@@ -10,12 +10,73 @@ The first product is a game hosting marketplace (think itch.io replacement), wit
 
 ## Architecture
 
-- **Backend:** Django
-- **Frontend:** React
-- **Identity/Data:** AT Protocol (ATProto) — users and creators have portable DIDs, content stored as ATProto records
+- **Backend:** Django 5.2 + Django REST Framework + Gunicorn
+- **Frontend:** React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5
+- **Runtime:** Bun (replaces Node/npm/Vite)
+- **Database:** PostgreSQL 17
+- **Reverse Proxy:** Caddy 2 (blue-green deployment)
+- **Identity/Data:** AT Protocol (ATProto) — users and creators have portable DIDs
 - **Payments:** Stripe Connect (subscriptions, marketplace purchases, creator payouts)
 - **Storage:** S3-compatible object storage (game builds, media assets)
-- **Delivery:** CDN + WebRTC peer-assisted delivery (video phase)
+
+## Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose
+- (Optional) Bun — for local frontend development outside Docker
+
+### Setup
+
+```bash
+# Install dependencies and create .env
+make setup
+
+# Review .env and set secure passwords
+vim .env
+
+# Build and start services
+make build && make up
+
+# Run database migrations
+make migrate
+
+# Create admin user
+make createsuperuser
+```
+
+### Access
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000/api/v1/ |
+| Django Admin | http://localhost:8000/admin/ |
+| Health Check | http://localhost:8000/health/ |
+| API Docs | http://localhost:8000/api/v1/docs/ |
+
+## Development
+
+```bash
+make up          # Start services
+make down        # Stop services
+make rebuild     # Rebuild and restart
+make logs        # Follow logs
+make ps          # Show containers
+make bash        # Shell into backend
+make shell       # Django shell
+```
+
+## Deployment
+
+Blue-green deployment with zero downtime:
+
+```bash
+make caddy-up        # Start reverse proxy
+make deploy          # Deploy to inactive slot
+make deploy-status   # Show current state
+make deploy-rollback # Rollback if needed
+```
 
 ## Key Concepts
 
@@ -27,20 +88,16 @@ The first product is a game hosting marketplace (think itch.io replacement), wit
 
 **Transparent Pass-Through:** No percentage cut. Creators see itemized costs (processing fees, infrastructure, CRF) rather than an opaque platform take.
 
-## Project Status
-
-Early experimentation. Design documents exist for the economic model, infrastructure costs, payment processing, cross-publishing toolset, and first-product strategy. This repo is where those ideas start becoming code.
-
 ## Design Documents
 
-The `/docs` directory contains the planning materials developed so far:
+The `/docs` directory contains the planning materials:
 
 - `hybrid-subscription-model-c.md` — Full subscription/pool/boost economic model
 - `infra-cheat-sheet.md` — Storage and delivery costs across media types
-- `payment-processing-setup.md` — Stripe Connect integration plan, ACH/FedNow roadmap
-- `first-foothold-itch-replacement.md` — Game marketplace as first product, traction phases
-- `cross-publishing-toolset-strategy.md` — YouTube/Steam/itch.io/Substack integration plan
-- `managed-hosting-product-breakdown-v2.md` — Infrastructure cost modeling for video creators
+- `payment-processing-setup.md` — Stripe Connect integration plan
+- `first-foothold-itch-replacement.md` — Game marketplace as first product
+- `cross-publishing-toolset-strategy.md` — YouTube/Steam/itch.io integration plan
+- `managed-hosting-product-breakdown-v2.md` — Infrastructure cost modeling
 
 ## License
 

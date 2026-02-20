@@ -1,0 +1,54 @@
+# ─── Environment ───
+.env
+.env.local
+.env.*.local
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ─── Django ───
+backend/staticfiles/
+backend/media/
+db.sqlite3
+debug.log
+
+# ─── Node / Bun ───
+node_modules/
+frontend/dist/
+frontend/bun.lock
+*.tsbuildinfo
+
+# ─── Docker ───
+.deployment-state
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ─── OS ───
+Thumbs.db
+.DS_Store
+
+# ─── Coverage / Testing ───
+htmlcov/
+.coverage
+.coverage.*
+coverage/
+*.lcov
+
+# ─── Agent files (contributor-specific) ───
+AGENTS.md
+CLAUDE.md

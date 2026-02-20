@@ -1,0 +1,25 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bluebell-frontend-green
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3001"
+      BUILD_MODE: prod
+    labels:
+      deployment: green
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bluebell
+
+networks:
+  bluebell:
+    external: true
+    name: bluebell_bluebell

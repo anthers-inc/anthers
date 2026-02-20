@@ -1,0 +1,57 @@
+:80 {
+	handle /health {
+		respond "OK" 200
+	}
+	handle {
+		redir https://bluebell.dev{uri} permanent
+	}
+}
+
+bluebell.dev {
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	handle /api/* {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle /admin {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle /admin/* {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle /health/* {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle /static/* {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle /media/* {
+		reverse_proxy bluebell-backend:8000
+	}
+
+	handle {
+		reverse_proxy {
+			to bluebell-frontend-blue:3000
+			to bluebell-frontend-green:3001
+
+			health_uri /
+			health_interval 15s
+			health_timeout 10s
+			health_status 2xx
+			fail_duration 60s
+			max_fails 5
+			unhealthy_status 5xx
+			lb_policy first
+		}
+	}
+}

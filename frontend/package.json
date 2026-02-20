@@ -1,0 +1,31 @@
+{
+  "name": "bluebell-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun ./index.html --port 3000",
+    "build": "bun build ./src/index.tsx --outdir ./dist --target=browser --minify",
+    "preview": "bun run serve.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "eslint src",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "@heroicons/react": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "bun-plugin-tailwind": "latest",
+    "daisyui": "^5.0.0",
+    "typescript": "^5.7.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}
