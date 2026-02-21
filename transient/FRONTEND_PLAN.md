@@ -31,6 +31,13 @@ The current backend has basic CRUD for Projects, Assets, and Posts. The frontend
 - [x] **2.7 CreatorsPage + CreatorProfilePage** — Creator grid with follow buttons. Patreon-like profile with header banner, avatar, bio, website/location, follow button, tabbed content (Projects/Posts/About).
 - [x] **2.8 PostFeedPage + PostPage** — Public post feed with pagination. Full post view with creator info, project link, comments.
 
+### Marketing Page Split — COMPLETE
+
+- [x] **HomePage** (`/`) — Slimmed to landing page with hero text and two side-by-side CTA cards ("For Creators" → `/for-creators`, "For Users" → `/for-users`), plus a subtle "Browse projects" link.
+- [x] **ForCreatorsPage** (`/for-creators`) — All creator-focused marketing content from the original HomePage: revenue comparison table, core value props, multi-media showcase, transparent pricing with receipt example, feature showcase (8 features), creator profile preview, project page preview, data portability (ATProto), platform comparison table, CTA to register.
+- [x] **ForUsersPage** (`/for-users`) — New user-focused marketing page: zero-friction browsing (play instantly, download freely, browse everything), content type showcase, discovery features (search, game jams, ratings, follow, feed, explore by media), transparent pricing from the buyer's perspective, data portability (ATProto/DID), no-account vs free-account comparison table, CTA to explore/register.
+- [x] **Routes** — Added `/for-creators` and `/for-users` to `App.tsx`.
+
 ### Stages 3-5: Not started
 
 See Implementation Order below.

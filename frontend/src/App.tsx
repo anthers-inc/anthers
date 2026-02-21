@@ -3,6 +3,8 @@ import Layout from "./components/layout/Layout";
 
 // Pages
 import HomePage from "./pages/HomePage";
+import ForCreatorsPage from "./pages/ForCreatorsPage";
+import ForUsersPage from "./pages/ForUsersPage";
 import ExplorePage from "./pages/ExplorePage";
 import ProjectPage from "./pages/ProjectPage";
 import PostFeedPage from "./pages/PostFeedPage";
@@ -18,6 +20,8 @@ export default function App() {
       <Route element={<Layout />}>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/for-creators" element={<ForCreatorsPage />} />
+        <Route path="/for-users" element={<ForUsersPage />} />
         <Route path="/explore" element={<ExplorePage />} />
         <Route path="/explore/:slug" element={<ProjectPage />} />
         <Route path="/posts" element={<PostFeedPage />} />
