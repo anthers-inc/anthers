@@ -54,6 +54,7 @@ services:
     restart: unless-stopped
     working_dir: /app
     env_file: .env
+    entrypoint: ["/app/entrypoint.sh"]
     command: bun run dev
     volumes:
       - ./frontend:/app

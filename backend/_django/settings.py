@@ -144,6 +144,22 @@ CORS_ALLOWED_ORIGINS = [
     if o.strip()
 ]
 
+CORS_ALLOW_CREDENTIALS = True
+
+# ─── CSRF / Session (SPA support) ───
+
+CSRF_COOKIE_HTTPONLY = False  # JS reads CSRF token from cookie
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "DJANGO_CSRF_TRUSTED_ORIGINS",
+        "http://localhost:3000,http://localhost:8000",
+    ).split(",")
+    if o.strip()
+]
+
 # ─── REST Framework ───
 
 REST_FRAMEWORK = {

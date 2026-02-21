@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Asset, Post, Project
+from .models import Asset, Comment, Post, Project, Rating, Screenshot
 
 
 class AssetInline(admin.TabularInline):
@@ -8,13 +8,27 @@ class AssetInline(admin.TabularInline):
     extra = 0
 
 
+class ScreenshotInline(admin.TabularInline):
+    model = Screenshot
+    extra = 0
+
+
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("title", "creator", "media_type", "is_published", "created_at")
-    list_filter = ("media_type", "is_published")
+    list_display = (
+        "title", "creator", "media_type", "pricing_type",
+        "is_published", "created_at",
+    )
+    list_filter = ("media_type", "pricing_type", "is_published")
     search_fields = ("title", "slug", "creator__username")
     prepopulated_fields = {"slug": ("title",)}
-    inlines = [AssetInline]
+    inlines = [ScreenshotInline, AssetInline]
+
+
+@admin.register(Screenshot)
+class ScreenshotAdmin(admin.ModelAdmin):
+    list_display = ("project", "caption", "sort_order", "created_at")
+    list_filter = ("project",)
 
 
 @admin.register(Asset)
@@ -28,3 +42,17 @@ class PostAdmin(admin.ModelAdmin):
     list_display = ("title", "creator", "project", "is_published", "created_at")
     list_filter = ("is_published",)
     search_fields = ("title", "body", "creator__username")
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = ("user", "project", "post", "created_at")
+    list_filter = ("created_at",)
+    raw_id_fields = ("user", "project", "post")
+
+
+@admin.register(Rating)
+class RatingAdmin(admin.ModelAdmin):
+    list_display = ("user", "project", "score", "created_at")
+    list_filter = ("score",)
+    raw_id_fields = ("user", "project")

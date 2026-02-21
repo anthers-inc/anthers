@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "bun ./index.html --port 3000",
+    "dev": "bun ./index.html --port=3000 --host=0.0.0.0",
     "build": "bun build ./src/index.tsx --outdir ./dist --target=browser --minify",
     "preview": "bun run serve.ts",
     "typecheck": "tsc --noEmit",
