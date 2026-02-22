@@ -72,6 +72,8 @@ export const api = {
   delete: <T>(path: string) => request<T>("DELETE", path),
   upload: <T>(path: string, formData: FormData) =>
     request<T>("POST", path, formData, { isFormData: true }),
+  uploadPatch: <T>(path: string, formData: FormData) =>
+    request<T>("PATCH", path, formData, { isFormData: true }),
 };
 
 // ─── Types ───

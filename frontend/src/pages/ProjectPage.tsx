@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type Project } from "../lib/api";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ProjectHero from "../components/project/ProjectHero";
+import ProjectEmbed from "../components/project/ProjectEmbed";
+import ProjectScreenshots from "../components/project/ProjectScreenshots";
+import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectDevlog from "../components/project/ProjectDevlog";
 import ProjectComments from "../components/project/ProjectComments";
@@ -49,34 +54,33 @@ export default function ProjectPage() {
         <div className="flex flex-col gap-8">
           <ProjectHero project={project} />
 
-          {/* Screenshots */}
-          {project.screenshots.length > 0 && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">Screenshots</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {project.screenshots.map((ss) => (
-                  <img
-                    key={ss.id}
-                    src={ss.image}
-                    alt={ss.caption || "Screenshot"}
-                    className="rounded-lg object-cover w-full h-40 cursor-pointer hover:opacity-80 transition-opacity"
-                  />
-                ))}
-              </div>
-            </div>
+          {/* Embed */}
+          {project.embed_url && (
+            <ProjectEmbed embedUrl={project.embed_url} title={project.title} />
           )}
+
+          {/* Screenshots */}
+          <ProjectScreenshots screenshots={project.screenshots} />
 
           {/* Description */}
           {project.description && (
             <div>
               <h2 className="text-xl font-bold mb-4">About</h2>
               <div className="prose prose-sm max-w-none">
-                {project.description.split("\n").map((line, i) => (
-                  <p key={i}>{line}</p>
-                ))}
+                <Markdown remarkPlugins={[remarkGfm]}>
+                  {project.description}
+                </Markdown>
               </div>
             </div>
           )}
+
+          {/* Pricing */}
+          <ProjectPricing
+            pricingType={project.pricing_type}
+            price={project.price}
+            minPrice={project.min_price}
+            suggestedPrice={project.suggested_price}
+          />
 
           {/* Downloads */}
           <ProjectDownloads

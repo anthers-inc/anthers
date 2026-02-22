@@ -1,13 +1,43 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "../lib/api";
+import type {
+  ProjectListItem,
+  Post,
+  PublicUser,
+  PaginatedResponse,
+} from "../lib/api";
+import ProjectCard from "../components/cards/ProjectCard";
+import PostCard from "../components/cards/PostCard";
+import CreatorCard from "../components/cards/CreatorCard";
 import {
   PaintBrushIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 export default function HomePage() {
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [creators, setCreators] = useState<PublicUser[]>([]);
+
+  useEffect(() => {
+    api
+      .get<PaginatedResponse<ProjectListItem>>("/api/v1/content/projects/")
+      .then((d) => setProjects(d.results.slice(0, 8)))
+      .catch(() => {});
+    api
+      .get<PaginatedResponse<Post>>("/api/v1/content/posts/")
+      .then((d) => setPosts(d.results.slice(0, 4)))
+      .catch(() => {});
+    api
+      .get<PaginatedResponse<PublicUser>>("/api/v1/accounts/users/")
+      .then((d) => setCreators(d.results.filter((u) => u.is_creator).slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
   return (
     <div>
-      {/* ───────────── Hero ───────────── */}
+      {/* Hero */}
       <section className="hero min-h-[85vh] bg-gradient-to-b from-base-200 to-base-100">
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
@@ -18,7 +48,6 @@ export default function HomePage() {
               favorite thing.
             </p>
 
-            {/* Two side-by-side CTAs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-xl mx-auto mt-8">
               <Link
                 to="/for-creators"
@@ -71,6 +100,63 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Featured Projects */}
+      {projects.length > 0 && (
+        <section className="py-16 px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Featured Projects</h2>
+              <Link to="/explore" className="btn btn-ghost btn-sm">
+                View all →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {projects.map((p) => (
+                <ProjectCard key={p.id} project={p} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Recent Posts */}
+      {posts.length > 0 && (
+        <section className="py-16 px-4 bg-base-200">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Recent Posts</h2>
+              <Link to="/posts" className="btn btn-ghost btn-sm">
+                View all →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {posts.map((p) => (
+                <PostCard key={p.id} post={p} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Featured Creators */}
+      {creators.length > 0 && (
+        <section className="py-16 px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">Featured Creators</h2>
+              <Link to="/creators" className="btn btn-ghost btn-sm">
+                View all →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {creators.map((c) => (
+                <CreatorCard key={c.id} creator={c} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, type Post, type Comment, type PaginatedResponse } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -110,9 +112,7 @@ export default function PostPage() {
 
         {/* Post body */}
         <div className="prose prose-sm max-w-none mb-8">
-          {post.body.split("\n").map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          <Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
         </div>
       </article>
 

@@ -3,7 +3,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Asset, Comment, Post, Project, Rating
+from .models import Asset, Comment, Post, Project, Rating, Screenshot
 from .serializers import (
     AssetSerializer,
     CommentSerializer,
@@ -12,6 +12,7 @@ from .serializers import (
     ProjectSerializer,
     RatingAggregateSerializer,
     RatingSerializer,
+    ScreenshotSerializer,
 )
 
 
@@ -112,6 +113,30 @@ class AssetDeleteView(generics.DestroyAPIView):
 
     def get_queryset(self):
         return Asset.objects.filter(
+            project__slug=self.kwargs["slug"],
+            project__creator=self.request.user,
+        )
+
+
+# ─── Screenshots (nested under project) ───
+
+
+class ScreenshotUploadView(generics.CreateAPIView):
+    serializer_class = ScreenshotSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        project = Project.objects.get(
+            slug=self.kwargs["slug"], creator=self.request.user
+        )
+        serializer.save(project=project)
+
+
+class ScreenshotDeleteView(generics.DestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Screenshot.objects.filter(
             project__slug=self.kwargs["slug"],
             project__creator=self.request.user,
         )

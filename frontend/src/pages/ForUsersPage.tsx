@@ -310,6 +310,68 @@ export default function ForUsersPage() {
         </div>
       </section>
 
+      {/* ───────────── Subscription Tiers ───────────── */}
+      <section className="bg-base-200 py-20">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <h2 className="text-3xl font-bold text-center mb-4">
+            Support creators with a subscription
+          </h2>
+          <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+            Optional subscriptions let you support the creators you love. Your
+            subscription funds are distributed based on what you actually watch,
+            play, read, and listen to — plus optional boosts to your favorites.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="table table-sm max-w-3xl mx-auto">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th className="text-right">Price</th>
+                  <th className="text-right">Content Cap</th>
+                  <th className="text-right">Gate Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Window</td>
+                  <td className="text-right">Free</td>
+                  <td className="text-right">10 hrs/mo</td>
+                  <td className="text-right text-base-content/40">No</td>
+                </tr>
+                <tr>
+                  <td>Base</td>
+                  <td className="text-right">$5/mo</td>
+                  <td className="text-right">25 hrs/mo</td>
+                  <td className="text-right text-base-content/40">No</td>
+                </tr>
+                <tr>
+                  <td>Supporter</td>
+                  <td className="text-right">$10/mo</td>
+                  <td className="text-right">Unlimited</td>
+                  <td className="text-right text-success">Yes</td>
+                </tr>
+                <tr>
+                  <td>Advocate</td>
+                  <td className="text-right">$15/mo</td>
+                  <td className="text-right">Unlimited</td>
+                  <td className="text-right text-success">Yes</td>
+                </tr>
+                <tr>
+                  <td>Champion</td>
+                  <td className="text-right">$20/mo</td>
+                  <td className="text-right">Unlimited</td>
+                  <td className="text-right text-success">Yes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-center text-xs text-base-content/40 mt-4">
+            Supporter and above get Boost Pool funds to direct to favorite
+            creators and unlock gated content. Subscriptions coming soon.
+          </p>
+        </div>
+      </section>
+
       {/* ───────────── Your Data Is Yours ───────────── */}
       <section className="bg-base-200 py-20">
         <div className="container mx-auto px-4 max-w-4xl">
@@ -318,8 +380,9 @@ export default function ForUsersPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Bluebell is built on the AT Protocol (the tech behind Bluesky).
-            That means your identity, your follows, your library, and your
-            activity are yours — portable and not locked in.
+            Sign in with your existing Bluesky identity, or create a new one.
+            Your follows, library, and activity are yours — portable and not
+            locked in.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

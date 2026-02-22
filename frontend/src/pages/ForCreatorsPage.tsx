@@ -361,7 +361,7 @@ export default function ForCreatorsPage() {
             <Feature
               icon={<ChartBarIcon className="w-6 h-6" />}
               title="Creator dashboard"
-              description="See your projects, posts, follower count, and content at a glance. Manage drafts and published work from one place. Analytics and detailed metrics coming soon."
+              description="See your projects, posts, follower count, and content at a glance. Manage drafts and published work from one place. Create and edit projects with rich forms, upload builds, and manage screenshots."
             />
             <Feature
               icon={<UserGroupIcon className="w-6 h-6" />}
@@ -374,6 +374,108 @@ export default function ForCreatorsPage() {
               description="Follow creators you care about and get their updates in a personalized feed. New project? Devlog post? Game jam entry? It all shows up in one timeline."
             />
           </div>
+        </div>
+      </section>
+
+      {/* ───────────── Audience Building ───────────── */}
+      <section className="py-20">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <h2 className="text-3xl font-bold text-center mb-4">
+            Build your audience in one place
+          </h2>
+          <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+            Like Patreon and YouTube Memberships, but alongside your actual
+            work. Post devlogs, vlogs, podcasts, and blogs — all under the same
+            profile your games live on. Your audience follows <em>you</em>,
+            not a platform.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="card bg-base-200">
+              <div className="card-body p-5">
+                <h3 className="font-semibold">Native content creation</h3>
+                <p className="text-sm text-base-content/60">
+                  Write devlogs, upload video updates, share podcast episodes —
+                  all natively hosted. No linking out to YouTube or Substack.
+                  Your content lives where your audience already is.
+                </p>
+              </div>
+            </div>
+            <div className="card bg-base-200">
+              <div className="card-body p-5">
+                <h3 className="font-semibold">Cross-publishing (coming soon)</h3>
+                <p className="text-sm text-base-content/60">
+                  Publish once, distribute everywhere. Push videos to YouTube,
+                  builds to Steam and itch.io, posts to Substack — all from your
+                  Bluebell dashboard. Unified analytics show performance across
+                  all platforms.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── Subscription Tiers ───────────── */}
+      <section className="bg-base-200 py-20">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <h2 className="text-3xl font-bold text-center mb-4">
+            Subscribers fund creators, not platforms
+          </h2>
+          <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+            Users subscribe to Bluebell, and their subscription funds are
+            distributed to creators proportionally based on what they actually
+            watch, read, listen to, and play. No platform cut — just transparent
+            allocation.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="table table-sm max-w-3xl mx-auto">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th className="text-right">Price</th>
+                  <th className="text-right">Creator Pool</th>
+                  <th className="text-right">Boost Pool</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Window</td>
+                  <td className="text-right">Free</td>
+                  <td className="text-right text-base-content/40">—</td>
+                  <td className="text-right text-base-content/40">—</td>
+                </tr>
+                <tr>
+                  <td>Base</td>
+                  <td className="text-right">$5/mo</td>
+                  <td className="text-right text-success">$4.85</td>
+                  <td className="text-right text-base-content/40">—</td>
+                </tr>
+                <tr>
+                  <td>Supporter</td>
+                  <td className="text-right">$10/mo</td>
+                  <td className="text-right text-success">$4.70</td>
+                  <td className="text-right text-primary">$5.00</td>
+                </tr>
+                <tr>
+                  <td>Advocate</td>
+                  <td className="text-right">$15/mo</td>
+                  <td className="text-right text-success">$4.55</td>
+                  <td className="text-right text-primary">$10.00</td>
+                </tr>
+                <tr>
+                  <td>Champion</td>
+                  <td className="text-right">$20/mo</td>
+                  <td className="text-right text-success">$4.40</td>
+                  <td className="text-right text-primary">$15.00</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-center text-xs text-base-content/40 mt-4">
+            Creator Pool is distributed proportionally by attention time.
+            Boost Pool lets subscribers direct funds to specific creators and
+            unlock gated content. Subscriptions coming soon.
+          </p>
         </div>
       </section>
 
@@ -527,8 +629,9 @@ export default function ForCreatorsPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Bluebell is built on the AT Protocol — the same open standard
-            behind Bluesky. Your identity, your content, and your audience
-            relationships are portable by design.
+            behind Bluesky. Sign in with your Bluesky identity, or create a
+            new one. Your content and audience relationships are portable by
+            design.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
