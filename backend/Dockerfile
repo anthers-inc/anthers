@@ -8,7 +8,7 @@ RUN pip install --upgrade pip && pip install --user --no-cache-dir -r requiremen
 FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE=_django.settings
 WORKDIR /app
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN adduser --disabled-password --force-badname --uid 1000 _django
 COPY --from=build --chown=_django:_django /root/.local /home/_django/.local
 ENV PATH="/home/_django/.local/bin:$PATH"

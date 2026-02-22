@@ -1,6 +1,9 @@
 from django.contrib import admin
 
-from .models import Asset, Comment, Post, Project, Rating, Screenshot
+from .models import (
+    Asset, Comment, InlineImage, Post, Project, Rating, Screenshot,
+    TranscodingJob,
+)
 
 
 class AssetInline(admin.TabularInline):
@@ -39,9 +42,25 @@ class AssetAdmin(admin.ModelAdmin):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    list_display = ("title", "creator", "project", "is_published", "created_at")
-    list_filter = ("is_published",)
+    list_display = (
+        "title", "creator", "content_type", "visibility",
+        "project", "is_published", "created_at",
+    )
+    list_filter = ("content_type", "visibility", "is_published", "is_premium")
     search_fields = ("title", "body", "creator__username")
+
+
+@admin.register(TranscodingJob)
+class TranscodingJobAdmin(admin.ModelAdmin):
+    list_display = ("post", "media_type", "status", "progress", "created_at")
+    list_filter = ("media_type", "status")
+    raw_id_fields = ("post",)
+
+
+@admin.register(InlineImage)
+class InlineImageAdmin(admin.ModelAdmin):
+    list_display = ("creator", "image", "created_at")
+    raw_id_fields = ("creator",)
 
 
 @admin.register(Comment)

@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import type { Post, PaginatedResponse } from "../lib/api";
-import PostCard from "../components/cards/PostCard";
+import type { PostListItem, PaginatedResponse } from "../lib/api";
+import ContentCard from "../components/cards/ContentCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import { RssIcon } from "@heroicons/react/24/outline";
 
 export default function FeedPage() {
-  const [data, setData] = useState<PaginatedResponse<Post> | null>(null);
+  const [data, setData] = useState<PaginatedResponse<PostListItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -17,7 +17,7 @@ export default function FeedPage() {
   useEffect(() => {
     setLoading(true);
     api
-      .get<PaginatedResponse<Post>>(
+      .get<PaginatedResponse<PostListItem>>(
         `/api/v1/accounts/me/feed/?page=${page}`,
       )
       .then(setData)
@@ -49,7 +49,7 @@ export default function FeedPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {data.results.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <ContentCard key={post.id} post={post} />
             ))}
           </div>
           <Pagination

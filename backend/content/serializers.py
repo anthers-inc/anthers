@@ -1,7 +1,9 @@
-from django.db.models import Avg, Count
 from rest_framework import serializers
 
-from .models import Asset, Comment, Post, Project, Rating, Screenshot
+from .models import (
+    Asset, Comment, InlineImage, Post, Project, Rating, Screenshot,
+    TranscodingJob,
+)
 
 
 class ScreenshotSerializer(serializers.ModelSerializer):
@@ -106,23 +108,82 @@ class ProjectListSerializer(serializers.ModelSerializer):
         )
 
 
+# ─── Transcoding ───
+
+
+class TranscodingJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TranscodingJob
+        fields = (
+            "id", "post", "media_type", "status", "progress",
+            "error_message", "hls_manifest_url", "output_file_url",
+            "waveform_data", "created_at", "updated_at",
+        )
+        read_only_fields = fields
+
+
+# ─── Posts ───
+
+
 class PostSerializer(serializers.ModelSerializer):
     creator = serializers.StringRelatedField(read_only=True)
     creator_username = serializers.CharField(source="creator.username", read_only=True)
     creator_avatar = serializers.ImageField(source="creator.avatar", read_only=True)
     project_title = serializers.CharField(source="project.title", read_only=True, default=None)
     project_slug = serializers.CharField(source="project.slug", read_only=True, default=None)
+    transcoding_jobs = TranscodingJobSerializer(many=True, read_only=True)
 
     class Meta:
         model = Post
         fields = (
             "id", "creator", "creator_username", "creator_avatar",
             "project", "project_title", "project_slug",
-            "title", "body", "is_published",
+            "title", "body", "body_html", "content_type",
+            "video_file", "audio_file", "thumbnail",
+            "duration_seconds", "is_premium", "visibility",
+            "is_published", "estimated_read_minutes",
+            "transcoding_jobs",
             "created_at", "updated_at",
         )
         read_only_fields = (
             "id", "creator", "creator_username", "creator_avatar",
             "project_title", "project_slug",
+            "duration_seconds", "estimated_read_minutes",
+            "transcoding_jobs",
             "created_at", "updated_at",
         )
+
+
+class PostListSerializer(serializers.ModelSerializer):
+    creator = serializers.StringRelatedField(read_only=True)
+    creator_username = serializers.CharField(source="creator.username", read_only=True)
+    creator_avatar = serializers.ImageField(source="creator.avatar", read_only=True)
+    project_title = serializers.CharField(source="project.title", read_only=True, default=None)
+    project_slug = serializers.CharField(source="project.slug", read_only=True, default=None)
+    latest_transcoding_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = (
+            "id", "creator", "creator_username", "creator_avatar",
+            "project", "project_title", "project_slug",
+            "title", "content_type", "thumbnail",
+            "duration_seconds", "is_premium", "visibility",
+            "is_published", "estimated_read_minutes",
+            "latest_transcoding_status",
+            "created_at", "updated_at",
+        )
+        read_only_fields = fields
+
+    def get_latest_transcoding_status(self, obj):
+        job = obj.transcoding_jobs.first()
+        if job:
+            return {"status": job.status, "progress": job.progress}
+        return None
+
+
+class InlineImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InlineImage
+        fields = ("id", "image", "created_at")
+        read_only_fields = ("id", "created_at")

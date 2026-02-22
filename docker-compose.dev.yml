@@ -48,6 +48,38 @@ services:
     networks:
       - bluebell
 
+  redis:
+    image: redis:7-alpine
+    container_name: bluebell-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bluebell
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bluebell-celery-worker
+    restart: unless-stopped
+    env_file: .env
+    command: celery -A _django worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - bluebell
+
   frontend:
     image: oven/bun:1
     container_name: bluebell-frontend

@@ -23,4 +23,11 @@ urlpatterns = [
     path("posts/<int:pk>/", views.PostDetailView.as_view(), name="post-detail"),
     # Comments on posts
     path("posts/<int:pk>/comments/", views.PostCommentListCreateView.as_view(), name="post-comments"),
+    # Transcoding status
+    path("posts/<int:pk>/transcoding/", views.TranscodingStatusView.as_view(), name="transcoding-status"),
+    # Media upload
+    path("media-upload/url/", views.MediaUploadUrlView.as_view(), name="media-upload-url"),
+    path("media-upload/direct/", views.MediaDirectUploadView.as_view(), name="media-upload-direct"),
+    # Inline images (rich text editor)
+    path("inline-images/", views.InlineImageUploadView.as_view(), name="inline-image-upload"),
 ]

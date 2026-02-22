@@ -102,6 +102,16 @@ class Asset(models.Model):
 
 
 class Post(models.Model):
+    class ContentType(models.TextChoices):
+        TEXT = "text", "Text"
+        VIDEO = "video", "Video"
+        AUDIO = "audio", "Audio"
+
+    class Visibility(models.TextChoices):
+        PUBLIC = "public", "Public"
+        SUBSCRIBERS_ONLY = "subscribers_only", "Subscribers Only"
+        GATED = "gated", "Gated"
+
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts"
     )
@@ -109,8 +119,28 @@ class Post(models.Model):
         Project, on_delete=models.CASCADE, related_name="posts", null=True, blank=True
     )
     title = models.CharField(max_length=255, blank=True)
-    body = models.TextField()
+    body = models.TextField(blank=True)
+    body_html = models.TextField(blank=True)
+    content_type = models.CharField(
+        max_length=10, choices=ContentType.choices, default=ContentType.TEXT
+    )
+
+    # Media fields
+    video_file = models.FileField(upload_to="videos/originals/", blank=True)
+    audio_file = models.FileField(upload_to="audio/originals/", blank=True)
+    thumbnail = models.ImageField(upload_to="thumbnails/", blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+
+    # Access control
+    is_premium = models.BooleanField(default=False)
+    visibility = models.CharField(
+        max_length=20, choices=Visibility.choices, default=Visibility.PUBLIC
+    )
     is_published = models.BooleanField(default=False)
+
+    # Text post metadata
+    estimated_read_minutes = models.PositiveIntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -119,6 +149,50 @@ class Post(models.Model):
 
     def __str__(self):
         return self.title or f"Post #{self.pk}"
+
+
+class TranscodingJob(models.Model):
+    class MediaType(models.TextChoices):
+        VIDEO = "video", "Video"
+        AUDIO = "audio", "Audio"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    post = models.ForeignKey(
+        Post, on_delete=models.CASCADE, related_name="transcoding_jobs"
+    )
+    media_type = models.CharField(max_length=10, choices=MediaType.choices)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    progress = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    hls_manifest_url = models.URLField(blank=True, max_length=500)
+    output_file_url = models.URLField(blank=True, max_length=500)
+    waveform_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.media_type} job for Post #{self.post_id} ({self.status})"
+
+
+class InlineImage(models.Model):
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="inline_images"
+    )
+    image = models.ImageField(upload_to="inline-images/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Inline image by {self.creator} ({self.pk})"
 
 
 class Comment(models.Model):

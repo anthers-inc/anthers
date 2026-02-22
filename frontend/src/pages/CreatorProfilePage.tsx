@@ -5,16 +5,16 @@ import {
   type PublicUser,
   type PaginatedResponse,
   type ProjectListItem,
-  type Post,
+  type PostListItem,
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import ProjectCard from "../components/cards/ProjectCard";
-import PostCard from "../components/cards/PostCard";
+import ContentCard from "../components/cards/ContentCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import { LinkIcon, MapPinIcon } from "@heroicons/react/24/outline";
 
-type Tab = "projects" | "posts" | "about";
+type Tab = "all" | "games" | "videos" | "audio" | "writing" | "about";
 
 export default function CreatorProfilePage() {
   const { username } = useParams<{ username: string }>();
@@ -22,8 +22,8 @@ export default function CreatorProfilePage() {
 
   const [creator, setCreator] = useState<PublicUser | null>(null);
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [tab, setTab] = useState<Tab>("projects");
+  const [posts, setPosts] = useState<PostListItem[]>([]);
+  const [tab, setTab] = useState<Tab>("all");
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
@@ -39,7 +39,7 @@ export default function CreatorProfilePage() {
       api.get<PaginatedResponse<ProjectListItem>>(
         `/api/v1/content/projects/?creator=${username}`
       ),
-      api.get<PaginatedResponse<Post>>(
+      api.get<PaginatedResponse<PostListItem>>(
         `/api/v1/content/posts/?creator=${username}`
       ),
     ])
@@ -87,6 +87,17 @@ export default function CreatorProfilePage() {
       </div>
     );
   }
+
+  // Filter content by tab
+  const videoPosts = posts.filter((p) => p.content_type === "video");
+  const audioPosts = posts.filter((p) => p.content_type === "audio");
+  const textPosts = posts.filter((p) => p.content_type === "text");
+
+  // All tab: interleave projects and posts by date
+  const allItems: { type: "project" | "post"; item: ProjectListItem | PostListItem; date: string }[] = [];
+  projects.forEach((p) => allItems.push({ type: "project", item: p, date: p.created_at }));
+  posts.forEach((p) => allItems.push({ type: "post", item: p, date: p.created_at }));
+  allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div>
@@ -161,30 +172,47 @@ export default function CreatorProfilePage() {
         </div>
 
         {/* Tabs */}
-        <div className="tabs tabs-bordered mb-6">
-          <button
-            className={`tab ${tab === "projects" ? "tab-active" : ""}`}
-            onClick={() => setTab("projects")}
-          >
-            Projects ({projects.length})
-          </button>
-          <button
-            className={`tab ${tab === "posts" ? "tab-active" : ""}`}
-            onClick={() => setTab("posts")}
-          >
-            Posts ({posts.length})
-          </button>
-          <button
-            className={`tab ${tab === "about" ? "tab-active" : ""}`}
-            onClick={() => setTab("about")}
-          >
-            About
-          </button>
+        <div className="tabs tabs-bordered mb-6 overflow-x-auto">
+          {([
+            ["all", "All"],
+            ["games", `Games (${projects.length})`],
+            ["videos", `Videos (${videoPosts.length})`],
+            ["audio", `Audio (${audioPosts.length})`],
+            ["writing", `Writing (${textPosts.length})`],
+            ["about", "About"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
+              onClick={() => setTab(key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Tab content */}
         <div className="pb-8">
-          {tab === "projects" && (
+          {tab === "all" && (
+            allItems.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allItems.map((entry) =>
+                  entry.type === "project" ? (
+                    <ProjectCard key={`proj-${entry.item.id}`} project={entry.item as ProjectListItem} />
+                  ) : (
+                    <ContentCard key={`post-${entry.item.id}`} post={entry.item as PostListItem} />
+                  )
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                title="No content yet"
+                description={`${creator.display_name || creator.username} hasn't published anything yet.`}
+              />
+            )
+          )}
+
+          {tab === "games" && (
             projects.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {projects.map((project) => (
@@ -193,23 +221,53 @@ export default function CreatorProfilePage() {
               </div>
             ) : (
               <EmptyState
-                title="No projects yet"
-                description={`${creator.display_name || creator.username} hasn't published any projects.`}
+                title="No games yet"
+                description={`${creator.display_name || creator.username} hasn't published any games.`}
               />
             )
           )}
 
-          {tab === "posts" && (
-            posts.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} />
+          {tab === "videos" && (
+            videoPosts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {videoPosts.map((post) => (
+                  <ContentCard key={post.id} post={post} />
                 ))}
               </div>
             ) : (
               <EmptyState
-                title="No posts yet"
-                description={`${creator.display_name || creator.username} hasn't published any posts.`}
+                title="No videos yet"
+                description={`${creator.display_name || creator.username} hasn't published any videos.`}
+              />
+            )
+          )}
+
+          {tab === "audio" && (
+            audioPosts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {audioPosts.map((post) => (
+                  <ContentCard key={post.id} post={post} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No audio yet"
+                description={`${creator.display_name || creator.username} hasn't published any audio.`}
+              />
+            )
+          )}
+
+          {tab === "writing" && (
+            textPosts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+                {textPosts.map((post) => (
+                  <ContentCard key={post.id} post={post} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No writing yet"
+                description={`${creator.display_name || creator.username} hasn't published any articles.`}
               />
             )
           )}

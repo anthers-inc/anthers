@@ -167,6 +167,26 @@ export interface ProjectListItem {
   updated_at: string;
 }
 
+export interface TranscodingJob {
+  id: number;
+  post: number;
+  media_type: "video" | "audio";
+  status: "pending" | "processing" | "completed" | "failed";
+  progress: number;
+  error_message: string;
+  hls_manifest_url: string;
+  output_file_url: string;
+  waveform_data: number[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MediaUploadUrl {
+  method: "presigned" | "direct";
+  upload_url: string;
+  storage_key: string | null;
+}
+
 export interface Post {
   id: number;
   creator: string;
@@ -177,7 +197,38 @@ export interface Post {
   project_slug: string | null;
   title: string;
   body: string;
+  body_html: string;
+  content_type: "text" | "video" | "audio";
+  video_file: string | null;
+  audio_file: string | null;
+  thumbnail: string | null;
+  duration_seconds: number | null;
+  is_premium: boolean;
+  visibility: "public" | "subscribers_only" | "gated";
   is_published: boolean;
+  estimated_read_minutes: number | null;
+  transcoding_jobs: TranscodingJob[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PostListItem {
+  id: number;
+  creator: string;
+  creator_username: string;
+  creator_avatar: string | null;
+  project: number | null;
+  project_title: string | null;
+  project_slug: string | null;
+  title: string;
+  content_type: "text" | "video" | "audio";
+  thumbnail: string | null;
+  duration_seconds: number | null;
+  is_premium: boolean;
+  visibility: "public" | "subscribers_only" | "gated";
+  is_published: boolean;
+  estimated_read_minutes: number | null;
+  latest_transcoding_status: { status: string; progress: number } | null;
   created_at: string;
   updated_at: string;
 }

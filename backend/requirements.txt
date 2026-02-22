@@ -28,5 +28,9 @@ python-dotenv>=1.1
 # API documentation
 drf-spectacular>=0.27
 
+# Async task queue
+celery[redis]>=5.4
+redis>=5.0
+
 # Payments
 stripe>=11.0

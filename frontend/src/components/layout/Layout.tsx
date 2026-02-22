@@ -1,5 +1,7 @@
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
+import { useMediaPlayer } from "../../lib/media-player";
+import MiniPlayer from "../media/MiniPlayer";
 import {
   Bars3Icon,
   UserCircleIcon,
@@ -7,6 +9,7 @@ import {
 
 export default function Layout() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { currentTrack } = useMediaPlayer();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -94,11 +97,13 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className={`flex-1 ${currentTrack ? "pb-16" : ""}`}>
         <Outlet />
       </main>
 
-      <footer className="footer footer-center p-4 bg-base-200 text-base-content">
+      <MiniPlayer />
+
+      <footer className={`footer footer-center p-4 bg-base-200 text-base-content ${currentTrack ? "mb-16" : ""}`}>
         <aside>
           <p>Bluebell — Creator-first, transparent, federated.</p>
         </aside>
