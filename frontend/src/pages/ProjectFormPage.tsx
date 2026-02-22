@@ -29,8 +29,6 @@ export default function ProjectFormPage() {
   const [tagsInput, setTagsInput] = useState("");
   const [pricingType, setPricingType] = useState<string>("free");
   const [price, setPrice] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [suggestedPrice, setSuggestedPrice] = useState("");
   const [embedUrl, setEmbedUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -61,8 +59,6 @@ export default function ProjectFormPage() {
           setTagsInput(project.tags.join(", "));
           setPricingType(project.pricing_type);
           setPrice(project.price || "");
-          setMinPrice(project.min_price || "");
-          setSuggestedPrice(project.suggested_price || "");
           setEmbedUrl(project.embed_url || "");
           setWebsiteUrl(project.website_url || "");
           setSourceUrl(project.source_url || "");
@@ -134,11 +130,6 @@ export default function ProjectFormPage() {
         formData.append("tags", JSON.stringify(tags));
         formData.append("pricing_type", pricingType);
         if (pricingType === "paid" && price) formData.append("price", price);
-        if (pricingType === "pwyw") {
-          if (minPrice) formData.append("min_price", minPrice);
-          if (suggestedPrice)
-            formData.append("suggested_price", suggestedPrice);
-        }
         formData.append("embed_url", embedUrl);
         formData.append("website_url", websiteUrl);
         formData.append("source_url", sourceUrl);
@@ -165,10 +156,6 @@ export default function ProjectFormPage() {
           is_published: isPublished,
         };
         if (pricingType === "paid" && price) payload.price = price;
-        if (pricingType === "pwyw") {
-          if (minPrice) payload.min_price = minPrice;
-          if (suggestedPrice) payload.suggested_price = suggestedPrice;
-        }
 
         const created = await api.post<Project>(
           "/api/v1/content/projects/",
@@ -313,7 +300,6 @@ export default function ProjectFormPage() {
             onChange={(e) => setPricingType(e.target.value)}
           >
             <option value="free">Free</option>
-            <option value="pwyw">Pay What You Want</option>
             <option value="paid">Paid</option>
           </select>
         </FormField>
@@ -330,36 +316,6 @@ export default function ProjectFormPage() {
               placeholder="9.99"
             />
           </FormField>
-        )}
-
-        {pricingType === "pwyw" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="Minimum Price ($)" error={errors.min_price}>
-              <input
-                type="number"
-                className="input input-bordered w-full"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-              />
-            </FormField>
-            <FormField
-              label="Suggested Price ($)"
-              error={errors.suggested_price}
-            >
-              <input
-                type="number"
-                className="input input-bordered w-full"
-                value={suggestedPrice}
-                onChange={(e) => setSuggestedPrice(e.target.value)}
-                min="0"
-                step="0.01"
-                placeholder="5.00"
-              />
-            </FormField>
-          </div>
         )}
 
         {/* Cover Image */}

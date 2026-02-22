@@ -31,6 +31,7 @@ export default function Layout() {
               <li><Link to="/creators">Creators</Link></li>
               <li><Link to="/posts">Posts</Link></li>
               {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
+              {isAuthenticated && <li><Link to="/library">Library</Link></li>}
             </ul>
           </div>
           <Link to="/" className="btn btn-ghost text-xl">
@@ -45,6 +46,7 @@ export default function Layout() {
             <li><Link to="/creators">Creators</Link></li>
             <li><Link to="/posts">Posts</Link></li>
             {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
+            {isAuthenticated && <li><Link to="/library">Library</Link></li>}
           </ul>
         </div>
 

@@ -141,6 +141,7 @@ export interface Project {
   screenshots: Screenshot[];
   rating_average: number | null;
   rating_count: number;
+  creator_has_stripe: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -203,4 +204,40 @@ export interface PaginatedResponse<T> {
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+// ─── Payment Types ───
+
+export interface StripeAccountStatus {
+  stripe_account_id: string;
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+  onboarding_complete: boolean;
+  created_at: string;
+}
+
+export interface CheckoutResponse {
+  client_secret: string;
+  amount: string;
+  processing_fee: string;
+  crf_fee: string;
+  creator_earnings: string;
+}
+
+export interface PurchaseItem {
+  id: number;
+  project: number;
+  project_title: string;
+  project_slug: string;
+  project_cover: string | null;
+  amount: string;
+  processing_fee: string;
+  crf_fee: string;
+  creator_earnings: string;
+  status: string;
+  created_at: string;
+}
+
+export interface OwnershipResponse {
+  owns: boolean;
 }

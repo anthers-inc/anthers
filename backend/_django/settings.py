@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -36,6 +37,7 @@ INSTALLED_APPS = [
     # Local
     "accounts",
     "content",
+    "payments",
 ]
 
 MIDDLEWARE = [
@@ -173,6 +175,16 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Creator-first media platform API",
     "VERSION": "0.1.0",
 }
+
+# ─── Stripe ───
+
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+# ─── Community Resilience Fund ───
+
+CRF_PERCENTAGE = Decimal("0.03")
 
 # ─── Misc ───
 

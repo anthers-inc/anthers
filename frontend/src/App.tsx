@@ -22,6 +22,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ProjectFormPage from "./pages/ProjectFormPage";
 import BuildsPage from "./pages/BuildsPage";
 import PostFormPage from "./pages/PostFormPage";
+import LibraryPage from "./pages/LibraryPage";
 
 export default function App() {
   return (
@@ -93,6 +94,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PostFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/library"
+          element={
+            <ProtectedRoute>
+              <LibraryPage />
             </ProtectedRoute>
           }
         />

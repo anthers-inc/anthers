@@ -1,8 +1,119 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, type StripeAccountStatus } from "../lib/api";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
+
+function StripeOnboardingSection() {
+  const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  const stripeResult = searchParams.get("stripe");
+
+  useEffect(() => {
+    api
+      .get<StripeAccountStatus>("/api/v1/payments/stripe/onboard/")
+      .then(setStripeStatus)
+      .catch(() => setStripeStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const res = await api.post<{ url: string }>(
+        "/api/v1/payments/stripe/onboard/",
+      );
+      window.location.href = res.url;
+    } catch {
+      setConnecting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="card bg-base-200">
+        <div className="card-body">
+          <h3 className="card-title text-lg">Stripe Payments</h3>
+          <p className="text-sm text-base-content/60">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isConnected =
+    stripeStatus?.charges_enabled && stripeStatus?.onboarding_complete;
+  const isIncomplete =
+    stripeStatus && !stripeStatus.charges_enabled;
+
+  return (
+    <div className="card bg-base-200">
+      <div className="card-body">
+        <h3 className="card-title text-lg">Stripe Payments</h3>
+
+        {stripeResult === "complete" && !isConnected && (
+          <div className="alert alert-info text-sm">
+            <span>
+              Stripe onboarding submitted. It may take a moment for your account
+              to be fully activated.
+            </span>
+          </div>
+        )}
+
+        {stripeResult === "refresh" && (
+          <div className="alert alert-warning text-sm">
+            <span>
+              Stripe onboarding link expired. Click below to continue.
+            </span>
+          </div>
+        )}
+
+        {isConnected ? (
+          <div className="flex items-center gap-2">
+            <div className="badge badge-success">Connected</div>
+            <span className="text-sm text-base-content/60">
+              Your Stripe account is active and ready to receive payments.
+            </span>
+          </div>
+        ) : isIncomplete ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-base-content/60">
+              Your Stripe account setup is incomplete. Complete onboarding to
+              start receiving payments.
+            </p>
+            <button
+              className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
+              onClick={handleConnect}
+              disabled={connecting}
+            >
+              {connecting ? "Redirecting..." : "Complete Stripe Setup"}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-base-content/60">
+              Connect a Stripe account to receive payments for your paid
+              projects. Bluebell uses Stripe Connect — you keep 100% of
+              earnings, only real costs are passed through.
+            </p>
+            <button
+              className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
+              onClick={handleConnect}
+              disabled={connecting}
+            >
+              {connecting ? "Redirecting..." : "Connect Stripe"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -183,6 +294,13 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* Stripe Onboarding — only shown for creators */}
+      {isCreator && (
+        <div className="mt-8">
+          <StripeOnboardingSection />
+        </div>
+      )}
     </div>
   );
 }

@@ -55,6 +55,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     screenshots = ScreenshotSerializer(many=True, read_only=True)
     rating_average = serializers.FloatField(read_only=True, default=None)
     rating_count = serializers.IntegerField(read_only=True, default=0)
+    creator_has_stripe = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -67,13 +68,19 @@ class ProjectSerializer(serializers.ModelSerializer):
             "website_url", "source_url",
             "assets", "screenshots",
             "rating_average", "rating_count",
+            "creator_has_stripe",
             "created_at", "updated_at",
         )
         read_only_fields = (
             "id", "creator", "creator_username",
             "rating_average", "rating_count",
+            "creator_has_stripe",
             "created_at", "updated_at",
         )
+
+    def get_creator_has_stripe(self, obj):
+        stripe_account = getattr(obj.creator, "stripe_account", None)
+        return stripe_account is not None and stripe_account.charges_enabled
 
 
 class ProjectListSerializer(serializers.ModelSerializer):

@@ -80,7 +80,7 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "slug"
 
     def get_queryset(self):
-        qs = Project.objects.select_related("creator").annotate(
+        qs = Project.objects.select_related("creator", "creator__stripe_account").annotate(
             rating_average=Avg("ratings__score"),
             rating_count=Count("ratings"),
         )

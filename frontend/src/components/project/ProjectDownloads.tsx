@@ -1,5 +1,5 @@
 import type { Asset } from "../../lib/api";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -21,11 +21,32 @@ const PLATFORM_LABELS: Record<string, string> = {
 export default function ProjectDownloads({
   assets,
   mediaType,
+  pricingType,
+  userOwns,
 }: {
   assets: Asset[];
   mediaType: string;
+  pricingType: "free" | "pwyw" | "paid";
+  userOwns: boolean | null;
 }) {
   if (assets.length === 0) return null;
+
+  // If paid and not owned, show gated message
+  if (pricingType === "paid" && userOwns !== true) {
+    return (
+      <div>
+        <h2 className="text-xl font-bold mb-4">Downloads</h2>
+        <div className="card bg-base-200">
+          <div className="card-body items-center text-center py-8">
+            <LockClosedIcon className="w-8 h-8 text-base-content/40" />
+            <p className="text-base-content/60">
+              Purchase this project to access downloads.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Group by platform for games
   const grouped =

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type Project } from "../lib/api";
+import { api, type Project, type OwnershipResponse } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ProjectHero from "../components/project/ProjectHero";
 import ProjectEmbed from "../components/project/ProjectEmbed";
@@ -16,9 +17,11 @@ import ProjectSidebar from "../components/project/ProjectSidebar";
 
 export default function ProjectPage() {
   const { slug } = useParams<{ slug: string }>();
+  const { isAuthenticated } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userOwns, setUserOwns] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -29,6 +32,22 @@ export default function ProjectPage() {
       .catch(() => setError("Project not found."))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // Check ownership for authenticated users
+  useEffect(() => {
+    if (!slug || !isAuthenticated) {
+      setUserOwns(null);
+      return;
+    }
+    api
+      .get<OwnershipResponse>(`/api/v1/payments/owns/${slug}/`)
+      .then((res) => setUserOwns(res.owns))
+      .catch(() => setUserOwns(null));
+  }, [slug, isAuthenticated]);
+
+  const handlePurchaseComplete = useCallback(() => {
+    setUserOwns(true);
+  }, []);
 
   if (loading) {
     return (
@@ -78,14 +97,18 @@ export default function ProjectPage() {
           <ProjectPricing
             pricingType={project.pricing_type}
             price={project.price}
-            minPrice={project.min_price}
-            suggestedPrice={project.suggested_price}
+            slug={project.slug}
+            creatorHasStripe={project.creator_has_stripe}
+            userOwns={userOwns}
+            onPurchaseComplete={handlePurchaseComplete}
           />
 
           {/* Downloads */}
           <ProjectDownloads
             assets={project.assets}
             mediaType={project.media_type}
+            pricingType={project.pricing_type}
+            userOwns={userOwns}
           />
 
           {/* Devlog */}
