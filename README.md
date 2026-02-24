@@ -10,7 +10,7 @@ The first product is a game hosting marketplace (think itch.io replacement), wit
 
 ## Architecture
 
-- **Backend:** Django 5.2 + Django REST Framework + Gunicorn
+- **Backend:** Django 5.2 + Django REST Framework + Gunicorn + Celery
 - **Frontend:** React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5
 - **Runtime:** Bun (replaces Node/npm/Vite)
 - **Database:** PostgreSQL 17
@@ -18,6 +18,20 @@ The first product is a game hosting marketplace (think itch.io replacement), wit
 - **Identity/Data:** AT Protocol (ATProto) — users and creators have portable DIDs
 - **Payments:** Stripe Connect (subscriptions, marketplace purchases, creator payouts)
 - **Storage:** S3-compatible object storage (game builds, media assets)
+
+## Project Structure
+
+```
+backend/
+  _django/          Project config (settings, urls, wsgi, asgi, celery, health)
+  accounts/         User model, auth, follows, creator profiles
+  content/          Projects, assets, posts, comments, ratings, media transcoding
+  payments/         Stripe Connect, purchases, CRF ledger, fee calculations
+frontend/
+  src/              Source code (pages, components, styles)
+  serve.ts          Production SPA server (Bun.serve + fallback)
+db/init/            PostgreSQL initialization scripts
+```
 
 ## Quick Start
 
@@ -55,6 +69,12 @@ make createsuperuser
 | Health Check | http://localhost:8000/health/ |
 | API Docs | http://localhost:8000/api/v1/docs/ |
 
+### API Routes
+
+- `/api/v1/accounts/` — Registration, login, profiles, follows, creator discovery
+- `/api/v1/content/` — Projects, assets, screenshots, posts, comments, ratings, media uploads
+- `/api/v1/payments/` — Stripe Connect onboarding, checkout, purchase history, webhooks
+
 ## Development
 
 ```bash
@@ -87,17 +107,6 @@ make deploy-rollback # Rollback if needed
 **Boost Pool:** Additional subscriber funds allocated manually or automatically to specific creators. Determines access to gated content.
 
 **Transparent Pass-Through:** No percentage cut. Creators see itemized costs (processing fees, infrastructure, CRF) rather than an opaque platform take.
-
-## Design Documents
-
-The `/docs` directory contains the planning materials:
-
-- `hybrid-subscription-model-c.md` — Full subscription/pool/boost economic model
-- `infra-cheat-sheet.md` — Storage and delivery costs across media types
-- `payment-processing-setup.md` — Stripe Connect integration plan
-- `first-foothold-itch-replacement.md` — Game marketplace as first product
-- `cross-publishing-toolset-strategy.md` — YouTube/Steam/itch.io integration plan
-- `managed-hosting-product-breakdown-v2.md` — Infrastructure cost modeling
 
 ## License
 
