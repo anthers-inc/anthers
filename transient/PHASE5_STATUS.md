@@ -5,7 +5,7 @@
 
 ---
 
-## COMPLETED — Sub-Phase 5A
+## COMPLETED — All 4 Sub-Phases
 
 ### Sub-Phase 5A: Identity + OAuth ✅
 
@@ -56,7 +56,19 @@
 - Token refresh with DPoP nonce retry built into PDS request handler
 - TID (timestamp-based ID) generation for ATProto record keys
 
-### Sub-Phase 5D: Source of Truth — TODO
+### Sub-Phase 5D: Source of Truth ✅
+
+- `atproto_index.py` module — reads ATProto records and rebuilds Django models
+- `list_records()` — paginated record listing from user's PDS (public API)
+- `get_record()` — fetch single record by collection + rkey
+- Index rebuilders for each content type:
+  - `index_games_for_user()` — reconstructs Project models from `com.bluebell.game`
+  - `index_posts_for_user()` — reconstructs Post models from `com.bluebell.post`
+  - `index_follows_for_user()` — reconstructs Follow models from `com.bluebell.follow`
+  - `index_all_for_user()` — full rebuild for a single user
+- Management command: `python manage.py atproto_reindex --user <username>` or `--all`
+- Slug uniqueness handling (appends rkey fragment on collision)
+- Cross-references preserved (post → game via atproto_uri)
 
 ---
 
