@@ -17,6 +17,7 @@ import {
   PencilSquareIcon,
   WrenchScrewdriverIcon,
   ChartBarIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardPage() {
@@ -64,6 +65,13 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold">Dashboard</h1>
         {user?.is_creator && (
           <div className="flex gap-2">
+            <Link
+              to="/dashboard/import"
+              className="btn btn-ghost btn-sm"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Import
+            </Link>
             <Link
               to="/dashboard/analytics"
               className="btn btn-ghost btn-sm"

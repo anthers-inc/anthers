@@ -630,3 +630,123 @@ class PlatformDisconnectView(APIView):
 
         conn.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ─── itch.io Import ───
+
+
+class ItchioImportPreviewView(APIView):
+    """Preview games from an itch.io profile before importing."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        username = request.query_params.get("username", "").strip()
+        if not username:
+            return Response(
+                {"detail": "username query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .itchio_importer import fetch_user_games
+
+        games = fetch_user_games(username)
+        if not games:
+            return Response(
+                {"detail": f"No public games found for '{username}'. Check the username and try again."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({"username": username, "games": games})
+
+
+class ItchioImportDetailView(APIView):
+    """Fetch detailed metadata for a single itch.io game."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        game_url = request.data.get("url", "").strip()
+        if not game_url:
+            return Response(
+                {"detail": "url is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not game_url.startswith("https://") or "itch.io" not in game_url:
+            return Response(
+                {"detail": "URL must be an itch.io game page."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .itchio_importer import fetch_game_details
+
+        details = fetch_game_details(game_url)
+        if not details:
+            return Response(
+                {"detail": "Could not fetch game details. Check the URL."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(details)
+
+
+class ItchioImportExecuteView(APIView):
+    """Import one or more itch.io games as draft projects."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        games = request.data.get("games", [])
+        if not games:
+            return Response(
+                {"detail": "games list is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(games) > 20:
+            return Response(
+                {"detail": "Maximum 20 games per import."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .itchio_importer import fetch_game_details, import_game_as_project
+
+        results = []
+        for game in games:
+            url = game.get("url", "").strip()
+            if not url:
+                continue
+
+            try:
+                details = fetch_game_details(url)
+                if not details:
+                    results.append({
+                        "url": url,
+                        "status": "failed",
+                        "error": "Could not fetch game details.",
+                    })
+                    continue
+
+                project = import_game_as_project(request.user, details)
+                results.append({
+                    "url": url,
+                    "status": "imported",
+                    "project_id": project.id,
+                    "project_slug": project.slug,
+                    "title": project.title,
+                })
+            except Exception as e:
+                logger.exception("Failed to import game from %s", url)
+                results.append({
+                    "url": url,
+                    "status": "failed",
+                    "error": str(e)[:200],
+                })
+
+        imported_count = sum(1 for r in results if r["status"] == "imported")
+        return Response({
+            "imported": imported_count,
+            "total": len(results),
+            "results": results,
+        }, status=status.HTTP_201_CREATED if imported_count > 0 else status.HTTP_200_OK)

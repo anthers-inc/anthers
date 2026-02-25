@@ -30,6 +30,7 @@ import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 import JamFormPage from "./pages/JamFormPage";
+import ImportPage from "./pages/ImportPage";
 
 export default function App() {
   return (
@@ -121,6 +122,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <JamFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/import"
+          element={
+            <ProtectedRoute>
+              <ImportPage />
             </ProtectedRoute>
           }
         />

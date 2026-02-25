@@ -39,3 +39,6 @@ stripe>=11.0
 requests>=2.32
 PyJWT>=2.0
 cryptography>=43.0
+
+# Web scraping (itch.io import)
+beautifulsoup4>=4.12

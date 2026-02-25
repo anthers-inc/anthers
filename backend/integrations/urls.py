@@ -62,4 +62,20 @@ urlpatterns = [
         views.CrossPublishInitView.as_view(),
         name="cross-publish-initiate",
     ),
+    # itch.io import
+    path(
+        "import/itchio/preview/",
+        views.ItchioImportPreviewView.as_view(),
+        name="itchio-import-preview",
+    ),
+    path(
+        "import/itchio/detail/",
+        views.ItchioImportDetailView.as_view(),
+        name="itchio-import-detail",
+    ),
+    path(
+        "import/itchio/",
+        views.ItchioImportExecuteView.as_view(),
+        name="itchio-import-execute",
+    ),
 ]
