@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "payments",
     "subscriptions",
     "integrations",
+    "jams",
 ]
 
 MIDDLEWARE = [
