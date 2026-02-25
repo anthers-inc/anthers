@@ -131,7 +131,13 @@ class FollowView(APIView):
                 {"detail": "You cannot follow yourself."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        Follow.objects.get_or_create(follower=request.user, creator=creator)
+        follow, created = Follow.objects.get_or_create(follower=request.user, creator=creator)
+        if created:
+            try:
+                from .atproto_sync import sync_follow_to_atproto
+                sync_follow_to_atproto(follow)
+            except Exception:
+                logger.debug("ATProto follow sync skipped", exc_info=True)
         return Response({"detail": "Followed."}, status=status.HTTP_201_CREATED)
 
 
@@ -421,6 +427,21 @@ class ATProtoCallbackView(APIView):
             # Clean up OAuth session data
             del request.session["atproto_oauth"]
 
+            def _save_atproto_session(target_user):
+                """Persist ATProto tokens for PDS write access."""
+                from .models import ATProtoSession
+                ATProtoSession.objects.update_or_create(
+                    user=target_user,
+                    defaults={
+                        "access_token": token_data.get("access_token", ""),
+                        "refresh_token": token_data.get("refresh_token", ""),
+                        "dpop_private_pem": oauth_state["dpop_private_pem"],
+                        "dpop_jwk": oauth_state["dpop_jwk"],
+                        "token_endpoint": oauth_state["as_metadata"].get("token_endpoint", ""),
+                        "dpop_nonce": token_data.get("_dpop_nonce", ""),
+                    },
+                )
+
             if intent == "link":
                 # Link DID to existing account
                 if not request.user.is_authenticated:
@@ -438,6 +459,7 @@ class ATProtoCallbackView(APIView):
                 user.atproto_handle = handle
                 user.atproto_pds_url = pds_url
                 user.save(update_fields=["atproto_did", "atproto_handle", "atproto_pds_url"])
+                _save_atproto_session(user)
                 return redirect(
                     f"{frontend_url}/auth/atproto/callback?success=linked"
                 )
@@ -457,6 +479,7 @@ class ATProtoCallbackView(APIView):
                 )
 
             login(request, user, backend="accounts.atproto_backend.ATProtoBackend")
+            _save_atproto_session(user)
             return redirect(
                 f"{frontend_url}/auth/atproto/callback?success=login"
             )

@@ -53,6 +53,9 @@ class Project(models.Model):
     website_url = models.URLField(blank=True)
     source_url = models.URLField(blank=True, help_text="e.g. GitHub link")
 
+    # ATProto
+    atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -141,6 +144,9 @@ class Post(models.Model):
     # Text post metadata
     estimated_read_minutes = models.PositiveIntegerField(null=True, blank=True)
 
+    # ATProto
+    atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -208,6 +214,7 @@ class Comment(models.Model):
         null=True, blank=True,
     )
     body = models.TextField()
+    atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -227,6 +234,7 @@ class Rating(models.Model):
     score = models.IntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
+    atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

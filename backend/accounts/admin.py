@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import Follow, User
+from .models import ATProtoSession, Follow, User
 
 
 @admin.register(User)
@@ -30,6 +30,13 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Follow)
 class FollowAdmin(admin.ModelAdmin):
-    list_display = ("follower", "creator", "created_at")
+    list_display = ("follower", "creator", "atproto_uri", "created_at")
     list_filter = ("created_at",)
     raw_id_fields = ("follower", "creator")
+
+
+@admin.register(ATProtoSession)
+class ATProtoSessionAdmin(admin.ModelAdmin):
+    list_display = ("user", "token_endpoint", "updated_at")
+    raw_id_fields = ("user",)
+    readonly_fields = ("access_token", "refresh_token", "dpop_private_pem")

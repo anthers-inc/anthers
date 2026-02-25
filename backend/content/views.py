@@ -6,7 +6,12 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+import logging
+
 from .models import Asset, Comment, InlineImage, Post, Project, Rating, Screenshot, TranscodingJob
+
+logger = logging.getLogger(__name__)
+
 from .serializers import (
     AssetSerializer,
     CommentSerializer,
@@ -20,6 +25,25 @@ from .serializers import (
     ScreenshotSerializer,
     TranscodingJobSerializer,
 )
+
+
+def _sync_to_atproto(record_type, obj):
+    """Best-effort sync to ATProto. Logs errors but never raises."""
+    try:
+        from accounts.atproto_sync import (
+            sync_project_to_atproto,
+            sync_post_to_atproto,
+            sync_rating_to_atproto,
+        )
+        sync_fn = {
+            "project": sync_project_to_atproto,
+            "post": sync_post_to_atproto,
+            "rating": sync_rating_to_atproto,
+        }.get(record_type)
+        if sync_fn:
+            sync_fn(obj)
+    except Exception:
+        logger.debug("ATProto sync skipped for %s %s", record_type, obj.pk, exc_info=True)
 
 
 # ─── Projects ───
@@ -78,7 +102,8 @@ class ProjectListCreateView(generics.ListCreateAPIView):
         return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
-        serializer.save(creator=self.request.user)
+        project = serializer.save(creator=self.request.user)
+        _sync_to_atproto("project", project)
 
 
 class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -201,6 +226,7 @@ class PostListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         post = serializer.save(creator=self.request.user)
         self._post_create_hooks(post)
+        _sync_to_atproto("post", post)
 
     def _post_create_hooks(self, post):
         # Calculate read time for text posts
@@ -487,9 +513,10 @@ class ProjectRatingView(APIView):
         })
         serializer.is_valid(raise_exception=True)
         # Upsert — update if already rated
-        Rating.objects.update_or_create(
+        rating, _ = Rating.objects.update_or_create(
             user=request.user,
             project=project,
             defaults={"score": serializer.validated_data["score"]},
         )
+        _sync_to_atproto("rating", rating)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

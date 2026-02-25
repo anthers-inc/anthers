@@ -38,7 +38,24 @@
 - Cross-references via `ref` (e.g. rating → game, post → game)
 - DID references for social records (follow subject, boost subject)
 
-### Sub-Phase 5C: Write Paths — TODO
+### Sub-Phase 5C: Write Paths ✅
+
+- `atproto_uri` field added to: Project, Post, Comment, Rating, Follow, BoostAllocation
+- `ATProtoSession` model stores OAuth tokens + DPoP key for PDS write access
+- Sessions auto-saved during OAuth callback (both login and link flows)
+- `atproto_sync.py` module with record write functions:
+  - `sync_project_to_atproto()` — creates/updates `com.bluebell.game` records
+  - `sync_post_to_atproto()` — creates/updates `com.bluebell.post` records
+  - `sync_rating_to_atproto()` — creates/updates `com.bluebell.rating` records
+  - `sync_follow_to_atproto()` — creates `com.bluebell.follow` records
+  - `sync_boost_to_atproto()` — creates/updates `com.bluebell.boost` records
+  - `delete_record_from_atproto()` — deletes records by URI
+- Best-effort sync: failures logged but never block the main request
+- Integrated into content views: ProjectListCreateView, PostListCreateView, ProjectRatingView
+- Integrated into accounts views: FollowView
+- Token refresh with DPoP nonce retry built into PDS request handler
+- TID (timestamp-based ID) generation for ATProto record keys
+
 ### Sub-Phase 5D: Source of Truth — TODO
 
 ---

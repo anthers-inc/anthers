@@ -162,6 +162,7 @@ class BoostAllocation(models.Model):
         default=False,
         help_text="Locked after first manual adjustment in a billing cycle.",
     )
+    atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
