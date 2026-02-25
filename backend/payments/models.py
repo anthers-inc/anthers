@@ -67,3 +67,42 @@ class CRFLedger(models.Model):
 
     def __str__(self):
         return f"CRF {self.amount} — {self.description}"
+
+
+class CRFSubsidy(models.Model):
+    """Monthly CRF subsidy for small creators to cover hosting costs."""
+
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="crf_subsidies",
+    )
+    billing_cycle = models.DateField(
+        help_text="First day of the billing cycle."
+    )
+    estimated_hosting_cost = models.DecimalField(
+        max_digits=8, decimal_places=2,
+        help_text="Estimated monthly hosting cost for this creator.",
+    )
+    creator_earnings = models.DecimalField(
+        max_digits=8, decimal_places=2,
+        help_text="Creator's total earnings during this cycle.",
+    )
+    subsidy_amount = models.DecimalField(
+        max_digits=8, decimal_places=2,
+        help_text="CRF subsidy paid to offset hosting costs.",
+    )
+    storage_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Total storage used by creator's content.",
+    )
+    project_count = models.PositiveIntegerField(default=0)
+    post_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("creator", "billing_cycle")
+        ordering = ["-billing_cycle"]
+
+    def __str__(self):
+        return f"CRF subsidy ${self.subsidy_amount} for {self.creator} ({self.billing_cycle})"

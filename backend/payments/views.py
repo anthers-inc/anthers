@@ -10,9 +10,10 @@ from rest_framework.views import APIView
 from content.models import Project
 
 from .fees import calculate_fees
-from .models import CRFLedger, Purchase, StripeAccount
+from .models import CRFLedger, CRFSubsidy, Purchase, StripeAccount
 from .serializers import (
     CheckoutResponseSerializer,
+    CRFSubsidySerializer,
     PurchaseSerializer,
     StripeAccountSerializer,
 )
@@ -267,3 +268,30 @@ class StripeWebhookView(APIView):
         account.save(update_fields=[
             "charges_enabled", "payouts_enabled", "onboarding_complete", "updated_at"
         ])
+
+
+# ─── CRF Subsidy ───
+
+
+class CRFStatusView(APIView):
+    """CRF fund status: balance and recent subsidy info for a creator."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Sum
+
+        # CRF fund balance
+        crf_balance = CRFLedger.objects.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
+        # Creator's subsidy history
+        subsidies = CRFSubsidy.objects.filter(
+            creator=request.user
+        ).order_by("-billing_cycle")[:6]
+
+        return Response({
+            "crf_balance": str(crf_balance),
+            "subsidies": CRFSubsidySerializer(subsidies, many=True).data,
+        })

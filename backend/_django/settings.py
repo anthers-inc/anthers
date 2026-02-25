@@ -224,6 +224,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "subscriptions.tasks.distribute_pool",
         "schedule": 24 * 60 * 60,  # Daily
     },
+    "calculate-crf-subsidies-monthly": {
+        "task": "payments.tasks.calculate_crf_subsidies",
+        "schedule": 24 * 60 * 60,  # Daily (idempotent per cycle)
+    },
 }
 
 # ─── Media Upload Limits ───

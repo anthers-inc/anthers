@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Purchase, StripeAccount
+from .models import CRFSubsidy, Purchase, StripeAccount
 
 
 class StripeAccountSerializer(serializers.ModelSerializer):
@@ -22,6 +22,23 @@ class CheckoutResponseSerializer(serializers.Serializer):
     processing_fee = serializers.DecimalField(max_digits=8, decimal_places=2)
     crf_fee = serializers.DecimalField(max_digits=8, decimal_places=2)
     creator_earnings = serializers.DecimalField(max_digits=8, decimal_places=2)
+
+
+class CRFSubsidySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CRFSubsidy
+        fields = (
+            "id",
+            "billing_cycle",
+            "estimated_hosting_cost",
+            "creator_earnings",
+            "subsidy_amount",
+            "storage_bytes",
+            "project_count",
+            "post_count",
+            "created_at",
+        )
+        read_only_fields = fields
 
 
 class PurchaseSerializer(serializers.ModelSerializer):

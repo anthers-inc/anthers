@@ -580,6 +580,25 @@ export interface CrossPublishInitRequest {
   post_id?: number;
 }
 
+// ─── CRF Types ───
+
+export interface CRFSubsidyItem {
+  id: number;
+  billing_cycle: string;
+  estimated_hosting_cost: string;
+  creator_earnings: string;
+  subsidy_amount: string;
+  storage_bytes: number;
+  project_count: number;
+  post_count: number;
+  created_at: string;
+}
+
+export interface CRFStatusResponse {
+  crf_balance: string;
+  subsidies: CRFSubsidyItem[];
+}
+
 export interface ATProtoClientMetadata {
   client_id: string;
   client_name: string;

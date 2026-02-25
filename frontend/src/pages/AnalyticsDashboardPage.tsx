@@ -11,6 +11,7 @@ import type {
   CrossPublishResultItem,
   PaginatedResponse,
   CreatorEarningsResponse,
+  CRFStatusResponse,
 } from "../lib/api";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
@@ -510,6 +511,77 @@ function CrossPublishHistory() {
   );
 }
 
+// ─── CRF Hosting Subsidy ───
+
+function CRFSubsidySection({
+  crfStatus,
+}: {
+  crfStatus: CRFStatusResponse | null;
+}) {
+  if (!crfStatus || crfStatus.subsidies.length === 0) return null;
+
+  const latest = crfStatus.subsidies[0];
+  const hasSubsidy = parseFloat(latest.subsidy_amount) > 0;
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  return (
+    <div className="card bg-base-200 mb-8">
+      <div className="card-body p-4">
+        <h3 className="font-semibold text-sm mb-3">
+          Hosting Costs & CRF Subsidy
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+          <div>
+            <div className="text-xs text-base-content/50">Hosting Cost</div>
+            <div className="text-lg font-bold">
+              ${latest.estimated_hosting_cost}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">Your Earnings</div>
+            <div className="text-lg font-bold">
+              ${latest.creator_earnings}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">CRF Subsidy</div>
+            <div
+              className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}
+            >
+              ${latest.subsidy_amount}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">Storage Used</div>
+            <div className="text-lg font-bold">
+              {formatBytes(latest.storage_bytes)}
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-base-content/40">
+          {hasSubsidy
+            ? "The Community Resilience Fund is covering part of your hosting costs. As your audience grows, the subsidy decreases."
+            : "Your earnings cover your hosting costs. Thank you for being part of the community!"}
+        </p>
+        <p className="text-xs text-base-content/40 mt-1">
+          {latest.project_count} projects, {latest.post_count} posts —{" "}
+          {new Date(latest.billing_cycle).toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───
 
 export default function AnalyticsDashboardPage() {
@@ -522,6 +594,7 @@ export default function AnalyticsDashboardPage() {
   const [earnings, setEarnings] = useState<CreatorEarningsResponse | null>(
     null,
   );
+  const [crfStatus, setCrfStatus] = useState<CRFStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -549,10 +622,14 @@ export default function AnalyticsDashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    // Fetch earnings (non-blocking, independent of period)
+    // Fetch earnings and CRF status (non-blocking, independent of period)
     api
       .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
       .then(setEarnings)
+      .catch(() => {});
+    api
+      .get<CRFStatusResponse>("/api/v1/payments/crf/status/")
+      .then(setCrfStatus)
       .catch(() => {});
   }, [period]);
 
@@ -592,6 +669,7 @@ export default function AnalyticsDashboardPage() {
           <TimeseriesCharts timeseries={timeseries} />
           <ContentPerformanceTable content={content} />
           <RevenueSection earnings={earnings} />
+          <CRFSubsidySection crfStatus={crfStatus} />
           <CrossPlatformSection comparison={comparison} />
           <CrossPublishHistory />
         </>

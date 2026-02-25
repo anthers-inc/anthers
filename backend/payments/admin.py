@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CRFLedger, Purchase, StripeAccount
+from .models import CRFLedger, CRFSubsidy, Purchase, StripeAccount
 
 
 @admin.register(StripeAccount)
@@ -19,3 +19,10 @@ class PurchaseAdmin(admin.ModelAdmin):
 @admin.register(CRFLedger)
 class CRFLedgerAdmin(admin.ModelAdmin):
     list_display = ("amount", "description", "purchase", "created_at")
+
+
+@admin.register(CRFSubsidy)
+class CRFSubsidyAdmin(admin.ModelAdmin):
+    list_display = ("creator", "billing_cycle", "estimated_hosting_cost", "creator_earnings", "subsidy_amount")
+    list_filter = ("billing_cycle",)
+    raw_id_fields = ("creator",)
