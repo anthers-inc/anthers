@@ -526,6 +526,92 @@ class APIKeyConnectView(APIView):
         )
 
 
+# ─── Cross-Publish Initiation ───
+
+
+class CrossPublishInitView(APIView):
+    """Initiate cross-publishing of content to a connected platform."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        platform = request.data.get("platform")
+        project_id = request.data.get("project_id")
+        post_id = request.data.get("post_id")
+
+        if not platform:
+            return Response(
+                {"detail": "platform is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not project_id and not post_id:
+            return Response(
+                {"detail": "project_id or post_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify platform connection exists
+        if not PlatformConnection.objects.filter(
+            user=request.user, platform=platform, is_active=True
+        ).exists():
+            return Response(
+                {"detail": f"No active {platform} connection found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify content ownership
+        project = None
+        post = None
+        if project_id:
+            try:
+                project = Project.objects.get(id=project_id, creator=request.user)
+            except Project.DoesNotExist:
+                return Response(
+                    {"detail": "Project not found or you don't own it."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        if post_id:
+            try:
+                post = Post.objects.get(id=post_id, creator=request.user)
+            except Post.DoesNotExist:
+                return Response(
+                    {"detail": "Post not found or you don't own it."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Check for existing pending/published result
+        existing = CrossPublishResult.objects.filter(
+            user=request.user,
+            platform=platform,
+            project=project,
+            post=post,
+        ).exclude(status=CrossPublishResult.Status.FAILED).first()
+
+        if existing:
+            return Response(
+                CrossPublishResultSerializer(existing).data,
+                status=status.HTTP_200_OK,
+            )
+
+        # Create cross-publish result and dispatch task
+        cross_publish = CrossPublishResult.objects.create(
+            user=request.user,
+            platform=platform,
+            project=project,
+            post=post,
+            status=CrossPublishResult.Status.PENDING,
+        )
+
+        from .tasks import cross_publish_to_platform
+
+        cross_publish_to_platform.delay(cross_publish.id)
+
+        return Response(
+            CrossPublishResultSerializer(cross_publish).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class PlatformDisconnectView(APIView):
     """Disconnect a platform connection."""
 

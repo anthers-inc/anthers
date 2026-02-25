@@ -51,10 +51,15 @@ urlpatterns = [
         views.YouTubeCallbackView.as_view(),
         name="youtube-callback",
     ),
-    # Cross-publish results
+    # Cross-publish
     path(
         "cross-publish/",
         views.CrossPublishResultListView.as_view(),
         name="cross-publish-list",
+    ),
+    path(
+        "cross-publish/initiate/",
+        views.CrossPublishInitView.as_view(),
+        name="cross-publish-initiate",
     ),
 ]

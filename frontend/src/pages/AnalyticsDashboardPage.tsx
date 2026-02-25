@@ -8,6 +8,8 @@ import type {
   TimeseriesEntry,
   TimeseriesResponse,
   CrossPlatformComparison,
+  CrossPublishResultItem,
+  PaginatedResponse,
 } from "../lib/api";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
@@ -371,6 +373,89 @@ function CrossPlatformSection({
   );
 }
 
+// ─── Cross-Publish History ───
+
+function CrossPublishHistory() {
+  const [results, setResults] = useState<CrossPublishResultItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .get<PaginatedResponse<CrossPublishResultItem>>(
+        "/api/v1/integrations/cross-publish/",
+      )
+      .then((data) => setResults(data.results))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading || results.length === 0) return null;
+
+  const statusBadge = (s: string) => {
+    switch (s) {
+      case "published":
+        return "badge-success";
+      case "pending":
+        return "badge-warning";
+      case "failed":
+        return "badge-error";
+      default:
+        return "badge-ghost";
+    }
+  };
+
+  return (
+    <div className="card bg-base-200 mb-8">
+      <div className="card-body p-4">
+        <h3 className="font-semibold text-sm mb-3">Cross-Publish History</h3>
+        <div className="overflow-x-auto">
+          <table className="table table-sm">
+            <thead>
+              <tr>
+                <th>Content</th>
+                <th>Platform</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.slice(0, 10).map((r) => (
+                <tr key={r.id}>
+                  <td className="text-sm">{r.content_title || "—"}</td>
+                  <td className="text-sm">{r.platform_display}</td>
+                  <td>
+                    <span className={`badge badge-xs ${statusBadge(r.status)}`}>
+                      {r.status}
+                    </span>
+                  </td>
+                  <td className="text-xs text-base-content/50">
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </td>
+                  <td>
+                    {r.external_url ? (
+                      <a
+                        href={r.external_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="link link-primary text-xs"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-xs text-base-content/30">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───
 
 export default function AnalyticsDashboardPage() {
@@ -444,6 +529,7 @@ export default function AnalyticsDashboardPage() {
           <TimeseriesCharts timeseries={timeseries} />
           <ContentPerformanceTable content={content} />
           <CrossPlatformSection comparison={comparison} />
+          <CrossPublishHistory />
         </>
       )}
     </div>

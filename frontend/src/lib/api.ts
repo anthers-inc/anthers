@@ -510,6 +510,12 @@ export interface CrossPublishResultItem {
   created_at: string;
 }
 
+export interface CrossPublishInitRequest {
+  platform: string;
+  project_id?: number;
+  post_id?: number;
+}
+
 export interface ATProtoClientMetadata {
   client_id: string;
   client_name: string;
