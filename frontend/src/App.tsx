@@ -26,6 +26,7 @@ import PostFormPage from "./pages/PostFormPage";
 import LibraryPage from "./pages/LibraryPage";
 import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
+import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 
 export default function App() {
   return (
@@ -99,6 +100,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PostFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/analytics"
+          element={
+            <ProtectedRoute>
+              <AnalyticsDashboardPage />
             </ProtectedRoute>
           }
         />

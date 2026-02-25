@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "content",
     "payments",
     "subscriptions",
+    "integrations",
 ]
 
 MIDDLEWARE = [

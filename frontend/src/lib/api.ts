@@ -405,6 +405,111 @@ export interface ATProtoAuthInitResponse {
   authorization_url: string;
 }
 
+// ─── Analytics / Integrations Types ───
+
+export interface AnalyticsOverview {
+  period_days: number;
+  metrics: {
+    total_events: number;
+    total_views: number;
+    total_plays: number;
+    total_watches: number;
+    total_reads: number;
+    total_listens: number;
+    total_duration_seconds: number;
+    total_duration_hours: number;
+    unique_viewers: number;
+  };
+  content: {
+    published_projects: number;
+    published_posts: number;
+  };
+  cross_publishing: {
+    total_published: number;
+    connected_platforms: string[];
+  };
+}
+
+export interface ContentAnalyticsItem {
+  type: "project" | "post";
+  id: number;
+  title: string;
+  slug?: string;
+  media_type?: string;
+  content_type?: string;
+  views: number;
+  duration_seconds: number;
+  duration_hours: number;
+  unique_viewers: number;
+}
+
+export interface ContentAnalyticsResponse {
+  period_days: number;
+  content: ContentAnalyticsItem[];
+}
+
+export interface TimeseriesEntry {
+  date: string;
+  views: number;
+  plays: number;
+  watches: number;
+  reads: number;
+  listens: number;
+  total_events: number;
+  duration_seconds: number;
+  unique_viewers: number;
+}
+
+export interface TimeseriesResponse {
+  period_days: number;
+  timeseries: TimeseriesEntry[];
+}
+
+export interface CrossPlatformComparison {
+  period_days: number;
+  bluebell: {
+    views: number;
+    duration_seconds: number;
+    unique_viewers: number;
+  };
+  platforms: Record<
+    string,
+    {
+      views: number;
+      likes: number;
+      watch_time_seconds: number;
+      revenue_cents: number;
+      content_count: number;
+      revenue_per_view: number;
+    }
+  >;
+}
+
+export interface PlatformConnectionItem {
+  id: number;
+  platform: string;
+  platform_display: string;
+  platform_user_id: string;
+  platform_username: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CrossPublishResultItem {
+  id: number;
+  platform: string;
+  platform_display: string;
+  content_title: string | null;
+  content_type: "project" | "post" | null;
+  external_id: string;
+  external_url: string;
+  status: "pending" | "published" | "failed";
+  error_message: string;
+  published_at: string | null;
+  created_at: string;
+}
+
 export interface ATProtoClientMetadata {
   client_id: string;
   client_name: string;

@@ -12,6 +12,7 @@ urlpatterns = [
         path("content/", include("content.urls")),
         path("payments/", include("payments.urls")),
         path("subscriptions/", include("subscriptions.urls")),
+        path("integrations/", include("integrations.urls")),
         path("schema/", SpectacularAPIView.as_view(), name="schema"),
         path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
     ])),
