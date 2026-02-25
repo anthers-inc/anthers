@@ -5,105 +5,113 @@
 
 ---
 
-## Sub-Phase 4A: Subscription Tiers + Stripe Billing — COMPLETE
+## COMPLETED — All 4 Sub-Phases
 
-### Backend — New `subscriptions` Django App
+### Sub-Phase 4A: Subscription Tiers + Stripe Billing ✅
 
-| File | Action | Notes |
-|------|--------|-------|
-| `backend/subscriptions/__init__.py` | **Created** | Empty |
-| `backend/subscriptions/apps.py` | **Created** | SubscriptionsConfig |
-| `backend/subscriptions/models.py` | **Created** | 5 models: Subscription, AttentionEvent, BoostAllocation, PoolDistribution, CreatorGate |
-| `backend/subscriptions/serializers.py` | **Created** | SubscriptionSerializer, SubscriptionTierSerializer, AttentionEventSerializer/Batch, BoostAllocationSerializer, PoolDistributionSerializer, CreatorGateSerializer |
-| `backend/subscriptions/views.py` | **Created** | TierListView, SubscriptionDetailView, SubscribeView (Stripe Checkout + tier change), CancelSubscriptionView, ResumeSubscriptionView, BillingPortalView, SubscriptionWebhookView (6 event types) |
-| `backend/subscriptions/urls.py` | **Created** | 7 routes at `/api/v1/subscriptions/` |
-| `backend/subscriptions/admin.py` | **Created** | Admin registration for all 5 models |
-| `backend/subscriptions/tasks.py` | **Created** | Stub tasks: distribute_pool, aggregate_attention (Phase 4C) |
-| `backend/subscriptions/migrations/0001_initial.py` | **Created + Applied** | All 5 tables with indexes |
+**Commit:** `8f2b00b`
 
-### Configuration Changes
+- New `subscriptions` Django app with 5 models
+- Stripe Checkout for subscription creation, in-place tier upgrades
+- Cancel/resume/billing portal endpoints
+- Webhook handler for 6 Stripe event types
+- Frontend SubscribePage (tier cards + comparison table) and SubscriptionPage (dashboard)
+- Navigation links in navbar and user dropdown
 
-| File | Action | Notes |
-|------|--------|-------|
-| `backend/_django/settings.py` | **Modified** | Added `subscriptions` to INSTALLED_APPS; added `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`, `STRIPE_PRICE_BASE/SUPPORTER/ADVOCATE/CHAMPION` settings |
-| `backend/_django/urls.py` | **Modified** | Added `path("subscriptions/", include("subscriptions.urls"))` |
-| `.env.example` | **Modified** | Added `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`, `STRIPE_PRICE_BASE/SUPPORTER/ADVOCATE/CHAMPION` |
+### Sub-Phase 4B: Attention Tracking ✅
 
-### Frontend
+**Commit:** `c3f2c08`
 
-| File | Action | Notes |
-|------|--------|-------|
-| `frontend/src/lib/api.ts` | **Modified** | Added `SubscriptionTier` type, `SubscriptionTierOption` and `SubscriptionStatus` interfaces |
-| `frontend/src/pages/SubscribePage.tsx` | **Created** | Tier selection cards with highlights, comparison table, "How It Works" section, Stripe Checkout redirect |
-| `frontend/src/pages/SubscriptionPage.tsx` | **Created** | Subscriber dashboard: current plan card (pool/boost/hours/gate), cancel/resume/billing portal actions, pool distribution placeholder |
-| `frontend/src/App.tsx` | **Modified** | Added `/subscribe` (public) and `/subscription` (protected) routes |
-| `frontend/src/components/layout/Layout.tsx` | **Modified** | Added "Subscribe" to nav bar (mobile + desktop); added "Subscription" to user dropdown menu |
+- `POST /api/v1/subscriptions/attention/` — batch event ingestion (50 events max, 300s cap per event, self-attention filtered)
+- `GET /api/v1/subscriptions/attention/summary/` — content hours used this cycle
+- Frontend `useAttentionTracker` hook — accumulates seconds when page visible, flushes every 30s
+- Integrated into PostPage (read/watch/listen), ProjectPage (play/page_view), MediaPlayerProvider (background listen)
+- Added `creator_id` to all content serializers (Project, Post, list variants)
+- SubscriptionPage shows content hours progress bar
 
-### API Endpoints
+### Sub-Phase 4C: Pool Distribution Engine ✅
 
-```
-GET    /api/v1/subscriptions/tiers/           — Public tier list (5 tiers with pricing/pool/boost details)
-GET    /api/v1/subscriptions/me/              — Current user's subscription status (auth required)
-POST   /api/v1/subscriptions/subscribe/       — Create/change subscription (Stripe Checkout or in-place upgrade)
-POST   /api/v1/subscriptions/cancel/          — Cancel at period end
-POST   /api/v1/subscriptions/resume/          — Resume pending cancellation
-POST   /api/v1/subscriptions/billing-portal/  — Stripe billing portal redirect
-POST   /api/v1/subscriptions/webhook/         — Stripe webhook (6 event types)
-```
+**Commit:** `cc451cd`
 
-### Webhook Events Handled
+- Celery task `distribute_pool` — aggregates attention per creator, distributes pool proportionally, applies boost allocations, writes PoolDistribution ledger
+- Rounding drift correction (adjusts largest allocation)
+- `GET /api/v1/subscriptions/distributions/` — subscriber's per-creator breakdown
+- `GET /api/v1/subscriptions/earnings/` — creator's total pool/boost income + supporter count
+- SubscriptionPage shows distribution table (creator, time, pool, boost, total)
+- DashboardPage shows creator earnings card (pool income, boost income, total, supporters)
 
-- `checkout.session.completed` — Links Stripe subscription to Bluebell Subscription model
-- `customer.subscription.created` — Syncs subscription state
-- `customer.subscription.updated` — Syncs tier/status/period/cancellation
-- `customer.subscription.deleted` — Reverts to Window tier
-- `invoice.payment_succeeded` — Updates period dates, marks active
-- `invoice.payment_failed` — Marks subscription inactive
+### Sub-Phase 4D: Boost Allocation + Gates ✅
 
-### Database Tables Created
+**Commit:** `f04d093`
 
-- `subscriptions_subscription` — OneToOne with User, tier/stripe IDs/period/status
-- `subscriptions_attentionevent` — User→Creator attention tracking (indexed by user+date, creator+date)
-- `subscriptions_boostallocation` — User→Creator boost amount per billing cycle (unique_together)
-- `subscriptions_pooldistribution` — Monthly subscriber→creator distribution ledger
-- `subscriptions_creatorgate` — Creator-set thresholds for gated content
-
-### Model Properties (Subscription)
-
-- `is_paid` — True if tier != window and active
-- `has_boost_pool` — True for supporter/advocate/champion
-- `has_gate_access` — Same as has_boost_pool
-- `monthly_content_hours` — 10 (window), 25 (base), None (unlimited for supporter+)
-- `creator_pool_amount` — $4.85/$4.70/$4.55/$4.40 by tier
-- `boost_pool_amount` — $0/$0/$5/$10/$15 by tier
+- `GET/POST /api/v1/subscriptions/boosts/` — list/set boost allocations with budget enforcement
+- `GET/POST /api/v1/subscriptions/gates/` — creator gate CRUD
+- `PUT/DELETE /api/v1/subscriptions/gates/<pk>/` — gate update/delete
+- `GET /api/v1/subscriptions/access/<pk>/` — content access check
+- PostDetailView enforces visibility: redacts body/media for unauthorized users, adds `access_granted` field
+- PostPage shows locked content gate with subscribe/boost prompts
+- Access logic: public (always), subscribers_only (paid tier required), gated (boost >= creator's lowest gate threshold)
 
 ---
 
-## Remaining Sub-Phases
+## API Endpoints (Complete)
 
-### 4B — Attention Tracking (NOT STARTED)
+```
+# Subscription Management
+GET    /api/v1/subscriptions/tiers/             — Public tier list
+GET    /api/v1/subscriptions/me/                — Current subscription status
+POST   /api/v1/subscriptions/subscribe/         — Create/change subscription
+POST   /api/v1/subscriptions/cancel/            — Cancel at period end
+POST   /api/v1/subscriptions/resume/            — Resume pending cancellation
+POST   /api/v1/subscriptions/billing-portal/    — Stripe billing portal
 
-- Frontend `AttentionTracker` component (invisible, reports durations every 30-60s)
-- Backend batch ingestion endpoint (`POST /api/v1/subscriptions/attention/`)
-- Content hour tracking + cap enforcement
-- Privacy-conscious design (aggregate only, no per-second tracking)
+# Attention Tracking
+POST   /api/v1/subscriptions/attention/         — Batch event ingestion
+GET    /api/v1/subscriptions/attention/summary/  — Content hours used
 
-### 4C — Pool Distribution Engine (NOT STARTED)
+# Pool Distributions
+GET    /api/v1/subscriptions/distributions/     — Subscriber's distributions
+GET    /api/v1/subscriptions/earnings/          — Creator's earnings
 
-- Celery task: `distribute_pool` (monthly per subscriber)
-- Attention aggregation per creator per subscriber
-- Proportional allocation of creator pool based on attention time
-- CRF deduction from pool distributions
-- PoolDistribution ledger records
-- Frontend: pool distribution details on SubscriptionPage
-- Creator earnings view on DashboardPage
+# Boost Allocations
+GET    /api/v1/subscriptions/boosts/            — List boost allocations
+POST   /api/v1/subscriptions/boosts/            — Set/update boost allocation
 
-### 4D — Boost Allocation + Gates (NOT STARTED)
+# Creator Gates
+GET    /api/v1/subscriptions/gates/             — List gates
+POST   /api/v1/subscriptions/gates/             — Create gate
+PUT    /api/v1/subscriptions/gates/<pk>/        — Update gate
+DELETE /api/v1/subscriptions/gates/<pk>/        — Delete gate
 
-- Boost slider UI on SubscriptionPage
-- Lock-in mechanics (first adjustment locks for billing cycle)
-- CreatorGate management for creators (in DashboardPage)
-- Gate access computation (boost amount vs threshold)
-- Content access control enforcement in PostDetailView and PostListCreateView
-- "Subscribe to unlock" prompts on gated content
-- Locked content previews (blurred/truncated)
+# Access Control
+GET    /api/v1/subscriptions/access/<pk>/       — Check content access
+
+# Webhook
+POST   /api/v1/subscriptions/webhook/           — Stripe subscription events
+```
+
+---
+
+## Architecture Notes
+
+### Content Access Control Flow
+1. PostDetailView.retrieve() checks `post.visibility`
+2. For `subscribers_only`: requires `subscription.is_paid`
+3. For `gated`: requires `subscription.has_gate_access` AND boost allocation >= creator's lowest gate threshold
+4. Unauthorized: body/body_html redacted, media nullified, `access_granted: false` returned
+5. Frontend shows locked gate card with subscribe/boost CTA
+
+### Attention Tracking Flow
+1. Frontend `useAttentionTracker` ticks every 1s when page is visible
+2. Accumulated seconds flushed to pending queue every 30s
+3. Pending queue posted to `/attention/` endpoint every 30s
+4. Also flushes on page visibility change (tab switch/close)
+5. Backend: bulk_create with validation (50 max, 300s cap, no self-attention)
+
+### Pool Distribution Flow
+1. Celery task `distribute_pool` runs per subscriber (or all)
+2. Queries AttentionEvent for current billing cycle
+3. Calculates proportional split of `creator_pool_amount`
+4. Applies BoostAllocation amounts
+5. Creates/updates PoolDistribution ledger entries
+6. Rounding drift corrected on largest allocation
