@@ -324,6 +324,34 @@ export interface AttentionSummary {
   cycle_start: string | null;
 }
 
+export interface PoolDistributionItem {
+  id: number;
+  creator: number;
+  creator_username: string;
+  creator_display_name: string;
+  billing_cycle: string;
+  pool_amount: string;
+  boost_amount: string;
+  total_amount: string;
+  attention_seconds: number;
+  created_at: string;
+}
+
+export interface MyDistributionsResponse {
+  distributions: PoolDistributionItem[];
+  total_pool: string;
+  total_boost: string;
+  total: string;
+}
+
+export interface CreatorEarningsResponse {
+  total_pool: string;
+  total_boost: string;
+  total: string;
+  subscriber_count: number;
+  cycle: string | null;
+}
+
 export interface SubscriptionStatus {
   id?: number;
   tier: SubscriptionTier;

@@ -17,6 +17,10 @@ urlpatterns = [
     path("attention/", views.AttentionBatchView.as_view(), name="attention-batch"),
     path("attention/summary/", views.AttentionSummaryView.as_view(), name="attention-summary"),
 
+    # Pool distributions
+    path("distributions/", views.MyDistributionsView.as_view(), name="my-distributions"),
+    path("earnings/", views.CreatorEarningsView.as_view(), name="creator-earnings"),
+
     # Webhook
     path("webhook/", views.SubscriptionWebhookView.as_view(), name="subscription-webhook"),
 ]

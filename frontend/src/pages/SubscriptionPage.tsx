@@ -1,11 +1,18 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type SubscriptionStatus, type AttentionSummary } from "../lib/api";
+import {
+  api,
+  type SubscriptionStatus,
+  type AttentionSummary,
+  type MyDistributionsResponse,
+} from "../lib/api";
 
 export default function SubscriptionPage() {
   const [searchParams] = useSearchParams();
   const [sub, setSub] = useState<SubscriptionStatus | null>(null);
   const [attention, setAttention] = useState<AttentionSummary | null>(null);
+  const [distributions, setDistributions] =
+    useState<MyDistributionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +23,7 @@ export default function SubscriptionPage() {
   useEffect(() => {
     fetchSubscription();
     fetchAttention();
+    fetchDistributions();
   }, []);
 
   useEffect(() => {
@@ -50,6 +58,17 @@ export default function SubscriptionPage() {
       setAttention(data);
     } catch {
       // Non-critical — don't show error
+    }
+  }
+
+  async function fetchDistributions() {
+    try {
+      const data = await api.get<MyDistributionsResponse>(
+        "/api/v1/subscriptions/distributions/",
+      );
+      setDistributions(data);
+    } catch {
+      // Non-critical
     }
   }
 
@@ -281,24 +300,99 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* Pool Distribution Preview (placeholder for Phase 4C) */}
+      {/* Pool Distribution */}
       {isPaid && (
         <div className="mt-8">
           <h2 className="text-lg font-bold mb-3">
             This Month's Creator Support
           </h2>
-          <div className="card bg-base-200">
-            <div className="card-body text-center text-base-content/60">
-              <p>
-                Pool distribution details will appear here once attention
-                tracking is active.
-              </p>
-              <p className="text-sm mt-1">
-                Your ${sub.creator_pool_amount} creator pool will be distributed
-                proportionally based on the content you watch, read, and listen to.
-              </p>
+          {distributions && distributions.distributions.length > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="card bg-base-200">
+                  <div className="card-body py-3 text-center">
+                    <div className="text-xs text-base-content/50 uppercase">
+                      Pool
+                    </div>
+                    <div className="text-lg font-bold">
+                      ${distributions.total_pool}
+                    </div>
+                  </div>
+                </div>
+                <div className="card bg-base-200">
+                  <div className="card-body py-3 text-center">
+                    <div className="text-xs text-base-content/50 uppercase">
+                      Boost
+                    </div>
+                    <div className="text-lg font-bold">
+                      ${distributions.total_boost}
+                    </div>
+                  </div>
+                </div>
+                <div className="card bg-base-200">
+                  <div className="card-body py-3 text-center">
+                    <div className="text-xs text-base-content/50 uppercase">
+                      Total
+                    </div>
+                    <div className="text-lg font-bold">
+                      ${distributions.total}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Creator</th>
+                      <th className="text-right">Time</th>
+                      <th className="text-right">Pool</th>
+                      <th className="text-right">Boost</th>
+                      <th className="text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {distributions.distributions.map((d) => (
+                      <tr key={d.id}>
+                        <td>
+                          <Link
+                            to={`/${d.creator_username}`}
+                            className="link link-hover"
+                          >
+                            {d.creator_display_name || d.creator_username}
+                          </Link>
+                        </td>
+                        <td className="text-right text-base-content/60">
+                          {Math.round(d.attention_seconds / 60)}m
+                        </td>
+                        <td className="text-right">${d.pool_amount}</td>
+                        <td className="text-right">
+                          {parseFloat(d.boost_amount) > 0
+                            ? `$${d.boost_amount}`
+                            : "—"}
+                        </td>
+                        <td className="text-right font-medium">
+                          ${d.total_amount}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="card bg-base-200">
+              <div className="card-body text-center text-base-content/60">
+                <p>No distributions yet this cycle.</p>
+                <p className="text-sm mt-1">
+                  Your ${sub.creator_pool_amount} creator pool will be
+                  distributed proportionally based on the content you watch,
+                  read, and listen to.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

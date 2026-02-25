@@ -10,8 +10,12 @@ from rest_framework.views import APIView
 from django.db.models import Sum
 from django.utils import timezone as django_timezone
 
-from .models import AttentionEvent, Subscription
-from .serializers import SubscriptionSerializer, SubscriptionTierSerializer
+from .models import AttentionEvent, PoolDistribution, Subscription
+from .serializers import (
+    PoolDistributionSerializer,
+    SubscriptionSerializer,
+    SubscriptionTierSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -410,6 +414,78 @@ class AttentionSummaryView(APIView):
             "seconds_used": total_seconds,
             "tier": tier,
             "cycle_start": cycle_start.isoformat() if cycle_start else None,
+        })
+
+
+# ─── Pool Distributions (4C) ───
+
+
+class MyDistributionsView(APIView):
+    """Subscriber view: how my subscription was distributed to creators."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        cycle = request.query_params.get("cycle")
+
+        qs = PoolDistribution.objects.filter(
+            subscriber=request.user,
+        ).select_related("creator")
+
+        if cycle:
+            qs = qs.filter(billing_cycle=cycle)
+        else:
+            # Default to latest cycle
+            latest = qs.values_list("billing_cycle", flat=True).first()
+            if latest:
+                qs = qs.filter(billing_cycle=latest)
+
+        distributions = qs.order_by("-pool_amount")
+        serializer = PoolDistributionSerializer(distributions, many=True)
+
+        # Compute totals
+        total_pool = sum(d.pool_amount for d in distributions)
+        total_boost = sum(d.boost_amount for d in distributions)
+
+        return Response({
+            "distributions": serializer.data,
+            "total_pool": str(total_pool),
+            "total_boost": str(total_boost),
+            "total": str(total_pool + total_boost),
+        })
+
+
+class CreatorEarningsView(APIView):
+    """Creator view: how much I've earned from subscriber pools and boosts."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        cycle = request.query_params.get("cycle")
+
+        qs = PoolDistribution.objects.filter(
+            creator=request.user,
+        ).select_related("subscriber")
+
+        if cycle:
+            qs = qs.filter(billing_cycle=cycle)
+        else:
+            latest = qs.values_list("billing_cycle", flat=True).first()
+            if latest:
+                qs = qs.filter(billing_cycle=latest)
+
+        distributions = qs.order_by("-pool_amount")
+
+        total_pool = sum(d.pool_amount for d in distributions)
+        total_boost = sum(d.boost_amount for d in distributions)
+        subscriber_count = distributions.values("subscriber").distinct().count()
+
+        return Response({
+            "total_pool": str(total_pool),
+            "total_boost": str(total_boost),
+            "total": str(total_pool + total_boost),
+            "subscriber_count": subscriber_count,
+            "cycle": distributions.first().billing_cycle.isoformat() if distributions.exists() else None,
         })
 
 

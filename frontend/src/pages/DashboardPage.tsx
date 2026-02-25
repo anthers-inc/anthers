@@ -5,6 +5,7 @@ import type {
   ProjectListItem,
   Post,
   PaginatedResponse,
+  CreatorEarningsResponse,
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -21,6 +22,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [earnings, setEarnings] = useState<CreatorEarningsResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,7 +39,15 @@ export default function DashboardPage() {
         setPosts(postData.results);
       })
       .finally(() => setLoading(false));
-  }, []);
+
+    // Fetch creator earnings (non-blocking)
+    if (user?.is_creator) {
+      api
+        .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
+        .then(setEarnings)
+        .catch(() => {});
+    }
+  }, [user?.is_creator]);
 
   if (loading) {
     return (
@@ -83,6 +95,54 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Creator Earnings */}
+      {user?.is_creator && earnings && parseFloat(earnings.total) > 0 && (
+        <div className="card bg-base-200 mb-8">
+          <div className="card-body">
+            <h2 className="card-title text-lg">Subscriber Earnings</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+              <div>
+                <div className="text-xs text-base-content/50 uppercase">
+                  Pool Income
+                </div>
+                <div className="text-xl font-bold text-success">
+                  ${earnings.total_pool}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-base-content/50 uppercase">
+                  Boost Income
+                </div>
+                <div className="text-xl font-bold text-success">
+                  ${earnings.total_boost}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-base-content/50 uppercase">
+                  Total
+                </div>
+                <div className="text-xl font-bold">
+                  ${earnings.total}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-base-content/50 uppercase">
+                  Supporters
+                </div>
+                <div className="text-xl font-bold">
+                  {earnings.subscriber_count}
+                </div>
+              </div>
+            </div>
+            {earnings.cycle && (
+              <p className="text-xs text-base-content/50 mt-2">
+                Cycle: {new Date(earnings.cycle).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Projects */}
       <section className="mb-8">
