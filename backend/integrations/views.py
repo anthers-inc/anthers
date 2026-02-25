@@ -1,7 +1,10 @@
+import logging
 from datetime import timedelta
 
+from django.conf import settings as django_settings
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
+from django.http import HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -10,12 +13,15 @@ from rest_framework.views import APIView
 from content.models import Post, Project
 from subscriptions.models import AttentionEvent
 
+from . import youtube_oauth
 from .models import CrossPublishResult, ExternalMetricSnapshot, PlatformConnection
 from .serializers import (
     CrossPublishResultSerializer,
     PlatformConnectionCreateSerializer,
     PlatformConnectionSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_period(request, default=30, maximum=365):
@@ -352,21 +358,14 @@ class CrossPlatformComparisonView(APIView):
 # ─── Platform Connections ───
 
 
-class PlatformConnectionListCreateView(generics.ListCreateAPIView):
-    """List or create platform connections."""
+class PlatformConnectionListView(generics.ListAPIView):
+    """List the authenticated user's platform connections."""
 
+    serializer_class = PlatformConnectionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return PlatformConnection.objects.filter(user=self.request.user)
-
-    def get_serializer_class(self):
-        if self.request.method == "POST":
-            return PlatformConnectionCreateSerializer
-        return PlatformConnectionSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
 class PlatformConnectionDetailView(generics.RetrieveDestroyAPIView):
@@ -399,3 +398,149 @@ class CrossPublishResultListView(generics.ListAPIView):
             qs = qs.filter(platform=platform)
 
         return qs.order_by("-created_at")
+
+
+# ─── YouTube OAuth ───
+
+
+class YouTubeAuthInitView(APIView):
+    """Initiate YouTube/Google OAuth flow."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if not youtube_oauth.is_configured():
+            return Response(
+                {"detail": "YouTube integration is not configured on this server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if PlatformConnection.objects.filter(
+            user=request.user, platform=PlatformConnection.Platform.YOUTUBE
+        ).exists():
+            return Response(
+                {"detail": "YouTube is already connected. Disconnect first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        url, state = youtube_oauth.build_authorization_url(request)
+        request.session["youtube_oauth_state"] = state
+        return Response({"authorization_url": url})
+
+
+class YouTubeCallbackView(APIView):
+    """Handle YouTube/Google OAuth callback."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        error = request.query_params.get("error")
+        if error:
+            frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+            return HttpResponseRedirect(
+                f"{frontend_url}/settings?youtube=error&detail={error}"
+            )
+
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        saved_state = request.session.pop("youtube_oauth_state", None)
+
+        if not code or not state or state != saved_state:
+            frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+            return HttpResponseRedirect(
+                f"{frontend_url}/settings?youtube=error&detail=invalid_state"
+            )
+
+        tokens = youtube_oauth.exchange_code(request, code)
+        if not tokens:
+            frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+            return HttpResponseRedirect(
+                f"{frontend_url}/settings?youtube=error&detail=token_exchange_failed"
+            )
+
+        access_token = tokens.get("access_token", "")
+        refresh_token = tokens.get("refresh_token", "")
+        expires_in = tokens.get("expires_in", 3600)
+
+        channel_info = youtube_oauth.get_channel_info(access_token)
+        channel_id = channel_info["channel_id"] if channel_info else ""
+        channel_title = channel_info["title"] if channel_info else ""
+
+        PlatformConnection.objects.update_or_create(
+            user=request.user,
+            platform=PlatformConnection.Platform.YOUTUBE,
+            defaults={
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_expires_at": timezone.now() + timedelta(seconds=expires_in),
+                "platform_user_id": channel_id,
+                "platform_username": channel_title,
+                "is_active": True,
+            },
+        )
+
+        frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+        return HttpResponseRedirect(f"{frontend_url}/settings?youtube=connected")
+
+
+# ─── API Key Connection (Steam, itch.io, Substack) ───
+
+
+class APIKeyConnectView(APIView):
+    """Connect a platform using an API key."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        platform = request.data.get("platform")
+        api_key = request.data.get("api_key", "").strip()
+
+        valid_platforms = [
+            PlatformConnection.Platform.STEAM,
+            PlatformConnection.Platform.ITCHIO,
+            PlatformConnection.Platform.SUBSTACK,
+        ]
+        if platform not in valid_platforms:
+            return Response(
+                {"detail": f"Invalid platform. Use one of: {', '.join(valid_platforms)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not api_key:
+            return Response(
+                {"detail": "API key is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        conn, created = PlatformConnection.objects.update_or_create(
+            user=request.user,
+            platform=platform,
+            defaults={
+                "api_key": api_key,
+                "is_active": True,
+            },
+        )
+
+        return Response(
+            PlatformConnectionSerializer(conn).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class PlatformDisconnectView(APIView):
+    """Disconnect a platform connection."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, platform):
+        try:
+            conn = PlatformConnection.objects.get(
+                user=request.user, platform=platform
+            )
+        except PlatformConnection.DoesNotExist:
+            return Response(
+                {"detail": "Platform not connected."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        conn.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

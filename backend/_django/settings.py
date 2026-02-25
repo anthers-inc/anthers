@@ -225,6 +225,12 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 ATPROTO_CLIENT_ID = os.environ.get("ATPROTO_CLIENT_ID", "")
 ATPROTO_REDIRECT_URI = os.environ.get("ATPROTO_REDIRECT_URI", "")
 
+# ─── Google / YouTube Integration ───
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "")
+
 # ─── Misc ───
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

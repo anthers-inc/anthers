@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { api, ApiError, type StripeAccountStatus } from "../lib/api";
+import {
+  api,
+  ApiError,
+  type StripeAccountStatus,
+  type PlatformConnectionItem,
+} from "../lib/api";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
 
@@ -242,6 +247,239 @@ function StripeOnboardingSection() {
   );
 }
 
+const PLATFORM_INFO: Record<
+  string,
+  { name: string; description: string; authType: "oauth" | "api_key" }
+> = {
+  youtube: {
+    name: "YouTube",
+    description: "Upload videos and track analytics from your YouTube channel.",
+    authType: "oauth",
+  },
+  steam: {
+    name: "Steam",
+    description: "Sync game builds and track sales via Steam publisher API.",
+    authType: "api_key",
+  },
+  itchio: {
+    name: "itch.io",
+    description: "Push builds and import analytics from your itch.io page.",
+    authType: "api_key",
+  },
+  substack: {
+    name: "Substack",
+    description: "Cross-publish text posts to your Substack newsletter.",
+    authType: "api_key",
+  },
+};
+
+function PlatformConnectionsSection() {
+  const [searchParams] = useSearchParams();
+  const [connections, setConnections] = useState<PlatformConnectionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(
+    null,
+  );
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  const youtubeResult = searchParams.get("youtube");
+
+  const fetchConnections = () => {
+    api
+      .get<PlatformConnectionItem[]>("/api/v1/integrations/platforms/")
+      .then(setConnections)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(fetchConnections, []);
+
+  const connectedPlatforms = new Set(connections.map((c) => c.platform));
+
+  const handleYouTubeConnect = async () => {
+    setError(null);
+    try {
+      const res = await api.post<{ authorization_url: string }>(
+        "/api/v1/integrations/platforms/youtube/auth/",
+      );
+      window.location.href = res.authorization_url;
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string };
+        setError(data?.detail ?? "Failed to initiate YouTube connection.");
+      } else {
+        setError("Something went wrong.");
+      }
+    }
+  };
+
+  const handleAPIKeyConnect = async (platform: string) => {
+    if (!apiKeyInput.trim()) return;
+    setError(null);
+    try {
+      await api.post("/api/v1/integrations/platforms/connect/", {
+        platform,
+        api_key: apiKeyInput.trim(),
+      });
+      setApiKeyInput("");
+      setConnectingPlatform(null);
+      fetchConnections();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string };
+        setError(data?.detail ?? "Failed to connect platform.");
+      } else {
+        setError("Something went wrong.");
+      }
+    }
+  };
+
+  const handleDisconnect = async (platform: string) => {
+    setDisconnecting(platform);
+    setError(null);
+    try {
+      await api.delete(
+        `/api/v1/integrations/platforms/${platform}/disconnect/`,
+      );
+      fetchConnections();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string };
+        setError(data?.detail ?? "Failed to disconnect platform.");
+      }
+    } finally {
+      setDisconnecting(null);
+    }
+  };
+
+  return (
+    <div className="card bg-base-200">
+      <div className="card-body">
+        <h3 className="card-title text-lg">Platform Connections</h3>
+        <p className="text-sm text-base-content/60 mb-2">
+          Connect external platforms for cross-publishing and unified analytics.
+        </p>
+
+        {youtubeResult === "connected" && (
+          <div className="alert alert-success text-sm mb-2">
+            <span>YouTube connected successfully.</span>
+          </div>
+        )}
+        {youtubeResult === "error" && (
+          <div className="alert alert-error text-sm mb-2">
+            <span>Failed to connect YouTube. Please try again.</span>
+          </div>
+        )}
+        {error && (
+          <div className="alert alert-error text-sm mb-2">
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-base-content/50">Loading...</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {Object.entries(PLATFORM_INFO).map(([platform, info]) => {
+              const conn = connections.find((c) => c.platform === platform);
+              const isConnected = connectedPlatforms.has(platform);
+
+              return (
+                <div
+                  key={platform}
+                  className="flex items-center justify-between p-3 bg-base-100 rounded-lg"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{info.name}</span>
+                      {isConnected && (
+                        <span className="badge badge-success badge-xs">
+                          Connected
+                        </span>
+                      )}
+                    </div>
+                    {isConnected && conn?.platform_username && (
+                      <p className="text-xs text-base-content/50">
+                        {conn.platform_username}
+                      </p>
+                    )}
+                    {!isConnected && (
+                      <p className="text-xs text-base-content/40">
+                        {info.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isConnected ? (
+                      <button
+                        className="btn btn-outline btn-error btn-xs"
+                        onClick={() => handleDisconnect(platform)}
+                        disabled={disconnecting === platform}
+                      >
+                        {disconnecting === platform
+                          ? "..."
+                          : "Disconnect"}
+                      </button>
+                    ) : connectingPlatform === platform &&
+                      info.authType === "api_key" ? (
+                      <div className="flex gap-1">
+                        <input
+                          type="password"
+                          className="input input-bordered input-xs w-40"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          placeholder="API key"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              handleAPIKeyConnect(platform);
+                          }}
+                        />
+                        <button
+                          className="btn btn-primary btn-xs"
+                          onClick={() => handleAPIKeyConnect(platform)}
+                          disabled={!apiKeyInput.trim()}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => {
+                            setConnectingPlatform(null);
+                            setApiKeyInput("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn btn-primary btn-xs"
+                        onClick={() => {
+                          if (info.authType === "oauth") {
+                            handleYouTubeConnect();
+                          } else {
+                            setConnectingPlatform(platform);
+                            setApiKeyInput("");
+                          }
+                        }}
+                      >
+                        Connect
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
 
@@ -431,6 +669,13 @@ export default function SettingsPage() {
       {isCreator && (
         <div className="mt-8">
           <StripeOnboardingSection />
+        </div>
+      )}
+
+      {/* Platform Connections — only shown for creators */}
+      {isCreator && (
+        <div className="mt-8">
+          <PlatformConnectionsSection />
         </div>
       )}
     </div>

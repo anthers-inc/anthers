@@ -27,13 +27,29 @@ urlpatterns = [
     # Platform connections
     path(
         "platforms/",
-        views.PlatformConnectionListCreateView.as_view(),
-        name="platform-list-create",
+        views.PlatformConnectionListView.as_view(),
+        name="platform-list",
     ),
     path(
-        "platforms/<str:platform>/",
-        views.PlatformConnectionDetailView.as_view(),
-        name="platform-detail",
+        "platforms/connect/",
+        views.APIKeyConnectView.as_view(),
+        name="platform-api-key-connect",
+    ),
+    path(
+        "platforms/<str:platform>/disconnect/",
+        views.PlatformDisconnectView.as_view(),
+        name="platform-disconnect",
+    ),
+    # YouTube OAuth
+    path(
+        "platforms/youtube/auth/",
+        views.YouTubeAuthInitView.as_view(),
+        name="youtube-auth-init",
+    ),
+    path(
+        "platforms/youtube/callback/",
+        views.YouTubeCallbackView.as_view(),
+        name="youtube-callback",
     ),
     # Cross-publish results
     path(
