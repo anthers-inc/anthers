@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
+import { BASE_URL } from "../../lib/api";
 
 const STORAGE_KEY = "bluebell_site_access";
-const GATE_URL =
-  ((globalThis as any).__API_URL__ || "http://localhost:8000") + "/health/gate/";
+const GATE_URL = BASE_URL + "/health/gate/";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
   const [authorized, setAuthorized] = useState(

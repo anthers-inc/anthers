@@ -3,11 +3,11 @@
 		respond "OK" 200
 	}
 	handle {
-		redir https://bluebell.dev{uri} permanent
+		redir https://bluebell.parkerhdavis.com{uri} permanent
 	}
 }
 
-bluebell.dev {
+bluebell.parkerhdavis.com {
 	header {
 		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
@@ -15,28 +15,21 @@ bluebell.dev {
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	handle /api/* {
-		reverse_proxy bluebell-backend:8000
-	}
+	@backend path /api/* /admin /admin/* /health/* /static/* /media/*
+	handle @backend {
+		reverse_proxy {
+			to bluebell-backend-blue:8000
+			to bluebell-backend-green:8000
 
-	handle /admin {
-		reverse_proxy bluebell-backend:8000
-	}
-
-	handle /admin/* {
-		reverse_proxy bluebell-backend:8000
-	}
-
-	handle /health/* {
-		reverse_proxy bluebell-backend:8000
-	}
-
-	handle /static/* {
-		reverse_proxy bluebell-backend:8000
-	}
-
-	handle /media/* {
-		reverse_proxy bluebell-backend:8000
+			health_uri /health/
+			health_interval 15s
+			health_timeout 10s
+			health_status 2xx
+			fail_duration 60s
+			max_fails 5
+			unhealthy_status 5xx
+			lb_policy first
+		}
 	}
 
 	handle {

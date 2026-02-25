@@ -1,6 +1,12 @@
-// Base URL defaults to localhost:8000 for dev. Override via window.__API_URL__ if needed.
+// In production (behind reverse proxy), use relative URLs.
+// In local dev (localhost), default to http://localhost:8000.
+// Can always be overridden via window.__API_URL__.
+const isLocalDev =
+  typeof location !== "undefined" &&
+  (location.hostname === "localhost" || location.hostname === "127.0.0.1");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const BASE_URL: string = (globalThis as any).__API_URL__ || "http://localhost:8000";
+export const BASE_URL: string =
+  (globalThis as any).__API_URL__ || (isLocalDev ? "http://localhost:8000" : "");
 
 function getCsrfToken(): string | null {
   const match = document.cookie.match(/csrftoken=([^;]+)/);

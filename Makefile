@@ -3,9 +3,11 @@
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
 COMPOSE_CADDY = docker compose -f docker-compose.caddy.yml
+COMPOSE_DATA = docker compose -f docker-compose.data.yml
 
 .PHONY: help up down rebuild logs ps bash shell migrate makemigrations createsuperuser \
-        deploy deploy-status deploy-rollback caddy-up caddy-down caddy-logs setup clean build
+        deploy deploy-status deploy-rollback caddy-up caddy-down caddy-logs \
+        data-up data-down data-logs setup clean build
 
 # ─── Development ───
 
@@ -57,6 +59,17 @@ deploy-status: ## Show active deployment slot
 
 deploy-rollback: ## Rollback to previous deployment
 	./deploy-blue-green.sh --rollback
+
+# ─── Data Services (production) ───
+
+data-up: ## Start data services (db, redis)
+	$(COMPOSE_DATA) up -d
+
+data-down: ## Stop data services
+	$(COMPOSE_DATA) down
+
+data-logs: ## Follow data service logs
+	$(COMPOSE_DATA) logs -f
 
 # ─── Caddy ───
 

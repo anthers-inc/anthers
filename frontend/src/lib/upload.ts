@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, BASE_URL } from "./api";
 
 interface UploadUrlResponse {
   method: "presigned" | "direct";
@@ -82,7 +82,7 @@ function xhrUploadFormData<T>(
     const xhr = new XMLHttpRequest();
     // Handle relative URLs
     const fullUrl = url.startsWith("/")
-      ? `${(globalThis as any).__API_URL__ || "http://localhost:8000"}${url}`
+      ? `${BASE_URL}${url}`
       : url;
     xhr.open("POST", fullUrl);
     xhr.withCredentials = true;
