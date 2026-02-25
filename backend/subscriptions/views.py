@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import stripe
 from django.conf import settings
@@ -10,8 +11,16 @@ from rest_framework.views import APIView
 from django.db.models import Sum
 from django.utils import timezone as django_timezone
 
-from .models import AttentionEvent, PoolDistribution, Subscription
+from .models import (
+    AttentionEvent,
+    BoostAllocation,
+    CreatorGate,
+    PoolDistribution,
+    Subscription,
+)
 from .serializers import (
+    BoostAllocationSerializer,
+    CreatorGateSerializer,
     PoolDistributionSerializer,
     SubscriptionSerializer,
     SubscriptionTierSerializer,
@@ -487,6 +496,265 @@ class CreatorEarningsView(APIView):
             "subscriber_count": subscriber_count,
             "cycle": distributions.first().billing_cycle.isoformat() if distributions.exists() else None,
         })
+
+
+# ─── Boost Allocations (4D) ───
+
+
+def _current_billing_cycle_date(user):
+    """Get the billing cycle date for the user's current period."""
+    try:
+        sub = user.subscription
+        if sub.current_period_start:
+            return sub.current_period_start.date().replace(day=1)
+    except Subscription.DoesNotExist:
+        pass
+    now = django_timezone.now()
+    return now.date().replace(day=1)
+
+
+class BoostListUpdateView(APIView):
+    """List and update boost allocations for the current billing cycle."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """List boost allocations for current cycle."""
+        try:
+            sub = request.user.subscription
+        except Subscription.DoesNotExist:
+            return Response({"allocations": [], "remaining": "0.00", "total_budget": "0.00"})
+
+        if not sub.has_boost_pool:
+            return Response({"allocations": [], "remaining": "0.00", "total_budget": "0.00"})
+
+        cycle_date = _current_billing_cycle_date(request.user)
+        allocations = BoostAllocation.objects.filter(
+            user=request.user,
+            billing_cycle=cycle_date,
+        ).select_related("creator")
+
+        total_allocated = sum(a.amount for a in allocations)
+        budget = sub.boost_pool_amount
+        remaining = budget - total_allocated
+
+        serializer = BoostAllocationSerializer(allocations, many=True)
+        return Response({
+            "allocations": serializer.data,
+            "remaining": str(remaining),
+            "total_budget": str(budget),
+        })
+
+    def post(self, request):
+        """Set or update a boost allocation to a creator."""
+        try:
+            sub = request.user.subscription
+        except Subscription.DoesNotExist:
+            return Response(
+                {"detail": "No active subscription."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not sub.has_boost_pool:
+            return Response(
+                {"detail": "Your tier does not include a boost pool."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        creator_id = request.data.get("creator")
+        amount = request.data.get("amount")
+
+        if not creator_id or amount is None:
+            return Response(
+                {"detail": "Provide 'creator' and 'amount'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from decimal import Decimal, InvalidOperation
+        try:
+            amount = Decimal(str(amount)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return Response(
+                {"detail": "Invalid amount."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if amount < 0:
+            return Response(
+                {"detail": "Amount cannot be negative."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Don't boost yourself
+        if int(creator_id) == request.user.pk:
+            return Response(
+                {"detail": "Cannot boost yourself."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cycle_date = _current_billing_cycle_date(request.user)
+
+        # Check budget
+        existing = BoostAllocation.objects.filter(
+            user=request.user,
+            billing_cycle=cycle_date,
+        ).exclude(creator_id=int(creator_id))
+
+        total_other = sum(a.amount for a in existing)
+        budget = sub.boost_pool_amount
+
+        if total_other + amount > budget:
+            return Response(
+                {"detail": f"Exceeds boost budget. ${budget - total_other} remaining."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if amount == 0:
+            # Remove allocation
+            BoostAllocation.objects.filter(
+                user=request.user,
+                creator_id=int(creator_id),
+                billing_cycle=cycle_date,
+            ).delete()
+        else:
+            BoostAllocation.objects.update_or_create(
+                user=request.user,
+                creator_id=int(creator_id),
+                billing_cycle=cycle_date,
+                defaults={"amount": amount, "is_locked": True},
+            )
+
+        # Return updated list
+        return self.get(request)
+
+
+# ─── Creator Gates (4D) ───
+
+
+class CreatorGateListCreateView(APIView):
+    """Creators manage their content gates."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """List gates for the current user (creator) or a specified creator."""
+        creator_username = request.query_params.get("creator")
+        if creator_username:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            try:
+                creator = User.objects.get(username=creator_username)
+            except User.DoesNotExist:
+                return Response({"detail": "Creator not found."}, status=status.HTTP_404_NOT_FOUND)
+            gates = CreatorGate.objects.filter(creator=creator)
+        else:
+            gates = CreatorGate.objects.filter(creator=request.user)
+
+        return Response(CreatorGateSerializer(gates, many=True).data)
+
+    def post(self, request):
+        """Create a new gate."""
+        serializer = CreatorGateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(creator=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CreatorGateDetailView(APIView):
+    """Update or delete a gate."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def put(self, request, pk):
+        try:
+            gate = CreatorGate.objects.get(pk=pk, creator=request.user)
+        except CreatorGate.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = CreatorGateSerializer(gate, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        try:
+            gate = CreatorGate.objects.get(pk=pk, creator=request.user)
+        except CreatorGate.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        gate.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ─── Access Check (4D) ───
+
+
+class ContentAccessCheckView(APIView):
+    """Check if user can access a specific post based on visibility/gate rules."""
+
+    permission_classes = []
+
+    def get(self, request, pk):
+        from content.models import Post
+
+        try:
+            post = Post.objects.select_related("creator").get(pk=pk, is_published=True)
+        except Post.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Public content is always accessible
+        if post.visibility == "public":
+            return Response({"access": True, "reason": "public"})
+
+        # Unauthenticated users can't access restricted content
+        if not request.user.is_authenticated:
+            return Response({"access": False, "reason": "login_required"})
+
+        # Creators can always see their own content
+        if post.creator == request.user:
+            return Response({"access": True, "reason": "owner"})
+
+        # Check subscription status
+        try:
+            sub = request.user.subscription
+        except Subscription.DoesNotExist:
+            sub = None
+
+        if post.visibility == "subscribers_only":
+            if sub and sub.is_paid:
+                return Response({"access": True, "reason": "subscriber"})
+            return Response({"access": False, "reason": "subscribers_only"})
+
+        if post.visibility == "gated":
+            if not sub or not sub.has_gate_access:
+                return Response({"access": False, "reason": "gate_tier_required"})
+
+            # Check boost allocation to this creator
+            cycle_date = _current_billing_cycle_date(request.user)
+            boost = BoostAllocation.objects.filter(
+                user=request.user,
+                creator=post.creator,
+                billing_cycle=cycle_date,
+            ).first()
+
+            boost_amount = boost.amount if boost else Decimal("0.00")
+
+            # Check against creator's lowest gate threshold
+            lowest_gate = CreatorGate.objects.filter(
+                creator=post.creator,
+            ).order_by("threshold").first()
+
+            if lowest_gate and boost_amount >= lowest_gate.threshold:
+                return Response({"access": True, "reason": "gate_unlocked"})
+
+            return Response({
+                "access": False,
+                "reason": "gate_locked",
+                "required_boost": str(lowest_gate.threshold) if lowest_gate else "0.00",
+                "current_boost": str(boost_amount),
+            })
+
+        return Response({"access": True, "reason": "public"})
 
 
 # ─── Billing Portal ───

@@ -186,8 +186,34 @@ export default function PostPage() {
           </div>
         </div>
 
+        {/* Locked content gate */}
+        {post.access_granted === false && (
+          <div className="card bg-base-200 border border-warning/30 mb-6">
+            <div className="card-body text-center">
+              <div className="text-4xl mb-2">
+                {post.visibility === "subscribers_only" ? "🔒" : "⭐"}
+              </div>
+              <h3 className="font-bold text-lg">
+                {post.visibility === "subscribers_only"
+                  ? "Subscribers Only"
+                  : "Gated Content"}
+              </h3>
+              <p className="text-sm text-base-content/60 mb-3">
+                {post.visibility === "subscribers_only"
+                  ? "Subscribe to Bluebell to access this content."
+                  : "Boost this creator to unlock their gated content."}
+              </p>
+              <Link to="/subscribe" className="btn btn-primary btn-sm w-fit mx-auto">
+                {post.visibility === "subscribers_only"
+                  ? "Subscribe"
+                  : "Upgrade & Boost"}
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Video content */}
-        {post.content_type === "video" && (
+        {post.access_granted !== false && post.content_type === "video" && (
           <div className="mb-6">
             {latestJob && latestJob.status !== "completed" ? (
               <TranscodingStatus
@@ -209,7 +235,7 @@ export default function PostPage() {
         )}
 
         {/* Audio content */}
-        {post.content_type === "audio" && (
+        {post.access_granted !== false && post.content_type === "audio" && (
           <div className="mb-6">
             {latestJob && latestJob.status !== "completed" ? (
               <TranscodingStatus
@@ -232,13 +258,15 @@ export default function PostPage() {
         )}
 
         {/* Post body */}
-        <div className="prose prose-sm max-w-none mb-8">
-          {post.body_html ? (
-            <div dangerouslySetInnerHTML={{ __html: post.body_html }} />
-          ) : post.body ? (
-            <Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-          ) : null}
-        </div>
+        {post.access_granted !== false && (
+          <div className="prose prose-sm max-w-none mb-8">
+            {post.body_html ? (
+              <div dangerouslySetInnerHTML={{ __html: post.body_html }} />
+            ) : post.body ? (
+              <Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
+            ) : null}
+          </div>
+        )}
       </article>
 
       {/* Comments */}

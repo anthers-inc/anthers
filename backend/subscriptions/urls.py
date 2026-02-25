@@ -21,6 +21,16 @@ urlpatterns = [
     path("distributions/", views.MyDistributionsView.as_view(), name="my-distributions"),
     path("earnings/", views.CreatorEarningsView.as_view(), name="creator-earnings"),
 
+    # Boost allocations
+    path("boosts/", views.BoostListUpdateView.as_view(), name="boost-list-update"),
+
+    # Creator gates
+    path("gates/", views.CreatorGateListCreateView.as_view(), name="gate-list-create"),
+    path("gates/<int:pk>/", views.CreatorGateDetailView.as_view(), name="gate-detail"),
+
+    # Content access check
+    path("access/<int:pk>/", views.ContentAccessCheckView.as_view(), name="content-access-check"),
+
     # Webhook
     path("webhook/", views.SubscriptionWebhookView.as_view(), name="subscription-webhook"),
 ]

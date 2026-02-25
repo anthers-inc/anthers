@@ -243,6 +243,69 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+
+        # Enforce visibility restrictions on GET
+        if instance.visibility != "public" and request.method == "GET":
+            has_access = self._check_access(request, instance)
+            data["access_granted"] = has_access
+            if not has_access:
+                # Redact content but keep metadata
+                data["body"] = ""
+                data["body_html"] = ""
+                data["video_file"] = None
+                data["audio_file"] = None
+
+        return Response(data)
+
+    def _check_access(self, request, post):
+        """Check if user can view restricted content."""
+        if not request.user.is_authenticated:
+            return False
+        if post.creator == request.user:
+            return True
+
+        from subscriptions.models import BoostAllocation, CreatorGate, Subscription
+        from decimal import Decimal
+
+        try:
+            sub = request.user.subscription
+        except Subscription.DoesNotExist:
+            return False
+
+        if post.visibility == "subscribers_only":
+            return sub.is_paid
+
+        if post.visibility == "gated":
+            if not sub.has_gate_access:
+                return False
+
+            from django.utils import timezone as tz
+            cycle_date = tz.now().date().replace(day=1)
+            if sub.current_period_start:
+                cycle_date = sub.current_period_start.date().replace(day=1)
+
+            boost = BoostAllocation.objects.filter(
+                user=request.user,
+                creator=post.creator,
+                billing_cycle=cycle_date,
+            ).first()
+
+            boost_amount = boost.amount if boost else Decimal("0.00")
+
+            lowest_gate = CreatorGate.objects.filter(
+                creator=post.creator,
+            ).order_by("threshold").first()
+
+            if lowest_gate and boost_amount >= lowest_gate.threshold:
+                return True
+            return False
+
+        return True
+
 
 # ─── Transcoding Status ───
 

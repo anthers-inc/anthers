@@ -211,6 +211,7 @@ export interface Post {
   is_published: boolean;
   estimated_read_minutes: number | null;
   transcoding_jobs: TranscodingJob[];
+  access_granted?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -350,6 +351,32 @@ export interface CreatorEarningsResponse {
   total: string;
   subscriber_count: number;
   cycle: string | null;
+}
+
+export interface BoostAllocation {
+  id: number;
+  creator: number;
+  creator_username: string;
+  creator_display_name: string;
+  creator_avatar: string | null;
+  amount: string;
+  billing_cycle: string;
+  is_locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BoostListResponse {
+  allocations: BoostAllocation[];
+  remaining: string;
+  total_budget: string;
+}
+
+export interface ContentAccessResponse {
+  access: boolean;
+  reason: string;
+  required_boost?: string;
+  current_boost?: string;
 }
 
 export interface SubscriptionStatus {
