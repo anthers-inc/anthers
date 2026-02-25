@@ -212,6 +212,19 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 
+# ─── Celery Beat Schedule ───
+
+CELERY_BEAT_SCHEDULE = {
+    "fetch-external-metrics-every-6h": {
+        "task": "integrations.tasks.fetch_external_metrics",
+        "schedule": 6 * 60 * 60,  # Every 6 hours
+    },
+    "distribute-pool-daily": {
+        "task": "subscriptions.tasks.distribute_pool",
+        "schedule": 24 * 60 * 60,  # Daily
+    },
+}
+
 # ─── Media Upload Limits ───
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500 MB

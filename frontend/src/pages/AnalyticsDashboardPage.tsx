@@ -10,6 +10,7 @@ import type {
   CrossPlatformComparison,
   CrossPublishResultItem,
   PaginatedResponse,
+  CreatorEarningsResponse,
 } from "../lib/api";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
@@ -373,6 +374,59 @@ function CrossPlatformSection({
   );
 }
 
+// ─── Revenue Analytics ───
+
+function RevenueSection({
+  earnings,
+}: {
+  earnings: CreatorEarningsResponse | null;
+}) {
+  if (!earnings) return null;
+  const total = parseFloat(earnings.total);
+  if (total === 0 && earnings.subscriber_count === 0) return null;
+
+  return (
+    <div className="card bg-base-200 mb-8">
+      <div className="card-body p-4">
+        <h3 className="font-semibold text-sm mb-3">Revenue</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-base-content/50">Pool Income</div>
+            <div className="text-lg font-bold text-success">
+              ${earnings.total_pool}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">Boost Income</div>
+            <div className="text-lg font-bold text-success">
+              ${earnings.total_boost}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">Total</div>
+            <div className="text-lg font-bold">${earnings.total}</div>
+          </div>
+          <div>
+            <div className="text-xs text-base-content/50">Supporters</div>
+            <div className="text-lg font-bold">
+              {earnings.subscriber_count}
+            </div>
+          </div>
+        </div>
+        {earnings.cycle && (
+          <p className="text-xs text-base-content/40 mt-2">
+            Current cycle:{" "}
+            {new Date(earnings.cycle).toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Cross-Publish History ───
 
 function CrossPublishHistory() {
@@ -465,6 +519,9 @@ export default function AnalyticsDashboardPage() {
   const [timeseries, setTimeseries] = useState<TimeseriesEntry[]>([]);
   const [comparison, setComparison] =
     useState<CrossPlatformComparison | null>(null);
+  const [earnings, setEarnings] = useState<CreatorEarningsResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -491,6 +548,12 @@ export default function AnalyticsDashboardPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch earnings (non-blocking, independent of period)
+    api
+      .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
+      .then(setEarnings)
+      .catch(() => {});
   }, [period]);
 
   return (
@@ -528,6 +591,7 @@ export default function AnalyticsDashboardPage() {
           <EventBreakdown overview={overview} />
           <TimeseriesCharts timeseries={timeseries} />
           <ContentPerformanceTable content={content} />
+          <RevenueSection earnings={earnings} />
           <CrossPlatformSection comparison={comparison} />
           <CrossPublishHistory />
         </>
