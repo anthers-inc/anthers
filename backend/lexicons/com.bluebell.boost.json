@@ -1,0 +1,40 @@
+{
+  "lexicon": 1,
+  "id": "com.bluebell.boost",
+  "description": "A boost allocation — subscriber directs part of their boost pool to a creator.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "amount", "billingCycle", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the creator receiving the boost."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Boost amount as decimal string (e.g. '5.00')."
+          },
+          "billingCycle": {
+            "type": "string",
+            "format": "datetime",
+            "description": "First day of the billing cycle (YYYY-MM-01)."
+          },
+          "isLocked": {
+            "type": "boolean",
+            "description": "Whether the allocation is locked for this cycle."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Timestamp when the allocation was created."
+          }
+        }
+      }
+    }
+  }
+}

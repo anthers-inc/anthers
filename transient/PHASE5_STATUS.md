@@ -25,7 +25,19 @@
 - Safety: can't unlink Bluesky if it's the only login method (no password set)
 - `atproto_did` and `atproto_handle` exposed as read-only fields on User serializers
 
-### Sub-Phase 5B: Lexicons — TODO
+### Sub-Phase 5B: Lexicons ✅
+
+- 5 ATProto lexicon schemas in `backend/lexicons/`
+- `com.bluebell.game` — Game/project record (maps to Project model)
+- `com.bluebell.post` — Content post record (maps to Post model)
+- `com.bluebell.rating` — User rating (maps to Rating model)
+- `com.bluebell.follow` — Follow relationship (maps to Follow model)
+- `com.bluebell.boost` — Boost allocation (maps to BoostAllocation model)
+- All use Lexicon v1 format with `type: record`, `key: tid`
+- Blob types for media (cover images, video, audio, thumbnails)
+- Cross-references via `ref` (e.g. rating → game, post → game)
+- DID references for social records (follow subject, boost subject)
+
 ### Sub-Phase 5C: Write Paths — TODO
 ### Sub-Phase 5D: Source of Truth — TODO
 
