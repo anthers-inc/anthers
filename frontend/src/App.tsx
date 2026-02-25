@@ -14,6 +14,7 @@ import CreatorsPage from "./pages/CreatorsPage";
 import CreatorProfilePage from "./pages/CreatorProfilePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
 
 // Protected pages
 import FeedPage from "./pages/FeedPage";
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/subscribe" element={<SubscribePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
 
         {/* Protected routes */}
         <Route

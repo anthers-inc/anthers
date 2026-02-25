@@ -34,3 +34,8 @@ redis>=5.0
 
 # Payments
 stripe>=11.0
+
+# ATProto (Bluesky) integration
+requests>=2.32
+PyJWT>=2.0
+cryptography>=43.0

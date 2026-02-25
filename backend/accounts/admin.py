@@ -6,7 +6,7 @@ from .models import Follow, User
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("username", "display_name", "email", "is_creator", "is_staff")
+    list_display = ("username", "display_name", "email", "is_creator", "atproto_handle", "is_staff")
     list_filter = ("is_creator", "is_staff", "is_superuser", "is_active")
     fieldsets = BaseUserAdmin.fieldsets + (
         (
@@ -18,7 +18,14 @@ class UserAdmin(BaseUserAdmin):
                 ),
             },
         ),
+        (
+            "ATProto / Bluesky",
+            {
+                "fields": ("atproto_did", "atproto_handle", "atproto_pds_url"),
+            },
+        ),
     )
+    readonly_fields = ("atproto_did", "atproto_handle", "atproto_pds_url")
 
 
 @admin.register(Follow)

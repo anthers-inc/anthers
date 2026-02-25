@@ -91,6 +91,11 @@ DATABASES = {
 
 AUTH_USER_MODEL = "accounts.User"
 
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "accounts.atproto_backend.ATProtoBackend",
+]
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -210,6 +215,14 @@ CELERY_RESULT_SERIALIZER = "json"
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB (buffer before disk)
+
+# ─── ATProto / Bluesky ───
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# Override for production — must be publicly accessible URLs
+ATPROTO_CLIENT_ID = os.environ.get("ATPROTO_CLIENT_ID", "")
+ATPROTO_REDIRECT_URI = os.environ.get("ATPROTO_REDIRECT_URI", "")
 
 # ─── Misc ───
 

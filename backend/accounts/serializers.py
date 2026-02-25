@@ -11,8 +11,9 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "username", "display_name", "bio", "is_creator",
             "avatar", "header_image", "website_url", "location",
+            "atproto_did", "atproto_handle",
         )
-        read_only_fields = ("id", "username")
+        read_only_fields = ("id", "username", "atproto_did", "atproto_handle")
 
 
 class PublicUserSerializer(serializers.ModelSerializer):
@@ -27,6 +28,7 @@ class PublicUserSerializer(serializers.ModelSerializer):
         fields = (
             "id", "username", "display_name", "bio", "is_creator",
             "avatar", "header_image", "website_url", "location",
+            "atproto_did", "atproto_handle",
             "follower_count", "project_count", "is_following", "date_joined",
         )
 

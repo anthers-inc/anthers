@@ -13,6 +13,20 @@ class User(AbstractUser):
     website_url = models.URLField(blank=True)
     location = models.CharField(max_length=100, blank=True)
 
+    # ATProto / Bluesky identity
+    atproto_did = models.CharField(
+        max_length=255, unique=True, null=True, blank=True,
+        help_text="Decentralized Identifier (e.g. did:plc:abc123)",
+    )
+    atproto_handle = models.CharField(
+        max_length=255, blank=True, default="",
+        help_text="ATProto handle (e.g. alice.bsky.social)",
+    )
+    atproto_pds_url = models.URLField(
+        blank=True, default="",
+        help_text="Personal Data Server URL",
+    )
+
     def __str__(self):
         return self.display_name or self.username
 

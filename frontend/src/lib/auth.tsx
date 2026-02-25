@@ -6,13 +6,16 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { api, ApiError, type User } from "./api";
+import { api, ApiError, type User, type ATProtoAuthInitResponse } from "./api";
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginWithBluesky: (handle: string) => Promise<void>;
+  linkBluesky: (handle: string) => Promise<void>;
+  unlinkBluesky: () => Promise<void>;
   register: (
     username: string,
     email: string,
@@ -77,6 +80,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const loginWithBluesky = useCallback(async (handle: string) => {
+    const data = await api.post<ATProtoAuthInitResponse>(
+      "/api/v1/accounts/atproto/auth/",
+      { handle, intent: "login" },
+    );
+    // Redirect to Bluesky authorization page
+    window.location.href = data.authorization_url;
+  }, []);
+
+  const linkBluesky = useCallback(async (handle: string) => {
+    const data = await api.post<ATProtoAuthInitResponse>(
+      "/api/v1/accounts/atproto/auth/",
+      { handle, intent: "link" },
+    );
+    window.location.href = data.authorization_url;
+  }, []);
+
+  const unlinkBluesky = useCallback(async () => {
+    const data = await api.post<User>("/api/v1/accounts/atproto/unlink/");
+    setUser(data);
+  }, []);
+
   const logout = useCallback(async () => {
     await api.post("/api/v1/accounts/logout/");
     setUser(null);
@@ -89,6 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: user !== null,
         login,
+        loginWithBluesky,
+        linkBluesky,
+        unlinkBluesky,
         register,
         logout,
         refreshUser,

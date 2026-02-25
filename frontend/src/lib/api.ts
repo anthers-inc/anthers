@@ -88,6 +88,8 @@ export interface User {
   header_image: string | null;
   website_url: string;
   location: string;
+  atproto_did: string | null;
+  atproto_handle: string;
 }
 
 export interface PublicUser extends User {
@@ -395,4 +397,23 @@ export interface SubscriptionStatus {
   canceled_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+// ─── ATProto Types ───
+
+export interface ATProtoAuthInitResponse {
+  authorization_url: string;
+}
+
+export interface ATProtoClientMetadata {
+  client_id: string;
+  client_name: string;
+  client_uri: string;
+  redirect_uris: string[];
+  scope: string;
+  grant_types: string[];
+  response_types: string[];
+  token_endpoint_auth_method: string;
+  application_type: string;
+  dpop_bound_access_tokens: boolean;
 }

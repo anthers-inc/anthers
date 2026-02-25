@@ -5,7 +5,7 @@ import { ApiError } from "../lib/api";
 import FormField from "../components/ui/FormField";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithBluesky } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/";
@@ -14,6 +14,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Bluesky login state
+  const [bskyHandle, setBskyHandle] = useState("");
+  const [bskyLoading, setBskyLoading] = useState(false);
+  const [bskyError, setBskyError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,11 +43,72 @@ export default function LoginPage() {
     }
   };
 
+  const handleBlueskyLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bskyHandle.trim()) return;
+    setBskyError("");
+    setBskyLoading(true);
+    try {
+      await loginWithBluesky(bskyHandle.trim());
+      // loginWithBluesky redirects, so we won't reach here
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string };
+        setBskyError(data?.detail ?? "Failed to initiate Bluesky login.");
+      } else {
+        setBskyError("Something went wrong. Please try again.");
+      }
+      setBskyLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-md">
       <div className="card bg-base-200 shadow-lg">
         <div className="card-body">
           <h1 className="card-title text-2xl justify-center">Log in</h1>
+
+          {/* Bluesky Sign In */}
+          <form onSubmit={handleBlueskyLogin} className="flex flex-col gap-3">
+            {bskyError && (
+              <div className="alert alert-error text-sm">
+                <span>{bskyError}</span>
+              </div>
+            )}
+            <FormField label="Bluesky Handle">
+              <input
+                type="text"
+                className="input input-bordered w-full"
+                value={bskyHandle}
+                onChange={(e) => setBskyHandle(e.target.value)}
+                placeholder="alice.bsky.social"
+              />
+            </FormField>
+            <button
+              type="submit"
+              className="btn btn-outline w-full"
+              disabled={bskyLoading || !bskyHandle.trim()}
+            >
+              {bskyLoading ? (
+                <span className="loading loading-spinner loading-sm" />
+              ) : (
+                <>
+                  <svg
+                    viewBox="0 0 568 501"
+                    className="w-4 h-4 fill-current"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M123.121 33.6637C188.241 82.5526 258.281 181.681 284 234.873C309.719 181.681 379.759 82.5526 444.879 33.6637C491.866 -1.61183 568 -28.9064 568 57.9464C568 75.2916 558.055 189.32 552 210.074C529.348 289.699 445.566 310.618 370.792 297.604C496.333 319.1 526.542 386.3 468.333 453.5C356.973 581.793 299.832 402.163 287.455 359.379C285.755 353.725 284.024 353.712 282.545 359.379C270.168 402.163 213.027 581.793 101.667 453.5C43.4583 386.3 73.6667 319.1 199.208 297.604C124.434 310.618 40.652 289.699 18 210.074C11.945 189.32 2 75.2916 2 57.9464C2 -28.9064 78.1345 -1.61183 123.121 33.6637Z" />
+                  </svg>
+                  Sign in with Bluesky
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="divider text-xs text-base-content/40">OR</div>
+
+          {/* Traditional Login */}
           {error && (
             <div className="alert alert-error text-sm">
               <span>{error}</span>
@@ -56,7 +122,6 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                autoFocus
               />
             </FormField>
             <FormField label="Password" required>
