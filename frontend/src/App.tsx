@@ -15,6 +15,8 @@ import CreatorProfilePage from "./pages/CreatorProfilePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
+import JamsPage from "./pages/JamsPage";
+import JamPage from "./pages/JamPage";
 
 // Protected pages
 import FeedPage from "./pages/FeedPage";
@@ -27,6 +29,7 @@ import LibraryPage from "./pages/LibraryPage";
 import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
+import JamFormPage from "./pages/JamFormPage";
 
 export default function App() {
   return (
@@ -45,6 +48,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
+        <Route path="/jams" element={<JamsPage />} />
+        <Route path="/jams/:slug" element={<JamPage />} />
 
         {/* Protected routes */}
         <Route
@@ -100,6 +105,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PostFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/jams/new"
+          element={
+            <ProtectedRoute>
+              <JamFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/jams/:slug/edit"
+          element={
+            <ProtectedRoute>
+              <JamFormPage />
             </ProtectedRoute>
           }
         />

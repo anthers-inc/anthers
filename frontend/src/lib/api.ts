@@ -510,6 +510,66 @@ export interface CrossPublishResultItem {
   created_at: string;
 }
 
+// ─── Jam Types ───
+
+export interface GameJam {
+  id: number;
+  creator: number;
+  creator_username: string;
+  title: string;
+  slug: string;
+  description: string;
+  theme: string | null;
+  cover_image: string | null;
+  start_at: string;
+  end_at: string;
+  voting_end_at: string;
+  max_team_size: number;
+  allow_late_submissions: boolean;
+  status: "upcoming" | "active" | "voting" | "ended";
+  entry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GameJamListItem {
+  id: number;
+  creator_username: string;
+  title: string;
+  slug: string;
+  cover_image: string | null;
+  start_at: string;
+  end_at: string;
+  voting_end_at: string;
+  status: "upcoming" | "active" | "voting" | "ended";
+  entry_count: number;
+  created_at: string;
+}
+
+export interface JamEntry {
+  id: number;
+  jam: number;
+  project: number;
+  project_title: string;
+  project_slug: string;
+  project_cover: string | null;
+  submitted_by: number;
+  submitted_by_username: string;
+  average_score: number | null;
+  vote_count: number;
+  user_vote: number | null;
+  created_at: string;
+}
+
+export interface JamEntryResult extends JamEntry {
+  rank: number;
+}
+
+export interface JamResultsResponse {
+  jam: GameJam;
+  results: JamEntryResult[];
+}
+
 export interface CrossPublishInitRequest {
   platform: string;
   project_id?: number;
