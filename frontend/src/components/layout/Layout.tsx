@@ -33,6 +33,7 @@ export default function Layout() {
               <li><Link to="/explore">Explore</Link></li>
               <li><Link to="/creators">Creators</Link></li>
               <li><Link to="/posts">Posts</Link></li>
+              <li><Link to="/subscribe">Subscribe</Link></li>
               {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
               {isAuthenticated && <li><Link to="/library">Library</Link></li>}
             </ul>
@@ -48,6 +49,7 @@ export default function Layout() {
             <li><Link to="/explore">Explore</Link></li>
             <li><Link to="/creators">Creators</Link></li>
             <li><Link to="/posts">Posts</Link></li>
+            <li><Link to="/subscribe">Subscribe</Link></li>
             {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
             {isAuthenticated && <li><Link to="/library">Library</Link></li>}
           </ul>
@@ -77,6 +79,7 @@ export default function Layout() {
                   </span>
                 </li>
                 <li><Link to="/dashboard">Dashboard</Link></li>
+                <li><Link to="/subscription">Subscription</Link></li>
                 <li><Link to={`/${user?.username}`}>My Profile</Link></li>
                 <li><Link to="/settings">Settings</Link></li>
                 <li>

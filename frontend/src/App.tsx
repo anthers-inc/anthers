@@ -23,6 +23,8 @@ import ProjectFormPage from "./pages/ProjectFormPage";
 import BuildsPage from "./pages/BuildsPage";
 import PostFormPage from "./pages/PostFormPage";
 import LibraryPage from "./pages/LibraryPage";
+import SubscribePage from "./pages/SubscribePage";
+import SubscriptionPage from "./pages/SubscriptionPage";
 
 export default function App() {
   return (
@@ -37,6 +39,7 @@ export default function App() {
         <Route path="/posts" element={<PostFeedPage />} />
         <Route path="/posts/:id" element={<PostPage />} />
         <Route path="/creators" element={<CreatorsPage />} />
+        <Route path="/subscribe" element={<SubscribePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
@@ -102,6 +105,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <LibraryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/subscription"
+          element={
+            <ProtectedRoute>
+              <SubscriptionPage />
             </ProtectedRoute>
           }
         />

@@ -292,3 +292,40 @@ export interface PurchaseItem {
 export interface OwnershipResponse {
   owns: boolean;
 }
+
+// ─── Subscription Types ───
+
+export type SubscriptionTier =
+  | "window"
+  | "base"
+  | "supporter"
+  | "advocate"
+  | "champion";
+
+export interface SubscriptionTierOption {
+  tier: SubscriptionTier;
+  name: string;
+  price: string;
+  creator_pool: string;
+  boost_pool: string;
+  content_hours: number | null;
+  gate_access: boolean;
+}
+
+export interface SubscriptionStatus {
+  id?: number;
+  tier: SubscriptionTier;
+  tier_display: string;
+  is_active: boolean;
+  is_paid: boolean;
+  has_boost_pool: boolean;
+  has_gate_access: boolean;
+  monthly_content_hours: number | null;
+  creator_pool_amount: string;
+  boost_pool_amount: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  canceled_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}

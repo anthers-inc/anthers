@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "accounts",
     "content",
     "payments",
+    "subscriptions",
 ]
 
 MIDDLEWARE = [
@@ -181,6 +182,17 @@ SPECTACULAR_SETTINGS = {
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_SUBSCRIPTION_WEBHOOK_SECRET = os.environ.get(
+    "STRIPE_SUBSCRIPTION_WEBHOOK_SECRET",
+    os.environ.get("STRIPE_WEBHOOK_SECRET", ""),
+)
+
+# ─── Stripe Subscription Price IDs ───
+
+STRIPE_PRICE_BASE = os.environ.get("STRIPE_PRICE_BASE", "")
+STRIPE_PRICE_SUPPORTER = os.environ.get("STRIPE_PRICE_SUPPORTER", "")
+STRIPE_PRICE_ADVOCATE = os.environ.get("STRIPE_PRICE_ADVOCATE", "")
+STRIPE_PRICE_CHAMPION = os.environ.get("STRIPE_PRICE_CHAMPION", "")
 
 # ─── Community Resilience Fund ───
 
