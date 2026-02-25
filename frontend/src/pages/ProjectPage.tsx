@@ -120,6 +120,7 @@ export default function ProjectPage() {
             mediaType={project.media_type}
             pricingType={project.pricing_type}
             userOwns={userOwns}
+            projectSlug={project.slug}
           />
 
           {/* Devlog */}

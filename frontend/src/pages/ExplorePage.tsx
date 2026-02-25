@@ -15,6 +15,14 @@ const MEDIA_TYPES = [
   { value: "text", label: "Text" },
 ];
 
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "popular", label: "Popular" },
+  { value: "top_rated", label: "Top Rated" },
+  { value: "trending", label: "Trending" },
+  { value: "downloads", label: "Most Downloads" },
+];
+
 export default function ExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<PaginatedResponse<ProjectListItem> | null>(null);
@@ -24,6 +32,7 @@ export default function ExplorePage() {
   const currentPage = parseInt(searchParams.get("page") ?? "1");
   const mediaType = searchParams.get("media_type") ?? "";
   const search = searchParams.get("search") ?? "";
+  const sort = searchParams.get("sort") ?? "newest";
 
   useEffect(() => {
     setLoading(true);
@@ -31,6 +40,7 @@ export default function ExplorePage() {
     params.set("page", String(currentPage));
     if (mediaType) params.set("media_type", mediaType);
     if (search) params.set("search", search);
+    if (sort && sort !== "newest") params.set("sort", sort);
 
     api
       .get<PaginatedResponse<ProjectListItem>>(
@@ -39,7 +49,7 @@ export default function ExplorePage() {
       .then(setData)
       .catch((err) => console.error("Failed to load projects:", err))
       .finally(() => setLoading(false));
-  }, [currentPage, mediaType, search]);
+  }, [currentPage, mediaType, search, sort]);
 
   const updateParams = (updates: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);
@@ -80,6 +90,17 @@ export default function ExplorePage() {
             <MagnifyingGlassIcon className="w-5 h-5" />
           </button>
         </form>
+        <select
+          className="select select-bordered"
+          value={sort}
+          onChange={(e) => updateParams({ sort: e.target.value })}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Media type tabs */}

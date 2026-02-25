@@ -1,4 +1,4 @@
-import type { Asset } from "../../lib/api";
+import { api, type Asset } from "../../lib/api";
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 
 function formatSize(bytes: number): string {
@@ -23,11 +23,13 @@ export default function ProjectDownloads({
   mediaType,
   pricingType,
   userOwns,
+  projectSlug,
 }: {
   assets: Asset[];
   mediaType: string;
   pricingType: "free" | "pwyw" | "paid";
   userOwns: boolean | null;
+  projectSlug: string;
 }) {
   if (assets.length === 0) return null;
 
@@ -90,14 +92,23 @@ export default function ProjectDownloads({
                     <td className="text-base-content/60">{asset.version}</td>
                   )}
                   <td>
-                    <a
-                      href={asset.file}
+                    <button
                       className="btn btn-sm btn-primary"
-                      download
+                      onClick={async () => {
+                        try {
+                          const res = await api.post<{ url: string }>(
+                            `/api/v1/content/projects/${projectSlug}/assets/${asset.id}/download/`,
+                          );
+                          window.location.href = res.url;
+                        } catch {
+                          // Fallback to direct link
+                          window.location.href = asset.file;
+                        }
+                      }}
                     >
                       <ArrowDownTrayIcon className="w-4 h-4" />
                       Download
-                    </a>
+                    </button>
                   </td>
                 </tr>
               ))

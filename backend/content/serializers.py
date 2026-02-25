@@ -71,12 +71,14 @@ class ProjectSerializer(serializers.ModelSerializer):
             "website_url", "source_url",
             "assets", "screenshots",
             "rating_average", "rating_count",
+            "view_count", "download_count",
             "creator_has_stripe",
             "created_at", "updated_at",
         )
         read_only_fields = (
             "id", "creator", "creator_id", "creator_username",
             "rating_average", "rating_count",
+            "view_count", "download_count",
             "creator_has_stripe",
             "created_at", "updated_at",
         )
@@ -101,11 +103,13 @@ class ProjectListSerializer(serializers.ModelSerializer):
             "pricing_type", "price", "min_price", "suggested_price",
             "cover_image",
             "rating_average", "rating_count",
+            "view_count", "download_count",
             "created_at", "updated_at",
         )
         read_only_fields = (
             "id", "creator", "creator_id", "creator_username",
             "rating_average", "rating_count",
+            "view_count", "download_count",
             "created_at", "updated_at",
         )
 

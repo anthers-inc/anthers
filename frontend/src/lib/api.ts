@@ -144,6 +144,8 @@ export interface Project {
   screenshots: Screenshot[];
   rating_average: number | null;
   rating_count: number;
+  view_count: number;
+  download_count: number;
   creator_has_stripe: boolean;
   created_at: string;
   updated_at: string;
@@ -167,6 +169,8 @@ export interface ProjectListItem {
   cover_image: string | null;
   rating_average: number | null;
   rating_count: number;
+  view_count: number;
+  download_count: number;
   created_at: string;
   updated_at: string;
 }

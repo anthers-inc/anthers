@@ -8,7 +8,12 @@ import {
   type ProjectListItem,
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { LinkIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
+import {
+  LinkIcon,
+  CodeBracketIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
 
 export default function ProjectSidebar({ project }: { project: Project }) {
   const { isAuthenticated, user } = useAuth();
@@ -170,6 +175,20 @@ export default function ProjectSidebar({ project }: { project: Project }) {
           </div>
         </div>
       )}
+
+      {/* Stats */}
+      <div className="flex gap-4 text-sm text-base-content/60">
+        <span className="flex items-center gap-1">
+          <EyeIcon className="w-4 h-4" />
+          {project.view_count.toLocaleString()}
+        </span>
+        {project.download_count > 0 && (
+          <span className="flex items-center gap-1">
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            {project.download_count.toLocaleString()}
+          </span>
+        )}
+      </div>
 
       {/* Published date */}
       <div className="text-xs text-base-content/50">

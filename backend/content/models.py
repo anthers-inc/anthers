@@ -53,6 +53,10 @@ class Project(models.Model):
     website_url = models.URLField(blank=True)
     source_url = models.URLField(blank=True, help_text="e.g. GitHub link")
 
+    # Counters
+    view_count = models.PositiveIntegerField(default=0)
+    download_count = models.PositiveIntegerField(default=0)
+
     # ATProto
     atproto_uri = models.CharField(max_length=512, unique=True, null=True, blank=True)
 
@@ -61,6 +65,10 @@ class Project(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-view_count"], name="idx_project_views"),
+            models.Index(fields=["-download_count"], name="idx_project_downloads"),
+        ]
 
     def __str__(self):
         return self.title

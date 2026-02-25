@@ -1,6 +1,9 @@
 import math
+from datetime import timedelta
 
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, F, Q, Sum
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -89,6 +92,34 @@ class ProjectListCreateView(generics.ListCreateAPIView):
                 | Q(short_description__icontains=search)
             )
 
+        # ?sort=newest|popular|top_rated|trending
+        sort = self.request.query_params.get("sort", "newest")
+        if sort == "popular":
+            qs = qs.order_by("-view_count", "-created_at")
+        elif sort == "top_rated":
+            qs = qs.order_by(
+                Coalesce("rating_average", 0).desc(),
+                "-rating_count",
+                "-created_at",
+            )
+        elif sort == "trending":
+            # Trending: most attention events in the last 7 days
+            week_ago = timezone.now() - timedelta(days=7)
+            qs = qs.annotate(
+                recent_attention=Coalesce(
+                    Count(
+                        "attention_events",
+                        filter=Q(attention_events__created_at__gte=week_ago),
+                    ),
+                    0,
+                )
+            ).order_by("-recent_attention", "-view_count", "-created_at")
+        elif sort == "downloads":
+            qs = qs.order_by("-download_count", "-created_at")
+        else:
+            # Default: newest
+            qs = qs.order_by("-created_at")
+
         return qs
 
     def get_serializer_class(self):
@@ -124,6 +155,13 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Increment view count (fire-and-forget, no race-condition concern for counters)
+        Project.objects.filter(pk=instance.pk).update(view_count=F("view_count") + 1)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
 
 # ─── Assets (nested under project) ───
 
@@ -147,6 +185,26 @@ class AssetDeleteView(generics.DestroyAPIView):
             project__slug=self.kwargs["slug"],
             project__creator=self.request.user,
         )
+
+
+class AssetDownloadView(APIView):
+    """Increment project download count and redirect to the asset file."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, slug, pk):
+        try:
+            asset = Asset.objects.select_related("project").get(
+                pk=pk, project__slug=slug
+            )
+        except Asset.DoesNotExist:
+            return Response(
+                {"detail": "Asset not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        Project.objects.filter(pk=asset.project_id).update(
+            download_count=F("download_count") + 1
+        )
+        return Response({"url": asset.file.url})
 
 
 # ─── Screenshots (nested under project) ───

@@ -11,6 +11,7 @@ urlpatterns = [
     # Assets (nested under project)
     path("projects/<slug:slug>/assets/", views.AssetUploadView.as_view(), name="asset-upload"),
     path("projects/<slug:slug>/assets/<int:pk>/", views.AssetDeleteView.as_view(), name="asset-delete"),
+    path("projects/<slug:slug>/assets/<int:pk>/download/", views.AssetDownloadView.as_view(), name="asset-download"),
     # Screenshots (nested under project)
     path("projects/<slug:slug>/screenshots/", views.ScreenshotUploadView.as_view(), name="screenshot-upload"),
     path("projects/<slug:slug>/screenshots/<int:pk>/", views.ScreenshotDeleteView.as_view(), name="screenshot-delete"),
