@@ -24,7 +24,6 @@ debug.log
 # ─── Node / Bun ───
 node_modules/
 frontend/dist/
-frontend/bun.lock
 *.tsbuildinfo
 
 # ─── Docker ───
