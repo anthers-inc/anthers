@@ -7,11 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useAttentionTracker } from "./attention";
 
 interface Track {
   src: string;
   title: string;
   creator: string;
+  creatorId?: number;
   thumbnail?: string | null;
   postId: number;
   waveform?: number[] | null;
@@ -103,6 +105,14 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
     setProgress(0);
     setDuration(0);
   }, []);
+
+  // Track attention for background audio playback (mini-player)
+  useAttentionTracker({
+    creatorId: currentTrack?.creatorId ?? null,
+    postId: currentTrack?.postId ?? null,
+    eventType: "listen",
+    active: isPlaying && !!currentTrack,
+  });
 
   return (
     <MediaPlayerContext.Provider

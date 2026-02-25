@@ -13,6 +13,10 @@ urlpatterns = [
     path("resume/", views.ResumeSubscriptionView.as_view(), name="subscription-resume"),
     path("billing-portal/", views.BillingPortalView.as_view(), name="billing-portal"),
 
+    # Attention tracking
+    path("attention/", views.AttentionBatchView.as_view(), name="attention-batch"),
+    path("attention/summary/", views.AttentionSummaryView.as_view(), name="attention-summary"),
+
     # Webhook
     path("webhook/", views.SubscriptionWebhookView.as_view(), name="subscription-webhook"),
 ]

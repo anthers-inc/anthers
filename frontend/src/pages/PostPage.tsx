@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { api, type Post, type Comment, type PaginatedResponse } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
+import { useAttentionTracker } from "../lib/attention";
 import VideoPlayer from "../components/media/VideoPlayer";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
@@ -50,6 +51,22 @@ export default function PostPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Attention tracking — map content_type to event_type
+  const eventType =
+    post?.content_type === "video"
+      ? "watch"
+      : post?.content_type === "audio"
+        ? "listen"
+        : "read";
+
+  useAttentionTracker({
+    creatorId: post?.creator_id ?? null,
+    postId: post?.id ?? null,
+    projectId: post?.project ?? null,
+    eventType,
+    active: !!post,
+  });
 
   const handleComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +120,7 @@ export default function PostPage() {
       src: audioSrc,
       title: post.title || "Untitled",
       creator: post.creator,
+      creatorId: post.creator_id,
       thumbnail: post.thumbnail,
       postId: post.id,
       waveform: latestJob?.waveform_data,

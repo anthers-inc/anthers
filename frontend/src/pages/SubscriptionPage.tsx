@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type SubscriptionStatus } from "../lib/api";
+import { api, type SubscriptionStatus, type AttentionSummary } from "../lib/api";
 
 export default function SubscriptionPage() {
   const [searchParams] = useSearchParams();
   const [sub, setSub] = useState<SubscriptionStatus | null>(null);
+  const [attention, setAttention] = useState<AttentionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -14,6 +15,7 @@ export default function SubscriptionPage() {
 
   useEffect(() => {
     fetchSubscription();
+    fetchAttention();
   }, []);
 
   useEffect(() => {
@@ -37,6 +39,17 @@ export default function SubscriptionPage() {
       setError("Failed to load subscription.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchAttention() {
+    try {
+      const data = await api.get<AttentionSummary>(
+        "/api/v1/subscriptions/attention/summary/",
+      );
+      setAttention(data);
+    } catch {
+      // Non-critical — don't show error
     }
   }
 
@@ -191,6 +204,26 @@ export default function SubscriptionPage() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Content Hours Usage */}
+          {attention && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="text-base-content/60">Content Hours Used</span>
+                <span className="font-medium">
+                  {attention.hours_used} hrs
+                  {attention.hours_cap ? ` / ${attention.hours_cap} hrs` : " (unlimited)"}
+                </span>
+              </div>
+              {attention.hours_cap && (
+                <progress
+                  className="progress progress-primary w-full"
+                  value={attention.hours_used}
+                  max={attention.hours_cap}
+                />
+              )}
             </div>
           )}
 

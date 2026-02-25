@@ -121,6 +121,7 @@ export interface Asset {
 export interface Project {
   id: number;
   creator: string;
+  creator_id: number;
   creator_username: string;
   title: string;
   slug: string;
@@ -149,6 +150,7 @@ export interface Project {
 export interface ProjectListItem {
   id: number;
   creator: string;
+  creator_id: number;
   creator_username: string;
   title: string;
   slug: string;
@@ -190,6 +192,7 @@ export interface MediaUploadUrl {
 export interface Post {
   id: number;
   creator: string;
+  creator_id: number;
   creator_username: string;
   creator_avatar: string | null;
   project: number | null;
@@ -215,6 +218,7 @@ export interface Post {
 export interface PostListItem {
   id: number;
   creator: string;
+  creator_id: number;
   creator_username: string;
   creator_avatar: string | null;
   project: number | null;
@@ -310,6 +314,14 @@ export interface SubscriptionTierOption {
   boost_pool: string;
   content_hours: number | null;
   gate_access: boolean;
+}
+
+export interface AttentionSummary {
+  hours_used: number;
+  hours_cap: number | null;
+  seconds_used: number;
+  tier: SubscriptionTier;
+  cycle_start: string | null;
 }
 
 export interface SubscriptionStatus {

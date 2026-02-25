@@ -7,7 +7,10 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Subscription
+from django.db.models import Sum
+from django.utils import timezone as django_timezone
+
+from .models import AttentionEvent, Subscription
 from .serializers import SubscriptionSerializer, SubscriptionTierSerializer
 
 logger = logging.getLogger(__name__)
@@ -309,6 +312,105 @@ class ResumeSubscriptionView(APIView):
                 {"detail": "Failed to resume subscription."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+
+# ─── Attention Tracking (4B) ───
+
+
+class AttentionBatchView(APIView):
+    """Ingest a batch of attention events from the frontend."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        events = request.data.get("events", [])
+        if not events or not isinstance(events, list):
+            return Response(
+                {"detail": "Provide a non-empty 'events' list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Cap batch size to prevent abuse
+        events = events[:50]
+
+        created = []
+        for event_data in events:
+            creator_id = event_data.get("creator")
+            event_type = event_data.get("event_type")
+            duration = event_data.get("duration_seconds", 0)
+
+            if not creator_id or not event_type:
+                continue
+
+            # Don't track self-attention
+            if int(creator_id) == request.user.pk:
+                continue
+
+            # Validate event_type
+            if event_type not in dict(AttentionEvent.EventType.choices):
+                continue
+
+            # Cap individual duration at 5 minutes (300s) per event
+            duration = min(int(duration), 300)
+
+            created.append(AttentionEvent(
+                user=request.user,
+                creator_id=int(creator_id),
+                project_id=event_data.get("project") or None,
+                post_id=event_data.get("post") or None,
+                event_type=event_type,
+                duration_seconds=duration,
+            ))
+
+        if created:
+            AttentionEvent.objects.bulk_create(created)
+
+        return Response({"created": len(created)}, status=status.HTTP_201_CREATED)
+
+
+class AttentionSummaryView(APIView):
+    """Return the user's content hours used this billing cycle."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Determine billing cycle start
+        try:
+            sub = request.user.subscription
+            cycle_start = sub.current_period_start
+        except Subscription.DoesNotExist:
+            sub = None
+            cycle_start = None
+
+        # Fall back to start of current month
+        if not cycle_start:
+            now = django_timezone.now()
+            cycle_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        total_seconds = (
+            AttentionEvent.objects.filter(
+                user=request.user,
+                created_at__gte=cycle_start,
+            ).aggregate(total=Sum("duration_seconds"))["total"]
+            or 0
+        )
+
+        total_hours = round(total_seconds / 3600, 2)
+
+        # Determine cap
+        cap = None
+        tier = "window"
+        if sub:
+            cap = sub.monthly_content_hours
+            tier = sub.tier
+
+        return Response({
+            "hours_used": total_hours,
+            "hours_cap": cap,
+            "seconds_used": total_seconds,
+            "tier": tier,
+            "cycle_start": cycle_start.isoformat() if cycle_start else None,
+        })
 
 
 # ─── Billing Portal ───

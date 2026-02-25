@@ -52,6 +52,7 @@ class RatingAggregateSerializer(serializers.Serializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     creator = serializers.StringRelatedField(read_only=True)
+    creator_id = serializers.IntegerField(source="creator.pk", read_only=True)
     creator_username = serializers.CharField(source="creator.username", read_only=True)
     assets = AssetSerializer(many=True, read_only=True)
     screenshots = ScreenshotSerializer(many=True, read_only=True)
@@ -62,7 +63,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = (
-            "id", "creator", "creator_username", "title", "slug",
+            "id", "creator", "creator_id", "creator_username", "title", "slug",
             "description", "short_description",
             "media_type", "tags", "is_published",
             "pricing_type", "price", "min_price", "suggested_price",
@@ -74,7 +75,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         )
         read_only_fields = (
-            "id", "creator", "creator_username",
+            "id", "creator", "creator_id", "creator_username",
             "rating_average", "rating_count",
             "creator_has_stripe",
             "created_at", "updated_at",
@@ -87,6 +88,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 class ProjectListSerializer(serializers.ModelSerializer):
     creator = serializers.StringRelatedField(read_only=True)
+    creator_id = serializers.IntegerField(source="creator.pk", read_only=True)
     creator_username = serializers.CharField(source="creator.username", read_only=True)
     rating_average = serializers.FloatField(read_only=True, default=None)
     rating_count = serializers.IntegerField(read_only=True, default=0)
@@ -94,7 +96,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = (
-            "id", "creator", "creator_username", "title", "slug",
+            "id", "creator", "creator_id", "creator_username", "title", "slug",
             "short_description", "media_type", "tags", "is_published",
             "pricing_type", "price", "min_price", "suggested_price",
             "cover_image",
@@ -102,7 +104,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         )
         read_only_fields = (
-            "id", "creator", "creator_username",
+            "id", "creator", "creator_id", "creator_username",
             "rating_average", "rating_count",
             "created_at", "updated_at",
         )
@@ -127,6 +129,7 @@ class TranscodingJobSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     creator = serializers.StringRelatedField(read_only=True)
+    creator_id = serializers.IntegerField(source="creator.pk", read_only=True)
     creator_username = serializers.CharField(source="creator.username", read_only=True)
     creator_avatar = serializers.ImageField(source="creator.avatar", read_only=True)
     project_title = serializers.CharField(source="project.title", read_only=True, default=None)
@@ -136,7 +139,7 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = (
-            "id", "creator", "creator_username", "creator_avatar",
+            "id", "creator", "creator_id", "creator_username", "creator_avatar",
             "project", "project_title", "project_slug",
             "title", "body", "body_html", "content_type",
             "video_file", "audio_file", "thumbnail",
@@ -146,7 +149,7 @@ class PostSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         )
         read_only_fields = (
-            "id", "creator", "creator_username", "creator_avatar",
+            "id", "creator", "creator_id", "creator_username", "creator_avatar",
             "project_title", "project_slug",
             "duration_seconds", "estimated_read_minutes",
             "transcoding_jobs",
@@ -156,6 +159,7 @@ class PostSerializer(serializers.ModelSerializer):
 
 class PostListSerializer(serializers.ModelSerializer):
     creator = serializers.StringRelatedField(read_only=True)
+    creator_id = serializers.IntegerField(source="creator.pk", read_only=True)
     creator_username = serializers.CharField(source="creator.username", read_only=True)
     creator_avatar = serializers.ImageField(source="creator.avatar", read_only=True)
     project_title = serializers.CharField(source="project.title", read_only=True, default=None)
@@ -165,7 +169,7 @@ class PostListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = (
-            "id", "creator", "creator_username", "creator_avatar",
+            "id", "creator", "creator_id", "creator_username", "creator_avatar",
             "project", "project_title", "project_slug",
             "title", "content_type", "thumbnail",
             "duration_seconds", "is_premium", "visibility",

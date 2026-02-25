@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, type Project, type OwnershipResponse } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useAttentionTracker } from "../lib/attention";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import ProjectHero from "../components/project/ProjectHero";
 import ProjectEmbed from "../components/project/ProjectEmbed";
@@ -44,6 +45,16 @@ export default function ProjectPage() {
       .then((res) => setUserOwns(res.owns))
       .catch(() => setUserOwns(null));
   }, [slug, isAuthenticated]);
+
+  // Attention tracking — games use "play", other project types use "page_view"
+  const eventType = project?.media_type === "game" ? "play" : "page_view";
+
+  useAttentionTracker({
+    creatorId: project?.creator_id ?? null,
+    projectId: project?.id ?? null,
+    eventType,
+    active: !!project,
+  });
 
   const handlePurchaseComplete = useCallback(() => {
     setUserOwns(true);
