@@ -73,9 +73,9 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      redis:
+      backend:
         condition: service_healthy
-      db:
+      redis:
         condition: service_healthy
     networks:
       - bluebell
