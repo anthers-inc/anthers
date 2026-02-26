@@ -25,7 +25,7 @@ export default function ForUsersPage() {
   return (
     <div>
       {/* ───────────── Hero ───────────── */}
-      <section className="hero min-h-[60vh] bg-gradient-to-b from-base-200 to-base-100">
+      <section className="hero min-h-[60vh]">
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
             <p className="text-sm font-medium text-secondary mb-3 tracking-wide uppercase">
@@ -58,7 +58,7 @@ export default function ForUsersPage() {
       </section>
 
       {/* ───────────── Zero Friction ───────────── */}
-      <section className="bg-base-200 py-20">
+      <section className="bg-base-200/50 py-20">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             No barriers, no tricks
@@ -167,7 +167,7 @@ export default function ForUsersPage() {
       </section>
 
       {/* ───────────── Discovery ───────────── */}
-      <section className="bg-base-200 py-20">
+      <section className="bg-base-200/50 py-20">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Find your next favorite thing
@@ -311,7 +311,7 @@ export default function ForUsersPage() {
       </section>
 
       {/* ───────────── Subscription Tiers ───────────── */}
-      <section className="bg-base-200 py-20">
+      <section className="bg-base-200/50 py-20">
         <div className="container mx-auto px-4 max-w-4xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Support creators with a subscription
@@ -373,7 +373,7 @@ export default function ForUsersPage() {
       </section>
 
       {/* ───────────── Your Data Is Yours ───────────── */}
-      <section className="bg-base-200 py-20">
+      <section className="bg-base-200/50 py-20">
         <div className="container mx-auto px-4 max-w-4xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Your account, your data
@@ -461,7 +461,7 @@ export default function ForUsersPage() {
       </section>
 
       {/* ───────────── CTA ───────────── */}
-      <section className="bg-gradient-to-b from-base-100 to-base-200 py-20">
+      <section className="py-20">
         <div className="container mx-auto px-4 text-center max-w-2xl">
           <h2 className="text-3xl font-bold mb-4">
             Start exploring
