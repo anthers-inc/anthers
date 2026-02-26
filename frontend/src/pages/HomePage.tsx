@@ -38,7 +38,7 @@ export default function HomePage() {
   return (
     <div>
       {/* Hero */}
-      <section className="hero min-h-[85vh] bg-gradient-to-b from-base-200 to-base-100">
+      <section className="hero min-h-[85vh]">
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
             <h1 className="text-6xl font-bold tracking-tight">Bluebell</h1>
@@ -122,7 +122,7 @@ export default function HomePage() {
 
       {/* Recent Posts */}
       {posts.length > 0 && (
-        <section className="py-16 px-4 bg-base-200">
+        <section className="py-16 px-4 bg-base-200/50">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Recent Posts</h2>
