@@ -17,6 +17,8 @@ import RegisterPage from "./pages/RegisterPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
 import JamsPage from "./pages/JamsPage";
 import JamPage from "./pages/JamPage";
+import CompareItchPage from "./pages/CompareItchPage";
+import CompareGhostPage from "./pages/CompareGhostPage";
 
 // Protected pages
 import FeedPage from "./pages/FeedPage";
@@ -51,6 +53,8 @@ export default function App() {
         <Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
         <Route path="/jams" element={<JamsPage />} />
         <Route path="/jams/:slug" element={<JamPage />} />
+        <Route path="/compare/itch-io" element={<CompareItchPage />} />
+        <Route path="/compare/ghost" element={<CompareGhostPage />} />
 
         {/* Protected routes */}
         <Route
