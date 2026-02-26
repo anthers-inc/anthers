@@ -2,3 +2,11 @@
 @plugin "daisyui" {
     themes: dark --default, light;
 }
+
+body {
+    background:
+        radial-gradient(ellipse at 20% 0%, oklch(from var(--color-primary) l c h / 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, oklch(from var(--color-secondary) l c h / 0.06) 0%, transparent 60%),
+        oklch(from var(--color-base-100) l c h);
+    background-attachment: fixed;
+}
