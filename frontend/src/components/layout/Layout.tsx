@@ -126,31 +126,34 @@ export default function Layout() {
 
       <MiniPlayer />
 
-      <footer className={`footer bg-base-200 text-base-content p-10 ${currentTrack ? "mb-16" : ""}`}>
-        <nav>
-          <h6 className="footer-title">Platform</h6>
-          <Link to="/for-creators" className="link link-hover">For Creators</Link>
-          <Link to="/for-users" className="link link-hover">For Users</Link>
-          <Link to="/subscribe" className="link link-hover">Subscribe</Link>
-          <Link to="/explore" className="link link-hover">Explore</Link>
-        </nav>
-        <nav>
-          <h6 className="footer-title">Compare</h6>
-          <Link to="/compare/itch-io" className="link link-hover">Bluebell vs itch.io</Link>
-          <Link to="/compare/ghost" className="link link-hover">Bluebell vs Ghost</Link>
-        </nav>
-        <nav>
-          <h6 className="footer-title">Community</h6>
-          <Link to="/creators" className="link link-hover">Creators</Link>
-          <Link to="/jams" className="link link-hover">Game Jams</Link>
-          <Link to="/posts" className="link link-hover">Posts</Link>
-        </nav>
-        <nav>
+      <footer className={`bg-base-200 text-base-content p-10 ${currentTrack ? "mb-16" : ""}`}>
+        <div className="footer justify-center">
+          <nav>
+            <h6 className="footer-title">Platform</h6>
+            <Link to="/for-creators" className="link link-hover">For Creators</Link>
+            <Link to="/creator-demo" className="link link-hover">Creator Hubs</Link>
+            <Link to="/for-users" className="link link-hover">For Users</Link>
+            <Link to="/subscribe" className="link link-hover">Subscribe</Link>
+            <Link to="/explore" className="link link-hover">Explore</Link>
+          </nav>
+          <nav>
+            <h6 className="footer-title">Compare</h6>
+            <Link to="/compare/itch-io" className="link link-hover">Bluebell vs itch.io</Link>
+            <Link to="/compare/ghost" className="link link-hover">Bluebell vs Ghost</Link>
+          </nav>
+          <nav>
+            <h6 className="footer-title">Community</h6>
+            <Link to="/creators" className="link link-hover">Creators</Link>
+            <Link to="/jams" className="link link-hover">Game Jams</Link>
+            <Link to="/posts" className="link link-hover">Posts</Link>
+          </nav>
+        </div>
+        <div className="mt-6 text-center">
           <h6 className="footer-title">About</h6>
-          <p className="text-sm text-base-content/50 max-w-xs">
+          <p className="text-sm text-base-content/50">
             Bluebell — Creator-first, transparent, federated.
           </p>
-        </nav>
+        </div>
       </footer>
     </div>
   );
