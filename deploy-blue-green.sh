@@ -5,8 +5,8 @@ set -euo pipefail
 # Full-stack blue/green: backend + celery + frontend per slot
 # Shared data services (db, redis) managed separately
 
-COMPOSE_DATA="docker-compose.data.yml"
-COMPOSE_CADDY="docker-compose.caddy.yml"
+COMPOSE_DATA="docker compose -p bluebell-data -f docker-compose.data.yml"
+COMPOSE_CADDY="docker compose -p bluebell-caddy -f docker-compose.caddy.yml"
 STATE_FILE=".deployment-state"
 HEALTH_TIMEOUT=90
 HEALTH_INTERVAL=3
@@ -58,7 +58,7 @@ health_check() {
 ensure_data_services() {
     echo -e "${YELLOW}Ensuring data services are running...${NC}"
     docker volume create bluebell_media_data 2>/dev/null || true
-    docker compose -f "$COMPOSE_DATA" up -d
+    $COMPOSE_DATA up -d
 
     if ! container_healthy bluebell-db; then
         health_check bluebell-db || exit 1
@@ -74,7 +74,11 @@ ensure_caddy() {
         echo -e "${GREEN}✓ Caddy is already running${NC}"
     else
         echo -e "${YELLOW}Starting Caddy...${NC}"
-        docker compose -f "$COMPOSE_CADDY" up -d
+        if ! $COMPOSE_CADDY up -d 2>&1; then
+            echo -e "${YELLOW}Recreating Caddy (stale container)...${NC}"
+            $COMPOSE_CADDY down 2>/dev/null || true
+            $COMPOSE_CADDY up -d
+        fi
         echo -e "${GREEN}✓ Caddy is running${NC}"
     fi
 }
@@ -127,12 +131,12 @@ deploy() {
     local new_slot new_compose old_compose
     if [ "$active" = "blue" ]; then
         new_slot="green"
-        new_compose="docker-compose.green.yml"
-        old_compose="docker-compose.blue.yml"
+        new_compose="docker compose -p bluebell-green -f docker-compose.green.yml"
+        old_compose="docker compose -p bluebell-blue -f docker-compose.blue.yml"
     else
         new_slot="blue"
-        new_compose="docker-compose.blue.yml"
-        old_compose="docker-compose.green.yml"
+        new_compose="docker compose -p bluebell-blue -f docker-compose.blue.yml"
+        old_compose="docker compose -p bluebell-green -f docker-compose.green.yml"
     fi
 
     echo -e "${BLUE}── Deploying to ${new_slot} ──${NC}"
@@ -144,19 +148,19 @@ deploy() {
 
     # Build and start the new slot
     echo -e "${YELLOW}Building ${new_slot}...${NC}"
-    docker compose -f "$new_compose" build
-    docker compose -f "$new_compose" up -d
+    $new_compose build
+    $new_compose up -d
 
     # Health check backend and frontend
     if ! health_check "bluebell-backend-${new_slot}"; then
         echo -e "${RED}Deployment failed. Rolling back...${NC}"
-        docker compose -f "$new_compose" down
+        $new_compose down
         exit 1
     fi
 
     if ! health_check "bluebell-frontend-${new_slot}"; then
         echo -e "${RED}Deployment failed. Rolling back...${NC}"
-        docker compose -f "$new_compose" down
+        $new_compose down
         exit 1
     fi
 
@@ -169,7 +173,7 @@ deploy() {
     # Stop the old slot
     if [ "$active" != "none" ]; then
         echo -e "${YELLOW}Stopping ${active}...${NC}"
-        docker compose -f "$old_compose" down
+        $old_compose down
     fi
 
     set_active_slot "$new_slot"

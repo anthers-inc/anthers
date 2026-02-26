@@ -2,8 +2,8 @@
 # Dev + deploy commands following Poppy pattern
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
-COMPOSE_CADDY = docker compose -f docker-compose.caddy.yml
-COMPOSE_DATA = docker compose -f docker-compose.data.yml
+COMPOSE_CADDY = docker compose -p bluebell-caddy -f docker-compose.caddy.yml
+COMPOSE_DATA = docker compose -p bluebell-data -f docker-compose.data.yml
 
 .PHONY: help up down rebuild logs ps bash shell migrate makemigrations createsuperuser \
         deploy deploy-status deploy-rollback caddy-up caddy-down caddy-logs \

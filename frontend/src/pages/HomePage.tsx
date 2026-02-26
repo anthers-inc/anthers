@@ -30,8 +30,8 @@ export default function HomePage() {
       .then((d) => setPosts(d.results.slice(0, 4)))
       .catch(() => {});
     api
-      .get<PaginatedResponse<PublicUser>>("/api/v1/accounts/users/")
-      .then((d) => setCreators(d.results.filter((u) => u.is_creator).slice(0, 4)))
+      .get<PaginatedResponse<PublicUser>>("/api/v1/accounts/creators/")
+      .then((d) => setCreators(d.results.slice(0, 4)))
       .catch(() => {});
   }, []);
 
