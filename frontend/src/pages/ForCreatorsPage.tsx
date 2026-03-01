@@ -37,7 +37,7 @@ export default function ForCreatorsPage() {
               Publish your work. Keep what you earn.
             </h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-              Games, videos, music, and writing — all under one roof, one
+              Games, videos, music, and writing—all under one roof, one
               identity, one audience. No platform cut. No hidden fees.
               Transparent costs you can see and verify.
             </p>
@@ -108,7 +108,7 @@ export default function ForCreatorsPage() {
           </div>
           <p className="text-center text-sm text-base-content/40 mt-4">
             On Bluebell, real costs (payment processing, infrastructure) are
-            shown as transparent line items — never a percentage cut.
+            shown as transparent line items—never a percentage cut.
           </p>
         </div>
       </section>
@@ -128,7 +128,7 @@ export default function ForCreatorsPage() {
               <p className="text-sm text-base-content/60 leading-relaxed">
                 You set a price, you receive that price. Processing fees and
                 infrastructure costs are passed through transparently as
-                itemized line items the buyer sees at checkout — never hidden,
+                itemized line items the buyer sees at checkout—never hidden,
                 never a percentage cut from your earnings.
               </p>
             </div>
@@ -140,7 +140,7 @@ export default function ForCreatorsPage() {
                 One Home for Everything
               </h3>
               <p className="text-sm text-base-content/60 leading-relaxed">
-                Games, videos, music, writing — all under one roof, one
+                Games, videos, music, writing—all under one roof, one
                 identity, one audience. A game developer who writes devlogs and
                 composes music shouldn't need three separate platforms.
                 Followers subscribe to <em>you</em>, not a medium.
@@ -152,7 +152,7 @@ export default function ForCreatorsPage() {
               </div>
               <h3 className="font-bold text-lg mb-2">Community Built In</h3>
               <p className="text-sm text-base-content/60 leading-relaxed">
-                Follows, devlogs, comments, ratings, game jams — everything
+                Follows, devlogs, comments, ratings, game jams—everything
                 you need to build and engage your audience lives on the same
                 platform where your work lives. No more scattering your
                 community across Discord, Patreon, and Twitter.
@@ -169,7 +169,7 @@ export default function ForCreatorsPage() {
             Every kind of creative work
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell isn't just for games. Publish anything you create — the
+            Bluebell isn't just for games. Publish anything you create—the
             platform adapts to the medium while keeping the same tools, the same
             audience, and the same economics.
           </p>
@@ -231,7 +231,7 @@ export default function ForCreatorsPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             At checkout, buyers see exactly where every penny goes. No hidden
             fees, no opaque "revenue share." Real infrastructure costs are
-            passed through — and they're tiny.
+            passed through—and they're tiny.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -256,7 +256,7 @@ export default function ForCreatorsPage() {
                   <ReceiptLine label="You pay" amount="$10.90" bold />
                 </div>
                 <p className="text-xs text-base-content/40 mt-3">
-                  Creator receives $10.00 — every time.
+                  Creator receives $10.00—every time.
                 </p>
               </div>
             </div>
@@ -318,7 +318,7 @@ export default function ForCreatorsPage() {
             />
             <PricingOption
               title="Fixed Price"
-              description="Set your price and receive 100% of it. Transparent fees are added on top for the buyer — never taken from your cut."
+              description="Set your price and receive 100% of it. Transparent fees are added on top for the buyer—never taken from your cut."
               badge="badge-neutral"
             />
           </div>
@@ -336,17 +336,17 @@ export default function ForCreatorsPage() {
             <Feature
               icon={<PaintBrushIcon className="w-6 h-6" />}
               title="Rich project pages"
-              description="Cover images, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type — platform-grouped downloads for games, embedded players for audio and video."
+              description="Cover images, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type—platform-grouped downloads for games, embedded players for audio and video."
             />
             <Feature
               icon={<ArrowDownTrayIcon className="w-6 h-6" />}
               title="Build management"
-              description="Upload builds for multiple platforms. Label versions as stable, beta, or prerelease. Your audience downloads from organized, clearly labeled files — not a confusing pile of .zips."
+              description="Upload builds for multiple platforms. Label versions as stable, beta, or prerelease. Your audience downloads from organized, clearly labeled files—not a confusing pile of .zips."
             />
             <Feature
               icon={<ChatBubbleLeftRightIcon className="w-6 h-6" />}
               title="Devlogs and posts"
-              description="Write updates, announcements, and essays. Link posts to specific projects as devlogs, or publish standalone. Your audience follows your work in a unified feed — like Patreon, but alongside your actual projects."
+              description="Write updates, announcements, and essays. Link posts to specific projects as devlogs, or publish standalone. Your audience follows your work in a unified feed—like Patreon, but alongside your actual projects."
             />
             <Feature
               icon={<StarIcon className="w-6 h-6" />}
@@ -366,7 +366,7 @@ export default function ForCreatorsPage() {
             <Feature
               icon={<UserGroupIcon className="w-6 h-6" />}
               title="Creator profiles"
-              description="Your own page on Bluebell — header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
+              description="Your own page on Bluebell—header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
             />
             <Feature
               icon={<ArrowPathIcon className="w-6 h-6" />}
@@ -385,7 +385,7 @@ export default function ForCreatorsPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Like Patreon and YouTube Memberships, but alongside your actual
-            work. Post devlogs, vlogs, podcasts, and blogs — all under the same
+            work. Post devlogs, vlogs, podcasts, and blogs—all under the same
             profile your games live on. Your audience follows <em>you</em>,
             not a platform.
           </p>
@@ -405,7 +405,7 @@ export default function ForCreatorsPage() {
                 <h3 className="font-semibold">Cross-publishing (coming soon)</h3>
                 <p className="text-sm text-base-content/60">
                   Publish once, distribute everywhere. Push videos to YouTube,
-                  builds to Steam and itch.io, posts to Substack — all from your
+                  builds to Steam and itch.io, posts to Substack—all from your
                   Bluebell dashboard. Unified analytics show performance across
                   all platforms.
                 </p>
@@ -424,7 +424,7 @@ export default function ForCreatorsPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Users subscribe to Bluebell, and their subscription funds are
             distributed to creators proportionally based on what they actually
-            watch, read, listen to, and play. No platform cut — just transparent
+            watch, read, listen to, and play. No platform cut—just transparent
             allocation.
           </p>
           <div className="overflow-x-auto">
@@ -487,7 +487,7 @@ export default function ForCreatorsPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Every creator gets a profile page that brings together everything
-            they do. Games, devlogs, music, writing — one identity, one
+            they do. Games, devlogs, music, writing—one identity, one
             audience, one URL to share.
           </p>
 
@@ -548,7 +548,7 @@ export default function ForCreatorsPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Every project gets a full-featured page with everything your
-            audience needs — adapted to the type of work you're sharing.
+            audience needs—adapted to the type of work you're sharing.
           </p>
 
           {/* Mock project page */}
@@ -628,7 +628,7 @@ export default function ForCreatorsPage() {
             Your data is yours
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell is built on the AT Protocol — the same open standard
+            Bluebell is built on the AT Protocol—the same open standard
             behind Bluesky. Sign in with your Bluesky identity, or create a
             new one. Your content and audience relationships are portable by
             design.
@@ -642,7 +642,7 @@ export default function ForCreatorsPage() {
               <h3 className="font-semibold mb-1">Portable identity</h3>
               <p className="text-sm text-base-content/60">
                 Your creator identity isn't locked to Bluebell. It's a DID
-                — a decentralized identifier you own. If you ever leave,
+               —a decentralized identifier you own. If you ever leave,
                 your identity goes with you.
               </p>
             </div>
@@ -663,7 +663,7 @@ export default function ForCreatorsPage() {
               </div>
               <h3 className="font-semibold mb-1">Federated future</h3>
               <p className="text-sm text-base-content/60">
-                ATProto enables federation — other nodes can join the
+                ATProto enables federation—other nodes can join the
                 network, and content is interoperable across them. No
                 single point of control.
               </p>

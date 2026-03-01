@@ -39,7 +39,7 @@ interface DemoPurchase {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** All possible gate thresholds — used as the universal scale for every bar */
+/** All possible gate thresholds—used as the universal scale for every bar */
 const ALL_GATE_THRESHOLDS = [2, 4, 8, 16, 32];
 const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10% headroom
 
@@ -225,7 +225,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
   },
   {
     creator: "Amaiguri",
-    item: "Seasonal Recipe Zine — Spring 2026",
+    item: "Seasonal Recipe Zine—Spring 2026",
     type: "physical",
     price: 12.0,
     fee: 0.6,
@@ -241,7 +241,7 @@ const PURCHASE_TYPE_LABELS: Record<DemoPurchase["type"], string> = {
 };
 
 // ---------------------------------------------------------------------------
-// AccessBar — segmented bar with uniform gate hash lines and hover tooltips
+// AccessBar—segmented bar with uniform gate hash lines and hover tooltips
 // ---------------------------------------------------------------------------
 
 function AccessBar({
@@ -363,7 +363,7 @@ function AccessBar({
         })}
       </div>
 
-      {/* Gate dollar labels below bar — only at thresholds this creator uses */}
+      {/* Gate dollar labels below bar—only at thresholds this creator uses */}
       <div className="relative h-4 mt-0.5">
         {gates.map((gate) => {
           const pos = (gate.threshold / BAR_MAX) * 100;
@@ -472,7 +472,7 @@ function SubscriptionDashboardDemo() {
       {/* Header */}
       <div>
         <h3 className="text-lg font-bold">
-          Your Bluebell — {DEMO_PLAN.month}
+          Your Bluebell—{DEMO_PLAN.month}
         </h3>
         <p className="text-sm text-base-content/60">
           {DEMO_PLAN.tier} Plan (${DEMO_PLAN.price}/mo)
@@ -639,7 +639,7 @@ function PurchasesDashboardDemo() {
       {/* Header */}
       <div>
         <h3 className="text-lg font-bold">
-          Purchases — {DEMO_PLAN.month}
+          Purchases—{DEMO_PLAN.month}
         </h3>
         <p className="text-sm text-base-content/60">
           Direct purchases are charged at time of sale, separate from your

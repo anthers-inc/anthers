@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await api.get<User>("/api/v1/accounts/me/");
       setUser(data);
     } catch (err) {
-      // 401/403 means not logged in — not an error
+      // 401/403 means not logged in—not an error
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setUser(null);
       } else {

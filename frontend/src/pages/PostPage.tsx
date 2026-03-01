@@ -52,7 +52,7 @@ export default function PostPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Attention tracking — map content_type to event_type
+  // Attention tracking—map content_type to event_type
   const eventType =
     post?.content_type === "video"
       ? "watch"

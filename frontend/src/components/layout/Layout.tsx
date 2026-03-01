@@ -19,7 +19,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="navbar bg-base-200 px-4">
+      <header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
         <div className="navbar-start">
           {/* Mobile menu */}
           <div className="dropdown lg:hidden">
@@ -128,34 +128,39 @@ export default function Layout() {
 
       <MiniPlayer />
 
-      <footer className={`bg-base-200 text-base-content p-10 ${currentTrack ? "mb-16" : ""}`}>
+      <footer className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}>
         <div className="max-w-4xl mx-auto">
           <div className="join join-horizontal w-full">
-            <nav className="join-item flex-1 flex flex-col items-center gap-2">
-              <h6 className="footer-title">Platform</h6>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">Explore</h6>
+              <Link to="/creators" className="link link-hover">Browse Creators</Link>
+              <Link to="/explore" className="link link-hover">Explore Projects</Link>
+            </nav>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">Creators</h6>
               <Link to="/for-creators" className="link link-hover">For Creators</Link>
               <Link to="/creator-demo" className="link link-hover">Creator Hubs</Link>
+            </nav>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">Users</h6>
               <Link to="/for-users" className="link link-hover">For Users</Link>
               <Link to="/subscribe" className="link link-hover">Subscribe</Link>
-              <Link to="/explore" className="link link-hover">Explore</Link>
             </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-2">
-              <h6 className="footer-title">Compare</h6>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">Compare</h6>
               <Link to="/compare/itch-io" className="link link-hover">Bluebell vs itch.io</Link>
               <Link to="/compare/ghost" className="link link-hover">Bluebell vs Ghost</Link>
             </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-2">
-              <h6 className="footer-title">Community</h6>
-              <Link to="/creators" className="link link-hover">Creators</Link>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">Community</h6>
               <Link to="/jams" className="link link-hover">Game Jams</Link>
               <Link to="/posts" className="link link-hover">Posts</Link>
             </nav>
-          </div>
-          <div className="mt-8 text-center">
-            <h6 className="footer-title justify-center">About</h6>
-            <p className="text-sm text-base-content/50">
-              Bluebell — Creator-first, transparent, federated.
-            </p>
+            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+              <h6 className="footer-title text-xs">About</h6>
+              <Link to="/about" className="link link-hover">About Us</Link>
+              <Link to="/wiki" className="link link-hover">Wiki</Link>
+            </nav>
           </div>
         </div>
       </footer>

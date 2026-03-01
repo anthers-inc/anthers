@@ -71,7 +71,7 @@ interface CreatorStyle {
 }
 
 // ---------------------------------------------------------------------------
-// Demo data — three very different creators
+// Demo data—three very different creators
 // ---------------------------------------------------------------------------
 
 const DEMO_CREATORS: DemoCreator[] = [
@@ -82,7 +82,7 @@ const DEMO_CREATORS: DemoCreator[] = [
     displayName: "Nova Pixel",
     username: "novapixel",
     avatar: "NP",
-    bio: "Solo indie dev crafting pixel-art worlds and lo-fi soundtracks. Currently building Moonvale — a farming sim meets dungeon crawler. I release devlogs every Friday and all my OSTs are free to stream.",
+    bio: "Solo indie dev crafting pixel-art worlds and lo-fi soundtracks. Currently building Moonvale—a farming sim meets dungeon crawler. I release devlogs every Friday and all my OSTs are free to stream.",
     followers: 2_841,
     website: "novapixel.dev",
     location: "Portland, OR",
@@ -121,13 +121,13 @@ const DEMO_CREATORS: DemoCreator[] = [
       },
     ],
     posts: [
-      { title: "Moonvale Devlog #47 — The Fishing Update", type: "video", duration: "14:32", date: "Feb 21, 2026" },
+      { title: "Moonvale Devlog #47—The Fishing Update", type: "video", duration: "14:32", date: "Feb 21, 2026" },
       { title: "OST Preview: \"Lantern Fields\"", type: "audio", duration: "3:44", date: "Feb 18, 2026" },
       { title: "How I Design Pixel Art Tilesets", type: "text", date: "Feb 14, 2026", readMin: 8 },
-      { title: "Moonvale Devlog #46 — NPC Dialogue Trees", type: "video", duration: "11:07", date: "Feb 7, 2026" },
+      { title: "Moonvale Devlog #46—NPC Dialogue Trees", type: "video", duration: "11:07", date: "Feb 7, 2026" },
     ],
     style: {
-      banner: "linear-gradient(135deg, #6d28d9 0%, #2563eb 50%, #06b6d4 100%)",
+      banner: "linear-gradient(135deg, #2e1065 0%, #6d28d9 50%, #8b5cf6 100%)",
       accent: "text-violet-400",
       cardBg: "bg-base-200",
       badgeClass: "badge-primary",
@@ -159,9 +159,9 @@ const DEMO_CREATORS: DemoCreator[] = [
     ],
     posts: [
       { title: "The Myth of the Neutral Platform", type: "text", date: "Feb 24, 2026", readMin: 14 },
-      { title: "Undercurrents Ep. 89 — \"Who Owns Your Feed?\"", type: "audio", duration: "52:18", date: "Feb 20, 2026", premium: true },
+      { title: "Undercurrents Ep. 89—\"Who Owns Your Feed?\"", type: "audio", duration: "52:18", date: "Feb 20, 2026", premium: true },
       { title: "Why I Left Substack (And What Comes Next)", type: "text", date: "Feb 16, 2026", readMin: 11 },
-      { title: "Undercurrents Ep. 88 — \"Digital Homesteading\"", type: "audio", duration: "47:03", date: "Feb 13, 2026" },
+      { title: "Undercurrents Ep. 88—\"Digital Homesteading\"", type: "audio", duration: "47:03", date: "Feb 13, 2026" },
       { title: "Five Books That Changed How I Think About the Internet", type: "text", date: "Feb 9, 2026", readMin: 9 },
       { title: "Video Essay: The Architecture of Trust", type: "video", duration: "23:41", date: "Feb 5, 2026", premium: true },
     ],
@@ -211,9 +211,9 @@ const DEMO_CREATORS: DemoCreator[] = [
       { title: "Remix Contest: Submit Your Take on \"Neon Rain\"", type: "text", date: "Feb 8, 2026", readMin: 3 },
     ],
     style: {
-      banner: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #701a75 100%)",
-      accent: "text-fuchsia-400",
-      cardBg: "bg-indigo-950/40",
+      banner: "linear-gradient(135deg, #042f2e 0%, #0f766e 40%, #14b8a6 100%)",
+      accent: "text-teal-400",
+      cardBg: "bg-teal-950/40",
       badgeClass: "badge-secondary",
       layout: "list",
       headingClass: "font-mono font-bold uppercase tracking-widest",
@@ -336,7 +336,7 @@ function PostCard({ post, style }: { post: DemoPost; style: CreatorStyle }) {
 }
 
 // ---------------------------------------------------------------------------
-// Magazine layout — featured article + sidebar
+// Magazine layout—featured article + sidebar
 // ---------------------------------------------------------------------------
 
 function MagazineLayout({ creator }: { creator: DemoCreator }) {
@@ -371,7 +371,7 @@ function MagazineLayout({ creator }: { creator: DemoCreator }) {
           ))}
         </div>
 
-        {/* Sidebar — projects */}
+        {/* Sidebar—projects */}
         <div>
           <h4 className="text-sm uppercase tracking-wider text-base-content/40 mb-2">Projects</h4>
           <div className="space-y-3">
@@ -394,7 +394,7 @@ function MagazineLayout({ creator }: { creator: DemoCreator }) {
 }
 
 // ---------------------------------------------------------------------------
-// Grid layout — projects hero + post cards
+// Grid layout—projects hero + post cards
 // ---------------------------------------------------------------------------
 
 function GridLayout({ creator }: { creator: DemoCreator }) {
@@ -448,7 +448,7 @@ function GridLayout({ creator }: { creator: DemoCreator }) {
 }
 
 // ---------------------------------------------------------------------------
-// List layout — everything as a clean feed
+// List layout—everything as a clean feed
 // ---------------------------------------------------------------------------
 
 function ListLayout({ creator }: { creator: DemoCreator }) {
@@ -554,7 +554,7 @@ export default function CreatorDemoPage() {
           Your page. Your style.
         </h1>
         <p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-          Every creator on Bluebell gets a customizable hub — not a cookie-cutter profile.
+          Every creator on Bluebell gets a customizable hub—not a cookie-cutter profile.
           Choose your layout, colors, and typography. Pin featured work. Organize your
           content your way. Below are three examples of what's possible.
         </p>
@@ -579,7 +579,7 @@ export default function CreatorDemoPage() {
               <p className={`text-sm font-semibold ${activeId === c.id ? "text-primary" : ""}`}>
                 {c.displayName}
               </p>
-              <p className="text-xs text-base-content/50">{c.label} — {c.tagline}</p>
+              <p className="text-xs text-base-content/50">{c.label}—{c.tagline}</p>
             </button>
           ))}
         </div>
@@ -615,7 +615,7 @@ export default function CreatorDemoPage() {
         {/* Customization callout */}
         <div className="mt-8 text-center">
           <p className="text-base-content/50 text-sm mb-4">
-            Layouts, color palettes, typography, pinned content, and more — all customizable by the creator.
+            Layouts, color palettes, typography, pinned content, and more—all customizable by the creator.
           </p>
           <Link
             to="/for-creators"

@@ -61,7 +61,7 @@ export default function CompareItchPage() {
           </h2>
           <p className="text-base-content/70 leading-relaxed text-center max-w-2xl mx-auto mb-8">
             itch.io pioneered creator-friendly game distribution. They proved
-            that a platform could put creators first — with open publishing,
+            that a platform could put creators first—with open publishing,
             flexible revenue sharing, customizable pages, and a vibrant
             community of game jams. Millions of indie games have found their
             audience because itch.io exists.
@@ -72,7 +72,7 @@ export default function CompareItchPage() {
             medium they work in, and true ownership of their identity and data.
             If itch.io is the place that showed the world what indie game
             distribution could be, Bluebell is our attempt to build the next
-            chapter — for games, videos, music, and writing all in one place.
+            chapter—for games, videos, music, and writing all in one place.
           </p>
         </div>
       </section>
@@ -86,33 +86,33 @@ export default function CompareItchPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
             <DiffCard
               icon={<CurrencyDollarIcon className="w-6 h-6" />}
-              title="100% to creators — no revenue share"
-              description="itch.io defaults to a 10% revenue share (which creators can adjust, even to 0%). Bluebell never takes a percentage. Your price is your revenue. Infrastructure and payment processing costs are shown as transparent line items to the buyer — never subtracted from your earnings."
+              title="100% to creators—no revenue share"
+              description="itch.io defaults to a 10% revenue share (which creators can adjust, even to 0%). Bluebell never takes a percentage. Your price is your revenue. Infrastructure and payment processing costs are shown as transparent line items to the buyer—never subtracted from your earnings."
             />
             <DiffCard
               icon={<GlobeAltIcon className="w-6 h-6" />}
               title="One home for every medium"
-              description="itch.io is primarily built for games. If you also make videos, music, or written content, you need separate platforms. Bluebell gives you one profile, one audience, and one URL for everything you create — games, devlogs, soundtracks, essays, and more."
+              description="itch.io is primarily built for games. If you also make videos, music, or written content, you need separate platforms. Bluebell gives you one profile, one audience, and one URL for everything you create—games, devlogs, soundtracks, essays, and more."
             />
             <DiffCard
               icon={<EyeIcon className="w-6 h-6" />}
               title="Transparent, itemized pricing"
-              description="On itch.io, the platform's share is deducted from your sale. On Bluebell, every cost is itemized at checkout — payment processing, infrastructure, and the Community Resilience Fund. Buyers see exactly where their money goes. Creators receive exactly what they charged."
+              description="On itch.io, the platform's share is deducted from your sale. On Bluebell, every cost is itemized at checkout—payment processing, infrastructure, and the Community Resilience Fund. Buyers see exactly where their money goes. Creators receive exactly what they charged."
             />
             <DiffCard
               icon={<LockOpenIcon className="w-6 h-6" />}
               title="Built on open protocols"
-              description="Bluebell is built on the AT Protocol (the same standard behind Bluesky). Your identity is a portable DID you own. Your content is stored as interoperable records. If you ever leave, your data goes with you — not by policy, but by design."
+              description="Bluebell is built on the AT Protocol (the same standard behind Bluesky). Your identity is a portable DID you own. Your content is stored as interoperable records. If you ever leave, your data goes with you—not by policy, but by design."
             />
             <DiffCard
               icon={<UserGroupIcon className="w-6 h-6" />}
               title="Subscription model that funds creators"
-              description="Beyond individual sales, Bluebell offers a subscription pool where subscriber payments are distributed to creators based on actual attention time — what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
+              description="Beyond individual sales, Bluebell offers a subscription pool where subscriber payments are distributed to creators based on actual attention time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
             />
             <DiffCard
               icon={<ChartBarIcon className="w-6 h-6" />}
               title="Unified creator dashboard"
-              description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Bluebell's dashboard covers your entire creative output — games, posts, audio, video — with follow and feed mechanics built in."
+              description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Bluebell's dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
             />
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function CompareItchPage() {
             Keep more of what you earn
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            itch.io's revenue sharing is flexible — creators can set their own
+            itch.io's revenue sharing is flexible—creators can set their own
             rate, even down to 0%. But the default is 10%, and many creators
             leave it there. Bluebell takes a fundamentally different approach:
             your price is your revenue, always.
@@ -188,7 +188,7 @@ export default function CompareItchPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             itch.io is a fantastic game marketplace. Bluebell is a home for
             every kind of creative work. If you make games <em>and</em> music,
-            if you write devlogs <em>and</em> record podcasts — you don't need
+            if you write devlogs <em>and</em> record podcasts—you don't need
             four platforms. You need one.
           </p>
 
@@ -278,7 +278,7 @@ export default function CompareItchPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             itch.io is a great place to publish, but your identity and content
             live on their servers. Bluebell is built on the AT Protocol —
-            the same open standard behind Bluesky — so your creator
+            the same open standard behind Bluesky—so your creator
             identity is a portable DID you truly own.
           </p>
 
@@ -310,7 +310,7 @@ export default function CompareItchPage() {
               </div>
               <h3 className="font-semibold mb-1">Federated future</h3>
               <p className="text-sm text-base-content/60">
-                ATProto enables federation — other nodes can join the network,
+                ATProto enables federation—other nodes can join the network,
                 and content is interoperable across them.
               </p>
             </div>
@@ -327,7 +327,7 @@ export default function CompareItchPage() {
           <p className="text-base-content/60 max-w-2xl mx-auto mb-8 leading-relaxed">
             Already have projects on itch.io? Bluebell's import tool can help
             you bring your project metadata over so you can get started
-            quickly. You don't have to choose one or the other — publish on
+            quickly. You don't have to choose one or the other—publish on
             both, and let your audience find you wherever they prefer.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">

@@ -29,7 +29,7 @@ export default function ATProtoCallbackPage() {
     }
 
     if (success === "login") {
-      // Successfully logged in via Bluesky — refresh user and redirect
+      // Successfully logged in via Bluesky—refresh user and redirect
       refreshUser().then(() => {
         navigate("/", { replace: true });
       });
@@ -37,7 +37,7 @@ export default function ATProtoCallbackPage() {
     }
 
     if (success === "linked") {
-      // Successfully linked Bluesky account — refresh user and redirect to settings
+      // Successfully linked Bluesky account—refresh user and redirect to settings
       refreshUser().then(() => {
         navigate("/settings?bluesky=linked", { replace: true });
       });

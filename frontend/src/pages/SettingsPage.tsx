@@ -230,7 +230,7 @@ function StripeOnboardingSection() {
           <div className="flex flex-col gap-2">
             <p className="text-sm text-base-content/60">
               Connect a Stripe account to receive payments for your paid
-              projects. Bluebell uses Stripe Connect — you keep 100% of
+              projects. Bluebell uses Stripe Connect—you keep 100% of
               earnings, only real costs are passed through.
             </p>
             <button
@@ -665,14 +665,14 @@ export default function SettingsPage() {
         <BlueskySection />
       </div>
 
-      {/* Stripe Onboarding — only shown for creators */}
+      {/* Stripe Onboarding—only shown for creators */}
       {isCreator && (
         <div className="mt-8">
           <StripeOnboardingSection />
         </div>
       )}
 
-      {/* Platform Connections — only shown for creators */}
+      {/* Platform Connections—only shown for creators */}
       {isCreator && (
         <div className="mt-8">
           <PlatformConnectionsSection />

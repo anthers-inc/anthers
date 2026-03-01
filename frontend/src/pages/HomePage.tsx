@@ -44,7 +44,7 @@ export default function HomePage() {
             <h1 className="text-6xl font-bold tracking-tight">Bluebell</h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
               A home for creators and the people who love their work. Publish
-              games, videos, music, and writing — or discover your next
+              games, videos, music, and writing—or discover your next
               favorite thing.
             </p>
 

@@ -60,8 +60,8 @@ export default function CompareGhostPage() {
             Two platforms, two philosophies
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Ghost and Bluebell share some values — independence, creator
-            ownership, transparent economics — but they're built for different
+            Ghost and Bluebell share some values—independence, creator
+            ownership, transparent economics—but they're built for different
             creative workflows.
           </p>
 
@@ -112,7 +112,7 @@ export default function CompareGhostPage() {
                 <p className="text-sm text-base-content/60 leading-relaxed mb-4">
                   A creator economy platform built for multi-media indie
                   creators. Bluebell is designed for people who make games,
-                  videos, music, and written content — and want one home for
+                  videos, music, and written content—and want one home for
                   all of it.
                 </p>
                 <ul className="text-sm text-base-content/60 flex flex-col gap-2">
@@ -122,7 +122,7 @@ export default function CompareGhostPage() {
                   </li>
                   <li className="flex gap-2">
                     <span className="text-success flex-shrink-0">✓</span>
-                    100% to creators — no platform revenue share
+                    100% to creators—no platform revenue share
                   </li>
                   <li className="flex gap-2">
                     <span className="text-success flex-shrink-0">✓</span>
@@ -151,7 +151,7 @@ export default function CompareGhostPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Ghost is laser-focused on written publishing and newsletters.
-            Bluebell covers a wider range of creative media — ideal for indie
+            Bluebell covers a wider range of creative media—ideal for indie
             creators who work across multiple formats.
           </p>
 
@@ -195,12 +195,12 @@ export default function CompareGhostPage() {
             <DiffCard
               icon={<CurrencyDollarIcon className="w-6 h-6" />}
               title="Revenue model"
-              description="Ghost charges a monthly hosting fee ($9-$199+/mo for Ghost Pro) and takes 0% of membership revenue. Bluebell is free to use and takes 0% of sales — real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
+              description="Ghost charges a monthly hosting fee ($9-$199+/mo for Ghost Pro) and takes 0% of membership revenue. Bluebell is free to use and takes 0% of sales—real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
             />
             <DiffCard
               icon={<EyeIcon className="w-6 h-6" />}
               title="Publishing approach"
-              description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery — it's a CMS. Bluebell gives you a creator profile with project pages, devlogs, and a built-in audience — it's a marketplace and community platform."
+              description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery—it's a CMS. Bluebell gives you a creator profile with project pages, devlogs, and a built-in audience—it's a marketplace and community platform."
             />
             <DiffCard
               icon={<UserGroupIcon className="w-6 h-6" />}
@@ -215,12 +215,12 @@ export default function CompareGhostPage() {
             <DiffCard
               icon={<TrophyIcon className="w-6 h-6" />}
               title="Community features"
-              description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Bluebell adds community mechanics like game jams, project ratings, comments, and follow/feed — built for the kind of interactive, collaborative community that forms around indie games and creative projects."
+              description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Bluebell adds community mechanics like game jams, project ratings, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
             />
             <DiffCard
               icon={<GlobeAltIcon className="w-6 h-6" />}
               title="Customization"
-              description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Bluebell focuses on creator profiles and project pages with consistent structure — less custom design, more consistent discovery experience."
+              description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Bluebell focuses on creator profiles and project pages with consistent structure—less custom design, more consistent discovery experience."
             />
           </div>
         </div>

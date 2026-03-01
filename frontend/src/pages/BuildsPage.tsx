@@ -111,7 +111,7 @@ export default function BuildsPage() {
           Dashboard
         </Link>
         <span className="text-base-content/30">/</span>
-        <h1 className="text-2xl font-bold">{project.title} — Builds</h1>
+        <h1 className="text-2xl font-bold">{project.title}—Builds</h1>
       </div>
 
       {error && (

@@ -46,7 +46,7 @@ export default function ProjectPage() {
       .catch(() => setUserOwns(null));
   }, [slug, isAuthenticated]);
 
-  // Attention tracking — games use "play", other project types use "page_view"
+  // Attention tracking—games use "play", other project types use "page_view"
   const eventType = project?.media_type === "game" ? "play" : "page_view";
 
   useAttentionTracker({

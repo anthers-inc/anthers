@@ -57,7 +57,7 @@ export default function SubscriptionPage() {
       );
       setAttention(data);
     } catch {
-      // Non-critical — don't show error
+      // Non-critical—don't show error
     }
   }
 

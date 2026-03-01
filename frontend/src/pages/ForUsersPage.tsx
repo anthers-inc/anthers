@@ -37,7 +37,7 @@ export default function ForUsersPage() {
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
               Browse games, music, videos, and writing from independent
               creators. Play in your browser, download for free, or pay what
-              you want — with every penny going to the person who made it.
+              you want—with every penny going to the person who made it.
             </p>
             <div className="flex gap-4 justify-center flex-wrap">
               <Link to="/explore" className="btn btn-secondary btn-lg">
@@ -86,7 +86,7 @@ export default function ForUsersPage() {
               </div>
               <h3 className="font-bold text-lg mb-2">Download freely</h3>
               <p className="text-sm text-base-content/60 leading-relaxed">
-                Free content is genuinely free — no login wall, no email gate,
+                Free content is genuinely free—no login wall, no email gate,
                 no "subscribe to download" tricks. If a creator made it free,
                 you get it free.
               </p>
@@ -98,7 +98,7 @@ export default function ForUsersPage() {
               <h3 className="font-bold text-lg mb-2">Browse everything</h3>
               <p className="text-sm text-base-content/60 leading-relaxed">
                 The full catalog is open. Search, filter by media type,
-                explore tags, check ratings — all without signing in.
+                explore tags, check ratings—all without signing in.
                 The platform works for you before you commit to it.
               </p>
             </div>
@@ -113,7 +113,7 @@ export default function ForUsersPage() {
             All kinds of creative work
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell isn't just games. Creators publish across media — and you
+            Bluebell isn't just games. Creators publish across media—and you
             can discover all of it in one place, from one search bar.
           </p>
 
@@ -197,7 +197,7 @@ export default function ForUsersPage() {
             <DiscoveryFeature
               icon={<SparklesIcon className="w-6 h-6" />}
               title="Personalized feed"
-              description="Your feed shows updates from creators you follow — new releases, devlog posts, jam entries. A single timeline for everything you care about."
+              description="Your feed shows updates from creators you follow—new releases, devlog posts, jam entries. A single timeline for everything you care about."
             />
             <DiscoveryFeature
               icon={<GlobeAltIcon className="w-6 h-6" />}
@@ -293,12 +293,12 @@ export default function ForUsersPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
             <PricingCard
               title="Free"
-              description="Tons of content is completely free — games, demos, jam entries, devlogs. Download or play with no account required."
+              description="Tons of content is completely free—games, demos, jam entries, devlogs. Download or play with no account required."
               badge="badge-success"
             />
             <PricingCard
               title="Pay What You Want"
-              description="Some creators let you choose what to pay. Give what you can — even $1 helps. Or pay nothing if that's what works."
+              description="Some creators let you choose what to pay. Give what you can—even $1 helps. Or pay nothing if that's what works."
               badge="badge-warning"
             />
             <PricingCard
@@ -319,7 +319,7 @@ export default function ForUsersPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Optional subscriptions let you support the creators you love. Your
             subscription funds are distributed based on what you actually watch,
-            play, read, and listen to — plus optional boosts to your favorites.
+            play, read, and listen to—plus optional boosts to your favorites.
           </p>
           <div className="overflow-x-auto">
             <table className="table table-sm max-w-3xl mx-auto">
@@ -381,7 +381,7 @@ export default function ForUsersPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Bluebell is built on the AT Protocol (the tech behind Bluesky).
             Sign in with your existing Bluesky identity, or create a new one.
-            Your follows, library, and activity are yours — portable and not
+            Your follows, library, and activity are yours—portable and not
             locked in.
           </p>
 
@@ -431,7 +431,7 @@ export default function ForUsersPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             You can do a lot without an account. But a free account unlocks
-            the full experience — and it takes 30 seconds.
+            the full experience—and it takes 30 seconds.
           </p>
 
           <div className="overflow-x-auto">
@@ -468,7 +468,7 @@ export default function ForUsersPage() {
           </h2>
           <p className="text-base-content/60 mb-8 leading-relaxed">
             Thousands of games, videos, music, and writing from independent
-            creators — many of them free. No account required to start
+            creators—many of them free. No account required to start
             browsing.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">

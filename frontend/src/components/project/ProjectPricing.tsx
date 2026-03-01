@@ -155,7 +155,7 @@ export default function ProjectPricing({
       ) : !creatorHasStripe ? (
         <div className="p-3 bg-base-200 rounded-lg">
           <p className="text-sm text-base-content/60">
-            Payments not available yet — the creator hasn't connected Stripe.
+            Payments not available yet—the creator hasn't connected Stripe.
           </p>
         </div>
       ) : !stripePromise ? (

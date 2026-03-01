@@ -22,6 +22,7 @@ import CompareGhostPage from "./pages/CompareGhostPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
 import UserDemoPage from "./pages/UserDemoPage";
 import WikiPage from "./pages/WikiPage";
+import AboutPage from "./pages/AboutPage";
 
 // Protected pages
 import FeedPage from "./pages/FeedPage";
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/creator-demo" element={<CreatorDemoPage />} />
         <Route path="/user-demo" element={<UserDemoPage />} />
         <Route path="/wiki/*" element={<WikiPage />} />
+        <Route path="/about" element={<AboutPage />} />
 
         {/* Protected routes */}
         <Route
@@ -176,7 +178,7 @@ export default function App() {
           }
         />
 
-        {/* Creator profile — must be last to avoid catching other routes */}
+        {/* Creator profile—must be last to avoid catching other routes */}
         <Route path="/:username" element={<CreatorProfilePage />} />
       </Route>
     </Routes>
