@@ -200,6 +200,37 @@ rollback() {
     deploy
 }
 
+teardown() {
+    local active
+    active=$(get_active_slot)
+
+    if [ "$active" = "none" ]; then
+        echo -e "${YELLOW}No active deployment slot.${NC}"
+    else
+        local active_compose
+        active_compose="docker compose -p bluebell-${active} -f docker-compose.${active}.yml"
+        echo -e "${YELLOW}Stopping ${active} slot...${NC}"
+        $active_compose down
+        echo -e "${GREEN}✓ ${active^} slot stopped${NC}"
+    fi
+
+    # Also stop the inactive slot if it's still running
+    for slot in blue green; do
+        if [ "$slot" != "$active" ]; then
+            local other_compose
+            other_compose="docker compose -p bluebell-${slot} -f docker-compose.${slot}.yml"
+            if docker ps --format '{{.Names}}' | grep -q "bluebell-backend-${slot}"; then
+                echo -e "${YELLOW}Stopping leftover ${slot} slot...${NC}"
+                $other_compose down
+                echo -e "${GREEN}✓ ${slot^} slot stopped${NC}"
+            fi
+        fi
+    done
+
+    set_active_slot "none"
+    echo -e "${GREEN}✓ All deployment slots stopped${NC}"
+}
+
 # ─── CLI ───
 case "${1:-deploy}" in
     --status)
@@ -208,11 +239,14 @@ case "${1:-deploy}" in
     --rollback)
         rollback
         ;;
+    --down)
+        teardown
+        ;;
     deploy|"")
         deploy
         ;;
     *)
-        echo "Usage: $0 [--status|--rollback]"
+        echo "Usage: $0 [--status|--rollback|--down]"
         exit 1
         ;;
 esac

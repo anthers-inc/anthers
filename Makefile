@@ -6,8 +6,8 @@ COMPOSE_CADDY = docker compose -p bluebell-caddy -f docker-compose.caddy.yml
 COMPOSE_DATA = docker compose -p bluebell-data -f docker-compose.data.yml
 
 .PHONY: help up down rebuild logs ps bash shell migrate makemigrations createsuperuser \
-        deploy deploy-status deploy-rollback caddy-up caddy-down caddy-logs \
-        data-up data-down data-logs setup clean build
+        deploy deploy-down deploy-status deploy-rollback caddy-up caddy-down caddy-logs \
+        data-up data-down data-logs setup clean build all-down
 
 # ─── Development ───
 
@@ -54,6 +54,9 @@ createsuperuser: ## Create Django admin superuser
 deploy: ## Run blue-green deployment
 	./deploy-blue-green.sh
 
+deploy-down: ## Stop active deployment slot(s)
+	./deploy-blue-green.sh --down
+
 deploy-status: ## Show active deployment slot
 	./deploy-blue-green.sh --status
 
@@ -81,6 +84,12 @@ caddy-down: ## Stop Caddy
 
 caddy-logs: ## Follow Caddy logs
 	$(COMPOSE_CADDY) logs -f
+
+all-down: ## Stop everything (dev, deploy, data, caddy)
+	$(COMPOSE_DEV) down 2>/dev/null || true
+	./deploy-blue-green.sh --down
+	$(COMPOSE_CADDY) down 2>/dev/null || true
+	$(COMPOSE_DATA) down 2>/dev/null || true
 
 # ─── Setup ───
 
