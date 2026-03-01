@@ -439,31 +439,31 @@ export default function ForCreatorsPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Window</td>
+                  <td>Free</td>
                   <td className="text-right">Free</td>
                   <td className="text-right text-base-content/40">—</td>
                   <td className="text-right text-base-content/40">—</td>
                 </tr>
                 <tr>
-                  <td>Base</td>
+                  <td>Root</td>
                   <td className="text-right">$5/mo</td>
                   <td className="text-right text-success">$4.85</td>
                   <td className="text-right text-base-content/40">—</td>
                 </tr>
                 <tr>
-                  <td>Supporter</td>
+                  <td>Sprout</td>
                   <td className="text-right">$10/mo</td>
                   <td className="text-right text-success">$4.70</td>
                   <td className="text-right text-primary">$5.00</td>
                 </tr>
                 <tr>
-                  <td>Advocate</td>
+                  <td>Petal</td>
                   <td className="text-right">$15/mo</td>
                   <td className="text-right text-success">$4.55</td>
                   <td className="text-right text-primary">$10.00</td>
                 </tr>
                 <tr>
-                  <td>Champion</td>
+                  <td>Bloom</td>
                   <td className="text-right">$20/mo</td>
                   <td className="text-right text-success">$4.40</td>
                   <td className="text-right text-primary">$15.00</td>

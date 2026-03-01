@@ -333,31 +333,31 @@ export default function ForUsersPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Window</td>
+                  <td>Free</td>
                   <td className="text-right">Free</td>
                   <td className="text-right">10 hrs/mo</td>
                   <td className="text-right text-base-content/40">No</td>
                 </tr>
                 <tr>
-                  <td>Base</td>
+                  <td>Root</td>
                   <td className="text-right">$5/mo</td>
                   <td className="text-right">25 hrs/mo</td>
                   <td className="text-right text-base-content/40">No</td>
                 </tr>
                 <tr>
-                  <td>Supporter</td>
+                  <td>Sprout</td>
                   <td className="text-right">$10/mo</td>
                   <td className="text-right">Unlimited</td>
                   <td className="text-right text-success">Yes</td>
                 </tr>
                 <tr>
-                  <td>Advocate</td>
+                  <td>Petal</td>
                   <td className="text-right">$15/mo</td>
                   <td className="text-right">Unlimited</td>
                   <td className="text-right text-success">Yes</td>
                 </tr>
                 <tr>
-                  <td>Champion</td>
+                  <td>Bloom</td>
                   <td className="text-right">$20/mo</td>
                   <td className="text-right">Unlimited</td>
                   <td className="text-right text-success">Yes</td>
@@ -366,7 +366,7 @@ export default function ForUsersPage() {
             </table>
           </div>
           <p className="text-center text-xs text-base-content/40 mt-4">
-            Supporter and above get Boost Pool funds to direct to favorite
+            Sprout and above get Boost Pool funds to direct to favorite
             creators and unlock gated content. Subscriptions coming soon.
           </p>
         </div>

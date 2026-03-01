@@ -313,11 +313,11 @@ export interface OwnershipResponse {
 // ─── Subscription Types ───
 
 export type SubscriptionTier =
-  | "window"
-  | "base"
-  | "supporter"
-  | "advocate"
-  | "champion";
+  | "free"
+  | "root"
+  | "sprout"
+  | "petal"
+  | "bloom";
 
 export interface SubscriptionTierOption {
   tier: SubscriptionTier;

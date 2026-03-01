@@ -8,29 +8,29 @@ import {
 } from "../lib/api";
 
 const TIER_HIGHLIGHTS: Record<string, string[]> = {
-  window: [
+  free: [
     "Browse and discover creators",
     "10 hours/month content access",
     "Follow creators and get updates",
   ],
-  base: [
+  root: [
     "25 hours/month content access",
     "Support creators through attention-based pool",
     "$4.85/mo goes directly to creators you engage with",
   ],
-  supporter: [
+  sprout: [
     "Unlimited content access",
     "$4.70/mo creator pool + $5.00 boost pool",
     "Manually boost your favorite creators",
     "Access gated/exclusive content",
   ],
-  advocate: [
+  petal: [
     "Unlimited content access",
     "$4.55/mo creator pool + $10.00 boost pool",
     "More boost budget for creators you love",
     "Access gated/exclusive content",
   ],
-  champion: [
+  bloom: [
     "Unlimited content access",
     "$4.40/mo creator pool + $15.00 boost pool",
     "Maximum support for your creators",
@@ -50,23 +50,16 @@ function TierCard({
   subscribing: string | null;
 }) {
   const isCurrentTier = tier.tier === currentTier;
-  const isFree = tier.tier === "window";
-  const isPopular = tier.tier === "supporter";
+  const isFree = tier.tier === "free";
   const price = parseFloat(tier.price);
 
   return (
     <div
-      className={`card bg-base-200 border-2 transition-all ${
-        isPopular ? "border-primary shadow-lg scale-105" : "border-base-300"
-      } ${isCurrentTier ? "ring-2 ring-success" : ""}`}
+      className={`card bg-base-200 border-2 transition-all border-base-300 ${
+        isCurrentTier ? "ring-2 ring-success" : ""
+      }`}
     >
       <div className="card-body">
-        {isPopular && (
-          <div className="badge badge-primary badge-sm self-end">
-            Most Popular
-          </div>
-        )}
-
         <h3 className="card-title text-lg">{tier.name}</h3>
 
         <div className="flex items-baseline gap-1 my-2">
@@ -130,7 +123,7 @@ function TierCard({
             </button>
           ) : (
             <button
-              className={`btn btn-sm w-full ${isPopular ? "btn-primary" : "btn-outline btn-primary"} ${
+              className={`btn btn-sm w-full btn-outline btn-primary ${
                 subscribing === tier.tier ? "btn-disabled" : ""
               }`}
               onClick={() => onSelect(tier.tier)}
@@ -138,7 +131,7 @@ function TierCard({
             >
               {subscribing === tier.tier
                 ? "Redirecting..."
-                : currentTier !== "window"
+                : currentTier !== "free"
                   ? `Switch to ${tier.name}`
                   : `Subscribe`}
             </button>
@@ -224,10 +217,10 @@ export default function SubscribePage() {
     );
   }
 
-  const currentTier = currentSub?.tier || "window";
+  const currentTier = currentSub?.tier || "free";
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-2">Choose Your Plan</h1>
         <p className="text-base-content/70 max-w-xl mx-auto">
@@ -343,36 +336,120 @@ export default function SubscribePage() {
       </div>
 
       {/* How it works section */}
-      <div className="mt-12 max-w-3xl mx-auto">
-        <h2 className="text-xl font-bold mb-4 text-center">How It Works</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="card bg-base-200">
-            <div className="card-body text-center">
-              <div className="text-3xl mb-2">1</div>
-              <h3 className="font-bold">Subscribe</h3>
-              <p className="text-sm text-base-content/70">
-                Pick a tier. Your subscription is split into a Creator Pool
-                and a Boost Pool.
+      <div className="mt-16 max-w-4xl mx-auto">
+        <h2 className="text-xl font-bold mb-2 text-center">
+          How it Works
+        </h2>
+        <p className="text-sm text-base-content/60 text-center mb-8 max-w-2xl mx-auto">
+          Every paid subscription is split into three transparent layers.
+          You always know where your money goes.
+        </p>
+
+        {/* Visual bar breakdown — example: Sprout @ $10/mo */}
+        <div className="card bg-base-200 p-5 mb-8">
+          <p className="text-xs text-base-content/50 uppercase tracking-wider mb-3">
+            Example: Sprout plan &mdash; $10/mo
+          </p>
+          {/* Proportional bar */}
+          <div className="flex rounded-lg overflow-hidden h-10 text-xs font-medium">
+            {/* CRF 3% */}
+            <div
+              className="bg-neutral text-neutral-content flex items-center justify-center"
+              style={{ width: "3%" }}
+              title="Community Resilience Fund — $0.30"
+            />
+            {/* Creator Pool ~47% */}
+            <div
+              className="bg-success text-success-content flex items-center justify-center"
+              style={{ width: "47%" }}
+            >
+              Creator Pool
+            </div>
+            {/* Boost Pool 50% */}
+            <div
+              className="bg-primary text-primary-content flex items-center justify-center"
+              style={{ width: "50%" }}
+            >
+              Boost Pool
+            </div>
+          </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-base-content/60">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-neutral inline-block" />
+              CRF &mdash; $0.30
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-success inline-block" />
+              Creator Pool &mdash; $4.70
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" />
+              Boost Pool &mdash; $5.00
+            </span>
+          </div>
+        </div>
+
+        {/* Layer detail rows */}
+        <div className="space-y-4">
+          {/* Layer 1 — CRF */}
+          <div className="flex gap-4 items-start">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-neutral text-neutral-content flex items-center justify-center mt-0.5">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">
+                Community Resilience Fund
+                <span className="font-normal text-base-content/40 ml-2">3%</span>
+              </h3>
+              <p className="text-sm text-base-content/60 mt-0.5">
+                Covers free-tier infrastructure, shields creators from viral
+                traffic spikes, and subsidizes small creators whose earnings
+                don't yet cover hosting costs.
               </p>
             </div>
           </div>
-          <div className="card bg-base-200">
-            <div className="card-body text-center">
-              <div className="text-3xl mb-2">2</div>
-              <h3 className="font-bold">Engage</h3>
-              <p className="text-sm text-base-content/70">
-                Watch, read, listen, play. Your Creator Pool is distributed
-                proportionally to the creators you spend time with.
+
+          {/* Layer 2 — Creator Pool */}
+          <div className="flex gap-4 items-start">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-success text-success-content flex items-center justify-center mt-0.5">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">
+                Creator Pool
+                <span className="font-normal text-base-content/40 ml-2">automatic &middot; watch-time proportional</span>
+              </h3>
+              <p className="text-sm text-base-content/60 mt-0.5">
+                Distributed to every creator you engage with, proportional to
+                the time you spend watching, reading, listening, or playing.
+                No action needed — it happens in the background.
               </p>
             </div>
           </div>
-          <div className="card bg-base-200">
-            <div className="card-body text-center">
-              <div className="text-3xl mb-2">3</div>
-              <h3 className="font-bold">Boost</h3>
-              <p className="text-sm text-base-content/70">
-                Supporter+ tiers get a Boost Pool. Manually allocate extra
-                funds to your favorite creators and unlock gated content.
+
+          {/* Layer 3 — Boost Pool */}
+          <div className="flex gap-4 items-start">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary text-primary-content flex items-center justify-center mt-0.5">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">
+                Boost Pool
+                <span className="font-normal text-base-content/40 ml-2">Sprout+ &middot; manual or auto</span>
+              </h3>
+              <p className="text-sm text-base-content/60 mt-0.5">
+                Extra funds you can direct to specific creators with sliders.
+                Your boost to each creator determines which gated content you
+                unlock. Left untouched, it follows the same watch-time split
+                as the Creator Pool.
               </p>
             </div>
           </div>

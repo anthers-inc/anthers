@@ -408,7 +408,7 @@ function RevenueSection({
             <div className="text-lg font-bold">${earnings.total}</div>
           </div>
           <div>
-            <div className="text-xs text-base-content/50">Supporters</div>
+            <div className="text-xs text-base-content/50">Subscribers</div>
             <div className="text-lg font-bold">
               {earnings.subscriber_count}
             </div>

@@ -197,10 +197,10 @@ STRIPE_SUBSCRIPTION_WEBHOOK_SECRET = os.environ.get(
 
 # ─── Stripe Subscription Price IDs ───
 
-STRIPE_PRICE_BASE = os.environ.get("STRIPE_PRICE_BASE", "")
-STRIPE_PRICE_SUPPORTER = os.environ.get("STRIPE_PRICE_SUPPORTER", "")
-STRIPE_PRICE_ADVOCATE = os.environ.get("STRIPE_PRICE_ADVOCATE", "")
-STRIPE_PRICE_CHAMPION = os.environ.get("STRIPE_PRICE_CHAMPION", "")
+STRIPE_PRICE_ROOT = os.environ.get("STRIPE_PRICE_ROOT", "")
+STRIPE_PRICE_SPROUT = os.environ.get("STRIPE_PRICE_SPROUT", "")
+STRIPE_PRICE_PETAL = os.environ.get("STRIPE_PRICE_PETAL", "")
+STRIPE_PRICE_BLOOM = os.environ.get("STRIPE_PRICE_BLOOM", "")
 
 # ─── Community Resilience Fund ───
 

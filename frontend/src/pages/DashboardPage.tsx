@@ -144,7 +144,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="text-xs text-base-content/50 uppercase">
-                  Supporters
+                  Subscribers
                 </div>
                 <div className="text-xl font-bold">
                   {earnings.subscriber_count}

@@ -8,11 +8,11 @@ class Subscription(models.Model):
     """A user's platform subscription tier and Stripe billing state."""
 
     class Tier(models.TextChoices):
-        WINDOW = "window", "Window"
-        BASE = "base", "Base"
-        SUPPORTER = "supporter", "Supporter"
-        ADVOCATE = "advocate", "Advocate"
-        CHAMPION = "champion", "Champion"
+        FREE = "free", "Free"
+        ROOT = "root", "Root"
+        SPROUT = "sprout", "Sprout"
+        PETAL = "petal", "Petal"
+        BLOOM = "bloom", "Bloom"
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -20,7 +20,7 @@ class Subscription(models.Model):
         related_name="subscription",
     )
     tier = models.CharField(
-        max_length=20, choices=Tier.choices, default=Tier.WINDOW
+        max_length=20, choices=Tier.choices, default=Tier.FREE
     )
     stripe_customer_id = models.CharField(max_length=255, blank=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True)
@@ -39,14 +39,14 @@ class Subscription(models.Model):
 
     @property
     def is_paid(self):
-        return self.tier != self.Tier.WINDOW and self.is_active
+        return self.tier != self.Tier.FREE and self.is_active
 
     @property
     def has_boost_pool(self):
         return self.tier in (
-            self.Tier.SUPPORTER,
-            self.Tier.ADVOCATE,
-            self.Tier.CHAMPION,
+            self.Tier.SPROUT,
+            self.Tier.PETAL,
+            self.Tier.BLOOM,
         ) and self.is_active
 
     @property
@@ -57,8 +57,8 @@ class Subscription(models.Model):
     def monthly_content_hours(self):
         """Content consumption cap in hours per month. None = unlimited."""
         caps = {
-            self.Tier.WINDOW: 10,
-            self.Tier.BASE: 25,
+            self.Tier.FREE: 10,
+            self.Tier.ROOT: 25,
         }
         return caps.get(self.tier)  # Supporter+ returns None (unlimited)
 
@@ -66,10 +66,10 @@ class Subscription(models.Model):
     def creator_pool_amount(self) -> Decimal:
         """Amount from this subscription that goes into the creator pool."""
         amounts = {
-            self.Tier.BASE: Decimal("4.85"),
-            self.Tier.SUPPORTER: Decimal("4.70"),
-            self.Tier.ADVOCATE: Decimal("4.55"),
-            self.Tier.CHAMPION: Decimal("4.40"),
+            self.Tier.ROOT: Decimal("4.85"),
+            self.Tier.SPROUT: Decimal("4.70"),
+            self.Tier.PETAL: Decimal("4.55"),
+            self.Tier.BLOOM: Decimal("4.40"),
         }
         return amounts.get(self.tier, Decimal("0.00"))
 
@@ -77,9 +77,9 @@ class Subscription(models.Model):
     def boost_pool_amount(self) -> Decimal:
         """Amount from this subscription available for boost allocation."""
         amounts = {
-            self.Tier.SUPPORTER: Decimal("5.00"),
-            self.Tier.ADVOCATE: Decimal("10.00"),
-            self.Tier.CHAMPION: Decimal("15.00"),
+            self.Tier.SPROUT: Decimal("5.00"),
+            self.Tier.PETAL: Decimal("10.00"),
+            self.Tier.BLOOM: Decimal("15.00"),
         }
         return amounts.get(self.tier, Decimal("0.00"))
 
@@ -222,11 +222,11 @@ class CreatorGate(models.Model):
     """A threshold set by a creator for gated content access."""
 
     class Threshold(models.TextChoices):
-        TIER_1 = "1.00", "$1/mo"
-        TIER_1_50 = "1.50", "$1.50/mo"
-        TIER_3 = "3.00", "$3/mo"
-        TIER_5 = "5.00", "$5/mo"
-        TIER_10 = "10.00", "$10/mo"
+        TIER_2 = "2.00", "$2/mo"
+        TIER_4 = "4.00", "$4/mo"
+        TIER_8 = "8.00", "$8/mo"
+        TIER_16 = "16.00", "$16/mo"
+        TIER_32 = "32.00", "$32/mo"
 
     creator = models.ForeignKey(
         settings.AUTH_USER_MODEL,

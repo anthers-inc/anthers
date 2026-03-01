@@ -34,8 +34,8 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 TIER_CONFIG = [
     {
-        "tier": "window",
-        "name": "Window",
+        "tier": "free",
+        "name": "Free",
         "price": "0.00",
         "creator_pool": "0.00",
         "boost_pool": "0.00",
@@ -43,8 +43,8 @@ TIER_CONFIG = [
         "gate_access": False,
     },
     {
-        "tier": "base",
-        "name": "Base",
+        "tier": "root",
+        "name": "Root",
         "price": "5.00",
         "creator_pool": "4.85",
         "boost_pool": "0.00",
@@ -52,8 +52,8 @@ TIER_CONFIG = [
         "gate_access": False,
     },
     {
-        "tier": "supporter",
-        "name": "Supporter",
+        "tier": "sprout",
+        "name": "Sprout",
         "price": "10.00",
         "creator_pool": "4.70",
         "boost_pool": "5.00",
@@ -61,8 +61,8 @@ TIER_CONFIG = [
         "gate_access": True,
     },
     {
-        "tier": "advocate",
-        "name": "Advocate",
+        "tier": "petal",
+        "name": "Petal",
         "price": "15.00",
         "creator_pool": "4.55",
         "boost_pool": "10.00",
@@ -70,8 +70,8 @@ TIER_CONFIG = [
         "gate_access": True,
     },
     {
-        "tier": "champion",
-        "name": "Champion",
+        "tier": "bloom",
+        "name": "Bloom",
         "price": "20.00",
         "creator_pool": "4.40",
         "boost_pool": "15.00",
@@ -82,10 +82,10 @@ TIER_CONFIG = [
 
 # Map tier to Stripe Price ID (set via env vars)
 TIER_STRIPE_PRICES = {
-    "base": settings.STRIPE_PRICE_BASE,
-    "supporter": settings.STRIPE_PRICE_SUPPORTER,
-    "advocate": settings.STRIPE_PRICE_ADVOCATE,
-    "champion": settings.STRIPE_PRICE_CHAMPION,
+    "root": settings.STRIPE_PRICE_ROOT,
+    "sprout": settings.STRIPE_PRICE_SPROUT,
+    "petal": settings.STRIPE_PRICE_PETAL,
+    "bloom": settings.STRIPE_PRICE_BLOOM,
 }
 
 
@@ -128,10 +128,10 @@ class SubscriptionDetailView(APIView):
         try:
             sub = request.user.subscription
         except Subscription.DoesNotExist:
-            # No subscription record means Window tier (implicit)
+            # No subscription record means Free tier (implicit)
             return Response({
-                "tier": "window",
-                "tier_display": "Window",
+                "tier": "free",
+                "tier_display": "Free",
                 "is_active": True,
                 "is_paid": False,
                 "has_boost_pool": False,
@@ -174,7 +174,7 @@ class SubscribeView(APIView):
         # Get or create subscription record
         sub, _ = Subscription.objects.get_or_create(
             user=request.user,
-            defaults={"tier": "window"},
+            defaults={"tier": "free"},
         )
 
         # If already on a paid Stripe subscription, update it instead of new checkout
@@ -412,7 +412,7 @@ class AttentionSummaryView(APIView):
 
         # Determine cap
         cap = None
-        tier = "window"
+        tier = "free"
         if sub:
             cap = sub.monthly_content_hours
             tier = sub.tier
