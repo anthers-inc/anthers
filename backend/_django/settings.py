@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "subscriptions",
     "integrations",
     "jams",
+    "wiki",
 ]
 
 MIDDLEWARE = [

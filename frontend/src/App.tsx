@@ -20,6 +20,7 @@ import JamPage from "./pages/JamPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CompareGhostPage from "./pages/CompareGhostPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
+import WikiPage from "./pages/WikiPage";
 
 // Protected pages
 import FeedPage from "./pages/FeedPage";
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/compare/itch-io" element={<CompareItchPage />} />
         <Route path="/compare/ghost" element={<CompareGhostPage />} />
         <Route path="/creator-demo" element={<CreatorDemoPage />} />
+        <Route path="/wiki/*" element={<WikiPage />} />
 
         {/* Protected routes */}
         <Route

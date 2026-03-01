@@ -13,29 +13,38 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^7.0.0",
     "@heroicons/react": "^2.2.0",
-    "@stripe/stripe-js": "^4.0.0",
+    "@mdx-js/mdx": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
     "@stripe/react-stripe-js": "^3.0.0",
-    "react-markdown": "^9.0.0",
-    "remark-gfm": "^4.0.0",
-    "hls.js": "^1.5.0",
-    "@tiptap/react": "^2.6.0",
-    "@tiptap/starter-kit": "^2.6.0",
+    "@stripe/stripe-js": "^4.0.0",
+    "@tailwindcss/typography": "^0.5.19",
     "@tiptap/extension-image": "^2.6.0",
     "@tiptap/extension-link": "^2.6.0",
-    "@tiptap/extension-placeholder": "^2.6.0"
+    "@tiptap/extension-placeholder": "^2.6.0",
+    "@tiptap/react": "^2.6.0",
+    "@tiptap/starter-kit": "^2.6.0",
+    "hls.js": "^1.5.0",
+    "katex": "^0.16.33",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.0",
+    "react-router-dom": "^7.0.0",
+    "react-syntax-highlighter": "^16.1.1",
+    "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "tailwindcss": "^4.0.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "bun-plugin-tailwind": "latest",
     "daisyui": "^5.0.0",
-    "typescript": "^5.7.0",
     "eslint": "^9.0.0",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
   }
 }

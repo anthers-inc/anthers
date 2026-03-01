@@ -35,6 +35,7 @@ export default function Layout() {
               <li><Link to="/posts">Posts</Link></li>
               <li><Link to="/jams">Jams</Link></li>
               <li><Link to="/subscribe">Subscribe</Link></li>
+              <li><Link to="/wiki">Wiki</Link></li>
               <li>
                 <details>
                   <summary>Compare</summary>
@@ -61,6 +62,7 @@ export default function Layout() {
             <li><Link to="/posts">Posts</Link></li>
             <li><Link to="/jams">Jams</Link></li>
             <li><Link to="/subscribe">Subscribe</Link></li>
+            <li><Link to="/wiki">Wiki</Link></li>
             <li>
               <details>
                 <summary>Compare</summary>
