@@ -1,10 +1,12 @@
 import {
 	boolean,
 	integer,
+	jsonb,
 	pgTable,
 	serial,
 	text,
 	timestamp,
+	uniqueIndex,
 	varchar,
 } from "drizzle-orm/pg-core";
 
@@ -49,3 +51,35 @@ export const verificationTokens = pgTable("verification_tokens", {
 	expiresAt: timestamp("expires_at").notNull(),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const atprotoSessions = pgTable("atproto_sessions", {
+	id: serial("id").primaryKey(),
+	userId: integer("user_id")
+		.notNull()
+		.unique()
+		.references(() => users.id, { onDelete: "cascade" }),
+	accessToken: text("access_token").default(""),
+	refreshToken: text("refresh_token").default(""),
+	dpopPrivatePem: text("dpop_private_pem").default(""),
+	dpopJwk: jsonb("dpop_jwk").default({}),
+	tokenEndpoint: varchar("token_endpoint", { length: 500 }).default(""),
+	dpopNonce: varchar("dpop_nonce", { length: 255 }).default(""),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+	updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const follows = pgTable(
+	"follows",
+	{
+		id: serial("id").primaryKey(),
+		followerId: integer("follower_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		atprotoUri: varchar("atproto_uri", { length: 512 }).unique(),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_follows_follower_creator").on(table.followerId, table.creatorId)],
+);
