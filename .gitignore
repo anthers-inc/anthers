@@ -37,3 +37,4 @@ __pycache__/
 *.so
 .venv/
 venv/
+_legacy/backend/staticfiles/
