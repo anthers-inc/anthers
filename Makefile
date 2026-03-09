@@ -1,101 +1,66 @@
-# ─── Bluebell Makefile ───
-# Dev + deploy commands following Poppy pattern
+# ─── Anthers Makefile ───
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
-COMPOSE_CADDY = docker compose -p bluebell-caddy -f docker-compose.caddy.yml
-COMPOSE_DATA = docker compose -p bluebell-data -f docker-compose.data.yml
 
-.PHONY: help up down rebuild logs ps bash shell migrate makemigrations createsuperuser \
-        deploy deploy-down deploy-status deploy-rollback caddy-up caddy-down caddy-logs \
-        data-up data-down data-logs setup clean build all-down
+.PHONY: help up down logs ps dev dev-api dev-web install \
+        db-generate db-migrate db-push db-studio \
+        typecheck test lint format
 
-# ─── Development ───
+# ─── Dev Infrastructure ───
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start dev services
+up: ## Start dev databases (PostgreSQL + Redis)
 	$(COMPOSE_DEV) up -d
 
-down: ## Stop dev services
+down: ## Stop dev databases
 	$(COMPOSE_DEV) down
 
-build: ## Build dev containers
-	$(COMPOSE_DEV) build
-
-rebuild: ## Rebuild and restart dev services
-	$(COMPOSE_DEV) down
-	$(COMPOSE_DEV) build
-	$(COMPOSE_DEV) up -d
-
-logs: ## Follow all dev logs
+logs: ## Follow database logs
 	$(COMPOSE_DEV) logs -f
 
 ps: ## Show running containers
 	$(COMPOSE_DEV) ps
 
-bash: ## Shell into backend container
-	$(COMPOSE_DEV) exec backend bash
+# ─── Application ───
 
-shell: ## Django Python shell
-	$(COMPOSE_DEV) exec backend python manage.py shell
+install: ## Install all dependencies
+	bun install
 
-migrate: ## Run Django migrations
-	$(COMPOSE_DEV) exec backend python manage.py migrate
+dev: ## Start API and web dev servers
+	bun run dev
 
-makemigrations: ## Create Django migrations
-	$(COMPOSE_DEV) exec backend python manage.py makemigrations
+dev-api: ## Start API dev server only
+	bun run dev:api
 
-createsuperuser: ## Create Django admin superuser
-	$(COMPOSE_DEV) exec backend python manage.py createsuperuser
+dev-web: ## Start web dev server only
+	bun run dev:web
 
-# ─── Deployment ───
+# ─── Database ───
 
-deploy: ## Run blue-green deployment
-	./deploy-blue-green.sh
+db-generate: ## Generate Drizzle migration from schema changes
+	bun run db:generate
 
-deploy-down: ## Stop active deployment slot(s)
-	./deploy-blue-green.sh --down
+db-migrate: ## Apply pending migrations
+	bun run db:migrate
 
-deploy-status: ## Show active deployment slot
-	./deploy-blue-green.sh --status
+db-push: ## Push schema directly (dev only, no migration files)
+	bun run db:push
 
-deploy-rollback: ## Rollback to previous deployment
-	./deploy-blue-green.sh --rollback
+db-studio: ## Open Drizzle Studio (database GUI)
+	bun run db:studio
 
-# ─── Data Services (production) ───
+# ─── Quality ───
 
-data-up: ## Start data services (db, redis)
-	$(COMPOSE_DATA) up -d
+typecheck: ## Run TypeScript type checking
+	bun run typecheck
 
-data-down: ## Stop data services
-	$(COMPOSE_DATA) down
+test: ## Run all tests
+	bun run test
 
-data-logs: ## Follow data service logs
-	$(COMPOSE_DATA) logs -f
+lint: ## Check linting with Biome
+	bun run lint
 
-# ─── Caddy ───
-
-caddy-up: ## Start Caddy reverse proxy
-	$(COMPOSE_CADDY) up -d
-
-caddy-down: ## Stop Caddy
-	$(COMPOSE_CADDY) down
-
-caddy-logs: ## Follow Caddy logs
-	$(COMPOSE_CADDY) logs -f
-
-all-down: ## Stop everything (dev, deploy, data, caddy)
-	$(COMPOSE_DEV) down 2>/dev/null || true
-	./deploy-blue-green.sh --down
-	$(COMPOSE_CADDY) down 2>/dev/null || true
-	$(COMPOSE_DATA) down 2>/dev/null || true
-
-# ─── Setup ───
-
-setup: ## Install host dependencies
-	./setup.sh
-
-clean: ## Stop all services and remove images
-	$(COMPOSE_DEV) down --rmi local
-	$(COMPOSE_CADDY) down --rmi local 2>/dev/null || true
+format: ## Format code with Biome
+	bun run format

@@ -1,0 +1,3 @@
+[install]
+# Hoist all dependencies to the root node_modules
+exact = true
