@@ -794,7 +794,7 @@ interface UnitCostCard {
 const UNIT_COST_CARDS: UnitCostCard[] = [
   {
     media: "Video",
-    badge: "video",
+    badge: "Video",
     badgeClass: "badge-error",
     store: { description: "1 hour of 1080p/60 (all quality tiers)", cost: "$0.19/mo" },
     deliver: { description: "1 view of a 30-min 1080p video", cost: "$0.018" },
@@ -802,7 +802,7 @@ const UNIT_COST_CARDS: UnitCostCard[] = [
   },
   {
     media: "Audio",
-    badge: "audio",
+    badge: "Audio",
     badgeClass: "badge-warning",
     store: { description: "10-album music catalog", cost: "$0.14/mo" },
     deliver: { description: "1 full-album stream (high quality)", cost: "$0.00086" },
@@ -810,7 +810,7 @@ const UNIT_COST_CARDS: UnitCostCard[] = [
   },
   {
     media: "Text",
-    badge: "text",
+    badge: "Text",
     badgeClass: "badge-ghost",
     store: { description: "A year of weekly essays", cost: "$0.008/mo" },
     deliver: { description: "1 article read", cost: "$0.000005" },
@@ -818,7 +818,7 @@ const UNIT_COST_CARDS: UnitCostCard[] = [
   },
   {
     media: "Games",
-    badge: "game",
+    badge: "Games",
     badgeClass: "badge-primary",
     store: { description: "500 MB game (3 platform variants)", cost: "$0.03/mo" },
     deliver: { description: "1 game download (500 MB)", cost: "$0.005" },
@@ -836,23 +836,19 @@ function QuickReference() {
       {/* Media-type cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {UNIT_COST_CARDS.map((card) => (
-          <div key={card.media} className="card bg-base-200 border border-base-300">
+          <div key={card.badge} className="card bg-base-200 border border-base-300">
             <div className="card-body p-4 gap-3">
-              <div className="flex items-center gap-2">
-                <span className={`badge badge-sm ${card.badgeClass}`}>{card.badge}</span>
-                <h5 className="font-semibold text-sm">{card.media}</h5>
+              <span className={`badge ${card.badgeClass}`}>{card.badge}</span>
+              <div>
+                <p className="text-xs text-base-content/50 uppercase tracking-wide">Store</p>
+                <p className="text-sm text-base-content/70">{card.store.description}</p>
+                <p className="text-lg font-bold tabular-nums">{card.store.cost}</p>
               </div>
-              <div className="space-y-2">
-                <div>
-                  <p className="text-xs text-base-content/50 uppercase tracking-wide">Store</p>
-                  <p className="text-sm text-base-content/70">{card.store.description}</p>
-                  <p className="text-lg font-bold tabular-nums">{card.store.cost}</p>
-                </div>
-                <div className="border-t border-base-300/50 pt-2">
-                  <p className="text-xs text-base-content/50 uppercase tracking-wide">Deliver</p>
-                  <p className="text-sm text-base-content/70">{card.deliver.description}</p>
-                  <p className="text-lg font-bold tabular-nums">{card.deliver.cost}</p>
-                </div>
+              <div className="divider my-0" />
+              <div>
+                <p className="text-xs text-base-content/50 uppercase tracking-wide">Deliver</p>
+                <p className="text-sm text-base-content/70">{card.deliver.description}</p>
+                <p className="text-lg font-bold tabular-nums">{card.deliver.cost}</p>
               </div>
               <p className="text-xs text-base-content/40">{card.note}</p>
             </div>
