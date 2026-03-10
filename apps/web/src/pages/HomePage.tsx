@@ -41,7 +41,7 @@ export default function HomePage() {
       <section className="hero min-h-[85vh]">
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
-            <h1 className="text-6xl font-bold tracking-tight">Bluebell</h1>
+            <h1 className="text-6xl font-bold tracking-tight">Anthers</h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
               A home for creators and the people who love their work. Publish
               games, videos, music, and writing—or discover your next

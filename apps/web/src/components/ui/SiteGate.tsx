@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { BASE_URL } from "../../lib/api";
 
-const STORAGE_KEY = "bluebell_site_access";
+const STORAGE_KEY = "anthers_site_access";
 const GATE_URL = BASE_URL + "/health/gate/";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
@@ -43,7 +43,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
         onSubmit={handleSubmit}
         className="card bg-base-100 shadow-xl p-8 w-full max-w-sm"
       >
-        <h1 className="text-2xl font-bold text-center mb-2">Bluebell</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">Anthers</h1>
         <p className="text-center text-base-content/60 mb-6">
           This site is currently in development. Enter the password to continue.
         </p>

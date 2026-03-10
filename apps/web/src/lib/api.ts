@@ -477,7 +477,7 @@ export interface TimeseriesResponse {
 
 export interface CrossPlatformComparison {
   period_days: number;
-  bluebell: {
+  anthers: {
     views: number;
     duration_seconds: number;
     unique_viewers: number;

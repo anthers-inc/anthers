@@ -690,7 +690,7 @@ function CreatorIncomeSection() {
         twice as much as Creator B, and A receives roughly twice the
         funding—automatically. After infrastructure costs, the
         remainder is the creator's income, paid out via Stripe
-        Connect. Bluebell takes zero percentage cut.
+        Connect. Anthers takes zero percentage cut.
       </p>
     </div>
   );
@@ -729,7 +729,7 @@ function CRFSection() {
         Infrastructure Equity, Education & Development, Economic
         Resilience & Relief, and Community & Public Benefit. The CRF
         is governed by a committee with direct creator representation
-        and is the operational heart of Bluebell's mission.
+        and is the operational heart of Anthers's mission.
       </p>
     </div>
   );
@@ -746,7 +746,7 @@ function OpsSection() {
         5% covers staff, legal, accounting, insurance, and tools.
         The board reviews this rate annually—if it generates more
         than 130–150% of projected costs, the rate is reduced. As
-        Bluebell scales, this percentage shrinks.
+        Anthers scales, this percentage shrinks.
       </p>
     </div>
   );
@@ -896,7 +896,7 @@ export default function SubscribePage() {
             Where Your Money Goes
           </h2>
           <p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto">
-            Bluebell is structured so that it cannot extract profit from
+            Anthers is structured so that it cannot extract profit from
             creators. Every tier splits the same way: 85% to creators, 10%
             to the Creator Resilience Fund, 5% to platform operations. You
             always know exactly where every dollar goes.
@@ -949,9 +949,9 @@ export default function SubscribePage() {
       <div className="mt-16 max-w-3xl mx-auto text-center pb-4">
         <h2 className="text-xl font-bold mb-3">Why Non-Profit</h2>
         <p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
-          Bluebell is a non-profit because the only way to
+          Anthers is a non-profit because the only way to
           guarantee that our platform always serves creators is to make it legally
-          impossible for it to act otherwise. Bluebell cannot distribute profits to
+          impossible for it to act otherwise. Anthers cannot distribute profits to
             insiders, cannot be acquired, and cannot have its mission diluted by investors.
             If it ever ceases to operate, its assets go to another exempt organization,
               not to founders or shareholders.

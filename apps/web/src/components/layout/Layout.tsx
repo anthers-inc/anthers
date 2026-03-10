@@ -50,7 +50,7 @@ export default function Layout() {
             </ul>
           </div>
           <Link to="/" className="btn btn-ghost text-xl">
-            Bluebell
+            Anthers
           </Link>
         </div>
 
@@ -148,8 +148,8 @@ export default function Layout() {
             </nav>
             <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
               <h6 className="footer-title text-xs">Compare</h6>
-              <Link to="/compare/itch-io" className="link link-hover">Bluebell vs itch.io</Link>
-              <Link to="/compare/ghost" className="link link-hover">Bluebell vs Ghost</Link>
+              <Link to="/compare/itch-io" className="link link-hover">Anthers vs itch.io</Link>
+              <Link to="/compare/ghost" className="link link-hover">Anthers vs Ghost</Link>
             </nav>
             <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
               <h6 className="footer-title text-xs">Community</h6>

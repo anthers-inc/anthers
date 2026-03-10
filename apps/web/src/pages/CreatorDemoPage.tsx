@@ -554,7 +554,7 @@ export default function CreatorDemoPage() {
           Your page. Your style.
         </h1>
         <p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-          Every creator on Bluebell gets a customizable hub—not a cookie-cutter profile.
+          Every creator on Anthers gets a customizable anther—not a cookie-cutter profile.
           Choose your layout, colors, and typography. Pin featured work. Organize your
           content your way. Below are three examples of what's possible.
         </p>
@@ -595,7 +595,7 @@ export default function CreatorDemoPage() {
             </div>
             <div className="flex-1 mx-3">
               <div className="bg-base-300 rounded-md px-3 py-1 text-xs text-base-content/40 font-mono">
-                bluebell.social/{active.username}
+                anthers.org/{active.username}
               </div>
             </div>
           </div>

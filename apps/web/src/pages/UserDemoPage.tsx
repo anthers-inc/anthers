@@ -472,7 +472,7 @@ function SubscriptionDashboardDemo() {
       {/* Header */}
       <div>
         <h3 className="text-lg font-bold">
-          Your Bluebell—{DEMO_PLAN.month}
+          Your Anther—{DEMO_PLAN.month}
         </h3>
         <p className="text-sm text-base-content/60">
           {DEMO_PLAN.tier} Plan (${DEMO_PLAN.price}/mo)
@@ -736,7 +736,7 @@ export default function UserDemoPage() {
           See where your money goes.
         </h1>
         <p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-          Bluebell gives you full transparency over your subscription. Browse
+          Anthers gives you full transparency over your subscription. Browse
           your feed, then check your dashboard to see exactly how your money is
           split across the creators you engage with.
         </p>
@@ -783,7 +783,7 @@ export default function UserDemoPage() {
             </div>
             <div className="flex-1 mx-3">
               <div className="bg-base-300 rounded-md px-3 py-1 text-xs text-base-content/40 font-mono">
-                bluebell.social/
+                anthers.org/
                 {activeTab === "feed"
                   ? "feed"
                   : activeTab === "purchases"

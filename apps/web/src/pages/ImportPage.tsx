@@ -120,7 +120,7 @@ export default function ImportPage() {
       <h1 className="text-3xl font-bold mb-2">Import from itch.io</h1>
       <p className="text-base-content/60 mb-6">
         Enter your itch.io username to find your public games and import them as
-        draft projects on Bluebell.
+        draft projects on Anthers.
       </p>
 
       {/* Search form */}

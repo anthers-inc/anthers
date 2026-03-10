@@ -26,14 +26,14 @@ export default function CompareItchPage() {
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
             <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">
-              Bluebell vs itch.io
+              Anthers vs itch.io
             </p>
             <h1 className="text-5xl font-bold tracking-tight">
               Love itch.io? You'll feel right at home.
             </h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
               itch.io is a beloved platform that's done more for indie creators
-              than almost anyone. Bluebell builds on that same spirit —
+              than almost anyone. Anthers builds on that same spirit —
               creator-first economics, open publishing, community game jams —
               and extends it with multi-media support, transparent pricing, and
               data portability.
@@ -43,7 +43,7 @@ export default function CompareItchPage() {
                 to={isAuthenticated ? "/dashboard" : "/register"}
                 className="btn btn-primary btn-lg"
               >
-                Try Bluebell Free
+                Try Anthers Free
               </Link>
               <Link to="/explore" className="btn btn-outline btn-lg">
                 Explore Projects
@@ -67,11 +67,11 @@ export default function CompareItchPage() {
             audience because itch.io exists.
           </p>
           <p className="text-base-content/70 leading-relaxed text-center max-w-2xl mx-auto">
-            Bluebell aims to carry that mission forward and expand it. We
+            Anthers aims to carry that mission forward and expand it. We
             believe creators deserve 100% of their earnings, support for every
             medium they work in, and true ownership of their identity and data.
             If itch.io is the place that showed the world what indie game
-            distribution could be, Bluebell is our attempt to build the next
+            distribution could be, Anthers is our attempt to build the next
             chapter—for games, videos, music, and writing all in one place.
           </p>
         </div>
@@ -81,38 +81,38 @@ export default function CompareItchPage() {
       <section className="py-20">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-3xl font-bold text-center mb-12">
-            What Bluebell does differently
+            What Anthers does differently
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
             <DiffCard
               icon={<CurrencyDollarIcon className="w-6 h-6" />}
               title="100% to creators—no revenue share"
-              description="itch.io defaults to a 10% revenue share (which creators can adjust, even to 0%). Bluebell never takes a percentage. Your price is your revenue. Infrastructure and payment processing costs are shown as transparent line items to the buyer—never subtracted from your earnings."
+              description="itch.io defaults to a 10% revenue share (which creators can adjust, even to 0%). Anthers never takes a percentage. Your price is your revenue. Infrastructure and payment processing costs are shown as transparent line items to the buyer—never subtracted from your earnings."
             />
             <DiffCard
               icon={<GlobeAltIcon className="w-6 h-6" />}
               title="One home for every medium"
-              description="itch.io is primarily built for games. If you also make videos, music, or written content, you need separate platforms. Bluebell gives you one profile, one audience, and one URL for everything you create—games, devlogs, soundtracks, essays, and more."
+              description="itch.io is primarily built for games. If you also make videos, music, or written content, you need separate platforms. Anthers gives you one profile, one audience, and one URL for everything you create—games, devlogs, soundtracks, essays, and more."
             />
             <DiffCard
               icon={<EyeIcon className="w-6 h-6" />}
               title="Transparent, itemized pricing"
-              description="On itch.io, the platform's share is deducted from your sale. On Bluebell, every cost is itemized at checkout—payment processing, infrastructure, and the Community Resilience Fund. Buyers see exactly where their money goes. Creators receive exactly what they charged."
+              description="On itch.io, the platform's share is deducted from your sale. On Anthers, every cost is itemized at checkout—payment processing, infrastructure, and the Community Resilience Fund. Buyers see exactly where their money goes. Creators receive exactly what they charged."
             />
             <DiffCard
               icon={<LockOpenIcon className="w-6 h-6" />}
               title="Built on open protocols"
-              description="Bluebell is built on the AT Protocol (the same standard behind Bluesky). Your identity is a portable DID you own. Your content is stored as interoperable records. If you ever leave, your data goes with you—not by policy, but by design."
+              description="Anthers is built on the AT Protocol (the same standard behind Bluesky). Your identity is a portable DID you own. Your content is stored as interoperable records. If you ever leave, your data goes with you—not by policy, but by design."
             />
             <DiffCard
               icon={<UserGroupIcon className="w-6 h-6" />}
               title="Subscription model that funds creators"
-              description="Beyond individual sales, Bluebell offers a subscription pool where subscriber payments are distributed to creators based on actual attention time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
+              description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual attention time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
             />
             <DiffCard
               icon={<ChartBarIcon className="w-6 h-6" />}
               title="Unified creator dashboard"
-              description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Bluebell's dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
+              description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers's dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
             />
           </div>
         </div>
@@ -127,7 +127,7 @@ export default function CompareItchPage() {
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             itch.io's revenue sharing is flexible—creators can set their own
             rate, even down to 0%. But the default is 10%, and many creators
-            leave it there. Bluebell takes a fundamentally different approach:
+            leave it there. Anthers takes a fundamentally different approach:
             your price is your revenue, always.
           </p>
 
@@ -152,10 +152,10 @@ export default function CompareItchPage() {
               </div>
             </div>
 
-            {/* Bluebell receipt */}
+            {/* Anthers receipt */}
             <div className="card bg-base-100 ring-2 ring-primary/30">
               <div className="card-body">
-                <h3 className="font-bold text-lg mb-1">Bluebell</h3>
+                <h3 className="font-bold text-lg mb-1">Anthers</h3>
                 <p className="text-xs text-base-content/40 mb-4">
                   $10 game sale (transparent pass-through)
                 </p>
@@ -186,7 +186,7 @@ export default function CompareItchPage() {
             More than a game marketplace
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            itch.io is a fantastic game marketplace. Bluebell is a home for
+            itch.io is a fantastic game marketplace. Anthers is a home for
             every kind of creative work. If you make games <em>and</em> music,
             if you write devlogs <em>and</em> record podcasts—you don't need
             four platforms. You need one.
@@ -203,19 +203,19 @@ export default function CompareItchPage() {
               icon={<FilmIcon className="w-7 h-7" />}
               title="Video"
               color="badge-error"
-              supported="bluebell"
+              supported="anthers"
             />
             <MediaCard
               icon={<MusicalNoteIcon className="w-7 h-7" />}
               title="Audio"
               color="badge-success"
-              supported="bluebell"
+              supported="anthers"
             />
             <MediaCard
               icon={<DocumentTextIcon className="w-7 h-7" />}
               title="Writing"
               color="badge-info"
-              supported="bluebell"
+              supported="anthers"
             />
           </div>
         </div>
@@ -233,37 +233,37 @@ export default function CompareItchPage() {
               <thead>
                 <tr>
                   <th>Feature</th>
-                  <th className="text-center">Bluebell</th>
+                  <th className="text-center">Anthers</th>
                   <th className="text-center">itch.io</th>
                 </tr>
               </thead>
               <tbody>
-                <CompRow feature="Game hosting & downloads" bluebell patreon />
-                <CompRow feature="HTML5 web games" bluebell patreon />
-                <CompRow feature="Game jams" bluebell patreon />
-                <CompRow feature="Customizable project pages" bluebell patreon />
-                <CompRow feature="Ratings & comments" bluebell patreon />
-                <CompRow feature="Devlogs & posts" bluebell patreon />
-                <CompRow feature="Video hosting" bluebell />
-                <CompRow feature="Audio & music hosting" bluebell />
-                <CompRow feature="Long-form writing" bluebell />
-                <CompRow feature="Unified creator profile" bluebell />
-                <CompRow feature="Follow & feed system" bluebell />
-                <CompRow feature="100% to creator (default)" bluebell />
+                <CompRow feature="Game hosting & downloads" anthers patreon />
+                <CompRow feature="HTML5 web games" anthers patreon />
+                <CompRow feature="Game jams" anthers patreon />
+                <CompRow feature="Customizable project pages" anthers patreon />
+                <CompRow feature="Ratings & comments" anthers patreon />
+                <CompRow feature="Devlogs & posts" anthers patreon />
+                <CompRow feature="Video hosting" anthers />
+                <CompRow feature="Audio & music hosting" anthers />
+                <CompRow feature="Long-form writing" anthers />
+                <CompRow feature="Unified creator profile" anthers />
+                <CompRow feature="Follow & feed system" anthers />
+                <CompRow feature="100% to creator (default)" anthers />
                 <CompRow feature="Adjustable revenue share" patreon />
-                <CompRow feature="Transparent itemized fees" bluebell />
-                <CompRow feature="Subscription pool model" bluebell />
-                <CompRow feature="AT Protocol / data portability" bluebell />
+                <CompRow feature="Transparent itemized fees" anthers />
+                <CompRow feature="Subscription pool model" anthers />
+                <CompRow feature="AT Protocol / data portability" anthers />
                 <CompRow feature="Desktop client" patreon />
-                <CompRow feature="Pay-what-you-want pricing" bluebell patreon />
-                <CompRow feature="Creator analytics" bluebell patreon />
+                <CompRow feature="Pay-what-you-want pricing" anthers patreon />
+                <CompRow feature="Creator analytics" anthers patreon />
                 <CompRow feature="Bundles" patreon />
               </tbody>
             </table>
           </div>
           <p className="text-center text-xs text-base-content/40 mt-6 max-w-xl mx-auto">
             itch.io has a mature, established feature set built over more than
-            a decade. Some Bluebell features listed above are actively in
+            a decade. Some Anthers features listed above are actively in
             development. We're building in the open and shipping fast.
           </p>
         </div>
@@ -277,7 +277,7 @@ export default function CompareItchPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             itch.io is a great place to publish, but your identity and content
-            live on their servers. Bluebell is built on the AT Protocol —
+            live on their servers. Anthers is built on the AT Protocol —
             the same open standard behind Bluesky—so your creator
             identity is a portable DID you truly own.
           </p>
@@ -289,7 +289,7 @@ export default function CompareItchPage() {
               </div>
               <h3 className="font-semibold mb-1">Portable identity</h3>
               <p className="text-sm text-base-content/60">
-                Your creator identity isn't locked to Bluebell. It's a DID you
+                Your creator identity isn't locked to Anthers. It's a DID you
                 own. If you leave, your identity goes with you.
               </p>
             </div>
@@ -325,7 +325,7 @@ export default function CompareItchPage() {
             Bring your itch.io projects with you
           </h2>
           <p className="text-base-content/60 max-w-2xl mx-auto mb-8 leading-relaxed">
-            Already have projects on itch.io? Bluebell's import tool can help
+            Already have projects on itch.io? Anthers's import tool can help
             you bring your project metadata over so you can get started
             quickly. You don't have to choose one or the other—publish on
             both, and let your audience find you wherever they prefer.
@@ -338,7 +338,7 @@ export default function CompareItchPage() {
               Import from itch.io
             </Link>
             <Link to="/for-creators" className="btn btn-outline">
-              Learn More About Bluebell
+              Learn More About Anthers
             </Link>
           </div>
         </div>
@@ -351,7 +351,7 @@ export default function CompareItchPage() {
             Ready to try something new?
           </h2>
           <p className="text-base-content/60 mb-8 leading-relaxed">
-            Bluebell is free to use. No platform cut, no hidden fees. Publish
+            Anthers is free to use. No platform cut, no hidden fees. Publish
             your work and keep 100% of what you earn. If you love itch.io,
             you'll love what comes next.
           </p>
@@ -428,7 +428,7 @@ function MediaCard({
   icon: React.ReactNode;
   title: string;
   color: string;
-  supported: "both" | "bluebell";
+  supported: "both" | "anthers";
 }) {
   return (
     <div className="card bg-base-200">
@@ -437,12 +437,12 @@ function MediaCard({
         <span className={`badge badge-sm ${color} mx-auto mb-2`}>{title}</span>
         {supported === "both" ? (
           <p className="text-xs text-base-content/50">
-            <span className="text-success">✓</span> Bluebell &{" "}
+            <span className="text-success">✓</span> Anthers &{" "}
             <span className="text-success">✓</span> itch.io
           </p>
         ) : (
           <p className="text-xs text-base-content/50">
-            <span className="text-success">✓</span> Bluebell only
+            <span className="text-success">✓</span> Anthers only
           </p>
         )}
       </div>
@@ -452,11 +452,11 @@ function MediaCard({
 
 function CompRow({
   feature,
-  bluebell,
+  anthers,
   patreon,
 }: {
   feature: string;
-  bluebell?: boolean;
+  anthers?: boolean;
   patreon?: boolean;
 }) {
   const check = <span className="text-success font-bold">✓</span>;
@@ -464,7 +464,7 @@ function CompRow({
   return (
     <tr>
       <td>{feature}</td>
-      <td className="text-center">{bluebell ? check : dash}</td>
+      <td className="text-center">{anthers ? check : dash}</td>
       <td className="text-center">{patreon ? check : dash}</td>
     </tr>
   );

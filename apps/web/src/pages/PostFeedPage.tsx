@@ -44,7 +44,7 @@ export default function PostFeedPage() {
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-2">Posts</h1>
       <p className="text-base-content/60 mb-6">
-        Updates, devlogs, and announcements from creators across Bluebell.
+        Updates, devlogs, and announcements from creators across Anthers.
       </p>
 
       {/* Content type filter buttons */}

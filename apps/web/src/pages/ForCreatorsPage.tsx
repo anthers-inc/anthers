@@ -79,7 +79,7 @@ export default function ForCreatorsPage() {
               </thead>
               <tbody>
                 <tr className="bg-primary/10 font-semibold">
-                  <td>Bluebell</td>
+                  <td>Anthers</td>
                   <td className="text-right text-success">$10.00 (100%)</td>
                   <td className="text-right">$0.00</td>
                 </tr>
@@ -107,7 +107,7 @@ export default function ForCreatorsPage() {
             </table>
           </div>
           <p className="text-center text-sm text-base-content/40 mt-4">
-            On Bluebell, real costs (payment processing, infrastructure) are
+            On Anthers, real costs (payment processing, infrastructure) are
             shown as transparent line items—never a percentage cut.
           </p>
         </div>
@@ -117,7 +117,7 @@ export default function ForCreatorsPage() {
       <section className="py-20">
         <div className="container mx-auto px-4 max-w-5xl">
           <h2 className="text-3xl font-bold text-center mb-12">
-            How Bluebell works for creators
+            How Anthers works for creators
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             <div className="text-center">
@@ -169,7 +169,7 @@ export default function ForCreatorsPage() {
             Every kind of creative work
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell isn't just for games. Publish anything you create—the
+            Anthers isn't just for games. Publish anything you create—the
             platform adapts to the medium while keeping the same tools, the same
             audience, and the same economics.
           </p>
@@ -366,7 +366,7 @@ export default function ForCreatorsPage() {
             <Feature
               icon={<UserGroupIcon className="w-6 h-6" />}
               title="Creator profiles"
-              description="Your own page on Bluebell—header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
+              description="Your own anther on Anthers—header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
             />
             <Feature
               icon={<ArrowPathIcon className="w-6 h-6" />}
@@ -406,7 +406,7 @@ export default function ForCreatorsPage() {
                 <p className="text-sm text-base-content/60">
                   Publish once, distribute everywhere. Push videos to YouTube,
                   builds to Steam and itch.io, posts to Substack—all from your
-                  Bluebell dashboard. Unified analytics show performance across
+                  Anthers dashboard. Unified analytics show performance across
                   all platforms.
                 </p>
               </div>
@@ -422,7 +422,7 @@ export default function ForCreatorsPage() {
             Subscribers fund creators, not platforms
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Users subscribe to Bluebell, and their subscription funds are
+            Users subscribe to Anthers, and their subscription funds are
             distributed to creators proportionally based on what they actually
             watch, read, listen to, and play. No platform cut—just transparent
             allocation.
@@ -628,7 +628,7 @@ export default function ForCreatorsPage() {
             Your data is yours
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell is built on the AT Protocol—the same open standard
+            Anthers is built on the AT Protocol—the same open standard
             behind Bluesky. Sign in with your Bluesky identity, or create a
             new one. Your content and audience relationships are portable by
             design.
@@ -641,7 +641,7 @@ export default function ForCreatorsPage() {
               </div>
               <h3 className="font-semibold mb-1">Portable identity</h3>
               <p className="text-sm text-base-content/60">
-                Your creator identity isn't locked to Bluebell. It's a DID
+                Your creator identity isn't locked to Anthers. It's a DID
                —a decentralized identifier you own. If you ever leave,
                 your identity goes with you.
               </p>
@@ -680,7 +680,7 @@ export default function ForCreatorsPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Instead of juggling itch.io + Patreon + YouTube + Substack,
-            Bluebell gives you all of it under one identity.
+            Anthers gives you all of it under one identity.
           </p>
 
           <div className="overflow-x-auto">
@@ -688,21 +688,21 @@ export default function ForCreatorsPage() {
               <thead>
                 <tr>
                   <th>Feature</th>
-                  <th className="text-center">Bluebell</th>
+                   <th className="text-center">Anthers</th>
                   <th className="text-center">itch.io</th>
                   <th className="text-center">Patreon</th>
                 </tr>
               </thead>
               <tbody>
-                <ComparisonRow feature="Game hosting" bluebell={true} itch={true} patreon={false} />
-                <ComparisonRow feature="Video/audio/writing" bluebell={true} itch={false} patreon={true} />
-                <ComparisonRow feature="Audience follows" bluebell={true} itch={false} patreon={true} />
-                <ComparisonRow feature="Devlogs & posts" bluebell={true} itch={true} patreon={true} />
-                <ComparisonRow feature="Game jams" bluebell={true} itch={true} patreon={false} />
-                <ComparisonRow feature="100% to creator" bluebell={true} itch={false} patreon={false} />
-                <ComparisonRow feature="Transparent fees" bluebell={true} itch={false} patreon={false} />
-                <ComparisonRow feature="Data portability" bluebell={true} itch={false} patreon={false} />
-                <ComparisonRow feature="Multi-media profile" bluebell={true} itch={false} patreon={false} />
+                <ComparisonRow feature="Game hosting" anthers={true} itch={true} patreon={false} />
+                <ComparisonRow feature="Video/audio/writing" anthers={true} itch={false} patreon={true} />
+                <ComparisonRow feature="Audience follows" anthers={true} itch={false} patreon={true} />
+                <ComparisonRow feature="Devlogs & posts" anthers={true} itch={true} patreon={true} />
+                <ComparisonRow feature="Game jams" anthers={true} itch={true} patreon={false} />
+                <ComparisonRow feature="100% to creator" anthers={true} itch={false} patreon={false} />
+                <ComparisonRow feature="Transparent fees" anthers={true} itch={false} patreon={false} />
+                <ComparisonRow feature="Data portability" anthers={true} itch={false} patreon={false} />
+                <ComparisonRow feature="Multi-media profile" anthers={true} itch={false} patreon={false} />
               </tbody>
             </table>
           </div>
@@ -716,7 +716,7 @@ export default function ForCreatorsPage() {
             Ready to share your work?
           </h2>
           <p className="text-base-content/60 mb-8 leading-relaxed">
-            Bluebell is free to use. No platform cut, no hidden fees. Just
+            Anthers is free to use. No platform cut, no hidden fees. Just
             publish your work and keep what you earn.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
@@ -835,12 +835,12 @@ function PricingOption({
 
 function ComparisonRow({
   feature,
-  bluebell,
+  anthers,
   itch,
   patreon,
 }: {
   feature: string;
-  bluebell: boolean;
+  anthers: boolean;
   itch: boolean;
   patreon: boolean;
 }) {
@@ -849,7 +849,7 @@ function ComparisonRow({
   return (
     <tr>
       <td>{feature}</td>
-      <td className="text-center">{bluebell ? check : dash}</td>
+      <td className="text-center">{anthers ? check : dash}</td>
       <td className="text-center">{itch ? check : dash}</td>
       <td className="text-center">{patreon ? check : dash}</td>
     </tr>

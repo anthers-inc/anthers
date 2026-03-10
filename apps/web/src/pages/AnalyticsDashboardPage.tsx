@@ -310,7 +310,7 @@ function CrossPlatformSection({
   if (!comparison) return null;
 
   const platforms = Object.entries(comparison.platforms);
-  if (platforms.length === 0 && comparison.bluebell.views === 0) return null;
+  if (platforms.length === 0 && comparison.anthers.views === 0) return null;
 
   const platformNames: Record<string, string> = {
     youtube: "YouTube",
@@ -337,12 +337,12 @@ function CrossPlatformSection({
             </thead>
             <tbody>
               <tr className="bg-primary/10">
-                <td className="font-medium">Bluebell</td>
+                <td className="font-medium">Anthers</td>
                 <td className="text-right">
-                  {formatNumber(comparison.bluebell.views)}
+                  {formatNumber(comparison.anthers.views)}
                 </td>
                 <td className="text-right">
-                  {formatDuration(comparison.bluebell.duration_seconds)}
+                  {formatDuration(comparison.anthers.duration_seconds)}
                 </td>
                 <td className="text-right text-base-content/40">--</td>
               </tr>

@@ -165,13 +165,13 @@ export default function AboutPage() {
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
             <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">
-              About Bluebell
+              About Anthers
             </p>
             <h1 className="text-5xl font-bold tracking-tight">
               The creative internet can work differently.
             </h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-              Bluebell is a federated, open content network for video, audio,
+              Anthers is a federated, open content network for video, audio,
               text, games, and interactive experiences—built and operated as a
               501(c)(3) non-profit so that it is structurally incapable of
               prioritizing profit over people.
@@ -265,7 +265,7 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">What We Do</h2>
           <p className="text-base-content/70 text-center max-w-3xl mx-auto mb-6">
-            Bluebell advances equity in creative and educational content spaces
+            Anthers advances equity in creative and educational content spaces
             by providing platform infrastructure that is structurally incapable
             of prioritizing profit over the people it serves.
           </p>
@@ -304,7 +304,7 @@ export default function AboutPage() {
               The Creator Resilience Fund
             </h3>
             <p className="text-base-content/70 text-center max-w-3xl mx-auto mb-10">
-              The CRF is the operational heart of Bluebell's charitable
+              The CRF is the operational heart of Anthers's charitable
               mission—funded by a fixed percentage of every subscription
               and governed by a dedicated advisory committee with direct
               creator representation. The CRF is not a side program. It is the
@@ -347,7 +347,7 @@ export default function AboutPage() {
           <h2 className="text-3xl font-bold text-center mb-3">How We Do It</h2>
           <p className="text-base-content/70 text-center max-w-2xl mx-auto mb-14">
             These aren't aspirations. They are structural properties of how
-            Bluebell is built, incorporated, and governed.
+            Anthers is built, incorporated, and governed.
           </p>
 
           {/* Numbered principles—vertical timeline-style layout */}
@@ -365,7 +365,7 @@ export default function AboutPage() {
                 {
                   num: "02",
                   title: "Audiences Choose What They See",
-                  text: "The default feed is chronological and subscriber-driven. Algorithmic discovery is available as an opt-in mode, never the primary experience. Bluebell has no ads and no incentive to manipulate attention.",
+                  text: "The default feed is chronological and subscriber-driven. Algorithmic discovery is available as an opt-in mode, never the primary experience. Anthers has no ads and no incentive to manipulate attention.",
                 },
                 {
                   num: "03",
@@ -375,7 +375,7 @@ export default function AboutPage() {
                 {
                   num: "04",
                   title: "The Profit Motive Is Structurally Eliminated",
-                  text: "Not voluntarily set aside—legally removed. A 501(c)(3) cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Bluebell dissolves, its assets go to another exempt organization.",
+                  text: "Not voluntarily set aside—legally removed. A 501(c)(3) cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Anthers dissolves, its assets go to another exempt organization.",
                 },
                 {
                   num: "05",
@@ -414,7 +414,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">Who We Are</h2>
           <p className="text-base-content/70 text-center max-w-2xl mx-auto mb-12">
-            Bluebell is in its founding phase. The team is small, building in
+            Anthers is in its founding phase. The team is small, building in
             public, and actively seeking board members who believe the creative
             internet deserves better.
           </p>
@@ -434,18 +434,18 @@ export default function AboutPage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/*  5. THE BLUEBELL FOUNDATION                               */}
+      {/*  5. THE ANTHERS FOUNDATION                                */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="bg-base-200/50 py-20">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-center gap-3 mb-3">
             <BuildingLibraryIcon className="w-8 h-8 text-primary" />
-            <h2 className="text-3xl font-bold">The Bluebell Foundation</h2>
+            <h2 className="text-3xl font-bold">The Anthers Foundation</h2>
           </div>
           <p className="text-base-content/70 text-center max-w-3xl mx-auto mb-14">
-              Bluebell is a non-profit because the only way to guarantee
+              Anthers is a non-profit because the only way to guarantee
               that our platform always serves creators is to make it legally
-              impossible for it to act otherwise. Bluebell cannot distribute
+              impossible for it to act otherwise. Anthers cannot distribute
               profits to insiders, cannot be acquired, and cannot have its
               mission diluted by investors. If it ever ceases to operate,
               its assets go to another exempt organization, not to founders
@@ -541,7 +541,7 @@ export default function AboutPage() {
           </h2>
           <p className="text-base-content/70 mb-8 max-w-xl mx-auto">
             Whether you create games, videos, music, writing, or interactive
-            experiences—Bluebell is designed so that every dollar flows to the
+            experiences—Anthers is designed so that every dollar flows to the
             people who make the platform valuable.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">

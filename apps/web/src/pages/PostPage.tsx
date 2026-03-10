@@ -200,7 +200,7 @@ export default function PostPage() {
               </h3>
               <p className="text-sm text-base-content/60 mb-3">
                 {post.visibility === "subscribers_only"
-                  ? "Subscribe to Bluebell to access this content."
+                  ? "Subscribe to Anthers to access this content."
                   : "Boost this creator to unlock their gated content."}
               </p>
               <Link to="/subscribe" className="btn btn-primary btn-sm w-fit mx-auto">

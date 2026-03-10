@@ -220,7 +220,7 @@ function StripeOnboardingSection() {
           <div className="flex flex-col gap-2">
             <p className="text-sm text-base-content/60">
               Connect a Stripe account to receive payments for your paid
-              projects. Bluebell uses Stripe Connect—you keep 100% of
+              projects. Anthers uses Stripe Connect—you keep 100% of
               earnings, only real costs are passed through.
             </p>
             <button

@@ -35,7 +35,7 @@ export default function CreatorsPage() {
       ) : !data || data.results.length === 0 ? (
         <EmptyState
           title="No creators yet"
-          description="Be the first to start creating on Bluebell."
+          description="Be the first to start creating on Anthers."
         />
       ) : (
         <>

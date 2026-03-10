@@ -53,17 +53,17 @@ const wikiAreas: WikiArea[] = [
             {
                 name: "Getting Started",
                 path: "10-Getting-Started",
-                description: "Introduction to Bluebell and how it works",
+                description: "Introduction to Anthers and how it works",
                 items: [
                     { name: "Overview", file: "README.md" },
-                    { name: "What is Bluebell?", file: "01-WhatIsBluebell.md" },
-                    { name: "How Bluebell Works", file: "02-HowBluebellWorks.md" },
+                    { name: "What is Anthers?", file: "01-WhatIsAnthers.md" },
+                    { name: "How Anthers Works", file: "02-HowAnthersWorks.md" },
                     { name: "Glossary", file: "03-Glossary.md" },
                 ],
             },
             {
-                name: "The Bluebell Model",
-                path: "11-The-Bluebell-Model",
+                name: "The Anthers Model",
+                path: "11-The-Anthers-Model",
                 description: "Transparent pricing, the CRF, and how money flows",
                 items: [
                     { name: "Overview", file: "README.md" },
@@ -127,7 +127,7 @@ const wikiAreas: WikiArea[] = [
     {
         name: "Creators",
         range: "30-39",
-        description: "Guides for publishing, monetizing, and growing on Bluebell",
+        description: "Guides for publishing, monetizing, and growing on Anthers",
         sections: [
             {
                 name: "Creator Setup",
@@ -176,7 +176,7 @@ const wikiStructure: WikiSection[] = wikiAreas.flatMap((area) => area.sections);
 /**
  * GitHub repository base URL for edit links.
  */
-const GITHUB_REPO_URL = "https://github.com/parkerhdavis/Bluebell";
+const GITHUB_REPO_URL = "https://github.com/parkerhdavis/Anthers";
 
 /**
  * Wiki page component that displays documentation from the repo /wiki directory.
@@ -317,7 +317,7 @@ export default function WikiPage() {
                         </div>
                         <div>
                             <h1 className="text-4xl font-bold text-base-content">
-                                Bluebell Wiki
+                                Anthers Wiki
                             </h1>
                             <p className="text-lg text-base-content/70">
                                 Guides and documentation for users and creators
@@ -369,11 +369,11 @@ export default function WikiPage() {
                                 <div>
                                     <button
                                         onClick={() =>
-                                            handleNavigate("10-Getting-Started", "01-WhatIsBluebell.md")
+                                            handleNavigate("10-Getting-Started", "01-WhatIsAnthers.md")
                                         }
                                         className="link link-primary font-semibold"
                                     >
-                                        What is Bluebell?
+                                        What is Anthers?
                                     </button>
                                     <p className="text-sm text-base-content/60">
                                         Learn about the platform and its mission
@@ -385,11 +385,11 @@ export default function WikiPage() {
                                 <div>
                                     <button
                                         onClick={() =>
-                                            handleNavigate("11-The-Bluebell-Model", "README.md")
+                                            handleNavigate("11-The-Anthers-Model", "README.md")
                                         }
                                         className="link link-primary font-semibold"
                                     >
-                                        The Bluebell Model
+                                        The Anthers Model
                                     </button>
                                     <p className="text-sm text-base-content/60">
                                         Understand transparent pricing and the CRF

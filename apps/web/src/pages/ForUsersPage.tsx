@@ -65,7 +65,7 @@ export default function ForUsersPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Other platforms make you create an account, verify your email, and
-            agree to terms before you can do anything. Bluebell gets out of your
+            agree to terms before you can do anything. Anthers gets out of your
             way.
           </p>
 
@@ -113,7 +113,7 @@ export default function ForUsersPage() {
             All kinds of creative work
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell isn't just games. Creators publish across media—and you
+            Anthers isn't just games. Creators publish across media—and you
             can discover all of it in one place, from one search bar.
           </p>
 
@@ -215,7 +215,7 @@ export default function ForUsersPage() {
             Transparent pricing you can trust
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            When you buy something on Bluebell, you see exactly where your
+            When you buy something on Anthers, you see exactly where your
             money goes. No hidden fees, no surprise charges. The creator's
             price is what the creator gets.
           </p>
@@ -379,7 +379,7 @@ export default function ForUsersPage() {
             Your account, your data
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Bluebell is built on the AT Protocol (the tech behind Bluesky).
+            Anthers is built on the AT Protocol (the tech behind Bluesky).
             Sign in with your existing Bluesky identity, or create a new one.
             Your follows, library, and activity are yours—portable and not
             locked in.

@@ -27,14 +27,14 @@ export default function CompareGhostPage() {
         <div className="hero-content text-center py-20">
           <div className="max-w-3xl">
             <p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase">
-              Bluebell vs Ghost
+              Anthers vs Ghost
             </p>
             <h1 className="text-5xl font-bold tracking-tight">
               Different missions, different strengths
             </h1>
             <p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
               Ghost is a beautifully crafted publishing platform for writers
-              and newsletter creators. Bluebell is a creator economy platform
+              and newsletter creators. Anthers is a creator economy platform
               for games, video, audio, and writing. Here's how they compare
               and where each one shines.
             </p>
@@ -43,7 +43,7 @@ export default function CompareGhostPage() {
                 to={isAuthenticated ? "/dashboard" : "/register"}
                 className="btn btn-primary btn-lg"
               >
-                Try Bluebell Free
+                Try Anthers Free
               </Link>
               <Link to="/explore" className="btn btn-outline btn-lg">
                 Explore Projects
@@ -60,7 +60,7 @@ export default function CompareGhostPage() {
             Two platforms, two philosophies
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Ghost and Bluebell share some values—independence, creator
+            Ghost and Anthers share some values—independence, creator
             ownership, transparent economics—but they're built for different
             creative workflows.
           </p>
@@ -107,11 +107,11 @@ export default function CompareGhostPage() {
               <div className="card-body">
                 <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
                   <PlayIcon className="w-5 h-5 text-primary" />
-                  Bluebell
+                  Anthers
                 </h3>
                 <p className="text-sm text-base-content/60 leading-relaxed mb-4">
                   A creator economy platform built for multi-media indie
-                  creators. Bluebell is designed for people who make games,
+                  creators. Anthers is designed for people who make games,
                   videos, music, and written content—and want one home for
                   all of it.
                 </p>
@@ -151,7 +151,7 @@ export default function CompareGhostPage() {
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
             Ghost is laser-focused on written publishing and newsletters.
-            Bluebell covers a wider range of creative media—ideal for indie
+            Anthers covers a wider range of creative media—ideal for indie
             creators who work across multiple formats.
           </p>
 
@@ -160,25 +160,25 @@ export default function CompareGhostPage() {
               icon={<PuzzlePieceIcon className="w-7 h-7" />}
               title="Games"
               color="badge-secondary"
-              bluebell
+              anthers
             />
             <ContentCard
               icon={<FilmIcon className="w-7 h-7" />}
               title="Video"
               color="badge-error"
-              bluebell
+              anthers
             />
             <ContentCard
               icon={<MusicalNoteIcon className="w-7 h-7" />}
               title="Audio"
               color="badge-success"
-              bluebell
+              anthers
             />
             <ContentCard
               icon={<DocumentTextIcon className="w-7 h-7" />}
               title="Writing"
               color="badge-info"
-              bluebell
+              anthers
               ghost
             />
           </div>
@@ -195,32 +195,32 @@ export default function CompareGhostPage() {
             <DiffCard
               icon={<CurrencyDollarIcon className="w-6 h-6" />}
               title="Revenue model"
-              description="Ghost charges a monthly hosting fee ($9-$199+/mo for Ghost Pro) and takes 0% of membership revenue. Bluebell is free to use and takes 0% of sales—real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
+              description="Ghost charges a monthly hosting fee ($9-$199+/mo for Ghost Pro) and takes 0% of membership revenue. Anthers is free to use and takes 0% of sales—real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
             />
             <DiffCard
               icon={<EyeIcon className="w-6 h-6" />}
               title="Publishing approach"
-              description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery—it's a CMS. Bluebell gives you a creator profile with project pages, devlogs, and a built-in audience—it's a marketplace and community platform."
+              description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery—it's a CMS. Anthers gives you a creator profile with project pages, devlogs, and a built-in audience—it's a marketplace and community platform."
             />
             <DiffCard
               icon={<UserGroupIcon className="w-6 h-6" />}
               title="Audience model"
-              description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Bluebell's model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by attention time."
+              description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers's model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by attention time."
             />
             <DiffCard
               icon={<CodeBracketIcon className="w-6 h-6" />}
               title="Open-source approach"
-              description="Ghost is fully open-source (MIT license) and self-hostable. Their non-profit foundation has been building in the open since 2013. Bluebell is built on the AT Protocol for data portability and federation, with a focus on open identity rather than open infrastructure."
+              description="Ghost is fully open-source (MIT license) and self-hostable. Their non-profit foundation has been building in the open since 2013. Anthers is built on the AT Protocol for data portability and federation, with a focus on open identity rather than open infrastructure."
             />
             <DiffCard
               icon={<TrophyIcon className="w-6 h-6" />}
               title="Community features"
-              description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Bluebell adds community mechanics like game jams, project ratings, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
+              description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics like game jams, project ratings, comments, and follow/feed—built for the kind of interactive, collaborative community that forms around indie games and creative projects."
             />
             <DiffCard
               icon={<GlobeAltIcon className="w-6 h-6" />}
               title="Customization"
-              description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Bluebell focuses on creator profiles and project pages with consistent structure—less custom design, more consistent discovery experience."
+              description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Anthers focuses on creator profiles and project pages with consistent structure—less custom design, more consistent discovery experience."
             />
           </div>
         </div>
@@ -238,32 +238,32 @@ export default function CompareGhostPage() {
               <thead>
                 <tr>
                   <th>Feature</th>
-                  <th className="text-center">Bluebell</th>
+                  <th className="text-center">Anthers</th>
                   <th className="text-center">Ghost</th>
                 </tr>
               </thead>
               <tbody>
-                <CompRow feature="Blog / long-form writing" bluebell ghost />
+                <CompRow feature="Blog / long-form writing" anthers ghost />
                 <CompRow feature="Email newsletters" ghost />
                 <CompRow feature="Paid memberships" ghost />
                 <CompRow feature="Custom website & themes" ghost />
                 <CompRow feature="Built-in SEO tools" ghost />
-                <CompRow feature="Game hosting & downloads" bluebell />
-                <CompRow feature="HTML5 web games" bluebell />
-                <CompRow feature="Video hosting" bluebell />
-                <CompRow feature="Audio / music hosting" bluebell />
-                <CompRow feature="Game jams" bluebell />
-                <CompRow feature="Ratings & comments" bluebell />
-                <CompRow feature="Follow & feed system" bluebell />
-                <CompRow feature="Creator profiles" bluebell />
-                <CompRow feature="Subscription pool model" bluebell />
-                <CompRow feature="Transparent itemized fees" bluebell />
-                <CompRow feature="0% platform revenue share" bluebell ghost />
+                <CompRow feature="Game hosting & downloads" anthers />
+                <CompRow feature="HTML5 web games" anthers />
+                <CompRow feature="Video hosting" anthers />
+                <CompRow feature="Audio / music hosting" anthers />
+                <CompRow feature="Game jams" anthers />
+                <CompRow feature="Ratings & comments" anthers />
+                <CompRow feature="Follow & feed system" anthers />
+                <CompRow feature="Creator profiles" anthers />
+                <CompRow feature="Subscription pool model" anthers />
+                <CompRow feature="Transparent itemized fees" anthers />
+                <CompRow feature="0% platform revenue share" anthers ghost />
                 <CompRow feature="Self-hostable" ghost />
                 <CompRow feature="Open-source codebase" ghost />
-                <CompRow feature="AT Protocol / portable identity" bluebell />
+                <CompRow feature="AT Protocol / portable identity" anthers />
                 <CompRow feature="Headless CMS / API" ghost />
-                <CompRow feature="Import from other platforms" bluebell ghost />
+                <CompRow feature="Import from other platforms" anthers ghost />
               </tbody>
             </table>
           </div>
@@ -308,7 +308,7 @@ export default function CompareGhostPage() {
 
             <div className="card bg-base-100 ring-2 ring-primary/30">
               <div className="card-body">
-                <h3 className="font-bold text-lg mb-3">Choose Bluebell if you...</h3>
+                <h3 className="font-bold text-lg mb-3">Choose Anthers if you...</h3>
                 <ul className="text-sm text-base-content/60 flex flex-col gap-3">
                   <li className="flex gap-2">
                     <span className="text-primary flex-shrink-0">→</span>
@@ -344,7 +344,7 @@ export default function CompareGhostPage() {
             Both believe in creator ownership
           </h2>
           <p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-            Ghost and Bluebell share a core belief: creators should own their
+            Ghost and Anthers share a core belief: creators should own their
             work, their audience, and their data. They just approach it
             differently.
           </p>
@@ -365,9 +365,9 @@ export default function CompareGhostPage() {
               <div className="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center mx-auto mb-3">
                 <ArrowPathIcon className="w-6 h-6 text-info" />
               </div>
-              <h3 className="font-semibold mb-1">Bluebell: open protocol</h3>
+              <h3 className="font-semibold mb-1">Anthers: open protocol</h3>
               <p className="text-sm text-base-content/60">
-                Bluebell builds on the AT Protocol. Your identity is a
+                Anthers builds on the AT Protocol. Your identity is a
                 portable DID. Your content is interoperable. Federation means
                 no single point of control.
               </p>
@@ -396,7 +396,7 @@ export default function CompareGhostPage() {
           <p className="text-base-content/60 mb-8 leading-relaxed">
             If you're a writer or journalist, Ghost is an excellent choice.
             If you make games, videos, music, or multimedia creative work —
-            Bluebell was built for you. Free to use, 100% to creators.
+            Anthers was built for you. Free to use, 100% to creators.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link
@@ -445,13 +445,13 @@ function ContentCard({
   icon,
   title,
   color,
-  bluebell,
+  anthers,
   ghost,
 }: {
   icon: React.ReactNode;
   title: string;
   color: string;
-  bluebell?: boolean;
+  anthers?: boolean;
   ghost?: boolean;
 }) {
   return (
@@ -460,9 +460,9 @@ function ContentCard({
         <div className="text-base-content/40 mx-auto mb-2">{icon}</div>
         <span className={`badge badge-sm ${color} mx-auto mb-2`}>{title}</span>
         <div className="text-xs text-base-content/50 flex flex-col gap-1">
-          {bluebell && (
+          {anthers && (
             <span>
-              <span className="text-success">✓</span> Bluebell
+              <span className="text-success">✓</span> Anthers
             </span>
           )}
           {ghost && (
@@ -483,11 +483,11 @@ function ContentCard({
 
 function CompRow({
   feature,
-  bluebell,
+  anthers,
   ghost,
 }: {
   feature: string;
-  bluebell?: boolean;
+  anthers?: boolean;
   ghost?: boolean;
 }) {
   const check = <span className="text-success font-bold">✓</span>;
@@ -495,7 +495,7 @@ function CompRow({
   return (
     <tr>
       <td>{feature}</td>
-      <td className="text-center">{bluebell ? check : dash}</td>
+      <td className="text-center">{anthers ? check : dash}</td>
       <td className="text-center">{ghost ? check : dash}</td>
     </tr>
   );
