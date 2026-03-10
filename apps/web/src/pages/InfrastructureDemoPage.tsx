@@ -101,7 +101,6 @@ const REFERENCE_CREATORS: ReferenceCreator[] = [
   { name: "MAPHRA", subs: "166K", videos: "6", storageLabel: "8.2 GB", storageCost: 0.16, deliveryCost: 399.95, totalInfra: 400, viewMinutes: "16.5M", infraPerViewMin: 0.000024, infraPctGross: "6.8%", ytGross: 5875, ytNet: 3231, anthersNet: 5475 },
   { name: "Memoria", subs: "281K", videos: "288", storageLabel: "5.1 TB", storageCost: 101.09, deliveryCost: 1168.90, totalInfra: 1270, viewMinutes: "49M", infraPerViewMin: 0.000026, infraPctGross: "36.3%", ytGross: 3500, ytNet: 1925, anthersNet: 2230 },
   { name: "gabi belle", subs: "1.42M", videos: "179", storageLabel: "2.1 TB", storageCost: 41.88, deliveryCost: 1187.12, totalInfra: 1229, viewMinutes: "51M", infraPerViewMin: 0.000024, infraPctGross: "28.9%", ytGross: 4250, ytNet: 2338, anthersNet: 3021 },
-  { name: "Hank Green", subs: "2.97M", videos: "1.1K", storageLabel: "9.4 TB", storageCost: 188.76, deliveryCost: 9441.92, totalInfra: 9631, viewMinutes: "396M", infraPerViewMin: 0.000024, infraPctGross: "15.3%", ytGross: 63000, ytNet: 34650, anthersNet: 53369 },
 ];
 
 // ---------------------------------------------------------------------------
