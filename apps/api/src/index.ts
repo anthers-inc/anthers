@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
+import { serveStatic } from "hono/bun";
 import { csrfProtection } from "./middleware/csrf.js";
 import { authRoutes } from "./routes/auth.js";
 import { atprotoRoutes } from "./routes/atproto.js";
@@ -12,6 +13,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
 import { ensureBossReady } from "./jobs/boss.js";
+import { isLocalStorage } from "./services/storage/index.js";
 
 const app = new Hono()
 	.use(logger())
@@ -23,6 +25,11 @@ const app = new Hono()
 		}),
 	)
 	.use(csrfProtection)
+	// Serve uploaded media files from local filesystem in dev mode
+	.use("/media/*", async (c, next) => {
+		if (!isLocalStorage) return next();
+		return serveStatic({ root: "../../media" })(c, next);
+	})
 	.get("/health", (c) => c.json({ status: "ok" }))
 	.post("/health/gate", async (c) => {
 		const expected = process.env.SITE_PASSWORD ?? "";

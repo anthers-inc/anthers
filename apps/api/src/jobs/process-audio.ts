@@ -7,10 +7,11 @@
 import { eq } from "drizzle-orm";
 import { db } from "@anthers/db";
 import { transcodingJobs, posts } from "@anthers/db/schema";
-import { rm } from "node:fs/promises";
+import { rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { storage } from "../services/storage/index.js";
 
 export interface ProcessAudioData {
 	jobId: number;
@@ -175,13 +176,16 @@ export async function processAudio(data: ProcessAudioData) {
 		.limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
-	// TODO: Resolve local path from storage (Phase 5)
-	const localPath = post.audioFile ?? "";
-	if (!localPath) throw new Error("No audio file on post");
+	const storageKey = post.audioFile ?? "";
+	if (!storageKey) throw new Error("No audio file on post");
 
+	let localPath: string | null = null;
 	let outputPath: string | null = null;
 
 	try {
+		// 0. Download source file to local temp path for ffmpeg
+		localPath = await storage.downloadToTemp(storageKey);
+
 		// 1. Probe for duration
 		const probe = await ffprobe(localPath);
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
@@ -220,9 +224,11 @@ export async function processAudio(data: ProcessAudioData) {
 		}
 		await updateJobProgress(jobId, 60);
 
-		// 3. Upload processed file
-		// TODO: Upload to S3/Spaces (Phase 5)
-		const storageKey = `audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
+		// 3. Upload processed file to storage
+		const outputKey = `audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
+		const outputBuffer = await readFile(outputPath);
+		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
+		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);
 
 		// 4. Generate waveform
@@ -234,7 +240,7 @@ export async function processAudio(data: ProcessAudioData) {
 			.set({
 				status: "completed",
 				progress: 100,
-				outputFileUrl: storageKey,
+				outputFileUrl: outputUrl,
 				waveformData: waveform,
 			})
 			.where(eq(transcodingJobs.id, jobId));
@@ -250,6 +256,12 @@ export async function processAudio(data: ProcessAudioData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
+		// Clean up temp files (only files under tmpdir)
+		if (localPath?.startsWith(tmpdir())) {
+			try {
+				await rm(localPath);
+			} catch {}
+		}
 		if (outputPath) {
 			try {
 				await rm(outputPath);

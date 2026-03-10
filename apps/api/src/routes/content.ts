@@ -33,6 +33,7 @@ import {
 } from "@anthers/db/schema";
 import { requireAuth } from "../middleware/auth.js";
 import { requireCreator } from "../middleware/auth.js";
+import { storage, isLocalStorage } from "../services/storage/index.js";
 import { validateSession } from "../services/auth.js";
 import { getCookie } from "hono/cookie";
 
@@ -974,6 +975,136 @@ const contentRoutes = new Hono()
 			.orderBy(desc(transcodingJobs.createdAt));
 
 		return c.json({ jobs });
+	})
+
+	// ── Inline Images ────────────────────────────────────────────────────────
+
+	// ── Media Upload ────────────────────────────────────────────────────────
+
+	/**
+	 * Get a presigned upload URL for large media (video, audio, assets).
+	 * In S3 mode: returns a presigned PUT URL for direct browser→Spaces upload.
+	 * In local mode: returns the direct-upload endpoint URL instead.
+	 */
+	.post(
+		"/media-upload/presign",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				filename: z.string().min(1).max(255),
+				contentType: z.string().min(1).max(100),
+				mediaType: z.enum(["video", "audio", "asset"]),
+			}),
+		),
+		async (c) => {
+			const { filename, contentType, mediaType } = c.req.valid("json");
+
+			// Generate a storage key following legacy conventions
+			const ext = filename.includes(".")
+				? filename.split(".").pop()
+				: "";
+			const uuid = crypto.randomUUID().replace(/-/g, "");
+			const keyMap = {
+				video: `videos/originals/${uuid}.${ext}`,
+				audio: `audio/originals/${uuid}.${ext}`,
+				asset: `assets/${uuid}.${ext}`,
+			} as const;
+			const key = keyMap[mediaType];
+
+			if (isLocalStorage) {
+				// Local mode — return the direct upload endpoint
+				return c.json({
+					method: "direct" as const,
+					uploadUrl: `/api/content/media-upload/direct`,
+					key,
+				});
+			}
+
+			const uploadUrl = await storage.getPresignedUploadUrl(
+				key,
+				contentType,
+				3600,
+			);
+			return c.json({ method: "presigned" as const, uploadUrl, key });
+		},
+	)
+
+	/**
+	 * Direct file upload — receives multipart form data.
+	 * Used in local dev mode, and for small files (avatars, covers, screenshots) in all modes.
+	 */
+	.post("/media-upload/direct", requireAuth, async (c) => {
+		const user = c.get("user");
+		const formData = await c.req.formData();
+		const file = formData.get("file");
+		const mediaType = formData.get("mediaType") as string | null;
+		const entityId = formData.get("entityId") as string | null;
+
+		if (!(file instanceof File)) {
+			return c.json({ error: "No file provided" }, 400);
+		}
+
+		// Size limit: 500MB for video/audio, 10MB for images
+		const isMedia = mediaType === "video" || mediaType === "audio";
+		const maxSize = isMedia ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
+		if (file.size > maxSize) {
+			return c.json(
+				{
+					error: `File too large (max ${isMedia ? "500MB" : "10MB"})`,
+				},
+				413,
+			);
+		}
+
+		// Generate storage key based on media type
+		const ext = file.name.includes(".")
+			? file.name.split(".").pop()
+			: "";
+		const uuid = crypto.randomUUID().replace(/-/g, "");
+		let key: string;
+
+		switch (mediaType) {
+			case "video":
+				key = `videos/originals/${uuid}.${ext}`;
+				break;
+			case "audio":
+				key = `audio/originals/${uuid}.${ext}`;
+				break;
+			case "avatar":
+				key = `avatars/${user.id}/${uuid}.${ext}`;
+				break;
+			case "header":
+				key = `headers/${user.id}/${uuid}.${ext}`;
+				break;
+			case "cover":
+				key = `covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			case "screenshot":
+				key = `screenshots/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			case "asset":
+				key = `assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			case "inline-image":
+				key = `inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			case "jam-cover":
+				key = `jams/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			default:
+				key = `uploads/${user.id}/${uuid}.${ext}`;
+		}
+
+		// Determine ACL: private for gated content, public for everything else
+		const privateTypes = new Set(["video", "audio", "asset"]);
+		const acl = privateTypes.has(mediaType ?? "") ? "private" : "public";
+
+		const buffer = Buffer.from(await file.arrayBuffer());
+		await storage.upload(key, buffer, file.type, acl);
+		const url = await storage.getUrl(key);
+
+		return c.json({ key, url }, 201);
 	})
 
 	// ── Inline Images ────────────────────────────────────────────────────────

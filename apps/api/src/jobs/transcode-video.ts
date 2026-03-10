@@ -16,10 +16,11 @@
 import { eq } from "drizzle-orm";
 import { db } from "@anthers/db";
 import { transcodingJobs, posts } from "@anthers/db/schema";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { storage } from "../services/storage/index.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -184,15 +185,17 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		.limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
-	// TODO: Resolve local path from storage (Phase 5 integration)
-	// For now, assume videoFile is a local path or storage key
-	const localPath = post.videoFile ?? "";
-	if (!localPath) throw new Error("No video file on post");
+	const storageKey = post.videoFile ?? "";
+	if (!storageKey) throw new Error("No video file on post");
 
+	let localPath: string | null = null;
 	let outputDir: string | null = null;
 	let thumbPath: string | null = null;
 
 	try {
+		// 0. Download source file to local temp path for ffmpeg
+		localPath = await storage.downloadToTemp(storageKey);
+
 		// 1. Probe source
 		const probe = await ffprobe(localPath);
 		const videoStream = probe.streams?.find(
@@ -265,26 +268,59 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		await generateMasterPlaylist(outputDir, variants);
 		await updateJobProgress(jobId, 80);
 
-		// 5. Upload to storage
-		// TODO: Upload HLS files to S3/Spaces (Phase 5 integration)
+		// 5. Upload HLS files to storage
 		const storagePrefix = `videos/hls/${randomUUID().replace(/-/g, "")}`;
-		// For now, store the intended prefix
+		const hlsFiles = await readdir(outputDir);
+		for (const filename of hlsFiles) {
+			const filePath = join(outputDir, filename);
+			const fileBuffer = await readFile(filePath);
+			const ct = filename.endsWith(".m3u8")
+				? "application/vnd.apple.mpegurl"
+				: "video/mp2t";
+			// HLS segments for gated content are private; playlists need to be accessible
+			const acl = filename.endsWith(".m3u8") ? "public" : "private";
+			await storage.upload(
+				`${storagePrefix}/${filename}`,
+				fileBuffer,
+				ct,
+				acl,
+			);
+		}
 		await updateJobProgress(jobId, 90);
 
 		// 6. Auto-generate thumbnail if none set
+		let thumbnailKey: string | null = null;
 		if (!post.thumbnail) {
 			const thumbPosition = Math.max(1, Math.round(duration * 0.25));
 			thumbPath = await generateThumbnail(localPath, thumbPosition);
-			// TODO: Upload thumbnail to storage (Phase 5 integration)
+			if (thumbPath) {
+				const thumbBuffer = await readFile(thumbPath);
+				thumbnailKey = `thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
+				await storage.upload(
+					thumbnailKey,
+					thumbBuffer,
+					"image/jpeg",
+					"public",
+				);
+				// Update post thumbnail
+				const thumbnailUrl = await storage.getUrl(thumbnailKey);
+				await db
+					.update(posts)
+					.set({ thumbnail: thumbnailUrl })
+					.where(eq(posts.id, post.id));
+			}
 		}
 
 		// 7. Complete
+		const manifestUrl = await storage.getUrl(
+			`${storagePrefix}/master.m3u8`,
+		);
 		await db
 			.update(transcodingJobs)
 			.set({
 				status: "completed",
 				progress: 100,
-				hlsManifestUrl: `${storagePrefix}/master.m3u8`,
+				hlsManifestUrl: manifestUrl,
 			})
 			.where(eq(transcodingJobs.id, jobId));
 	} catch (error) {
@@ -299,7 +335,12 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
-		// Clean up temp files
+		// Clean up temp files (only files under tmpdir)
+		if (localPath?.startsWith(tmpdir())) {
+			try {
+				await rm(localPath);
+			} catch {}
+		}
 		if (outputDir) {
 			try {
 				await rm(outputDir, { recursive: true });

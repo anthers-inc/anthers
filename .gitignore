@@ -27,6 +27,9 @@ Thumbs.db
 coverage/
 *.lcov
 
+# ─── Local media storage (dev) ───
+media/
+
 # ─── Agent files (contributor-specific) ───
 AGENTS.md
 CLAUDE.md
