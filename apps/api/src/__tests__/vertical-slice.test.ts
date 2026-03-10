@@ -69,7 +69,7 @@ describe("Vertical Slice", () => {
 	});
 
 	it("create project requires auth", async () => {
-		const res = await makeRequest("/api/projects", {
+		const res = await makeRequest("/api/content/projects", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
@@ -85,7 +85,7 @@ describe("Vertical Slice", () => {
 
 	it("create project succeeds when authenticated", async () => {
 		const slug = `test-game-${testId}`;
-		const res = await makeRequest("/api/projects", {
+		const res = await makeRequest("/api/content/projects", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
@@ -96,6 +96,7 @@ describe("Vertical Slice", () => {
 				title: "Test Game",
 				slug,
 				description: "A test project from the vertical slice",
+				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
@@ -106,7 +107,7 @@ describe("Vertical Slice", () => {
 	});
 
 	it("list projects returns the created project", async () => {
-		const res = await makeRequest("/api/projects");
+		const res = await makeRequest("/api/content/projects");
 		expect(res.status).toBe(200);
 		const data = await res.json();
 		expect(data.projects.length).toBeGreaterThan(0);
@@ -114,7 +115,7 @@ describe("Vertical Slice", () => {
 	});
 
 	it("Zod validates project creation input", async () => {
-		const res = await makeRequest("/api/projects", {
+		const res = await makeRequest("/api/content/projects", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
