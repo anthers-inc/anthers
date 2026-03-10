@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { BASE_URL } from "../../lib/api";
 
 const STORAGE_KEY = "anthers_site_access";
-const GATE_URL = BASE_URL + "/health/gate/";
+const GATE_URL = BASE_URL + "/health/gate";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
   const [authorized, setAuthorized] = useState(
