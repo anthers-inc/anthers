@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { csrfProtection } from "./middleware/csrf.js";
 import { authRoutes } from "./routes/auth.js";
+import { atprotoRoutes } from "./routes/atproto.js";
 import { projectRoutes } from "./routes/projects.js";
 
 const app = new Hono()
@@ -18,6 +19,7 @@ const app = new Hono()
 	.use(csrfProtection)
 	.get("/health", (c) => c.json({ status: "ok" }))
 	.route("/api/auth", authRoutes)
+	.route("/api/atproto", atprotoRoutes)
 	.route("/api/projects", projectRoutes);
 
 export default {

@@ -12,8 +12,9 @@
   "dependencies": {
     "@anthers/db": "workspace:*",
     "@anthers/shared": "workspace:*",
-    "hono": "^4.7.0",
     "@hono/zod-validator": "^0.5.0",
+    "hono": "^4.7.0",
+    "jose": "6.2.1",
     "zod": "^3.25.0"
   },
   "devDependencies": {

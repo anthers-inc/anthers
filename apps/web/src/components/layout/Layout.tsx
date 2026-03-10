@@ -8,12 +8,12 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function Layout() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, signOut } = useAuth();
   const { currentTrack } = useMediaPlayer();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     navigate("/");
   };
 
@@ -84,7 +84,7 @@ export default function Layout() {
                 {user?.avatar ? (
                   <img
                     src={user.avatar}
-                    alt={user.display_name || user.username}
+                    alt={user.displayName || user.username}
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (

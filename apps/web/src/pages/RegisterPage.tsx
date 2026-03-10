@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { ApiError } from "../lib/api";
 import FormField from "../components/ui/FormField";
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState("");
@@ -18,26 +17,20 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+
+    if (password !== passwordConfirm) {
+      setErrors({ password_confirm: "Passwords do not match" });
+      return;
+    }
+
     setLoading(true);
     try {
-      await register(username, email, password, passwordConfirm);
+      await signUp(username, email, password);
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as Record<string, string[]>;
-        const fieldErrors: Record<string, string> = {};
-        for (const [key, messages] of Object.entries(data)) {
-          if (Array.isArray(messages)) {
-            fieldErrors[key] = messages[0];
-          }
-        }
-        if (data?.non_field_errors) {
-          fieldErrors.general = data.non_field_errors[0];
-        }
-        setErrors(fieldErrors);
-      } else {
-        setErrors({ general: "Something went wrong. Please try again." });
-      }
+      setErrors({
+        general: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+      });
     } finally {
       setLoading(false);
     }

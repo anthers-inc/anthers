@@ -14,7 +14,7 @@ const createProjectSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens"),
 	description: z.string().max(10000).optional(),
-	pricingModel: z.enum(["free", "pwyw", "paid"]).default("free"),
+	pricingType: z.enum(["free", "pwyw", "paid"]).default("free"),
 	price: z.string().optional(), // numeric as string for precision
 	minPrice: z.string().optional(),
 });
@@ -46,13 +46,13 @@ const projectRoutes = new Hono()
 		const [project] = await db
 			.insert(projects)
 			.values({
-				creatorId: user.id,
-				title: data.title,
-				slug: data.slug,
-				description: data.description ?? "",
-				pricingModel: data.pricingModel,
-				price: data.price ?? null,
-				minPrice: data.minPrice ?? null,
+			creatorId: user.id,
+			title: data.title,
+			slug: data.slug,
+			description: data.description ?? "",
+			pricingType: data.pricingType,
+			price: data.price ?? null,
+			minPrice: data.minPrice ?? null,
 			})
 			.returning();
 

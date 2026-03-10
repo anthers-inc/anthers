@@ -111,7 +111,7 @@ export default function JamsPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Game Jams</h1>
-        {user?.is_creator && (
+        {user?.isCreator && (
           <Link to="/dashboard/jams/new" className="btn btn-primary btn-sm">
             <PlusIcon className="w-4 h-4" />
             Host a Jam
@@ -145,7 +145,7 @@ export default function JamsPage() {
               : "No game jams have been created yet."
           }
           action={
-            user?.is_creator ? (
+            user?.isCreator ? (
               <Link
                 to="/dashboard/jams/new"
                 className="btn btn-primary btn-sm"

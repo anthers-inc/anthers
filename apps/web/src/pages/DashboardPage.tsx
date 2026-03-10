@@ -43,13 +43,13 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
 
     // Fetch creator earnings (non-blocking)
-    if (user?.is_creator) {
+    if (user?.isCreator) {
       api
         .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
         .then(setEarnings)
         .catch(() => {});
     }
-  }, [user?.is_creator]);
+  }, [user?.isCreator]);
 
   if (loading) {
     return (
@@ -63,7 +63,7 @@ export default function DashboardPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        {user?.is_creator && (
+        {user?.isCreator && (
           <div className="flex gap-2">
             <Link
               to="/dashboard/import"
@@ -113,7 +113,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Creator Earnings */}
-      {user?.is_creator && earnings && parseFloat(earnings.total) > 0 && (
+      {user?.isCreator && earnings && parseFloat(earnings.total) > 0 && (
         <div className="card bg-base-200 mb-8">
           <div className="card-body">
             <h2 className="card-title text-lg">Subscriber Earnings</h2>
@@ -228,7 +228,7 @@ export default function DashboardPage() {
             title="No projects yet"
             description="Create your first project to get started."
             action={
-              user?.is_creator ? (
+              user?.isCreator ? (
                 <Link
                   to="/dashboard/projects/new"
                   className="btn btn-primary btn-sm"
@@ -313,7 +313,7 @@ export default function DashboardPage() {
             title="No posts yet"
             description="Write your first devlog or update."
             action={
-              user?.is_creator ? (
+              user?.isCreator ? (
                 <Link
                   to="/dashboard/posts/new"
                   className="btn btn-primary btn-sm"

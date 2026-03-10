@@ -46,3 +46,15 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 
 	await next();
 });
+
+/**
+ * Middleware that requires the authenticated user to be a creator.
+ * Must be used AFTER requireAuth.
+ */
+export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {
+	const user = c.get("user");
+	if (!user?.isCreator) {
+		return c.json({ error: "Creator account required" }, 403);
+	}
+	await next();
+});

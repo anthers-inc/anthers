@@ -19,7 +19,7 @@ function BlueskySection() {
   const [error, setError] = useState<string | null>(null);
 
   const blueskyResult = searchParams.get("bluesky");
-  const isLinked = !!user?.atproto_did;
+  const isLinked = !!user?.atprotoDid;
 
   useEffect(() => {
     if (blueskyResult === "linked") {
@@ -36,12 +36,7 @@ function BlueskySection() {
       await linkBluesky(handle.trim());
       // linkBluesky redirects, so we won't reach here
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to link Bluesky account.");
-      } else {
-        setError("Something went wrong.");
-      }
+      setError(err instanceof Error ? err.message : "Failed to link Bluesky account.");
       setLinking(false);
     }
   };
@@ -52,12 +47,7 @@ function BlueskySection() {
     try {
       await unlinkBluesky();
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to unlink Bluesky account.");
-      } else {
-        setError("Something went wrong.");
-      }
+      setError(err instanceof Error ? err.message : "Failed to unlink Bluesky account.");
     } finally {
       setUnlinking(false);
     }
@@ -94,11 +84,11 @@ function BlueskySection() {
             <div className="flex items-center gap-2">
               <div className="badge badge-success">Linked</div>
               <span className="text-sm font-medium">
-                @{user.atproto_handle}
+                @{user.atprotoHandle}
               </span>
             </div>
             <p className="text-xs text-base-content/50">
-              DID: {user.atproto_did}
+              DID: {user.atprotoDid}
             </p>
             <button
               className="btn btn-outline btn-error btn-sm w-fit"
@@ -483,11 +473,11 @@ function PlatformConnectionsSection() {
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
 
-  const [displayName, setDisplayName] = useState(user?.display_name || "");
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [bio, setBio] = useState(user?.bio || "");
-  const [websiteUrl, setWebsiteUrl] = useState(user?.website_url || "");
+  const [websiteUrl, setWebsiteUrl] = useState(user?.websiteUrl || "");
   const [location, setLocation] = useState(user?.location || "");
-  const [isCreator, setIsCreator] = useState(user?.is_creator || false);
+  const [isCreator, setIsCreator] = useState(user?.isCreator || false);
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
@@ -495,7 +485,7 @@ export default function SettingsPage() {
   );
   const [headerFile, setHeaderFile] = useState<File | null>(null);
   const [headerPreview, setHeaderPreview] = useState<string | null>(
-    user?.header_image || null,
+    user?.headerImage || null,
   );
 
   const [saving, setSaving] = useState(false);

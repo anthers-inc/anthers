@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { ApiError } from "../lib/api";
 import FormField from "../components/ui/FormField";
 
 export default function LoginPage() {
-  const { login, loginWithBluesky } = useAuth();
+  const { signIn, signInWithBluesky } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/";
 
-  const [username, setUsername] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,19 +24,10 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(username, password);
+      await signIn(login, password);
       navigate(from, { replace: true });
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as Record<string, string[]>;
-        setError(
-          data?.non_field_errors?.[0] ??
-          data?.detail ??
-          "Invalid username or password."
-        );
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -49,15 +39,10 @@ export default function LoginPage() {
     setBskyError("");
     setBskyLoading(true);
     try {
-      await loginWithBluesky(bskyHandle.trim());
-      // loginWithBluesky redirects, so we won't reach here
+      await signInWithBluesky(bskyHandle.trim());
+      // signInWithBluesky redirects, so we won't reach here
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setBskyError(data?.detail ?? "Failed to initiate Bluesky login.");
-      } else {
-        setBskyError("Something went wrong. Please try again.");
-      }
+      setBskyError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setBskyLoading(false);
     }
   };
@@ -115,12 +100,12 @@ export default function LoginPage() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <FormField label="Username" required>
+            <FormField label="Username or Email" required>
               <input
                 type="text"
                 className="input input-bordered w-full"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
                 required
               />
             </FormField>

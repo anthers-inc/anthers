@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll } from "bun:test";
+import { sql } from "drizzle-orm";
+import { db } from "@anthers/db/client";
 import app from "../index";
 
 // Use the app directly via .fetch() for testing (no network needed)
@@ -8,8 +10,18 @@ function makeRequest(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
+// Use unique identifiers per test run to avoid conflicts
+const testId = crypto.randomUUID().slice(0, 8);
+const testUsername = `test_${testId}`;
+const testEmail = `test_${testId}@example.com`;
+
 describe("Vertical Slice", () => {
 	let sessionCookie: string;
+
+	beforeAll(async () => {
+		// Clean up any leftover test data from previous runs
+		await db.execute(sql`DELETE FROM projects WHERE slug = 'test-game-${sql.raw(testId)}'`);
+	});
 
 	it("health check returns ok", async () => {
 		const res = await makeRequest("/health");
@@ -26,15 +38,15 @@ describe("Vertical Slice", () => {
 				Origin: "http://localhost:3000",
 			},
 			body: JSON.stringify({
-				username: "slicetest",
-				email: "slice@test.com",
+				username: testUsername,
+				email: testEmail,
 				password: "testpass123",
 			}),
 		});
 		expect(res.status).toBe(201);
 		const data = await res.json();
-		expect(data.user.username).toBe("slicetest");
-		expect(data.user.email).toBe("slice@test.com");
+		expect(data.user.username).toBe(testUsername);
+		expect(data.user.email).toBe(testEmail);
 
 		// Extract session cookie
 		const setCookieHeader = res.headers.get("Set-Cookie");
@@ -42,14 +54,18 @@ describe("Vertical Slice", () => {
 		sessionCookie = setCookieHeader!.split(";")[0];
 	});
 
-	it("get /me returns authenticated user", async () => {
+	it("get /me returns authenticated user with full profile", async () => {
 		const res = await makeRequest("/api/auth/me", {
 			headers: { Cookie: sessionCookie },
 		});
 		expect(res.status).toBe(200);
 		const data = await res.json();
 		expect(data.user).toBeTruthy();
-		expect(data.user!.username).toBe("slicetest");
+		expect(data.user!.username).toBe(testUsername);
+		// Phase 2: /me now returns full profile
+		expect(data.user!.email).toBe(testEmail);
+		expect(data.user!.emailVerified).toBe(false);
+		expect(data.user!.isCreator).toBe(false);
 	});
 
 	it("create project requires auth", async () => {
@@ -68,6 +84,7 @@ describe("Vertical Slice", () => {
 	});
 
 	it("create project succeeds when authenticated", async () => {
+		const slug = `test-game-${testId}`;
 		const res = await makeRequest("/api/projects", {
 			method: "POST",
 			headers: {
@@ -77,15 +94,15 @@ describe("Vertical Slice", () => {
 			},
 			body: JSON.stringify({
 				title: "Test Game",
-				slug: "test-game",
+				slug,
 				description: "A test project from the vertical slice",
 			}),
 		});
 		expect(res.status).toBe(201);
 		const data = await res.json();
 		expect(data.project.title).toBe("Test Game");
-		expect(data.project.slug).toBe("test-game");
-		expect(data.project.creatorId).toBe(1);
+		expect(data.project.slug).toBe(slug);
+		expect(data.project.creatorId).toBeGreaterThan(0);
 	});
 
 	it("list projects returns the created project", async () => {
@@ -93,7 +110,7 @@ describe("Vertical Slice", () => {
 		expect(res.status).toBe(200);
 		const data = await res.json();
 		expect(data.projects.length).toBeGreaterThan(0);
-		expect(data.projects.some((p: any) => p.slug === "test-game")).toBe(true);
+		expect(data.projects.some((p: any) => p.slug === `test-game-${testId}`)).toBe(true);
 	});
 
 	it("Zod validates project creation input", async () => {

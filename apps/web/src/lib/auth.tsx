@@ -1,136 +1,158 @@
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  type ReactNode,
+	createContext,
+	useContext,
+	useEffect,
+	useState,
+	useCallback,
+	type ReactNode,
 } from "react";
-import { api, ApiError, type User, type ATProtoAuthInitResponse } from "./api";
+import { client } from "./rpc";
+
+/**
+ * User shape returned from /api/auth/me.
+ * Matches the serializeUser() output in apps/api/src/routes/auth.ts.
+ */
+export interface User {
+	id: number;
+	username: string;
+	email: string;
+	displayName: string | null;
+	bio: string | null;
+	isCreator: boolean | null;
+	avatar: string | null;
+	headerImage: string | null;
+	websiteUrl: string | null;
+	location: string | null;
+	emailVerified: boolean | null;
+	atprotoDid: string | null;
+	atprotoHandle: string | null;
+	createdAt: string;
+}
 
 interface AuthContextValue {
-  user: User | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  loginWithBluesky: (handle: string) => Promise<void>;
-  linkBluesky: (handle: string) => Promise<void>;
-  unlinkBluesky: () => Promise<void>;
-  register: (
-    username: string,
-    email: string,
-    password: string,
-    passwordConfirm: string,
-  ) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+	user: User | null;
+	isLoading: boolean;
+	isAuthenticated: boolean;
+	signIn: (login: string, password: string) => Promise<void>;
+	signUp: (username: string, email: string, password: string) => Promise<void>;
+	signOut: () => Promise<void>;
+	signInWithBluesky: (handle: string) => Promise<void>;
+	linkBluesky: (handle: string) => Promise<void>;
+	unlinkBluesky: () => Promise<void>;
+	refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+	const [user, setUser] = useState<User | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
 
-  const refreshUser = useCallback(async () => {
-    try {
-      const data = await api.get<User>("/api/v1/accounts/me/");
-      setUser(data);
-    } catch (err) {
-      // 401/403 means not logged in—not an error
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        setUser(null);
-      } else {
-        console.error("Failed to fetch user:", err);
-        setUser(null);
-      }
-    }
-  }, []);
+	const refreshUser = useCallback(async () => {
+		try {
+			const res = await client.api.auth.me.$get();
+			if (res.ok) {
+				const data = await res.json();
+				setUser(data.user as User | null);
+			} else {
+				setUser(null);
+			}
+		} catch {
+			setUser(null);
+		}
+	}, []);
 
-  useEffect(() => {
-    refreshUser().finally(() => setIsLoading(false));
-  }, [refreshUser]);
+	useEffect(() => {
+		refreshUser().finally(() => setIsLoading(false));
+	}, [refreshUser]);
 
-  const login = useCallback(
-    async (username: string, password: string) => {
-      const data = await api.post<User>("/api/v1/accounts/login/", {
-        username,
-        password,
-      });
-      setUser(data);
-    },
-    [],
-  );
+	const signIn = useCallback(async (login: string, password: string) => {
+		const res = await client.api.auth["sign-in"].$post({
+			json: { login, password },
+		});
+		if (!res.ok) {
+			const data = await res.json();
+			throw new Error((data as any).error ?? "Sign in failed");
+		}
+		const data = await res.json();
+		setUser(data.user as User);
+	}, []);
 
-  const register = useCallback(
-    async (
-      username: string,
-      email: string,
-      password: string,
-      passwordConfirm: string,
-    ) => {
-      const data = await api.post<User>("/api/v1/accounts/register/", {
-        username,
-        email,
-        password,
-        password_confirm: passwordConfirm,
-      });
-      setUser(data);
-    },
-    [],
-  );
+	const signUp = useCallback(async (username: string, email: string, password: string) => {
+		const res = await client.api.auth["sign-up"].$post({
+			json: { username, email, password },
+		});
+		if (!res.ok) {
+			const data = await res.json();
+			throw new Error((data as any).error ?? "Sign up failed");
+		}
+		const data = await res.json();
+		setUser(data.user as User);
+	}, []);
 
-  const loginWithBluesky = useCallback(async (handle: string) => {
-    const data = await api.post<ATProtoAuthInitResponse>(
-      "/api/v1/accounts/atproto/auth/",
-      { handle, intent: "login" },
-    );
-    // Redirect to Bluesky authorization page
-    window.location.href = data.authorization_url;
-  }, []);
+	const signOut = useCallback(async () => {
+		await client.api.auth["sign-out"].$post();
+		setUser(null);
+	}, []);
 
-  const linkBluesky = useCallback(async (handle: string) => {
-    const data = await api.post<ATProtoAuthInitResponse>(
-      "/api/v1/accounts/atproto/auth/",
-      { handle, intent: "link" },
-    );
-    window.location.href = data.authorization_url;
-  }, []);
+	const signInWithBluesky = useCallback(async (handle: string) => {
+		const res = await client.api.atproto.auth.$post({
+			json: { handle, intent: "login" },
+		});
+		if (!res.ok) {
+			const data = await res.json();
+			throw new Error((data as any).error ?? "Bluesky auth failed");
+		}
+		const data = await res.json();
+		// Redirect to Bluesky authorization page
+		window.location.href = (data as any).authorization_url;
+	}, []);
 
-  const unlinkBluesky = useCallback(async () => {
-    const data = await api.post<User>("/api/v1/accounts/atproto/unlink/");
-    setUser(data);
-  }, []);
+	const linkBluesky = useCallback(async (handle: string) => {
+		const res = await client.api.atproto.auth.$post({
+			json: { handle, intent: "link" },
+		});
+		if (!res.ok) {
+			const data = await res.json();
+			throw new Error((data as any).error ?? "Bluesky link failed");
+		}
+		const data = await res.json();
+		window.location.href = (data as any).authorization_url;
+	}, []);
 
-  const logout = useCallback(async () => {
-    await api.post("/api/v1/accounts/logout/");
-    setUser(null);
-  }, []);
+	const unlinkBluesky = useCallback(async () => {
+		const res = await client.api.atproto.unlink.$post();
+		if (!res.ok) {
+			const data = await res.json();
+			throw new Error((data as any).error ?? "Unlink failed");
+		}
+		await refreshUser();
+	}, [refreshUser]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: user !== null,
-        login,
-        loginWithBluesky,
-        linkBluesky,
-        unlinkBluesky,
-        register,
-        logout,
-        refreshUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+	return (
+		<AuthContext.Provider
+			value={{
+				user,
+				isLoading,
+				isAuthenticated: user !== null,
+				signIn,
+				signUp,
+				signOut,
+				signInWithBluesky,
+				linkBluesky,
+				unlinkBluesky,
+				refreshUser,
+			}}
+		>
+			{children}
+		</AuthContext.Provider>
+	);
 }
 
 export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+	const context = useContext(AuthContext);
+	if (!context) {
+		throw new Error("useAuth must be used within an AuthProvider");
+	}
+	return context;
 }
