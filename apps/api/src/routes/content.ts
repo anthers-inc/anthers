@@ -773,14 +773,14 @@ const contentRoutes = new Hono()
 				mediaType: "video",
 				status: "pending",
 			});
-			// TODO: Queue BullMQ job for actual transcoding
+			// TODO: Queue pg-boss job for actual transcoding
 		} else if (data.contentType === "audio" && data.audioFile) {
 			await db.insert(transcodingJobs).values({
 				postId: post.id,
 				mediaType: "audio",
 				status: "pending",
 			});
-			// TODO: Queue BullMQ job for actual processing
+			// TODO: Queue pg-boss job for actual processing
 		}
 
 		// TODO: ATProto sync

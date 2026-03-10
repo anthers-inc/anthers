@@ -23,7 +23,6 @@
     "pg": "8.20.0"
   },
   "dependencies": {
-    "bullmq": "5.70.4",
     "drizzle-orm": "0.45.1"
   }
 }

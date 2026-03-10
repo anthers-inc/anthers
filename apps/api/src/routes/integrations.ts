@@ -338,7 +338,7 @@ const integrationRoutes = new Hono()
 				})
 				.returning();
 
-			// TODO: Queue BullMQ job for actual cross-publishing
+			// TODO: Queue pg-boss job for actual cross-publishing
 
 			return c.json({ result }, 201);
 		},
