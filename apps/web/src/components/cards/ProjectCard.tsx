@@ -30,7 +30,7 @@ export default function ProjectCard({ project }: { project: Project }) {
         <p className="text-xs text-base-content/60">
           by{" "}
           <span className="font-medium text-base-content/80">
-            {project.creator}
+            {project.creator?.displayName || project.creator?.username}
           </span>
         </p>
         {project.shortDescription && (
