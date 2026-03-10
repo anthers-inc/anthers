@@ -23,16 +23,13 @@ const app = new Hono()
 	)
 	.use(csrfProtection)
 	.get("/health", (c) => c.json({ status: "ok" }))
-	.post("/health/gate", (c) => {
+	.post("/health/gate", async (c) => {
 		const expected = process.env.SITE_PASSWORD ?? "";
 		if (!expected) return c.json({ ok: false }, 403);
-		return c.req.json().then(
-			(data) =>
-				data?.password === expected
-					? c.json({ ok: true })
-					: c.json({ ok: false }, 403),
-			() => c.json({ ok: false }, 400),
-		);
+		const data = await c.req.json().catch(() => null);
+		if (!data) return c.json({ ok: false }, 400);
+		if (data.password !== expected) return c.json({ ok: false }, 403);
+		return c.json({ ok: true });
 	})
 	.route("/api/auth", authRoutes)
 	.route("/api/atproto", atprotoRoutes)
