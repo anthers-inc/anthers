@@ -11,6 +11,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
+import { ensureBossReady } from "./jobs/boss.js";
 
 const app = new Hono()
 	.use(logger())
@@ -39,6 +40,14 @@ const app = new Hono()
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/jams", jamRoutes);
+
+// Start pg-boss when running as the server (not when imported by tests).
+// import.meta.main is true only when this file is the entry point.
+if (import.meta.main) {
+	ensureBossReady().catch((err) =>
+		console.error("pg-boss failed to start:", err),
+	);
+}
 
 export default {
 	port: Number(process.env.PORT ?? 8000),

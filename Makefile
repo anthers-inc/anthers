@@ -2,7 +2,7 @@
 
 COMPOSE_DEV = docker compose -f docker-compose.dev.yml
 
-.PHONY: help up down logs ps dev dev-api dev-web install \
+.PHONY: help up down logs ps dev dev-api dev-worker dev-web install \
         db-generate db-migrate db-push db-studio \
         typecheck test lint format
 
@@ -33,6 +33,9 @@ dev: ## Start API and web dev servers
 
 dev-api: ## Start API dev server only
 	bun run dev:api
+
+dev-worker: ## Start background job worker only
+	bun run dev:worker
 
 dev-web: ## Start web dev server only
 	bun run dev:web

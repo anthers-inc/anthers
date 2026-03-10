@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:api": "bun run --filter api dev",
+    "dev:worker": "bun run --filter api dev:worker",
     "dev:web": "bun run --filter web dev",
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
@@ -23,6 +24,7 @@
     "pg": "8.20.0"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.1"
+    "drizzle-orm": "0.45.1",
+    "pg-boss": "12.14.0"
   }
 }

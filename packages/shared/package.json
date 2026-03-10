@@ -12,6 +12,7 @@
     "./constants": "./src/constants.ts"
   },
   "dependencies": {
+    "decimal.js": "10.6.0",
     "zod": "^3.25.0"
   }
 }

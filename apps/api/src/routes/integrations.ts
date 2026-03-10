@@ -18,6 +18,7 @@ import {
 	externalMetricSnapshots,
 } from "@anthers/db/schema";
 import { requireAuth } from "../middleware/auth.js";
+import { boss, QUEUES, JOB_OPTIONS } from "../jobs/boss.js";
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -338,7 +339,11 @@ const integrationRoutes = new Hono()
 				})
 				.returning();
 
-			// TODO: Queue pg-boss job for actual cross-publishing
+			await boss.send(
+				QUEUES.CROSS_PUBLISH,
+				{ crossPublishId: result.id },
+				JOB_OPTIONS[QUEUES.CROSS_PUBLISH],
+			);
 
 			return c.json({ result }, 201);
 		},

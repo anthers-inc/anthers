@@ -18,6 +18,7 @@ import {
 	count,
 	inArray,
 } from "drizzle-orm";
+import { boss, QUEUES, JOB_OPTIONS } from "../jobs/boss.js";
 import { db } from "@anthers/db/client";
 import {
 	users,
@@ -768,19 +769,33 @@ const contentRoutes = new Hono()
 
 		// Trigger transcoding for video/audio posts
 		if (data.contentType === "video" && data.videoFile) {
-			await db.insert(transcodingJobs).values({
-				postId: post.id,
-				mediaType: "video",
-				status: "pending",
-			});
-			// TODO: Queue pg-boss job for actual transcoding
+			const [job] = await db
+				.insert(transcodingJobs)
+				.values({
+					postId: post.id,
+					mediaType: "video",
+					status: "pending",
+				})
+				.returning();
+			await boss.send(
+				QUEUES.TRANSCODE_VIDEO,
+				{ jobId: job.id },
+				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
+			);
 		} else if (data.contentType === "audio" && data.audioFile) {
-			await db.insert(transcodingJobs).values({
-				postId: post.id,
-				mediaType: "audio",
-				status: "pending",
-			});
-			// TODO: Queue pg-boss job for actual processing
+			const [job] = await db
+				.insert(transcodingJobs)
+				.values({
+					postId: post.id,
+					mediaType: "audio",
+					status: "pending",
+				})
+				.returning();
+			await boss.send(
+				QUEUES.PROCESS_AUDIO,
+				{ jobId: job.id },
+				JOB_OPTIONS[QUEUES.PROCESS_AUDIO],
+			);
 		}
 
 		// TODO: ATProto sync

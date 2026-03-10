@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun --env-file=../../.env --watch src/index.ts",
+    "dev:worker": "bun --env-file=../../.env --watch src/jobs/worker.ts",
     "start": "bun --env-file=../../.env src/index.ts",
+    "start:worker": "bun --env-file=../../.env src/jobs/worker.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
@@ -13,6 +15,7 @@
     "@anthers/db": "workspace:*",
     "@anthers/shared": "workspace:*",
     "@hono/zod-validator": "^0.5.0",
+    "decimal.js": "10.6.0",
     "hono": "^4.7.0",
     "jose": "6.2.1",
     "zod": "^3.25.0"
