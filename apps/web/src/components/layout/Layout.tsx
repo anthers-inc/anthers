@@ -139,7 +139,8 @@ export default function Layout() {
             <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
               <h6 className="footer-title text-xs">Creators</h6>
               <Link to="/for-creators" className="link link-hover">For Creators</Link>
-              <Link to="/creator-demo" className="link link-hover">Creator Hubs</Link>
+              <Link to="/demo-creator-page" className="link link-hover">Creator Hubs</Link>
+              <Link to="/demo-creator-breakdown" className="link link-hover">Creator Economics</Link>
             </nav>
             <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
               <h6 className="footer-title text-xs">Users</h6>
