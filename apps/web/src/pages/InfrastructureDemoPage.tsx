@@ -7,6 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
   AreaChart,
   Area,
   CartesianGrid,
@@ -347,11 +348,23 @@ function ResultCard({ label, value, sub, accent }: { label: string; value: strin
 function CrossMediaComparison() {
   const [logScale, setLogScale] = useState(true);
 
-  const chartData = CROSS_MEDIA_DATA.filter((d) => d.costPerMin > 0).map((d) => ({
+  // Filter to items with cost > 0, sort largest to smallest
+  const sortedData = CROSS_MEDIA_DATA
+    .filter((d) => d.costPerMin > 0)
+    .sort((a, b) => b.costPerMin - a.costPerMin);
+
+  // For log scale: normalize so the smallest value = 1 and everything else is
+  // a positive multiple. This way taller bars = more expensive (intuitive).
+  const minCost = Math.min(...sortedData.map((d) => d.costPerMin));
+
+  const chartData = sortedData.map((d) => ({
     name: d.media,
     cost: d.costPerMin,
-    costLog: Math.log10(d.costPerMin),
+    // Log-relative: how many orders of magnitude more expensive than the cheapest
+    logRelative: Math.log10(d.costPerMin / minCost),
+    actualCost: d.costPerMin,
     color: d.color,
+    label: fmtCost(d.costPerMin),
   }));
 
   // Cost per attention-minute table (all media)
@@ -381,25 +394,46 @@ function CrossMediaComparison() {
               <input type="checkbox" checked={logScale} onChange={() => setLogScale(!logScale)} className="toggle toggle-xs toggle-primary" />
             </label>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={chartData} margin={{ top: 24, right: 8, bottom: 8, left: 8 }}>
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis
-                tick={{ fontSize: 10 }}
-                tickFormatter={(v: number) => logScale ? `1e${v}` : fmtCost(v)}
-                domain={logScale ? [-6.5, -2] : [0, "auto"]}
-              />
+              {logScale ? (
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: number) => v === 0 ? "1x" : `${Math.round(Math.pow(10, v))}x`}
+                  domain={[0, "auto"]}
+                />
+              ) : (
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: number) => fmtCost(v)}
+                  domain={[0, "auto"]}
+                />
+              )}
               <Tooltip
-                formatter={(value) => [logScale ? fmtCost(Math.pow(10, Number(value))) : fmtCost(Number(value)), "Cost/min"]}
+                formatter={(_value, _name, item) => {
+                  const actual = (item.payload as (typeof chartData)[number]).actualCost;
+                  return [fmtCost(actual), "Cost/min"];
+                }}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />
-              <Bar dataKey={logScale ? "costLog" : "cost"} radius={[4, 4, 0, 0]}>
+              <Bar dataKey={logScale ? "logRelative" : "cost"} radius={[4, 4, 0, 0]}>
                 {chartData.map((d, i) => (
                   <Cell key={i} fill={d.color} />
                 ))}
+                <LabelList
+                  dataKey="label"
+                  position="top"
+                  style={{ fontSize: 10, fill: "#888" }}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          {logScale && (
+            <p className="text-xs text-base-content/40 mt-1">
+              Log scale — taller bars = more expensive. Y-axis shows relative cost vs. the cheapest media type. Actual dollar values shown above each bar.
+            </p>
+          )}
         </div>
       </div>
 
