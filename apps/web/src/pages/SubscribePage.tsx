@@ -61,104 +61,52 @@ const TIER_HIGHLIGHTS: Record<
 /*  Sankey diagram—"Where Your Money Goes" visualization            */
 /* ------------------------------------------------------------------ */
 
-// Node indices—25 nodes total
-const N = {
-  SUB: 0,              // depth 0
-  CPOOL: 1,            // depth 1
-  BOOST: 2,            // depth 1
-  CRF: 3,              // depth 1
-  OPS: 4,              // depth 1—bottom
-  SUPPORT: 5,          // depth 2—top
-  CRF_INFRA: 6,        // depth 2
-  CRF_EDU: 7,          // depth 2
-  CRF_RELIEF: 8,       // depth 2
-  CRF_COMMUNITY: 9,    // depth 2
-  OPS_STAFF: 10,       // depth 2
-  OPS_ADMIN: 11,       // depth 2
-  OPS_RESERVES: 12,    // depth 2—bottom
-  CREATOR_A: 13,       // depth 3
-  CREATOR_B: 14,       // depth 3
-  CREATOR_C: 15,       // depth 3
-  A_INCOME: 16,        // depth 4
-  A_DELIVERY: 17,      // depth 4
-  A_STORAGE: 18,       // depth 4
-  B_INCOME: 19,        // depth 4
-  B_DELIVERY: 20,      // depth 4
-  B_STORAGE: 21,       // depth 4
-  C_INCOME: 22,        // depth 4
-  C_DELIVERY: 23,      // depth 4
-  C_STORAGE: 24,       // depth 4—bottom
-} as const;
+/** Tier configuration for Sankey generation. */
+interface SankeyTierConfig {
+  id: string;
+  name: string;
+  price: number;
+  boostBudget: number;
+}
 
-const SANKEY_DATA = {
-  nodes: [
-    { name: "Your Subscription" },         // 0  depth 0
-    { name: "Creator Pool" },              // 1  depth 1
-    { name: "Boost Pool" },                // 2  depth 1
-    { name: "Resilience Fund" },           // 3  depth 1
-    { name: "Platform Operations" },       // 4  depth 1
-    { name: "Creator Support" },           // 5  depth 2—top
-    { name: "Infrastructure Equity" },     // 6  depth 2
-    { name: "Education & Development" },   // 7  depth 2
-    { name: "Econ. Resilience & Relief" }, // 8  depth 2
-    { name: "Community & Public Benefit" },// 9  depth 2
-    { name: "Staff" },                     // 10 depth 2
-    { name: "Admin" },                     // 11 depth 2
-    { name: "Reserves" },                  // 12 depth 2—bottom
-    { name: "Creator A" },                 // 13 depth 3
-    { name: "Creator B" },                 // 14 depth 3
-    { name: "Creator C" },                 // 15 depth 3
-    { name: "Income" },                    // 16 depth 4
-    { name: "Infra: Delivery" },           // 17 depth 4
-    { name: "Infra: Storage" },            // 18 depth 4
-    { name: "Income" },                    // 19 depth 4
-    { name: "Infra: Delivery" },           // 20 depth 4
-    { name: "Infra: Storage" },            // 21 depth 4
-    { name: "Income" },                    // 22 depth 4
-    { name: "Infra: Delivery" },           // 23 depth 4
-    { name: "Infra: Storage" },            // 24 depth 4
-  ],
-  links: [
-    // Col 0 → Col 1: Subscription splits into four streams
-    { source: N.SUB, target: N.CPOOL, value: 4.25 },
-    { source: N.SUB, target: N.BOOST, value: 4.25 },
-    { source: N.SUB, target: N.CRF,   value: 1.00 },
-    { source: N.SUB, target: N.OPS,   value: 0.50 },
+const SANKEY_TIERS: SankeyTierConfig[] = [
+  { id: "root",   name: "Root",   price: 3,  boostBudget: 0 },
+  { id: "sprout", name: "Sprout", price: 7,  boostBudget: 2 },
+  { id: "petal",  name: "Petal",  price: 15, boostBudget: 5 },
+  { id: "bloom",  name: "Bloom",  price: 30, boostBudget: 12 },
+];
 
-    // Col 1 → Col 2: Both creator pools merge into Creator Support
-    { source: N.CPOOL, target: N.SUPPORT, value: 4.25 },
-    { source: N.BOOST, target: N.SUPPORT, value: 4.25 },
-
-    // Col 2 → Col 3: Creator Support splits by watch-time to creators
-    { source: N.SUPPORT, target: N.CREATOR_A, value: 4.35 },
-    { source: N.SUPPORT, target: N.CREATOR_B, value: 2.25 },
-    { source: N.SUPPORT, target: N.CREATOR_C, value: 1.90 },
-
-    // Col 3 → Col 4: Each creator splits into income + infra costs
-    { source: N.CREATOR_A, target: N.A_INCOME,   value: 3.85 },
-    { source: N.CREATOR_A, target: N.A_DELIVERY,  value: 0.30 },
-    { source: N.CREATOR_A, target: N.A_STORAGE,   value: 0.20 },
-
-    { source: N.CREATOR_B, target: N.B_INCOME,   value: 1.95 },
-    { source: N.CREATOR_B, target: N.B_DELIVERY,  value: 0.18 },
-    { source: N.CREATOR_B, target: N.B_STORAGE,   value: 0.12 },
-
-    { source: N.CREATOR_C, target: N.C_INCOME,   value: 1.65 },
-    { source: N.CREATOR_C, target: N.C_DELIVERY,  value: 0.15 },
-    { source: N.CREATOR_C, target: N.C_STORAGE,   value: 0.10 },
-
-    // Col 1 → Col 2: CRF splits into four charitable pillars
-    { source: N.CRF, target: N.CRF_INFRA,     value: 0.35 },
-    { source: N.CRF, target: N.CRF_EDU,       value: 0.30 },
-    { source: N.CRF, target: N.CRF_RELIEF,    value: 0.20 },
-    { source: N.CRF, target: N.CRF_COMMUNITY, value: 0.15 },
-
-    // Col 1 → Col 2: Ops splits into three line items
-    { source: N.OPS, target: N.OPS_STAFF,     value: 0.28 },
-    { source: N.OPS, target: N.OPS_ADMIN,     value: 0.16 },
-    { source: N.OPS, target: N.OPS_RESERVES,  value: 0.06 },
-  ],
+/* Allocation percentages (fixed across all tiers). */
+const ALLOC = {
+  creators: 0.85,
+  crf: 0.10,
+  ops: 0.05,
+  /* CRF sub-splits (proportions of CRF total). */
+  crfInfra: 0.35,
+  crfEdu: 0.30,
+  crfRelief: 0.20,
+  crfCommunity: 0.15,
+  /* Ops sub-splits (proportions of Ops total). */
+  opsStaff: 0.56,
+  opsAdmin: 0.32,
+  opsReserves: 0.12,
+  /* Creator engagement-time share (example proportions). */
+  creatorA: 0.51,
+  creatorB: 0.26,
+  creatorC: 0.23,
+  /* Infra cost as fraction of each creator's total. */
+  infraDeliveryRate: 0.07,
+  infraStorageRate: 0.05,
 };
+
+/** Round to 2 decimal places (financial display). */
+function r2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function fmt(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
 
 const COLORS = {
   pool:     "#2563eb",  // Creator Pool—blue-600
@@ -185,62 +133,268 @@ const COLORS = {
   grey3:    "#7c2d12",  // Reserves—orange-900
 };
 
-const INCOME_NODES: Set<number> = new Set([N.A_INCOME, N.B_INCOME, N.C_INCOME]);
-const DELIVERY_NODES: Set<number> = new Set([N.A_DELIVERY, N.B_DELIVERY, N.C_DELIVERY]);
-const STORAGE_NODES: Set<number> = new Set([N.A_STORAGE, N.B_STORAGE, N.C_STORAGE]);
-const INFRA_NODES: Set<number> = new Set([
-  ...DELIVERY_NODES, ...STORAGE_NODES,
-]);
-const CRF_PILLAR_NODES: Set<number> = new Set([
-  N.CRF_INFRA, N.CRF_EDU, N.CRF_RELIEF, N.CRF_COMMUNITY,
-]);
-const OPS_BRANCH_NODES: Set<number> = new Set([
-  N.OPS_STAFF, N.OPS_ADMIN, N.OPS_RESERVES,
-]);
-const CREATOR_NODES: Set<number> = new Set([
-  N.CREATOR_A, N.CREATOR_B, N.CREATOR_C,
-]);
+/**
+ * Build a Sankey data set + node metadata for a given tier config.
+ *
+ * For tiers without a Boost Pool (boost = 0), the Boost node and its
+ * links are omitted and Creator Pool receives all 85%.  To keep node
+ * indices stable we always allocate all 25 node slots but only include
+ * links for nodes that carry value.
+ */
+function buildSankeyForTier(tier: SankeyTierConfig) {
+  const price = tier.price;
+  const boost = tier.boostBudget;
+  const hasBoost = boost > 0;
 
-const SANKEY_NODE_META: {
-  label: string;
-  sub: string;
-  color: string;
-}[] = [
-  // 0—depth 0
-  { label: "Your Subscription",       sub: "$10/mo",  color: COLORS.muted },
-  // 1–4—depth 1
-  { label: "Creator Pool",            sub: "$4.25",   color: COLORS.pool },
-  { label: "Boost Pool",              sub: "$4.25",   color: COLORS.boost },
-  { label: "Resilience Fund",         sub: "$1.00",   color: COLORS.crf },
-  { label: "Platform Operations",     sub: "$0.50",   color: COLORS.grey },
-  // 5—depth 2 (top: creator support)
-  { label: "Creator Support",         sub: "$8.50",   color: COLORS.support },
-  // 6–9—depth 2 (CRF pillars)
-  { label: "Infrastructure Equity",   sub: "$0.35",   color: COLORS.crfA },
-  { label: "Education & Dev.",        sub: "$0.30",   color: COLORS.crfB },
-  { label: "Resilience & Relief",     sub: "$0.20",   color: COLORS.crfC },
-  { label: "Community & Public",      sub: "$0.15",   color: COLORS.crfD },
-  // 10–12—depth 2 (Ops branches)
-  { label: "Staff",                   sub: "$0.28",   color: COLORS.grey1 },
-  { label: "Admin",                   sub: "$0.16",   color: COLORS.grey2 },
-  { label: "Reserves",                sub: "$0.06",   color: COLORS.grey3 },
-  // 13–15—depth 3 (creators)
-  { label: "Creator A",               sub: "$4.35",   color: COLORS.crA },
-  { label: "Creator B",               sub: "$2.25",   color: COLORS.crB },
-  { label: "Creator C",               sub: "$1.90",   color: COLORS.crC },
-  // 16–18—depth 4 (Creator A breakdown)
-  { label: "Income",                  sub: "$3.85",   color: COLORS.crA },
-  { label: "Infra: Delivery",         sub: "$0.30",   color: COLORS.delivery },
-  { label: "Infra: Storage",          sub: "$0.20",   color: COLORS.storage },
-  // 19–21—depth 4 (Creator B breakdown)
-  { label: "Income",                  sub: "$1.95",   color: COLORS.crB },
-  { label: "Infra: Delivery",         sub: "$0.18",   color: COLORS.delivery },
-  { label: "Infra: Storage",          sub: "$0.12",   color: COLORS.storage },
-  // 22–24—depth 4 (Creator C breakdown)
-  { label: "Income",                  sub: "$1.65",   color: COLORS.crC },
-  { label: "Infra: Delivery",         sub: "$0.15",   color: COLORS.delivery },
-  { label: "Infra: Storage",          sub: "$0.10",   color: COLORS.storage },
-];
+  const creatorTotal = r2(price * ALLOC.creators);
+  const crfTotal = r2(price * ALLOC.crf);
+  const opsTotal = r2(price - creatorTotal - crfTotal); // remainder to avoid rounding drift
+
+  const poolAmount = r2(creatorTotal - boost);
+  const boostAmount = boost;
+
+  // Creator Support → individual creators (engagement-time weighted)
+  const supportTotal = creatorTotal;
+  const crA = r2(supportTotal * ALLOC.creatorA);
+  const crB = r2(supportTotal * ALLOC.creatorB);
+  const crC = r2(supportTotal - crA - crB); // remainder
+
+  // Each creator → income + infra
+  function creatorSplit(total: number) {
+    const delivery = r2(total * ALLOC.infraDeliveryRate);
+    const storage = r2(total * ALLOC.infraStorageRate);
+    const income = r2(total - delivery - storage);
+    return { income, delivery, storage };
+  }
+  const splitA = creatorSplit(crA);
+  const splitB = creatorSplit(crB);
+  const splitC = creatorSplit(crC);
+
+  // CRF sub-splits
+  const crfInfra = r2(crfTotal * ALLOC.crfInfra);
+  const crfEdu = r2(crfTotal * ALLOC.crfEdu);
+  const crfRelief = r2(crfTotal * ALLOC.crfRelief);
+  const crfCommunity = r2(crfTotal - crfInfra - crfEdu - crfRelief);
+
+  // Ops sub-splits
+  const opsStaff = r2(opsTotal * ALLOC.opsStaff);
+  const opsAdmin = r2(opsTotal * ALLOC.opsAdmin);
+  const opsReserves = r2(opsTotal - opsStaff - opsAdmin);
+
+  // --- Node index map (always 25 slots) ---
+  const N = {
+    SUB: 0,
+    CPOOL: 1,
+    BOOST: 2,
+    CRF: 3,
+    OPS: 4,
+    SUPPORT: 5,
+    CRF_INFRA: 6,
+    CRF_EDU: 7,
+    CRF_RELIEF: 8,
+    CRF_COMMUNITY: 9,
+    OPS_STAFF: 10,
+    OPS_ADMIN: 11,
+    OPS_RESERVES: 12,
+    CREATOR_A: 13,
+    CREATOR_B: 14,
+    CREATOR_C: 15,
+    A_INCOME: 16,
+    A_DELIVERY: 17,
+    A_STORAGE: 18,
+    B_INCOME: 19,
+    B_DELIVERY: 20,
+    B_STORAGE: 21,
+    C_INCOME: 22,
+    C_DELIVERY: 23,
+    C_STORAGE: 24,
+  } as const;
+
+  const nodes = [
+    { name: "Your Subscription" },
+    { name: "Creator Pool" },
+    { name: "Boost Pool" },
+    { name: "Resilience Fund" },
+    { name: "Platform Operations" },
+    { name: "Creator Support" },
+    { name: "Infrastructure Equity" },
+    { name: "Education & Development" },
+    { name: "Econ. Resilience & Relief" },
+    { name: "Community & Public Benefit" },
+    { name: "Staff" },
+    { name: "Admin" },
+    { name: "Reserves" },
+    { name: "Creator A" },
+    { name: "Creator B" },
+    { name: "Creator C" },
+    { name: "Income" },
+    { name: "Infra: Delivery" },
+    { name: "Infra: Storage" },
+    { name: "Income" },
+    { name: "Infra: Delivery" },
+    { name: "Infra: Storage" },
+    { name: "Income" },
+    { name: "Infra: Delivery" },
+    { name: "Infra: Storage" },
+  ];
+
+  const links: { source: number; target: number; value: number }[] = [
+    // Col 0 → Col 1
+    { source: N.SUB, target: N.CPOOL, value: poolAmount },
+    ...(hasBoost
+      ? [{ source: N.SUB, target: N.BOOST, value: boostAmount }]
+      : []),
+    { source: N.SUB, target: N.CRF, value: crfTotal },
+    { source: N.SUB, target: N.OPS, value: opsTotal },
+
+    // Col 1 → Col 2: pools merge into Creator Support
+    { source: N.CPOOL, target: N.SUPPORT, value: poolAmount },
+    ...(hasBoost
+      ? [{ source: N.BOOST, target: N.SUPPORT, value: boostAmount }]
+      : []),
+
+    // Col 2 → Col 3: Creator Support → creators
+    { source: N.SUPPORT, target: N.CREATOR_A, value: crA },
+    { source: N.SUPPORT, target: N.CREATOR_B, value: crB },
+    { source: N.SUPPORT, target: N.CREATOR_C, value: crC },
+
+    // Col 3 → Col 4: each creator → income + infra
+    { source: N.CREATOR_A, target: N.A_INCOME, value: splitA.income },
+    { source: N.CREATOR_A, target: N.A_DELIVERY, value: splitA.delivery },
+    { source: N.CREATOR_A, target: N.A_STORAGE, value: splitA.storage },
+
+    { source: N.CREATOR_B, target: N.B_INCOME, value: splitB.income },
+    { source: N.CREATOR_B, target: N.B_DELIVERY, value: splitB.delivery },
+    { source: N.CREATOR_B, target: N.B_STORAGE, value: splitB.storage },
+
+    { source: N.CREATOR_C, target: N.C_INCOME, value: splitC.income },
+    { source: N.CREATOR_C, target: N.C_DELIVERY, value: splitC.delivery },
+    { source: N.CREATOR_C, target: N.C_STORAGE, value: splitC.storage },
+
+    // CRF → pillars
+    { source: N.CRF, target: N.CRF_INFRA, value: crfInfra },
+    { source: N.CRF, target: N.CRF_EDU, value: crfEdu },
+    { source: N.CRF, target: N.CRF_RELIEF, value: crfRelief },
+    { source: N.CRF, target: N.CRF_COMMUNITY, value: crfCommunity },
+
+    // Ops → branches
+    { source: N.OPS, target: N.OPS_STAFF, value: opsStaff },
+    { source: N.OPS, target: N.OPS_ADMIN, value: opsAdmin },
+    { source: N.OPS, target: N.OPS_RESERVES, value: opsReserves },
+  ];
+
+  const meta: { label: string; sub: string; color: string }[] = [
+    { label: "Your Subscription",       sub: `$${price}/mo`,       color: COLORS.muted },
+    { label: "Creator Pool",            sub: fmt(poolAmount),      color: COLORS.pool },
+    { label: "Boost Pool",              sub: fmt(boostAmount),     color: COLORS.boost },
+    { label: "Resilience Fund",         sub: fmt(crfTotal),        color: COLORS.crf },
+    { label: "Platform Operations",     sub: fmt(opsTotal),        color: COLORS.grey },
+    { label: "Creator Support",         sub: fmt(supportTotal),    color: COLORS.support },
+    { label: "Infrastructure Equity",   sub: fmt(crfInfra),        color: COLORS.crfA },
+    { label: "Education & Dev.",        sub: fmt(crfEdu),          color: COLORS.crfB },
+    { label: "Resilience & Relief",     sub: fmt(crfRelief),       color: COLORS.crfC },
+    { label: "Community & Public",      sub: fmt(crfCommunity),    color: COLORS.crfD },
+    { label: "Staff",                   sub: fmt(opsStaff),        color: COLORS.grey1 },
+    { label: "Admin",                   sub: fmt(opsAdmin),        color: COLORS.grey2 },
+    { label: "Reserves",                sub: fmt(opsReserves),     color: COLORS.grey3 },
+    { label: "Creator A",               sub: fmt(crA),             color: COLORS.crA },
+    { label: "Creator B",               sub: fmt(crB),             color: COLORS.crB },
+    { label: "Creator C",               sub: fmt(crC),             color: COLORS.crC },
+    { label: "Income",                  sub: fmt(splitA.income),   color: COLORS.crA },
+    { label: "Infra: Delivery",         sub: fmt(splitA.delivery), color: COLORS.delivery },
+    { label: "Infra: Storage",          sub: fmt(splitA.storage),  color: COLORS.storage },
+    { label: "Income",                  sub: fmt(splitB.income),   color: COLORS.crB },
+    { label: "Infra: Delivery",         sub: fmt(splitB.delivery), color: COLORS.delivery },
+    { label: "Infra: Storage",          sub: fmt(splitB.storage),  color: COLORS.storage },
+    { label: "Income",                  sub: fmt(splitC.income),   color: COLORS.crC },
+    { label: "Infra: Delivery",         sub: fmt(splitC.delivery), color: COLORS.delivery },
+    { label: "Infra: Storage",          sub: fmt(splitC.storage),  color: COLORS.storage },
+  ];
+
+  // Pre-compute link colors
+  const linkColors: Record<number, string> = {};
+  links.forEach((link, i) => {
+    const { source, target } = link;
+    if (source === N.SUB) {
+      if (target === N.CPOOL) linkColors[i] = COLORS.pool;
+      else if (target === N.BOOST) linkColors[i] = COLORS.boost;
+      else if (target === N.CRF) linkColors[i] = COLORS.crf;
+      else if (target === N.OPS) linkColors[i] = COLORS.grey;
+      else linkColors[i] = COLORS.muted;
+    } else if (source === N.CRF) {
+      const crfMap: Record<number, string> = {
+        [N.CRF_INFRA]: COLORS.crfA,
+        [N.CRF_EDU]: COLORS.crfB,
+        [N.CRF_RELIEF]: COLORS.crfC,
+        [N.CRF_COMMUNITY]: COLORS.crfD,
+      };
+      linkColors[i] = crfMap[target] ?? COLORS.crf;
+    } else if (source === N.OPS) {
+      const opsMap: Record<number, string> = {
+        [N.OPS_STAFF]: COLORS.grey1,
+        [N.OPS_ADMIN]: COLORS.grey2,
+        [N.OPS_RESERVES]: COLORS.grey3,
+      };
+      linkColors[i] = opsMap[target] ?? COLORS.grey;
+    } else if (source === N.CPOOL) {
+      linkColors[i] = COLORS.pool;
+    } else if (source === N.BOOST) {
+      linkColors[i] = COLORS.boost;
+    } else if (source === N.SUPPORT) {
+      const crMap: Record<number, string> = {
+        [N.CREATOR_A]: COLORS.crA,
+        [N.CREATOR_B]: COLORS.crB,
+        [N.CREATOR_C]: COLORS.crC,
+      };
+      linkColors[i] = crMap[target] ?? COLORS.support;
+    } else if (
+      target === N.A_INCOME ||
+      target === N.B_INCOME ||
+      target === N.C_INCOME
+    ) {
+      const crMap: Record<number, string> = {
+        [N.CREATOR_A]: COLORS.crA,
+        [N.CREATOR_B]: COLORS.crB,
+        [N.CREATOR_C]: COLORS.crC,
+      };
+      linkColors[i] = crMap[source] ?? COLORS.support;
+    } else if (
+      target === N.A_DELIVERY ||
+      target === N.B_DELIVERY ||
+      target === N.C_DELIVERY
+    ) {
+      linkColors[i] = COLORS.delivery;
+    } else if (
+      target === N.A_STORAGE ||
+      target === N.B_STORAGE ||
+      target === N.C_STORAGE
+    ) {
+      linkColors[i] = COLORS.storage;
+    } else {
+      linkColors[i] = COLORS.muted;
+    }
+  });
+
+  return { data: { nodes, links }, meta, linkColors, N, hasBoost };
+}
+
+// Pre-build Sankey data for each tier (avoids recomputation on every render).
+const SANKEY_BY_TIER: Record<
+  string,
+  ReturnType<typeof buildSankeyForTier>
+> = Object.fromEntries(SANKEY_TIERS.map((t) => [t.id, buildSankeyForTier(t)]));
+
+// Default to sprout for initial render
+const DEFAULT_SANKEY_TIER = "sprout";
+
+/** Stable node indices used across all tier variants. */
+const INCOME_NODES: Set<number> = new Set([16, 19, 22]);
+const DELIVERY_NODES: Set<number> = new Set([17, 20, 23]);
+const STORAGE_NODES: Set<number> = new Set([18, 21, 24]);
+const INFRA_NODES: Set<number> = new Set([...DELIVERY_NODES, ...STORAGE_NODES]);
+const CRF_PILLAR_NODES: Set<number> = new Set([6, 7, 8, 9]);
+const OPS_BRANCH_NODES: Set<number> = new Set([10, 11, 12]);
+const CREATOR_NODES: Set<number> = new Set([13, 14, 15]);
 
 /** Map each node index to a hover section key. */
 type SectionKey =
@@ -252,77 +406,14 @@ type SectionKey =
   | null;
 
 function nodeToSection(index: number): SectionKey {
-  // Creator Support: pools, boost, merged support node, individual creators
-  if (index === N.CPOOL) return "support";
-  if (index === N.BOOST) return "support";
-  if (index === N.SUPPORT) return "support";
+  if (index === 1 || index === 2 || index === 5) return "support";
   if (CREATOR_NODES.has(index)) return "support";
-  // Creator Income
   if (INCOME_NODES.has(index)) return "income";
-  // Infrastructure Costs
   if (INFRA_NODES.has(index)) return "infra";
-  // Resilience Fund
-  if (index === N.CRF) return "crf";
-  if (CRF_PILLAR_NODES.has(index)) return "crf";
-  // Platform Operations
-  if (index === N.OPS) return "ops";
-  if (OPS_BRANCH_NODES.has(index)) return "ops";
+  if (index === 3 || CRF_PILLAR_NODES.has(index)) return "crf";
+  if (index === 4 || OPS_BRANCH_NODES.has(index)) return "ops";
   return null;
 }
-
-/** Color for a specific creator's flows (node bar + outgoing links). */
-const CREATOR_COLOR: Record<number, string> = {
-  [N.CREATOR_A]: COLORS.crA,
-  [N.CREATOR_B]: COLORS.crB,
-  [N.CREATOR_C]: COLORS.crC,
-};
-
-/** Color for each CRF pillar link. */
-const CRF_PILLAR_COLOR: Record<number, string> = {
-  [N.CRF_INFRA]:     COLORS.crfA,
-  [N.CRF_EDU]:       COLORS.crfB,
-  [N.CRF_RELIEF]:    COLORS.crfC,
-  [N.CRF_COMMUNITY]: COLORS.crfD,
-};
-
-/** Color for each Ops branch link. */
-const OPS_BRANCH_COLOR: Record<number, string> = {
-  [N.OPS_STAFF]:     COLORS.grey1,
-  [N.OPS_ADMIN]:     COLORS.grey2,
-  [N.OPS_RESERVES]:  COLORS.grey3,
-};
-
-/** Pre-compute link colors based on source/target semantics. */
-const SANKEY_LINK_COLORS: Record<number, string> = (() => {
-  const map: Record<number, string> = {};
-  SANKEY_DATA.links.forEach((link, i) => {
-    const { source, target } = link;
-    // Sub → pool: color by the target pool
-    if (source === N.SUB) {
-      if (target === N.CPOOL) map[i] = COLORS.pool;
-      else if (target === N.BOOST) map[i] = COLORS.boost;
-      else if (target === N.CRF) map[i] = COLORS.crf;
-      else if (target === N.OPS) map[i] = COLORS.grey;
-      else map[i] = COLORS.muted;
-    }
-    // CRF → pillars: color by target pillar
-    else if (source === N.CRF) map[i] = CRF_PILLAR_COLOR[target] ?? COLORS.crf;
-    // Ops → branches: color by target branch
-    else if (source === N.OPS) map[i] = OPS_BRANCH_COLOR[target] ?? COLORS.grey;
-    // Pool → Creator Support: color by source pool
-    else if (source === N.CPOOL) map[i] = COLORS.pool;
-    else if (source === N.BOOST) map[i] = COLORS.boost;
-    // Creator Support → individual creators: color by target creator
-    else if (source === N.SUPPORT) map[i] = CREATOR_COLOR[target] ?? COLORS.support;
-    // Creator → income: color by source creator
-    else if (INCOME_NODES.has(target)) map[i] = CREATOR_COLOR[source] ?? COLORS.support;
-    // Creator → infra costs
-    else if (DELIVERY_NODES.has(target)) map[i] = COLORS.delivery;
-    else if (STORAGE_NODES.has(target)) map[i] = COLORS.storage;
-    else map[i] = COLORS.muted;
-  });
-  return map;
-})();
 
 /*
  * We need a factory so each Sankey instance can wire hover callbacks
@@ -332,6 +423,7 @@ function makeSankeyNodeComponent(
   onEnter: (section: SectionKey) => void,
   onLeave: () => void,
   activeSection: SectionKey,
+  nodeMeta: { label: string; sub: string; color: string }[],
 ) {
   return function SankeyNodeComponent({
     x,
@@ -343,7 +435,7 @@ function makeSankeyNodeComponent(
     const containerWidth = useChartWidth();
     if (containerWidth == null) return null;
 
-    const meta = SANKEY_NODE_META[index];
+    const meta = nodeMeta[index];
     if (!meta) return null;
 
     const isOut = x + width + 6 > containerWidth;
@@ -397,6 +489,7 @@ function makeSankeyLinkComponent(
   onEnter: (section: SectionKey) => void,
   onLeave: () => void,
   activeSection: SectionKey,
+  tierData: ReturnType<typeof buildSankeyForTier>,
 ) {
   return function SankeyLinkComponent({
     sourceX,
@@ -408,8 +501,8 @@ function makeSankeyLinkComponent(
     linkWidth,
     index,
   }: SankeyLinkProps) {
-    const color = SANKEY_LINK_COLORS[index] ?? "#888";
-    const link = SANKEY_DATA.links[index];
+    const color = tierData.linkColors[index] ?? "#888";
+    const link = tierData.data.links[index];
     // Derive section from the link's target node
     const section = link ? nodeToSection(link.target) : null;
     // Also check the source—links from Sub split into multiple sections
@@ -707,6 +800,10 @@ export default function SubscribePage() {
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKey>(null);
+  const [sankeyTier, setSankeyTier] = useState(DEFAULT_SANKEY_TIER);
+
+  const activeTierData = SANKEY_BY_TIER[sankeyTier]!;
+  const activeTierConfig = SANKEY_TIERS.find((t) => t.id === sankeyTier)!;
 
   const onSectionEnter = useCallback(
     (s: SectionKey) => setActiveSection(s),
@@ -717,15 +814,27 @@ export default function SubscribePage() {
     [],
   );
 
-  // Recreate node/link components when activeSection changes so
-  // Recharts re-renders with updated dim/highlight opacity.
+  // Recreate node/link components when activeSection or tier changes so
+  // Recharts re-renders with updated dim/highlight opacity and data.
   const sankeyNode = useMemo(
-    () => makeSankeyNodeComponent(onSectionEnter, onSectionLeave, activeSection),
-    [onSectionEnter, onSectionLeave, activeSection],
+    () =>
+      makeSankeyNodeComponent(
+        onSectionEnter,
+        onSectionLeave,
+        activeSection,
+        activeTierData.meta,
+      ),
+    [onSectionEnter, onSectionLeave, activeSection, activeTierData],
   );
   const sankeyLink = useMemo(
-    () => makeSankeyLinkComponent(onSectionEnter, onSectionLeave, activeSection),
-    [onSectionEnter, onSectionLeave, activeSection],
+    () =>
+      makeSankeyLinkComponent(
+        onSectionEnter,
+        onSectionLeave,
+        activeSection,
+        activeTierData,
+      ),
+    [onSectionEnter, onSectionLeave, activeSection, activeTierData],
   );
 
   const wasCanceled = searchParams.get("canceled") === "true";
@@ -858,16 +967,44 @@ export default function SubscribePage() {
 
         {/* Sankey flow diagram—full width */}
         <div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto">
-          <p className="text-xs text-base-content/50 uppercase tracking-wider mb-3">
-            Example: Sprout plan &mdash; $10/mo
-            <span className="ml-3 font-normal normal-case text-base-content/30">
-              Hover any section to learn more
-            </span>
+          {/* Tier selector tabs */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {SANKEY_TIERS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setSankeyTier(t.id);
+                  setActiveSection(null);
+                }}
+                className={`btn ${
+                  sankeyTier === t.id
+                    ? "btn-primary"
+                    : "btn-ghost"
+                }`}
+              >
+                {t.name}
+                <span className="ml-1 text-sm opacity-60">
+                  ${t.price}/mo
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-base-content/30 mb-3">
+            Hover any section to learn more
           </p>
+
+          {!activeTierData.hasBoost && (
+            <p className="text-xs text-base-content/40 mb-2">
+              The {activeTierConfig.name} tier directs all creator funding
+              through the Creator Pool. Boost Pool is available starting at
+              Sprout.
+            </p>
+          )}
+
           <div style={{ minWidth: 1000 }}>
             <ResponsiveContainer width="100%" height={800}>
               <Sankey
-                data={SANKEY_DATA}
+                data={activeTierData.data}
                 node={sankeyNode}
                 link={sankeyLink}
                 nodeWidth={14}
