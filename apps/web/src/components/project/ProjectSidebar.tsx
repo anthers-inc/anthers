@@ -160,7 +160,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
       {moreProjects.length > 0 && (
         <div>
           <h3 className="font-semibold text-sm mb-2">
-            More by {project.creator}
+            More by {project.creator?.displayName || project.creator?.username}
           </h3>
           <div className="flex flex-col gap-2">
             {moreProjects.map((p) => (

@@ -267,7 +267,7 @@ export default function CreatorProfilePage() {
 
           {tab === "writing" && (
             textPosts.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
                 {textPosts.map((post) => (
                   <ContentCard key={post.id} post={post} />
                 ))}

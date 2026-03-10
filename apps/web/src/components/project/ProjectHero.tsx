@@ -31,7 +31,7 @@ export default function ProjectHero({ project }: { project: Project }) {
             to={`/${project.creator?.username}`}
             className="link link-hover font-medium"
           >
-            {project.creator}
+            {project.creator?.displayName || project.creator?.username}
           </Link>
         </span>
         <StarRating

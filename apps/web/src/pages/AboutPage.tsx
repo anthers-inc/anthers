@@ -184,7 +184,7 @@ export default function AboutPage() {
       {/*  1. WHY WE'RE HERE                                        */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="bg-base-200/50 py-20">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">
             Why We're Here
           </h2>
@@ -262,7 +262,7 @@ export default function AboutPage() {
       {/*  2. WHAT WE DO                                            */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="py-20">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">What We Do</h2>
           <p className="text-base-content/70 text-center max-w-3xl mx-auto mb-6">
             Anthers advances equity in creative and educational content spaces
@@ -271,7 +271,7 @@ export default function AboutPage() {
           </p>
 
           {/* Mission summary—two-column prose */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto mb-16">
             <div className="border-l-2 border-primary/30 pl-6">
               <h3 className="text-sm uppercase tracking-wider text-primary mb-3">
                 For Creators
@@ -299,7 +299,7 @@ export default function AboutPage() {
           </div>
 
           {/* CRF—the heart of the mission */}
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <h3 className="text-2xl font-bold text-center mb-2">
               The Creator Resilience Fund
             </h3>
@@ -343,7 +343,7 @@ export default function AboutPage() {
       {/*  3. HOW WE DO IT                                          */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="bg-base-200/50 py-20">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">How We Do It</h2>
           <p className="text-base-content/70 text-center max-w-2xl mx-auto mb-14">
             These aren't aspirations. They are structural properties of how
@@ -411,7 +411,7 @@ export default function AboutPage() {
       {/*  4. WHO WE ARE                                            */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="py-20">
-        <div className="max-w-4xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-3">Who We Are</h2>
           <p className="text-base-content/70 text-center max-w-2xl mx-auto mb-12">
             Anthers is in its founding phase. The team is small, building in
@@ -437,7 +437,7 @@ export default function AboutPage() {
       {/*  5. THE ANTHERS FOUNDATION                                */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="bg-base-200/50 py-20">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-center gap-3 mb-3">
             <BuildingLibraryIcon className="w-8 h-8 text-primary" />
             <h2 className="text-3xl font-bold">The Anthers Foundation</h2>

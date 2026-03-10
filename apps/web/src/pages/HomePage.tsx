@@ -102,7 +102,7 @@ export default function HomePage() {
       {/* Featured Projects */}
       {projects.length > 0 && (
         <section className="py-16 px-4">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Featured Projects</h2>
               <Link to="/explore" className="btn btn-ghost btn-sm">
@@ -121,7 +121,7 @@ export default function HomePage() {
       {/* Recent Posts */}
       {posts.length > 0 && (
         <section className="py-16 px-4 bg-base-200/50">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Recent Posts</h2>
               <Link to="/posts" className="btn btn-ghost btn-sm">
@@ -140,7 +140,7 @@ export default function HomePage() {
       {/* Featured Creators */}
       {creators.length > 0 && (
         <section className="py-16 px-4">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Featured Creators</h2>
               <Link to="/creators" className="btn btn-ghost btn-sm">

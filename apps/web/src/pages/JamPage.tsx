@@ -290,7 +290,7 @@ export default function JamPage() {
   const showResults = jam.status === "ended" && results !== null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       {jam.coverImage && (
         <div className="rounded-lg overflow-hidden mb-6 h-48 md:h-64">

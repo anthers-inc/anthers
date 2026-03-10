@@ -123,7 +123,7 @@ export default function BuildsPage() {
 
   if (!project) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <p className="text-error">{error || "Project not found."}</p>
       </div>
     );
@@ -132,7 +132,7 @@ export default function BuildsPage() {
   const assets = project.assets || [];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center gap-2 mb-6">
         <Link to="/dashboard" className="link text-sm">
           Dashboard

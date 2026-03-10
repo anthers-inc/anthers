@@ -20,6 +20,8 @@ import JamPage from "./pages/JamPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CompareGhostPage from "./pages/CompareGhostPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
+import CreatorBreakdownDemoPage from "./pages/CreatorBreakdownDemoPage";
+import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
 import UserDemoPage from "./pages/UserDemoPage";
 import WikiPage from "./pages/WikiPage";
 import AboutPage from "./pages/AboutPage";
@@ -60,7 +62,9 @@ export default function App() {
         <Route path="/jams/:slug" element={<JamPage />} />
         <Route path="/compare/itch-io" element={<CompareItchPage />} />
         <Route path="/compare/ghost" element={<CompareGhostPage />} />
-        <Route path="/creator-demo" element={<CreatorDemoPage />} />
+        <Route path="/demo-creator-page" element={<CreatorDemoPage />} />
+        <Route path="/demo-creator-breakdown" element={<CreatorBreakdownDemoPage />} />
+        <Route path="/demo-infrastructure" element={<InfrastructureDemoPage />} />
         <Route path="/user-demo" element={<UserDemoPage />} />
         <Route path="/wiki/*" element={<WikiPage />} />
         <Route path="/about" element={<AboutPage />} />
