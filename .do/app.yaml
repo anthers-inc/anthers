@@ -1,0 +1,136 @@
+spec:
+  name: anthers
+  region: nyc
+
+  databases:
+    - name: db
+      engine: PG
+      version: "17"
+      size: db-s-dev-database
+      num_nodes: 1
+
+  services:
+    - name: api
+      dockerfile_path: apps/api/Dockerfile
+      source_dir: /
+      http_port: 8000
+      instance_size_slug: professional-xs
+      instance_count: 1
+      routes:
+        - path: /api
+        - path: /health
+      health_check:
+        http_path: /health
+      envs:
+        - key: DATABASE_URL
+          scope: RUN_TIME
+          value: ${db.DATABASE_URL}
+        - key: PORT
+          scope: RUN_TIME
+          value: "8000"
+        - key: FRONTEND_URL
+          scope: RUN_TIME
+          value: ${APP_URL}
+        - key: SESSION_SECRET
+          scope: RUN_TIME
+          type: SECRET
+        - key: SITE_PASSWORD
+          scope: RUN_TIME
+          type: SECRET
+        - key: STORAGE_BACKEND
+          scope: RUN_TIME
+          value: s3
+        - key: SPACES_KEY
+          scope: RUN_TIME
+          type: SECRET
+        - key: SPACES_SECRET
+          scope: RUN_TIME
+          type: SECRET
+        - key: SPACES_BUCKET
+          scope: RUN_TIME
+          value: anthers-media
+        - key: SPACES_REGION
+          scope: RUN_TIME
+          value: nyc3
+        - key: STRIPE_SECRET_KEY
+          scope: RUN_TIME
+          type: SECRET
+        - key: STRIPE_PUBLISHABLE_KEY
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: STRIPE_WEBHOOK_SECRET
+          scope: RUN_TIME
+          type: SECRET
+        - key: STRIPE_SUBSCRIPTION_WEBHOOK_SECRET
+          scope: RUN_TIME
+          type: SECRET
+        - key: STRIPE_PRICE_ROOT
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: STRIPE_PRICE_SPROUT
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: STRIPE_PRICE_PETAL
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: STRIPE_PRICE_BLOOM
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: ATPROTO_CLIENT_ID
+          scope: RUN_TIME
+          value: PLACEHOLDER
+        - key: ATPROTO_REDIRECT_URI
+          scope: RUN_TIME
+          value: PLACEHOLDER
+
+  workers:
+    - name: worker
+      dockerfile_path: apps/api/Dockerfile
+      source_dir: /
+      instance_size_slug: professional-xs
+      instance_count: 1
+      run_command: bun run apps/api/src/jobs/worker.ts
+      envs:
+        - key: DATABASE_URL
+          scope: RUN_TIME
+          value: ${db.DATABASE_URL}
+        - key: STORAGE_BACKEND
+          scope: RUN_TIME
+          value: s3
+        - key: SPACES_KEY
+          scope: RUN_TIME
+          type: SECRET
+        - key: SPACES_SECRET
+          scope: RUN_TIME
+          type: SECRET
+        - key: SPACES_BUCKET
+          scope: RUN_TIME
+          value: anthers-media
+        - key: SPACES_REGION
+          scope: RUN_TIME
+          value: nyc3
+        - key: STRIPE_SECRET_KEY
+          scope: RUN_TIME
+          type: SECRET
+
+  jobs:
+    - name: migrate
+      dockerfile_path: apps/api/Dockerfile
+      source_dir: /
+      kind: PRE_DEPLOY
+      instance_size_slug: basic-xxs
+      instance_count: 1
+      run_command: bun run packages/db/src/migrate.ts
+      envs:
+        - key: DATABASE_URL
+          scope: RUN_TIME
+          value: ${db.DATABASE_URL}
+
+  static_sites:
+    - name: web
+      source_dir: /
+      build_command: bun install && bun run --cwd apps/web build
+      output_dir: apps/web/dist
+      catchall_document: index.html
+      routes:
+        - path: /
