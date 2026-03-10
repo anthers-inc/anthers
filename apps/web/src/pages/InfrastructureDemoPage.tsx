@@ -782,64 +782,82 @@ function OptimizationVisualizer() {
 // Section: Quick Reference Card
 // ---------------------------------------------------------------------------
 
+interface UnitCostCard {
+  media: string;
+  badge: string;
+  badgeClass: string;
+  store: { description: string; cost: string };
+  deliver: { description: string; cost: string };
+  note: string;
+}
+
+const UNIT_COST_CARDS: UnitCostCard[] = [
+  {
+    media: "Video",
+    badge: "video",
+    badgeClass: "badge-error",
+    store: { description: "1 hour of 1080p/60 (all quality tiers)", cost: "$0.19/mo" },
+    deliver: { description: "1 view of a 30-min 1080p video", cost: "$0.018" },
+    note: "Scales with catalog size and viewership",
+  },
+  {
+    media: "Audio",
+    badge: "audio",
+    badgeClass: "badge-warning",
+    store: { description: "10-album music catalog", cost: "$0.14/mo" },
+    deliver: { description: "1 full-album stream (high quality)", cost: "$0.00086" },
+    note: "Scales with both, but delivery is very cheap",
+  },
+  {
+    media: "Text",
+    badge: "text",
+    badgeClass: "badge-ghost",
+    store: { description: "A year of weekly essays", cost: "$0.008/mo" },
+    deliver: { description: "1 article read", cost: "$0.000005" },
+    note: "Essentially flat regardless of scale",
+  },
+  {
+    media: "Games",
+    badge: "game",
+    badgeClass: "badge-primary",
+    store: { description: "500 MB game (3 platform variants)", cost: "$0.03/mo" },
+    deliver: { description: "1 game download (500 MB)", cost: "$0.005" },
+    note: "Storage scales with catalog; delivery is one-time per download",
+  },
+];
+
 function QuickReference() {
-  const items = [
-    { question: "Store 1 hour of 1080p/60 video (all tiers)", answer: "$0.19/month" },
-    { question: "Deliver 1 view of a 30-min 1080p video", answer: "$0.018" },
-    { question: "Store a 10-album music catalog", answer: "$0.14/month" },
-    { question: "Deliver 1 full-album stream (high quality)", answer: "$0.00086" },
-    { question: "Store a year of weekly essays", answer: "$0.008/month" },
-    { question: "Deliver 1 article read", answer: "$0.000005" },
-    { question: "Store a 500 MB game (3 platforms)", answer: "$0.03/month" },
-    { question: "Deliver 1 game download (500 MB)", answer: "$0.005" },
-  ];
-
-  const costBehavior = [
-    { media: "Video", storage: "Recurring (per month stored)", delivery: "Recurring (per view)", behavior: "Scales with catalog size AND viewership" },
-    { media: "Audio", storage: "Recurring (per month stored)", delivery: "Recurring (per listen)", behavior: "Scales with both, but delivery is very cheap" },
-    { media: "Text", storage: "Recurring (negligible)", delivery: "Recurring (negligible)", behavior: "Essentially flat regardless of scale" },
-    { media: "Games (DL)", storage: "Recurring (per month stored)", delivery: "One-time (per download)", behavior: "Catalog size scales, delivery is one-time" },
-    { media: "Games (web)", storage: "Recurring (negligible)", delivery: "Recurring (very cheap)", behavior: "Essentially flat" },
-  ];
-
   return (
     <div className="space-y-6">
       <h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider">
         How much does it cost to serve one unit of content?
       </h4>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {items.map((item) => (
-          <div key={item.question} className="flex justify-between items-baseline gap-2 py-2 border-b border-base-300/50">
-            <span className="text-sm text-base-content/70">{item.question}</span>
-            <span className="text-sm font-semibold tabular-nums flex-shrink-0">{item.answer}</span>
+
+      {/* Media-type cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {UNIT_COST_CARDS.map((card) => (
+          <div key={card.media} className="card bg-base-200 border border-base-300">
+            <div className="card-body p-4 gap-3">
+              <div className="flex items-center gap-2">
+                <span className={`badge badge-sm ${card.badgeClass}`}>{card.badge}</span>
+                <h5 className="font-semibold text-sm">{card.media}</h5>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs text-base-content/50 uppercase tracking-wide">Store</p>
+                  <p className="text-sm text-base-content/70">{card.store.description}</p>
+                  <p className="text-lg font-bold tabular-nums">{card.store.cost}</p>
+                </div>
+                <div className="border-t border-base-300/50 pt-2">
+                  <p className="text-xs text-base-content/50 uppercase tracking-wide">Deliver</p>
+                  <p className="text-sm text-base-content/70">{card.deliver.description}</p>
+                  <p className="text-lg font-bold tabular-nums">{card.deliver.cost}</p>
+                </div>
+              </div>
+              <p className="text-xs text-base-content/40">{card.note}</p>
+            </div>
           </div>
         ))}
-      </div>
-
-      <h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mt-6">
-        Cost behavior by media type
-      </h4>
-      <div className="overflow-x-auto">
-        <table className="table table-sm w-full">
-          <thead>
-            <tr>
-              <th>Media</th>
-              <th>Storage</th>
-              <th>Delivery</th>
-              <th>Behavior</th>
-            </tr>
-          </thead>
-          <tbody>
-            {costBehavior.map((row) => (
-              <tr key={row.media}>
-                <td className="text-sm font-medium">{row.media}</td>
-                <td className="text-sm text-base-content/60">{row.storage}</td>
-                <td className="text-sm text-base-content/60">{row.delivery}</td>
-                <td className="text-sm text-base-content/60">{row.behavior}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
       {/* Base cost assumptions */}
