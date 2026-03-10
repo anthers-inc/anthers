@@ -743,7 +743,7 @@ export default function UserDemoPage() {
       </section>
 
       {/* Tabs + content */}
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4">
         {/* Tab bar */}
         <div className="flex gap-2 mb-6">
           <button

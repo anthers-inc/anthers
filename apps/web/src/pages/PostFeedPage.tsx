@@ -75,7 +75,7 @@ export default function PostFeedPage() {
           description="No one has published a post yet. Check back soon."
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl">
           {posts.map((post) => (
             <ContentCard key={post.id} post={post} />
           ))}

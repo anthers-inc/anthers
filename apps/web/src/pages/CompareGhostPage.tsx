@@ -55,7 +55,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── Positioning ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Two platforms, two philosophies
           </h2>
@@ -145,7 +145,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── Media Support ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Content types at a glance
           </h2>
@@ -187,7 +187,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── Key Differences ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Where they differ
           </h2>
@@ -228,7 +228,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── Feature Comparison Table ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Feature by feature
           </h2>
@@ -272,7 +272,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── When to Use Which ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Which one is right for you?
           </h2>
@@ -339,7 +339,7 @@ export default function CompareGhostPage() {
 
       {/* ───────────── Data Portability ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Both believe in creator ownership
           </h2>

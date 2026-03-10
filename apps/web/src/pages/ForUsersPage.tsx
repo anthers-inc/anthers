@@ -59,7 +59,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── Zero Friction ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             No barriers, no tricks
           </h2>
@@ -108,7 +108,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── What You'll Find ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             All kinds of creative work
           </h2>
@@ -168,7 +168,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── Discovery ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Find your next favorite thing
           </h2>
@@ -210,7 +210,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── Fair Pricing for Users ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Transparent pricing you can trust
           </h2>
@@ -312,7 +312,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── Subscription Tiers ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Support creators with a subscription
           </h2>
@@ -374,7 +374,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── Your Data Is Yours ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Your account, your data
           </h2>
@@ -425,7 +425,7 @@ export default function ForUsersPage() {
 
       {/* ───────────── What You Get ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Free account, real benefits
           </h2>

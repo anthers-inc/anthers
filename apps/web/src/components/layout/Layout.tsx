@@ -129,7 +129,7 @@ export default function Layout() {
       <MiniPlayer />
 
       <footer className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}>
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="join join-horizontal w-full">
             <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
               <h6 className="footer-title text-xs">Explore</h6>

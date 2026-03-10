@@ -914,7 +914,7 @@ export default function InfrastructureDemoPage() {
       </section>
 
       {/* Quick reference card — always visible */}
-      <div className="max-w-5xl mx-auto px-4 mb-8">
+      <div className="max-w-7xl mx-auto px-4 mb-8">
         <div className="card bg-base-200/50 border border-base-300">
           <div className="card-body p-4">
             <QuickReference />
@@ -922,7 +922,7 @@ export default function InfrastructureDemoPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4">
         {/* Tab selector */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
           {TABS.map((tab) => (

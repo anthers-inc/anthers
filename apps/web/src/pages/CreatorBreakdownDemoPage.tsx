@@ -859,7 +859,7 @@ export default function CreatorBreakdownDemoPage() {
       </section>
 
       {/* Content */}
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4">
         {/* Creator selector tabs */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
           {DEMO_CREATORS.map((c) => (

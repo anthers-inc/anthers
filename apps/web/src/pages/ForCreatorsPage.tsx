@@ -58,7 +58,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Revenue Comparison ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Creators deserve better
           </h2>
@@ -115,7 +115,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Core Value Props ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             How Anthers works for creators
           </h2>
@@ -164,7 +164,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Multi-Media Showcase ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Every kind of creative work
           </h2>
@@ -224,7 +224,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Transparent Pricing Deep Dive ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Transparent pricing, not platform rent
           </h2>
@@ -327,7 +327,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Feature Showcase ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Everything you need to publish and grow
           </h2>
@@ -379,7 +379,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Audience Building ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Build your audience in one place
           </h2>
@@ -417,7 +417,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Subscription Tiers ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Subscribers fund creators, not platforms
           </h2>
@@ -481,7 +481,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Creator Profile Preview ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Your home on the internet
           </h2>
@@ -542,7 +542,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Project Page Preview ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Project pages that do the work
           </h2>
@@ -623,7 +623,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Data Portability ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Your data is yours
           </h2>
@@ -674,7 +674,7 @@ export default function ForCreatorsPage() {
 
       {/* ───────────── Platform Comparison ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Everything in one place
           </h2>

@@ -79,7 +79,7 @@ export default function CompareItchPage() {
 
       {/* ───────────── Key Differences ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-5xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             What Anthers does differently
           </h2>
@@ -120,7 +120,7 @@ export default function CompareItchPage() {
 
       {/* ───────────── Revenue Comparison ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Keep more of what you earn
           </h2>
@@ -181,7 +181,7 @@ export default function CompareItchPage() {
 
       {/* ───────────── Multi-Media ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             More than a game marketplace
           </h2>
@@ -223,7 +223,7 @@ export default function CompareItchPage() {
 
       {/* ───────────── Feature Comparison Table ───────────── */}
       <section className="bg-base-200/50 py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             Feature by feature
           </h2>
@@ -271,7 +271,7 @@ export default function CompareItchPage() {
 
       {/* ───────────── Data Portability ───────────── */}
       <section className="py-20">
-        <div className="container mx-auto px-4 max-w-4xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           <h2 className="text-3xl font-bold text-center mb-4">
             Your identity, your data, your choice
           </h2>
