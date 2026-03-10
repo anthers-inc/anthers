@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type PaginatedResponse, type PurchaseItem } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Purchase } from "../lib/types";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export default function LibraryPage() {
-  const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<PurchaseItem>>("/api/v1/payments/purchases/")
-      .then((res) => setPurchases(res.results))
+    client.api.payments.purchases
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setPurchases((data as { purchases: Purchase[] }).purchases))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -41,14 +43,14 @@ export default function LibraryPage() {
           {purchases.map((purchase) => (
             <Link
               key={purchase.id}
-              to={`/explore/${purchase.project_slug}`}
+              to={`/explore/${purchase.project?.slug}`}
               className="card bg-base-200 hover:shadow-lg transition-shadow"
             >
-              {purchase.project_cover ? (
+              {purchase.project?.coverImage ? (
                 <figure>
                   <img
-                    src={purchase.project_cover}
-                    alt={purchase.project_title}
+                    src={purchase.project.coverImage}
+                    alt={purchase.project?.title}
                     className="w-full h-40 object-cover"
                   />
                 </figure>
@@ -60,10 +62,10 @@ export default function LibraryPage() {
                 </div>
               )}
               <div className="card-body p-4">
-                <h2 className="card-title text-sm">{purchase.project_title}</h2>
+                <h2 className="card-title text-sm">{purchase.project?.title}</h2>
                 <p className="text-xs text-base-content/60">
                   Purchased{" "}
-                  {new Date(purchase.created_at).toLocaleDateString()}
+                  {new Date(purchase.createdAt).toLocaleDateString()}
                 </p>
               </div>
             </Link>

@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type Project, type OwnershipResponse } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Project } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import { useAttentionTracker } from "../lib/attention";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -27,9 +28,10 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    api
-      .get<Project>(`/api/v1/content/projects/${slug}/`)
-      .then(setProject)
+    client.api.content.projects[":slug"]
+      .$get({ param: { slug } })
+      .then((res) => res.json())
+      .then((data) => setProject((data as { project: Project }).project))
       .catch(() => setError("Project not found."))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -40,17 +42,18 @@ export default function ProjectPage() {
       setUserOwns(null);
       return;
     }
-    api
-      .get<OwnershipResponse>(`/api/v1/payments/owns/${slug}/`)
-      .then((res) => setUserOwns(res.owns))
+    client.api.payments.owns[":slug"]
+      .$get({ param: { slug } })
+      .then((res) => res.json())
+      .then((data) => setUserOwns((data as { owns: boolean }).owns))
       .catch(() => setUserOwns(null));
   }, [slug, isAuthenticated]);
 
   // Attention tracking—games use "play", other project types use "page_view"
-  const eventType = project?.media_type === "game" ? "play" : "page_view";
+  const eventType = project?.mediaType === "game" ? "play" : "page_view";
 
   useAttentionTracker({
-    creatorId: project?.creator_id ?? null,
+    creatorId: project?.creatorId ?? null,
     projectId: project?.id ?? null,
     eventType,
     active: !!project,
@@ -85,8 +88,8 @@ export default function ProjectPage() {
           <ProjectHero project={project} />
 
           {/* Embed */}
-          {project.embed_url && (
-            <ProjectEmbed embedUrl={project.embed_url} title={project.title} />
+          {project.embedUrl && (
+            <ProjectEmbed embedUrl={project.embedUrl} title={project.title} />
           )}
 
           {/* Screenshots */}
@@ -106,10 +109,10 @@ export default function ProjectPage() {
 
           {/* Pricing */}
           <ProjectPricing
-            pricingType={project.pricing_type}
+            pricingType={project.pricingType}
             price={project.price}
             slug={project.slug}
-            creatorHasStripe={project.creator_has_stripe}
+            creatorHasStripe={undefined}
             userOwns={userOwns}
             onPurchaseComplete={handlePurchaseComplete}
           />
@@ -117,8 +120,8 @@ export default function ProjectPage() {
           {/* Downloads */}
           <ProjectDownloads
             assets={project.assets}
-            mediaType={project.media_type}
-            pricingType={project.pricing_type}
+            mediaType={project.mediaType}
+            pricingType={project.pricingType}
             userOwns={userOwns}
             projectSlug={project.slug}
           />

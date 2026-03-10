@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import type { Screenshot } from "../../lib/api";
+import type { Screenshot } from "../../lib/types";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,

@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import {
-  api,
-  ApiError,
-  type StripeAccountStatus,
-  type PlatformConnectionItem,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type { StripeAccountStatus, PlatformConnection } from "../lib/types";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 function BlueskySection() {
   const { user, linkBluesky, unlinkBluesky, refreshUser } = useAuth();
@@ -138,9 +140,10 @@ function StripeOnboardingSection() {
   const stripeResult = searchParams.get("stripe");
 
   useEffect(() => {
-    api
-      .get<StripeAccountStatus>("/api/v1/payments/stripe/onboard/")
-      .then(setStripeStatus)
+    client.api.payments.stripe.onboard
+      .$get()
+      .then((res) => res.json() as Promise<unknown>)
+      .then((data) => setStripeStatus(data as StripeAccountStatus))
       .catch(() => setStripeStatus(null))
       .finally(() => setLoading(false));
   }, []);
@@ -148,10 +151,9 @@ function StripeOnboardingSection() {
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const res = await api.post<{ url: string }>(
-        "/api/v1/payments/stripe/onboard/",
-      );
-      window.location.href = res.url;
+      const res = await client.api.payments.stripe.onboard.$post();
+      const data = (await res.json()) as { url: string };
+      window.location.href = data.url;
     } catch {
       setConnecting(false);
     }
@@ -169,9 +171,9 @@ function StripeOnboardingSection() {
   }
 
   const isConnected =
-    stripeStatus?.charges_enabled && stripeStatus?.onboarding_complete;
+    stripeStatus?.chargesEnabled && stripeStatus?.onboardingComplete;
   const isIncomplete =
-    stripeStatus && !stripeStatus.charges_enabled;
+    stripeStatus && !stripeStatus.chargesEnabled;
 
   return (
     <div className="card bg-base-200">
@@ -265,7 +267,7 @@ const PLATFORM_INFO: Record<
 
 function PlatformConnectionsSection() {
   const [searchParams] = useSearchParams();
-  const [connections, setConnections] = useState<PlatformConnectionItem[]>([]);
+  const [connections, setConnections] = useState<PlatformConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(
     null,
@@ -277,9 +279,12 @@ function PlatformConnectionsSection() {
   const youtubeResult = searchParams.get("youtube");
 
   const fetchConnections = () => {
-    api
-      .get<PlatformConnectionItem[]>("/api/v1/integrations/platforms/")
-      .then(setConnections)
+    client.api.integrations.platforms
+      .$get()
+      .then((res) => res.json())
+      .then((data) =>
+        setConnections((data as { platforms: PlatformConnection[] }).platforms),
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -291,17 +296,20 @@ function PlatformConnectionsSection() {
   const handleYouTubeConnect = async () => {
     setError(null);
     try {
-      const res = await api.post<{ authorization_url: string }>(
-        "/api/v1/integrations/platforms/youtube/auth/",
-      );
-      window.location.href = res.authorization_url;
-    } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
+      const res = await fetch(apiBase + "/api/integrations/platforms/youtube/auth", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
         setError(data?.detail ?? "Failed to initiate YouTube connection.");
-      } else {
-        setError("Something went wrong.");
+        return;
       }
+      const data = (await res.json()) as { authorizationUrl: string };
+      window.location.href = data.authorizationUrl;
+    } catch {
+      setError("Something went wrong.");
     }
   };
 
@@ -309,20 +317,21 @@ function PlatformConnectionsSection() {
     if (!apiKeyInput.trim()) return;
     setError(null);
     try {
-      await api.post("/api/v1/integrations/platforms/connect/", {
-        platform,
-        api_key: apiKeyInput.trim(),
+      const res = await client.api.integrations.platforms.connect.$post({
+        json: {
+          platform: platform as "steam" | "itchio" | "substack",
+          apiKey: apiKeyInput.trim(),
+        },
       });
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
+        throw new Error(data?.detail ?? "Failed to connect platform.");
+      }
       setApiKeyInput("");
       setConnectingPlatform(null);
       fetchConnections();
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to connect platform.");
-      } else {
-        setError("Something went wrong.");
-      }
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     }
   };
 
@@ -330,15 +339,20 @@ function PlatformConnectionsSection() {
     setDisconnecting(platform);
     setError(null);
     try {
-      await api.delete(
-        `/api/v1/integrations/platforms/${platform}/disconnect/`,
+      const res = await fetch(
+        `${apiBase}/api/integrations/platforms/${platform}/disconnect`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
       );
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
+        throw new Error(data?.detail ?? "Failed to disconnect platform.");
+      }
       fetchConnections();
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to disconnect platform.");
-      }
+      setError(err instanceof Error ? err.message : "Failed to disconnect platform.");
     } finally {
       setDisconnecting(null);
     }
@@ -390,9 +404,9 @@ function PlatformConnectionsSection() {
                         </span>
                       )}
                     </div>
-                    {isConnected && conn?.platform_username && (
+                    {isConnected && conn?.platformUsername && (
                       <p className="text-xs text-base-content/50">
-                        {conn.platform_username}
+                        {conn.platformUsername}
                       </p>
                     )}
                     {!isConnected && (
@@ -502,28 +516,40 @@ export default function SettingsPage() {
 
     try {
       const formData = new FormData();
-      formData.append("display_name", displayName);
+      formData.append("displayName", displayName);
       formData.append("bio", bio);
-      formData.append("website_url", websiteUrl);
+      formData.append("websiteUrl", websiteUrl);
       formData.append("location", location);
-      formData.append("is_creator", String(isCreator));
+      formData.append("isCreator", String(isCreator));
       if (avatarFile) formData.append("avatar", avatarFile);
-      if (headerFile) formData.append("header_image", headerFile);
+      if (headerFile) formData.append("headerImage", headerFile);
 
-      await api.uploadPatch("/api/v1/accounts/me/", formData);
+      const res = await fetch(`${apiBase}/api/accounts/me`, {
+        method: "PATCH",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        if (data && typeof data === "object") {
+          const fieldErrors: Record<string, string> = {};
+          for (const [key, val] of Object.entries(
+            data as Record<string, string[]>,
+          )) {
+            fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+          }
+          setErrors(fieldErrors);
+          return;
+        }
+        throw new Error("Failed to save settings.");
+      }
+
       await refreshUser();
       setSuccess(true);
     } catch (err) {
-      if (err instanceof ApiError && err.data && typeof err.data === "object") {
-        const fieldErrors: Record<string, string> = {};
-        for (const [key, val] of Object.entries(
-          err.data as Record<string, string[]>,
-        )) {
-          fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
-        }
-        setErrors(fieldErrors);
-      } else {
-        setError("Failed to save settings.");
+      if (Object.keys(errors).length === 0) {
+        setError(err instanceof Error ? err.message : "Failed to save settings.");
       }
     } finally {
       setSaving(false);
@@ -546,7 +572,7 @@ export default function SettingsPage() {
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormField label="Display Name" error={errors.display_name}>
+        <FormField label="Display Name" error={errors.displayName}>
           <input
             type="text"
             className="input input-bordered w-full"
@@ -583,7 +609,7 @@ export default function SettingsPage() {
           />
         </FormField>
 
-        <FormField label="Header Image" error={errors.header_image}>
+        <FormField label="Header Image" error={errors.headerImage}>
           <FileUpload
             accept="image/*"
             maxSize={10 * 1024 * 1024}
@@ -600,7 +626,7 @@ export default function SettingsPage() {
           />
         </FormField>
 
-        <FormField label="Website URL" error={errors.website_url}>
+        <FormField label="Website URL" error={errors.websiteUrl}>
           <input
             type="url"
             className="input input-bordered w-full"

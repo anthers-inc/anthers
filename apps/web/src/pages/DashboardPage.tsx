@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
-import type {
-  ProjectListItem,
-  Post,
-  PaginatedResponse,
-  CreatorEarningsResponse,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Project, Post, CreatorEarnings } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
@@ -20,33 +15,40 @@ import {
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
+
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [earnings, setEarnings] = useState<CreatorEarningsResponse | null>(
-    null,
-  );
+  const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
-      api.get<PaginatedResponse<ProjectListItem>>(
-        "/api/v1/content/projects/?mine=true",
-      ),
-      api.get<PaginatedResponse<Post>>("/api/v1/content/posts/?mine=true"),
+      fetch(apiBase + "/api/content/projects?mine=true", {
+        credentials: "include",
+      }).then((res) => res.json()),
+      fetch(apiBase + "/api/content/posts?mine=true", {
+        credentials: "include",
+      }).then((res) => res.json()),
     ])
       .then(([projData, postData]) => {
-        setProjects(projData.results);
-        setPosts(postData.results);
+        setProjects(projData.projects);
+        setPosts(postData.posts);
       })
       .finally(() => setLoading(false));
 
     // Fetch creator earnings (non-blocking)
     if (user?.isCreator) {
-      api
-        .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
-        .then(setEarnings)
+      client.api.subscriptions.earnings
+        .$get()
+        .then((res) => res.json())
+        .then((data) => setEarnings(data as CreatorEarnings))
         .catch(() => {});
     }
   }, [user?.isCreator]);
@@ -107,7 +109,7 @@ export default function DashboardPage() {
         <div className="stat">
           <div className="stat-title">Published</div>
           <div className="stat-value text-success">
-            {projects.filter((p) => p.is_published).length}
+            {projects.filter((p) => p.isPublished).length}
           </div>
         </div>
       </div>
@@ -123,7 +125,7 @@ export default function DashboardPage() {
                   Pool Income
                 </div>
                 <div className="text-xl font-bold text-success">
-                  ${earnings.total_pool}
+                  ${earnings.poolTotal}
                 </div>
               </div>
               <div>
@@ -131,7 +133,7 @@ export default function DashboardPage() {
                   Boost Income
                 </div>
                 <div className="text-xl font-bold text-success">
-                  ${earnings.total_boost}
+                  ${earnings.boostTotal}
                 </div>
               </div>
               <div>
@@ -147,7 +149,7 @@ export default function DashboardPage() {
                   Subscribers
                 </div>
                 <div className="text-xl font-bold">
-                  {earnings.subscriber_count}
+                  {earnings.subscriberCount}
                 </div>
               </div>
             </div>
@@ -187,19 +189,19 @@ export default function DashboardPage() {
                       </Link>
                     </td>
                     <td>
-                      <MediaTypeBadge type={project.media_type} />
+                      <MediaTypeBadge type={project.mediaType} />
                     </td>
                     <td>
                       <PricingBadge
-                        pricingType={project.pricing_type}
+                        pricingType={project.pricingType}
                         price={project.price}
                       />
                     </td>
                     <td>
                       <span
-                        className={`badge badge-sm ${project.is_published ? "badge-success" : "badge-warning"}`}
+                        className={`badge badge-sm ${project.isPublished ? "badge-success" : "badge-warning"}`}
                       >
-                        {project.is_published ? "Published" : "Draft"}
+                        {project.isPublished ? "Published" : "Draft"}
                       </span>
                     </td>
                     <td className="flex gap-1">
@@ -276,9 +278,9 @@ export default function DashboardPage() {
                       </Link>
                     </td>
                     <td>
-                      {post.project_title ? (
+                      {post.projectId ? (
                         <span className="badge badge-sm badge-outline">
-                          {post.project_title}
+                          Project
                         </span>
                       ) : (
                         <span className="text-base-content/30">—</span>
@@ -286,13 +288,13 @@ export default function DashboardPage() {
                     </td>
                     <td>
                       <span
-                        className={`badge badge-sm ${post.is_published ? "badge-success" : "badge-warning"}`}
+                        className={`badge badge-sm ${post.isPublished ? "badge-success" : "badge-warning"}`}
                       >
-                        {post.is_published ? "Published" : "Draft"}
+                        {post.isPublished ? "Published" : "Draft"}
                       </span>
                     </td>
                     <td className="text-sm text-base-content/50">
-                      {new Date(post.created_at).toLocaleDateString()}
+                      {new Date(post.createdAt).toLocaleDateString()}
                     </td>
                     <td>
                       <Link

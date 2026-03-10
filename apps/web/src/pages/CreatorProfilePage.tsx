@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  api,
-  type PublicUser,
-  type PaginatedResponse,
-  type ProjectListItem,
-  type PostListItem,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type { PublicUser, Project, PostListItem } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentCard from "../components/cards/ContentCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import { LinkIcon, MapPinIcon } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 type Tab = "all" | "games" | "videos" | "audio" | "writing" | "about";
 
@@ -21,7 +22,7 @@ export default function CreatorProfilePage() {
   const { isAuthenticated, user: currentUser } = useAuth();
 
   const [creator, setCreator] = useState<PublicUser | null>(null);
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [posts, setPosts] = useState<PostListItem[]>([]);
   const [tab, setTab] = useState<Tab>("all");
   const [loading, setLoading] = useState(true);
@@ -35,20 +36,23 @@ export default function CreatorProfilePage() {
     setLoading(true);
 
     Promise.all([
-      api.get<PublicUser>(`/api/v1/accounts/users/${username}/`),
-      api.get<PaginatedResponse<ProjectListItem>>(
-        `/api/v1/content/projects/?creator=${username}`
-      ),
-      api.get<PaginatedResponse<PostListItem>>(
-        `/api/v1/content/posts/?creator=${username}`
-      ),
+      client.api.accounts.users[":username"]
+        .$get({ param: { username } })
+        .then((res) => res.json()),
+      fetch(apiBase + "/api/content/projects?creator=" + username, {
+        credentials: "include",
+      }).then((res) => res.json()),
+      fetch(apiBase + "/api/content/posts?creator=" + username, {
+        credentials: "include",
+      }).then((res) => res.json()),
     ])
       .then(([creatorData, projectData, postData]) => {
-        setCreator(creatorData);
-        setIsFollowing(creatorData.is_following);
-        setFollowerCount(creatorData.follower_count);
-        setProjects(projectData.results);
-        setPosts(postData.results);
+        const userData = (creatorData as { user: PublicUser }).user;
+        setCreator(userData);
+        setIsFollowing(userData.isFollowing);
+        setFollowerCount(userData.followerCount);
+        setProjects(projectData.projects);
+        setPosts(postData.posts);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -58,11 +62,15 @@ export default function CreatorProfilePage() {
     if (!isAuthenticated || !username) return;
     try {
       if (isFollowing) {
-        await api.post(`/api/v1/accounts/users/${username}/unfollow/`);
+        await client.api.accounts.users[":username"].unfollow.$post({
+          param: { username },
+        });
         setIsFollowing(false);
         setFollowerCount((c) => c - 1);
       } else {
-        await api.post(`/api/v1/accounts/users/${username}/follow/`);
+        await client.api.accounts.users[":username"].follow.$post({
+          param: { username },
+        });
         setIsFollowing(true);
         setFollowerCount((c) => c + 1);
       }
@@ -89,14 +97,14 @@ export default function CreatorProfilePage() {
   }
 
   // Filter content by tab
-  const videoPosts = posts.filter((p) => p.content_type === "video");
-  const audioPosts = posts.filter((p) => p.content_type === "audio");
-  const textPosts = posts.filter((p) => p.content_type === "text");
+  const videoPosts = posts.filter((p) => p.contentType === "video");
+  const audioPosts = posts.filter((p) => p.contentType === "audio");
+  const textPosts = posts.filter((p) => p.contentType === "text");
 
   // All tab: interleave projects and posts by date
-  const allItems: { type: "project" | "post"; item: ProjectListItem | PostListItem; date: string }[] = [];
-  projects.forEach((p) => allItems.push({ type: "project", item: p, date: p.created_at }));
-  posts.forEach((p) => allItems.push({ type: "post", item: p, date: p.created_at }));
+  const allItems: { type: "project" | "post"; item: Project | PostListItem; date: string }[] = [];
+  projects.forEach((p) => allItems.push({ type: "project", item: p, date: p.createdAt }));
+  posts.forEach((p) => allItems.push({ type: "post", item: p, date: p.createdAt }));
   allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
@@ -105,9 +113,9 @@ export default function CreatorProfilePage() {
       <div
         className="w-full h-48 md:h-64 bg-base-300"
         style={
-          creator.header_image
+          creator.headerImage
             ? {
-                backgroundImage: `url(${creator.header_image})`,
+                backgroundImage: `url(${creator.headerImage})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }
@@ -121,19 +129,19 @@ export default function CreatorProfilePage() {
           {creator.avatar ? (
             <img
               src={creator.avatar}
-              alt={creator.display_name || creator.username}
+              alt={creator.displayName || creator.username}
               className="w-24 h-24 rounded-full object-cover border-4 border-base-100"
             />
           ) : (
             <div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-              {(creator.display_name || creator.username)
+              {(creator.displayName || creator.username)
                 .charAt(0)
                 .toUpperCase()}
             </div>
           )}
           <div className="flex-1 pt-4">
             <h1 className="text-2xl font-bold">
-              {creator.display_name || creator.username}
+              {creator.displayName || creator.username}
             </h1>
             <p className="text-base-content/60">
               @{creator.username} · {followerCount} followers
@@ -142,15 +150,15 @@ export default function CreatorProfilePage() {
               <p className="mt-2 text-sm max-w-2xl">{creator.bio}</p>
             )}
             <div className="flex items-center gap-4 mt-2 text-sm text-base-content/60">
-              {creator.website_url && (
+              {creator.websiteUrl && (
                 <a
-                  href={creator.website_url}
+                  href={creator.websiteUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 link link-hover"
                 >
                   <LinkIcon className="w-4 h-4" />
-                  {new URL(creator.website_url).hostname}
+                  {new URL(creator.websiteUrl).hostname}
                 </a>
               )}
               {creator.location && (
@@ -198,7 +206,7 @@ export default function CreatorProfilePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {allItems.map((entry) =>
                   entry.type === "project" ? (
-                    <ProjectCard key={`proj-${entry.item.id}`} project={entry.item as ProjectListItem} />
+                    <ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
                   ) : (
                     <ContentCard key={`post-${entry.item.id}`} post={entry.item as PostListItem} />
                   )
@@ -207,7 +215,7 @@ export default function CreatorProfilePage() {
             ) : (
               <EmptyState
                 title="No content yet"
-                description={`${creator.display_name || creator.username} hasn't published anything yet.`}
+                description={`${creator.displayName || creator.username} hasn't published anything yet.`}
               />
             )
           )}
@@ -222,7 +230,7 @@ export default function CreatorProfilePage() {
             ) : (
               <EmptyState
                 title="No games yet"
-                description={`${creator.display_name || creator.username} hasn't published any games.`}
+                description={`${creator.displayName || creator.username} hasn't published any games.`}
               />
             )
           )}
@@ -237,7 +245,7 @@ export default function CreatorProfilePage() {
             ) : (
               <EmptyState
                 title="No videos yet"
-                description={`${creator.display_name || creator.username} hasn't published any videos.`}
+                description={`${creator.displayName || creator.username} hasn't published any videos.`}
               />
             )
           )}
@@ -252,7 +260,7 @@ export default function CreatorProfilePage() {
             ) : (
               <EmptyState
                 title="No audio yet"
-                description={`${creator.display_name || creator.username} hasn't published any audio.`}
+                description={`${creator.displayName || creator.username} hasn't published any audio.`}
               />
             )
           )}
@@ -267,7 +275,7 @@ export default function CreatorProfilePage() {
             ) : (
               <EmptyState
                 title="No writing yet"
-                description={`${creator.display_name || creator.username} hasn't published any articles.`}
+                description={`${creator.displayName || creator.username} hasn't published any articles.`}
               />
             )
           )}
@@ -285,7 +293,7 @@ export default function CreatorProfilePage() {
               )}
               <div className="mt-6 text-sm text-base-content/50">
                 Member since{" "}
-                {new Date(creator.date_joined).toLocaleDateString("en-US", {
+                {new Date(creator.createdAt).toLocaleDateString("en-US", {
                   month: "long",
                   year: "numeric",
                 })}

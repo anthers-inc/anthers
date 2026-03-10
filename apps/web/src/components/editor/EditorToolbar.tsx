@@ -1,5 +1,4 @@
 import type { Editor } from "@tiptap/react";
-import { api } from "../../lib/api";
 import {
   BoldIcon,
   ItalicIcon,
@@ -8,6 +7,12 @@ import {
   LinkIcon,
   PhotoIcon,
 } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -49,11 +54,13 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
       formData.append("image", file);
 
       try {
-        const result = await api.upload<{ id: number; image: string }>(
-          "/api/v1/content/inline-images/",
-          formData,
-        );
-        editor.chain().focus().setImage({ src: result.image }).run();
+        const res = await fetch(apiBase + "/api/content/inline-images", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        const data = await res.json();
+        editor.chain().focus().setImage({ src: data.inlineImage.image }).run();
       } catch (err) {
         console.error("Image upload failed:", err);
       }

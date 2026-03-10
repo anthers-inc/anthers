@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
+import { client } from "../lib/rpc";
 import type {
   GameJam,
   JamEntry,
   JamEntryResult,
-  JamResultsResponse,
-  PaginatedResponse,
-  ProjectListItem,
-} from "../lib/api";
+  Project,
+} from "../lib/types";
 import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import StarRating from "../components/ui/StarRating";
@@ -18,6 +16,12 @@ import {
   TrophyIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -56,11 +60,11 @@ function EntryCard({
 
   return (
     <div className="card bg-base-200">
-      {entry.project_cover && (
+      {entry.project?.coverImage && (
         <figure className="h-32">
           <img
-            src={entry.project_cover}
-            alt={entry.project_title}
+            src={entry.project.coverImage}
+            alt={entry.project?.title}
             className="w-full h-full object-cover"
           />
         </figure>
@@ -75,24 +79,24 @@ function EntryCard({
           </div>
         )}
         <Link
-          to={`/explore/${entry.project_slug}`}
+          to={`/explore/${entry.project?.slug}`}
           className="link link-hover font-semibold text-sm"
         >
-          {entry.project_title}
+          {entry.project?.title}
         </Link>
         <p className="text-xs text-base-content/50">
-          by {entry.submitted_by_username}
+          by {entry.submitter?.username}
         </p>
         <div className="flex items-center justify-between mt-2">
           <div className="text-xs text-base-content/50">
-            {entry.vote_count} {entry.vote_count === 1 ? "vote" : "votes"}
-            {entry.average_score !== null && (
-              <span> · avg {entry.average_score}</span>
+            {entry.voteCount} {entry.voteCount === 1 ? "vote" : "votes"}
+            {entry.avgScore !== null && entry.avgScore !== undefined && (
+              <span> · avg {entry.avgScore}</span>
             )}
           </div>
           {showVoting && onVote && (
             <StarRating
-              rating={entry.user_vote}
+              rating={null}
               interactive
               onRate={(score: number) => onVote(entry.id, score)}
               size="sm"
@@ -111,18 +115,20 @@ function SubmitEntryForm({
   jamSlug: string;
   onSubmitted: () => void;
 }) {
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<ProjectListItem>>(
-        "/api/v1/content/projects/?mine=true",
+    fetch(`${apiBase}/api/content/projects?mine=true`, {
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data: { projects: Project[] }) =>
+        setProjects(data.projects.filter((p) => p.isPublished)),
       )
-      .then((data) => setProjects(data.results.filter((p) => p.is_published)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -131,17 +137,17 @@ function SubmitEntryForm({
     setSubmitting(true);
     setError(null);
     try {
-      await api.post(`/api/v1/jams/${jamSlug}/entries/`, {
-        project: selectedProject,
+      const res = await client.api.jams[":slug"].entries.$post({
+        param: { slug: jamSlug },
+        json: { projectId: selectedProject },
       });
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
+        throw new Error(data?.detail ?? "Failed to submit entry.");
+      }
       onSubmitted();
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to submit entry.");
-      } else {
-        setError("Something went wrong.");
-      }
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
@@ -196,7 +202,7 @@ function SubmitEntryForm({
 export default function JamPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user, isAuthenticated } = useAuth();
-  const [jam, setJam] = useState<GameJam | null>(null);
+  const [jam, setJam] = useState<(GameJam & { status: string }) | null>(null);
   const [entries, setEntries] = useState<JamEntry[]>([]);
   const [results, setResults] = useState<JamEntryResult[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,23 +212,29 @@ export default function JamPage() {
     if (!slug) return;
     setLoading(true);
     Promise.all([
-      api.get<GameJam>(`/api/v1/jams/${slug}/`),
-      api.get<PaginatedResponse<JamEntry>>(`/api/v1/jams/${slug}/entries/`),
+      client.api.jams[":slug"]
+        .$get({ param: { slug } })
+        .then((res) => res.json() as Promise<unknown>),
+      client.api.jams[":slug"].entries
+        .$get({ param: { slug } })
+        .then((res) => res.json() as Promise<unknown>),
     ])
       .then(([jamData, entryData]) => {
-        setJam(jamData);
-        setEntries(entryData.results);
+        const jamObj = (jamData as { jam: GameJam & { status: string } }).jam;
+        setJam(jamObj);
+        setEntries((entryData as { entries: JamEntry[] }).entries);
 
         // If ended, also fetch results
-        if (jamData.status === "ended") {
-          api
-            .get<JamResultsResponse>(`/api/v1/jams/${slug}/results/`)
-            .then((r) => setResults(r.results))
+        if (jamObj.status === "ended") {
+          client.api.jams[":slug"].results
+            .$get({ param: { slug } })
+            .then((res) => res.json() as Promise<unknown>)
+            .then((r) => setResults((r as { results: JamEntryResult[] }).results))
             .catch(() => {});
         }
       })
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 404) {
+        if (err instanceof Response && err.status === 404) {
           setError("Jam not found.");
         } else {
           setError("Failed to load jam.");
@@ -236,15 +248,20 @@ export default function JamPage() {
   const handleVote = async (entryId: number, score: number) => {
     if (!slug) return;
     try {
-      await api.post(`/api/v1/jams/${slug}/entries/${entryId}/vote/`, {
-        score,
-      });
-      fetchData();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
+      const res = await client.api.jams[":slug"].entries[":entryId"].vote.$post(
+        {
+          param: { slug, entryId: String(entryId) },
+          json: { score },
+        },
+      );
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
         alert(data?.detail ?? "Failed to vote.");
+        return;
       }
+      fetchData();
+    } catch {
+      alert("Failed to vote.");
     }
   };
 
@@ -267,7 +284,7 @@ export default function JamPage() {
     );
   }
 
-  const isOwner = user?.id === jam.creator;
+  const isOwner = user?.id === jam.creatorId;
   const canSubmit = isAuthenticated && jam.status === "active";
   const canVote = isAuthenticated && jam.status === "voting";
   const showResults = jam.status === "ended" && results !== null;
@@ -275,10 +292,10 @@ export default function JamPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Header */}
-      {jam.cover_image && (
+      {jam.coverImage && (
         <div className="rounded-lg overflow-hidden mb-6 h-48 md:h-64">
           <img
-            src={jam.cover_image}
+            src={jam.coverImage}
             alt={jam.title}
             className="w-full h-full object-cover"
           />
@@ -291,10 +308,10 @@ export default function JamPage() {
           <p className="text-sm text-base-content/50 mt-1">
             Hosted by{" "}
             <Link
-              to={`/${jam.creator_username}`}
+              to={`/${jam.creator?.username}`}
               className="link link-hover"
             >
-              {jam.creator_username}
+              {jam.creator?.username}
             </Link>
           </p>
         </div>
@@ -305,20 +322,20 @@ export default function JamPage() {
       <div className="flex flex-wrap gap-4 mb-6 text-sm">
         <div className="flex items-center gap-1.5 text-base-content/60">
           <CalendarIcon className="w-4 h-4" />
-          <span>Starts: {formatDate(jam.start_at)}</span>
+          <span>Starts: {formatDate(jam.startAt)}</span>
         </div>
         <div className="flex items-center gap-1.5 text-base-content/60">
           <CalendarIcon className="w-4 h-4" />
-          <span>Ends: {formatDate(jam.end_at)}</span>
+          <span>Ends: {formatDate(jam.endAt)}</span>
         </div>
         <div className="flex items-center gap-1.5 text-base-content/60">
           <TrophyIcon className="w-4 h-4" />
-          <span>Voting until: {formatDate(jam.voting_end_at)}</span>
+          <span>Voting until: {formatDate(jam.votingEndAt)}</span>
         </div>
         <div className="flex items-center gap-1.5 text-base-content/60">
           <UsersIcon className="w-4 h-4" />
           <span>
-            {jam.entry_count} {jam.entry_count === 1 ? "entry" : "entries"}
+            {jam.entryCount} {jam.entryCount === 1 ? "entry" : "entries"}
           </span>
         </div>
       </div>

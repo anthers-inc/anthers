@@ -1,18 +1,19 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  api,
-  type SubscriptionStatus,
-  type AttentionSummary,
-  type MyDistributionsResponse,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type {
+  Subscription,
+  AttentionSummary,
+  PoolDistribution,
+} from "../lib/types";
 
 export default function SubscriptionPage() {
   const [searchParams] = useSearchParams();
-  const [sub, setSub] = useState<SubscriptionStatus | null>(null);
+  const [sub, setSub] = useState<Subscription | null>(null);
   const [attention, setAttention] = useState<AttentionSummary | null>(null);
-  const [distributions, setDistributions] =
-    useState<MyDistributionsResponse | null>(null);
+  const [distributions, setDistributions] = useState<{
+    distributions: PoolDistribution[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +40,9 @@ export default function SubscriptionPage() {
 
   async function fetchSubscription() {
     try {
-      const data = await api.get<SubscriptionStatus>(
-        "/api/v1/subscriptions/me/",
-      );
-      setSub(data);
+      const res = await client.api.subscriptions.me.$get();
+      const data = (await res.json()) as { subscription: Subscription };
+      setSub(data.subscription);
     } catch {
       setError("Failed to load subscription.");
     } finally {
@@ -52,9 +52,8 @@ export default function SubscriptionPage() {
 
   async function fetchAttention() {
     try {
-      const data = await api.get<AttentionSummary>(
-        "/api/v1/subscriptions/attention/summary/",
-      );
+      const res = await client.api.subscriptions.attention.summary.$get();
+      const data = (await res.json()) as AttentionSummary;
       setAttention(data);
     } catch {
       // Non-critical—don't show error
@@ -63,9 +62,10 @@ export default function SubscriptionPage() {
 
   async function fetchDistributions() {
     try {
-      const data = await api.get<MyDistributionsResponse>(
-        "/api/v1/subscriptions/distributions/",
-      );
+      const res = await client.api.subscriptions.distributions.$get();
+      const data = (await res.json()) as {
+        distributions: PoolDistribution[];
+      };
       setDistributions(data);
     } catch {
       // Non-critical
@@ -76,10 +76,9 @@ export default function SubscriptionPage() {
     setActionLoading("cancel");
     setError(null);
     try {
-      const data = await api.post<SubscriptionStatus>(
-        "/api/v1/subscriptions/cancel/",
-      );
-      setSub(data);
+      const res = await client.api.subscriptions.cancel.$post();
+      const data = (await res.json()) as { subscription: Subscription };
+      setSub(data.subscription);
       setSuccess("Your subscription will cancel at the end of the current billing period.");
     } catch {
       setError("Failed to cancel subscription.");
@@ -92,10 +91,9 @@ export default function SubscriptionPage() {
     setActionLoading("resume");
     setError(null);
     try {
-      const data = await api.post<SubscriptionStatus>(
-        "/api/v1/subscriptions/resume/",
-      );
-      setSub(data);
+      const res = await client.api.subscriptions.resume.$post();
+      const data = (await res.json()) as { subscription: Subscription };
+      setSub(data.subscription);
       setSuccess("Subscription resumed.");
     } catch {
       setError("Failed to resume subscription.");
@@ -107,10 +105,9 @@ export default function SubscriptionPage() {
   const handleBillingPortal = async () => {
     setActionLoading("portal");
     try {
-      const res = await api.post<{ portal_url: string }>(
-        "/api/v1/subscriptions/billing-portal/",
-      );
-      window.location.href = res.portal_url;
+      const res = await client.api.subscriptions["billing-portal"].$post();
+      const data = (await res.json()) as { portalUrl: string };
+      window.location.href = data.portalUrl;
     } catch {
       setError("Failed to open billing portal.");
       setActionLoading(null);
@@ -137,8 +134,8 @@ export default function SubscriptionPage() {
     );
   }
 
-  const isPaid = sub.is_paid;
-  const isCanceling = !!sub.canceled_at;
+  const isPaid = sub.tier !== "free";
+  const isCanceling = !!sub.canceledAt;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -160,9 +157,9 @@ export default function SubscriptionPage() {
         <div className="card-body">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="card-title">{sub.tier_display} Plan</h2>
+              <h2 className="card-title">{sub.tier.charAt(0).toUpperCase() + sub.tier.slice(1)} Plan</h2>
               <div className="flex items-center gap-2 mt-1">
-                {sub.is_active ? (
+                {sub.isActive ? (
                   <div className="badge badge-success badge-sm">Active</div>
                 ) : (
                   <div className="badge badge-error badge-sm">Inactive</div>
@@ -181,76 +178,23 @@ export default function SubscriptionPage() {
             )}
           </div>
 
-          {isPaid && (
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div>
-                <div className="text-xs text-base-content/50 uppercase">
-                  Creator Pool
-                </div>
-                <div className="text-lg font-semibold">
-                  ${sub.creator_pool_amount}/mo
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-base-content/50 uppercase">
-                  Boost Pool
-                </div>
-                <div className="text-lg font-semibold">
-                  {parseFloat(sub.boost_pool_amount) > 0
-                    ? `$${sub.boost_pool_amount}/mo`
-                    : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-base-content/50 uppercase">
-                  Content Hours
-                </div>
-                <div className="text-lg font-semibold">
-                  {sub.monthly_content_hours
-                    ? `${sub.monthly_content_hours} hrs/mo`
-                    : "Unlimited"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-base-content/50 uppercase">
-                  Gate Access
-                </div>
-                <div className="text-lg font-semibold">
-                  {sub.has_gate_access ? (
-                    <span className="text-success">Yes</span>
-                  ) : (
-                    "No"
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Content Hours Usage */}
           {attention && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-sm mb-1">
                 <span className="text-base-content/60">Content Hours Used</span>
                 <span className="font-medium">
-                  {attention.hours_used} hrs
-                  {attention.hours_cap ? ` / ${attention.hours_cap} hrs` : " (unlimited)"}
+                  {attention.hoursUsed} hrs
                 </span>
               </div>
-              {attention.hours_cap && (
-                <progress
-                  className="progress progress-primary w-full"
-                  value={attention.hours_used}
-                  max={attention.hours_cap}
-                />
-              )}
             </div>
           )}
 
-          {sub.current_period_end && (
+          {sub.currentPeriodEnd && (
             <div className="text-sm text-base-content/60 mt-4">
               {isCanceling ? "Access until" : "Next billing date"}:{" "}
               <span className="font-medium">
-                {new Date(sub.current_period_end).toLocaleDateString()}
+                {new Date(sub.currentPeriodEnd).toLocaleDateString()}
               </span>
             </div>
           )}
@@ -307,88 +251,55 @@ export default function SubscriptionPage() {
             This Month's Creator Support
           </h2>
           {distributions && distributions.distributions.length > 0 ? (
-            <>
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="card bg-base-200">
-                  <div className="card-body py-3 text-center">
-                    <div className="text-xs text-base-content/50 uppercase">
-                      Pool
-                    </div>
-                    <div className="text-lg font-bold">
-                      ${distributions.total_pool}
-                    </div>
-                  </div>
-                </div>
-                <div className="card bg-base-200">
-                  <div className="card-body py-3 text-center">
-                    <div className="text-xs text-base-content/50 uppercase">
-                      Boost
-                    </div>
-                    <div className="text-lg font-bold">
-                      ${distributions.total_boost}
-                    </div>
-                  </div>
-                </div>
-                <div className="card bg-base-200">
-                  <div className="card-body py-3 text-center">
-                    <div className="text-xs text-base-content/50 uppercase">
-                      Total
-                    </div>
-                    <div className="text-lg font-bold">
-                      ${distributions.total}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Creator</th>
-                      <th className="text-right">Time</th>
-                      <th className="text-right">Pool</th>
-                      <th className="text-right">Boost</th>
-                      <th className="text-right">Total</th>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Creator</th>
+                    <th className="text-right">Time</th>
+                    <th className="text-right">Pool</th>
+                    <th className="text-right">Boost</th>
+                    <th className="text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {distributions.distributions.map((d) => (
+                    <tr key={d.id}>
+                      <td>
+                        <Link
+                          to={`/${d.creator?.username}`}
+                          className="link link-hover"
+                        >
+                          {d.creator?.displayName || d.creator?.username}
+                        </Link>
+                      </td>
+                      <td className="text-right text-base-content/60">
+                        {Math.round((d.attentionSeconds ?? 0) / 60)}m
+                      </td>
+                      <td className="text-right">${d.poolAmount}</td>
+                      <td className="text-right">
+                        {parseFloat(d.boostAmount) > 0
+                          ? `$${d.boostAmount}`
+                          : "—"}
+                      </td>
+                      <td className="text-right font-medium">
+                        ${(
+                          parseFloat(d.poolAmount) +
+                          parseFloat(d.boostAmount)
+                        ).toFixed(2)}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {distributions.distributions.map((d) => (
-                      <tr key={d.id}>
-                        <td>
-                          <Link
-                            to={`/${d.creator_username}`}
-                            className="link link-hover"
-                          >
-                            {d.creator_display_name || d.creator_username}
-                          </Link>
-                        </td>
-                        <td className="text-right text-base-content/60">
-                          {Math.round(d.attention_seconds / 60)}m
-                        </td>
-                        <td className="text-right">${d.pool_amount}</td>
-                        <td className="text-right">
-                          {parseFloat(d.boost_amount) > 0
-                            ? `$${d.boost_amount}`
-                            : "—"}
-                        </td>
-                        <td className="text-right font-medium">
-                          ${d.total_amount}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="card bg-base-200">
               <div className="card-body text-center text-base-content/60">
                 <p>No distributions yet this cycle.</p>
                 <p className="text-sm mt-1">
-                  Your ${sub.creator_pool_amount} creator pool will be
-                  distributed proportionally based on the content you watch,
-                  read, and listen to.
+                  Your creator pool will be distributed proportionally based
+                  on the content you watch, read, and listen to.
                 </p>
               </div>
             </div>

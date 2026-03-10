@@ -5,7 +5,8 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { api, type CheckoutResponse } from "../../lib/api";
+import { client } from "../../lib/rpc";
+import type { CheckoutResponse } from "../../lib/types";
 import { stripePromise } from "../../lib/stripe";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
@@ -58,9 +59,10 @@ function CheckoutForm({
     setError(null);
 
     try {
-      const checkout = await api.post<CheckoutResponse>(
-        `/api/v1/payments/checkout/${slug}/`,
-      );
+      const res = await client.api.payments.checkout[":slug"].$post({
+        param: { slug },
+      });
+      const checkout = (await res.json()) as CheckoutResponse;
 
       const cardElement = elements.getElement(CardElement);
       if (!cardElement) {
@@ -70,7 +72,7 @@ function CheckoutForm({
       }
 
       const { error: stripeError } = await stripe.confirmCardPayment(
-        checkout.client_secret,
+        checkout.clientSecret,
         { payment_method: { card: cardElement } },
       );
 

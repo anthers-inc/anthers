@@ -1,19 +1,19 @@
 import { Link } from "react-router-dom";
-import type { ProjectListItem } from "../../lib/api";
+import type { Project } from "../../lib/types";
 import MediaTypeBadge from "../ui/MediaTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 import StarRating from "../ui/StarRating";
 
-export default function ProjectCard({ project }: { project: ProjectListItem }) {
+export default function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
       to={`/explore/${project.slug}`}
       className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
     >
-      {project.cover_image ? (
+      {project.coverImage ? (
         <figure className="h-40 overflow-hidden">
           <img
-            src={project.cover_image}
+            src={project.coverImage}
             alt={project.title}
             className="w-full h-full object-cover"
           />
@@ -21,7 +21,7 @@ export default function ProjectCard({ project }: { project: ProjectListItem }) {
       ) : (
         <figure className="h-40 bg-base-300 flex items-center justify-center">
           <span className="text-4xl text-base-content/20">
-            {project.media_type === "game" ? "🎮" : project.media_type === "video" ? "🎬" : project.media_type === "audio" ? "🎵" : "📝"}
+            {project.mediaType === "game" ? "🎮" : project.mediaType === "video" ? "🎬" : project.mediaType === "audio" ? "🎵" : "📝"}
           </span>
         </figure>
       )}
@@ -33,19 +33,19 @@ export default function ProjectCard({ project }: { project: ProjectListItem }) {
             {project.creator}
           </span>
         </p>
-        {project.short_description && (
+        {project.shortDescription && (
           <p className="text-sm text-base-content/70 line-clamp-2">
-            {project.short_description}
+            {project.shortDescription}
           </p>
         )}
         <div className="flex items-center justify-between mt-auto pt-2">
           <div className="flex gap-1">
-            <MediaTypeBadge type={project.media_type} />
-            <PricingBadge pricingType={project.pricing_type} price={project.price} />
+            <MediaTypeBadge type={project.mediaType} />
+            <PricingBadge pricingType={project.pricingType} price={project.price} />
           </div>
           <StarRating
-            rating={project.rating_average}
-            count={project.rating_count}
+            rating={project.ratingAverage}
+            count={project.ratingCount}
             size="sm"
           />
         </div>

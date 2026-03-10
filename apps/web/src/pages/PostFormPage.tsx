@@ -1,12 +1,18 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
-import type { Post, ProjectListItem, PaginatedResponse } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Post, Project } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
 import RichTextEditor from "../components/editor/RichTextEditor";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 type ContentType = "text" | "video" | "audio";
 type Visibility = "public" | "subscribers_only" | "gated";
@@ -34,7 +40,7 @@ export default function PostFormPage() {
   const [uploadedStorageKey, setUploadedStorageKey] = useState<string | null>(null);
 
   // UI state
-  const [myProjects, setMyProjects] = useState<ProjectListItem[]>([]);
+  const [myProjects, setMyProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -42,25 +48,27 @@ export default function PostFormPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<ProjectListItem>>(
-        "/api/v1/content/projects/?mine=true",
-      )
-      .then((data) => setMyProjects(data.results))
+    fetch(apiBase + "/api/content/projects?mine=true", {
+      credentials: "include",
+    })
+      .then((res) => res.json())
+      .then((data: { projects: Project[] }) => setMyProjects(data.projects))
       .catch(() => {});
 
     if (isEdit && id) {
-      api
-        .get<Post>(`/api/v1/content/posts/${id}/`)
-        .then((post) => {
-          setTitle(post.title);
-          setBody(post.body);
-          setBodyHtml(post.body_html);
-          setContentType(post.content_type);
-          setProjectId(post.project ? String(post.project) : "");
-          setIsPublished(post.is_published);
-          setIsPremium(post.is_premium);
-          setVisibility(post.visibility);
+      client.api.content.posts[":id"]
+        .$get({ param: { id } })
+        .then((res) => res.json() as Promise<unknown>)
+        .then((data: unknown) => {
+          const post = (data as { post: Post }).post;
+          setTitle(post.title || "");
+          setBody(post.body || "");
+          setBodyHtml(post.bodyHtml || "");
+          setContentType(post.contentType as ContentType);
+          setProjectId(post.projectId ? String(post.projectId) : "");
+          setIsPublished(post.isPublished ?? false);
+          setIsPremium(post.isPremium ?? false);
+          setVisibility(post.visibility as Visibility);
           if (post.thumbnail) setThumbnailPreview(post.thumbnail);
         })
         .catch(() => setError("Failed to load post."))
@@ -102,19 +110,19 @@ export default function PostFormPage() {
     try {
       const formData = new FormData();
       formData.append("title", title);
-      formData.append("content_type", contentType);
+      formData.append("contentType", contentType);
       formData.append("visibility", visibility);
-      formData.append("is_premium", String(isPremium));
-      formData.append("is_published", String(isPublished));
+      formData.append("isPremium", String(isPremium));
+      formData.append("isPublished", String(isPublished));
       if (projectId) formData.append("project", projectId);
 
       if (contentType === "text") {
         formData.append("body", body);
-        formData.append("body_html", bodyHtml);
+        formData.append("bodyHtml", bodyHtml);
       } else {
         // Optional description for media posts
         if (body) formData.append("body", body);
-        if (bodyHtml) formData.append("body_html", bodyHtml);
+        if (bodyHtml) formData.append("bodyHtml", bodyHtml);
       }
 
       if (thumbnailFile) {
@@ -123,30 +131,51 @@ export default function PostFormPage() {
 
       // For media posts with uploaded file, set the file field
       if (contentType === "video" && uploadedStorageKey) {
-        formData.append("video_file", uploadedStorageKey);
+        formData.append("videoFile", uploadedStorageKey);
       }
       if (contentType === "audio" && uploadedStorageKey) {
-        formData.append("audio_file", uploadedStorageKey);
+        formData.append("audioFile", uploadedStorageKey);
       }
 
       if (isEdit) {
-        await api.uploadPatch(`/api/v1/content/posts/${id}/`, formData);
+        await fetch(`${apiBase}/api/content/posts/${id}`, {
+          method: "PATCH",
+          credentials: "include",
+          body: formData,
+        }).then((res) => {
+          if (!res.ok) throw res;
+          return res.json();
+        });
       } else {
-        await api.upload("/api/v1/content/posts/", formData);
+        await fetch(`${apiBase}/api/content/posts`, {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        }).then((res) => {
+          if (!res.ok) throw res;
+          return res.json();
+        });
       }
       navigate("/dashboard");
     } catch (err) {
-      if (err instanceof ApiError && err.data && typeof err.data === "object") {
-        const fieldErrors: Record<string, string> = {};
-        for (const [key, val] of Object.entries(
-          err.data as Record<string, string[]>,
-        )) {
-          fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+      if (err instanceof Response) {
+        try {
+          const data = await err.json();
+          if (data && typeof data === "object") {
+            const fieldErrors: Record<string, string> = {};
+            for (const [key, val] of Object.entries(
+              data as Record<string, string[]>,
+            )) {
+              fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+            }
+            setErrors(fieldErrors);
+            return;
+          }
+        } catch {
+          // Fall through
         }
-        setErrors(fieldErrors);
-      } else {
-        setError("Failed to save post.");
       }
+      setError("Failed to save post.");
     } finally {
       setSaving(false);
     }
@@ -206,7 +235,7 @@ export default function PostFormPage() {
 
         {/* Text content */}
         {contentType === "text" && (
-          <FormField label="Content" required error={errors.body_html || errors.body}>
+          <FormField label="Content" required error={errors.bodyHtml || errors.body}>
             <RichTextEditor
               content={bodyHtml || body}
               onChange={(html) => {
@@ -224,7 +253,7 @@ export default function PostFormPage() {
         {/* Video upload */}
         {contentType === "video" && (
           <>
-            <FormField label="Video File" required error={errors.video_file}>
+            <FormField label="Video File" required error={errors.videoFile}>
               {mediaFile ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
@@ -271,7 +300,7 @@ export default function PostFormPage() {
         {/* Audio upload */}
         {contentType === "audio" && (
           <>
-            <FormField label="Audio File" required error={errors.audio_file}>
+            <FormField label="Audio File" required error={errors.audioFile}>
               {mediaFile ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-3 p-3 bg-base-200 rounded-lg">

@@ -1,18 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { client } from "../lib/rpc";
 import type {
   AnalyticsOverview,
   ContentAnalyticsItem,
-  ContentAnalyticsResponse,
   TimeseriesEntry,
-  TimeseriesResponse,
-  CrossPlatformComparison,
-  CrossPublishResultItem,
-  PaginatedResponse,
-  CreatorEarningsResponse,
-  CRFStatusResponse,
-} from "../lib/api";
+  CrossPublishResult,
+  CreatorEarnings,
+  CrfSubsidy,
+} from "../lib/types";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import {
@@ -26,6 +22,12 @@ import {
   DocumentTextIcon,
   ArrowTrendingUpIcon,
 } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 const PERIOD_OPTIONS = [
   { value: "7", label: "7 days" },
@@ -91,7 +93,7 @@ function SparkBar({
 // ─── Overview Stats Cards ───
 
 function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
-  const m = overview.metrics;
+  const e = overview.events;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       <div className="stat bg-base-200 rounded-lg p-4">
@@ -99,7 +101,7 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
           <EyeIcon className="w-6 h-6" />
         </div>
         <div className="stat-title text-xs">Total Views</div>
-        <div className="stat-value text-lg">{formatNumber(m.total_views)}</div>
+        <div className="stat-value text-lg">{formatNumber(e.views)}</div>
       </div>
       <div className="stat bg-base-200 rounded-lg p-4">
         <div className="stat-figure text-secondary">
@@ -107,7 +109,7 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
         </div>
         <div className="stat-title text-xs">Watch Time</div>
         <div className="stat-value text-lg">
-          {formatDuration(m.total_duration_seconds)}
+          {overview.totalDurationHours.toFixed(1)}h
         </div>
       </div>
       <div className="stat bg-base-200 rounded-lg p-4">
@@ -116,7 +118,7 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
         </div>
         <div className="stat-title text-xs">Unique Viewers</div>
         <div className="stat-value text-lg">
-          {formatNumber(m.unique_viewers)}
+          {formatNumber(overview.uniqueViewers)}
         </div>
       </div>
       <div className="stat bg-base-200 rounded-lg p-4">
@@ -125,7 +127,7 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
         </div>
         <div className="stat-title text-xs">Total Events</div>
         <div className="stat-value text-lg">
-          {formatNumber(m.total_events)}
+          {formatNumber(e.total)}
         </div>
       </div>
     </div>
@@ -135,13 +137,13 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
 // ─── Event Type Breakdown ───
 
 function EventBreakdown({ overview }: { overview: AnalyticsOverview }) {
-  const m = overview.metrics;
+  const e = overview.events;
   const items = [
-    { label: "Page Views", value: m.total_views, color: "bg-primary" },
-    { label: "Plays", value: m.total_plays, color: "bg-secondary" },
-    { label: "Watches", value: m.total_watches, color: "bg-accent" },
-    { label: "Reads", value: m.total_reads, color: "bg-info" },
-    { label: "Listens", value: m.total_listens, color: "bg-warning" },
+    { label: "Page Views", value: e.views, color: "bg-primary" },
+    { label: "Plays", value: e.plays, color: "bg-secondary" },
+    { label: "Watches", value: e.watches, color: "bg-accent" },
+    { label: "Reads", value: e.reads, color: "bg-info" },
+    { label: "Listens", value: e.listens, color: "bg-warning" },
   ].filter((i) => i.value > 0);
 
   if (items.length === 0) return null;
@@ -193,18 +195,18 @@ function TimeseriesCharts({
         <h3 className="font-semibold text-sm mb-3">Daily Trends</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <SparkBar
-            data={timeseries.map((d) => d.total_events)}
+            data={timeseries.map((d) => d.views + d.plays + d.watches + d.reads + d.listens)}
             label="Events"
             color="bg-primary"
           />
           <SparkBar
-            data={timeseries.map((d) => d.unique_viewers)}
-            label="Unique Viewers"
+            data={timeseries.map((d) => d.views)}
+            label="Views"
             color="bg-accent"
           />
           <SparkBar
-            data={timeseries.map((d) => d.duration_seconds)}
-            label="Duration"
+            data={timeseries.map((d) => d.watches + d.listens)}
+            label="Media Engagement"
             color="bg-secondary"
           />
         </div>
@@ -242,9 +244,8 @@ function ContentPerformanceTable({
             <thead>
               <tr>
                 <th>Content</th>
-                <th className="text-right">Views</th>
+                <th className="text-right">Events</th>
                 <th className="text-right">Time</th>
-                <th className="text-right">Viewers</th>
               </tr>
             </thead>
             <tbody>
@@ -252,9 +253,7 @@ function ContentPerformanceTable({
                 <tr key={`${item.type}-${item.id}`}>
                   <td>
                     <div className="flex items-center gap-2">
-                      <EventTypeIcon
-                        type={item.media_type || item.content_type || "text"}
-                      />
+                      <EventTypeIcon type={item.type} />
                       <div>
                         {item.type === "project" && item.slug ? (
                           <Link
@@ -282,94 +281,16 @@ function ContentPerformanceTable({
                     </div>
                   </td>
                   <td className="text-right text-sm">
-                    {formatNumber(item.views)}
+                    {formatNumber(item.eventCount)}
                   </td>
                   <td className="text-right text-sm">
-                    {formatDuration(item.duration_seconds)}
-                  </td>
-                  <td className="text-right text-sm">
-                    {formatNumber(item.unique_viewers)}
+                    {formatDuration(item.totalDuration)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Cross-Platform Comparison ───
-
-function CrossPlatformSection({
-  comparison,
-}: {
-  comparison: CrossPlatformComparison | null;
-}) {
-  if (!comparison) return null;
-
-  const platforms = Object.entries(comparison.platforms);
-  if (platforms.length === 0 && comparison.anthers.views === 0) return null;
-
-  const platformNames: Record<string, string> = {
-    youtube: "YouTube",
-    steam: "Steam",
-    itchio: "itch.io",
-    substack: "Substack",
-  };
-
-  return (
-    <div className="card bg-base-200 mb-8">
-      <div className="card-body p-4">
-        <h3 className="font-semibold text-sm mb-3">
-          Cross-Platform Comparison
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="table table-sm">
-            <thead>
-              <tr>
-                <th>Platform</th>
-                <th className="text-right">Views</th>
-                <th className="text-right">Watch Time</th>
-                <th className="text-right">Revenue/View</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-primary/10">
-                <td className="font-medium">Anthers</td>
-                <td className="text-right">
-                  {formatNumber(comparison.anthers.views)}
-                </td>
-                <td className="text-right">
-                  {formatDuration(comparison.anthers.duration_seconds)}
-                </td>
-                <td className="text-right text-base-content/40">--</td>
-              </tr>
-              {platforms.map(([platform, data]) => (
-                <tr key={platform}>
-                  <td>{platformNames[platform] || platform}</td>
-                  <td className="text-right">{formatNumber(data.views)}</td>
-                  <td className="text-right">
-                    {formatDuration(data.watch_time_seconds)}
-                  </td>
-                  <td className="text-right">
-                    ${data.revenue_per_view.toFixed(4)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {platforms.length === 0 && (
-          <p className="text-xs text-base-content/40 mt-2">
-            Connect external platforms in{" "}
-            <Link to="/settings" className="link">
-              Settings
-            </Link>{" "}
-            to see cross-platform comparisons.
-          </p>
-        )}
       </div>
     </div>
   );
@@ -380,11 +301,11 @@ function CrossPlatformSection({
 function RevenueSection({
   earnings,
 }: {
-  earnings: CreatorEarningsResponse | null;
+  earnings: CreatorEarnings | null;
 }) {
   if (!earnings) return null;
   const total = parseFloat(earnings.total);
-  if (total === 0 && earnings.subscriber_count === 0) return null;
+  if (total === 0 && earnings.subscriberCount === 0) return null;
 
   return (
     <div className="card bg-base-200 mb-8">
@@ -394,13 +315,13 @@ function RevenueSection({
           <div>
             <div className="text-xs text-base-content/50">Pool Income</div>
             <div className="text-lg font-bold text-success">
-              ${earnings.total_pool}
+              ${earnings.poolTotal}
             </div>
           </div>
           <div>
             <div className="text-xs text-base-content/50">Boost Income</div>
             <div className="text-lg font-bold text-success">
-              ${earnings.total_boost}
+              ${earnings.boostTotal}
             </div>
           </div>
           <div>
@@ -410,7 +331,7 @@ function RevenueSection({
           <div>
             <div className="text-xs text-base-content/50">Subscribers</div>
             <div className="text-lg font-bold">
-              {earnings.subscriber_count}
+              {earnings.subscriberCount}
             </div>
           </div>
         </div>
@@ -431,15 +352,16 @@ function RevenueSection({
 // ─── Cross-Publish History ───
 
 function CrossPublishHistory() {
-  const [results, setResults] = useState<CrossPublishResultItem[]>([]);
+  const [results, setResults] = useState<CrossPublishResult[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<CrossPublishResultItem>>(
-        "/api/v1/integrations/cross-publish/",
+    client.api.integrations["cross-publish"]
+      .$get()
+      .then((res) => res.json())
+      .then((data) =>
+        setResults((data as { results: CrossPublishResult[] }).results),
       )
-      .then((data) => setResults(data.results))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -467,7 +389,6 @@ function CrossPublishHistory() {
           <table className="table table-sm">
             <thead>
               <tr>
-                <th>Content</th>
                 <th>Platform</th>
                 <th>Status</th>
                 <th>Date</th>
@@ -477,20 +398,19 @@ function CrossPublishHistory() {
             <tbody>
               {results.slice(0, 10).map((r) => (
                 <tr key={r.id}>
-                  <td className="text-sm">{r.content_title || "—"}</td>
-                  <td className="text-sm">{r.platform_display}</td>
+                  <td className="text-sm">{r.platform}</td>
                   <td>
                     <span className={`badge badge-xs ${statusBadge(r.status)}`}>
                       {r.status}
                     </span>
                   </td>
                   <td className="text-xs text-base-content/50">
-                    {new Date(r.created_at).toLocaleDateString()}
+                    {new Date(r.createdAt).toLocaleDateString()}
                   </td>
                   <td>
-                    {r.external_url ? (
+                    {r.externalUrl ? (
                       <a
-                        href={r.external_url}
+                        href={r.externalUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="link link-primary text-xs"
@@ -516,12 +436,12 @@ function CrossPublishHistory() {
 function CRFSubsidySection({
   crfStatus,
 }: {
-  crfStatus: CRFStatusResponse | null;
+  crfStatus: { balance: string; subsidies: CrfSubsidy[] } | null;
 }) {
   if (!crfStatus || crfStatus.subsidies.length === 0) return null;
 
   const latest = crfStatus.subsidies[0];
-  const hasSubsidy = parseFloat(latest.subsidy_amount) > 0;
+  const hasSubsidy = parseFloat(latest.subsidyAmount) > 0;
 
   function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -541,13 +461,13 @@ function CRFSubsidySection({
           <div>
             <div className="text-xs text-base-content/50">Hosting Cost</div>
             <div className="text-lg font-bold">
-              ${latest.estimated_hosting_cost}
+              ${latest.estimatedHostingCost}
             </div>
           </div>
           <div>
             <div className="text-xs text-base-content/50">Your Earnings</div>
             <div className="text-lg font-bold">
-              ${latest.creator_earnings}
+              ${latest.creatorEarnings}
             </div>
           </div>
           <div>
@@ -555,13 +475,13 @@ function CRFSubsidySection({
             <div
               className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}
             >
-              ${latest.subsidy_amount}
+              ${latest.subsidyAmount}
             </div>
           </div>
           <div>
             <div className="text-xs text-base-content/50">Storage Used</div>
             <div className="text-lg font-bold">
-              {formatBytes(latest.storage_bytes)}
+              {formatBytes(latest.storageBytes ?? 0)}
             </div>
           </div>
         </div>
@@ -571,8 +491,8 @@ function CRFSubsidySection({
             : "Your earnings cover your hosting costs. Thank you for being part of the community!"}
         </p>
         <p className="text-xs text-base-content/40 mt-1">
-          {latest.project_count} projects, {latest.post_count} posts —{" "}
-          {new Date(latest.billing_cycle).toLocaleDateString("en-US", {
+          {latest.projectCount} projects, {latest.postCount} posts —{" "}
+          {new Date(latest.billingCycle).toLocaleDateString("en-US", {
             month: "long",
             year: "numeric",
           })}
@@ -589,47 +509,54 @@ export default function AnalyticsDashboardPage() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [content, setContent] = useState<ContentAnalyticsItem[]>([]);
   const [timeseries, setTimeseries] = useState<TimeseriesEntry[]>([]);
-  const [comparison, setComparison] =
-    useState<CrossPlatformComparison | null>(null);
-  const [earnings, setEarnings] = useState<CreatorEarningsResponse | null>(
-    null,
-  );
-  const [crfStatus, setCrfStatus] = useState<CRFStatusResponse | null>(null);
+  const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
+  const [crfStatus, setCrfStatus] = useState<{
+    balance: string;
+    subsidies: CrfSubsidy[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
+
+    // Use raw fetch for endpoints that need query params
     Promise.all([
-      api.get<AnalyticsOverview>(
-        `/api/v1/integrations/analytics/overview/?period=${period}`,
-      ),
-      api.get<ContentAnalyticsResponse>(
-        `/api/v1/integrations/analytics/content/?period=${period}`,
-      ),
-      api.get<TimeseriesResponse>(
-        `/api/v1/integrations/analytics/timeseries/?period=${period}`,
-      ),
-      api.get<CrossPlatformComparison>(
-        `/api/v1/integrations/analytics/comparison/?period=${period}`,
-      ),
+      fetch(`${apiBase}/api/integrations/analytics/overview?period=${period}`, {
+        credentials: "include",
+      }).then((res) => res.json()),
+      fetch(`${apiBase}/api/integrations/analytics/content?period=${period}`, {
+        credentials: "include",
+      }).then((res) => res.json()),
+      fetch(
+        `${apiBase}/api/integrations/analytics/timeseries?period=${period}`,
+        { credentials: "include" },
+      ).then((res) => res.json()),
     ])
-      .then(([overviewData, contentData, timeseriesData, comparisonData]) => {
-        setOverview(overviewData);
-        setContent(contentData.content);
-        setTimeseries(timeseriesData.timeseries);
-        setComparison(comparisonData);
+      .then(([overviewData, contentData, timeseriesData]) => {
+        setOverview(overviewData as AnalyticsOverview);
+        setContent(
+          (contentData as { content: ContentAnalyticsItem[] }).content,
+        );
+        setTimeseries(
+          (timeseriesData as { timeseries: TimeseriesEntry[] }).timeseries,
+        );
       })
       .catch(() => {})
       .finally(() => setLoading(false));
 
     // Fetch earnings and CRF status (non-blocking, independent of period)
-    api
-      .get<CreatorEarningsResponse>("/api/v1/subscriptions/earnings/")
-      .then(setEarnings)
+    client.api.subscriptions.earnings
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setEarnings(data as CreatorEarnings))
       .catch(() => {});
-    api
-      .get<CRFStatusResponse>("/api/v1/payments/crf/status/")
-      .then(setCrfStatus)
+
+    client.api.payments.crf.status
+      .$get()
+      .then((res) => res.json())
+      .then((data) =>
+        setCrfStatus(data as { balance: string; subsidies: CrfSubsidy[] }),
+      )
       .catch(() => {});
   }, [period]);
 
@@ -670,7 +597,6 @@ export default function AnalyticsDashboardPage() {
           <ContentPerformanceTable content={content} />
           <RevenueSection earnings={earnings} />
           <CRFSubsidySection crfStatus={crfStatus} />
-          <CrossPlatformSection comparison={comparison} />
           <CrossPublishHistory />
         </>
       )}

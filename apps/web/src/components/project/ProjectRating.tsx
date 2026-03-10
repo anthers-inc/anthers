@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type RatingAggregate } from "../../lib/api";
+import { client } from "../../lib/rpc";
+import type { RatingAggregate } from "../../lib/types";
 import { useAuth } from "../../lib/auth";
 import StarRating from "../ui/StarRating";
 
@@ -8,8 +9,9 @@ export default function ProjectRating({ slug }: { slug: string }) {
   const [rating, setRating] = useState<RatingAggregate | null>(null);
 
   const fetchRating = () => {
-    api
-      .get<RatingAggregate>(`/api/v1/content/projects/${slug}/ratings/`)
+    client.api.content.projects[":slug"].ratings
+      .$get({ param: { slug } })
+      .then((res) => res.json())
       .then(setRating)
       .catch(console.error);
   };
@@ -21,7 +23,10 @@ export default function ProjectRating({ slug }: { slug: string }) {
   const handleRate = async (score: number) => {
     if (!isAuthenticated) return;
     try {
-      await api.post(`/api/v1/content/projects/${slug}/ratings/`, { score });
+      await client.api.content.projects[":slug"].ratings.$post({
+        param: { slug },
+        json: { score },
+      });
       fetchRating();
     } catch (err) {
       console.error("Failed to rate:", err);
@@ -40,9 +45,9 @@ export default function ProjectRating({ slug }: { slug: string }) {
           interactive={isAuthenticated}
           onRate={handleRate}
         />
-        {rating.user_rating !== null && (
+        {rating.userRating !== null && (
           <span className="text-sm text-base-content/60">
-            Your rating: {rating.user_rating}/5
+            Your rating: {rating.userRating}/5
           </span>
         )}
       </div>

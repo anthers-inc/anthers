@@ -1,11 +1,17 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
-import type { GameJamListItem, PaginatedResponse } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { GameJam } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import { PlusIcon, CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 const STATUS_TABS = [
   { value: "", label: "All" },
@@ -48,16 +54,16 @@ function formatDateRange(start: string, end: string): string {
   return `${formatDate(start)} – ${formatDate(end)}`;
 }
 
-function JamCard({ jam }: { jam: GameJamListItem }) {
+function JamCard({ jam }: { jam: GameJam }) {
   return (
     <Link
       to={`/jams/${jam.slug}`}
       className="card bg-base-200 hover:bg-base-300 transition-colors"
     >
-      {jam.cover_image && (
+      {jam.coverImage && (
         <figure className="h-40">
           <img
-            src={jam.cover_image}
+            src={jam.coverImage}
             alt={jam.title}
             className="w-full h-full object-cover"
           />
@@ -66,24 +72,24 @@ function JamCard({ jam }: { jam: GameJamListItem }) {
       <div className="card-body p-4">
         <div className="flex items-start justify-between gap-2">
           <h2 className="card-title text-base">{jam.title}</h2>
-          <JamStatusBadge status={jam.status} />
+          <JamStatusBadge status={(jam as GameJam & { status: string }).status} />
         </div>
         <div className="flex flex-col gap-1 text-sm text-base-content/60">
           <div className="flex items-center gap-1.5">
             <CalendarIcon className="w-3.5 h-3.5" />
-            <span>{formatDateRange(jam.start_at, jam.end_at)}</span>
+            <span>{formatDateRange(jam.startAt, jam.endAt)}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <ClockIcon className="w-3.5 h-3.5" />
-            <span>Voting until {formatDate(jam.voting_end_at)}</span>
+            <span>Voting until {formatDate(jam.votingEndAt)}</span>
           </div>
         </div>
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-base-content/40">
-            by {jam.creator_username}
+            by {jam.creator?.username}
           </span>
           <span className="text-xs text-base-content/50">
-            {jam.entry_count} {jam.entry_count === 1 ? "entry" : "entries"}
+            {jam.entryCount} {jam.entryCount === 1 ? "entry" : "entries"}
           </span>
         </div>
       </div>
@@ -94,15 +100,15 @@ function JamCard({ jam }: { jam: GameJamListItem }) {
 export default function JamsPage() {
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState("");
-  const [jams, setJams] = useState<GameJamListItem[]>([]);
+  const [jams, setJams] = useState<GameJam[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     const params = statusFilter ? `?status=${statusFilter}` : "";
-    api
-      .get<PaginatedResponse<GameJamListItem>>(`/api/v1/jams/${params}`)
-      .then((data) => setJams(data.results))
+    fetch(`${apiBase}/api/jams${params}`, { credentials: "include" })
+      .then((res) => res.json())
+      .then((data: { jams: GameJam[] }) => setJams(data.jams))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [statusFilter]);

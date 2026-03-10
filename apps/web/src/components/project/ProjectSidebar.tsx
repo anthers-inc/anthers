@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  api,
-  type Project,
-  type PublicUser,
-  type PaginatedResponse,
-  type ProjectListItem,
-} from "../../lib/api";
+import type { Project, PublicUser } from "../../lib/types";
+import { client } from "../../lib/rpc";
 import { useAuth } from "../../lib/auth";
 import {
   LinkIcon,
@@ -15,47 +10,52 @@ import {
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 
+const apiBase =
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:8000"
+    : "";
+
 export default function ProjectSidebar({ project }: { project: Project }) {
   const { isAuthenticated, user } = useAuth();
   const [creator, setCreator] = useState<PublicUser | null>(null);
-  const [moreProjects, setMoreProjects] = useState<ProjectListItem[]>([]);
+  const [moreProjects, setMoreProjects] = useState<Project[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
-    api
-      .get<PublicUser>(
-        `/api/v1/accounts/users/${project.creator_username}/`
-      )
+    client.api.accounts.users[":username"]
+      .$get({ param: { username: project.creator?.username! } })
+      .then((res) => res.json())
       .then((data) => {
-        setCreator(data);
-        setIsFollowing(data.is_following);
+        const u = (data as any).user;
+        setCreator(u);
+        setIsFollowing(u.isFollowing);
       })
       .catch(console.error);
 
-    api
-      .get<PaginatedResponse<ProjectListItem>>(
-        `/api/v1/content/projects/?creator=${project.creator_username}`
-      )
+    fetch(apiBase + "/api/content/projects?creator=" + project.creator?.username, {
+      credentials: "include",
+    })
+      .then((res) => res.json())
       .then((data) => {
         setMoreProjects(
-          data.results.filter((p) => p.slug !== project.slug).slice(0, 3)
+          (data.projects as Project[]).filter((p) => p.slug !== project.slug).slice(0, 3)
         );
       })
       .catch(console.error);
-  }, [project.creator_username, project.slug]);
+  }, [project.creator?.username, project.slug]);
 
   const handleFollow = async () => {
     if (!isAuthenticated || !creator) return;
     try {
       if (isFollowing) {
-        await api.post(
-          `/api/v1/accounts/users/${creator.username}/unfollow/`
-        );
+        await client.api.accounts.users[":username"].unfollow.$post({
+          param: { username: creator.username },
+        });
         setIsFollowing(false);
       } else {
-        await api.post(
-          `/api/v1/accounts/users/${creator.username}/follow/`
-        );
+        await client.api.accounts.users[":username"].follow.$post({
+          param: { username: creator.username },
+        });
         setIsFollowing(true);
       }
     } catch (err) {
@@ -63,7 +63,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
     }
   };
 
-  const isOwnProject = user?.username === project.creator_username;
+  const isOwnProject = user?.username === project.creator?.username;
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,12 +75,12 @@ export default function ProjectSidebar({ project }: { project: Project }) {
               {creator.avatar ? (
                 <img
                   src={creator.avatar}
-                  alt={creator.display_name || creator.username}
+                  alt={creator.displayName || creator.username}
                   className="w-16 h-16 rounded-full object-cover"
                 />
               ) : (
                 <div className="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center text-2xl font-bold text-base-content/40">
-                  {(creator.display_name || creator.username)
+                  {(creator.displayName || creator.username)
                     .charAt(0)
                     .toUpperCase()}
                 </div>
@@ -90,10 +90,10 @@ export default function ProjectSidebar({ project }: { project: Project }) {
               to={`/${creator.username}`}
               className="font-semibold link link-hover"
             >
-              {creator.display_name || creator.username}
+              {creator.displayName || creator.username}
             </Link>
             <span className="text-xs text-base-content/50">
-              {creator.follower_count} followers
+              {creator.followerCount} followers
             </span>
             {isAuthenticated && !isOwnProject && (
               <button
@@ -126,13 +126,13 @@ export default function ProjectSidebar({ project }: { project: Project }) {
       )}
 
       {/* Links */}
-      {(project.website_url || project.source_url) && (
+      {(project.websiteUrl || project.sourceUrl) && (
         <div>
           <h3 className="font-semibold text-sm mb-2">Links</h3>
           <div className="flex flex-col gap-1">
-            {project.website_url && (
+            {project.websiteUrl && (
               <a
-                href={project.website_url}
+                href={project.websiteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="link link-hover text-sm flex items-center gap-1"
@@ -141,9 +141,9 @@ export default function ProjectSidebar({ project }: { project: Project }) {
                 Website
               </a>
             )}
-            {project.source_url && (
+            {project.sourceUrl && (
               <a
-                href={project.source_url}
+                href={project.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="link link-hover text-sm flex items-center gap-1"
@@ -180,12 +180,12 @@ export default function ProjectSidebar({ project }: { project: Project }) {
       <div className="flex gap-4 text-sm text-base-content/60">
         <span className="flex items-center gap-1">
           <EyeIcon className="w-4 h-4" />
-          {project.view_count.toLocaleString()}
+          {project.viewCount.toLocaleString()}
         </span>
-        {project.download_count > 0 && (
+        {project.downloadCount > 0 && (
           <span className="flex items-center gap-1">
             <ArrowDownTrayIcon className="w-4 h-4" />
-            {project.download_count.toLocaleString()}
+            {project.downloadCount.toLocaleString()}
           </span>
         )}
       </div>
@@ -193,7 +193,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
       {/* Published date */}
       <div className="text-xs text-base-content/50">
         Published{" "}
-        {new Date(project.created_at).toLocaleDateString("en-US", {
+        {new Date(project.createdAt).toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
           year: "numeric",

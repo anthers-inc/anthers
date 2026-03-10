@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, type Post, type Comment, type PaginatedResponse } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Post, Comment } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
 import { useAttentionTracker } from "../lib/attention";
@@ -39,31 +40,34 @@ export default function PostPage() {
     setLoading(true);
 
     Promise.all([
-      api.get<Post>(`/api/v1/content/posts/${id}/`),
-      api
-        .get<PaginatedResponse<Comment>>(`/api/v1/content/posts/${id}/comments/`)
-        .catch(() => ({ results: [] as Comment[] })),
+      client.api.content.posts[":id"]
+        .$get({ param: { id } })
+        .then((res) => res.json() as Promise<unknown>),
+      client.api.content.posts[":id"].comments
+        .$get({ param: { id } })
+        .then((res) => res.json() as Promise<unknown>)
+        .catch(() => ({ comments: [] as Comment[] })),
     ])
       .then(([postData, commentData]) => {
-        setPost(postData);
-        setComments(commentData.results);
+        setPost((postData as { post: Post }).post);
+        setComments((commentData as { comments: Comment[] }).comments);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Attention tracking—map content_type to event_type
+  // Attention tracking—map contentType to event_type
   const eventType =
-    post?.content_type === "video"
+    post?.contentType === "video"
       ? "watch"
-      : post?.content_type === "audio"
+      : post?.contentType === "audio"
         ? "listen"
         : "read";
 
   useAttentionTracker({
-    creatorId: post?.creator_id ?? null,
+    creatorId: post?.creatorId ?? null,
     postId: post?.id ?? null,
-    projectId: post?.project ?? null,
+    projectId: post?.projectId ?? null,
     eventType,
     active: !!post,
   });
@@ -73,11 +77,12 @@ export default function PostPage() {
     if (!commentBody.trim() || !id) return;
     setSubmitting(true);
     try {
-      const comment = await api.post<Comment>(
-        `/api/v1/content/posts/${id}/comments/`,
-        { body: commentBody }
-      );
-      setComments([comment, ...comments]);
+      const res = await client.api.content.posts[":id"].comments.$post({
+        param: { id },
+        json: { body: commentBody },
+      });
+      const data = (await res.json()) as { comment: Comment };
+      setComments([data.comment, ...comments]);
       setCommentBody("");
     } catch (err) {
       console.error("Failed to post comment:", err);
@@ -103,27 +108,27 @@ export default function PostPage() {
     );
   }
 
-  const date = new Date(post.created_at).toLocaleDateString("en-US", {
+  const date = new Date(post.createdAt).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
   });
 
   // Get latest transcoding job for media posts
-  const latestJob = post.transcoding_jobs?.[0];
-  const videoSrc = latestJob?.hls_manifest_url || (post.video_file ?? undefined);
-  const audioSrc = latestJob?.output_file_url || (post.audio_file ?? undefined);
+  const latestJob = post.transcodingJobs?.[0];
+  const videoSrc = latestJob?.hlsManifestUrl || (post.videoFile ?? undefined);
+  const audioSrc = latestJob?.outputFileUrl || (post.audioFile ?? undefined);
 
   const handlePlayInMiniPlayer = () => {
     if (!audioSrc || !post) return;
     mediaPlayer.playTrack({
       src: audioSrc,
       title: post.title || "Untitled",
-      creator: post.creator,
-      creatorId: post.creator_id,
+      creator: post.creator?.username || "",
+      creatorId: post.creatorId,
       thumbnail: post.thumbnail,
       postId: post.id,
-      waveform: latestJob?.waveform_data,
+      waveform: latestJob?.waveformData,
     });
   };
 
@@ -133,61 +138,53 @@ export default function PostPage() {
         {/* Post header */}
         {post.title && <h1 className="text-3xl font-bold mb-3">{post.title}</h1>}
         <div className="flex items-center gap-3 mb-6 text-sm">
-          {post.creator_avatar ? (
+          {post.creator?.avatar ? (
             <img
-              src={post.creator_avatar}
-              alt={post.creator}
+              src={post.creator.avatar}
+              alt={post.creator?.username}
               className="w-10 h-10 rounded-full object-cover"
             />
           ) : (
             <div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
-              {(post.creator_username ?? post.creator).charAt(0).toUpperCase()}
+              {(post.creator?.username ?? "?").charAt(0).toUpperCase()}
             </div>
           )}
           <div>
             <Link
-              to={`/${post.creator_username}`}
+              to={`/${post.creator?.username}`}
               className="font-medium link link-hover"
             >
-              {post.creator}
+              {post.creator?.displayName || post.creator?.username}
             </Link>
             <p className="text-base-content/50 text-xs">{date}</p>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            {post.content_type === "text" && post.estimated_read_minutes && (
+            {post.contentType === "text" && post.estimatedReadMinutes && (
               <span className="flex items-center gap-1 text-xs text-base-content/50">
                 <ClockIcon className="w-3 h-3" />
-                {post.estimated_read_minutes} min read
+                {post.estimatedReadMinutes} min read
               </span>
             )}
-            {post.content_type === "video" && post.duration_seconds && (
+            {post.contentType === "video" && post.durationSeconds && (
               <span className="flex items-center gap-1 text-xs text-base-content/50">
                 <FilmIcon className="w-3 h-3" />
-                {formatDuration(post.duration_seconds)}
+                {formatDuration(post.durationSeconds)}
               </span>
             )}
-            {post.content_type === "audio" && post.duration_seconds && (
+            {post.contentType === "audio" && post.durationSeconds && (
               <span className="flex items-center gap-1 text-xs text-base-content/50">
                 <MusicalNoteIcon className="w-3 h-3" />
-                {formatDuration(post.duration_seconds)}
+                {formatDuration(post.durationSeconds)}
               </span>
             )}
-            {post.is_premium && (
+            {post.isPremium && (
               <span className="badge badge-secondary badge-sm">Premium</span>
-            )}
-            {post.project_title && (
-              <Link
-                to={`/explore/${post.project_slug}`}
-                className="badge badge-outline"
-              >
-                {post.project_title}
-              </Link>
             )}
           </div>
         </div>
 
         {/* Locked content gate */}
-        {post.access_granted === false && (
+        {post.accessGranted === false && (
           <div className="card bg-base-200 border border-warning/30 mb-6">
             <div className="card-body text-center">
               <div className="text-4xl mb-2">
@@ -213,13 +210,13 @@ export default function PostPage() {
         )}
 
         {/* Video content */}
-        {post.access_granted !== false && post.content_type === "video" && (
+        {post.accessGranted !== false && post.contentType === "video" && (
           <div className="mb-6">
             {latestJob && latestJob.status !== "completed" ? (
               <TranscodingStatus
                 status={latestJob.status}
-                progress={latestJob.progress}
-                errorMessage={latestJob.error_message}
+                progress={latestJob.progress ?? 0}
+                errorMessage={latestJob.errorMessage ?? undefined}
               />
             ) : videoSrc ? (
               <VideoPlayer
@@ -235,18 +232,18 @@ export default function PostPage() {
         )}
 
         {/* Audio content */}
-        {post.access_granted !== false && post.content_type === "audio" && (
+        {post.accessGranted !== false && post.contentType === "audio" && (
           <div className="mb-6">
             {latestJob && latestJob.status !== "completed" ? (
               <TranscodingStatus
                 status={latestJob.status}
-                progress={latestJob.progress}
-                errorMessage={latestJob.error_message}
+                progress={latestJob.progress ?? 0}
+                errorMessage={latestJob.errorMessage ?? undefined}
               />
             ) : audioSrc ? (
               <AudioPlayer
                 src={audioSrc}
-                waveform={latestJob?.waveform_data}
+                waveform={latestJob?.waveformData}
                 onPlayInMiniPlayer={handlePlayInMiniPlayer}
               />
             ) : (
@@ -258,10 +255,10 @@ export default function PostPage() {
         )}
 
         {/* Post body */}
-        {post.access_granted !== false && (
+        {post.accessGranted !== false && (
           <div className="prose prose-sm max-w-none mb-8">
-            {post.body_html ? (
-              <div dangerouslySetInnerHTML={{ __html: post.body_html }} />
+            {post.bodyHtml ? (
+              <div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
             ) : post.body ? (
               <Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
             ) : null}
@@ -322,7 +319,7 @@ export default function PostPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-medium">{comment.username}</span>
                     <span className="text-base-content/40 text-xs">
-                      {new Date(comment.created_at).toLocaleDateString()}
+                      {new Date(comment.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                   <p className="text-sm mt-1">{comment.body}</p>

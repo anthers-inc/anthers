@@ -1,29 +1,26 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
-import type { PostListItem, PaginatedResponse } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { PostListItem } from "../lib/types";
 import ContentCard from "../components/cards/ContentCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
-import Pagination from "../components/ui/Pagination";
 import { RssIcon } from "@heroicons/react/24/outline";
 
 export default function FeedPage() {
-  const [data, setData] = useState<PaginatedResponse<PostListItem> | null>(null);
+  const [posts, setPosts] = useState<PostListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setLoading(true);
-    api
-      .get<PaginatedResponse<PostListItem>>(
-        `/api/v1/accounts/me/feed/?page=${page}`,
-      )
-      .then(setData)
+    client.api.accounts.me.feed
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setPosts((data as { posts: PostListItem[] }).posts))
       .catch(() => setError("Failed to load feed."))
       .finally(() => setLoading(false));
-  }, [page]);
+  }, []);
 
   if (loading) {
     return (
@@ -45,21 +42,12 @@ export default function FeedPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">Your Feed</h1>
 
-      {data && data.results.length > 0 ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.results.map((post) => (
-              <ContentCard key={post.id} post={post} />
-            ))}
-          </div>
-          <Pagination
-            count={data.count}
-            next={data.next}
-            previous={data.previous}
-            currentPage={page}
-            onPageChange={setPage}
-          />
-        </>
+      {posts.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {posts.map((post) => (
+            <ContentCard key={post.id} post={post} />
+          ))}
+        </div>
       ) : (
         <EmptyState
           icon={<RssIcon className="w-12 h-12" />}

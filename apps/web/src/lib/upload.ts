@@ -1,113 +1,105 @@
-import { api, BASE_URL } from "./api";
-
-interface UploadUrlResponse {
-  method: "presigned" | "direct";
-  upload_url: string;
-  storage_key: string | null;
-}
-
-interface DirectUploadResponse {
-  storage_key: string;
-  url: string;
-}
+import { client } from "./rpc";
 
 /**
  * Upload a media file (video/audio) using presigned URL (S3) or direct upload (local dev).
  * Returns the storage key for the uploaded file.
  */
 export async function uploadMediaFile(
-  file: File,
-  mediaType: "video" | "audio",
-  onProgress?: (percent: number) => void,
+	file: File,
+	mediaType: "video" | "audio",
+	onProgress?: (percent: number) => void,
 ): Promise<string> {
-  // Step 1: Get upload URL
-  const urlInfo = await api.post<UploadUrlResponse>(
-    "/api/v1/content/media-upload/url/",
-    { filename: file.name, media_type: mediaType },
-  );
+	// Step 1: Get upload URL from API
+	const res = await client.api.content["media-upload"].presign.$post({
+		json: { filename: file.name, contentType: file.type, mediaType },
+	});
+	if (!res.ok) throw new Error("Failed to get upload URL");
+	const urlInfo = (await res.json()) as {
+		method: "presigned" | "direct";
+		uploadUrl: string;
+		key: string;
+	};
 
-  if (urlInfo.method === "presigned" && urlInfo.storage_key) {
-    // S3 presigned upload
-    await xhrUpload(urlInfo.upload_url, file, "PUT", onProgress);
-    return urlInfo.storage_key;
-  } else {
-    // Direct multipart upload (local dev)
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("media_type", mediaType);
-    const result = await xhrUploadFormData<DirectUploadResponse>(
-      urlInfo.upload_url,
-      formData,
-      onProgress,
-    );
-    return result.storage_key;
-  }
+	if (urlInfo.method === "presigned") {
+		// S3 presigned upload — PUT directly to Spaces
+		await xhrUpload(urlInfo.uploadUrl, file, "PUT", onProgress);
+		return urlInfo.key;
+	} else {
+		// Direct multipart upload (local dev)
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("mediaType", mediaType);
+		const result = await xhrUploadFormData<{ key: string; url: string }>(
+			urlInfo.uploadUrl,
+			formData,
+			onProgress,
+		);
+		return result.key;
+	}
 }
 
 function xhrUpload(
-  url: string,
-  file: File,
-  method: string,
-  onProgress?: (percent: number) => void,
+	url: string,
+	file: File,
+	method: string,
+	onProgress?: (percent: number) => void,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open(method, url);
 
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
+		xhr.upload.addEventListener("progress", (e) => {
+			if (e.lengthComputable && onProgress) {
+				onProgress(Math.round((e.loaded / e.total) * 100));
+			}
+		});
 
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-      } else {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
-      }
-    });
+		xhr.addEventListener("load", () => {
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve();
+			} else {
+				reject(new Error(`Upload failed with status ${xhr.status}`));
+			}
+		});
 
-    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-    xhr.send(file);
-  });
+		xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+		xhr.send(file);
+	});
 }
 
 function xhrUploadFormData<T>(
-  url: string,
-  formData: FormData,
-  onProgress?: (percent: number) => void,
+	url: string,
+	formData: FormData,
+	onProgress?: (percent: number) => void,
 ): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    // Handle relative URLs
-    const fullUrl = url.startsWith("/")
-      ? `${BASE_URL}${url}`
-      : url;
-    xhr.open("POST", fullUrl);
-    xhr.withCredentials = true;
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		// Handle relative URLs — use the same base as the RPC client
+		const baseUrl =
+			typeof location !== "undefined" &&
+			(location.hostname === "localhost" ||
+				location.hostname === "127.0.0.1")
+				? "http://localhost:8000"
+				: "";
+		const fullUrl = url.startsWith("/") ? `${baseUrl}${url}` : url;
+		xhr.open("POST", fullUrl);
+		xhr.withCredentials = true;
 
-    // Include CSRF token
-    const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
-    if (csrfMatch) {
-      xhr.setRequestHeader("X-CSRFToken", csrfMatch[1]);
-    }
+		xhr.upload.addEventListener("progress", (e) => {
+			if (e.lengthComputable && onProgress) {
+				onProgress(Math.round((e.loaded / e.total) * 100));
+			}
+		});
 
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    });
+		xhr.addEventListener("load", () => {
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve(JSON.parse(xhr.responseText));
+			} else {
+				reject(new Error(`Upload failed with status ${xhr.status}`));
+			}
+		});
 
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText));
-      } else {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
-      }
-    });
-
-    xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-    xhr.send(formData);
-  });
+		xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+		xhr.send(formData);
+	});
 }

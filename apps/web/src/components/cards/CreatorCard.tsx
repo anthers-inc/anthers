@@ -1,13 +1,13 @@
 import { Link } from "react-router-dom";
-import type { PublicUser } from "../../lib/api";
-import { api } from "../../lib/api";
+import { client } from "../../lib/rpc";
+import type { PublicUser } from "../../lib/types";
 import { useAuth } from "../../lib/auth";
 import { useState } from "react";
 
 export default function CreatorCard({ creator }: { creator: PublicUser }) {
   const { isAuthenticated, user } = useAuth();
-  const [isFollowing, setIsFollowing] = useState(creator.is_following);
-  const [followerCount, setFollowerCount] = useState(creator.follower_count);
+  const [isFollowing, setIsFollowing] = useState(creator.isFollowing);
+  const [followerCount, setFollowerCount] = useState(creator.followerCount);
   const isOwnProfile = user?.username === creator.username;
 
   const handleFollow = async (e: React.MouseEvent) => {
@@ -15,11 +15,15 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
     if (!isAuthenticated) return;
     try {
       if (isFollowing) {
-        await api.post(`/api/v1/accounts/users/${creator.username}/unfollow/`);
+        await client.api.accounts.users[":username"].unfollow.$post({
+          param: { username: creator.username },
+        });
         setIsFollowing(false);
         setFollowerCount((c) => c - 1);
       } else {
-        await api.post(`/api/v1/accounts/users/${creator.username}/follow/`);
+        await client.api.accounts.users[":username"].follow.$post({
+          param: { username: creator.username },
+        });
         setIsFollowing(true);
         setFollowerCount((c) => c + 1);
       }
@@ -37,16 +41,16 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
         {creator.avatar ? (
           <img
             src={creator.avatar}
-            alt={creator.display_name || creator.username}
+            alt={creator.displayName || creator.username}
             className="w-16 h-16 rounded-full object-cover"
           />
         ) : (
           <div className="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center text-2xl font-bold text-base-content/40">
-            {(creator.display_name || creator.username).charAt(0).toUpperCase()}
+            {(creator.displayName || creator.username).charAt(0).toUpperCase()}
           </div>
         )}
         <h3 className="font-semibold">
-          {creator.display_name || creator.username}
+          {creator.displayName || creator.username}
         </h3>
         <p className="text-xs text-base-content/50">@{creator.username}</p>
         {creator.bio && (
@@ -56,7 +60,7 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
         )}
         <div className="flex gap-4 text-xs text-base-content/60 mt-1">
           <span>{followerCount} followers</span>
-          <span>{creator.project_count} projects</span>
+          <span>{creator.projectCount} projects</span>
         </div>
         {isAuthenticated && !isOwnProfile && (
           <button

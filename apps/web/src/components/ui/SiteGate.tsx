@@ -1,8 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { BASE_URL } from "../../lib/api";
 
 const STORAGE_KEY = "anthers_site_access";
-const GATE_URL = BASE_URL + "/health/gate";
+
+const baseUrl =
+  typeof location !== "undefined" &&
+  (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+    ? "http://localhost:8000"
+    : "";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
   const [authorized, setAuthorized] = useState(
@@ -19,7 +23,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(GATE_URL, {
+      const res = await fetch(`${baseUrl}/health/gate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),

@@ -1,4 +1,5 @@
-import { api, type Asset } from "../../lib/api";
+import { client } from "../../lib/rpc";
+import type { Asset } from "../../lib/types";
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 
 function formatSize(bytes: number): string {
@@ -86,7 +87,7 @@ export default function ProjectDownloads({
                   )}
                   <td>{asset.filename}</td>
                   <td className="text-base-content/60">
-                    {formatSize(asset.file_size)}
+                    {formatSize(asset.fileSize ?? 0)}
                   </td>
                   {assets.some((a) => a.version) && (
                     <td className="text-base-content/60">{asset.version}</td>
@@ -96,10 +97,11 @@ export default function ProjectDownloads({
                       className="btn btn-sm btn-primary"
                       onClick={async () => {
                         try {
-                          const res = await api.post<{ url: string }>(
-                            `/api/v1/content/projects/${projectSlug}/assets/${asset.id}/download/`,
-                          );
-                          window.location.href = res.url;
+                          const res = await client.api.content.projects[":slug"].assets[":id"].download.$post({
+                            param: { slug: projectSlug, id: String(asset.id) },
+                          });
+                          const data = await res.json() as { url: string };
+                          window.location.href = data.url;
                         } catch {
                           // Fallback to direct link
                           window.location.href = asset.file;

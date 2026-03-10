@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api } from "../lib/api";
-import type { Project, Asset } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Project, Asset } from "../lib/types";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import { TrashIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -30,9 +36,10 @@ export default function BuildsPage() {
 
   useEffect(() => {
     if (!slug) return;
-    api
-      .get<Project>(`/api/v1/content/projects/${slug}/`)
-      .then(setProject)
+    client.api.content.projects[":slug"]
+      .$get({ param: { slug } })
+      .then((res) => res.json())
+      .then((data) => setProject((data as { project: Project }).project))
       .catch(() => setError("Failed to load project."))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -47,18 +54,26 @@ export default function BuildsPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("filename", file.name);
-      formData.append("file_size", String(file.size));
-      formData.append("mime_type", file.type || "application/octet-stream");
+      formData.append("fileSize", String(file.size));
+      formData.append("mimeType", file.type || "application/octet-stream");
       formData.append("platform", platform);
       formData.append("version", version);
 
       try {
-        const asset = await api.upload<Asset>(
-          `/api/v1/content/projects/${slug}/assets/`,
-          formData,
+        const res = await fetch(
+          `${apiBase}/api/content/projects/${slug}/assets`,
+          {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          },
         );
+        if (!res.ok) throw new Error("Upload failed");
+        const data = (await res.json()) as { asset: Asset };
         setProject((prev) =>
-          prev ? { ...prev, assets: [asset, ...prev.assets] } : prev,
+          prev
+            ? { ...prev, assets: [data.asset, ...(prev.assets || [])] }
+            : prev,
         );
         setFile(null);
         setVersion("");
@@ -75,10 +90,20 @@ export default function BuildsPage() {
     async (assetId: number) => {
       if (!slug) return;
       try {
-        await api.delete(`/api/v1/content/projects/${slug}/assets/${assetId}/`);
+        const res = await fetch(
+          `${apiBase}/api/content/projects/${slug}/assets/${assetId}`,
+          {
+            method: "DELETE",
+            credentials: "include",
+          },
+        );
+        if (!res.ok) throw new Error("Delete failed");
         setProject((prev) =>
           prev
-            ? { ...prev, assets: prev.assets.filter((a) => a.id !== assetId) }
+            ? {
+                ...prev,
+                assets: (prev.assets || []).filter((a) => a.id !== assetId),
+              }
             : prev,
         );
       } catch {
@@ -103,6 +128,8 @@ export default function BuildsPage() {
       </div>
     );
   }
+
+  const assets = project.assets || [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -178,7 +205,7 @@ export default function BuildsPage() {
       </div>
 
       {/* Existing builds */}
-      {project.assets.length > 0 ? (
+      {assets.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="table table-sm">
             <thead>
@@ -192,7 +219,7 @@ export default function BuildsPage() {
               </tr>
             </thead>
             <tbody>
-              {project.assets.map((asset) => (
+              {assets.map((asset) => (
                 <tr key={asset.id}>
                   <td className="font-mono text-sm">{asset.filename}</td>
                   <td>
@@ -202,10 +229,10 @@ export default function BuildsPage() {
                   </td>
                   <td>{asset.version || "—"}</td>
                   <td className="text-sm text-base-content/60">
-                    {formatFileSize(asset.file_size)}
+                    {formatFileSize(asset.fileSize ?? 0)}
                   </td>
                   <td className="text-sm text-base-content/60">
-                    {new Date(asset.created_at).toLocaleDateString()}
+                    {new Date(asset.createdAt).toLocaleDateString()}
                   </td>
                   <td>
                     <button

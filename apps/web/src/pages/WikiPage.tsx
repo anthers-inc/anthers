@@ -7,7 +7,7 @@ import {
     MagnifyingGlassIcon,
     BookOpenIcon,
 } from "@heroicons/react/24/outline";
-import { api } from "../lib/api";
+import { client } from "../lib/rpc";
 import MDXRenderer from "../components/wiki/MDXRenderer";
 import WikiRightSidebar from "../components/wiki/WikiRightSidebar";
 
@@ -219,9 +219,15 @@ export default function WikiPage() {
             setLoading(true);
             setError(null);
             try {
-                const data = await api.get<{ content: string; section: string; filename: string }>(
-                    `/api/v1/wiki/${currentSection}/${currentFile}/`
-                );
+                // Wiki endpoint isn't part of the typed RPC routes, use raw fetch
+                const baseUrl =
+                    typeof location !== "undefined" &&
+                    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+                        ? "http://localhost:8000"
+                        : "";
+                const res = await fetch(`${baseUrl}/api/wiki/${currentSection}/${currentFile}`);
+                if (!res.ok) throw new Error(`Failed to load wiki page (${res.status})`);
+                const data = await res.json();
                 setContent(data.content);
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Unknown error");

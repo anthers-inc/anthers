@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, type PaginatedResponse, type ProjectListItem } from "../lib/api";
+import type { Project } from "../lib/types";
 import ProjectCard from "../components/cards/ProjectCard";
-import Pagination from "../components/ui/Pagination";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
@@ -25,11 +24,10 @@ const SORT_OPTIONS = [
 
 export default function ExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [data, setData] = useState<PaginatedResponse<ProjectListItem> | null>(null);
+  const [data, setData] = useState<Project[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
 
-  const currentPage = parseInt(searchParams.get("page") ?? "1");
   const mediaType = searchParams.get("media_type") ?? "";
   const search = searchParams.get("search") ?? "";
   const sort = searchParams.get("sort") ?? "newest";
@@ -37,19 +35,27 @@ export default function ExplorePage() {
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams();
-    params.set("page", String(currentPage));
     if (mediaType) params.set("media_type", mediaType);
     if (search) params.set("search", search);
     if (sort && sort !== "newest") params.set("sort", sort);
 
-    api
-      .get<PaginatedResponse<ProjectListItem>>(
-        `/api/v1/content/projects/?${params.toString()}`
-      )
-      .then(setData)
+    const apiBase =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+        ? "http://localhost:8000"
+        : "";
+
+    fetch(`${apiBase}/api/content/projects?${params.toString()}`, {
+      credentials: "include",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load projects");
+        return res.json();
+      })
+      .then((json) => setData(json.projects))
       .catch((err) => console.error("Failed to load projects:", err))
       .finally(() => setLoading(false));
-  }, [currentPage, mediaType, search, sort]);
+  }, [mediaType, search, sort]);
 
   const updateParams = (updates: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);
@@ -59,10 +65,6 @@ export default function ExplorePage() {
       } else {
         next.delete(key);
       }
-    }
-    // Reset to page 1 when filters change
-    if (!("page" in updates)) {
-      next.delete("page");
     }
     setSearchParams(next);
   };
@@ -121,7 +123,7 @@ export default function ExplorePage() {
         <div className="flex justify-center py-16">
           <LoadingSpinner size="lg" />
         </div>
-      ) : !data || data.results.length === 0 ? (
+      ) : !data || data.length === 0 ? (
         <EmptyState
           title="No projects found"
           description={
@@ -133,17 +135,10 @@ export default function ExplorePage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {data.results.map((project) => (
+            {data.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
           </div>
-          <Pagination
-            count={data.count}
-            next={data.next}
-            previous={data.previous}
-            currentPage={currentPage}
-            onPageChange={(page) => updateParams({ page: String(page) })}
-          />
         </>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
+import { client } from "../lib/rpc";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import {
@@ -10,18 +10,24 @@ import {
   MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
+
 interface ItchioGame {
   url: string;
   title: string;
-  cover_image: string;
-  short_description: string;
+  coverImage: string;
+  shortDescription: string;
 }
 
 interface ImportResult {
   url: string;
   status: "imported" | "failed";
-  project_id?: number;
-  project_slug?: string;
+  projectId?: number;
+  projectSlug?: string;
   title?: string;
   error?: string;
 }
@@ -46,19 +52,20 @@ export default function ImportPage() {
     setSelected(new Set());
 
     try {
-      const data = await api.get<{ username: string; games: ItchioGame[] }>(
-        `/api/v1/integrations/import/itchio/preview/?username=${encodeURIComponent(username.trim())}`,
+      const res = await fetch(
+        `${apiBase}/api/integrations/import/itchio/preview?username=${encodeURIComponent(username.trim())}`,
+        { credentials: "include" },
       );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as { detail?: string })?.detail ?? "Failed to fetch games.");
+      }
+      const data = (await res.json()) as { username: string; games: ItchioGame[] };
       setGames(data.games);
       // Select all by default
       setSelected(new Set(data.games.map((g) => g.url)));
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Failed to fetch games.");
-      } else {
-        setError("Something went wrong.");
-      }
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -95,16 +102,23 @@ export default function ImportPage() {
       .map((g) => ({ url: g.url }));
 
     try {
-      const data = await api.post<{
+      const res = await client.api.integrations.import.itchio.$post({
+        json: { games: gamesToImport },
+      });
+      const data = (await res.json()) as unknown as {
         imported: number;
         total: number;
         results: ImportResult[];
-      }>("/api/v1/integrations/import/itchio/", { games: gamesToImport });
+      };
       setResults(data.results);
     } catch (err) {
-      if (err instanceof ApiError) {
-        const data = err.data as { detail?: string };
-        setError(data?.detail ?? "Import failed.");
+      if (err instanceof Response) {
+        try {
+          const data = (await err.json()) as { detail?: string };
+          setError(data?.detail ?? "Import failed.");
+        } catch {
+          setError("Something went wrong during import.");
+        }
       } else {
         setError("Something went wrong during import.");
       }
@@ -180,9 +194,9 @@ export default function ImportPage() {
                     <p className="text-xs text-error">{r.error}</p>
                   )}
                 </div>
-                {r.status === "imported" && r.project_slug && (
+                {r.status === "imported" && r.projectSlug && (
                   <Link
-                    to={`/dashboard/projects/${r.project_slug}/edit`}
+                    to={`/dashboard/projects/${r.projectSlug}/edit`}
                     className="btn btn-sm btn-outline"
                   >
                     Edit Draft
@@ -252,9 +266,9 @@ export default function ImportPage() {
                   checked={selected.has(game.url)}
                   onChange={() => toggleGame(game.url)}
                 />
-                {game.cover_image && (
+                {game.coverImage && (
                   <img
-                    src={game.cover_image}
+                    src={game.coverImage}
                     alt={game.title}
                     className="w-16 h-12 object-cover rounded"
                   />
@@ -263,9 +277,9 @@ export default function ImportPage() {
                   <div className="font-medium text-sm truncate">
                     {game.title}
                   </div>
-                  {game.short_description && (
+                  {game.shortDescription && (
                     <p className="text-xs text-base-content/50 line-clamp-1">
-                      {game.short_description}
+                      {game.shortDescription}
                     </p>
                   )}
                 </div>

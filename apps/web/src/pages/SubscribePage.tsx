@@ -10,11 +10,8 @@ import {
   type SankeyLinkProps,
 } from "recharts";
 import { useAuth } from "../lib/auth";
-import {
-  api,
-  type SubscriptionTierOption,
-  type SubscriptionStatus,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type { SubscriptionTierOption, Subscription } from "../lib/types";
 
 /** Each tier's highlights are framed as what changes from the previous tier. */
 const TIER_HIGHLIGHTS: Record<
@@ -64,48 +61,7 @@ const TIER_HIGHLIGHTS: Record<
 /*  Sankey diagram—"Where Your Money Goes" visualization            */
 /* ------------------------------------------------------------------ */
 
-/*
- * Illustrative Sprout plan breakdown: $10/mo
- *
- * Split: 85% creators, 10% CRF, 5% ops. Creator Pool is fixed at
- * $4.25 (base $5 tier minus CRF+Ops); Boost absorbs the rest.
- *
- *  Col 0       Col 1             Col 2              Col 3           Col 4
- *  ─────       ─────             ─────              ─────           ─────
- *  Sub ──────→ Creator Pool  ──┐
- *  $10   │     $4.25           ├→ Creator    ─────→ Creator A ───→ Income
- *        │                     │  Support   │       $4.35       ├→ Infra: Delivery
- *        ├───→ Boost Pool   ───┘  $8.50     │                   └→ Infra: Storage
- *        │     $4.25                        ├────→ Creator B ───→ Income
- *        │                                  │       $2.25       ├→ Infra: Delivery
- *        │                                  │                   └→ Infra: Storage
- *        │                                  └────→ Creator C ───→ Income
- *        │                                          $1.90       ├→ Infra: Delivery
- *        ├───→ Resilience Fund ──→ Infra. Equity                └→ Infra: Storage
- *        │     $1.00           ├→ Education & Dev
- *        │                     ├→ Resilience & Relief
- *        │                     └→ Community & Public
- *        └───→ Platform Ops  ──→ Staff
- *              $0.50          ├→ Admin
- *                             └→ Reserves
- */
-
 // Node indices—25 nodes total
-//
-// Declaration order determines initial vertical position within each
-// depth column.  We group nodes so that vertically-adjacent nodes in
-// the same column are declared consecutively, giving the relaxation
-// algorithm a much better starting layout and reducing link crossings.
-//
-// Depth 0: Sub
-// Depth 1: CPool, Boost  (top—creator flow)
-//           CRF           (middle—charitable)
-//           Ops            (bottom—operational)
-// Depth 2: Support        (top—fed by pools)
-//           CRF pillars ×4 (middle—fed by CRF)
-//           Ops branches ×3 (bottom—fed by Ops)
-// Depth 3: Creator A, B, C
-// Depth 4: Per-creator breakdowns (Income, Delivery, Storage) ×3
 const N = {
   SUB: 0,              // depth 0
   CPOOL: 1,            // depth 1
@@ -504,9 +460,9 @@ function TierCard({
   onSelect: (tier: string) => void;
   subscribing: string | null;
 }) {
-  const isCurrentTier = tier.tier === currentTier;
-  const isFree = tier.tier === "free";
-  const price = parseFloat(tier.price);
+  const isCurrentTier = tier.id === currentTier;
+  const isFree = tier.id === "free";
+  const price = tier.price;
 
   return (
     <div
@@ -529,7 +485,7 @@ function TierCard({
         <div className="divider my-1" />
 
         {(() => {
-          const info = TIER_HIGHLIGHTS[tier.tier];
+          const info = TIER_HIGHLIGHTS[tier.id];
           if (!info) return null;
           return (
             <div className="flex-grow">
@@ -564,17 +520,6 @@ function TierCard({
           );
         })()}
 
-        {!isFree && (
-          <div className="text-xs text-base-content/50 mt-2">
-            <p>
-              Creator Pool: ${tier.creator_pool}/mo
-              {parseFloat(tier.boost_pool) > 0 && (
-                <> &middot; Boost Pool: ${tier.boost_pool}/mo</>
-              )}
-            </p>
-          </div>
-        )}
-
         <div className="card-actions mt-4">
           {isCurrentTier ? (
             <button className="btn btn-success btn-sm w-full" disabled>
@@ -587,12 +532,12 @@ function TierCard({
           ) : (
             <button
               className={`btn btn-sm w-full btn-outline btn-primary ${
-                subscribing === tier.tier ? "btn-disabled" : ""
+                subscribing === tier.id ? "btn-disabled" : ""
               }`}
-              onClick={() => onSelect(tier.tier)}
+              onClick={() => onSelect(tier.id)}
               disabled={!!subscribing}
             >
-              {subscribing === tier.tier
+              {subscribing === tier.id
                 ? "Redirecting..."
                 : currentTier !== "free"
                   ? `Switch to ${tier.name}`
@@ -757,9 +702,7 @@ export default function SubscribePage() {
   const [searchParams] = useSearchParams();
 
   const [tiers, setTiers] = useState<SubscriptionTierOption[]>([]);
-  const [currentSub, setCurrentSub] = useState<SubscriptionStatus | null>(
-    null,
-  );
+  const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -790,16 +733,22 @@ export default function SubscribePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tierList, sub] = await Promise.all([
-          api.get<SubscriptionTierOption[]>(
-            "/api/v1/subscriptions/tiers/",
-          ),
+        const [tierRes, subRes] = await Promise.all([
+          client.api.subscriptions.tiers.$get(),
           user
-            ? api.get<SubscriptionStatus>("/api/v1/subscriptions/me/")
+            ? client.api.subscriptions.me.$get()
             : Promise.resolve(null),
         ]);
-        setTiers(tierList);
-        setCurrentSub(sub);
+        const tierData = (await tierRes.json()) as {
+          tiers: SubscriptionTierOption[];
+        };
+        setTiers(tierData.tiers);
+        if (subRes) {
+          const subData = (await subRes.json()) as {
+            subscription: Subscription;
+          };
+          setCurrentSub(subData.subscription);
+        }
       } catch {
         setError("Failed to load subscription info.");
       } finally {
@@ -819,19 +768,23 @@ export default function SubscribePage() {
     setError(null);
 
     try {
-      const res = await api.post<{
-        checkout_url?: string;
+      const res = await client.api.subscriptions.subscribe.$post({
+        json: { tier: tier as "root" | "sprout" | "petal" | "bloom" },
+      });
+      const data = (await res.json()) as {
+        checkoutUrl?: string;
         tier?: string;
-      }>("/api/v1/subscriptions/subscribe/", { tier });
+      };
 
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url;
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
       } else {
         // Tier change on existing subscription (no checkout needed)
-        const sub = await api.get<SubscriptionStatus>(
-          "/api/v1/subscriptions/me/",
-        );
-        setCurrentSub(sub);
+        const subRes = await client.api.subscriptions.me.$get();
+        const subData = (await subRes.json()) as {
+          subscription: Subscription;
+        };
+        setCurrentSub(subData.subscription);
         setSubscribing(null);
       }
     } catch {
@@ -880,7 +833,7 @@ export default function SubscribePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
         {tiers.map((tier) => (
           <TierCard
-            key={tier.tier}
+            key={tier.id}
             tier={tier}
             currentTier={currentTier}
             onSelect={handleSelect}

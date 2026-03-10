@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
-import type {
-  ProjectListItem,
-  Post,
-  PublicUser,
-  PaginatedResponse,
-} from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Project, Post, PublicUser } from "../lib/types";
 import ProjectCard from "../components/cards/ProjectCard";
 import PostCard from "../components/cards/PostCard";
 import CreatorCard from "../components/cards/CreatorCard";
@@ -16,22 +11,25 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function HomePage() {
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [creators, setCreators] = useState<PublicUser[]>([]);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<ProjectListItem>>("/api/v1/content/projects/")
-      .then((d) => setProjects(d.results.slice(0, 8)))
+    client.api.content.projects
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setProjects(data.projects.slice(0, 8)))
       .catch(() => {});
-    api
-      .get<PaginatedResponse<Post>>("/api/v1/content/posts/")
-      .then((d) => setPosts(d.results.slice(0, 4)))
+    client.api.content.posts
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setPosts(data.posts.slice(0, 4)))
       .catch(() => {});
-    api
-      .get<PaginatedResponse<PublicUser>>("/api/v1/accounts/creators/")
-      .then((d) => setCreators(d.results.slice(0, 4)))
+    client.api.accounts.creators
+      .$get()
+      .then((res) => res.json())
+      .then((data) => setCreators(data.creators.slice(0, 4)))
       .catch(() => {});
   }, []);
 

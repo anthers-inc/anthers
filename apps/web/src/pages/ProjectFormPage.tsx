@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
-import type { Project, Screenshot } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { Project, Screenshot } from "../lib/types";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 function slugify(text: string): string {
   return text
@@ -47,24 +53,26 @@ export default function ProjectFormPage() {
 
   useEffect(() => {
     if (isEdit && slug) {
-      api
-        .get<Project>(`/api/v1/content/projects/${slug}/`)
-        .then((project) => {
+      client.api.content.projects[":slug"]
+        .$get({ param: { slug } })
+        .then((res) => res.json())
+        .then((data) => {
+          const project = (data as { project: Project }).project;
           setTitle(project.title);
           setProjectSlug(project.slug);
           setSlugManual(true);
-          setDescription(project.description);
-          setShortDescription(project.short_description);
-          setMediaType(project.media_type);
+          setDescription(project.description || "");
+          setShortDescription(project.shortDescription || "");
+          setMediaType(project.mediaType);
           setTagsInput(project.tags.join(", "));
-          setPricingType(project.pricing_type);
+          setPricingType(project.pricingType);
           setPrice(project.price || "");
-          setEmbedUrl(project.embed_url || "");
-          setWebsiteUrl(project.website_url || "");
-          setSourceUrl(project.source_url || "");
-          setIsPublished(project.is_published);
-          setCoverPreview(project.cover_image);
-          setScreenshots(project.screenshots);
+          setEmbedUrl(project.embedUrl || "");
+          setWebsiteUrl(project.websiteUrl || "");
+          setSourceUrl(project.sourceUrl || "");
+          setIsPublished(project.isPublished ?? false);
+          setCoverPreview(project.coverImage);
+          setScreenshots(project.screenshots || []);
         })
         .catch(() => setError("Failed to load project."))
         .finally(() => setLoading(false));
@@ -84,11 +92,17 @@ export default function ProjectFormPage() {
       const formData = new FormData();
       formData.append("image", file);
       try {
-        const screenshot = await api.upload<Screenshot>(
-          `/api/v1/content/projects/${slug}/screenshots/`,
-          formData,
+        const res = await fetch(
+          `${apiBase}/api/content/projects/${slug}/screenshots`,
+          {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          },
         );
-        setScreenshots((prev) => [...prev, screenshot]);
+        if (!res.ok) throw new Error("Upload failed");
+        const screenshot = (await res.json()) as { screenshot: Screenshot };
+        setScreenshots((prev) => [...prev, screenshot.screenshot]);
       } catch {
         setError("Failed to upload screenshot.");
       }
@@ -100,7 +114,14 @@ export default function ProjectFormPage() {
     async (id: number) => {
       if (!slug) return;
       try {
-        await api.delete(`/api/v1/content/projects/${slug}/screenshots/${id}/`);
+        const res = await fetch(
+          `${apiBase}/api/content/projects/${slug}/screenshots/${id}`,
+          {
+            method: "DELETE",
+            credentials: "include",
+          },
+        );
+        if (!res.ok) throw new Error("Delete failed");
         setScreenshots((prev) => prev.filter((s) => s.id !== id));
       } catch {
         setError("Failed to delete screenshot.");
@@ -125,66 +146,85 @@ export default function ProjectFormPage() {
         const formData = new FormData();
         formData.append("title", title);
         formData.append("description", description);
-        formData.append("short_description", shortDescription);
-        formData.append("media_type", mediaType);
+        formData.append("shortDescription", shortDescription);
+        formData.append("mediaType", mediaType);
         formData.append("tags", JSON.stringify(tags));
-        formData.append("pricing_type", pricingType);
+        formData.append("pricingType", pricingType);
         if (pricingType === "paid" && price) formData.append("price", price);
-        formData.append("embed_url", embedUrl);
-        formData.append("website_url", websiteUrl);
-        formData.append("source_url", sourceUrl);
-        formData.append("is_published", String(isPublished));
-        if (coverFile) formData.append("cover_image", coverFile);
+        formData.append("embedUrl", embedUrl);
+        formData.append("websiteUrl", websiteUrl);
+        formData.append("sourceUrl", sourceUrl);
+        formData.append("isPublished", String(isPublished));
+        if (coverFile) formData.append("coverImage", coverFile);
 
-        await api.uploadPatch(
-          `/api/v1/content/projects/${slug}/`,
-          formData,
+        const res = await fetch(
+          `${apiBase}/api/content/projects/${slug}`,
+          {
+            method: "PATCH",
+            credentials: "include",
+            body: formData,
+          },
         );
+        if (!res.ok) throw res;
       } else {
         // Create with JSON first (no file upload), then patch with cover
         const payload: Record<string, unknown> = {
           title,
           slug: projectSlug,
           description,
-          short_description: shortDescription,
-          media_type: mediaType,
+          shortDescription,
+          mediaType,
           tags,
-          pricing_type: pricingType,
-          embed_url: embedUrl,
-          website_url: websiteUrl,
-          source_url: sourceUrl,
-          is_published: isPublished,
+          pricingType,
+          embedUrl,
+          websiteUrl,
+          sourceUrl,
+          isPublished,
         };
         if (pricingType === "paid" && price) payload.price = price;
 
-        const created = await api.post<Project>(
-          "/api/v1/content/projects/",
-          payload,
-        );
+        const res = await client.api.content.projects.$post({
+          json: payload as Record<string, unknown> & {
+            title: string;
+            slug: string;
+          },
+        });
+        const created = (await res.json()) as { project: Project };
 
         // Upload cover image if provided
         if (coverFile) {
           const formData = new FormData();
-          formData.append("cover_image", coverFile);
-          await api.uploadPatch(
-            `/api/v1/content/projects/${created.slug}/`,
-            formData,
+          formData.append("coverImage", coverFile);
+          await fetch(
+            `${apiBase}/api/content/projects/${created.project.slug}`,
+            {
+              method: "PATCH",
+              credentials: "include",
+              body: formData,
+            },
           );
         }
       }
       navigate("/dashboard");
     } catch (err) {
-      if (err instanceof ApiError && err.data && typeof err.data === "object") {
-        const fieldErrors: Record<string, string> = {};
-        for (const [key, val] of Object.entries(
-          err.data as Record<string, string[]>,
-        )) {
-          fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+      if (err instanceof Response) {
+        try {
+          const data = await err.json();
+          if (data && typeof data === "object") {
+            const fieldErrors: Record<string, string> = {};
+            for (const [key, val] of Object.entries(
+              data as Record<string, string[]>,
+            )) {
+              fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+            }
+            setErrors(fieldErrors);
+            return;
+          }
+        } catch {
+          // Fall through
         }
-        setErrors(fieldErrors);
-      } else {
-        setError("Failed to save project.");
       }
+      setError("Failed to save project.");
     } finally {
       setSaving(false);
     }
@@ -242,7 +282,7 @@ export default function ProjectFormPage() {
 
         <FormField
           label="Short Description"
-          error={errors.short_description}
+          error={errors.shortDescription}
         >
           <input
             type="text"
@@ -265,7 +305,7 @@ export default function ProjectFormPage() {
 
         {/* Metadata */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField label="Media Type" error={errors.media_type}>
+          <FormField label="Media Type" error={errors.mediaType}>
             <select
               className="select select-bordered w-full"
               value={mediaType}
@@ -293,7 +333,7 @@ export default function ProjectFormPage() {
         </div>
 
         {/* Pricing */}
-        <FormField label="Pricing" error={errors.pricing_type}>
+        <FormField label="Pricing" error={errors.pricingType}>
           <select
             className="select select-bordered w-full"
             value={pricingType}
@@ -319,7 +359,7 @@ export default function ProjectFormPage() {
         )}
 
         {/* Cover Image */}
-        <FormField label="Cover Image" error={errors.cover_image}>
+        <FormField label="Cover Image" error={errors.coverImage}>
           <FileUpload
             accept="image/*"
             maxSize={10 * 1024 * 1024}
@@ -371,7 +411,7 @@ export default function ProjectFormPage() {
         )}
 
         {/* Links */}
-        <FormField label="Embed URL" error={errors.embed_url}>
+        <FormField label="Embed URL" error={errors.embedUrl}>
           <input
             type="url"
             className="input input-bordered w-full"
@@ -385,7 +425,7 @@ export default function ProjectFormPage() {
         </FormField>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField label="Website URL" error={errors.website_url}>
+          <FormField label="Website URL" error={errors.websiteUrl}>
             <input
               type="url"
               className="input input-bordered w-full"
@@ -395,7 +435,7 @@ export default function ProjectFormPage() {
             />
           </FormField>
 
-          <FormField label="Source Code URL" error={errors.source_url}>
+          <FormField label="Source Code URL" error={errors.sourceUrl}>
             <input
               type="url"
               className="input input-bordered w-full"

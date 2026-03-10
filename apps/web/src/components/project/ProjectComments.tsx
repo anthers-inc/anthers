@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type Comment, type PaginatedResponse } from "../../lib/api";
+import { client } from "../../lib/rpc";
+import type { Comment } from "../../lib/types";
 import { useAuth } from "../../lib/auth";
 import LoadingSpinner from "../ui/LoadingSpinner";
 
@@ -11,11 +12,10 @@ export default function ProjectComments({ slug }: { slug: string }) {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchComments = () => {
-    api
-      .get<PaginatedResponse<Comment>>(
-        `/api/v1/content/projects/${slug}/comments/`
-      )
-      .then((data) => setComments(data.results))
+    client.api.content.projects[":slug"].comments
+      .$get({ param: { slug } })
+      .then((res) => res.json())
+      .then((data) => setComments(data.comments))
       .catch((err) => console.error("Failed to load comments:", err))
       .finally(() => setLoading(false));
   };
@@ -29,11 +29,12 @@ export default function ProjectComments({ slug }: { slug: string }) {
     if (!body.trim()) return;
     setSubmitting(true);
     try {
-      const comment = await api.post<Comment>(
-        `/api/v1/content/projects/${slug}/comments/`,
-        { body }
-      );
-      setComments([comment, ...comments]);
+      const res = await client.api.content.projects[":slug"].comments.$post({
+        param: { slug },
+        json: { body },
+      });
+      const data = await res.json();
+      setComments([data.comment, ...comments]);
       setBody("");
     } catch (err) {
       console.error("Failed to post comment:", err);
@@ -96,7 +97,7 @@ export default function ProjectComments({ slug }: { slug: string }) {
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-medium">{comment.username}</span>
                   <span className="text-base-content/40 text-xs">
-                    {new Date(comment.created_at).toLocaleDateString()}
+                    {new Date(comment.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <p className="text-sm mt-1">{comment.body}</p>

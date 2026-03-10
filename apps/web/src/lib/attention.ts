@@ -1,16 +1,16 @@
 import { useEffect, useRef, useCallback } from "react";
-import { api } from "./api";
+import { client } from "./rpc";
 import { useAuth } from "./auth";
 
 const FLUSH_INTERVAL_MS = 30_000; // Report every 30 seconds
 const TICK_INTERVAL_MS = 1_000; // Accumulate every 1 second
 
 interface AttentionEvent {
-  creator: number;
-  project?: number | null;
-  post?: number | null;
-  event_type: "page_view" | "play" | "watch" | "read" | "listen";
-  duration_seconds: number;
+  creatorId: number;
+  projectId?: number | null;
+  postId?: number | null;
+  eventType: "page_view" | "play" | "watch" | "read" | "listen";
+  durationSeconds: number;
 }
 
 // Pending events waiting to be flushed
@@ -25,7 +25,21 @@ async function flushEvents() {
   pendingEvents = [];
 
   try {
-    await api.post("/api/v1/subscriptions/attention/", { events: toSend });
+    const res = await client.api.subscriptions.attention.$post({
+      json: {
+        events: toSend.map((e) => ({
+          creatorId: e.creatorId,
+          eventType: e.eventType,
+          durationSeconds: e.durationSeconds,
+          ...(e.projectId != null ? { projectId: e.projectId } : {}),
+          ...(e.postId != null ? { postId: e.postId } : {}),
+        })),
+      },
+    });
+    if (!res.ok) {
+      // On failure, put events back for next flush attempt
+      pendingEvents.unshift(...toSend);
+    }
   } catch {
     // On failure, put events back for next flush attempt
     pendingEvents.unshift(...toSend);
@@ -54,7 +68,7 @@ export function useAttentionTracker(params: {
   creatorId: number | null;
   projectId?: number | null;
   postId?: number | null;
-  eventType: AttentionEvent["event_type"];
+  eventType: AttentionEvent["eventType"];
   active?: boolean; // defaults to true; set false to pause tracking
 }) {
   const { creatorId, projectId, postId, eventType, active = true } = params;
@@ -71,11 +85,11 @@ export function useAttentionTracker(params: {
   const flushAccumulated = useCallback(() => {
     if (accumulatedRef.current > 0 && lastCreatorRef.current) {
       pendingEvents.push({
-        creator: lastCreatorRef.current,
-        project: projectId || null,
-        post: postId || null,
-        event_type: eventType,
-        duration_seconds: accumulatedRef.current,
+        creatorId: lastCreatorRef.current,
+        projectId: projectId || null,
+        postId: postId || null,
+        eventType,
+        durationSeconds: accumulatedRef.current,
       });
       accumulatedRef.current = 0;
     }

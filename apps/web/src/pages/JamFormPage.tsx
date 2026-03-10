@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
-import type { GameJam } from "../lib/api";
+import { client } from "../lib/rpc";
+import type { GameJam } from "../lib/types";
 import FormField from "../components/ui/FormField";
 import FileUpload from "../components/ui/FileUpload";
+
+const apiBase =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8000"
+    : "";
 
 function toLocalDatetime(isoStr: string): string {
   if (!isoStr) return "";
@@ -37,19 +43,21 @@ export default function JamFormPage() {
 
   useEffect(() => {
     if (!slug) return;
-    api
-      .get<GameJam>(`/api/v1/jams/${slug}/`)
-      .then((jam) => {
+    client.api.jams[":slug"]
+      .$get({ param: { slug } })
+      .then((res) => res.json() as Promise<unknown>)
+      .then((data: unknown) => {
+        const jam = (data as { jam: GameJam }).jam;
         setTitle(jam.title);
         setJamSlug(jam.slug);
-        setDescription(jam.description);
+        setDescription(jam.description || "");
         setTheme(jam.theme || "");
-        setStartAt(toLocalDatetime(jam.start_at));
-        setEndAt(toLocalDatetime(jam.end_at));
-        setVotingEndAt(toLocalDatetime(jam.voting_end_at));
-        setMaxTeamSize(jam.max_team_size);
-        setAllowLate(jam.allow_late_submissions);
-        if (jam.cover_image) setCoverPreview(jam.cover_image);
+        setStartAt(toLocalDatetime(jam.startAt));
+        setEndAt(toLocalDatetime(jam.endAt));
+        setVotingEndAt(toLocalDatetime(jam.votingEndAt));
+        setMaxTeamSize(jam.maxTeamSize ?? 0);
+        setAllowLate(jam.allowLateSubmissions ?? false);
+        if (jam.coverImage) setCoverPreview(jam.coverImage);
       })
       .catch(() => setError("Failed to load jam."))
       .finally(() => setLoading(false));
@@ -82,32 +90,50 @@ export default function JamFormPage() {
       formData.append("slug", jamSlug);
       formData.append("description", description);
       formData.append("theme", theme);
-      formData.append("start_at", new Date(startAt).toISOString());
-      formData.append("end_at", new Date(endAt).toISOString());
-      formData.append("voting_end_at", new Date(votingEndAt).toISOString());
-      formData.append("max_team_size", maxTeamSize.toString());
-      formData.append("allow_late_submissions", allowLate.toString());
-      if (coverFile) formData.append("cover_image", coverFile);
+      formData.append("startAt", new Date(startAt).toISOString());
+      formData.append("endAt", new Date(endAt).toISOString());
+      formData.append("votingEndAt", new Date(votingEndAt).toISOString());
+      formData.append("maxTeamSize", maxTeamSize.toString());
+      formData.append("allowLateSubmissions", allowLate.toString());
+      if (coverFile) formData.append("coverImage", coverFile);
 
       if (isEditing) {
-        await api.uploadPatch(`/api/v1/jams/${slug}/`, formData);
+        const res = await fetch(`${apiBase}/api/jams/${slug}`, {
+          method: "PATCH",
+          credentials: "include",
+          body: formData,
+        });
+        if (!res.ok) throw res;
         navigate(`/jams/${jamSlug}`);
       } else {
-        const result = await api.upload<GameJam>("/api/v1/jams/", formData);
-        navigate(`/jams/${result.slug}`);
+        const res = await fetch(`${apiBase}/api/jams`, {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+        if (!res.ok) throw res;
+        const result = (await res.json()) as { jam: GameJam };
+        navigate(`/jams/${result.jam.slug}`);
       }
     } catch (err) {
-      if (err instanceof ApiError && err.data && typeof err.data === "object") {
-        const fieldErrors: Record<string, string> = {};
-        for (const [key, val] of Object.entries(
-          err.data as Record<string, string[]>,
-        )) {
-          fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+      if (err instanceof Response) {
+        try {
+          const data = await err.json();
+          if (data && typeof data === "object") {
+            const fieldErrors: Record<string, string> = {};
+            for (const [key, val] of Object.entries(
+              data as Record<string, string[]>,
+            )) {
+              fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
+            }
+            setErrors(fieldErrors);
+            return;
+          }
+        } catch {
+          // Fall through
         }
-        setErrors(fieldErrors);
-      } else {
-        setError("Failed to save jam.");
       }
+      setError("Failed to save jam.");
     } finally {
       setSaving(false);
     }
@@ -177,7 +203,7 @@ export default function JamFormPage() {
           </p>
         </FormField>
 
-        <FormField label="Cover Image" error={errors.cover_image}>
+        <FormField label="Cover Image" error={errors.coverImage}>
           <FileUpload
             accept="image/*"
             maxSize={10 * 1024 * 1024}
@@ -195,7 +221,7 @@ export default function JamFormPage() {
         </FormField>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FormField label="Starts at" error={errors.start_at}>
+          <FormField label="Starts at" error={errors.startAt}>
             <input
               type="datetime-local"
               className="input input-bordered w-full"
@@ -205,7 +231,7 @@ export default function JamFormPage() {
             />
           </FormField>
 
-          <FormField label="Ends at" error={errors.end_at}>
+          <FormField label="Ends at" error={errors.endAt}>
             <input
               type="datetime-local"
               className="input input-bordered w-full"
@@ -215,7 +241,7 @@ export default function JamFormPage() {
             />
           </FormField>
 
-          <FormField label="Voting ends at" error={errors.voting_end_at}>
+          <FormField label="Voting ends at" error={errors.votingEndAt}>
             <input
               type="datetime-local"
               className="input input-bordered w-full"
@@ -226,7 +252,7 @@ export default function JamFormPage() {
           </FormField>
         </div>
 
-        <FormField label="Max Team Size" error={errors.max_team_size}>
+        <FormField label="Max Team Size" error={errors.maxTeamSize}>
           <input
             type="number"
             className="input input-bordered w-full"
