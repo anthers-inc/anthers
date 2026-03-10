@@ -17,7 +17,7 @@ import { isLocalStorage } from "./services/storage/index.js";
 
 const app = new Hono()
 	.use(logger())
-	.use(secureHeaders())
+	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
 	.use(
 		cors({
 			origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
@@ -28,7 +28,7 @@ const app = new Hono()
 	// Serve uploaded media files from local filesystem in dev mode
 	.use("/media/*", async (c, next) => {
 		if (!isLocalStorage) return next();
-		return serveStatic({ root: "../../media" })(c, next);
+		return serveStatic({ root: "../../" })(c, next);
 	})
 	.get("/health", (c) => c.json({ status: "ok" }))
 	.post("/health/gate", async (c) => {
