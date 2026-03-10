@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import type { StorageService } from "./types.js";
 
-/** Root directory for local media files (relative to apps/api/) */
-const MEDIA_ROOT = join(import.meta.dir, "../../../../media");
+/** Root directory for local media files (repo root /media/) */
+const MEDIA_ROOT = join(import.meta.dir, "../../../../../media");
 
 /** Base URL for serving local files */
 function getBaseUrl(): string {

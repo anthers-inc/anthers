@@ -100,9 +100,25 @@ export default function Layout() {
                     @{user?.username}
                   </span>
                 </li>
-                <li><Link to="/dashboard">Dashboard</Link></li>
+                <div className="divider my-0 px-2" />
+                <li className="menu-title px-4 py-1">
+                  <span className="text-xs text-base-content/40 uppercase tracking-wider">User</span>
+                </li>
                 <li><Link to="/subscription">Subscription</Link></li>
-                <li><Link to={`/${user?.username}`}>My Profile</Link></li>
+                <li><Link to="/library">Library</Link></li>
+
+                {user?.isCreator && (
+                  <>
+                    <li className="menu-title px-4 py-1 mt-1">
+                      <span className="text-xs text-base-content/40 uppercase tracking-wider">Creator</span>
+                    </li>
+                    <li><Link to="/dashboard">Dashboard</Link></li>
+                    <li><Link to="/dashboard/analytics">Analytics</Link></li>
+                  </>
+                )}
+
+                <div className="divider my-0 px-2" />
+                <li><Link to={`/${user?.username}`}>Profile</Link></li>
                 <li><Link to="/settings">Settings</Link></li>
                 <li>
                   <button onClick={handleLogout}>Log out</button>
