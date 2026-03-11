@@ -87,7 +87,7 @@ export default function HomePage() {
             </div>
 
             <div className="flex gap-4 justify-center flex-wrap mt-10">
-              <Link to="/explore" className="btn btn-ghost btn-sm">
+              <Link to="/discover" className="btn btn-ghost btn-sm">
                 Browse projects →
               </Link>
             </div>
@@ -105,7 +105,7 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Featured Projects</h2>
-              <Link to="/explore" className="btn btn-ghost btn-sm">
+              <Link to="/discover" className="btn btn-ghost btn-sm">
                 View all →
               </Link>
             </div>
@@ -124,7 +124,7 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Recent Posts</h2>
-              <Link to="/posts" className="btn btn-ghost btn-sm">
+              <Link to="/discover" className="btn btn-ghost btn-sm">
                 View all →
               </Link>
             </div>
@@ -143,7 +143,7 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">Featured Creators</h2>
-              <Link to="/creators" className="btn btn-ghost btn-sm">
+              <Link to="/discover" className="btn btn-ghost btn-sm">
                 View all →
               </Link>
             </div>

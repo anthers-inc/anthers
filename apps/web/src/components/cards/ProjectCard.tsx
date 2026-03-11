@@ -7,7 +7,7 @@ import StarRating from "../ui/StarRating";
 export default function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
-      to={`/explore/${project.slug}`}
+      to={`/discover/${project.slug}`}
       className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
     >
       {project.coverImage ? (

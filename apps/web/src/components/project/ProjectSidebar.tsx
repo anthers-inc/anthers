@@ -166,7 +166,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
             {moreProjects.map((p) => (
               <Link
                 key={p.slug}
-                to={`/explore/${p.slug}`}
+                to={`/discover/${p.slug}`}
                 className="text-sm link link-hover"
               >
                 {p.title}

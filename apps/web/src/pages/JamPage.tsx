@@ -79,7 +79,7 @@ function EntryCard({
           </div>
         )}
         <Link
-          to={`/explore/${entry.project?.slug}`}
+          to={`/discover/${entry.project?.slug}`}
           className="link link-hover font-semibold text-sm"
         >
           {entry.project?.title}

@@ -182,7 +182,7 @@ export default function DashboardPage() {
                   <tr key={project.id}>
                     <td>
                       <Link
-                        to={`/explore/${project.slug}`}
+                        to={`/discover/${project.slug}`}
                         className="link link-hover font-medium"
                       >
                         {project.title}

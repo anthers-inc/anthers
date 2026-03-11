@@ -257,7 +257,7 @@ function ContentPerformanceTable({
                       <div>
                         {item.type === "project" && item.slug ? (
                           <Link
-                            to={`/explore/${item.slug}`}
+                            to={`/discover/${item.slug}`}
                             className="link link-hover text-sm font-medium"
                           >
                             {item.title}
