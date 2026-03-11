@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Project, PublicUser } from "../lib/types";
+import { useSidebar } from "../components/layout/SidebarContext";
 import ProjectCard from "../components/cards/ProjectCard";
 import CreatorCard from "../components/cards/CreatorCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import {
-  Bars3Icon,
   MagnifyingGlassIcon,
   InboxIcon,
   GlobeAltIcon,
@@ -73,9 +73,140 @@ const PRICING_FILTERS = [
   { id: "pay_what_you_want", label: "Pay what you want" },
 ] as const;
 
+function DiscoverSidebarContent({
+  exploreMode,
+  contentType,
+  pricing,
+  onUpdateParams,
+}: {
+  exploreMode: string;
+  contentType: string;
+  pricing: string;
+  onUpdateParams: (updates: Record<string, string>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Exploration mode */}
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
+          Explore
+        </h3>
+        <ul className="menu menu-sm p-0 gap-0.5">
+          {EXPLORE_MODES.map((mode) => (
+            <li key={mode.id}>
+              <button
+                type="button"
+                className={exploreMode === mode.id ? "active" : ""}
+                onClick={() => onUpdateParams({ mode: mode.id === "browse" ? "" : mode.id })}
+                title={mode.description}
+              >
+                <mode.icon className="w-4 h-4" />
+                {mode.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Content type */}
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
+          Content Type
+        </h3>
+        <ul className="menu menu-sm p-0 gap-0.5">
+          {CONTENT_TYPES.map((type) => (
+            <li key={type.id}>
+              <button
+                type="button"
+                className={contentType === type.id ? "active" : ""}
+                onClick={() => onUpdateParams({ media_type: type.id })}
+              >
+                <type.icon className="w-4 h-4" />
+                {type.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Filters (shown for browse mode) */}
+      {exploreMode === "browse" && (
+        <section>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
+            <FunnelIcon className="w-3.5 h-3.5" />
+            Filters
+          </h3>
+
+          {/* Pricing */}
+          <div className="mb-3">
+            <label className="text-xs text-base-content/50 mb-1 block">
+              Pricing
+            </label>
+            <select
+              className="select select-bordered select-xs w-full"
+              value={pricing}
+              onChange={(e) => onUpdateParams({ pricing: e.target.value })}
+            >
+              {PRICING_FILTERS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Type-specific filters placeholder */}
+          {contentType === "game" && (
+            <div className="mb-3">
+              <label className="text-xs text-base-content/50 mb-1 block">
+                Platform
+              </label>
+              <select className="select select-bordered select-xs w-full">
+                <option value="">Any platform</option>
+                <option value="web">Browser</option>
+                <option value="windows">Windows</option>
+                <option value="mac">macOS</option>
+                <option value="linux">Linux</option>
+              </select>
+            </div>
+          )}
+
+          {contentType === "audio" && (
+            <div className="mb-3">
+              <label className="text-xs text-base-content/50 mb-1 block">
+                Duration
+              </label>
+              <select className="select select-bordered select-xs w-full">
+                <option value="">Any length</option>
+                <option value="short">Under 5 min</option>
+                <option value="medium">5-30 min</option>
+                <option value="long">Over 30 min</option>
+              </select>
+            </div>
+          )}
+
+          {contentType === "video" && (
+            <div className="mb-3">
+              <label className="text-xs text-base-content/50 mb-1 block">
+                Duration
+              </label>
+              <select className="select select-bordered select-xs w-full">
+                <option value="">Any length</option>
+                <option value="short">Under 10 min</option>
+                <option value="medium">10-60 min</option>
+                <option value="long">Over 1 hour</option>
+              </select>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { setPageContent } = useSidebar();
   const [projects, setProjects] = useState<Project[]>([]);
   const [creators, setCreators] = useState<PublicUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,17 +220,35 @@ export default function DiscoverPage() {
   const sort = searchParams.get("sort") ?? "newest";
   const pricing = searchParams.get("pricing") ?? "";
 
-  const updateParams = (updates: Record<string, string>) => {
-    const next = new URLSearchParams(searchParams);
-    for (const [key, value] of Object.entries(updates)) {
-      if (value) {
-        next.set(key, value);
-      } else {
-        next.delete(key);
-      }
-    }
-    setSearchParams(next, { replace: true });
-  };
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value) {
+            next.set(key, value);
+          } else {
+            next.delete(key);
+          }
+        }
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  // Register page-specific sidebar content
+  useEffect(() => {
+    setPageContent(
+      <DiscoverSidebarContent
+        exploreMode={exploreMode}
+        contentType={contentType}
+        pricing={pricing}
+        onUpdateParams={updateParams}
+      />,
+    );
+    return () => setPageContent(null);
+  }, [setPageContent, exploreMode, contentType, pricing, updateParams]);
 
   useEffect(() => {
     if (exploreMode !== "browse") return;
@@ -263,160 +412,13 @@ export default function DiscoverPage() {
   );
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)]">
-      {/* Sidebar */}
-      <aside
-        className={`${sidebarOpen ? "w-64" : "w-0"} shrink-0 transition-all duration-200 overflow-hidden border-r border-base-300/50`}
-      >
-        <div className="w-64 p-4 flex flex-col gap-5 h-full overflow-y-auto">
-          {/* Exploration mode */}
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
-              Explore
-            </h3>
-            <ul className="menu menu-sm p-0 gap-0.5">
-              {EXPLORE_MODES.map((mode) => (
-                <li key={mode.id}>
-                  <button
-                    type="button"
-                    className={exploreMode === mode.id ? "active" : ""}
-                    onClick={() => updateParams({ mode: mode.id === "browse" ? "" : mode.id })}
-                    title={mode.description}
-                  >
-                    <mode.icon className="w-4 h-4" />
-                    {mode.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Content type */}
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
-              Content Type
-            </h3>
-            <ul className="menu menu-sm p-0 gap-0.5">
-              {CONTENT_TYPES.map((type) => (
-                <li key={type.id}>
-                  <button
-                    type="button"
-                    className={contentType === type.id ? "active" : ""}
-                    onClick={() => updateParams({ media_type: type.id })}
-                  >
-                    <type.icon className="w-4 h-4" />
-                    {type.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Filters (shown for browse mode) */}
-          {exploreMode === "browse" && (
-            <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
-                <FunnelIcon className="w-3.5 h-3.5" />
-                Filters
-              </h3>
-
-              {/* Pricing */}
-              <div className="mb-3">
-                <label className="text-xs text-base-content/50 mb-1 block">
-                  Pricing
-                </label>
-                <select
-                  className="select select-bordered select-xs w-full"
-                  value={pricing}
-                  onChange={(e) =>
-                    updateParams({ pricing: e.target.value })
-                  }
-                >
-                  {PRICING_FILTERS.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Type-specific filters placeholder */}
-              {contentType === "game" && (
-                <div className="mb-3">
-                  <label className="text-xs text-base-content/50 mb-1 block">
-                    Platform
-                  </label>
-                  <select className="select select-bordered select-xs w-full">
-                    <option value="">Any platform</option>
-                    <option value="web">Browser</option>
-                    <option value="windows">Windows</option>
-                    <option value="mac">macOS</option>
-                    <option value="linux">Linux</option>
-                  </select>
-                </div>
-              )}
-
-              {contentType === "audio" && (
-                <div className="mb-3">
-                  <label className="text-xs text-base-content/50 mb-1 block">
-                    Duration
-                  </label>
-                  <select className="select select-bordered select-xs w-full">
-                    <option value="">Any length</option>
-                    <option value="short">Under 5 min</option>
-                    <option value="medium">5-30 min</option>
-                    <option value="long">Over 30 min</option>
-                  </select>
-                </div>
-              )}
-
-              {contentType === "video" && (
-                <div className="mb-3">
-                  <label className="text-xs text-base-content/50 mb-1 block">
-                    Duration
-                  </label>
-                  <select className="select select-bordered select-xs w-full">
-                    <option value="">Any length</option>
-                    <option value="short">Under 10 min</option>
-                    <option value="medium">10-60 min</option>
-                    <option value="long">Over 1 hour</option>
-                  </select>
-                </div>
-              )}
-            </section>
-          )}
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 min-w-0">
-        {/* Header */}
-        <div className="sticky top-16 z-30 bg-base-100/80 backdrop-blur-md border-b border-base-300/50">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-square"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              aria-label="Toggle sidebar"
-            >
-              <Bars3Icon className="w-5 h-5" />
-            </button>
-            <h1 className="text-lg font-bold">Discover</h1>
-            {exploreMode !== "browse" && (
-              <span className="badge badge-sm badge-outline">
-                {EXPLORE_MODES.find((m) => m.id === exploreMode)?.label}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Page content */}
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          {exploreMode === "browse" && renderBrowseContent()}
-          {exploreMode === "inbox" && renderInboxContent()}
-          {exploreMode === "network" && renderNetworkContent()}
-          {exploreMode === "ticker" && renderTickerContent()}
-        </div>
+    <div className="min-h-full">
+      {/* Page content */}
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        {exploreMode === "browse" && renderBrowseContent()}
+        {exploreMode === "inbox" && renderInboxContent()}
+        {exploreMode === "network" && renderNetworkContent()}
+        {exploreMode === "ticker" && renderTickerContent()}
       </div>
     </div>
   );

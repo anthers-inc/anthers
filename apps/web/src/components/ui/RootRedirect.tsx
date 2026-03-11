@@ -5,7 +5,7 @@ import HomePage from "../../pages/HomePage";
 
 /**
  * Handles the / route:
- * - Authenticated users are redirected to /home
+ * - Authenticated users are redirected to /feed
  * - Unauthenticated users see the marketing landing page
  */
 export default function RootRedirect() {
@@ -20,7 +20,7 @@ export default function RootRedirect() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/home" replace />;
+    return <Navigate to="/feed" replace />;
   }
 
   return <HomePage />;

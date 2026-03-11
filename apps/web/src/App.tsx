@@ -54,7 +54,7 @@ export default function App() {
       {/*
         Marketing / logged-out layout
         These pages always show the marketing chrome (sign up/log in buttons,
-        marketing nav links). Authenticated users hitting / get redirected to /home.
+        marketing nav links).         Authenticated users hitting / get redirected to /feed.
       */}
       <Route element={<LoggedOutLayout />}>
         <Route path="/" element={<RootRedirect />} />
@@ -90,7 +90,7 @@ export default function App() {
       */}
       <Route element={<LoggedInLayout />}>
         <Route
-          path="/home"
+          path="/feed"
           element={
             <ProtectedRoute>
               <AuthenticatedHomePage />
