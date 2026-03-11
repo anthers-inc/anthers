@@ -1,186 +1,24 @@
-import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
-import { useMediaPlayer } from "../../lib/media-player";
-import MiniPlayer from "../media/MiniPlayer";
-import {
-  Bars3Icon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import LoggedInLayout from "./LoggedInLayout";
+import LoggedOutLayout from "./LoggedOutLayout";
+import LoadingSpinner from "../ui/LoadingSpinner";
 
+/**
+ * Auth-aware layout switcher.
+ * Renders LoggedInLayout for authenticated users, LoggedOutLayout otherwise.
+ * Used for shared routes (explore, creators, posts, etc.) that should work
+ * for both logged-in and logged-out users but with the appropriate chrome.
+ */
 export default function Layout() {
-  const { user, isAuthenticated, signOut } = useAuth();
-  const { currentTrack } = useMediaPlayer();
-  const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  const handleLogout = async () => {
-    await signOut();
-    navigate("/");
-  };
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
-        <div className="navbar-start">
-          {/* Mobile menu */}
-          <div className="dropdown lg:hidden">
-            <label tabIndex={0} className="btn btn-ghost">
-              <Bars3Icon className="w-5 h-5" />
-            </label>
-            <ul
-              tabIndex={0}
-              className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
-            >
-              <li><Link to="/explore">Explore</Link></li>
-              <li><Link to="/creators">Creators</Link></li>
-              <li><Link to="/posts">Posts</Link></li>
-              <li><Link to="/jams">Jams</Link></li>
-              <li><Link to="/subscribe">Subscribe</Link></li>
-              <li><Link to="/wiki">Wiki</Link></li>
-              <li>
-                <details>
-                  <summary>Compare</summary>
-                  <ul className="bg-base-200 z-50">
-                    <li><Link to="/compare/itch-io">vs itch.io</Link></li>
-                    <li><Link to="/compare/ghost">vs Ghost</Link></li>
-                  </ul>
-                </details>
-              </li>
-              {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
-              {isAuthenticated && <li><Link to="/library">Library</Link></li>}
-            </ul>
-          </div>
-          <Link to="/" className="btn btn-ghost text-xl">
-            Anthers
-          </Link>
-        </div>
-
-        {/* Desktop nav */}
-        <div className="navbar-center hidden lg:flex">
-          <ul className="menu menu-horizontal px-1 gap-1">
-            <li><Link to="/explore">Explore</Link></li>
-            <li><Link to="/creators">Creators</Link></li>
-            <li><Link to="/posts">Posts</Link></li>
-            <li><Link to="/jams">Jams</Link></li>
-            <li><Link to="/subscribe">Subscribe</Link></li>
-            <li><Link to="/wiki">Wiki</Link></li>
-            <li>
-              <details>
-                <summary>Compare</summary>
-                <ul className="bg-base-200 z-50">
-                  <li><Link to="/compare/itch-io">vs itch.io</Link></li>
-                  <li><Link to="/compare/ghost">vs Ghost</Link></li>
-                </ul>
-              </details>
-            </li>
-            {isAuthenticated && <li><Link to="/feed">Feed</Link></li>}
-            {isAuthenticated && <li><Link to="/library">Library</Link></li>}
-          </ul>
-        </div>
-
-        <div className="navbar-end">
-          {isAuthenticated ? (
-            <div className="dropdown dropdown-end">
-              <label tabIndex={0} className="btn btn-ghost btn-circle">
-                {user?.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt={user.displayName || user.username}
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <UserCircleIcon className="w-8 h-8" />
-                )}
-              </label>
-              <ul
-                tabIndex={0}
-                className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
-              >
-                <li className="menu-title px-4 py-1">
-                  <span className="text-xs text-base-content/50">
-                    @{user?.username}
-                  </span>
-                </li>
-                <div className="divider my-0 px-2" />
-                <li className="menu-title px-4 py-1">
-                  <span className="text-xs text-base-content/40 uppercase tracking-wider">User</span>
-                </li>
-                <li><Link to="/subscription">Subscription</Link></li>
-                <li><Link to="/library">Library</Link></li>
-
-                {user?.isCreator && (
-                  <>
-                    <li className="menu-title px-4 py-1 mt-1">
-                      <span className="text-xs text-base-content/40 uppercase tracking-wider">Creator</span>
-                    </li>
-                    <li><Link to="/dashboard">Dashboard</Link></li>
-                    <li><Link to="/dashboard/analytics">Analytics</Link></li>
-                  </>
-                )}
-
-                <div className="divider my-0 px-2" />
-                <li><Link to={`/${user?.username}`}>Profile</Link></li>
-                <li><Link to="/settings">Settings</Link></li>
-                <li>
-                  <button onClick={handleLogout}>Log out</button>
-                </li>
-              </ul>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Link to="/login" className="btn btn-ghost btn-sm">
-                Log in
-              </Link>
-              <Link to="/register" className="btn btn-primary btn-sm">
-                Sign up
-              </Link>
-            </div>
-          )}
-        </div>
-      </header>
-
-      <main className={`flex-1 ${currentTrack ? "pb-16" : ""}`}>
-        <Outlet />
-      </main>
-
-      <MiniPlayer />
-
-      <footer className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}>
-        <div className="max-w-7xl mx-auto">
-          <div className="join join-horizontal w-full">
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">Explore</h6>
-              <Link to="/creators" className="link link-hover">Browse Creators</Link>
-              <Link to="/explore" className="link link-hover">Explore Projects</Link>
-            </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">Creators</h6>
-              <Link to="/for-creators" className="link link-hover">For Creators</Link>
-              <Link to="/demo-creator-page" className="link link-hover">Creator Hubs</Link>
-              <Link to="/demo-creator-breakdown" className="link link-hover">Creator Economics</Link>
-            </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">Users</h6>
-              <Link to="/for-users" className="link link-hover">For Users</Link>
-              <Link to="/subscribe" className="link link-hover">Subscribe</Link>
-            </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">Compare</h6>
-              <Link to="/compare/itch-io" className="link link-hover">Anthers vs itch.io</Link>
-              <Link to="/compare/ghost" className="link link-hover">Anthers vs Ghost</Link>
-            </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">Community</h6>
-              <Link to="/jams" className="link link-hover">Game Jams</Link>
-              <Link to="/posts" className="link link-hover">Posts</Link>
-            </nav>
-            <nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-              <h6 className="footer-title text-xs">About</h6>
-              <Link to="/about" className="link link-hover">About Us</Link>
-              <Link to="/wiki" className="link link-hover">Wiki</Link>
-            </nav>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+  return isAuthenticated ? <LoggedInLayout /> : <LoggedOutLayout />;
 }

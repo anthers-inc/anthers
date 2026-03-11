@@ -26,7 +26,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await signUp(username, email, password);
-      navigate("/dashboard", { replace: true });
+      navigate("/home", { replace: true });
     } catch (err) {
       setErrors({
         general: err instanceof Error ? err.message : "Something went wrong. Please try again.",

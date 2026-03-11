@@ -48,7 +48,7 @@ export default function ForCreatorsPage() {
               >
                 Start Creating
               </Link>
-              <Link to="/explore" className="btn btn-outline btn-lg">
+              <Link to="/discover" className="btn btn-outline btn-lg">
                 See What Others Built
               </Link>
             </div>
@@ -726,7 +726,7 @@ export default function ForCreatorsPage() {
             >
               Create Your Account
             </Link>
-            <Link to="/explore" className="btn btn-outline btn-lg">
+            <Link to="/discover" className="btn btn-outline btn-lg">
               Browse Projects
             </Link>
           </div>

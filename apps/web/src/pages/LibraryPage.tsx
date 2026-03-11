@@ -1,21 +1,58 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import EmptyState from "../components/ui/EmptyState";
+import {
+  PuzzlePieceIcon,
+  MusicalNoteIcon,
+  VideoCameraIcon,
+  PencilSquareIcon,
+  RectangleStackIcon,
+  PlayIcon,
+} from "@heroicons/react/24/outline";
+
+const MEDIA_TABS = [
+  { id: "", label: "All", icon: RectangleStackIcon },
+  { id: "game", label: "Games", icon: PuzzlePieceIcon },
+  { id: "audio", label: "Music", icon: MusicalNoteIcon },
+  { id: "video", label: "Video", icon: VideoCameraIcon },
+  { id: "text", label: "Writing", icon: PencilSquareIcon },
+] as const;
 
 export default function LibraryPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const activeTab = searchParams.get("type") ?? "";
 
   useEffect(() => {
     client.api.payments.purchases
       .$get()
       .then((res) => res.json())
-      .then((data) => setPurchases((data as { purchases: Purchase[] }).purchases))
+      .then((data) =>
+        setPurchases((data as { purchases: Purchase[] }).purchases),
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const setTab = (id: string) => {
+    if (id) {
+      setSearchParams({ type: id }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  };
+
+  // Filter purchases by media type (when project data includes mediaType)
+  const filteredPurchases = activeTab
+    ? purchases.filter(
+        (p) => (p.project as { mediaType?: string })?.mediaType === activeTab,
+      )
+    : purchases;
 
   if (loading) {
     return (
@@ -27,23 +64,74 @@ export default function LibraryPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">My Library</h1>
+      <h1 className="text-2xl font-bold mb-2">Library</h1>
+      <p className="text-base-content/60 text-sm mb-6">
+        Your purchased projects and saved content, organized by media type.
+      </p>
 
-      {purchases.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-base-content/60 mb-4">
-            You haven't purchased any projects yet.
+      {/* Media type tabs */}
+      <div className="tabs tabs-boxed mb-6 w-fit">
+        {MEDIA_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab tab-sm gap-1.5 ${activeTab === tab.id ? "tab-active" : ""}`}
+            onClick={() => setTab(tab.id)}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+            {tab.id === "" && purchases.length > 0 && (
+              <span className="badge badge-xs">{purchases.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab-specific scaffolding */}
+      {activeTab === "audio" && filteredPurchases.length > 0 && (
+        <div className="bg-base-200/50 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <PlayIcon className="w-5 h-5 text-primary" />
+          <p className="text-sm text-base-content/60">
+            Music player integration coming soon. You'll be able to queue and
+            play your music library directly from here.
           </p>
-          <Link to="/explore" className="btn btn-primary">
-            Explore Projects
-          </Link>
         </div>
+      )}
+
+      {activeTab === "game" && filteredPurchases.length > 0 && (
+        <div className="bg-base-200/50 rounded-lg p-4 mb-6 flex items-center gap-3">
+          <PuzzlePieceIcon className="w-5 h-5 text-primary" />
+          <p className="text-sm text-base-content/60">
+            Install tracking and download management coming soon.
+          </p>
+        </div>
+      )}
+
+      {/* Content */}
+      {filteredPurchases.length === 0 ? (
+        <EmptyState
+          title={
+            activeTab
+              ? `No ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} in your library`
+              : "Your library is empty"
+          }
+          description={
+            activeTab
+              ? `You haven't purchased any ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} yet.`
+              : "Purchase or save content to build your library."
+          }
+          action={
+            <Link to="/discover" className="btn btn-primary btn-sm">
+              Discover Content
+            </Link>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {purchases.map((purchase) => (
+          {filteredPurchases.map((purchase) => (
             <Link
               key={purchase.id}
-              to={`/explore/${purchase.project?.slug}`}
+              to={`/discover/${purchase.project?.slug}`}
               className="card bg-base-200 hover:shadow-lg transition-shadow"
             >
               {purchase.project?.coverImage ? (
@@ -62,7 +150,9 @@ export default function LibraryPage() {
                 </div>
               )}
               <div className="card-body p-4">
-                <h2 className="card-title text-sm">{purchase.project?.title}</h2>
+                <h2 className="card-title text-sm">
+                  {purchase.project?.title}
+                </h2>
                 <p className="text-xs text-base-content/60">
                   Purchased{" "}
                   {new Date(purchase.createdAt).toLocaleDateString()}

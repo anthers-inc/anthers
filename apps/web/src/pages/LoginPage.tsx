@@ -7,7 +7,7 @@ export default function LoginPage() {
   const { signIn, signInWithBluesky } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/";
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/home";
 
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");

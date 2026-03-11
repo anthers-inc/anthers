@@ -1,22 +1,13 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
+import LoggedInLayout from "./components/layout/LoggedInLayout";
+import LoggedOutLayout from "./components/layout/LoggedOutLayout";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
+import RootRedirect from "./components/ui/RootRedirect";
 
-// Public pages
-import HomePage from "./pages/HomePage";
+// Public marketing pages
 import ForCreatorsPage from "./pages/ForCreatorsPage";
 import ForUsersPage from "./pages/ForUsersPage";
-import ExplorePage from "./pages/ExplorePage";
-import ProjectPage from "./pages/ProjectPage";
-import PostFeedPage from "./pages/PostFeedPage";
-import PostPage from "./pages/PostPage";
-import CreatorsPage from "./pages/CreatorsPage";
-import CreatorProfilePage from "./pages/CreatorProfilePage";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
-import JamsPage from "./pages/JamsPage";
-import JamPage from "./pages/JamPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CompareGhostPage from "./pages/CompareGhostPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
@@ -25,17 +16,33 @@ import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
 import UserDemoPage from "./pages/UserDemoPage";
 import WikiPage from "./pages/WikiPage";
 import AboutPage from "./pages/AboutPage";
+import FAQPage from "./pages/FAQPage";
 import VerticalSlicePage from "./pages/VerticalSlicePage";
 
+// Auth pages
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
+
+// Shared content pages (work for both logged-in and logged-out)
+import DiscoverPage from "./pages/DiscoverPage";
+import ProjectPage from "./pages/ProjectPage";
+import PostPage from "./pages/PostPage";
+import CreatorProfilePage from "./pages/CreatorProfilePage";
+import SubscribePage from "./pages/SubscribePage";
+import JamsPage from "./pages/JamsPage";
+import JamPage from "./pages/JamPage";
+
+// Authenticated home page
+import AuthenticatedHomePage from "./pages/AuthenticatedHomePage";
+
 // Protected pages
-import FeedPage from "./pages/FeedPage";
 import DashboardPage from "./pages/DashboardPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProjectFormPage from "./pages/ProjectFormPage";
 import BuildsPage from "./pages/BuildsPage";
 import PostFormPage from "./pages/PostFormPage";
 import LibraryPage from "./pages/LibraryPage";
-import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 import JamFormPage from "./pages/JamFormPage";
@@ -44,38 +51,49 @@ import ImportPage from "./pages/ImportPage";
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
-        {/* Public routes */}
-        <Route path="/" element={<HomePage />} />
+      {/*
+        Marketing / logged-out layout
+        These pages always show the marketing chrome (sign up/log in buttons,
+        marketing nav links). Authenticated users hitting / get redirected to /home.
+      */}
+      <Route element={<LoggedOutLayout />}>
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/for-creators" element={<ForCreatorsPage />} />
         <Route path="/for-users" element={<ForUsersPage />} />
-        <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/explore/:slug" element={<ProjectPage />} />
-        <Route path="/posts" element={<PostFeedPage />} />
-        <Route path="/posts/:id" element={<PostPage />} />
-        <Route path="/creators" element={<CreatorsPage />} />
-        <Route path="/subscribe" element={<SubscribePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
-        <Route path="/jams" element={<JamsPage />} />
-        <Route path="/jams/:slug" element={<JamPage />} />
         <Route path="/compare/itch-io" element={<CompareItchPage />} />
         <Route path="/compare/ghost" element={<CompareGhostPage />} />
         <Route path="/demo-creator-page" element={<CreatorDemoPage />} />
-        <Route path="/demo-creator-breakdown" element={<CreatorBreakdownDemoPage />} />
-        <Route path="/demo-infrastructure" element={<InfrastructureDemoPage />} />
+        <Route
+          path="/demo-creator-breakdown"
+          element={<CreatorBreakdownDemoPage />}
+        />
+        <Route
+          path="/demo-infrastructure"
+          element={<InfrastructureDemoPage />}
+        />
         <Route path="/user-demo" element={<UserDemoPage />} />
         <Route path="/wiki/*" element={<WikiPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/vertical-slice" element={<VerticalSlicePage />} />
-
-        {/* Protected routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route
-          path="/feed"
+          path="/auth/atproto/callback"
+          element={<ATProtoCallbackPage />}
+        />
+      </Route>
+
+      {/*
+        Authenticated layout
+        Protected routes that require login. Shows the user-focused nav
+        (discover, library, dashboard, avatar dropdown).
+      */}
+      <Route element={<LoggedInLayout />}>
+        <Route
+          path="/home"
           element={
             <ProtectedRoute>
-              <FeedPage />
+              <AuthenticatedHomePage />
             </ProtectedRoute>
           }
         />
@@ -183,8 +201,23 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+      </Route>
 
-        {/* Creator profile—must be last to avoid catching other routes */}
+      {/*
+        Shared content routes
+        These use the auth-switching Layout: logged-in users see LoggedInLayout,
+        logged-out users see LoggedOutLayout. Content is accessible to everyone.
+      */}
+      <Route element={<Layout />}>
+        <Route path="/discover" element={<DiscoverPage />} />
+        <Route path="/discover/:slug" element={<ProjectPage />} />
+        <Route path="/posts/:id" element={<PostPage />} />
+        <Route path="/subscribe" element={<SubscribePage />} />
+        <Route path="/jams" element={<JamsPage />} />
+        <Route path="/jams/:slug" element={<JamPage />} />
+        <Route path="/faq" element={<FAQPage />} />
+
+        {/* Creator profile -- must be last to avoid catching other routes */}
         <Route path="/:username" element={<CreatorProfilePage />} />
       </Route>
     </Routes>

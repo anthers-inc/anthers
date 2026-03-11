@@ -31,7 +31,7 @@ export default function ATProtoCallbackPage() {
     if (success === "login") {
       // Successfully logged in via Bluesky—refresh user and redirect
       refreshUser().then(() => {
-        navigate("/", { replace: true });
+        navigate("/home", { replace: true });
       });
       return;
     }

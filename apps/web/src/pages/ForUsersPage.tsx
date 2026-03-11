@@ -40,7 +40,7 @@ export default function ForUsersPage() {
               you want—with every penny going to the person who made it.
             </p>
             <div className="flex gap-4 justify-center flex-wrap">
-              <Link to="/explore" className="btn btn-secondary btn-lg">
+              <Link to="/discover" className="btn btn-secondary btn-lg">
                 Start Exploring
               </Link>
               {!isAuthenticated && (
@@ -472,7 +472,7 @@ export default function ForUsersPage() {
             browsing.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
-            <Link to="/explore" className="btn btn-secondary btn-lg">
+            <Link to="/discover" className="btn btn-secondary btn-lg">
               Browse Projects
             </Link>
             {!isAuthenticated && (

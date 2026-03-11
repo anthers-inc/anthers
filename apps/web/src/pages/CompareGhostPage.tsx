@@ -45,7 +45,7 @@ export default function CompareGhostPage() {
               >
                 Try Anthers Free
               </Link>
-              <Link to="/explore" className="btn btn-outline btn-lg">
+              <Link to="/discover" className="btn btn-outline btn-lg">
                 Explore Projects
               </Link>
             </div>
