@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Project, PostListItem, PublicUser } from "../lib/types";
 import { useSidebar } from "../components/layout/SidebarContext";
+import ContentFilterSections from "../components/layout/ContentFilterSections";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentCard from "../components/cards/ContentCard";
 import CreatorCard from "../components/cards/CreatorCard";
@@ -18,7 +19,25 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
-function FeedSidebarContent() {
+function FeedSidebarContent({
+  contentType,
+  pricing,
+  showLocked,
+  minPrice,
+  maxPrice,
+  onSale,
+  tag,
+  onUpdateParams,
+}: {
+  contentType: string;
+  pricing: string;
+  showLocked: string;
+  minPrice: string;
+  maxPrice: string;
+  onSale: string;
+  tag: string;
+  onUpdateParams: (updates: Record<string, string>) => void;
+}) {
   const [showFeedInfo, setShowFeedInfo] = useState(false);
 
   return (
@@ -125,22 +144,73 @@ function FeedSidebarContent() {
           New content from creators you follow shows up here.
         </p>
       </section>
+
+      <div className="divider my-0" />
+
+      {/* Shared filter sections */}
+      <ContentFilterSections
+        contentType={contentType}
+        pricing={pricing}
+        showLocked={showLocked}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onSale={onSale}
+        tag={tag}
+        onUpdateParams={onUpdateParams}
+      />
     </div>
   );
 }
 
 export default function AuthenticatedHomePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContent } = useSidebar();
   const [feedPosts, setFeedPosts] = useState<PostListItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [creators, setCreators] = useState<PublicUser[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
 
+  const contentType = searchParams.get("media_type") ?? "";
+  const pricing = searchParams.get("pricing") ?? "";
+  const showLocked = searchParams.get("show_locked") ?? "";
+  const minPrice = searchParams.get("min_price") ?? "";
+  const maxPrice = searchParams.get("max_price") ?? "";
+  const onSale = searchParams.get("on_sale") ?? "";
+  const tag = searchParams.get("tag") ?? "";
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, value] of Object.entries(updates)) {
+          if (value) {
+            next.set(key, value);
+          } else {
+            next.delete(key);
+          }
+        }
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
   // Register page-specific sidebar content
   useEffect(() => {
-    setPageContent(<FeedSidebarContent />);
+    setPageContent(
+      <FeedSidebarContent
+        contentType={contentType}
+        pricing={pricing}
+        showLocked={showLocked}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onSale={onSale}
+        tag={tag}
+        onUpdateParams={updateParams}
+      />,
+    );
     return () => setPageContent(null);
-  }, [setPageContent]);
+  }, [setPageContent, contentType, pricing, showLocked, minPrice, maxPrice, onSale, tag, updateParams]);
 
   useEffect(() => {
     // Fetch the user's feed

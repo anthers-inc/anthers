@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Project, PublicUser } from "../lib/types";
 import { useSidebar } from "../components/layout/SidebarContext";
+import ContentFilterSections from "../components/layout/ContentFilterSections";
 import ProjectCard from "../components/cards/ProjectCard";
 import CreatorCard from "../components/cards/CreatorCard";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -12,12 +13,6 @@ import {
   InboxIcon,
   GlobeAltIcon,
   BoltIcon,
-  MusicalNoteIcon,
-  VideoCameraIcon,
-  PencilSquareIcon,
-  PuzzlePieceIcon,
-  CubeTransparentIcon,
-  FunnelIcon,
 } from "@heroicons/react/24/outline";
 
 // Exploration modes
@@ -48,15 +43,6 @@ const EXPLORE_MODES = [
   },
 ] as const;
 
-// Content type filters
-const CONTENT_TYPES = [
-  { id: "", label: "All", icon: CubeTransparentIcon },
-  { id: "game", label: "Games", icon: PuzzlePieceIcon },
-  { id: "audio", label: "Music", icon: MusicalNoteIcon },
-  { id: "video", label: "Video", icon: VideoCameraIcon },
-  { id: "text", label: "Writing", icon: PencilSquareIcon },
-] as const;
-
 // Sort options
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
@@ -65,25 +51,34 @@ const SORT_OPTIONS = [
   { value: "trending", label: "Trending" },
 ] as const;
 
-// Pricing filters
-const PRICING_FILTERS = [
-  { id: "", label: "Any price" },
-  { id: "free", label: "Free" },
-  { id: "paid", label: "Paid" },
-  { id: "pay_what_you_want", label: "Pay what you want" },
-] as const;
-
 function DiscoverSidebarContent({
   exploreMode,
   contentType,
   pricing,
+  showLocked,
+  minPrice,
+  maxPrice,
+  onSale,
+  tag,
   onUpdateParams,
 }: {
   exploreMode: string;
   contentType: string;
   pricing: string;
+  showLocked: string;
+  minPrice: string;
+  maxPrice: string;
+  onSale: string;
+  tag: string;
   onUpdateParams: (updates: Record<string, string>) => void;
 }) {
+  const filterBtnClass = (isActive: boolean) =>
+    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
+      isActive
+        ? "bg-secondary/10 text-secondary font-medium"
+        : "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
+    }`;
+
   return (
     <div className="flex flex-col gap-5">
       {/* Exploration mode */}
@@ -91,115 +86,35 @@ function DiscoverSidebarContent({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
           Explore
         </h3>
-        <ul className="menu menu-sm p-0 gap-0.5">
+        <div className="flex flex-col gap-0.5">
           {EXPLORE_MODES.map((mode) => (
-            <li key={mode.id}>
-              <button
-                type="button"
-                className={exploreMode === mode.id ? "active" : ""}
-                onClick={() => onUpdateParams({ mode: mode.id === "browse" ? "" : mode.id })}
-                title={mode.description}
-              >
-                <mode.icon className="w-4 h-4" />
-                {mode.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Content type */}
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
-          Content Type
-        </h3>
-        <ul className="menu menu-sm p-0 gap-0.5">
-          {CONTENT_TYPES.map((type) => (
-            <li key={type.id}>
-              <button
-                type="button"
-                className={contentType === type.id ? "active" : ""}
-                onClick={() => onUpdateParams({ media_type: type.id })}
-              >
-                <type.icon className="w-4 h-4" />
-                {type.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Filters (shown for browse mode) */}
-      {exploreMode === "browse" && (
-        <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
-            <FunnelIcon className="w-3.5 h-3.5" />
-            Filters
-          </h3>
-
-          {/* Pricing */}
-          <div className="mb-3">
-            <label className="text-xs text-base-content/50 mb-1 block">
-              Pricing
-            </label>
-            <select
-              className="select select-bordered select-xs w-full"
-              value={pricing}
-              onChange={(e) => onUpdateParams({ pricing: e.target.value })}
+            <button
+              key={mode.id}
+              type="button"
+              className={filterBtnClass(exploreMode === mode.id)}
+              onClick={() => onUpdateParams({ mode: mode.id === "browse" ? "" : mode.id })}
+              title={mode.description}
             >
-              {PRICING_FILTERS.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <mode.icon className="w-5 h-5 shrink-0" />
+              {mode.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
-          {/* Type-specific filters placeholder */}
-          {contentType === "game" && (
-            <div className="mb-3">
-              <label className="text-xs text-base-content/50 mb-1 block">
-                Platform
-              </label>
-              <select className="select select-bordered select-xs w-full">
-                <option value="">Any platform</option>
-                <option value="web">Browser</option>
-                <option value="windows">Windows</option>
-                <option value="mac">macOS</option>
-                <option value="linux">Linux</option>
-              </select>
-            </div>
-          )}
+      <div className="divider my-0" />
 
-          {contentType === "audio" && (
-            <div className="mb-3">
-              <label className="text-xs text-base-content/50 mb-1 block">
-                Duration
-              </label>
-              <select className="select select-bordered select-xs w-full">
-                <option value="">Any length</option>
-                <option value="short">Under 5 min</option>
-                <option value="medium">5-30 min</option>
-                <option value="long">Over 30 min</option>
-              </select>
-            </div>
-          )}
-
-          {contentType === "video" && (
-            <div className="mb-3">
-              <label className="text-xs text-base-content/50 mb-1 block">
-                Duration
-              </label>
-              <select className="select select-bordered select-xs w-full">
-                <option value="">Any length</option>
-                <option value="short">Under 10 min</option>
-                <option value="medium">10-60 min</option>
-                <option value="long">Over 1 hour</option>
-              </select>
-            </div>
-          )}
-        </section>
-      )}
+      {/* Shared filter sections */}
+      <ContentFilterSections
+        contentType={contentType}
+        pricing={pricing}
+        showLocked={showLocked}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onSale={onSale}
+        tag={tag}
+        onUpdateParams={onUpdateParams}
+      />
     </div>
   );
 }
@@ -219,6 +134,11 @@ export default function DiscoverPage() {
   const search = searchParams.get("search") ?? "";
   const sort = searchParams.get("sort") ?? "newest";
   const pricing = searchParams.get("pricing") ?? "";
+  const showLocked = searchParams.get("show_locked") ?? "";
+  const minPrice = searchParams.get("min_price") ?? "";
+  const maxPrice = searchParams.get("max_price") ?? "";
+  const onSale = searchParams.get("on_sale") ?? "";
+  const tag = searchParams.get("tag") ?? "";
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -244,11 +164,16 @@ export default function DiscoverPage() {
         exploreMode={exploreMode}
         contentType={contentType}
         pricing={pricing}
+        showLocked={showLocked}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        onSale={onSale}
+        tag={tag}
         onUpdateParams={updateParams}
       />,
     );
     return () => setPageContent(null);
-  }, [setPageContent, exploreMode, contentType, pricing, updateParams]);
+  }, [setPageContent, exploreMode, contentType, pricing, showLocked, minPrice, maxPrice, onSale, tag, updateParams]);
 
   useEffect(() => {
     if (exploreMode !== "browse") return;
@@ -258,6 +183,8 @@ export default function DiscoverPage() {
     if (contentType) params.set("media_type", contentType);
     if (search) params.set("search", search);
     if (sort && sort !== "newest") params.set("sort", sort);
+    if (pricing) params.set("pricing", pricing);
+    if (tag) params.set("tag", tag);
 
     const apiBase =
       window.location.hostname === "localhost" ||
@@ -279,7 +206,7 @@ export default function DiscoverPage() {
       .then((res) => res.json())
       .then((data) => setCreators(data.creators))
       .catch(() => {});
-  }, [exploreMode, contentType, search, sort]);
+  }, [exploreMode, contentType, search, sort, pricing, tag]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
