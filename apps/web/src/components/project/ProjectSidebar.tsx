@@ -108,14 +108,14 @@ export default function ProjectSidebar({ project }: { project: Project }) {
       )}
 
       {/* Tags */}
-      {project.tags.length > 0 && (
+      {Array.isArray(project.tags) && project.tags.length > 0 && (
         <div>
           <h3 className="font-semibold text-sm mb-2">Tags</h3>
           <div className="flex flex-wrap gap-1">
             {project.tags.map((tag) => (
               <Link
                 key={tag}
-                to={`/explore?tag=${tag}`}
+                to={`/discover?tag=${tag}`}
                 className="badge badge-outline badge-sm"
               >
                 {tag}
@@ -166,7 +166,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
             {moreProjects.map((p) => (
               <Link
                 key={p.slug}
-                to={`/discover/${p.slug}`}
+                to={`/${project.creator?.username ?? "unknown"}/${p.slug}`}
                 className="text-sm link link-hover"
               >
                 {p.title}

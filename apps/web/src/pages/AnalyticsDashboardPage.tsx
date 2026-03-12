@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { client } from "../lib/rpc";
+import { useAuth } from "../lib/auth";
 import type {
   AnalyticsOverview,
   ContentAnalyticsItem,
@@ -226,6 +227,8 @@ function ContentPerformanceTable({
 }: {
   content: ContentAnalyticsItem[];
 }) {
+  const { user } = useAuth();
+
   if (content.length === 0) {
     return (
       <EmptyState
@@ -257,14 +260,14 @@ function ContentPerformanceTable({
                       <div>
                         {item.type === "project" && item.slug ? (
                           <Link
-                            to={`/discover/${item.slug}`}
+                            to={`/${user?.username}/${item.slug}`}
                             className="link link-hover text-sm font-medium"
                           >
                             {item.title}
                           </Link>
                         ) : item.type === "post" ? (
                           <Link
-                            to={`/posts/${item.id}`}
+                            to={`/${user?.username}/posts/${item.id}`}
                             className="link link-hover text-sm font-medium"
                           >
                             {item.title}

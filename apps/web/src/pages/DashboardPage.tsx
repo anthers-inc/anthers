@@ -182,7 +182,7 @@ export default function DashboardPage() {
                   <tr key={project.id}>
                     <td>
                       <Link
-                        to={`/discover/${project.slug}`}
+                        to={`/${user?.username}/${project.slug}`}
                         className="link link-hover font-medium"
                       >
                         {project.title}
@@ -271,7 +271,7 @@ export default function DashboardPage() {
                   <tr key={post.id}>
                     <td>
                       <Link
-                        to={`/posts/${post.id}`}
+                        to={`/${user?.username}/posts/${post.id}`}
                         className="link link-hover font-medium"
                       >
                         {post.title || "Untitled"}

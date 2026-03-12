@@ -32,6 +32,7 @@ import CreatorProfilePage from "./pages/CreatorProfilePage";
 import SubscribePage from "./pages/SubscribePage";
 import JamsPage from "./pages/JamsPage";
 import JamPage from "./pages/JamPage";
+import ProjectRedirect from "./components/ui/ProjectRedirect";
 
 // Authenticated home page
 import AuthenticatedHomePage from "./pages/AuthenticatedHomePage";
@@ -210,12 +211,16 @@ export default function App() {
       */}
       <Route element={<Layout />}>
         <Route path="/discover" element={<DiscoverPage />} />
-        <Route path="/discover/:slug" element={<ProjectPage />} />
+        <Route path="/discover/:slug" element={<ProjectRedirect />} />
         <Route path="/posts/:id" element={<PostPage />} />
         <Route path="/subscribe" element={<SubscribePage />} />
         <Route path="/jams" element={<JamsPage />} />
         <Route path="/jams/:slug" element={<JamPage />} />
         <Route path="/faq" element={<FAQPage />} />
+
+        {/* Creator site routes */}
+        <Route path="/:username/:slug" element={<ProjectPage />} />
+        <Route path="/:username/posts/:id" element={<PostPage />} />
 
         {/* Creator profile -- must be last to avoid catching other routes */}
         <Route path="/:username" element={<CreatorProfilePage />} />

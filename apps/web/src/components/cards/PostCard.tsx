@@ -12,7 +12,7 @@ export default function PostCard({ post }: { post: Post }) {
 
   return (
     <Link
-      to={`/posts/${post.id}`}
+      to={`/${post.creator?.username ?? "unknown"}/posts/${post.id}`}
       className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
     >
       <div className="card-body p-4 gap-2">

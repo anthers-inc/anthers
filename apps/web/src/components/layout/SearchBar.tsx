@@ -162,7 +162,7 @@ export default function SearchBar() {
                   return (
                     <li key={project.id}>
                       <Link
-                        to={`/discover/${project.slug}`}
+                         to={`/${project.creator?.username ?? "unknown"}/${project.slug}`}
                         className="flex items-center gap-3 px-3 py-2"
                         onClick={() => {
                           setFocused(false);
