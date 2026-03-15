@@ -1,4 +1,4 @@
-![Anthers Logo](./.github/assets/anthers-logo-concept-placeholder.jpg)
+![Anthers Logo](./.github/assets/anthers-logo-concept-placeholder.png)
 # Anthers
 
 ---
