@@ -12,6 +12,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
+import { waitlistRoutes } from "./routes/waitlist.js";
 import { ensureBossReady } from "./jobs/boss.js";
 import { isLocalStorage } from "./services/storage/index.js";
 
@@ -46,7 +47,8 @@ const app = new Hono()
 	.route("/api/payments", paymentRoutes)
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
-	.route("/api/jams", jamRoutes);
+	.route("/api/jams", jamRoutes)
+	.route("/api/waitlist", waitlistRoutes);
 
 // Start pg-boss when running as the server (not when imported by tests).
 // import.meta.main is true only when this file is the entry point.
