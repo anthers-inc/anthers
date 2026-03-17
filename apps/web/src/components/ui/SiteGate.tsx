@@ -74,18 +74,35 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 	return (
 		<div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
 			{/* Hero content */}
-			<div className="max-w-lg w-full text-center">
-				<h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-6">
+			<div className="max-w-3xl w-full text-center">
+				<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-8 mt-8">
 					Anthers
 				</h1>
 
-				<p className="text-lg sm:text-xl text-base-content/70 leading-relaxed mb-4">
-					A home for creators and the people who love their work.
+				<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
+					A new non-profit building a uniquely nurturing ecosystem 
+					for creators and their communities.
 				</p>
 
-				<p className="text-base text-base-content/50 leading-relaxed mb-10">
-					Games, videos, music, and writing — all in one place. Creators
-					keep their earnings. No ads, no algorithms working against you.
+				<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
+					Games, videos, music, writing, and more — on an open,
+					distributed network. No intrusive ads, no manipulative
+					algorithms, just your direct line to a creative
+					internet worth loving again.
+				</p>
+
+				<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
+					Supporting it all: a charitable foundation dedicated to
+					lifting new and marginalized creators; building a more honest,
+					healthy connection between creators and their audiences; and
+					sharing openly the tools to build creative community
+					without corporate interference or middlemen.
+				</p>
+
+				<p className="text-lg text-base-content/65 leading-relaxed mb-10 text-justify">
+					It's not a crazy idea. We've done this before. All it takes is
+					for someone to put people first, and keep profit out of their
+					the equation. All it takes is Anthers.
 				</p>
 
 				{/* Waitlist form */}
@@ -93,10 +110,10 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 					<div className="card-body gap-5">
 						{submitState === "success" ? (
 							<div className="py-4">
-								<p className="text-lg font-medium text-success">
+								<p className="text-xl font-medium text-success">
 									You're on the list.
 								</p>
-								<p className="text-sm text-base-content/60 mt-2">
+								<p className="text-base text-base-content/70 mt-2">
 									We'll reach out when things are ready.
 								</p>
 							</div>
@@ -105,9 +122,9 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 								onSubmit={handleWaitlistSubmit}
 								className="flex flex-col gap-4"
 							>
-								<p className="text-sm text-base-content/60">
-									We're building something new. Leave your email and
-									we'll let you know when we're ready for you.
+								<p className="text-base text-base-content/70">
+									We're excited to share Anthers with you but aren't quite ready yet.
+									<br/>Leave your email and we'll let you know when we're ready for you.
 								</p>
 
 								{/* Email input */}
@@ -126,7 +143,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 
 								{/* Interest toggle */}
 								<fieldset className="flex flex-col gap-1.5">
-									<legend className="text-xs text-base-content/50 text-left">
+									<legend className="text-sm text-base-content/60 text-left">
 										I'm interested as a...
 									</legend>
 									<div className="join w-full">
@@ -140,7 +157,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 											<button
 												key={value}
 												type="button"
-												className={`join-item btn btn-sm flex-1 ${
+												className={`join-item btn flex-1 ${
 													interest === value
 														? "btn-primary"
 														: "btn-ghost border-base-content/20"
@@ -154,7 +171,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 								</fieldset>
 
 								{submitState === "error" && (
-									<p className="text-error text-sm">
+									<p className="text-error text-base">
 										Something went wrong. Please try again.
 									</p>
 								)}
@@ -202,7 +219,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 					) : (
 						<button
 							type="button"
-							className="text-xs text-base-content/30 hover:text-base-content/50 transition-colors"
+							className="text-sm text-base-content/40 hover:text-base-content/60 transition-colors"
 							onClick={() => setShowPassword(true)}
 						>
 							Team access
