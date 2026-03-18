@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 import type { Post } from "../../lib/types";
 
 export default function PostCard({ post }: { post: Post }) {
-  const excerpt =
-    post.body.length > 150 ? post.body.slice(0, 150) + "..." : post.body;
+  const body = post.body ?? "";
+  const excerpt = body.length > 150 ? body.slice(0, 150) + "..." : body;
   const date = new Date(post.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

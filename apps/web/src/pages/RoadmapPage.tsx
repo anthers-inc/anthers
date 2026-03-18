@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -613,7 +613,7 @@ function assignRows(items: RoadmapItem[]): RoadmapItem[] {
 /*  Timeline chart (SVG-based interactive Gantt)                       */
 /* ------------------------------------------------------------------ */
 
-const Q_WIDTH = 160; // px per quarter column
+const MIN_Q_WIDTH = 160; // minimum px per quarter column
 const ROW_HEIGHT = 40; // px per item row
 const LANE_HEADER = 32; // px for lane label
 const LANE_GAP = 16; // px between lanes
@@ -630,7 +630,29 @@ interface TimelineProps {
 
 function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Measure container width and update on resize
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Compute Q_WIDTH: fill container, but never go below MIN_Q_WIDTH
+  const numQuarters = roadmap.quarters.length;
+  const Q_WIDTH = containerWidth > 0
+    ? Math.max(MIN_Q_WIDTH, (containerWidth - LEFT_GUTTER) / numQuarters)
+    : MIN_Q_WIDTH;
 
   // Layout all lanes
   const layoutLanes = useMemo(() => {
@@ -655,7 +677,7 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
     );
   }, [layoutLanes]);
 
-  const totalWidth = LEFT_GUTTER + roadmap.quarters.length * Q_WIDTH;
+  const totalWidth = LEFT_GUTTER + numQuarters * Q_WIDTH;
 
   const handleBarClick = useCallback(
     (id: string) => {
@@ -668,13 +690,13 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
   let laneY = TOP_PAD;
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-base-300/50">
+    <div ref={containerRef} className="overflow-x-auto rounded-xl border border-base-300/50">
       <svg
         ref={svgRef}
         width={totalWidth}
         height={totalHeight}
         className="select-none"
-        style={{ minWidth: totalWidth }}
+        style={{ minWidth: numQuarters * MIN_Q_WIDTH }}
       >
         {/* Quarter columns */}
         {roadmap.quarters.map((q, i) => {
@@ -1004,7 +1026,7 @@ export default function RoadmapPage() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <StatusLegend />
         <p className="text-xs text-base-content/30">
-          Click any item for details. Scroll horizontally to see the full timeline.
+          Click any item for details.
         </p>
       </div>
 
