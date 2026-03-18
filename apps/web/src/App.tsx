@@ -17,6 +17,7 @@ import UserDemoPage from "./pages/UserDemoPage";
 import WikiPage from "./pages/WikiPage";
 import AboutPage from "./pages/AboutPage";
 import FAQPage from "./pages/FAQPage";
+import RoadmapPage from "./pages/RoadmapPage";
 import VerticalSlicePage from "./pages/VerticalSlicePage";
 
 // Auth pages
@@ -217,6 +218,7 @@ export default function App() {
         <Route path="/jams" element={<JamsPage />} />
         <Route path="/jams/:slug" element={<JamPage />} />
         <Route path="/faq" element={<FAQPage />} />
+        <Route path="/roadmap" element={<RoadmapPage />} />
 
         {/* Creator site routes */}
         <Route path="/:username/:slug" element={<ProjectPage />} />

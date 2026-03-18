@@ -168,6 +168,7 @@ function LoggedInLayoutInner() {
                   <h6 className="footer-title text-xs">About</h6>
                   <Link to="/about" className="link link-hover">About Us</Link>
                   <Link to="/faq" className="link link-hover">FAQ</Link>
+                  <Link to="/roadmap" className="link link-hover">Roadmap</Link>
                   <Link to="/wiki" className="link link-hover">Wiki</Link>
                 </nav>
               </div>
