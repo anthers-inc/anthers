@@ -17,12 +17,12 @@ import {
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-const CRF_PILLARS = [
+const FOUNDATION_PILLARS = [
   {
     icon: ShieldCheckIcon,
     title: "Infrastructure Equity",
     description:
-      "No creator is priced out of reaching their audience. The CRF subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
+      "No creator is priced out of reaching their audience. The Foundation subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
   },
   {
     icon: AcademicCapIcon,
@@ -281,7 +281,7 @@ export default function AboutPage() {
                 directly to creators. Infrastructure costs are transparent and
                 passed through at cost. The organization's operating expenses
                 are fixed to reasonable staff and infrastructure, and all
-                surplus is directed to the Creator Resilience Fund.
+                surplus is directed to the Anthers Foundation's charitable programs.
               </p>
             </div>
             <div className="border-l-2 border-secondary/30 pl-6">
@@ -301,17 +301,16 @@ export default function AboutPage() {
           {/* CRF—the heart of the mission */}
           <div className="max-w-7xl mx-auto">
             <h3 className="text-2xl font-bold text-center mb-2">
-              The Creator Resilience Fund
+              The Anthers Foundation
             </h3>
             <p className="text-base-content/70 text-center max-w-3xl mx-auto mb-10">
-              The CRF is the operational heart of Anthers's charitable
-              mission—funded by a fixed percentage of every subscription
-              and governed by a dedicated advisory committee with direct
-              creator representation. The CRF is not a side program. It is the
-              reason the platform exists.
+              The Foundation is the operational heart of Anthers's mission,
+              allocating at least 50% of the 8% Foundation Fee to charitable
+              programs: infrastructure equity, education, creation grants,
+              and emergency assistance.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {CRF_PILLARS.map((pillar) => (
+              {FOUNDATION_PILLARS.map((pillar) => (
                 <div
                   key={pillar.title}
                   className="card bg-base-200/80 shadow-xl p-6 flex flex-row gap-4"
@@ -370,7 +369,7 @@ export default function AboutPage() {
                 {
                   num: "03",
                   title: "Funding Flows Directly",
-                  text: "Revenue enters through subscriptions and direct purchases. The vast majority goes to creators through a transparent pool model. No matter how much money flows through the platform, operating costs are fixed and every dollar of surplus goes to the CRF.",
+                  text: "Revenue enters through subscriptions and direct purchases. The vast majority goes to creators through a transparent pool model. No matter how much money flows through the platform, operating costs are fixed and every dollar of surplus goes to the Foundation's programs.",
                 },
                 {
                   num: "04",
@@ -501,9 +500,9 @@ export default function AboutPage() {
                   cadence: "Annual",
                 },
                 {
-                  title: "CRF Impact Report",
+                  title: "Foundation Impact Report",
                   description:
-                    "Creator Resilience Fund allocations, program outcomes, and grant activity across all four pillars.",
+                    "Foundation allocations, program outcomes, and grant activity across all four pillars.",
                   cadence: "Annual",
                 },
                 {

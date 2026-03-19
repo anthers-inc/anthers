@@ -1,5 +1,5 @@
 /**
- * Payment routes — Stripe Connect onboarding, checkout, purchases, CRF.
+ * Payment routes — Stripe Connect onboarding, checkout, purchases, Foundation Fee.
  *
  * Note: Actual Stripe API calls are stubbed with TODO markers.
  * Stripe SDK will be integrated when payment processing is fully wired up.
@@ -22,15 +22,16 @@ import { requireAuth } from "../middleware/auth.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const CRF_PERCENTAGE = 0.03; // 3%
+const FOUNDATION_FEE_PERCENTAGE = 0.03; // Anthers Foundation Fee: 3%
 const PROCESSING_FEE_PERCENTAGE = 0.029; // 2.9%
 const PROCESSING_FEE_FIXED = 0.30; // $0.30
 
 function calculateFees(amount: number) {
 	const processingFee = Number((amount * PROCESSING_FEE_PERCENTAGE + PROCESSING_FEE_FIXED).toFixed(2));
-	const crfFee = Number((amount * CRF_PERCENTAGE).toFixed(2));
-	const creatorEarnings = Number((amount - processingFee - crfFee).toFixed(2));
-	return { processingFee, crfFee, creatorEarnings };
+	const foundationFee = Number((amount * FOUNDATION_FEE_PERCENTAGE).toFixed(2));
+	const creatorEarnings = Number((amount - processingFee - foundationFee).toFixed(2));
+	// crfFee: legacy field name for Anthers Foundation Fee
+	return { processingFee, crfFee: foundationFee, creatorEarnings };
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -136,14 +137,14 @@ const paymentRoutes = new Hono()
 		// const paymentIntent = await stripe.paymentIntents.create({
 		//   amount: Math.round(amount * 100),
 		//   currency: "usd",
-		//   application_fee_amount: Math.round((fees.processingFee + fees.crfFee) * 100),
+		//   application_fee_amount: Math.round((fees.processingFee + fees.crfFee) * 100), // crfFee = Foundation Fee
 		//   transfer_data: { destination: creatorStripeAccountId },
 		// });
 
 		return c.json({
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
-			crfFee: fees.crfFee.toFixed(2),
+			crfFee: fees.crfFee.toFixed(2), // Legacy field name for Foundation Fee
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
 			clientSecret: "placeholder_client_secret",
 			message: "Stripe checkout not yet fully implemented",
@@ -217,11 +218,11 @@ const paymentRoutes = new Hono()
 		});
 	})
 
-	// ── CRF Status ───────────────────────────────────────────────────────────
+	// ── Foundation Status ────────────────────────────────────────────────────
 	.get("/crf/status", requireAuth, async (c) => {
 		const user = c.get("user");
 
-		// Total CRF balance
+		// Total Foundation balance
 		const [balance] = await db
 			.select({ total: sql<string>`COALESCE(SUM(amount), '0.00')` })
 			.from(crfLedger);
@@ -243,7 +244,7 @@ const paymentRoutes = new Hono()
 	// ── Stripe Webhook ───────────────────────────────────────────────────────
 	.post("/stripe/webhook", async (c) => {
 		// TODO: Verify Stripe webhook signature
-		// TODO: Handle payment_intent.succeeded → complete purchase, record CRF
+		// TODO: Handle payment_intent.succeeded → complete purchase, record Foundation Fee
 		// TODO: Handle account.updated → sync onboarding state
 
 		const body = await c.req.text();

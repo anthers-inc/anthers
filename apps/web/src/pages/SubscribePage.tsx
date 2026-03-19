@@ -1,1052 +1,1126 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Sankey,
-  ResponsiveContainer,
-  Layer,
-  Rectangle,
-  useChartWidth,
-  type SankeyNodeProps,
-  type SankeyLinkProps,
+	Sankey,
+	ResponsiveContainer,
+	Layer,
+	Rectangle,
+	useChartWidth,
+	type SankeyNodeProps,
+	type SankeyLinkProps,
 } from "recharts";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
 import type { SubscriptionTierOption, Subscription } from "../lib/types";
-
-/** Each tier's highlights are framed as what changes from the previous tier. */
-const TIER_HIGHLIGHTS: Record<
-  string,
-  { included: string[]; upgrade?: string }
-> = {
-  free: {
-    included: [
-      "Browse and discover creators",
-      "10 hours/month content access",
-      "Follow creators and get updates",
-    ],
-  },
-  root: {
-    upgrade: "Everything in Free, plus:",
-    included: [
-      "25 hours/month content access",
-      "Creator Pool—funds every creator you engage with",
-      "85% to creators, 10% CRF, 5% operations",
-    ],
-  },
-  sprout: {
-    upgrade: "Everything in Root, plus:",
-    included: [
-      "Unlimited content access",
-      "Boost Pool—direct extra funds to your favorite creators",
-      "Access gated/exclusive content",
-    ],
-  },
-  petal: {
-    upgrade: "Everything in Sprout, plus:",
-    included: [
-      "Double the Boost Pool budget",
-      "More support for the creators you love",
-    ],
-  },
-  bloom: {
-    upgrade: "Everything in Petal, plus:",
-    included: [
-      "Triple the Boost Pool budget",
-      "Maximum direct support for your creators",
-    ],
-  },
-};
+// Sales tax rates file retained for reference; we use the national average here.
+// import { STATE_SALES_TAX_RATES } from "../lib/sales-tax-rates";
 
 /* ------------------------------------------------------------------ */
-/*  Sankey diagram—"Where Your Money Goes" visualization            */
+/*  Tier thresholds                                                   */
 /* ------------------------------------------------------------------ */
 
-/** Tier configuration for Sankey generation. */
-interface SankeyTierConfig {
-  id: string;
-  name: string;
-  price: number;
-  boostBudget: number;
+interface TierThreshold {
+	id: string;
+	name: string;
+	price: number;
 }
 
-const SANKEY_TIERS: SankeyTierConfig[] = [
-  { id: "root",   name: "Root",   price: 3,  boostBudget: 0 },
-  { id: "sprout", name: "Sprout", price: 7,  boostBudget: 2 },
-  { id: "petal",  name: "Petal",  price: 15, boostBudget: 5 },
-  { id: "bloom",  name: "Bloom",  price: 30, boostBudget: 12 },
+const TIER_THRESHOLDS: TierThreshold[] = [
+	{ id: "root",   name: "Root",   price: 3 },
+	{ id: "sprout", name: "Sprout", price: 7 },
+	{ id: "petal",  name: "Petal",  price: 15 },
+	{ id: "bloom",  name: "Bloom",  price: 30 },
 ];
 
-/* Allocation percentages (fixed across all tiers). */
+/**
+ * Flat delivery credit for all paid subscribers, funded by the Foundation.
+ * $1/month covers ~15 hours of 1080p60 video, more for audio/text.
+ * Expressed as a dollar amount so it's media-agnostic.
+ */
+const DELIVERY_CREDIT = 1.00;
+
+function tierForAmount(amount: number): TierThreshold | null {
+	for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
+		if (amount >= TIER_THRESHOLDS[i].price) return TIER_THRESHOLDS[i];
+	}
+	return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Financial helpers                                                 */
+/* ------------------------------------------------------------------ */
+
 const ALLOC = {
-  creators: 0.85,
-  crf: 0.10,
-  ops: 0.05,
-  /* CRF sub-splits (proportions of CRF total). */
-  crfInfra: 0.35,
-  crfEdu: 0.30,
-  crfRelief: 0.20,
-  crfCommunity: 0.15,
-  /* Ops sub-splits (proportions of Ops total). */
-  opsStaff: 0.56,
-  opsAdmin: 0.32,
-  opsReserves: 0.12,
-  /* Creator engagement-time share (example proportions). */
-  creatorA: 0.51,
-  creatorB: 0.26,
-  creatorC: 0.23,
-  /* Infra cost as fraction of each creator's total. */
-  infraDeliveryRate: 0.07,
-  infraStorageRate: 0.05,
+	creators: 0.92,
+	foundation: 0.08,
+	foundationPrograms: 0.60,
+	foundationOps: 0.40,
 };
 
-/** Round to 2 decimal places (financial display). */
-function r2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
+const CREATOR_POOL = 2.76;
 
-function fmt(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
-
-const COLORS = {
-  pool:     "#2563eb",  // Creator Pool—blue-600
-  boost:    "#c026d3",  // Boost Pool—fuchsia-600
-  muted:    "#a3a3a3",  // neutral / subscription node
-  // Creator flow—decreasing shades of violet
-  support:  "#7c3aed",  // Creator Support (merged pool—violet-600)
-  crA:      "#4c1d95",  // Creator A—violet-900
-  crB:      "#6d28d9",  // Creator B—violet-700
-  crC:      "#8b5cf6",  // Creator C—violet-500
-  // Infra costs—pink tones
-  delivery: "#db2777",  // Infra: Delivery—pink-600
-  storage:  "#9d174d",  // Infra: Storage—pink-800
-  // Resilience Fund—teal/cyan tones (secondary family)
-  crf:      "#0f766e",  // Resilience Fund node—dark teal
-  crfA:     "#14b8a6",  // CRF pillar 1—bright teal
-  crfB:     "#0d9488",  // CRF pillar 2—medium teal
-  crfC:     "#0f766e",  // CRF pillar 3—muted teal
-  crfD:     "#115e59",  // CRF pillar 4—dark teal
-  // Platform Ops—dark orange tones
-  grey:     "#c2410c",  // Platform Operations node—orange-700
-  grey1:    "#ea580c",  // Staff—orange-600
-  grey2:    "#c2410c",  // Admin—orange-700
-  grey3:    "#7c2d12",  // Reserves—orange-900
-};
+/** 1080p60 midpoint ~15 Mbps = ~112.5 MB/min. Delivery at $0.01/GiB. */
+const DELIVERY_PER_HOUR = 112.5 * 60 / 1024 * 0.01; // ~$0.066/hr
 
 /**
- * Build a Sankey data set + node metadata for a given tier config.
- *
- * For tiers without a Boost Pool (boost = 0), the Boost node and its
- * links are omitted and Creator Pool receives all 85%.  To keep node
- * indices stable we always allocate all 25 node slots but only include
- * links for nodes that carry value.
+ * Non-linear streaming slider: maps a 0–1000 slider position to 0–200 hours
+ * using a power curve (exponent 1.5), giving more granularity at lower values
+ * without being as aggressive as quadratic.
+ * slider 0 → 0 hrs, slider 500 → ~71 hrs, slider 1000 → 200 hrs.
  */
-function buildSankeyForTier(tier: SankeyTierConfig) {
-  const price = tier.price;
-  const boost = tier.boostBudget;
-  const hasBoost = boost > 0;
+const STREAM_SLIDER_MAX = 1000;
+const STREAM_HOURS_MAX = 200;
+const STREAM_EASE = 1.5;
 
-  const creatorTotal = r2(price * ALLOC.creators);
-  const crfTotal = r2(price * ALLOC.crf);
-  const opsTotal = r2(price - creatorTotal - crfTotal); // remainder to avoid rounding drift
-
-  const poolAmount = r2(creatorTotal - boost);
-  const boostAmount = boost;
-
-  // Creator Support → individual creators (engagement-time weighted)
-  const supportTotal = creatorTotal;
-  const crA = r2(supportTotal * ALLOC.creatorA);
-  const crB = r2(supportTotal * ALLOC.creatorB);
-  const crC = r2(supportTotal - crA - crB); // remainder
-
-  // Each creator → income + infra
-  function creatorSplit(total: number) {
-    const delivery = r2(total * ALLOC.infraDeliveryRate);
-    const storage = r2(total * ALLOC.infraStorageRate);
-    const income = r2(total - delivery - storage);
-    return { income, delivery, storage };
-  }
-  const splitA = creatorSplit(crA);
-  const splitB = creatorSplit(crB);
-  const splitC = creatorSplit(crC);
-
-  // CRF sub-splits
-  const crfInfra = r2(crfTotal * ALLOC.crfInfra);
-  const crfEdu = r2(crfTotal * ALLOC.crfEdu);
-  const crfRelief = r2(crfTotal * ALLOC.crfRelief);
-  const crfCommunity = r2(crfTotal - crfInfra - crfEdu - crfRelief);
-
-  // Ops sub-splits
-  const opsStaff = r2(opsTotal * ALLOC.opsStaff);
-  const opsAdmin = r2(opsTotal * ALLOC.opsAdmin);
-  const opsReserves = r2(opsTotal - opsStaff - opsAdmin);
-
-  // --- Node index map (always 25 slots) ---
-  const N = {
-    SUB: 0,
-    CPOOL: 1,
-    BOOST: 2,
-    CRF: 3,
-    OPS: 4,
-    SUPPORT: 5,
-    CRF_INFRA: 6,
-    CRF_EDU: 7,
-    CRF_RELIEF: 8,
-    CRF_COMMUNITY: 9,
-    OPS_STAFF: 10,
-    OPS_ADMIN: 11,
-    OPS_RESERVES: 12,
-    CREATOR_A: 13,
-    CREATOR_B: 14,
-    CREATOR_C: 15,
-    A_INCOME: 16,
-    A_DELIVERY: 17,
-    A_STORAGE: 18,
-    B_INCOME: 19,
-    B_DELIVERY: 20,
-    B_STORAGE: 21,
-    C_INCOME: 22,
-    C_DELIVERY: 23,
-    C_STORAGE: 24,
-  } as const;
-
-  const nodes = [
-    { name: "Your Subscription" },
-    { name: "Creator Pool" },
-    { name: "Boost Pool" },
-    { name: "Resilience Fund" },
-    { name: "Platform Operations" },
-    { name: "Creator Support" },
-    { name: "Infrastructure Equity" },
-    { name: "Education & Development" },
-    { name: "Econ. Resilience & Relief" },
-    { name: "Community & Public Benefit" },
-    { name: "Staff" },
-    { name: "Admin" },
-    { name: "Reserves" },
-    { name: "Creator A" },
-    { name: "Creator B" },
-    { name: "Creator C" },
-    { name: "Income" },
-    { name: "Infra: Delivery" },
-    { name: "Infra: Storage" },
-    { name: "Income" },
-    { name: "Infra: Delivery" },
-    { name: "Infra: Storage" },
-    { name: "Income" },
-    { name: "Infra: Delivery" },
-    { name: "Infra: Storage" },
-  ];
-
-  const links: { source: number; target: number; value: number }[] = [
-    // Col 0 → Col 1
-    { source: N.SUB, target: N.CPOOL, value: poolAmount },
-    ...(hasBoost
-      ? [{ source: N.SUB, target: N.BOOST, value: boostAmount }]
-      : []),
-    { source: N.SUB, target: N.CRF, value: crfTotal },
-    { source: N.SUB, target: N.OPS, value: opsTotal },
-
-    // Col 1 → Col 2: pools merge into Creator Support
-    { source: N.CPOOL, target: N.SUPPORT, value: poolAmount },
-    ...(hasBoost
-      ? [{ source: N.BOOST, target: N.SUPPORT, value: boostAmount }]
-      : []),
-
-    // Col 2 → Col 3: Creator Support → creators
-    { source: N.SUPPORT, target: N.CREATOR_A, value: crA },
-    { source: N.SUPPORT, target: N.CREATOR_B, value: crB },
-    { source: N.SUPPORT, target: N.CREATOR_C, value: crC },
-
-    // Col 3 → Col 4: each creator → income + infra
-    { source: N.CREATOR_A, target: N.A_INCOME, value: splitA.income },
-    { source: N.CREATOR_A, target: N.A_DELIVERY, value: splitA.delivery },
-    { source: N.CREATOR_A, target: N.A_STORAGE, value: splitA.storage },
-
-    { source: N.CREATOR_B, target: N.B_INCOME, value: splitB.income },
-    { source: N.CREATOR_B, target: N.B_DELIVERY, value: splitB.delivery },
-    { source: N.CREATOR_B, target: N.B_STORAGE, value: splitB.storage },
-
-    { source: N.CREATOR_C, target: N.C_INCOME, value: splitC.income },
-    { source: N.CREATOR_C, target: N.C_DELIVERY, value: splitC.delivery },
-    { source: N.CREATOR_C, target: N.C_STORAGE, value: splitC.storage },
-
-    // CRF → pillars
-    { source: N.CRF, target: N.CRF_INFRA, value: crfInfra },
-    { source: N.CRF, target: N.CRF_EDU, value: crfEdu },
-    { source: N.CRF, target: N.CRF_RELIEF, value: crfRelief },
-    { source: N.CRF, target: N.CRF_COMMUNITY, value: crfCommunity },
-
-    // Ops → branches
-    { source: N.OPS, target: N.OPS_STAFF, value: opsStaff },
-    { source: N.OPS, target: N.OPS_ADMIN, value: opsAdmin },
-    { source: N.OPS, target: N.OPS_RESERVES, value: opsReserves },
-  ];
-
-  const meta: { label: string; sub: string; color: string }[] = [
-    { label: "Your Subscription",       sub: `$${price}/mo`,       color: COLORS.muted },
-    { label: "Creator Pool",            sub: fmt(poolAmount),      color: COLORS.pool },
-    { label: "Boost Pool",              sub: fmt(boostAmount),     color: COLORS.boost },
-    { label: "Resilience Fund",         sub: fmt(crfTotal),        color: COLORS.crf },
-    { label: "Platform Operations",     sub: fmt(opsTotal),        color: COLORS.grey },
-    { label: "Creator Support",         sub: fmt(supportTotal),    color: COLORS.support },
-    { label: "Infrastructure Equity",   sub: fmt(crfInfra),        color: COLORS.crfA },
-    { label: "Education & Dev.",        sub: fmt(crfEdu),          color: COLORS.crfB },
-    { label: "Resilience & Relief",     sub: fmt(crfRelief),       color: COLORS.crfC },
-    { label: "Community & Public",      sub: fmt(crfCommunity),    color: COLORS.crfD },
-    { label: "Staff",                   sub: fmt(opsStaff),        color: COLORS.grey1 },
-    { label: "Admin",                   sub: fmt(opsAdmin),        color: COLORS.grey2 },
-    { label: "Reserves",                sub: fmt(opsReserves),     color: COLORS.grey3 },
-    { label: "Creator A",               sub: fmt(crA),             color: COLORS.crA },
-    { label: "Creator B",               sub: fmt(crB),             color: COLORS.crB },
-    { label: "Creator C",               sub: fmt(crC),             color: COLORS.crC },
-    { label: "Income",                  sub: fmt(splitA.income),   color: COLORS.crA },
-    { label: "Infra: Delivery",         sub: fmt(splitA.delivery), color: COLORS.delivery },
-    { label: "Infra: Storage",          sub: fmt(splitA.storage),  color: COLORS.storage },
-    { label: "Income",                  sub: fmt(splitB.income),   color: COLORS.crB },
-    { label: "Infra: Delivery",         sub: fmt(splitB.delivery), color: COLORS.delivery },
-    { label: "Infra: Storage",          sub: fmt(splitB.storage),  color: COLORS.storage },
-    { label: "Income",                  sub: fmt(splitC.income),   color: COLORS.crC },
-    { label: "Infra: Delivery",         sub: fmt(splitC.delivery), color: COLORS.delivery },
-    { label: "Infra: Storage",          sub: fmt(splitC.storage),  color: COLORS.storage },
-  ];
-
-  // Pre-compute link colors
-  const linkColors: Record<number, string> = {};
-  links.forEach((link, i) => {
-    const { source, target } = link;
-    if (source === N.SUB) {
-      if (target === N.CPOOL) linkColors[i] = COLORS.pool;
-      else if (target === N.BOOST) linkColors[i] = COLORS.boost;
-      else if (target === N.CRF) linkColors[i] = COLORS.crf;
-      else if (target === N.OPS) linkColors[i] = COLORS.grey;
-      else linkColors[i] = COLORS.muted;
-    } else if (source === N.CRF) {
-      const crfMap: Record<number, string> = {
-        [N.CRF_INFRA]: COLORS.crfA,
-        [N.CRF_EDU]: COLORS.crfB,
-        [N.CRF_RELIEF]: COLORS.crfC,
-        [N.CRF_COMMUNITY]: COLORS.crfD,
-      };
-      linkColors[i] = crfMap[target] ?? COLORS.crf;
-    } else if (source === N.OPS) {
-      const opsMap: Record<number, string> = {
-        [N.OPS_STAFF]: COLORS.grey1,
-        [N.OPS_ADMIN]: COLORS.grey2,
-        [N.OPS_RESERVES]: COLORS.grey3,
-      };
-      linkColors[i] = opsMap[target] ?? COLORS.grey;
-    } else if (source === N.CPOOL) {
-      linkColors[i] = COLORS.pool;
-    } else if (source === N.BOOST) {
-      linkColors[i] = COLORS.boost;
-    } else if (source === N.SUPPORT) {
-      const crMap: Record<number, string> = {
-        [N.CREATOR_A]: COLORS.crA,
-        [N.CREATOR_B]: COLORS.crB,
-        [N.CREATOR_C]: COLORS.crC,
-      };
-      linkColors[i] = crMap[target] ?? COLORS.support;
-    } else if (
-      target === N.A_INCOME ||
-      target === N.B_INCOME ||
-      target === N.C_INCOME
-    ) {
-      const crMap: Record<number, string> = {
-        [N.CREATOR_A]: COLORS.crA,
-        [N.CREATOR_B]: COLORS.crB,
-        [N.CREATOR_C]: COLORS.crC,
-      };
-      linkColors[i] = crMap[source] ?? COLORS.support;
-    } else if (
-      target === N.A_DELIVERY ||
-      target === N.B_DELIVERY ||
-      target === N.C_DELIVERY
-    ) {
-      linkColors[i] = COLORS.delivery;
-    } else if (
-      target === N.A_STORAGE ||
-      target === N.B_STORAGE ||
-      target === N.C_STORAGE
-    ) {
-      linkColors[i] = COLORS.storage;
-    } else {
-      linkColors[i] = COLORS.muted;
-    }
-  });
-
-  return { data: { nodes, links }, meta, linkColors, N, hasBoost };
+function sliderToHrs(slider: number): number {
+  const t = slider / STREAM_SLIDER_MAX; // 0..1
+  return Math.round(Math.pow(t, STREAM_EASE) * STREAM_HOURS_MAX);
 }
 
-// Pre-build Sankey data for each tier (avoids recomputation on every render).
-const SANKEY_BY_TIER: Record<
-  string,
-  ReturnType<typeof buildSankeyForTier>
-> = Object.fromEntries(SANKEY_TIERS.map((t) => [t.id, buildSankeyForTier(t)]));
+function hrsToSlider(hrs: number): number {
+  const t = Math.pow(Math.min(1, Math.max(0, hrs / STREAM_HOURS_MAX)), 1 / STREAM_EASE);
+  return Math.round(t * STREAM_SLIDER_MAX);
+}
 
-// Default to sprout for initial render
-const DEFAULT_SANKEY_TIER = "sprout";
+/** National average combined state + local sales tax rate (2026 estimate). */
+const AVG_SALES_TAX_RATE = 0.0663;
 
-/** Stable node indices used across all tier variants. */
-const INCOME_NODES: Set<number> = new Set([16, 19, 22]);
-const DELIVERY_NODES: Set<number> = new Set([17, 20, 23]);
-const STORAGE_NODES: Set<number> = new Set([18, 21, 24]);
-const INFRA_NODES: Set<number> = new Set([...DELIVERY_NODES, ...STORAGE_NODES]);
-const CRF_PILLAR_NODES: Set<number> = new Set([6, 7, 8, 9]);
-const OPS_BRANCH_NODES: Set<number> = new Set([10, 11, 12]);
-const CREATOR_NODES: Set<number> = new Set([13, 14, 15]);
+function r2(n: number): number {
+	return Math.round(n * 100) / 100;
+}
+function fmt(n: number): string {
+	return `$${n.toFixed(2)}`;
+}
 
-/** Map each node index to a hover section key. */
-type SectionKey =
-  | "support"
-  | "income"
-  | "infra"
-  | "crf"
-  | "ops"
-  | null;
+function computeCardFee(amount: number, useCard: boolean): number {
+	if (amount <= 0) return 0;
+	if (useCard) return r2(amount * 0.029 + 0.30);
+	return r2(Math.min(amount * 0.008, 5)); // ACH: 0.8% capped at $5
+}
+
+function computeSalesTax(amount: number): number {
+	if (amount <= 0) return 0;
+	return r2(amount * AVG_SALES_TAX_RATE);
+}
+
+/**
+ * Zero-sum update for a triple of slider values.
+ * When one slider moves, the delta is distributed equally across the
+ * other two. If one of them hits 0, the remaining delta spills to the
+ * other.
+ */
+function zeroSumUpdate(
+	prev: [number, number, number],
+	idx: 0 | 1 | 2,
+	rawVal: number,
+	total: number,
+): [number, number, number] {
+	const clamped = Math.min(total, Math.max(0, Math.round(rawVal)));
+	const delta = clamped - prev[idx];
+	if (delta === 0) return prev;
+
+	const others = ([0, 1, 2] as const).filter((i) => i !== idx);
+	const next: [number, number, number] = [...prev] as [number, number, number];
+	next[idx] = clamped;
+
+	// Try to subtract delta/2 from each other, clamping at 0
+	let toDistribute = -delta;
+	const perOther = Math.round(toDistribute / 2);
+
+	for (const i of others) {
+		const adjusted = Math.max(0, next[i] + perOther);
+		toDistribute -= (adjusted - next[i]);
+		next[i] = adjusted;
+	}
+
+	// Any leftover (from clamping at 0) goes to whichever other can absorb it
+	if (toDistribute !== 0) {
+		for (const i of others) {
+			const adjusted = Math.max(0, next[i] + toDistribute);
+			toDistribute -= (adjusted - next[i]);
+			next[i] = adjusted;
+			if (toDistribute === 0) break;
+		}
+	}
+
+	// Final rounding correction
+	const sum = next[0] + next[1] + next[2];
+	if (sum !== total) {
+		for (const i of others) {
+			if (next[i] + (total - sum) >= 0) {
+				next[i] += total - sum;
+				break;
+			}
+		}
+	}
+
+	return next;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sankey builder                                                    */
+/* ------------------------------------------------------------------ */
+
+const COLORS = {
+	pool:       "#2563eb",
+	boost:      "#c026d3",
+	muted:      "#a3a3a3",
+	crA:        "#4c1d95",
+	crB:        "#6d28d9",
+	crC:        "#8b5cf6",
+	delivery:   "#db2777",
+	foundation: "#0f766e",
+	programs:   "#14b8a6",
+	ops:        "#0d9488",
+	cardFee:    "#d97706",  // amber-600
+	salesTax:   "#737373",  // neutral-500
+};
+
+interface SankeyParams {
+	fundingLevel: number;
+	grossDelivery: number;
+	deliveryAmt: number;
+	cardFee: number;
+	salesTax: number;
+	poolSplits: [number, number, number];
+	boostSplits: [number, number, number];
+}
+
+/**
+ * Three root inputs:
+ *   0: Subscription        (creator pool, boost, foundation fee)
+ *   1: Fees                (user-paid delivery overage, card/bank fee, sales tax)
+ *   2: Foundation Credit   ($1/mo delivery credit, always present)
+ *
+ * Subscription side:
+ *   3: Creator Pool
+ *   4: Boost Pool
+ *   5: Creator A
+ *   6: Creator B
+ *   7: Creator C
+ *   8: Anthers Foundation
+ *   9: Programs
+ *  10: Operations
+ *
+ * Fees + Foundation Credit merge at Delivery:
+ *  11: Delivery            (receives from Foundation Credit + optionally Fees)
+ *  12: Processing Fee
+ *  13: Sales Tax
+ */
+function buildSankey(p: SankeyParams) {
+	const price = p.fundingLevel;
+	const isFree = price <= 0;
+
+	const creatorTotal = isFree ? 0 : r2(price * ALLOC.creators);
+	const foundationTotal = isFree ? 0 : r2(price - creatorTotal);
+	const poolAmount = isFree ? 0 : Math.min(CREATOR_POOL, creatorTotal);
+	const boostAmount = isFree ? 0 : r2(creatorTotal - poolAmount);
+	const hasBoost = boostAmount > 0;
+
+	// Foundation credit covers up to $1 of delivery
+	const creditUsed = r2(Math.min(DELIVERY_CREDIT, p.grossDelivery));
+	const userDelivery = p.deliveryAmt; // already has credit subtracted
+
+	const feesTotal = r2(userDelivery + p.cardFee + p.salesTax);
+	const totalPayment = r2(price + feesTotal);
+
+	const poolA = r2(poolAmount * p.poolSplits[0]);
+	const poolB = r2(poolAmount * p.poolSplits[1]);
+	const poolC = r2(poolAmount - poolA - poolB);
+
+	const boostA = hasBoost ? r2(boostAmount * p.boostSplits[0]) : 0;
+	const boostB = hasBoost ? r2(boostAmount * p.boostSplits[1]) : 0;
+	const boostC = hasBoost ? r2(boostAmount - boostA - boostB) : 0;
+
+	const crA = r2(poolA + boostA);
+	const crB = r2(poolB + boostB);
+	const crC = r2(poolC + boostC);
+
+	const foundationPrograms = r2(foundationTotal * ALLOC.foundationPrograms);
+	const foundationOps = r2(foundationTotal - foundationPrograms);
+
+	const N = {
+		SUB: 0, FEES: 1, FNDCREDIT: 2,
+		CPOOL: 3, BOOST: 4,
+		CREATOR_A: 5, CREATOR_B: 6, CREATOR_C: 7,
+		FOUNDATION: 8, PROGRAMS: 9, OPS: 10,
+		CARDFEE: 11, SALESTAX: 12, DELIVERY: 13,
+	} as const;
+
+	const nodes = [
+		{ name: "User Subscription" },
+		{ name: "User Fees" },
+		{ name: "Foundation Credit" },
+		{ name: "Creator Pool" },
+		{ name: "Boost Pool" },
+		{ name: "Creator A" },
+		{ name: "Creator B" },
+		{ name: "Creator C" },
+		{ name: "Anthers Foundation" },
+		{ name: "Programs" },
+		{ name: "Operations" },
+		{ name: "Processing Fee" },
+		{ name: "Sales Tax" },
+		{ name: "Content Delivery" },
+	];
+
+	const links: { source: number; target: number; value: number }[] = [];
+
+	// Subscription → pools + foundation
+	if (poolAmount > 0) links.push({ source: N.SUB, target: N.CPOOL, value: poolAmount });
+	if (hasBoost) links.push({ source: N.SUB, target: N.BOOST, value: boostAmount });
+	if (foundationTotal > 0) links.push({ source: N.SUB, target: N.FOUNDATION, value: foundationTotal });
+
+	// Pool → creators
+	if (poolA > 0) links.push({ source: N.CPOOL, target: N.CREATOR_A, value: poolA });
+	if (poolB > 0) links.push({ source: N.CPOOL, target: N.CREATOR_B, value: poolB });
+	if (poolC > 0) links.push({ source: N.CPOOL, target: N.CREATOR_C, value: poolC });
+
+	// Boost → creators
+	if (hasBoost) {
+		if (boostA > 0) links.push({ source: N.BOOST, target: N.CREATOR_A, value: boostA });
+		if (boostB > 0) links.push({ source: N.BOOST, target: N.CREATOR_B, value: boostB });
+		if (boostC > 0) links.push({ source: N.BOOST, target: N.CREATOR_C, value: boostC });
+	}
+
+	// Foundation → Programs + Operations
+	if (foundationPrograms > 0) links.push({ source: N.FOUNDATION, target: N.PROGRAMS, value: foundationPrograms });
+	if (foundationOps > 0) links.push({ source: N.FOUNDATION, target: N.OPS, value: foundationOps });
+
+	// Foundation Credit → Delivery (always, even if $0 streaming — shows the credit exists)
+	links.push({ source: N.FNDCREDIT, target: N.DELIVERY, value: Math.max(creditUsed, 0.01) });
+
+	// Fees → user-paid delivery overage, processing, tax
+	if (userDelivery > 0) links.push({ source: N.FEES, target: N.DELIVERY, value: userDelivery });
+	if (p.cardFee > 0) links.push({ source: N.FEES, target: N.CARDFEE, value: p.cardFee });
+	if (p.salesTax > 0) links.push({ source: N.FEES, target: N.SALESTAX, value: p.salesTax });
+
+	const totalDelivery = r2(creditUsed + userDelivery);
+
+	const meta: { label: string; sub: string; color: string }[] = [
+		{ label: "User Subscription",  sub: fmt(price),                color: COLORS.muted },
+		{ label: "User Fees",          sub: fmt(feesTotal),            color: COLORS.cardFee },
+		{ label: "Foundation Credit",  sub: fmt(creditUsed),           color: COLORS.programs },
+		{ label: "Creator Pool",       sub: fmt(poolAmount),           color: COLORS.pool },
+		{ label: "Boost Pool",         sub: fmt(boostAmount),          color: COLORS.boost },
+		{ label: "Creator A",          sub: fmt(crA),                  color: COLORS.crA },
+		{ label: "Creator B",          sub: fmt(crB),                  color: COLORS.crB },
+		{ label: "Creator C",          sub: fmt(crC),                  color: COLORS.crC },
+		{ label: "Anthers Foundation", sub: fmt(foundationTotal),      color: COLORS.foundation },
+		{ label: "Programs",           sub: fmt(foundationPrograms),   color: COLORS.programs },
+		{ label: "Operations",         sub: fmt(foundationOps),        color: COLORS.ops },
+		{ label: "Processing Fee",     sub: fmt(p.cardFee),            color: COLORS.cardFee },
+		{ label: "Sales Tax",          sub: fmt(p.salesTax),           color: COLORS.salesTax },
+		{ label: "Content Delivery",   sub: fmt(totalDelivery),        color: COLORS.delivery },
+	];
+
+	const linkColors: Record<number, string> = {};
+	links.forEach((link, i) => {
+		const { source, target } = link;
+		if (source === N.SUB) {
+			if (target === N.CPOOL) linkColors[i] = COLORS.pool;
+			else if (target === N.BOOST) linkColors[i] = COLORS.boost;
+			else if (target === N.FOUNDATION) linkColors[i] = COLORS.foundation;
+			else linkColors[i] = COLORS.muted;
+		} else if (source === N.CPOOL) {
+			linkColors[i] = COLORS.pool;
+		} else if (source === N.BOOST) {
+			linkColors[i] = COLORS.boost;
+		} else if (source === N.FOUNDATION) {
+			if (target === N.PROGRAMS) linkColors[i] = COLORS.programs;
+			else if (target === N.OPS) linkColors[i] = COLORS.ops;
+			else linkColors[i] = COLORS.foundation;
+		} else if (source === N.FNDCREDIT) {
+			linkColors[i] = COLORS.programs; // teal, matching Foundation
+		} else if (source === N.FEES) {
+			if (target === N.DELIVERY) linkColors[i] = COLORS.delivery;
+			else if (target === N.CARDFEE) linkColors[i] = COLORS.cardFee;
+			else if (target === N.SALESTAX) linkColors[i] = COLORS.salesTax;
+			else linkColors[i] = COLORS.cardFee;
+		} else {
+			linkColors[i] = COLORS.muted;
+		}
+	});
+
+	return { data: { nodes, links }, meta, linkColors, N, hasBoost, totalPayment };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sankey hover logic                                                */
+/* ------------------------------------------------------------------ */
+
+const CREATOR_NODES: Set<number> = new Set([5, 6, 7]);
+const FOUNDATION_SUB_NODES: Set<number> = new Set([9, 10]);
+const FEE_LEAF_NODES: Set<number> = new Set([11, 12, 13]);
+
+type SectionKey = "support" | "foundation" | "fees" | null;
 
 function nodeToSection(index: number): SectionKey {
-  if (index === 1 || index === 2 || index === 5) return "support";
-  if (CREATOR_NODES.has(index)) return "support";
-  if (INCOME_NODES.has(index)) return "income";
-  if (INFRA_NODES.has(index)) return "infra";
-  if (index === 3 || CRF_PILLAR_NODES.has(index)) return "crf";
-  if (index === 4 || OPS_BRANCH_NODES.has(index)) return "ops";
-  return null;
+	// Creator Pool (3), Boost Pool (4), Creators (5-7)
+	if (index === 3 || index === 4) return "support";
+	if (CREATOR_NODES.has(index)) return "support";
+	// Foundation (8), Programs (9), Operations (10)
+	if (index === 8 || FOUNDATION_SUB_NODES.has(index)) return "foundation";
+	// Fees (1), Foundation Credit (2), Processing Fee (11), Sales Tax (12), Content Delivery (13)
+	if (index === 1 || index === 2 || FEE_LEAF_NODES.has(index)) return "fees";
+	return null;
 }
 
-/*
- * We need a factory so each Sankey instance can wire hover callbacks
- * without breaking the function-ref requirement (no JSX wrapper).
- */
 function makeSankeyNodeComponent(
-  onEnter: (section: SectionKey) => void,
-  onLeave: () => void,
-  activeSection: SectionKey,
-  nodeMeta: { label: string; sub: string; color: string }[],
+	onEnter: (section: SectionKey) => void,
+	onLeave: () => void,
+	activeSection: SectionKey,
+	nodeMeta: { label: string; sub: string; color: string }[],
 ) {
-  return function SankeyNodeComponent({
-    x,
-    y,
-    width,
-    height,
-    index,
-  }: SankeyNodeProps) {
-    const containerWidth = useChartWidth();
-    if (containerWidth == null) return null;
+	return function SankeyNodeComponent({ x, y, width, height, index }: SankeyNodeProps) {
+		const containerWidth = useChartWidth();
+		if (containerWidth == null) return null;
+		const meta = nodeMeta[index];
+		if (!meta) return null;
 
-    const meta = nodeMeta[index];
-    if (!meta) return null;
+		const isOut = x + width + 6 > containerWidth;
+		const section = nodeToSection(index);
+		const dimmed = activeSection !== null && section !== activeSection;
 
-    const isOut = x + width + 6 > containerWidth;
-    const section = nodeToSection(index);
-    const dimmed = activeSection !== null && section !== activeSection;
-
-    return (
-      <Layer key={`SankeyNode${index}`}>
-        {/* Invisible wider hit area for thin nodes */}
-        <Rectangle
-          x={x - 6}
-          y={y}
-          width={width + 12}
-          height={height}
-          fill="transparent"
-          style={{ cursor: section ? "pointer" : "default" }}
-          onMouseEnter={() => section && onEnter(section)}
-          onMouseLeave={onLeave}
-        />
-        <Rectangle
-          x={x}
-          y={y}
-          width={width}
-          height={height}
-          fill={meta.color}
-          fillOpacity={dimmed ? 0.12 : 0.9}
-          radius={2}
-          style={{ pointerEvents: "none", transition: "fill-opacity 1000ms" }}
-        />
-        <text
-          textAnchor={isOut ? "end" : "start"}
-          x={isOut ? x - 8 : x + width + 8}
-          y={y + height / 2}
-          fontSize="12"
-          fontWeight="600"
-          fill="currentColor"
-          dominantBaseline="middle"
-          style={{ pointerEvents: "none", opacity: dimmed ? 0.25 : 1, transition: "opacity 1000ms" }}
-        >
-          {meta.label}
-          <tspan fontWeight="400" fillOpacity={0.45} dx={6}>
-            {meta.sub}
-          </tspan>
-        </text>
-      </Layer>
-    );
-  };
+		return (
+			<Layer key={`SankeyNode${index}`}>
+				<Rectangle x={x - 6} y={y} width={width + 12} height={height}
+						   fill="transparent" style={{ cursor: section ? "pointer" : "default" }}
+						   onMouseEnter={() => section && onEnter(section)} onMouseLeave={onLeave}
+				/>
+				<Rectangle x={x} y={y} width={width} height={height}
+						   fill={meta.color} fillOpacity={dimmed ? 0.12 : 0.9} radius={2}
+						   style={{ pointerEvents: "none", transition: "fill-opacity 1000ms" }}
+				/>
+				<text
+					textAnchor={isOut ? "end" : "start"}
+					x={isOut ? x - 8 : x + width + 8}
+					y={y + height / 2} fontSize="12" fontWeight="600"
+					fill="currentColor" dominantBaseline="middle"
+					style={{ pointerEvents: "none", opacity: dimmed ? 0.25 : 1, transition: "opacity 1000ms" }}
+				>
+					{meta.label}
+					<tspan fontWeight="400" fillOpacity={0.45} dx={6}>{meta.sub}</tspan>
+				</text>
+			</Layer>
+		);
+	};
 }
 
 function makeSankeyLinkComponent(
-  onEnter: (section: SectionKey) => void,
-  onLeave: () => void,
-  activeSection: SectionKey,
-  tierData: ReturnType<typeof buildSankeyForTier>,
+	onEnter: (section: SectionKey) => void,
+	onLeave: () => void,
+	activeSection: SectionKey,
+	sankeyData: ReturnType<typeof buildSankey>,
 ) {
-  return function SankeyLinkComponent({
-    sourceX,
-    sourceY,
-    sourceControlX,
-    targetX,
-    targetY,
-    targetControlX,
-    linkWidth,
-    index,
-  }: SankeyLinkProps) {
-    const color = tierData.linkColors[index] ?? "#888";
-    const link = tierData.data.links[index];
-    // Derive section from the link's target node
-    const section = link ? nodeToSection(link.target) : null;
-    // Also check the source—links from Sub split into multiple sections
-    const sourceSection = link ? nodeToSection(link.source) : null;
-    const dimmed = activeSection !== null && section !== activeSection && sourceSection !== activeSection;
+	return function SankeyLinkComponent({
+											sourceX, sourceY, sourceControlX,
+											targetX, targetY, targetControlX,
+											linkWidth, index,
+										}: SankeyLinkProps) {
+		const color = sankeyData.linkColors[index] ?? "#888";
+		const link = sankeyData.data.links[index];
+		const section = link ? nodeToSection(link.target) : null;
+		const sourceSection = link ? nodeToSection(link.source) : null;
+		const dimmed = activeSection !== null && section !== activeSection && sourceSection !== activeSection;
+		const d = `M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`;
 
-    const d = `
-      M${sourceX},${sourceY}
-      C${sourceControlX},${sourceY}
-       ${targetControlX},${targetY}
-       ${targetX},${targetY}
-    `;
-
-    return (
-      <Layer key={`SankeyLink${index}`}>
-        {/* Visible link */}
-        <path
-          d={d}
-          fill="none"
-          stroke={color}
-          strokeWidth={linkWidth}
-          strokeOpacity={dimmed ? 0.05 : 0.2}
-          style={{ pointerEvents: "none", transition: "stroke-opacity 1000ms" }}
-        />
-        {/* Invisible wider hit area for hover */}
-        <path
-          d={d}
-          fill="none"
-          stroke="transparent"
-          strokeWidth={Math.max(linkWidth, 8)}
-          style={{ cursor: section ? "pointer" : "default" }}
-          onMouseEnter={() => section && onEnter(section)}
-          onMouseLeave={onLeave}
-        />
-      </Layer>
-    );
-  };
+		return (
+			<Layer key={`SankeyLink${index}`}>
+				<path d={d} fill="none" stroke={color} strokeWidth={linkWidth}
+					  strokeOpacity={dimmed ? 0.05 : 0.2}
+					  style={{ pointerEvents: "none", transition: "stroke-opacity 1000ms" }}
+				/>
+				<path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(linkWidth, 8)}
+					  style={{ cursor: section ? "pointer" : "default" }}
+					  onMouseEnter={() => section && onEnter(section)} onMouseLeave={onLeave}
+				/>
+			</Layer>
+		);
+	};
 }
+
+/* ------------------------------------------------------------------ */
+/*  Funding Level Slider                                              */
+/* ------------------------------------------------------------------ */
+
+const SLIDER_MIN = 0;
+const SLIDER_MAX = 50;
+
+function FundingSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+	const ticks: number[] = [];
+	for (let i = SLIDER_MIN; i <= SLIDER_MAX; i++) ticks.push(i);
+
+	return (
+		<div className="mb-4">
+			<input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={1} value={value}
+				   onChange={(e) => onChange(Number(e.target.value))}
+				   className="range range-primary w-full"
+			/>
+			<div className="relative w-full h-6 mt-1">
+				{ticks.map((tick) => {
+					const pct = ((tick - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100;
+					const isLabeled = tick % 5 === 0;
+					return (
+						<div key={tick} className="absolute -translate-x-1/2 flex flex-col items-center"
+							 style={{ left: `${pct}%` }}
+						>
+							<div className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`} />
+							{isLabeled && (
+								<span className="text-[10px] text-base-content/40 mt-0.5">${tick}</span>
+							)}
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tier Cards                                                        */
+/* ------------------------------------------------------------------ */
 
 function TierCard({
-  tier,
-  currentTier,
-  onSelect,
-  subscribing,
-}: {
-  tier: SubscriptionTierOption;
-  currentTier: string;
-  onSelect: (tier: string) => void;
-  subscribing: string | null;
+					  tier, currentTier, sliderTier, onSelect, subscribing,
+				  }: {
+	tier: SubscriptionTierOption;
+	currentTier: string;
+	sliderTier: string | null;
+	onSelect: (tier: string) => void;
+	subscribing: string | null;
 }) {
-  const isCurrentTier = tier.id === currentTier;
-  const isFree = tier.id === "free";
-  const price = tier.price;
+	const isCurrentTier = tier.id === currentTier;
+	const isSliderTier = tier.id === sliderTier;
+	const isFree = tier.id === "free";
 
-  return (
-    <div
-      className={`card bg-base-200/60 shadow-xl border-2 transition-all border-base-300 ${
-        isCurrentTier ? "ring-2 ring-success" : ""
-      }`}
-    >
-      <div className="card-body">
-        <h3 className="card-title text-lg">{tier.name}</h3>
-
-        <div className="flex items-baseline gap-1 my-2">
-          <span className="text-3xl font-bold">
-            {isFree ? "Free" : `$${price}`}
-          </span>
-          {!isFree && (
-            <span className="text-sm text-base-content/60">/month</span>
-          )}
-        </div>
-
-        <div className="divider my-1" />
-
-        {(() => {
-          const info = TIER_HIGHLIGHTS[tier.id];
-          if (!info) return null;
-          return (
-            <div className="flex-grow">
-              {info.upgrade && (
-                <p className="text-xs text-base-content/40 mb-2">
-                  {info.upgrade}
-                </p>
-              )}
-              <ul className="space-y-2 text-sm">
-                {info.included.map((highlight, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-success mt-0.5">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </span>
-                    <span>{highlight}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })()}
-
-        <div className="card-actions mt-4">
-          {isCurrentTier ? (
-            <button className="btn btn-success btn-sm w-full" disabled>
-              Current Plan
-            </button>
-          ) : isFree ? (
-            <button className="btn btn-ghost btn-sm w-full" disabled>
-              Default Tier
-            </button>
-          ) : (
-            <button
-              className={`btn btn-sm w-full btn-outline btn-primary ${
-                subscribing === tier.id ? "btn-disabled" : ""
-              }`}
-              onClick={() => onSelect(tier.id)}
-              disabled={!!subscribing}
-            >
-              {subscribing === tier.id
-                ? "Redirecting..."
-                : currentTier !== "free"
-                  ? `Switch to ${tier.name}`
-                  : `Subscribe`}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+	return (
+		<div className={`card bg-base-200/60 shadow-xl border-2 transition-all ${
+			isCurrentTier ? "ring-2 ring-success border-success"
+				: isSliderTier ? "ring-2 ring-primary border-primary"
+					: "border-base-300"
+		}`}>
+			<div className="card-body items-center text-center p-4">
+				<h3 className="card-title text-lg">{tier.name}</h3>
+				<div className="flex items-baseline gap-1 my-1">
+					<span className="text-2xl font-bold">{isFree ? "Free" : `$${tier.price}`}</span>
+					{!isFree && <span className="text-sm text-base-content/60">/mo</span>}
+				</div>
+				<div className="card-actions mt-2">
+					{isCurrentTier ? (
+						<button className="btn btn-success btn-sm w-full" disabled>Current Plan</button>
+					) : isFree ? (
+						<button className="btn btn-ghost btn-sm w-full" disabled>Default Tier</button>
+					) : (
+						<button
+							className={`btn btn-sm w-full btn-outline btn-primary ${subscribing === tier.id ? "btn-disabled" : ""}`}
+							onClick={() => onSelect(tier.id)} disabled={!!subscribing}
+						>
+							{subscribing === tier.id ? "Redirecting..."
+								: currentTier !== "free" ? `Start at ${tier.name}` : `Subscribe`}
+						</button>
+					)}
+				</div>
+			</div>
+		</div>
+	);
 }
 
 /* ------------------------------------------------------------------ */
-/*  Hover-conditional content sections below the Sankey diagram       */
+/*  Hover-conditional content sections                                */
 /* ------------------------------------------------------------------ */
 
-/** Maps each section component to the SectionKey(s) that highlight it. */
 const SECTION_KEYS: { keys: SectionKey[]; id: string }[] = [
-  { keys: ["support"], id: "support" },
-  { keys: ["income"], id: "income" },
-  { keys: ["infra"], id: "infra" },
-  { keys: ["crf"], id: "crf" },
-  { keys: ["ops"], id: "ops" },
+	{ keys: ["support"], id: "support" },
+	{ keys: ["foundation"], id: "foundation" },
+	{ keys: ["fees"], id: "fees" },
 ];
 
 function dimClass(active: SectionKey, keys: SectionKey[]): string {
-  if (active === null) return "";
-  return keys.includes(active)
-    ? ""
-    : "opacity-25";
+	if (active === null) return "";
+	return keys.includes(active) ? "" : "opacity-25";
 }
 
 function SectionContent({
-  section,
-  onEnter,
-  onLeave,
-}: {
-  section: SectionKey;
-  onEnter: (s: SectionKey) => void;
-  onLeave: () => void;
+							section, onEnter, onLeave,
+						}: {
+	section: SectionKey;
+	onEnter: (s: SectionKey) => void;
+	onLeave: () => void;
 }) {
-  return (
-    <>
-      {SECTION_KEYS.map(({ keys, id }) => (
-        <div
-          key={id}
-          className={`transition-opacity duration-1000 h-full ${dimClass(section, keys)}`}
-          onMouseEnter={() => onEnter(keys[0])}
-          onMouseLeave={onLeave}
-        >
-          {id === "support" && <CreatorSupportSection />}
-          {id === "income" && <CreatorIncomeSection />}
-          {id === "infra" && <InfraCostsSection />}
-          {id === "crf" && <CRFSection />}
-          {id === "ops" && <OpsSection />}
-        </div>
-      ))}
-    </>
-  );
+	return (
+		<>
+			{SECTION_KEYS.map(({ keys, id }) => (
+				<div key={id}
+					 className={`transition-opacity duration-1000 h-full ${dimClass(section, keys)}`}
+					 onMouseEnter={() => onEnter(keys[0])} onMouseLeave={onLeave}
+				>
+					{id === "support" && <CreatorSupportSection />}
+					{id === "foundation" && <FoundationSection />}
+					{id === "fees" && <FeesSection />}
+				</div>
+			))}
+		</>
+	);
 }
 
 function CreatorSupportSection() {
-  return (
-    <div className="card bg-base-200/60 shadow-xl p-4 h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="flex gap-1">
-          <div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.pool }} />
-          <div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.boost }} />
-        </div>
-        <h3 className="font-semibold text-sm">Creator Support</h3>
-      </div>
-      <p className="text-xs text-base-content/60 leading-relaxed">
-        85% of your subscription goes to creators through two pools.
-        The <strong>Creator Pool</strong> is distributed automatically,
-        proportional to time spent engaging—watching, reading,
-        listening, or playing. The <strong>Boost Pool</strong> lets
-        you direct extra funds to specific creators with sliders;
-        left untouched, it follows the same engagement-time split.
-        Your boost also determines which gated content you unlock.
-      </p>
-    </div>
-  );
+	return (
+		<div className="card bg-base-200/60 shadow-xl p-4 h-full">
+			<div className="flex items-center gap-2 mb-2">
+				<div className="flex gap-1">
+					<div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.pool }} />
+					<div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.boost }} />
+				</div>
+				<h3 className="font-semibold text-sm">Creator Support</h3>
+			</div>
+			<p className="text-xs text-base-content/60 leading-relaxed">
+				92% of your subscription goes to creators through two pools.
+				The <strong>Creator Pool</strong> ($2.76) is distributed automatically,
+				proportional to time spent engaging. The <strong>Boost Pool</strong> is
+				everything above that — it lets you direct extra funds to specific
+				creators. Your boost determines which gated content you unlock.
+				Boost starts at any funding level above $3.
+			</p>
+		</div>
+	);
 }
 
-function CreatorIncomeSection() {
-  return (
-    <div className="card bg-base-200/60 shadow-xl p-4 h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-6 h-6 rounded" style={{ backgroundColor: COLORS.crA }} />
-        <h3 className="font-semibold text-sm">Creator Income</h3>
-      </div>
-      <p className="text-xs text-base-content/60 leading-relaxed">
-        Both pools merge into a single stream and are distributed to
-        creators weighted by engagement time. Engage with Creator A
-        twice as much as Creator B, and A receives roughly twice the
-        funding—automatically. After infrastructure costs, the
-        remainder is the creator's income, paid out via Stripe
-        Connect. Anthers takes zero percentage cut.
-      </p>
-    </div>
-  );
+function FoundationSection() {
+	return (
+		<div className="card bg-base-200/60 shadow-xl p-4 h-full">
+			<div className="flex items-center gap-2 mb-2">
+				<div className="w-6 h-6 rounded" style={{ backgroundColor: COLORS.foundation }} />
+				<h3 className="font-semibold text-sm">Anthers Foundation</h3>
+			</div>
+			<p className="text-xs text-base-content/60 leading-relaxed">
+				8% of your subscription funds the Anthers Foundation, which
+				allocates between charitable programs and organizational
+				operations. At least 50% goes to programs in any year. The
+				Foundation publishes quarterly allocation reports.
+			</p>
+		</div>
+	);
 }
 
-function InfraCostsSection() {
-  return (
-    <div className="card bg-base-200/60 shadow-xl p-4 h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="flex gap-1">
-          <div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.delivery }} />
-          <div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.storage }} />
-        </div>
-        <h3 className="font-semibold text-sm">Infrastructure Costs</h3>
-      </div>
-      <p className="text-xs text-base-content/60 leading-relaxed">
-        CDN bandwidth (delivery) and object storage are passed through
-        at cost with no markup. These are the only deductions from a
-        creator's revenue—real, itemized costs they can see and
-        verify. Creators whose costs exceed their revenue are covered
-        by the CRF's Infrastructure Equity program.
-      </p>
-    </div>
-  );
+function FeesSection() {
+	return (
+		<div className="card bg-base-200/60 shadow-xl p-4 h-full">
+			<div className="flex items-center gap-2 mb-2">
+				<div className="flex gap-1">
+					<div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.delivery }} />
+					<div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.cardFee }} />
+					<div className="w-3 h-6 rounded" style={{ backgroundColor: COLORS.salesTax }} />
+				</div>
+				<h3 className="font-semibold text-sm">Fees</h3>
+			</div>
+			<p className="text-xs text-base-content/60 leading-relaxed">
+				<strong>Delivery:</strong> bandwidth cost of content you watch,
+				billed based on actual usage. Smart quality controls, local
+				caching, downloads, and shared viewing help keep costs low.{" "}
+				<strong>Processing:</strong> 2.9% + $0.30 for credit/debit cards,
+				or 0.8% (max $5) for bank payments (ACH).{" "}
+				<strong>Sales tax:</strong> estimated at the national average
+				(~6.6%). Actual tax may vary by state and locality.
+			</p>
+		</div>
+	);
 }
 
-function CRFSection() {
-  return (
-    <div className="card bg-base-200/60 shadow-xl p-4 h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-6 h-6 rounded" style={{ backgroundColor: COLORS.crf }} />
-        <h3 className="font-semibold text-sm">Resilience Fund</h3>
-      </div>
-      <p className="text-xs text-base-content/60 leading-relaxed">
-        10% of every subscription funds four charitable pillars:
-        Infrastructure Equity, Education & Development, Economic
-        Resilience & Relief, and Community & Public Benefit. The CRF
-        is governed by a committee with direct creator representation
-        and is the operational heart of Anthers's mission.
-      </p>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Page Component                                                    */
+/* ------------------------------------------------------------------ */
 
-function OpsSection() {
-  return (
-    <div className="card bg-base-200/60 shadow-xl p-4 h-full">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-6 h-6 rounded" style={{ backgroundColor: COLORS.grey }} />
-        <h3 className="font-semibold text-sm">Platform Operations</h3>
-      </div>
-      <p className="text-xs text-base-content/60 leading-relaxed">
-        5% covers staff, legal, accounting, insurance, and tools.
-        The board reviews this rate annually—if it generates more
-        than 130–150% of projected costs, the rate is reduced. As
-        Anthers scales, this percentage shrinks.
-      </p>
-    </div>
-  );
-}
+const DEFAULT_FUNDING = 7;
 
 export default function SubscribePage() {
-  const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+	const { user } = useAuth();
+	const [searchParams] = useSearchParams();
 
-  const [tiers, setTiers] = useState<SubscriptionTierOption[]>([]);
-  const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [subscribing, setSubscribing] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<SectionKey>(null);
-  const [sankeyTier, setSankeyTier] = useState(DEFAULT_SANKEY_TIER);
+	const [tiers, setTiers] = useState<SubscriptionTierOption[]>([]);
+	const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [subscribing, setSubscribing] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [activeSection, setActiveSection] = useState<SectionKey>(null);
 
-  const activeTierData = SANKEY_BY_TIER[sankeyTier]!;
-  const activeTierConfig = SANKEY_TIERS.find((t) => t.id === sankeyTier)!;
+	// --- Interactive controls ---
+	const [fundingLevel, setFundingLevel] = useState(DEFAULT_FUNDING);
 
-  const onSectionEnter = useCallback(
-    (s: SectionKey) => setActiveSection(s),
-    [],
-  );
-  const onSectionLeave = useCallback(
-    () => setActiveSection(null),
-    [],
-  );
+	// Creator watch % — zero-sum, always sums to 100
+	const [watchPcts, setWatchPcts] = useState<[number, number, number]>([51, 26, 23]);
 
-  // Recreate node/link components when activeSection or tier changes so
-  // Recharts re-renders with updated dim/highlight opacity and data.
-  const sankeyNode = useMemo(
-    () =>
-      makeSankeyNodeComponent(
-        onSectionEnter,
-        onSectionLeave,
-        activeSection,
-        activeTierData.meta,
-      ),
-    [onSectionEnter, onSectionLeave, activeSection, activeTierData],
-  );
-  const sankeyLink = useMemo(
-    () =>
-      makeSankeyLinkComponent(
-        onSectionEnter,
-        onSectionLeave,
-        activeSection,
-        activeTierData,
-      ),
-    [onSectionEnter, onSectionLeave, activeSection, activeTierData],
-  );
+	/**
+	 * Update one slider in a zero-sum triple and distribute the change
+	 * equally across the other two, clamping at 0.
+	 */
+	const setWatch = useCallback((idx: 0 | 1 | 2, newVal: number) => {
+		setWatchPcts((prev) => zeroSumUpdate(prev, idx, newVal, 100));
+	}, []);
 
-  const wasCanceled = searchParams.get("canceled") === "true";
+	// Creator boost % — zero-sum, always sums to 100
+	const [boostPcts, setBoostPcts] = useState<[number, number, number]>([68, 20, 12]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [tierRes, subRes] = await Promise.all([
-          client.api.subscriptions.tiers.$get(),
-          user
-            ? client.api.subscriptions.me.$get()
-            : Promise.resolve(null),
-        ]);
-        const tierData = (await tierRes.json()) as {
-          tiers: SubscriptionTierOption[];
-        };
-        setTiers(tierData.tiers);
-        if (subRes) {
-          const subData = (await subRes.json()) as {
-            subscription: Subscription;
-          };
-          setCurrentSub(subData.subscription);
-        }
-      } catch {
-        setError("Failed to load subscription info.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [user]);
+	const boostTotal = useMemo(() => {
+		const cs = r2(fundingLevel * ALLOC.creators);
+		return Math.max(0, r2(cs - CREATOR_POOL));
+	}, [fundingLevel]);
 
-  const handleSelect = async (tier: string) => {
-    if (!user) {
-      window.location.href = `/login?next=/subscribe`;
-      return;
-    }
+	const setBoost = useCallback((idx: 0 | 1 | 2, newVal: number) => {
+		setBoostPcts((prev) => zeroSumUpdate(prev, idx, newVal, 100));
+	}, []);
 
-    setSubscribing(tier);
-    setError(null);
+	// Streaming hours (non-linear slider: 0–1000 position → 0–200 hrs quadratic)
+	const [streamSlider, setStreamSlider] = useState(() => hrsToSlider(25));
+	const streamHours = sliderToHrs(streamSlider);
 
-    try {
-      const res = await client.api.subscriptions.subscribe.$post({
-        json: { tier: tier as "root" | "sprout" | "petal" | "bloom" },
-      });
-      const data = (await res.json()) as {
-        checkoutUrl?: string;
-        tier?: string;
-      };
+	// Payment method
+	const [useCard, setUseCard] = useState(true);
 
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        // Tier change on existing subscription (no checkout needed)
-        const subRes = await client.api.subscriptions.me.$get();
-        const subData = (await subRes.json()) as {
-          subscription: Subscription;
-        };
-        setCurrentSub(subData.subscription);
-        setSubscribing(null);
-      }
-    } catch {
-      setError("Failed to start subscription. Please try again.");
-      setSubscribing(null);
-    }
-  };
+	// --- Computed values ---
+	const currentTier = tierForAmount(fundingLevel);
+	const grossDelivery = r2(streamHours * DELIVERY_PER_HOUR);
+	const deliveryAmt = r2(Math.max(0, grossDelivery - DELIVERY_CREDIT));
+	const subtotal = r2(fundingLevel + deliveryAmt);
+	const cardFee = computeCardFee(subtotal, useCard);
+	const cardFeeIfCard = computeCardFee(subtotal, true);
+	const cardFeeIfBank = computeCardFee(subtotal, false);
+	const cardFeeSavings = r2(cardFeeIfCard - cardFeeIfBank);
+	const salesTax = computeSalesTax(subtotal);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
+	// Show the full Sankey diagram, or just the Foundation explainer?
+	const showDiagram = fundingLevel > 0 || deliveryAmt > 0;
 
-  const currentTier = currentSub?.tier || "free";
+	const poolSplits: [number, number, number] = [
+		watchPcts[0] / 100,
+		watchPcts[1] / 100,
+		watchPcts[2] / 100,
+	];
 
-  return (
-    <div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
-      <div className="text-center mb-8">
-        <p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
-          501(c)(3) non-profit
-        </p>
-        <h1 className="text-3xl font-bold mb-2">Choose Your Plan</h1>
-        <p className="text-base-content/70 max-w-xl mx-auto">
-          Your subscription directly funds the creators you engage with
-          and the charitable programs that keep the creative internet
-          equitable. No algorithms, no middlemen, no shareholders—just
-          transparent, accountable support.
-        </p>
-      </div>
+	const boostSplits: [number, number, number] = [
+		boostPcts[0] / 100,
+		boostPcts[1] / 100,
+		boostPcts[2] / 100,
+	];
 
-      {wasCanceled && (
-        <div className="alert alert-warning mb-6 max-w-lg mx-auto">
-          <span>Checkout was canceled. You can try again anytime.</span>
-        </div>
-      )}
+	const sankeyData = useMemo(
+		() => buildSankey({
+			fundingLevel,
+			grossDelivery,
+			deliveryAmt,
+			cardFee,
+			salesTax,
+			poolSplits,
+			boostSplits,
+		}),
+		[fundingLevel, grossDelivery, deliveryAmt, cardFee, salesTax, poolSplits, boostSplits],
+	);
 
-      {error && (
-        <div className="alert alert-error mb-6 max-w-lg mx-auto">
-          <span>{error}</span>
-        </div>
-      )}
+	const onSectionEnter = useCallback((s: SectionKey) => setActiveSection(s), []);
+	const onSectionLeave = useCallback(() => setActiveSection(null), []);
 
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
-        {tiers.map((tier) => (
-          <TierCard
-            key={tier.id}
-            tier={tier}
-            currentTier={currentTier}
-            onSelect={handleSelect}
-            subscribing={subscribing}
-          />
-        ))}
-      </div>
+	const sankeyNode = useMemo(
+		() => makeSankeyNodeComponent(onSectionEnter, onSectionLeave, activeSection, sankeyData.meta),
+		[onSectionEnter, onSectionLeave, activeSection, sankeyData],
+	);
+	const sankeyLink = useMemo(
+		() => makeSankeyLinkComponent(onSectionEnter, onSectionLeave, activeSection, sankeyData),
+		[onSectionEnter, onSectionLeave, activeSection, sankeyData],
+	);
 
-      {/* Where Your Money Goes */}
-      <div className="mt-16">
-        <div className="max-w-4xl mx-auto mb-8">
-          <h2 className="text-2xl font-bold mb-2 text-center">
-            Where Your Money Goes
-          </h2>
-          <p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto">
-            Anthers is structured so that it cannot extract profit from
-            creators. Every tier splits the same way: 85% to creators, 10%
-            to the Creator Resilience Fund, 5% to platform operations. You
-            always know exactly where every dollar goes.
-          </p>
-        </div>
+	const wasCanceled = searchParams.get("canceled") === "true";
 
-        {/* Sankey flow diagram—full width */}
-        <div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto">
-          {/* Tier selector tabs */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            {SANKEY_TIERS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => {
-                  setSankeyTier(t.id);
-                  setActiveSection(null);
-                }}
-                className={`btn ${
-                  sankeyTier === t.id
-                    ? "btn-primary"
-                    : "btn-ghost"
-                }`}
-              >
-                {t.name}
-                <span className="ml-1 text-sm opacity-60">
-                  ${t.price}/mo
-                </span>
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-base-content/30 mb-3">
-            Hover any section to learn more
-          </p>
+	useEffect(() => {
+		const fetchData = async () => {
+			try {
+				const [tierRes, subRes] = await Promise.all([
+					client.api.subscriptions.tiers.$get(),
+					user ? client.api.subscriptions.me.$get() : Promise.resolve(null),
+				]);
+				const tierData = (await tierRes.json()) as { tiers: SubscriptionTierOption[] };
+				setTiers(tierData.tiers);
+				if (subRes) {
+					const subData = (await subRes.json()) as { subscription: Subscription };
+					setCurrentSub(subData.subscription);
+				}
+			} catch {
+				setError("Failed to load subscription info.");
+			} finally {
+				setLoading(false);
+			}
+		};
+		fetchData();
+	}, [user]);
 
-          {!activeTierData.hasBoost && (
-            <p className="text-xs text-base-content/40 mb-2">
-              The {activeTierConfig.name} tier directs all creator funding
-              through the Creator Pool. Boost Pool is available starting at
-              Sprout.
-            </p>
-          )}
+	const handleSelect = async (tier: string) => {
+		if (!user) { window.location.href = `/login?next=/subscribe`; return; }
+		setSubscribing(tier);
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.subscribe.$post({
+				json: { tier: tier as "root" | "sprout" | "petal" | "bloom" },
+			});
+			const data = (await res.json()) as { checkoutUrl?: string; tier?: string };
+			if (data.checkoutUrl) {
+				window.location.href = data.checkoutUrl;
+			} else {
+				const subRes = await client.api.subscriptions.me.$get();
+				const subData = (await subRes.json()) as { subscription: Subscription };
+				setCurrentSub(subData.subscription);
+				setSubscribing(null);
+			}
+		} catch {
+			setError("Failed to start subscription. Please try again.");
+			setSubscribing(null);
+		}
+	};
 
-          <div style={{ minWidth: 1000 }}>
-            <ResponsiveContainer width="100%" height={800}>
-              <Sankey
-                data={activeTierData.data}
-                node={sankeyNode}
-                link={sankeyLink}
-                nodeWidth={14}
-                nodePadding={24}
-                margin={{ top: 16, right: 180, bottom: 16, left: 160 }}
-                sort={false}
-                iterations={128}
-                linkCurvature={0.5}
-                align="left"
-                verticalAlign="top"
-              />
-            </ResponsiveContainer>
-          </div>
-          <p className="text-xs text-base-content/40 mt-1 text-center">
-            85% of your subscription goes directly to creators
-            and their infrastructure. 10% funds the Creator Resilience
-            Fund's charitable programs. 5% covers platform operations.
-          </p>
-        </div>
+	if (loading) {
+		return (
+			<div className="flex justify-center py-16">
+				<span className="loading loading-spinner loading-lg" />
+			</div>
+		);
+	}
 
-        {/* Detail breakdown—compact grid below chart */}
-        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          <SectionContent
-            section={activeSection}
-            onEnter={onSectionEnter}
-            onLeave={onSectionLeave}
-          />
-        </div>
-      </div>
+	const userTier = currentSub?.tier || "free";
 
-      {/* Why Non-Profit */}
-      <div className="mt-16 max-w-3xl mx-auto text-center pb-4">
-        <h2 className="text-xl font-bold mb-3">Why Non-Profit</h2>
-        <p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
-          Anthers is a non-profit because the only way to
-          guarantee that our platform always serves creators is to make it legally
-          impossible for it to act otherwise. Anthers cannot distribute profits to
-            insiders, cannot be acquired, and cannot have its mission diluted by investors.
-            If it ever ceases to operate, its assets go to another exempt organization,
-              not to founders or shareholders.
-        </p>
-      </div>
-    </div>
-  );
+	return (
+		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
+			<div className="text-center mb-8">
+				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
+					501(c)(3) non-profit
+				</p>
+				<h1 className="text-3xl font-bold mb-2">Support Your Creators</h1>
+				<p className="text-base-content/70 max-w-xl mx-auto">
+					Pick a starting tier, then adjust your support level anytime.
+					Every dollar splits the same way: 92% to creators, 8% to the
+					Anthers Foundation. You're always in control.
+				</p>
+			</div>
+
+			{wasCanceled && (
+				<div className="alert alert-warning mb-6 max-w-lg mx-auto">
+					<span>Checkout was canceled. You can try again anytime.</span>
+				</div>
+			)}
+			{error && (
+				<div className="alert alert-error mb-6 max-w-lg mx-auto">
+					<span>{error}</span>
+				</div>
+			)}
+
+			{/* Tier cards */}
+			<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
+				{tiers.map((tier) => (
+					<TierCard key={tier.id} tier={tier} currentTier={userTier}
+							  sliderTier={currentTier?.id ?? null}
+							  onSelect={handleSelect} subscribing={subscribing}
+					/>
+				))}
+			</div>
+
+			{/* Where Your Money Goes */}
+			<div className="mt-16">
+				<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto">
+					<h2 className="text-2xl font-bold mb-2 text-center">
+						Where Your Money Goes
+					</h2>
+					<p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto mb-6">
+						Drag the sliders to see how any funding level breaks down.
+						The split is always the same: 92% to creators, 8% to the
+						Anthers Foundation.
+					</p>
+
+					{/* ---- Subscription funding slider ---- */}
+					<FundingSlider value={fundingLevel} onChange={setFundingLevel} />
+
+					{/* ---- Customization controls ---- */}
+					<div className="divider text-xs text-base-content/30 my-2">Customize the scenario</div>
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-x divide-base-content/10 mb-2">
+
+						{/* Creator A */}
+						<div className="space-y-2 px-4 first:pl-0 last:pr-0">
+							<label className="text-xs font-semibold text-center block">Creator A</label>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
+								<input type="range" min={0} max={100} step={1} value={watchPcts[0]}
+									   onChange={(e) => setWatch(0, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.pool }} />
+								<span className="text-xs w-8 text-right">{watchPcts[0]}%</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
+								<input type="range" min={0} max={100} step={1} value={boostPcts[0]}
+									   onChange={(e) => setBoost(0, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.boost }}
+									   disabled={boostTotal <= 0} />
+								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[0])}</span>
+							</div>
+						</div>
+
+						{/* Creator B */}
+						<div className="space-y-2 px-4">
+							<label className="text-xs font-semibold text-center block">Creator B</label>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
+								<input type="range" min={0} max={100} step={1} value={watchPcts[1]}
+									   onChange={(e) => setWatch(1, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.pool }} />
+								<span className="text-xs w-8 text-right">{watchPcts[1]}%</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
+								<input type="range" min={0} max={100} step={1} value={boostPcts[1]}
+									   onChange={(e) => setBoost(1, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.boost }}
+									   disabled={boostTotal <= 0} />
+								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[1])}</span>
+							</div>
+						</div>
+
+						{/* Creator C */}
+						<div className="space-y-2 px-4">
+							<label className="text-xs font-semibold text-center block">Creator C</label>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
+								<input type="range" min={0} max={100} step={1} value={watchPcts[2]}
+									   onChange={(e) => setWatch(2, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.pool }} />
+								<span className="text-xs w-8 text-right">{watchPcts[2]}%</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
+								<input type="range" min={0} max={100} step={1} value={boostPcts[2]}
+									   onChange={(e) => setBoost(2, Number(e.target.value))}
+									   className="range range-xs flex-1"
+									   style={{ color: COLORS.boost }}
+									   disabled={boostTotal <= 0} />
+								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[2])}</span>
+							</div>
+						</div>
+
+						{/* Streaming hours */}
+						<div className="space-y-2 px-4 last:pr-0">
+							<label className="text-xs font-semibold text-center block">Streaming</label>
+							<div className="flex items-center gap-2">
+								{(() => {
+									const creditThresholdHrs = Math.round(DELIVERY_CREDIT / DELIVERY_PER_HOUR);
+									return (
+										<div className="flex-1 relative mb-5">
+											<input type="range" min={0} max={1000} step={1} value={streamSlider}
+												   onChange={(e) => setStreamSlider(Number(e.target.value))}
+												   className="range range-xs w-full"
+												   style={{ color: deliveryAmt > 0 ? COLORS.delivery : "#14b8a6" }} />
+											{/* Threshold marker where the $1 credit runs out */}
+											<div
+												className="absolute top-full mt-0.5 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+												style={{ left: `${(hrsToSlider(creditThresholdHrs) / 1000) * 100}%` }}
+											>
+												<div className="w-px h-2.5 bg-success" />
+												<span className="text-[9px] text-success font-semibold whitespace-nowrap">
+                            ~{creditThresholdHrs}h free
+                          </span>
+											</div>
+										</div>
+									);
+								})()}
+								<span className="text-xs w-14 text-right">{streamHours} hrs</span>
+							</div>
+							<p className="text-[10px] leading-tight">
+                  <span className={deliveryAmt > 0 ? "text-warning" : "text-success"}>
+                    {deliveryAmt > 0
+						? `$1.00 credit applied — ${fmt(deliveryAmt)} billable delivery`
+						: `$1.00/mo delivery credit covers this — no delivery charge`}
+                  </span>
+							</p>
+							<p className="text-[10px] text-base-content/30 leading-tight">
+								Assumes 1080/60 video (~{fmt(grossDelivery)} gross). Will be
+								lower for audio, text, or if you watch with friends, download
+								for rewatching, or use auto-quality/audio-only.
+							</p>
+						</div>
+					</div>
+					<div className="divider my-2" />
+
+					{/* ---- Cost breakdown ---- */}
+					<div className="flex justify-center mb-4">
+						<div className="text-sm w-full max-w-lg">
+							{/* Subscription amount */}
+							<div className="flex items-center justify-between py-2 border-b border-base-content/10">
+								<span className="text-base-content/60">Subscription</span>
+								<div className="flex items-baseline gap-1">
+									<span className="text-xl font-bold">${fundingLevel}</span>
+									<span className="text-base-content/40 text-xs">/mo</span>
+									{!sankeyData.hasBoost && fundingLevel > 0 && (
+										<span className="text-xs text-base-content/40 ml-2">
+                      (above $3 for Boost Pool)
+                    </span>
+									)}
+								</div>
+							</div>
+
+							{/* Individual cost elements */}
+							<div className="py-2 space-y-1.5">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.pool }} />
+										<span className="text-base-content/70">Creator Pool</span>
+									</div>
+									<strong>{fmt(Math.min(CREATOR_POOL, r2(fundingLevel * ALLOC.creators)))}</strong>
+								</div>
+								{sankeyData.hasBoost && (
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.boost }} />
+											<span className="text-base-content/70">Boost Pool</span>
+										</div>
+										<strong>{fmt(boostTotal)}</strong>
+									</div>
+								)}
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.foundation }} />
+										<span className="text-base-content/70">Anthers Foundation</span>
+									</div>
+									<strong>{fmt(r2(fundingLevel * ALLOC.foundation))}</strong>
+								</div>
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.delivery }} />
+										<span className="text-base-content/70">
+                      Delivery
+											{deliveryAmt === 0 && (
+												<span className="text-success text-xs ml-1">($1 credit covers this)</span>
+											)}
+											{deliveryAmt > 0 && (
+												<span className="text-base-content/40 text-xs ml-1">({fmt(grossDelivery)} − $1.00 credit)</span>
+											)}
+                    </span>
+									</div>
+									<strong>{fmt(deliveryAmt)}</strong>
+								</div>
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.salesTax }} />
+										<span className="text-base-content/70">Est. sales tax</span>
+									</div>
+									<strong>{fmt(salesTax)}</strong>
+								</div>
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.cardFee }} />
+										<span className="text-base-content/70">{useCard ? "Card" : "Bank"} fee</span>
+										<span className={`text-[10px] cursor-pointer ${useCard ? "font-semibold" : "text-base-content/40"}`}
+											  onClick={() => setUseCard(true)}>Card</span>
+										<input type="checkbox" className="toggle toggle-xs toggle-primary"
+											   checked={!useCard} onChange={(e) => setUseCard(!e.target.checked)} />
+										<span className={`text-[10px] cursor-pointer ${!useCard ? "font-semibold" : "text-base-content/40"}`}
+											  onClick={() => setUseCard(false)}>Bank</span>
+										{!useCard && cardFeeSavings > 0 && (
+											<span className="text-[10px] text-success">({fmt(cardFeeSavings)} saved vs. card)</span>
+										)}
+									</div>
+									<strong>{fmt(cardFee)}</strong>
+								</div>
+							</div>
+
+							{/* Total w/Fees */}
+							<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
+								<span className="font-bold">Total w/Fees</span>
+								<div className="flex items-baseline gap-1">
+									<span className="text-xl font-bold">{fmt(sankeyData.totalPayment)}</span>
+									<span className="text-base-content/40 text-xs">/mo</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					{/* ---- Sankey diagram or Foundation explainer ---- */}
+					<div className="relative">
+						{/* Sankey diagram */}
+						<div className="transition-all duration-700 ease-in-out"
+							 style={{ opacity: showDiagram ? 1 : 0, maxHeight: showDiagram ? "900px" : "0px", overflow: "hidden" }}>
+							<p className="text-xs text-base-content/30 mb-3">
+								Hover any section to learn more
+							</p>
+
+							<div style={{ minWidth: 1000 }}>
+								<ResponsiveContainer width="100%" height={800}>
+									<Sankey
+										data={sankeyData.data}
+										node={sankeyNode}
+										link={sankeyLink}
+										nodeWidth={14}
+										nodePadding={24}
+										margin={{ top: 16, right: 180, bottom: 16, left: 160 }}
+										sort={false}
+										iterations={128}
+										linkCurvature={0.5}
+										align="left"
+										verticalAlign="top"
+									/>
+								</ResponsiveContainer>
+							</div>
+
+							<p className="text-xs text-base-content/40 mt-1 text-center">
+								92% of your subscription goes directly to creators. 8% funds the
+								Anthers Foundation. Delivery, processing, and tax are separate fees.
+							</p>
+						</div>
+
+						{/* Foundation explainer (when diagram is hidden) */}
+						<div className="transition-all duration-700 ease-in-out"
+							 style={{ opacity: showDiagram ? 0 : 1, maxHeight: showDiagram ? "0px" : "400px", overflow: "hidden" }}>
+							<div className="flex flex-col items-center justify-center py-16 px-8 max-w-2xl mx-auto text-center">
+								<div className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+									 style={{ backgroundColor: COLORS.programs + "20" }}>
+									<div className="w-8 h-8 rounded-full" style={{ backgroundColor: COLORS.programs }} />
+								</div>
+								<h3 className="text-lg font-bold mb-2">The Foundation has you covered</h3>
+								<p className="text-sm text-base-content/60 leading-relaxed">
+									Every Anthers user — including free users — gets a <strong>$1/month delivery
+									credit</strong> funded by the Anthers Foundation. That's enough for roughly
+									15 hours of 1080p video, and even more for audio or text content. At your
+									current streaming level, the Foundation covers your entire delivery
+									cost — you won't be charged anything for delivery.
+								</p>
+								<p className="text-xs text-base-content/40 mt-4">
+									Increase your subscription or streaming above the credit to see the
+									full flow diagram.
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				{/* Detail breakdown */}
+				<div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
+					<SectionContent
+						section={activeSection}
+						onEnter={onSectionEnter}
+						onLeave={onSectionLeave}
+					/>
+				</div>
+			</div>
+
+			{/* Why Non-Profit */}
+			<div className="mt-16 max-w-3xl mx-auto text-center pb-4">
+				<h2 className="text-xl font-bold mb-3">Why Non-Profit</h2>
+				<p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
+					Anthers is a non-profit because the only way to guarantee that our
+					platform always serves creators is to make it legally impossible for
+					it to act otherwise. Anthers cannot distribute profits to insiders,
+					cannot be acquired, and cannot have its mission diluted by investors.
+					If it ever ceases to operate, its assets go to another exempt
+					organization, not to founders or shareholders.
+				</p>
+			</div>
+		</div>
+	);
 }

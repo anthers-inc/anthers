@@ -25,7 +25,7 @@ export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
 	PROCESS_AUDIO: "process-audio",
 	DISTRIBUTE_POOL: "distribute-pool",
-	CALCULATE_CRF: "calculate-crf",
+	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates Foundation subsidy allocations
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
 } as const;

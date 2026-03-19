@@ -38,7 +38,7 @@ export const purchases = pgTable("purchases", {
 		.references(() => projects.id, { onDelete: "cascade" }),
 	amount: numeric("amount", { precision: 8, scale: 2 }).notNull(),
 	processingFee: numeric("processing_fee", { precision: 8, scale: 2 }).notNull(),
-	crfFee: numeric("crf_fee", { precision: 8, scale: 2 }).notNull(),
+	crfFee: numeric("crf_fee", { precision: 8, scale: 2 }).notNull(), // Legacy column name; stores Anthers Foundation Fee amount
 	creatorEarnings: numeric("creator_earnings", { precision: 8, scale: 2 }).notNull(),
 	stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }).notNull().unique(),
 	status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | completed | failed | refunded

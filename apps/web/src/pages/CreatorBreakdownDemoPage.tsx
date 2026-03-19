@@ -148,6 +148,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
     revenueByTier: [
       { tier: "Root", price: 3, pool: 0.83, boost: 0.0, total: 0.83 },
       { tier: "Sprout", price: 7, pool: 0.77, boost: 0.66, total: 1.43 },
+      { tier: "Sprout+", price: 10, pool: 0.77, boost: 1.12, total: 1.89 },
       { tier: "Petal", price: 15, pool: 0.77, boost: 1.64, total: 2.41 },
       { tier: "Bloom", price: 30, pool: 0.75, boost: 3.94, total: 4.69 },
     ],
@@ -207,6 +208,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
     revenueByTier: [
       { tier: "Root", price: 3, pool: 0.66, boost: 0.0, total: 0.66 },
       { tier: "Sprout", price: 7, pool: 0.62, boost: 0.52, total: 1.14 },
+      { tier: "Sprout+", price: 10, pool: 0.62, boost: 0.89, total: 1.51 },
       { tier: "Petal", price: 15, pool: 0.62, boost: 1.30, total: 1.92 },
       { tier: "Bloom", price: 30, pool: 0.60, boost: 3.12, total: 3.72 },
     ],
@@ -267,6 +269,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
     revenueByTier: [
       { tier: "Root", price: 3, pool: 0.51, boost: 0.0, total: 0.51 },
       { tier: "Sprout", price: 7, pool: 0.48, boost: 0.40, total: 0.88 },
+      { tier: "Sprout+", price: 10, pool: 0.48, boost: 0.69, total: 1.17 },
       { tier: "Petal", price: 15, pool: 0.48, boost: 1.00, total: 1.48 },
       { tier: "Bloom", price: 30, pool: 0.46, boost: 2.40, total: 2.86 },
     ],
@@ -643,10 +646,12 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
           </tr>
         </thead>
         <tbody>
-          {creator.revenueByTier.map((row) => (
-            <tr key={row.tier}>
-              <td className="font-medium text-sm">{row.tier}</td>
-              <td className="text-sm text-right text-base-content/60">
+          {creator.revenueByTier.map((row) => {
+            const isExample = row.tier.includes("+");
+            return (
+            <tr key={row.tier} className={isExample ? "text-base-content/50 border-dashed border-t border-base-300/50" : ""}>
+              <td className={`text-sm ${isExample ? "italic" : "font-medium"}`}>{isExample ? `e.g. ${row.tier}` : row.tier}</td>
+              <td className={`text-sm text-right ${isExample ? "italic" : "text-base-content/60"}`}>
                 ${row.price}/mo
               </td>
               <td className="text-sm text-right text-success">
@@ -655,15 +660,19 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
               <td className="text-sm text-right text-primary">
                 {row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
               </td>
-              <td className="text-sm text-right font-semibold">
+              <td className={`text-sm text-right ${isExample ? "" : "font-semibold"}`}>
                 ${row.total.toFixed(2)}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       <p className="text-xs text-base-content/40 mt-2">
-        Per-subscriber revenue assumes this creator receives{" "}
+        Named tiers show revenue at the threshold price; "Sprout+" shows $10/mo
+        as an example of continuous $1-increment funding between tiers. Boost
+        scales continuously — actual funding levels vary. Per-subscriber revenue
+        assumes this creator receives{" "}
         {creator.id === "video"
           ? "~8.6%"
           : creator.id === "podcast"

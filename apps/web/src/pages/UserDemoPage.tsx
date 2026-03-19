@@ -50,9 +50,9 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 const DEMO_PLAN = {
   tier: "Sprout",
   price: 10,
-  crf: 0.3,
-  creatorPool: 4.7,
-  boostPool: 5.0,
+  foundation: 0.80,
+  creatorPool: 2.76,
+  boostPool: 6.44,
   month: "February 2026",
 };
 
@@ -63,7 +63,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
     avatar: "BF",
     watchHours: 8.2,
     poolAmount: 1.54,
-    boostAmount: 3.0,
+    boostAmount: 3.86,
     gates: [
       {
         threshold: 2,
@@ -98,7 +98,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
     avatar: "LR",
     watchHours: 6.5,
     poolAmount: 1.22,
-    boostAmount: 0.94,
+    boostAmount: 1.21,
     gates: [
       {
         threshold: 2,
@@ -118,7 +118,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
     avatar: "RC",
     watchHours: 5.1,
     poolAmount: 0.96,
-    boostAmount: 0.66,
+    boostAmount: 0.85,
     gates: [
       {
         threshold: 2,
@@ -143,7 +143,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
     avatar: "AM",
     watchHours: 3.0,
     poolAmount: 0.56,
-    boostAmount: 0.3,
+    boostAmount: 0.39,
     gates: [
       {
         threshold: 4,
@@ -168,7 +168,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
     avatar: "MA",
     watchHours: 1.5,
     poolAmount: 0.28,
-    boostAmount: 0.1,
+    boostAmount: 0.13,
     gates: [
       {
         threshold: 2,
@@ -475,7 +475,7 @@ function SubscriptionDashboardDemo() {
           Your Anther—{DEMO_PLAN.month}
         </h3>
         <p className="text-sm text-base-content/60">
-          {DEMO_PLAN.tier} Plan (${DEMO_PLAN.price}/mo)
+          {DEMO_PLAN.tier} tier — ${DEMO_PLAN.price}/mo
         </p>
       </div>
 
@@ -484,10 +484,10 @@ function SubscriptionDashboardDemo() {
         <div className="card bg-base-200">
           <div className="card-body p-4">
             <p className="text-xs text-base-content/50 uppercase tracking-wide">
-              Community Resilience Fund
+              Anthers Foundation Fee
             </p>
-            <p className="text-xl font-bold">${DEMO_PLAN.crf.toFixed(2)}</p>
-            <p className="text-xs text-base-content/40">3% of subscription</p>
+            <p className="text-xl font-bold">${DEMO_PLAN.foundation.toFixed(2)}</p>
+            <p className="text-xs text-base-content/40">8% of subscription</p>
           </div>
         </div>
         <div className="card bg-base-200">
@@ -601,9 +601,9 @@ function SubscriptionDashboardDemo() {
         <div className="card-body p-4 space-y-1">
           <div className="flex justify-between text-sm">
             <span className="text-base-content/70">
-              Community Resilience Fund
+              Anthers Foundation Fee
             </span>
-            <span>${DEMO_PLAN.crf.toFixed(2)}</span>
+            <span>${DEMO_PLAN.foundation.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-base-content/70">Creator Pool</span>

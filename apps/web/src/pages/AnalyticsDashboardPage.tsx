@@ -434,9 +434,9 @@ function CrossPublishHistory() {
   );
 }
 
-// ─── CRF Hosting Subsidy ───
+// ─── Foundation Hosting Subsidy ───
 
-function CRFSubsidySection({
+function FoundationSubsidySection({
   crfStatus,
 }: {
   crfStatus: { balance: string; subsidies: CrfSubsidy[] } | null;
@@ -458,7 +458,7 @@ function CRFSubsidySection({
     <div className="card bg-base-200 mb-8">
       <div className="card-body p-4">
         <h3 className="font-semibold text-sm mb-3">
-          Hosting Costs & CRF Subsidy
+          Hosting Costs & Foundation Subsidy
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
           <div>
@@ -474,7 +474,7 @@ function CRFSubsidySection({
             </div>
           </div>
           <div>
-            <div className="text-xs text-base-content/50">CRF Subsidy</div>
+            <div className="text-xs text-base-content/50">Foundation Subsidy</div>
             <div
               className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}
             >
@@ -490,7 +490,7 @@ function CRFSubsidySection({
         </div>
         <p className="text-xs text-base-content/40">
           {hasSubsidy
-            ? "The Community Resilience Fund is covering part of your hosting costs. As your audience grows, the subsidy decreases."
+            ? "The Anthers Foundation is covering part of your hosting costs. As your audience grows, the subsidy decreases."
             : "Your earnings cover your hosting costs. Thank you for being part of the community!"}
         </p>
         <p className="text-xs text-base-content/40 mt-1">
@@ -547,7 +547,7 @@ export default function AnalyticsDashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
 
-    // Fetch earnings and CRF status (non-blocking, independent of period)
+    // Fetch earnings and Foundation status (non-blocking, independent of period)
     client.api.subscriptions.earnings
       .$get()
       .then((res) => res.json())
@@ -599,7 +599,7 @@ export default function AnalyticsDashboardPage() {
           <TimeseriesCharts timeseries={timeseries} />
           <ContentPerformanceTable content={content} />
           <RevenueSection earnings={earnings} />
-          <CRFSubsidySection crfStatus={crfStatus} />
+          <FoundationSubsidySection crfStatus={crfStatus} />
           <CrossPublishHistory />
         </>
       )}

@@ -97,7 +97,7 @@ export default function CompareItchPage() {
             <DiffCard
               icon={<EyeIcon className="w-6 h-6" />}
               title="Transparent, itemized pricing"
-              description="On itch.io, the platform's share is deducted from your sale. On Anthers, every cost is itemized at checkout—payment processing, infrastructure, and the Community Resilience Fund. Buyers see exactly where their money goes. Creators receive exactly what they charged."
+              description="On itch.io, the platform's share is deducted from your sale. On Anthers, every cost is itemized at checkout—payment processing, infrastructure, and the Anthers Foundation. Buyers see exactly where their money goes. Creators receive exactly what they charged."
             />
             <DiffCard
               icon={<LockOpenIcon className="w-6 h-6" />}
@@ -162,7 +162,7 @@ export default function CompareItchPage() {
                 <div className="flex flex-col gap-2 text-sm">
                   <ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
                   <ReceiptLine label="Infrastructure fee" amount="$0.01" />
-                  <ReceiptLine label="Community Resilience Fund (3%)" amount="$0.30" />
+                  <ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
                   <ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
                   <div className="divider my-1" />
                   <ReceiptLine label="Buyer pays" amount="$10.90" />
