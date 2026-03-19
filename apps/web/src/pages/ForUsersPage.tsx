@@ -326,7 +326,7 @@ export default function ForUsersPage() {
               <thead>
                 <tr>
                   <th>Tier</th>
-                  <th className="text-right">Price</th>
+                  <th className="text-right">Starting at</th>
                   <th className="text-right">Content Cap</th>
                   <th className="text-right">Gate Access</th>
                 </tr>
@@ -342,32 +342,35 @@ export default function ForUsersPage() {
                   <td>Root</td>
                   <td className="text-right">$3/mo</td>
                   <td className="text-right">25 hrs/mo</td>
-                  <td className="text-right text-base-content/40">No</td>
+                  <td className="text-right text-base-content/60">Boost gates*</td>
                 </tr>
                 <tr>
                   <td>Sprout</td>
                   <td className="text-right">$7/mo</td>
                   <td className="text-right">Unlimited</td>
-                  <td className="text-right text-success">Yes</td>
+                  <td className="text-right text-success">Both</td>
                 </tr>
                 <tr>
                   <td>Petal</td>
                   <td className="text-right">$15/mo</td>
                   <td className="text-right">Unlimited</td>
-                  <td className="text-right text-success">Yes</td>
+                  <td className="text-right text-success">Both</td>
                 </tr>
                 <tr>
                   <td>Bloom</td>
                   <td className="text-right">$30/mo</td>
                   <td className="text-right">Unlimited</td>
-                  <td className="text-right text-success">Yes</td>
+                  <td className="text-right text-success">Both</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p className="text-center text-xs text-base-content/40 mt-4">
-            Sprout and above get Boost Pool funds to direct to favorite
-            creators and unlock gated content. Subscriptions coming soon.
+            Tiers are threshold prices — you can adjust your support level in $1
+            increments. Any funding level above $3 generates Boost Pool funds to
+            direct to favorite creators and unlock boost-gated content.
+            *Platform tier gates (e.g. "Sprout required") need the corresponding
+            threshold. Subscriptions coming soon.
           </p>
         </div>
       </section>

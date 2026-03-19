@@ -448,13 +448,19 @@ export default function ForCreatorsPage() {
                   <td>Root</td>
                   <td className="text-right">$3/mo</td>
                   <td className="text-right text-success">$2.76</td>
-                  <td className="text-right text-base-content/40">—</td>
+                  <td className="text-right text-base-content/40">—†</td>
                 </tr>
                 <tr>
                   <td>Sprout</td>
                   <td className="text-right">$7/mo</td>
                   <td className="text-right text-success">$2.76</td>
                   <td className="text-right text-primary">$3.68</td>
+                </tr>
+                <tr className="text-base-content/50 border-dashed border-t border-base-300/50">
+                  <td className="italic">e.g. Sprout+</td>
+                  <td className="text-right italic">$10/mo</td>
+                  <td className="text-right text-success">$2.76</td>
+                  <td className="text-right text-primary">$6.44</td>
                 </tr>
                 <tr>
                   <td>Petal</td>
@@ -472,9 +478,11 @@ export default function ForCreatorsPage() {
             </table>
           </div>
           <p className="text-center text-xs text-base-content/40 mt-4">
-            Creator Pool is distributed proportionally by attention time.
-            Boost Pool lets subscribers direct funds to specific creators and
-            unlock gated content. Subscriptions coming soon.
+            These are values at each tier threshold — users can fund at any $1
+            increment and boost scales continuously. Creator Pool is fixed at
+            $2.76/mo at any funding level $3+, distributed proportionally by
+            attention time. †Boost starts above $3, so a user at exactly $3 has
+            no boost; at $4 they have $0.92 in boost. Subscriptions coming soon.
           </p>
         </div>
       </section>

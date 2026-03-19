@@ -2,6 +2,10 @@
  * Subscription routes — tiers, subscribe, cancel, attention tracking,
  * pool distributions, boosts, creator gates, content access.
  *
+ * Tiers are thresholds on a continuous funding level. Users can fund at any
+ * $1 increment. The boost budget is computed from the funding level, not
+ * looked up by tier name.
+ *
  * Note: Stripe subscription management is stubbed with TODO markers.
  */
 
@@ -28,19 +32,19 @@ import { getCookie } from "hono/cookie";
 
 const TIERS = [
 	{ id: "free", name: "Free", price: 0, features: ["Browse and discover content", "Rate and comment", "Follow creators"] },
-	{ id: "root", name: "Root", price: 3, features: ["Support the platform", "Access subscriber-only content", "Pool distribution to creators"] },
-	{ id: "sprout", name: "Sprout", price: 7, features: ["Everything in Root", "Boost allocation ($2/mo)", "Gate access for boosted creators"] },
-	{ id: "petal", name: "Petal", price: 15, features: ["Everything in Sprout", "Boost allocation ($5/mo)", "Priority support"] },
-	{ id: "bloom", name: "Bloom", price: 30, features: ["Everything in Petal", "Boost allocation ($12/mo)", "Creator analytics insights"] },
+	{ id: "root", name: "Root", price: 3, features: ["Support the platform", "Access subscriber-only content", "Pool distribution to creators", "Boost pool available at funding levels above $3"] },
+	{ id: "sprout", name: "Sprout", price: 7, features: ["Everything in Root", "Boost allocation (varies by funding level, $3.68+ at threshold)", "Gate access for boosted creators"] },
+	{ id: "petal", name: "Petal", price: 15, features: ["Everything in Sprout", "Boost allocation (varies by funding level, $11.04+ at threshold)", "Priority support"] },
+	{ id: "bloom", name: "Bloom", price: 30, features: ["Everything in Petal", "Boost allocation (varies by funding level, $24.84+ at threshold)", "Creator analytics insights"] },
 ];
 
-const TIER_BOOST_BUDGETS: Record<string, number> = {
-	free: 0,
-	root: 0,
-	sprout: 2,
-	petal: 5,
-	bloom: 12,
-};
+/** Compute boost budget from actual funding level. */
+function computeBoostBudget(fundingLevel: number): number {
+	if (fundingLevel < 3) return 0;
+	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
+	const creatorPool = 2.76; // fixed at 92% of $3 Root threshold
+	return Math.max(0, Number((creatorShare - creatorPool).toFixed(2)));
+}
 
 function getCurrentBillingCycle(): string {
 	const now = new Date();
@@ -321,14 +325,19 @@ const subscriptionRoutes = new Hono()
 				),
 			);
 
-		// Get user's tier budget
+		// Get user's subscription to determine funding level
 		const [sub] = await db
 			.select({ tier: subscriptions.tier })
 			.from(subscriptions)
 			.where(eq(subscriptions.userId, user.id))
 			.limit(1);
 
-		const budget = TIER_BOOST_BUDGETS[sub?.tier ?? "free"] ?? 0;
+		// TODO: The subscription data model needs a `funding_level` field so we
+		// can compute boost from the actual funding amount. For now, fall back
+		// to the tier's threshold price as a proxy.
+		const tierPrices: Record<string, number> = { free: 0, root: 3, sprout: 7, petal: 15, bloom: 30 };
+		const fundingLevel = tierPrices[sub?.tier ?? "free"] ?? 0;
+		const budget = computeBoostBudget(fundingLevel);
 		const allocated = result.reduce((sum, r) => sum + Number(r.boost.amount), 0);
 
 		return c.json({
@@ -358,17 +367,23 @@ const subscriptionRoutes = new Hono()
 			const amountNum = Number(amount);
 			const cycle = getCurrentBillingCycle();
 
-			// Get user's tier budget
+			// Get user's subscription to determine funding level
 			const [sub] = await db
 				.select({ tier: subscriptions.tier })
 				.from(subscriptions)
 				.where(eq(subscriptions.userId, user.id))
 				.limit(1);
 
-			const budget = TIER_BOOST_BUDGETS[sub?.tier ?? "free"] ?? 0;
+			// TODO: The subscription data model needs a `funding_level` field so we
+			// can compute boost from the actual funding amount. For now, fall back
+			// to the tier's threshold price as a proxy.
+			const tierPrices: Record<string, number> = { free: 0, root: 3, sprout: 7, petal: 15, bloom: 30 };
+			const fundingLevel = tierPrices[sub?.tier ?? "free"] ?? 0;
+			const budget = computeBoostBudget(fundingLevel);
 
+			// Boost is available at any funding level above $3, regardless of tier name
 			if (budget === 0) {
-				return c.json({ error: "Your subscription tier does not include boost allocations" }, 400);
+				return c.json({ error: "Boost allocations require a funding level above $3" }, 400);
 			}
 
 			// Check total allocated (excluding the creator being updated)
