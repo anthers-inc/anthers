@@ -51,182 +51,182 @@ import JamFormPage from "./pages/JamFormPage";
 import ImportPage from "./pages/ImportPage";
 
 export default function App() {
-  return (
-    <Routes>
-      {/*
-        Marketing / logged-out layout
-        These pages always show the marketing chrome (sign up/log in buttons,
-        marketing nav links).         Authenticated users hitting / get redirected to /feed.
-      */}
-      <Route element={<LoggedOutLayout />}>
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="/for-creators" element={<ForCreatorsPage />} />
-        <Route path="/for-users" element={<ForUsersPage />} />
-        <Route path="/compare/itch-io" element={<CompareItchPage />} />
-        <Route path="/compare/ghost" element={<CompareGhostPage />} />
-        <Route path="/demo-creator-page" element={<CreatorDemoPage />} />
-        <Route
-          path="/demo-creator-breakdown"
-          element={<CreatorBreakdownDemoPage />}
-        />
-        <Route
-          path="/demo-infrastructure"
-          element={<InfrastructureDemoPage />}
-        />
-        <Route path="/user-demo" element={<UserDemoPage />} />
-        <Route path="/wiki/*" element={<WikiPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/vertical-slice" element={<VerticalSlicePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route
-          path="/auth/atproto/callback"
-          element={<ATProtoCallbackPage />}
-        />
-      </Route>
+	return (
+		<Routes>
+			{/*
+				Marketing / logged-out layout
+				These pages always show the marketing chrome (sign up/log in buttons,
+				marketing nav links).         Authenticated users hitting / get redirected to /feed.
+			*/}
+			<Route element={<LoggedOutLayout />}>
+				<Route path="/" element={<RootRedirect />} />
+				<Route path="/for-creators" element={<ForCreatorsPage />} />
+				<Route path="/for-users" element={<ForUsersPage />} />
+				<Route path="/compare/itch-io" element={<CompareItchPage />} />
+				<Route path="/compare/ghost" element={<CompareGhostPage />} />
+				<Route path="/demo-creator-page" element={<CreatorDemoPage />} />
+				<Route
+					path="/demo-creator-breakdown"
+					element={<CreatorBreakdownDemoPage />}
+				/>
+				<Route
+					path="/demo-infrastructure"
+					element={<InfrastructureDemoPage />}
+				/>
+				<Route path="/user-demo" element={<UserDemoPage />} />
+				<Route path="/wiki/*" element={<WikiPage />} />
+				<Route path="/about" element={<AboutPage />} />
+				<Route path="/vertical-slice" element={<VerticalSlicePage />} />
+				<Route path="/login" element={<LoginPage />} />
+				<Route path="/register" element={<RegisterPage />} />
+				<Route
+					path="/auth/atproto/callback"
+					element={<ATProtoCallbackPage />}
+				/>
+			</Route>
 
-      {/*
-        Authenticated layout
-        Protected routes that require login. Shows the user-focused nav
-        (discover, library, dashboard, avatar dropdown).
-      */}
-      <Route element={<LoggedInLayout />}>
-        <Route
-          path="/feed"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedHomePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/projects/new"
-          element={
-            <ProtectedRoute>
-              <ProjectFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/projects/:slug/edit"
-          element={
-            <ProtectedRoute>
-              <ProjectFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/projects/:slug/builds"
-          element={
-            <ProtectedRoute>
-              <BuildsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/posts/new"
-          element={
-            <ProtectedRoute>
-              <PostFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/posts/:id/edit"
-          element={
-            <ProtectedRoute>
-              <PostFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/jams/new"
-          element={
-            <ProtectedRoute>
-              <JamFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/jams/:slug/edit"
-          element={
-            <ProtectedRoute>
-              <JamFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/import"
-          element={
-            <ProtectedRoute>
-              <ImportPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/dashboard/analytics"
-          element={
-            <ProtectedRoute>
-              <AnalyticsDashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/library"
-          element={
-            <ProtectedRoute>
-              <LibraryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/subscription"
-          element={
-            <ProtectedRoute>
-              <SubscriptionPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-      </Route>
+			{/*
+				Authenticated layout
+				Protected routes that require login. Shows the user-focused nav
+				(discover, library, dashboard, avatar dropdown).
+			*/}
+			<Route element={<LoggedInLayout />}>
+				<Route
+					path="/feed"
+					element={
+						<ProtectedRoute>
+							<AuthenticatedHomePage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard"
+					element={
+						<ProtectedRoute>
+							<DashboardPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/projects/new"
+					element={
+						<ProtectedRoute>
+							<ProjectFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/projects/:slug/edit"
+					element={
+						<ProtectedRoute>
+							<ProjectFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/projects/:slug/builds"
+					element={
+						<ProtectedRoute>
+							<BuildsPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/posts/new"
+					element={
+						<ProtectedRoute>
+							<PostFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/posts/:id/edit"
+					element={
+						<ProtectedRoute>
+							<PostFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/jams/new"
+					element={
+						<ProtectedRoute>
+							<JamFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/jams/:slug/edit"
+					element={
+						<ProtectedRoute>
+							<JamFormPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/import"
+					element={
+						<ProtectedRoute>
+							<ImportPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/dashboard/analytics"
+					element={
+						<ProtectedRoute>
+							<AnalyticsDashboardPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/library"
+					element={
+						<ProtectedRoute>
+							<LibraryPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/subscription"
+					element={
+						<ProtectedRoute>
+							<SubscriptionPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/settings"
+					element={
+						<ProtectedRoute>
+							<SettingsPage />
+						</ProtectedRoute>
+					}
+				/>
+			</Route>
 
-      {/*
-        Shared content routes
-        These use the auth-switching Layout: logged-in users see LoggedInLayout,
-        logged-out users see LoggedOutLayout. Content is accessible to everyone.
-      */}
-      <Route element={<Layout />}>
-        <Route path="/discover" element={<DiscoverPage />} />
-        <Route path="/discover/:slug" element={<ProjectRedirect />} />
-        <Route path="/posts/:id" element={<PostPage />} />
-        <Route path="/subscribe" element={<SubscribePage />} />
-        <Route path="/jams" element={<JamsPage />} />
-        <Route path="/jams/:slug" element={<JamPage />} />
-        <Route path="/faq" element={<FAQPage />} />
-        <Route path="/roadmap" element={<RoadmapPage />} />
+			{/*
+				Shared content routes
+				These use the auth-switching Layout: logged-in users see LoggedInLayout,
+				logged-out users see LoggedOutLayout. Content is accessible to everyone.
+			*/}
+			<Route element={<Layout />}>
+				<Route path="/discover" element={<DiscoverPage />} />
+				<Route path="/discover/:slug" element={<ProjectRedirect />} />
+				<Route path="/posts/:id" element={<PostPage />} />
+				<Route path="/subscribe" element={<SubscribePage />} />
+				<Route path="/jams" element={<JamsPage />} />
+				<Route path="/jams/:slug" element={<JamPage />} />
+				<Route path="/faq" element={<FAQPage />} />
+				<Route path="/roadmap" element={<RoadmapPage />} />
 
-        {/* Creator site routes */}
-        <Route path="/:username/:slug" element={<ProjectPage />} />
-        <Route path="/:username/posts/:id" element={<PostPage />} />
+				{/* Creator site routes */}
+				<Route path="/:username/:slug" element={<ProjectPage />} />
+				<Route path="/:username/posts/:id" element={<PostPage />} />
 
-        {/* Creator profile -- must be last to avoid catching other routes */}
-        <Route path="/:username" element={<CreatorProfilePage />} />
-      </Route>
-    </Routes>
-  );
+				{/* Creator profile -- must be last to avoid catching other routes */}
+				<Route path="/:username" element={<CreatorProfilePage />} />
+			</Route>
+		</Routes>
+	);
 }

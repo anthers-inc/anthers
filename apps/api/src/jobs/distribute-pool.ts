@@ -25,6 +25,12 @@ export interface DistributePoolData {
 	subscriptionId?: number;
 }
 
+/**
+ * Fixed creator pool amount: 92% of the first $3 tier threshold.
+ * This is the same for every paid subscriber regardless of their funding level.
+ */
+const CREATOR_POOL_AMOUNT = "2.76";
+
 function getBillingCycle(sub: {
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
@@ -42,14 +48,16 @@ function getBillingCycle(sub: {
 	return { start, end };
 }
 
-function billingCycleDate(cycleStart: Date): Date {
-	return new Date(cycleStart.getFullYear(), cycleStart.getMonth(), 1);
+/** Returns YYYY-MM-01 string for Drizzle date columns. */
+function billingCycleDate(cycleStart: Date): string {
+	const y = cycleStart.getFullYear();
+	const m = String(cycleStart.getMonth() + 1).padStart(2, "0");
+	return `${y}-${m}-01`;
 }
 
 async function distributeForSubscriber(sub: {
 	id: number;
 	userId: number;
-	creatorPoolAmount: string;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
@@ -85,7 +93,7 @@ async function distributeForSubscriber(sub: {
 	}
 
 	// 2. Calculate proportional pool distribution
-	const poolAmount = new Decimal(sub.creatorPoolAmount || "0");
+	const poolAmount = new Decimal(CREATOR_POOL_AMOUNT);
 	const distributions = new Map<
 		number,
 		{

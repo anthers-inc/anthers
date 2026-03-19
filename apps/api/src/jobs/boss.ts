@@ -4,8 +4,6 @@ export const boss = new PgBoss({
 	connectionString: process.env.DATABASE_URL!,
 	// pg-boss creates its own schema (pgboss) for queue tables
 	schema: "pgboss",
-	// Don't log maintenance operations at info level
-	noSupervisor: false,
 });
 
 /** Start pg-boss and ensure all queues exist (idempotent — safe to call from both API server and worker) */

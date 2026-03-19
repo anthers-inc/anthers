@@ -319,12 +319,13 @@ const accountRoutes = new Hono()
 			return c.json({ error: "User not found" }, 404);
 		}
 
-		const result = await db
+		const deleted = await db
 			.delete(follows)
-			.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)));
+			.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
+			.returning({ id: follows.id });
 
 		// Check if any rows were deleted
-		if (result.rowCount === 0) {
+		if (deleted.length === 0) {
 			return c.json({ error: "You were not following this user" }, 404);
 		}
 

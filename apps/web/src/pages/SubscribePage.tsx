@@ -73,13 +73,13 @@ const STREAM_HOURS_MAX = 200;
 const STREAM_EASE = 1.5;
 
 function sliderToHrs(slider: number): number {
-  const t = slider / STREAM_SLIDER_MAX; // 0..1
-  return Math.round(Math.pow(t, STREAM_EASE) * STREAM_HOURS_MAX);
+	const t = slider / STREAM_SLIDER_MAX; // 0..1
+	return Math.round(Math.pow(t, STREAM_EASE) * STREAM_HOURS_MAX);
 }
 
 function hrsToSlider(hrs: number): number {
-  const t = Math.pow(Math.min(1, Math.max(0, hrs / STREAM_HOURS_MAX)), 1 / STREAM_EASE);
-  return Math.round(t * STREAM_SLIDER_MAX);
+	const t = Math.pow(Math.min(1, Math.max(0, hrs / STREAM_HOURS_MAX)), 1 / STREAM_EASE);
+	return Math.round(t * STREAM_SLIDER_MAX);
 }
 
 /** National average combined state + local sales tax rate (2026 estimate). */
@@ -924,8 +924,8 @@ export default function SubscribePage() {
 											>
 												<div className="w-px h-2.5 bg-success" />
 												<span className="text-[9px] text-success font-semibold whitespace-nowrap">
-                            ~{creditThresholdHrs}h free
-                          </span>
+														~{creditThresholdHrs}h free
+													</span>
 											</div>
 										</div>
 									);
@@ -933,11 +933,11 @@ export default function SubscribePage() {
 								<span className="text-xs w-14 text-right">{streamHours} hrs</span>
 							</div>
 							<p className="text-[10px] leading-tight">
-                  <span className={deliveryAmt > 0 ? "text-warning" : "text-success"}>
-                    {deliveryAmt > 0
+									<span className={deliveryAmt > 0 ? "text-warning" : "text-success"}>
+										{deliveryAmt > 0
 						? `$1.00 credit applied — ${fmt(deliveryAmt)} billable delivery`
 						: `$1.00/mo delivery credit covers this — no delivery charge`}
-                  </span>
+									</span>
 							</p>
 							<p className="text-[10px] text-base-content/30 leading-tight">
 								Assumes 1080/60 video (~{fmt(grossDelivery)} gross). Will be
@@ -959,8 +959,8 @@ export default function SubscribePage() {
 									<span className="text-base-content/40 text-xs">/mo</span>
 									{!sankeyData.hasBoost && fundingLevel > 0 && (
 										<span className="text-xs text-base-content/40 ml-2">
-                      (above $3 for Boost Pool)
-                    </span>
+											(above $3 for Boost Pool)
+										</span>
 									)}
 								</div>
 							</div>
@@ -994,14 +994,14 @@ export default function SubscribePage() {
 									<div className="flex items-center gap-2">
 										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.delivery }} />
 										<span className="text-base-content/70">
-                      Delivery
+											Delivery
 											{deliveryAmt === 0 && (
 												<span className="text-success text-xs ml-1">($1 credit covers this)</span>
 											)}
 											{deliveryAmt > 0 && (
 												<span className="text-base-content/40 text-xs ml-1">({fmt(grossDelivery)} − $1.00 credit)</span>
 											)}
-                    </span>
+										</span>
 									</div>
 									<strong>{fmt(deliveryAmt)}</strong>
 								</div>

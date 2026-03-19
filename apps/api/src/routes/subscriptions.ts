@@ -511,11 +511,12 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const { id } = c.req.param();
 
-		const result = await db
+		const deleted = await db
 			.delete(creatorGates)
-			.where(and(eq(creatorGates.id, Number(id)), eq(creatorGates.creatorId, user.id)));
+			.where(and(eq(creatorGates.id, Number(id)), eq(creatorGates.creatorId, user.id)))
+			.returning({ id: creatorGates.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Gate not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Gate not found" }, 404);
 		return c.body(null, 204);
 	})
 

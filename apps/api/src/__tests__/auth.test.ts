@@ -170,7 +170,7 @@ describe("Auth System", () => {
 			const tokenRow = tokens.find((t) => t.type === "email_verify");
 			expect(tokenRow).toBeTruthy();
 
-			const res = await jsonPost("/api/auth/verify-email", { token: tokenRow.token });
+			const res = await jsonPost("/api/auth/verify-email", { token: tokenRow!.token });
 			expect(res.status).toBe(200);
 			const data = await res.json();
 			expect(data.success).toBe(true);

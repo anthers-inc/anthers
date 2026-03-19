@@ -373,11 +373,12 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const result = await db
+		const deleted = await db
 			.delete(projects)
-			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)));
+			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
+			.returning({ id: projects.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 
 		return c.body(null, 204);
 	})
@@ -409,7 +410,7 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug, id } = c.req.param();
 
-		const result = await db.delete(assets).where(
+		const deleted = await db.delete(assets).where(
 			and(
 				eq(assets.id, Number(id)),
 				eq(
@@ -417,9 +418,9 @@ const contentRoutes = new Hono()
 					sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
 				),
 			),
-		);
+		).returning({ id: assets.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
 
@@ -476,7 +477,7 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug, id } = c.req.param();
 
-		const result = await db.delete(screenshots).where(
+		const deleted = await db.delete(screenshots).where(
 			and(
 				eq(screenshots.id, Number(id)),
 				eq(
@@ -484,9 +485,9 @@ const contentRoutes = new Hono()
 					sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
 				),
 			),
-		);
+		).returning({ id: screenshots.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
 
@@ -902,11 +903,12 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { id } = c.req.param();
 
-		const result = await db
+		const deleted = await db
 			.delete(posts)
-			.where(and(eq(posts.id, Number(id)), eq(posts.creatorId, user.id)));
+			.where(and(eq(posts.id, Number(id)), eq(posts.creatorId, user.id)))
+			.returning({ id: posts.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
 

@@ -28,28 +28,34 @@ async function start() {
 
 	await boss.work<TranscodeVideoData>(
 		QUEUES.TRANSCODE_VIDEO,
-		{ teamConcurrency: 2 },
-		async (job) => {
-			console.log(`[transcode-video] Processing job ${job.id}`);
-			await transcodeVideo(job.data);
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[transcode-video] Processing job ${job.id}`);
+				await transcodeVideo(job.data);
+			}
 		},
 	);
 
 	await boss.work<ProcessAudioData>(
 		QUEUES.PROCESS_AUDIO,
-		{ teamConcurrency: 2 },
-		async (job) => {
-			console.log(`[process-audio] Processing job ${job.id}`);
-			await processAudio(job.data);
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[process-audio] Processing job ${job.id}`);
+				await processAudio(job.data);
+			}
 		},
 	);
 
 	await boss.work<CrossPublishData>(
 		QUEUES.CROSS_PUBLISH,
-		{ teamConcurrency: 2 },
-		async (job) => {
-			console.log(`[cross-publish] Processing job ${job.id}`);
-			await crossPublish(job.data);
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[cross-publish] Processing job ${job.id}`);
+				await crossPublish(job.data);
+			}
 		},
 	);
 
@@ -57,21 +63,27 @@ async function start() {
 
 	await boss.work<DistributePoolData>(
 		QUEUES.DISTRIBUTE_POOL,
-		async (job) => {
-			console.log(`[distribute-pool] Processing job ${job.id}`);
-			await distributePool(job.data);
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[distribute-pool] Processing job ${job.id}`);
+				await distributePool(job.data);
+			}
 		},
 	);
 
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
-	await boss.work(QUEUES.CALCULATE_CRF, async (job) => {
-		console.log(`[calculate-crf] Processing job ${job.id}`);
-		await calculateCrfSubsidies();
+	await boss.work(QUEUES.CALCULATE_CRF, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[calculate-crf] Processing job ${job.id}`);
+			await calculateCrfSubsidies();
+		}
 	});
 
-	await boss.work(QUEUES.FETCH_METRICS, async (job) => {
-		console.log(`[fetch-metrics] Processing job ${job.id}`);
-		await fetchExternalMetrics();
+	await boss.work(QUEUES.FETCH_METRICS, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[fetch-metrics] Processing job ${job.id}`);
+			await fetchExternalMetrics();
+		}
 	});
 
 	// ── Cron schedules (replaces Celery Beat) ─────────────────────────

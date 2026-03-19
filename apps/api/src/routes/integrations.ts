@@ -260,16 +260,17 @@ const integrationRoutes = new Hono()
 		const user = c.get("user");
 		const { platform } = c.req.param();
 
-		const result = await db
+		const deleted = await db
 			.delete(platformConnections)
 			.where(
 				and(
 					eq(platformConnections.userId, user.id),
 					eq(platformConnections.platform, platform),
 				),
-			);
+			)
+			.returning({ id: platformConnections.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Connection not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Connection not found" }, 404);
 		return c.body(null, 204);
 	})
 

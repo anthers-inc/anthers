@@ -10,15 +10,15 @@ import LoadingSpinner from "../ui/LoadingSpinner";
  * for both logged-in and logged-out users but with the appropriate chrome.
  */
 export default function Layout() {
-  const { isAuthenticated, isLoading } = useAuth();
+	const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+	if (isLoading) {
+		return (
+			<div className="flex justify-center items-center min-h-screen">
+				<LoadingSpinner size="lg" />
+			</div>
+		);
+	}
 
-  return isAuthenticated ? <LoggedInLayout /> : <LoggedOutLayout />;
+	return isAuthenticated ? <LoggedInLayout /> : <LoggedOutLayout />;
 }

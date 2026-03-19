@@ -167,11 +167,12 @@ const jamRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const result = await db
+		const deleted = await db
 			.delete(gameJams)
-			.where(and(eq(gameJams.slug, slug), eq(gameJams.creatorId, user.id)));
+			.where(and(eq(gameJams.slug, slug), eq(gameJams.creatorId, user.id)))
+			.returning({ id: gameJams.id });
 
-		if (result.rowCount === 0) return c.json({ error: "Not found" }, 404);
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
 

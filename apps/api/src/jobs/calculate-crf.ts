@@ -23,14 +23,17 @@ import {
 } from "@anthers/db/schema";
 import { estimateHostingCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
 
-function getCycleDate(): Date {
+/** Returns the first day of the current month as YYYY-MM-DD for Drizzle date columns. */
+function getCycleDate(): string {
 	const now = new Date();
-	return new Date(now.getFullYear(), now.getMonth(), 1);
+	const y = now.getFullYear();
+	const m = String(now.getMonth() + 1).padStart(2, "0");
+	return `${y}-${m}-01`;
 }
 
 async function getCreatorEarnings(
 	creatorId: number,
-	cycleDate: Date,
+	cycleDate: string,
 ): Promise<Decimal> {
 	// Pool + boost distributions
 	const [poolResult] = await db
@@ -50,21 +53,20 @@ async function getCreatorEarnings(
 	const boostAmount = new Decimal(poolResult?.boostTotal ?? "0");
 
 	// Marketplace earnings this month
-	const monthStart = cycleDate;
-	const monthEnd = new Date(
-		cycleDate.getFullYear(),
-		cycleDate.getMonth() + 1,
-		1,
-	);
+	// cycleDate is "YYYY-MM-01"; derive month boundaries for timestamp comparison
+	const [y, m] = cycleDate.split("-").map(Number);
+	const monthStart = new Date(y, m - 1, 1);
+	const monthEnd = new Date(y, m, 1);
 
 	const [salesResult] = await db
 		.select({
 			total: sum(purchases.creatorEarnings),
 		})
 		.from(purchases)
+		.innerJoin(projects, eq(purchases.projectId, projects.id))
 		.where(
 			and(
-				eq(purchases.creatorId, creatorId),
+				eq(projects.creatorId, creatorId),
 				eq(purchases.status, "completed"),
 				sql`${purchases.createdAt} >= ${monthStart}`,
 				sql`${purchases.createdAt} < ${monthEnd}`,

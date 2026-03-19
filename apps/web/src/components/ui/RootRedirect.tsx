@@ -9,19 +9,19 @@ import HomePage from "../../pages/HomePage";
  * - Unauthenticated users see the marketing landing page
  */
 export default function RootRedirect() {
-  const { isAuthenticated, isLoading } = useAuth();
+	const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+	if (isLoading) {
+		return (
+			<div className="flex justify-center items-center min-h-[60vh]">
+				<LoadingSpinner size="lg" />
+			</div>
+		);
+	}
 
-  if (isAuthenticated) {
-    return <Navigate to="/feed" replace />;
-  }
+	if (isAuthenticated) {
+		return <Navigate to="/feed" replace />;
+	}
 
-  return <HomePage />;
+	return <HomePage />;
 }

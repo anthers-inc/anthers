@@ -117,8 +117,8 @@ export async function fetchExternalMetrics() {
 		.from(crossPublishResults)
 		.where(eq(crossPublishResults.status, "published"));
 
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
+	const now = new Date();
+	const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
 	for (const crossPub of published) {
 		const [connection] = await db
