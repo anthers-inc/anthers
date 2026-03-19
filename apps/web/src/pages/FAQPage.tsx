@@ -61,19 +61,16 @@ const FAQ_ITEMS: FAQItem[] = [
       <div className="space-y-2">
         <p>
           Anthers uses a subscription pool model. When you subscribe at any tier
-          (Root $5, Sprout $10, Petal $20, or Bloom $40), your payment is split:
+          (Root $3, Sprout $7, Petal $15, or Bloom $30), your payment is split:
         </p>
         <ul className="list-disc list-inside space-y-1 text-base-content/70">
           <li>
-            <strong>85%</strong> goes to creators (via the Creator Pool and your
+            <strong>92%</strong> goes to creators (via the Creator Pool and your
             Boost allocations)
           </li>
           <li>
-            <strong>10%</strong> funds the Community Resilience Fund (grants,
-            education, emergency assistance)
-          </li>
-          <li>
-            <strong>5%</strong> covers platform operations
+            <strong>8%</strong> funds the Anthers Foundation (charitable programs
+            and operations)
           </li>
         </ul>
         <p>
@@ -87,21 +84,21 @@ const FAQ_ITEMS: FAQItem[] = [
   },
   {
     category: "Subscriptions & Payments",
-    question: "What is the Community Resilience Fund (CRF)?",
+    question: "What is the Anthers Foundation?",
     answer:
-      "The CRF receives 10% of all subscription revenue. It funds four programs: infrastructure equity (helping small creators afford hosting), education (workshops, mentorship), creation grants (funding new projects), and emergency assistance (helping creators through unexpected hardships). The CRF is governed transparently with public reporting.",
+      "The Foundation receives 8% of all subscription revenue and allocates it between charitable programs (infrastructure equity, education, creation grants, emergency assistance) and organizational operations, with at least 50% going to programs.",
   },
   {
     category: "Subscriptions & Payments",
     question: "How do direct purchases work?",
     answer:
-      "For direct purchases (buying a game, download, etc.), fees are added on top of the creator's price rather than deducted from it. The creator receives 100% of their listed price. Processing fees and a small CRF contribution are paid by the buyer as a transparent pass-through.",
+      "For direct purchases (buying a game, download, etc.), fees are added on top of the creator's price rather than deducted from it. The creator receives 100% of their listed price. Processing fees and a small Foundation Fee are paid by the buyer as a transparent pass-through.",
   },
   {
     category: "Creators",
     question: "How much do creators keep?",
     answer:
-      "From subscriptions, creators receive 85% of revenue through the pool system. From direct purchases, creators receive 100% of their listed price -- fees are added on top and paid by the buyer. Anthers never takes a cut from creator earnings.",
+      "From subscriptions, creators receive 92% of revenue through the pool system. From direct purchases, creators receive 100% of their listed price -- fees are added on top and paid by the buyer. Anthers never takes a cut from creator earnings.",
   },
   {
     category: "Creators",

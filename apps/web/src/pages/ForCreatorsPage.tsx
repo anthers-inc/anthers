@@ -245,7 +245,7 @@ export default function ForCreatorsPage() {
                   <ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
                   <ReceiptLine label="Infrastructure fee" amount="$0.01" />
                   <ReceiptLine
-                    label="Community Resilience Fund (3%)"
+                    label="Anthers Foundation Fee (3%)"
                     amount="$0.30"
                   />
                   <ReceiptLine
@@ -291,13 +291,13 @@ export default function ForCreatorsPage() {
                   <ServerStackIcon className="w-5 h-5 text-warning" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-sm">
-                    Community Resilience Fund
+                   <h4 className="font-semibold text-sm">
+                    Anthers Foundation
                   </h4>
                   <p className="text-sm text-base-content/60">
-                    3% of transactions funds infrastructure, free-tier hosting
-                    for small creators, game jam support, and platform reserves.
-                    It's a community investment, not a platform tax.
+                    3% of transactions funds the Anthers Foundation, which
+                    allocates between charitable programs and organizational
+                    operations. It's a community investment, not a platform tax.
                   </p>
                 </div>
               </div>
@@ -446,27 +446,27 @@ export default function ForCreatorsPage() {
                 </tr>
                 <tr>
                   <td>Root</td>
-                  <td className="text-right">$5/mo</td>
-                  <td className="text-right text-success">$4.85</td>
+                  <td className="text-right">$3/mo</td>
+                  <td className="text-right text-success">$2.76</td>
                   <td className="text-right text-base-content/40">—</td>
                 </tr>
                 <tr>
                   <td>Sprout</td>
-                  <td className="text-right">$10/mo</td>
-                  <td className="text-right text-success">$4.70</td>
-                  <td className="text-right text-primary">$5.00</td>
+                  <td className="text-right">$7/mo</td>
+                  <td className="text-right text-success">$2.76</td>
+                  <td className="text-right text-primary">$3.68</td>
                 </tr>
                 <tr>
                   <td>Petal</td>
                   <td className="text-right">$15/mo</td>
-                  <td className="text-right text-success">$4.55</td>
-                  <td className="text-right text-primary">$10.00</td>
+                  <td className="text-right text-success">$2.76</td>
+                  <td className="text-right text-primary">$11.04</td>
                 </tr>
                 <tr>
                   <td>Bloom</td>
-                  <td className="text-right">$20/mo</td>
-                  <td className="text-right text-success">$4.40</td>
-                  <td className="text-right text-primary">$15.00</td>
+                  <td className="text-right">$30/mo</td>
+                  <td className="text-right text-success">$2.76</td>
+                  <td className="text-right text-primary">$24.84</td>
                 </tr>
               </tbody>
             </table>

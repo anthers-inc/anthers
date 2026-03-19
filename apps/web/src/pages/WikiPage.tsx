@@ -64,11 +64,11 @@ const wikiAreas: WikiArea[] = [
             {
                 name: "The Anthers Model",
                 path: "11-The-Anthers-Model",
-                description: "Transparent pricing, the CRF, and how money flows",
+			description: "Transparent pricing, the Anthers Foundation, and how money flows",
                 items: [
                     { name: "Overview", file: "README.md" },
                     { name: "Transparent Pricing", file: "01-TransparentPricing.md" },
-                    { name: "Community Resilience Fund", file: "02-CommunityResilienceFund.md" },
+				{ name: "Anthers Foundation", file: "02-CommunityResilienceFund.md" },
                     { name: "Creator Pool", file: "03-CreatorPool.md" },
                 ],
             },

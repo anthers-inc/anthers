@@ -49,10 +49,10 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 
 const DEMO_PLAN = {
   tier: "Sprout",
-  price: 10,
-  crf: 0.3,
-  creatorPool: 4.7,
-  boostPool: 5.0,
+  price: 7,
+  foundation: 0.56,
+  creatorPool: 2.76,
+  boostPool: 3.68,
   month: "February 2026",
 };
 
@@ -484,10 +484,10 @@ function SubscriptionDashboardDemo() {
         <div className="card bg-base-200">
           <div className="card-body p-4">
             <p className="text-xs text-base-content/50 uppercase tracking-wide">
-              Community Resilience Fund
+              Anthers Foundation Fee
             </p>
-            <p className="text-xl font-bold">${DEMO_PLAN.crf.toFixed(2)}</p>
-            <p className="text-xs text-base-content/40">3% of subscription</p>
+            <p className="text-xl font-bold">${DEMO_PLAN.foundation.toFixed(2)}</p>
+            <p className="text-xs text-base-content/40">8% of subscription</p>
           </div>
         </div>
         <div className="card bg-base-200">
@@ -601,9 +601,9 @@ function SubscriptionDashboardDemo() {
         <div className="card-body p-4 space-y-1">
           <div className="flex justify-between text-sm">
             <span className="text-base-content/70">
-              Community Resilience Fund
+              Anthers Foundation Fee
             </span>
-            <span>${DEMO_PLAN.crf.toFixed(2)}</span>
+            <span>${DEMO_PLAN.foundation.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-base-content/70">Creator Pool</span>

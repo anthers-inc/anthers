@@ -28,7 +28,7 @@ function buildReceipt(price: number) {
     price,
     lines: [
       { label: "Payment processing", amount: processing, note: "Stripe" },
-      { label: "Community Resilience Fund", amount: crf, note: "3%" },
+      { label: "Anthers Foundation Fee", amount: crf, note: "3%" },
     ],
     creatorTotal: Math.max(creatorTotal, 0),
   };

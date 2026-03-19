@@ -189,7 +189,7 @@ export interface StripeAccountStatus {
 export interface CheckoutResponse {
 	amount: string;
 	processingFee: string;
-	crfFee: string;
+	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
 	creatorEarnings: string;
 	clientSecret: string;
 	message: string;
@@ -201,7 +201,7 @@ export interface Purchase {
 	projectId: number;
 	amount: string;
 	processingFee: string;
-	crfFee: string;
+	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
 	creatorEarnings: string;
 	stripePaymentIntentId: string;
 	status: string;
@@ -419,7 +419,7 @@ export interface JamEntryResult extends JamEntry {
 	rank: number;
 }
 
-// ─── CRF Types ───
+// ─── Foundation Types ───
 
 export interface CrfSubsidy {
 	id: number;

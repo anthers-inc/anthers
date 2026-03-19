@@ -4,10 +4,10 @@ import Decimal from "decimal.js";
 const PROCESSING_RATE = new Decimal("0.029");
 const PROCESSING_FLAT = new Decimal("0.30");
 
-/** Community Resilience Fund: 3% of transaction amount */
-const CRF_RATE = new Decimal("0.03");
+/** Anthers Foundation Fee: 3% of transaction amount */
+const FOUNDATION_RATE = new Decimal("0.03");
 
-/** CRF hosting cost model constants (monthly per-creator) */
+/** Foundation hosting cost model constants (monthly per-creator) */
 export const HOSTING_COSTS = {
 	BASE_PER_CREATOR: new Decimal("0.50"),
 	PER_GB_STORAGE: new Decimal("0.05"),
@@ -15,7 +15,7 @@ export const HOSTING_COSTS = {
 	PER_MEDIA_POST: new Decimal("0.15"),
 } as const;
 
-/** Maximum CRF subsidy per creator per month */
+/** Maximum Foundation subsidy per creator per month */
 export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 
 /**
@@ -27,13 +27,13 @@ export function calculateFees(amount: Decimal) {
 		.mul(PROCESSING_RATE)
 		.plus(PROCESSING_FLAT)
 		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-	const crfFee = amount
-		.mul(CRF_RATE)
+	const foundationFee = amount
+		.mul(FOUNDATION_RATE)
 		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 	const creatorEarnings = amount;
-	const buyerTotal = amount.plus(processingFee).plus(crfFee);
+	const buyerTotal = amount.plus(processingFee).plus(foundationFee);
 
-	return { processingFee, crfFee, creatorEarnings, buyerTotal };
+	return { processingFee, crfFee: foundationFee, creatorEarnings, buyerTotal };
 }
 
 /**

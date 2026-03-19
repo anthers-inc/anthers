@@ -231,7 +231,7 @@ export default function ForUsersPage() {
                   <ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
                   <ReceiptLine label="Infrastructure fee" amount="$0.01" />
                   <ReceiptLine
-                    label="Community Resilience Fund (3%)"
+                    label="Anthers Foundation Fee (3%)"
                     amount="$0.30"
                   />
                   <ReceiptLine
@@ -278,11 +278,11 @@ export default function ForUsersPage() {
                   <HeartIcon className="w-5 h-5 text-error" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-sm">Community Resilience Fund</h4>
+                  <h4 className="font-semibold text-sm">Anthers Foundation</h4>
                   <p className="text-sm text-base-content/60">
-                    A small 3% contribution funds free-tier hosting for small
-                    creators, game jam support, and platform infrastructure. It
-                    keeps the ecosystem healthy for everyone.
+                    A small 3% contribution funds the Anthers Foundation, which
+                    allocates between charitable programs and organizational
+                    operations to keep the ecosystem healthy for everyone.
                   </p>
                 </div>
               </div>
@@ -340,13 +340,13 @@ export default function ForUsersPage() {
                 </tr>
                 <tr>
                   <td>Root</td>
-                  <td className="text-right">$5/mo</td>
+                  <td className="text-right">$3/mo</td>
                   <td className="text-right">25 hrs/mo</td>
                   <td className="text-right text-base-content/40">No</td>
                 </tr>
                 <tr>
                   <td>Sprout</td>
-                  <td className="text-right">$10/mo</td>
+                  <td className="text-right">$7/mo</td>
                   <td className="text-right">Unlimited</td>
                   <td className="text-right text-success">Yes</td>
                 </tr>
@@ -358,7 +358,7 @@ export default function ForUsersPage() {
                 </tr>
                 <tr>
                   <td>Bloom</td>
-                  <td className="text-right">$20/mo</td>
+                  <td className="text-right">$30/mo</td>
                   <td className="text-right">Unlimited</td>
                   <td className="text-right text-success">Yes</td>
                 </tr>

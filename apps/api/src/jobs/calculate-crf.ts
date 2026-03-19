@@ -1,5 +1,5 @@
 /**
- * CRF subsidy calculation job.
+ * Foundation subsidy calculation job.
  *
  * Ported from _legacy/backend/payments/tasks.py calculate_crf_subsidies()
  *
@@ -79,14 +79,14 @@ async function getCreatorEarnings(
 export async function calculateCrfSubsidies() {
 	const cycleDate = getCycleDate();
 
-	// Get CRF balance
+	// Get Foundation balance
 	const [balanceResult] = await db
 		.select({ total: sum(crfLedger.amount) })
 		.from(crfLedger);
 
 	const crfBalance = new Decimal(balanceResult?.total ?? "0");
 	if (crfBalance.lte(0)) {
-		console.log("CRF balance is zero or negative. Skipping subsidies.");
+		console.log("Foundation balance is zero or negative. Skipping subsidies.");
 		return 0;
 	}
 
@@ -188,7 +188,7 @@ export async function calculateCrfSubsidies() {
 		let subsidy = Decimal.min(gap, MAX_MONTHLY_SUBSIDY, budgetRemaining);
 
 		if (subsidy.lte(0)) {
-			console.log(`CRF budget exhausted after ${subsidized} subsidies.`);
+			console.log(`Foundation budget exhausted after ${subsidized} subsidies.`);
 			break;
 		}
 
@@ -208,7 +208,7 @@ export async function calculateCrfSubsidies() {
 		// Record CRF outflow
 		await db.insert(crfLedger).values({
 			amount: subsidy.neg().toString(),
-			description: `CRF subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
+			description: `Foundation subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
 		});
 
 		totalSubsidy = totalSubsidy.plus(subsidy);
@@ -216,7 +216,7 @@ export async function calculateCrfSubsidies() {
 	}
 
 	console.log(
-		`CRF subsidy calculation complete: ${subsidized} creators subsidized, $${totalSubsidy} total`,
+		`Foundation subsidy calculation complete: ${subsidized} creators subsidized, $${totalSubsidy} total`,
 	);
 	return subsidized;
 }

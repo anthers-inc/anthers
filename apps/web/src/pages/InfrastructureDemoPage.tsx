@@ -93,8 +93,8 @@ interface ReferenceCreator {
 }
 
 const REFERENCE_CREATORS: ReferenceCreator[] = [
-  { name: "Amaiguri", subs: "3.85K", videos: "270", storageLabel: "2.6 TB", storageCost: 52.65, deliveryCost: 12.80, totalInfra: 65, viewMinutes: "155K", infraPerViewMin: 0.000419, infraPctGross: "CRF", ytGross: 11, ytNet: 6, anthersNet: 11 },
-  { name: "LittleDuck", subs: "17.2K", videos: "1.1K", storageLabel: "9.4 TB", storageCost: 188.76, deliveryCost: 10.92, totalInfra: 200, viewMinutes: "440K", infraPerViewMin: 0.000455, infraPctGross: "CRF", ytGross: 30, ytNet: 16, anthersNet: 30 },
+  { name: "Amaiguri", subs: "3.85K", videos: "270", storageLabel: "2.6 TB", storageCost: 52.65, deliveryCost: 12.80, totalInfra: 65, viewMinutes: "155K", infraPerViewMin: 0.000419, infraPctGross: "Foundation", ytGross: 11, ytNet: 6, anthersNet: 11 },
+  { name: "LittleDuck", subs: "17.2K", videos: "1.1K", storageLabel: "9.4 TB", storageCost: 188.76, deliveryCost: 10.92, totalInfra: 200, viewMinutes: "440K", infraPerViewMin: 0.000455, infraPctGross: "Foundation", ytGross: 30, ytNet: 16, anthersNet: 30 },
   { name: "Race Day Cafe", subs: "35.1K", videos: "58", storageLabel: "396 GB", storageCost: 7.92, deliveryCost: 66.56, totalInfra: 75, viewMinutes: "4.7M", infraPerViewMin: 0.000016, infraPctGross: "11.1%", ytGross: 678, ytNet: 373, anthersNet: 603 },
   { name: "Life Of Riza", subs: "991K", videos: "77", storageLabel: "225 GB", storageCost: 4.50, deliveryCost: 67.62, totalInfra: 72, viewMinutes: "5.3M", infraPerViewMin: 0.000014, infraPctGross: "4.6%", ytGross: 1575, ytNet: 866, anthersNet: 1503 },
   { name: "bugfishhhh", subs: "147K", videos: "22", storageLabel: "558 GB", storageCost: 11.16, deliveryCost: 1396.56, totalInfra: 1408, viewMinutes: "62M", infraPerViewMin: 0.000023, infraPctGross: "49.2%", ytGross: 2859, ytNet: 1572, anthersNet: 1451 },
@@ -510,7 +510,7 @@ function ReferenceCreatorProfiles() {
       <p className="text-sm text-base-content/60 leading-relaxed">
         These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform fee.
         Anthers takes 0% — only real infrastructure costs are deducted. Creators whose infrastructure exceeds
-        their pool earnings are covered by the <span className="font-semibold text-base-content">Community Resilience Fund (CRF)</span>.
+        their pool earnings are covered by the <span className="font-semibold text-base-content">Anthers Foundation</span>.
       </p>
 
       {/* Net income comparison chart */}
@@ -569,7 +569,7 @@ function ReferenceCreatorProfiles() {
                   <td className="text-sm text-right tabular-nums text-base-content/60">{c.subs}</td>
                   <td className="text-sm text-right tabular-nums text-base-content/60">{c.storageLabel}</td>
                   <td className="text-sm text-right tabular-nums">${c.totalInfra.toLocaleString()}</td>
-                  <td className={`text-sm text-right tabular-nums ${c.infraPctGross === "CRF" ? "text-info" : ""}`}>
+                  <td className={`text-sm text-right tabular-nums ${c.infraPctGross === "Foundation" ? "text-info" : ""}`}>
                     {c.infraPctGross}
                   </td>
                   <td className="text-sm text-right tabular-nums">${c.ytNet.toLocaleString()}</td>
@@ -590,10 +590,10 @@ function ReferenceCreatorProfiles() {
         <div className="collapse-content text-xs text-base-content/60 space-y-1">
           <p>YouTube CPM estimated by content type (range: $2.50-$7). Applied to ~50% monetized playback rate.</p>
           <p>YouTube takes 45% of ad revenue.</p>
-          <p>Anthers subscription: $10/mo. 3% to CRF. Pool payout ~$0.0065/view-minute.</p>
+          <p>Anthers subscription: $7/mo. 8% Foundation Fee. Pool payout ~$0.0065/view-minute.</p>
           <p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
           <p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
-          <p>CRF subsidizes any creator whose pool income {"<"} infrastructure cost.</p>
+          <p>The Foundation subsidizes any creator whose pool income {"<"} infrastructure cost.</p>
           <p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
         </div>
       </details>

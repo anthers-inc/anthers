@@ -63,6 +63,7 @@ async function start() {
 		},
 	);
 
+	// Foundation subsidy calculation (legacy queue name: calculate-crf)
 	await boss.work(QUEUES.CALCULATE_CRF, async (job) => {
 		console.log(`[calculate-crf] Processing job ${job.id}`);
 		await calculateCrfSubsidies();
@@ -76,6 +77,7 @@ async function start() {
 	// ── Cron schedules (replaces Celery Beat) ─────────────────────────
 
 	await boss.schedule(QUEUES.DISTRIBUTE_POOL, "0 0 * * *", {}); // midnight daily
+	// Foundation subsidy calculation (legacy queue name: calculate-crf)
 	await boss.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
 	await boss.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
 

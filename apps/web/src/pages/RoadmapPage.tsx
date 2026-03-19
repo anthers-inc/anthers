@@ -26,12 +26,18 @@ interface RoadmapLane {
   items: RoadmapItem[];
 }
 
+interface RoadmapSection {
+  id: string;
+  label: string;
+  lanes: RoadmapLane[];
+}
+
 interface RoadmapDef {
   id: string;
   label: string;
   description: string;
   quarters: string[];
-  lanes: RoadmapLane[];
+  sections: RoadmapSection[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -87,332 +93,334 @@ const QUARTERS = [
   "Q4 2027",
 ];
 
-const CREATOR_ROADMAP: RoadmapDef = {
-  id: "creator",
-  label: "Creator Roadmap",
+const PLATFORM_ROADMAP: RoadmapDef = {
+  id: "platform",
+  label: "Platform Roadmap",
   description:
-    "Features and tools for creators publishing on Anthers. From game hosting to multi-media content, analytics, and cross-publishing.",
+    "Everything we're building for creators and users on Anthers — from publishing and monetization tools to content playback, subscriptions, and community features.",
   quarters: QUARTERS,
-  lanes: [
+  sections: [
     {
-      id: "publishing",
-      label: "Publishing",
-      color: "#7c3aed",
-      items: [
+      id: "for-creators",
+      label: "For Creators",
+      lanes: [
         {
-          id: "c-game-hosting",
-          title: "Game Hosting & Marketplace",
-          description:
-            "Host games with build management, differential updates, web game embedding, and flexible pricing (free / PWYW / fixed / gated).",
+          id: "publishing",
+          label: "Publishing",
+          color: "#7c3aed",
+          items: [
+            {
+              id: "c-game-hosting",
+              title: "Game Hosting & Marketplace",
+              description:
+                "Host games with build management, differential updates, web game embedding, and flexible pricing (free / PWYW / fixed / gated).",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-rich-text",
+              title: "Rich Text Posts",
+              description:
+                "TipTap-powered editor for devlogs, articles, and written content with inline images and embeds.",
           status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "c-rich-text",
-          title: "Rich Text Posts",
-          description:
-            "TipTap-powered editor for devlogs, articles, and written content with inline images and embeds.",
-          status: "launched",
           startQ: 0,
           endQ: 0,
         },
         {
           id: "c-video",
-          title: "Video Hosting",
-          description:
-            "Upload and transcode video to HLS for adaptive streaming. Automatic thumbnail generation.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
+              title: "Video Hosting",
+              description:
+                "Upload and transcode video to HLS for adaptive streaming. Automatic thumbnail generation.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-audio",
+              title: "Audio Hosting",
+              description:
+                "Upload audio with normalization, waveform generation, and persistent playback across navigation.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-multimedia-expand",
+              title: "Multi-Media Expansion",
+              description:
+                "Visual art galleries, podcast series support, and mixed-media project pages.",
+              status: "planned",
+              startQ: 3,
+              endQ: 5,
+            },
+          ],
         },
         {
-          id: "c-audio",
-          title: "Audio Hosting",
-          description:
-            "Upload audio with normalization, waveform generation, and persistent playback across navigation.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
+          id: "monetization",
+          label: "Monetization",
+          color: "#c026d3",
+          items: [
+            {
+              id: "c-stripe-connect",
+              title: "Stripe Connect Payouts",
+              description:
+                "Creator onboarding to Stripe Connect for direct payouts from marketplace sales and subscription distributions.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-pool-income",
+              title: "Subscription Pool Income",
+              description:
+                "Earn from the Creator Pool proportional to engagement time across all subscribers.",
+              status: "planned",
+              startQ: 1,
+              endQ: 2,
+            },
+            {
+              id: "c-boost-income",
+              title: "Boost Pool Income",
+              description:
+                "Additional subscriber-directed funds via the Boost Pool, with manual or automatic allocation.",
+              status: "planned",
+              startQ: 1,
+              endQ: 3,
+            },
+            {
+              id: "c-gated-content",
+              title: "Gated Content",
+              description:
+                "Set boost thresholds to unlock exclusive content. Subscribers who boost enough get access.",
+              status: "planned",
+              startQ: 2,
+              endQ: 3,
+            },
+            {
+              id: "c-direct-purchases",
+              title: "Direct Purchases",
+              description:
+                "Marketplace for one-time purchases: digital downloads, experiences, physical goods. 0% creator cut — transparent pass-through fees.",
+              status: "planned",
+              startQ: 2,
+              endQ: 4,
+            },
+            {
+              id: "c-bundles",
+              title: "Creator Bundles",
+              description:
+                "Collaborative bundles with discounted combined gate access and engagement-time proportional revenue sharing.",
+              status: "exploring",
+              startQ: 5,
+              endQ: 7,
+            },
+          ],
         },
         {
-          id: "c-multimedia-expand",
-          title: "Multi-Media Expansion",
-          description:
-            "Visual art galleries, podcast series support, and mixed-media project pages.",
-          status: "planned",
-          startQ: 3,
-          endQ: 5,
+          id: "tools",
+          label: "Creator Tools",
+          color: "#0ea5e9",
+          items: [
+            {
+              id: "c-analytics",
+              title: "Analytics Dashboard",
+              description:
+                "Views, purchases, engagement timeseries, content performance breakdown. Unified analytics across all content types.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-cross-publish",
+              title: "Cross-Publishing",
+              description:
+                "Publish once, distribute everywhere. YouTube, itch.io, Steam, Substack, and more.",
+              status: "planned",
+              startQ: 2,
+              endQ: 4,
+            },
+            {
+              id: "c-itch-import",
+              title: "itch.io Import",
+              description:
+                "One-click import of games, metadata, and assets from itch.io.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "c-creator-hubs",
+              title: "Custom Creator Pages",
+              description:
+                "Branded creator profile pages with customizable layout, featured content, and social links.",
+              status: "planned",
+              startQ: 2,
+              endQ: 3,
+            },
+            {
+              id: "c-native-first",
+              title: "Native-First Publishing",
+              description:
+                "Tools optimized for Anthers as the primary publishing destination, with cross-posting to legacy platforms as secondary.",
+              status: "exploring",
+              startQ: 5,
+              endQ: 7,
+            },
+          ],
         },
       ],
     },
     {
-      id: "monetization",
-      label: "Monetization",
-      color: "#c026d3",
-      items: [
+      id: "for-users",
+      label: "For Users",
+      lanes: [
         {
-          id: "c-stripe-connect",
-          title: "Stripe Connect Payouts",
-          description:
-            "Creator onboarding to Stripe Connect for direct payouts from marketplace sales and subscription distributions.",
+          id: "consumption",
+          label: "Content & Playback",
+          color: "#2563eb",
+          items: [
+            {
+              id: "u-browse",
+              title: "Browse & Discover",
+              description:
+                "Browse projects by category, tag, and media type. Search with full-text matching.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "u-hls-playback",
+              title: "Adaptive Video Playback",
+              description:
+                "HLS-based adaptive streaming for video content with quality selection.",
+              status: "active",
+              startQ: 0,
+              endQ: 0,
+            },
+            {
+              id: "u-audio-player",
+              title: "Persistent Audio Player",
+              description:
+                "Mini-player that persists across page navigation. Full waveform visualization.",
           status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "c-pool-income",
-          title: "Subscription Pool Income",
-          description:
-            "Earn from the Creator Pool proportional to engagement time across all subscribers.",
-          status: "planned",
-          startQ: 1,
-          endQ: 2,
-        },
-        {
-          id: "c-boost-income",
-          title: "Boost Pool Income",
-          description:
-            "Additional subscriber-directed funds via the Boost Pool, with manual or automatic allocation.",
-          status: "planned",
-          startQ: 1,
-          endQ: 3,
-        },
-        {
-          id: "c-gated-content",
-          title: "Gated Content",
-          description:
-            "Set boost thresholds to unlock exclusive content. Subscribers who boost enough get access.",
-          status: "planned",
-          startQ: 2,
-          endQ: 3,
-        },
-        {
-          id: "c-direct-purchases",
-          title: "Direct Purchases",
-          description:
-            "Marketplace for one-time purchases: digital downloads, experiences, physical goods. 0% creator cut — transparent pass-through fees.",
-          status: "planned",
-          startQ: 2,
-          endQ: 4,
-        },
-        {
-          id: "c-bundles",
-          title: "Creator Bundles",
-          description:
-            "Collaborative bundles with discounted combined gate access and engagement-time proportional revenue sharing.",
-          status: "exploring",
-          startQ: 5,
-          endQ: 7,
-        },
-      ],
-    },
-    {
-      id: "tools",
-      label: "Creator Tools",
-      color: "#0ea5e9",
-      items: [
-        {
-          id: "c-analytics",
-          title: "Analytics Dashboard",
-          description:
-            "Views, purchases, engagement timeseries, content performance breakdown. Unified analytics across all content types.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "c-cross-publish",
-          title: "Cross-Publishing",
-          description:
-            "Publish once, distribute everywhere. YouTube, itch.io, Steam, Substack, and more.",
-          status: "planned",
-          startQ: 2,
-          endQ: 4,
-        },
-        {
-          id: "c-itch-import",
-          title: "itch.io Import",
-          description:
-            "One-click import of games, metadata, and assets from itch.io.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "c-creator-hubs",
-          title: "Custom Creator Pages",
-          description:
-            "Branded creator profile pages with customizable layout, featured content, and social links.",
-          status: "planned",
-          startQ: 2,
-          endQ: 3,
-        },
-        {
-          id: "c-native-first",
-          title: "Native-First Publishing",
-          description:
-            "Tools optimized for Anthers as the primary publishing destination, with cross-posting to legacy platforms as secondary.",
-          status: "exploring",
-          startQ: 5,
-          endQ: 7,
-        },
-      ],
-    },
-  ],
-};
-
-const USER_ROADMAP: RoadmapDef = {
-  id: "user",
-  label: "User Roadmap",
-  description:
-    "Features for subscribers and consumers — from content discovery and playback to subscriptions and community participation.",
-  quarters: QUARTERS,
-  lanes: [
-    {
-      id: "consumption",
-      label: "Content & Playback",
-      color: "#2563eb",
-      items: [
-        {
-          id: "u-browse",
-          title: "Browse & Discover",
-          description:
-            "Browse projects by category, tag, and media type. Search with full-text matching.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "u-hls-playback",
-          title: "Adaptive Video Playback",
-          description:
-            "HLS-based adaptive streaming for video content with quality selection.",
-          status: "active",
-          startQ: 0,
-          endQ: 0,
-        },
-        {
-          id: "u-audio-player",
-          title: "Persistent Audio Player",
-          description:
-            "Mini-player that persists across page navigation. Full waveform visualization.",
-          status: "launched",
           startQ: 0,
           endQ: 0,
         },
         {
           id: "u-web-games",
-          title: "Web Game Embedding",
-          description:
-            "Play HTML5/WebGL games directly in the browser from project pages.",
+              title: "Web Game Embedding",
+              description:
+                "Play HTML5/WebGL games directly in the browser from project pages.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "u-playlists",
+              title: "Playlists & Watch History",
+              description:
+                "Create and manage playlists. Track watch/listen/play history across all content types.",
+              status: "planned",
+              startQ: 3,
+              endQ: 4,
+            },
+            {
+              id: "u-notifications",
+              title: "Notifications",
+              description:
+                "Get notified when creators you follow publish new content or go live.",
+              status: "planned",
+              startQ: 3,
+              endQ: 4,
+            },
+          ],
+        },
+        {
+          id: "subscription",
+          label: "Subscriptions",
+          color: "#c026d3",
+          items: [
+            {
+              id: "u-sub-tiers",
+              title: "Subscription Tiers",
+              description:
+                "Five tiers from Free to Bloom ($30/mo). 92% to creators, 8% to the Anthers Foundation. Transparent split.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "u-boost-alloc",
+              title: "Boost Allocation",
+              description:
+                "Manually allocate Boost Pool funds to your favorite creators with sliders. Unlocks gated content.",
+              status: "planned",
+              startQ: 1,
+              endQ: 2,
+            },
+            {
+              id: "u-sub-dashboard",
+              title: "Subscription Dashboard",
+              description:
+                "See exactly where your money goes each month: which creators, how much, why.",
+              status: "planned",
+              startQ: 2,
+              endQ: 3,
+            },
+          ],
+        },
+        {
+          id: "community",
+          label: "Community",
+          color: "#0f766e",
+          items: [
+            {
+              id: "u-follows",
+              title: "Follow Creators",
+              description:
+                "Follow creators to build your chronological feed. No algorithmic ranking.",
           status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "u-playlists",
-          title: "Playlists & Watch History",
-          description:
-            "Create and manage playlists. Track watch/listen/play history across all content types.",
-          status: "planned",
-          startQ: 3,
-          endQ: 4,
-        },
-        {
-          id: "u-notifications",
-          title: "Notifications",
-          description:
-            "Get notified when creators you follow publish new content or go live.",
-          status: "planned",
-          startQ: 3,
-          endQ: 4,
-        },
-      ],
-    },
-    {
-      id: "subscription",
-      label: "Subscriptions",
-      color: "#c026d3",
-      items: [
-        {
-          id: "u-sub-tiers",
-          title: "Subscription Tiers",
-          description:
-            "Five tiers from Free to Bloom ($40/mo). 85% to creators, 10% CRF, 5% operations. Transparent split.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "u-boost-alloc",
-          title: "Boost Allocation",
-          description:
-            "Manually allocate Boost Pool funds to your favorite creators with sliders. Unlocks gated content.",
-          status: "planned",
-          startQ: 1,
-          endQ: 2,
-        },
-        {
-          id: "u-sub-dashboard",
-          title: "Subscription Dashboard",
-          description:
-            "See exactly where your money goes each month: which creators, how much, why.",
-          status: "planned",
-          startQ: 2,
-          endQ: 3,
-        },
-      ],
-    },
-    {
-      id: "community",
-      label: "Community",
-      color: "#0f766e",
-      items: [
-        {
-          id: "u-follows",
-          title: "Follow Creators",
-          description:
-            "Follow creators to build your chronological feed. No algorithmic ranking.",
-          status: "launched",
           startQ: 0,
           endQ: 0,
         },
         {
           id: "u-comments",
-          title: "Comments & Ratings",
-          description:
-            "Rate and review projects. Comment on posts and game pages.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "u-jams",
-          title: "Game Jams",
-          description:
-            "Participate in game jams: browse entries, vote, and discover new creators.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
-        },
-        {
-          id: "u-contests",
-          title: "Contests & Calls for Content",
-          description:
-            "Multi-media contests, sponsor-backed events, panel judging, prize escrow.",
-          status: "planned",
-          startQ: 3,
-          endQ: 5,
-        },
-        {
-          id: "u-mobile",
-          title: "Mobile Apps",
-          description:
-            "Native iOS and Android apps for content consumption, notifications, and community interaction.",
-          status: "exploring",
-          startQ: 5,
-          endQ: 7,
+              title: "Comments & Ratings",
+              description:
+                "Rate and review projects. Comment on posts and game pages.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "u-jams",
+              title: "Game Jams",
+              description:
+                "Participate in game jams: browse entries, vote, and discover new creators.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "u-contests",
+              title: "Contests & Calls for Content",
+              description:
+                "Multi-media contests, sponsor-backed events, panel judging, prize escrow.",
+              status: "planned",
+              startQ: 3,
+              endQ: 5,
+            },
+            {
+              id: "u-mobile",
+              title: "Mobile Apps",
+              description:
+                "Native iOS and Android apps for content consumption, notifications, and community interaction.",
+              status: "exploring",
+              startQ: 5,
+              endQ: 7,
+            },
+          ],
         },
       ],
     },
@@ -425,160 +433,170 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
   description:
     "Milestones and initiatives for the Anthers Foundation — a 501(c)(3) non-profit. From incorporation to charitable programs at scale.",
   quarters: QUARTERS,
-  lanes: [
+  sections: [
     {
-      id: "legal",
-      label: "Organization",
-      color: "#c2410c",
-      items: [
+      id: "on-platform",
+      label: "On-Platform",
+      lanes: [
         {
-          id: "f-pre-inc",
-          title: "Pre-Incorporation",
-          description:
-            "Attorney engaged, board recruited, governance documents drafted, fiscal planning completed.",
-          status: "launched",
+          id: "legal",
+          label: "Organization",
+          color: "#c2410c",
+          items: [
+            {
+              id: "f-pre-inc",
+              title: "Pre-Incorporation",
+              description:
+                "Attorney engaged, board recruited, governance documents drafted, fiscal planning completed.",
+          status: "active",
           startQ: 0,
           endQ: 0,
         },
         {
           id: "f-incorporation",
-          title: "Incorporation & Filing",
-          description:
-            "Colorado incorporation, EIN obtained, Form 1023 submitted, first board meeting held.",
-          status: "active",
-          startQ: 0,
-          endQ: 1,
+              title: "Incorporation & Filing",
+              description:
+                "Colorado incorporation, EIN obtained, Form 1023 submitted, first board meeting held.",
+              status: "active",
+              startQ: 0,
+              endQ: 1,
+            },
+            {
+              id: "f-building",
+              title: "Building in the Open",
+              description:
+                "Platform development, community forming, early donations, vendor conversations, transparent progress reports.",
+              status: "active",
+              startQ: 1,
+              endQ: 2,
+            },
+            {
+              id: "f-alpha",
+              title: "Alpha Launch",
+              description:
+                "Invite-only launch with 20-50 creators, a few hundred consumers. CRF operational. IRS determination letter (ideally).",
+              status: "planned",
+              startQ: 2,
+              endQ: 3,
+            },
+            {
+              id: "f-beta",
+              title: "Beta Launch",
+              description:
+                "Open registration, multiple media formats, CRF expanding, active fundraising, first 990 filed.",
+              status: "planned",
+              startQ: 4,
+              endQ: 5,
+            },
+            {
+              id: "f-ga",
+              title: "General Availability",
+              description:
+                "Stable public platform, all CRF pillars active, federation functioning, organizational maturity.",
+              status: "exploring",
+              startQ: 6,
+              endQ: 7,
+            },
+          ],
         },
         {
-          id: "f-building",
-          title: "Building in the Open",
-          description:
-            "Platform development, community forming, early donations, vendor conversations, transparent progress reports.",
-          status: "active",
-          startQ: 1,
-          endQ: 2,
+          id: "crf",
+          label: "Resilience Fund",
+          color: "#0f766e",
+          items: [
+            {
+              id: "f-infra-equity",
+              title: "Pillar 1: Infrastructure Equity",
+              description:
+                "Small creator subsidies, viral surge protection, free-tier infrastructure access for new creators.",
+              status: "planned",
+              startQ: 2,
+              endQ: 4,
+            },
+            {
+              id: "f-education",
+              title: "Pillar 2: Education & Development",
+              description:
+                "Creators as Educators initiative, structured mentorship programs, skill-building content and workshops.",
+              status: "planned",
+              startQ: 3,
+              endQ: 5,
+            },
+            {
+              id: "f-relief",
+              title: "Pillar 3: Economic Resilience & Relief",
+              description:
+                "Creation grants ($1-5K range), emergency assistance for creators, supplementary professional resources.",
+              status: "exploring",
+              startQ: 4,
+              endQ: 6,
+            },
+            {
+              id: "f-community",
+              title: "Pillar 4: Community & Public Benefit",
+              description:
+                "Open-source tool development, research and advocacy, community partnerships and outreach programs.",
+              status: "exploring",
+              startQ: 5,
+              endQ: 7,
+            },
+          ],
         },
         {
-          id: "f-alpha",
-          title: "Alpha Launch",
-          description:
-            "Invite-only launch with 20-50 creators, a few hundred consumers. CRF operational. IRS determination letter (ideally).",
-          status: "planned",
-          startQ: 2,
-          endQ: 3,
-        },
-        {
-          id: "f-beta",
-          title: "Beta Launch",
-          description:
-            "Open registration, multiple media formats, CRF expanding, active fundraising, first 990 filed.",
-          status: "planned",
-          startQ: 4,
-          endQ: 5,
-        },
-        {
-          id: "f-ga",
-          title: "General Availability",
-          description:
-            "Stable public platform, all CRF pillars active, federation functioning, organizational maturity.",
-          status: "exploring",
-          startQ: 6,
-          endQ: 7,
+          id: "growth",
+          label: "Growth Milestones",
+          color: "#7c3aed",
+          items: [
+            {
+              id: "f-founding-creators",
+              title: "Founding Creators (20-50)",
+              description:
+                "Recruit initial cohort of founding creators, primarily from the indie game development community.",
+              status: "active",
+              startQ: 0,
+              endQ: 2,
+            },
+            {
+              id: "f-2500-subs",
+              title: "2,500 Subscribers",
+              description:
+                "Covers basic overhead ($13-16K/yr). Infrastructure subsidies begin. Reserve accumulation starts.",
+              status: "planned",
+              startQ: 3,
+              endQ: 4,
+            },
+            {
+              id: "f-10000-subs",
+              title: "10,000 Subscribers",
+              description:
+                "Minimum viable one-person operation ($50-65K/yr). Pillar 1 funded. First small grants possible.",
+              status: "exploring",
+              startQ: 5,
+              endQ: 6,
+            },
+            {
+              id: "f-25000-subs",
+              title: "25,000 Subscribers",
+              description:
+                "Inflection point: ED salary + admin overhead ($125-164K/yr). All four CRF pillars active. Meaningful creation grants.",
+              status: "exploring",
+              startQ: 6,
+              endQ: 7,
+            },
+          ],
         },
       ],
     },
     {
-      id: "crf",
-      label: "Resilience Fund",
-      color: "#0f766e",
-      items: [
-        {
-          id: "f-infra-equity",
-          title: "Pillar 1: Infrastructure Equity",
-          description:
-            "Small creator subsidies, viral surge protection, free-tier infrastructure access for new creators.",
-          status: "planned",
-          startQ: 2,
-          endQ: 4,
-        },
-        {
-          id: "f-education",
-          title: "Pillar 2: Education & Development",
-          description:
-            "Creators as Educators initiative, structured mentorship programs, skill-building content and workshops.",
-          status: "planned",
-          startQ: 3,
-          endQ: 5,
-        },
-        {
-          id: "f-relief",
-          title: "Pillar 3: Economic Resilience & Relief",
-          description:
-            "Creation grants ($1-5K range), emergency assistance for creators, supplementary professional resources.",
-          status: "exploring",
-          startQ: 4,
-          endQ: 6,
-        },
-        {
-          id: "f-community",
-          title: "Pillar 4: Community & Public Benefit",
-          description:
-            "Open-source tool development, research and advocacy, community partnerships and outreach programs.",
-          status: "exploring",
-          startQ: 5,
-          endQ: 7,
-        },
-      ],
-    },
-    {
-      id: "growth",
-      label: "Growth Milestones",
-      color: "#7c3aed",
-      items: [
-        {
-          id: "f-founding-creators",
-          title: "Founding Creators (20-50)",
-          description:
-            "Recruit initial cohort of founding creators, primarily from the indie game development community.",
-          status: "active",
-          startQ: 0,
-          endQ: 2,
-        },
-        {
-          id: "f-2500-subs",
-          title: "2,500 Subscribers",
-          description:
-            "Covers basic overhead ($13-16K/yr). Infrastructure subsidies begin. Reserve accumulation starts.",
-          status: "planned",
-          startQ: 3,
-          endQ: 4,
-        },
-        {
-          id: "f-10000-subs",
-          title: "10,000 Subscribers",
-          description:
-            "Minimum viable one-person operation ($50-65K/yr). Pillar 1 funded. First small grants possible.",
-          status: "exploring",
-          startQ: 5,
-          endQ: 6,
-        },
-        {
-          id: "f-25000-subs",
-          title: "25,000 Subscribers",
-          description:
-            "Inflection point: ED salary + admin overhead ($125-164K/yr). All four CRF pillars active. Meaningful creation grants.",
-          status: "exploring",
-          startQ: 6,
-          endQ: 7,
-        },
-      ],
+      id: "off-platform",
+      label: "Off-Platform",
+      lanes: [],
     },
   ],
 };
 
 const ROADMAPS: RoadmapDef[] = [
-  CREATOR_ROADMAP,
-  USER_ROADMAP,
+  PLATFORM_ROADMAP,
   FOUNDATION_ROADMAP,
 ];
 
@@ -617,6 +635,8 @@ const MIN_Q_WIDTH = 160; // minimum px per quarter column
 const ROW_HEIGHT = 40; // px per item row
 const LANE_HEADER = 32; // px for lane label
 const LANE_GAP = 16; // px between lanes
+const SECTION_HEADER = 36; // px for section group header
+const SECTION_GAP = 24; // px between sections
 const BAR_PAD_Y = 6; // vertical padding inside row
 const BAR_RADIUS = 6;
 const LEFT_GUTTER = 0; // no left gutter — labels are inside bars
@@ -654,28 +674,40 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
     ? Math.max(MIN_Q_WIDTH, (containerWidth - LEFT_GUTTER) / numQuarters)
     : MIN_Q_WIDTH;
 
-  // Layout all lanes
-  const layoutLanes = useMemo(() => {
-    return roadmap.lanes.map((lane) => {
-      const laidOut = assignRows(lane.items);
-      const maxRow = laidOut.reduce(
-        (max, item) => Math.max(max, (item.row ?? 0) + 1),
-        0,
-      );
-      return { ...lane, items: laidOut, rowCount: maxRow };
-    });
+  // Layout all sections → lanes
+  const layoutSections = useMemo(() => {
+    return roadmap.sections
+      .filter((s) => s.lanes.length > 0)
+      .map((section) => {
+        const lanes = section.lanes.map((lane) => {
+          const laidOut = assignRows(lane.items);
+          const maxRow = laidOut.reduce(
+            (max, item) => Math.max(max, (item.row ?? 0) + 1),
+            0,
+          );
+          return { ...lane, items: laidOut, rowCount: maxRow };
+        });
+        return { ...section, lanes };
+      });
   }, [roadmap]);
 
   // Total SVG height
   const totalHeight = useMemo(() => {
     return (
       TOP_PAD +
-      layoutLanes.reduce(
-        (h, lane) => h + LANE_HEADER + lane.rowCount * ROW_HEIGHT + LANE_GAP,
+      layoutSections.reduce(
+        (h, section) =>
+          h +
+          SECTION_HEADER +
+          section.lanes.reduce(
+            (lh, lane) => lh + LANE_HEADER + lane.rowCount * ROW_HEIGHT + LANE_GAP,
+            0,
+          ) +
+          SECTION_GAP,
         0,
       )
     );
-  }, [layoutLanes]);
+  }, [layoutSections]);
 
   const totalWidth = LEFT_GUTTER + numQuarters * Q_WIDTH;
 
@@ -777,95 +809,131 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
           );
         })()}
 
-        {/* Lanes */}
-        {layoutLanes.map((lane) => {
-          const currentLaneY = laneY;
-          const laneHeight = LANE_HEADER + lane.rowCount * ROW_HEIGHT;
-          laneY += laneHeight + LANE_GAP;
+        {/* Sections → Lanes */}
+        {layoutSections.map((section) => {
+          // Section header
+          const sectionStartY = laneY;
+          laneY += SECTION_HEADER;
 
           return (
-            <g key={lane.id}>
-              {/* Lane label */}
+            <g key={section.id}>
+              {/* Section group label */}
               <text
                 x={8}
-                y={currentLaneY + LANE_HEADER - 10}
-                fontSize={11}
-                fontWeight={700}
-                className="fill-base-content/40"
-                style={{ letterSpacing: 1 }}
+                y={sectionStartY + SECTION_HEADER - 12}
+                fontSize={13}
+                fontWeight={800}
+                className="fill-base-content/60"
+                style={{ letterSpacing: 0.5 }}
               >
-                {lane.label.toUpperCase()}
+                {section.label}
               </text>
 
-              {/* Lane separator line */}
+              {/* Section divider line */}
               <line
                 x1={0}
-                y1={currentLaneY + LANE_HEADER - 2}
+                y1={sectionStartY + SECTION_HEADER - 4}
                 x2={totalWidth}
-                y2={currentLaneY + LANE_HEADER - 2}
-                className="stroke-base-300/30"
+                y2={sectionStartY + SECTION_HEADER - 4}
+                className="stroke-base-300/50"
                 strokeWidth={1}
               />
 
-              {/* Items */}
-              {lane.items.map((item) => {
-                const row = item.row ?? 0;
-                const x = LEFT_GUTTER + item.startQ * Q_WIDTH + 4;
-                const w =
-                  (item.endQ - item.startQ + 1) * Q_WIDTH - 8;
-                const y =
-                  currentLaneY + LANE_HEADER + row * ROW_HEIGHT + BAR_PAD_Y;
-                const h = ROW_HEIGHT - BAR_PAD_Y * 2;
-                const isHovered = hoveredItem === item.id;
-                const isSelected = selectedItem === item.id;
-                const status = STATUS_META[item.status];
+              {/* Lanes within section */}
+              {section.lanes.map((lane) => {
+                const currentLaneY = laneY;
+                const laneHeight = LANE_HEADER + lane.rowCount * ROW_HEIGHT;
+                laneY += laneHeight + LANE_GAP;
 
                 return (
-                  <g
-                    key={item.id}
-                    style={{ cursor: "pointer" }}
-                    onMouseEnter={() => setHoveredItem(item.id)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    onClick={() => handleBarClick(item.id)}
-                  >
-                    {/* Bar background */}
-                    <rect
-                      x={x}
-                      y={y}
-                      width={w}
-                      height={h}
-                      rx={BAR_RADIUS}
-                      fill={lane.color}
-                      fillOpacity={
-                        isSelected ? 0.35 : isHovered ? 0.25 : 0.15
-                      }
-                      stroke={lane.color}
-                      strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 0}
-                      strokeOpacity={0.6}
-                      style={{ transition: "fill-opacity 150ms, stroke-width 150ms" }}
-                    />
-                    {/* Status dot */}
-                    <circle
-                      cx={x + 14}
-                      cy={y + h / 2}
-                      r={4}
-                      fill={status.dot}
-                    />
-                    {/* Title */}
+                  <g key={lane.id}>
+                    {/* Lane label */}
                     <text
-                      x={x + 26}
-                      y={y + h / 2}
-                      dominantBaseline="central"
-                      fontSize={12}
-                      fontWeight={600}
-                      className="fill-base-content"
-                      style={{ pointerEvents: "none" }}
+                      x={8}
+                      y={currentLaneY + LANE_HEADER - 10}
+                      fontSize={11}
+                      fontWeight={700}
+                      className="fill-base-content/40"
+                      style={{ letterSpacing: 1 }}
                     >
-                      {item.title}
+                      {lane.label.toUpperCase()}
                     </text>
+
+                    {/* Lane separator line */}
+                    <line
+                      x1={0}
+                      y1={currentLaneY + LANE_HEADER - 2}
+                      x2={totalWidth}
+                      y2={currentLaneY + LANE_HEADER - 2}
+                      className="stroke-base-300/30"
+                      strokeWidth={1}
+                    />
+
+                    {/* Items */}
+                    {lane.items.map((item) => {
+                      const row = item.row ?? 0;
+                      const x = LEFT_GUTTER + item.startQ * Q_WIDTH + 4;
+                      const w =
+                        (item.endQ - item.startQ + 1) * Q_WIDTH - 8;
+                      const y =
+                        currentLaneY + LANE_HEADER + row * ROW_HEIGHT + BAR_PAD_Y;
+                      const h = ROW_HEIGHT - BAR_PAD_Y * 2;
+                      const isHovered = hoveredItem === item.id;
+                      const isSelected = selectedItem === item.id;
+                      const status = STATUS_META[item.status];
+
+                      return (
+                        <g
+                          key={item.id}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setHoveredItem(item.id)}
+                          onMouseLeave={() => setHoveredItem(null)}
+                          onClick={() => handleBarClick(item.id)}
+                        >
+                          {/* Bar background */}
+                          <rect
+                            x={x}
+                            y={y}
+                            width={w}
+                            height={h}
+                            rx={BAR_RADIUS}
+                            fill={lane.color}
+                            fillOpacity={
+                              isSelected ? 0.35 : isHovered ? 0.25 : 0.15
+                            }
+                            stroke={lane.color}
+                            strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 0}
+                            strokeOpacity={0.6}
+                            style={{ transition: "fill-opacity 150ms, stroke-width 150ms" }}
+                          />
+                          {/* Status dot */}
+                          <circle
+                            cx={x + 14}
+                            cy={y + h / 2}
+                            r={4}
+                            fill={status.dot}
+                          />
+                          {/* Title */}
+                          <text
+                            x={x + 26}
+                            y={y + h / 2}
+                            dominantBaseline="central"
+                            fontSize={12}
+                            fontWeight={600}
+                            className="fill-base-content"
+                            style={{ pointerEvents: "none" }}
+                          >
+                            {item.title}
+                          </text>
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })}
+
+              {/* Section gap spacer (advance laneY) */}
+              {(() => { laneY += SECTION_GAP; return null; })()}
             </g>
           );
         })}
@@ -972,9 +1040,11 @@ export default function RoadmapPage() {
   // Find the selected item and its lane for the detail panel
   const selectedData = useMemo(() => {
     if (!selectedItem) return null;
-    for (const lane of roadmap.lanes) {
-      const item = lane.items.find((i) => i.id === selectedItem);
-      if (item) return { item, lane };
+    for (const section of roadmap.sections) {
+      for (const lane of section.lanes) {
+        const item = lane.items.find((i) => i.id === selectedItem);
+        if (item) return { item, lane };
+      }
     }
     return null;
   }, [selectedItem, roadmap]);
