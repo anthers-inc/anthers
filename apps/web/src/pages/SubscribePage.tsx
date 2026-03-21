@@ -445,7 +445,7 @@ function makeSankeyLinkComponent(
 /* ------------------------------------------------------------------ */
 
 const SLIDER_MIN = 0;
-const SLIDER_MAX = 50;
+const SLIDER_MAX = 40;
 
 function FundingSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
 	const ticks: number[] = [];
@@ -453,9 +453,23 @@ function FundingSlider({ value, onChange }: { value: number; onChange: (v: numbe
 
 	return (
 		<div className="mb-4">
+			{/* Tier threshold marks above the slider */}
+			<div className="relative w-full h-6 mb-1">
+				{TIER_THRESHOLDS.map((tier) => {
+					const pct = ((tier.price - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100;
+					return (
+						<div key={tier.id} className="absolute -translate-x-1/2 flex flex-col items-center"
+							 style={{ left: `${pct}%`, bottom: 0 }}
+						>
+							<span className={`text-[10px] mb-0.5 ${tierForAmount(value)?.id === tier.id ? "text-base-content font-semibold" : "text-base-content/40"}`}>{tier.name}</span>
+							<div className="w-px h-3 bg-base-content/20" />
+						</div>
+					);
+				})}
+			</div>
 			<input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={1} value={value}
 				   onChange={(e) => onChange(Number(e.target.value))}
-				   className="range range-primary w-full"
+				   className="range range-success w-full"
 			/>
 			<div className="relative w-full h-6 mt-1">
 				{ticks.map((tick) => {
@@ -496,8 +510,8 @@ function TierCard({
 
 	return (
 		<div className={`card bg-base-200/60 shadow-xl border-2 transition-all ${
-			isCurrentTier ? "ring-2 ring-success border-success"
-				: isSliderTier ? "ring-2 ring-primary border-primary"
+			isSliderTier ? "ring-2 ring-success border-success"
+				: isCurrentTier ? "ring-2 ring-primary/40 border-primary/40"
 					: "border-base-300"
 		}`}>
 			<div className="card-body items-center text-center p-4">
@@ -820,16 +834,16 @@ export default function SubscribePage() {
 				))}
 			</div>
 
-			{/* Where Your Money Goes */}
+			{/* Build Your Scenario */}
 			<div className="mt-16">
 				<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto">
 					<h2 className="text-2xl font-bold mb-2 text-center">
-						Where Your Money Goes
+						Build Your Scenario
 					</h2>
 					<p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto mb-6">
-						Drag the sliders to see how any funding level breaks down.
-						The split is always the same: 92% to creators, 8% to the
-						Anthers Foundation.
+						Set your subscription level, adjust how you split watch time
+						and boost funds across creators, estimate your streaming usage,
+						and see the full cost breakdown below.
 					</p>
 
 					{/* ---- Subscription funding slider ---- */}
@@ -1040,6 +1054,29 @@ export default function SubscribePage() {
 							</div>
 						</div>
 					</div>
+				</div>
+			</div>
+
+			{/* Where Your Money Goes */}
+			<div className="mt-10">
+				<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto">
+					<h2 className="text-2xl font-bold mb-2 text-center">
+						Where Your Money Goes
+					</h2>
+					<p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto mb-6">
+						The split is always the same: 92% to creators, 8% to the
+						Anthers Foundation. Delivery, processing, and tax are
+						separate pass-through fees — Anthers keeps none of it.
+					</p>
+
+					{/* Section cards */}
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+						<SectionContent
+							section={activeSection}
+							onEnter={onSectionEnter}
+							onLeave={onSectionLeave}
+						/>
+					</div>
 
 					{/* ---- Sankey diagram or Foundation explainer ---- */}
 					<div className="relative">
@@ -1097,15 +1134,6 @@ export default function SubscribePage() {
 							</div>
 						</div>
 					</div>
-				</div>
-
-				{/* Detail breakdown */}
-				<div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
-					<SectionContent
-						section={activeSection}
-						onEnter={onSectionEnter}
-						onLeave={onSectionLeave}
-					/>
 				</div>
 			</div>
 
