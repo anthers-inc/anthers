@@ -827,37 +827,58 @@ export default function SubscriptionPage() {
 									);
 								})}
 							</div>
-							{/* Range input with committed/pending visual */}
-							<div className="relative w-full">
-								{/* Visual bar behind the range input */}
-								<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 bg-base-300 rounded-full overflow-hidden pointer-events-none z-0">
-									{/* Committed fill */}
+							{/* Custom track: teal committed fill, white pending fill */}
+							{(() => {
+								const committedPct = (committedFunding / SLIDER_MAX) * 100;
+								const pendingPct = (effectiveFunding / SLIDER_MAX) * 100;
+								const hasPendingSub = pendingFunding !== null && pendingFunding !== committedFunding;
+								const subTrackRef = document.createElement("div"); // placeholder for ref
+								return (
 									<div
-										className="absolute inset-y-0 left-0 bg-success/50 rounded-full"
-										style={{ width: `${(committedFunding / SLIDER_MAX) * 100}%` }}
-									/>
-									{/* Pending increase: outline/dashed effect */}
-									{pendingFunding !== null && pendingFunding > committedFunding && (
+										className={`relative h-5 select-none ${useCustomAmount ? "pointer-events-none" : "cursor-pointer"}`}
+										onPointerDown={(e) => {
+											if (useCustomAmount) return;
+											const rect = e.currentTarget.getBoundingClientRect();
+											const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+											const val = Math.round(pct * SLIDER_MAX);
+											handleFundingChange(val);
+											e.preventDefault();
+											(e.target as HTMLElement).setPointerCapture(e.pointerId);
+										}}
+										onPointerMove={(e) => {
+											if (!(e.buttons & 1) || useCustomAmount) return;
+											const rect = e.currentTarget.getBoundingClientRect();
+											const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+											handleFundingChange(Math.round(pct * SLIDER_MAX));
+										}}
+									>
+										<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
+											{/* Committed fill (teal) */}
+											<div
+												className="absolute inset-y-0 left-0 bg-success/40 rounded-full"
+												style={{ width: `${committedPct}%` }}
+											/>
+											{/* Pending fill (white) */}
+											{hasPendingSub && effectiveFunding > committedFunding && (
+												<div
+													className="absolute inset-y-0 bg-white/40 rounded-r-full"
+													style={{
+														left: `${committedPct}%`,
+														width: `${pendingPct - committedPct}%`,
+													}}
+												/>
+											)}
+										</div>
+										{/* Thumb */}
 										<div
-											className="absolute inset-y-0 border-y-[1.5px] border-r-[1.5px] border-success/60 border-dashed rounded-r-full"
-											style={{
-												left: `${(committedFunding / SLIDER_MAX) * 100}%`,
-												width: `${((pendingFunding - committedFunding) / SLIDER_MAX) * 100}%`,
-											}}
+											className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
+												hasPendingSub ? "bg-white border-white" : "bg-success border-success"
+											}`}
+											style={{ left: `${pendingPct}%` }}
 										/>
-									)}
-								</div>
-								<input
-									type="range"
-									min={0}
-									max={SLIDER_MAX}
-									step={1}
-									value={effectiveFunding}
-									onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
-									className="range range-success w-full relative z-10"
-									disabled={useCustomAmount}
-								/>
-							</div>
+									</div>
+								);
+							})()}
 							{/* Tick marks below slider */}
 							<div className="relative w-full h-6 mt-1">
 								{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
