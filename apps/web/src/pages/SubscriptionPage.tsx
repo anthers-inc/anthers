@@ -389,11 +389,22 @@ function TimePoolPie({
 	const circumference = 2 * Math.PI * radius;
 	let offset = 0;
 
-	const slices = rows.map((row, i) => {
+	// Build slice data with precomputed offsets
+	const sliceData = rows.map((row, i) => {
 		const pct = row.timeSeconds / totalTime;
 		const dashLength = pct * circumference;
 		const dashOffset = -offset;
 		offset += dashLength;
+		return { row, i, dashLength, dashOffset };
+	});
+
+	// Render: dimmed slices first, focused slice last (on top)
+	const focusedIdx = sliceData.findIndex((s) => s.row.creatorId === focusedCreatorId);
+	const ordered = focusedIdx >= 0
+		? [...sliceData.filter((_, i) => i !== focusedIdx), sliceData[focusedIdx]]
+		: sliceData;
+
+	const slices = ordered.map(({ row, i, dashLength, dashOffset }) => {
 		const isFocused = focusedCreatorId === row.creatorId;
 		const isDimmed = focusedCreatorId !== null && !isFocused;
 		return (
@@ -404,11 +415,11 @@ function TimePoolPie({
 				r={radius}
 				fill="none"
 				stroke={PIE_COLORS[i % PIE_COLORS.length]}
-				strokeWidth={isFocused ? strokeWidth + 6 : strokeWidth}
+				strokeWidth={strokeWidth}
 				strokeDasharray={`${dashLength} ${circumference - dashLength}`}
 				strokeDashoffset={dashOffset}
-				opacity={isDimmed ? 0.25 : 1}
-				className="transition-all duration-1000 cursor-pointer"
+				opacity={isDimmed ? 0.3 : 1}
+				className="transition-opacity duration-1000 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
 				onMouseLeave={onLeave}
 			/>
