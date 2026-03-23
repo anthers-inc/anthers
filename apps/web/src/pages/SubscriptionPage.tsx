@@ -88,6 +88,32 @@ function viewModeFor(cycle: string): ViewMode {
 }
 
 /* ------------------------------------------------------------------ */
+/*  InfoTip — hover (i) icon with tooltip                              */
+/* ------------------------------------------------------------------ */
+
+function InfoTip({ text }: { text: string }) {
+	const [show, setShow] = useState(false);
+	return (
+		<span
+			className="relative inline-flex ml-1 cursor-help"
+			onMouseEnter={() => setShow(true)}
+			onMouseLeave={() => setShow(false)}
+		>
+			<span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-base-content/20 text-[9px] font-semibold text-base-content/40 leading-none">
+				i
+			</span>
+			{show && (
+				<div className="absolute z-50 left-0 bottom-full mb-1.5 pointer-events-none">
+					<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs text-base-content/70 w-56 font-normal normal-case tracking-normal leading-relaxed">
+						{text}
+					</div>
+				</div>
+			)}
+		</span>
+	);
+}
+
+/* ------------------------------------------------------------------ */
 /*  BoostBar — slider + gate hash marks in one column                  */
 /* ------------------------------------------------------------------ */
 
@@ -735,28 +761,40 @@ export default function SubscriptionPage() {
 			<div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Foundation Fee</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Foundation Fee
+							<InfoTip text="8% of your subscription funds the Anthers Foundation, which allocates between charitable programs (min 50%) and organizational operations. The Foundation publishes quarterly reports showing exactly how the fee is spent." />
+						</p>
 						<p className="text-xl font-bold">{fmt(foundationFee)}</p>
 						<p className="text-xs text-base-content/40">8% of subscription</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Time Pool</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Time Pool
+							<InfoTip text="Distributed automatically to creators based on the time you spend with their content. A minute of video, audio, reading, or gameplay all count equally. You don't control this — it flows proportionally to where you spend your time." />
+						</p>
 						<p className="text-xl font-bold text-success">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</p>
 						<p className="text-xs text-base-content/40">Auto · time-proportional</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Boost Pool</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Boost Pool
+							<InfoTip text="Funds you direct to specific creators in $1 increments. Your boost to a creator determines which of their gated content you can access. Boost tiers are set by each creator with custom names and thresholds." />
+						</p>
 						<p className="text-xl font-bold text-primary">{fmt(financials.boostPool)}</p>
 						<p className="text-xs text-base-content/40">{canEdit ? "$1 increments" : "Auto allocation"}</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Unallocated Boost</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Unallocated Boost
+							<InfoTip text="Boost budget you haven't assigned to any creator yet. Any unallocated boost is returned to the Time Pool and distributed proportionally across the creators you spend time with." />
+						</p>
 						<p className={`text-xl font-bold ${unallocatedBoost > 0 ? "text-warning" : "text-base-content/30"}`}>
 							{fmt(unallocatedBoost)}
 						</p>
