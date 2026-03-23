@@ -1040,37 +1040,6 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* ── Save / Discard / Revert buttons ── */}
-			{canEdit && (
-				<div className="flex items-center justify-center gap-3">
-					<button
-						className="btn btn-outline btn-warning btn-sm"
-						disabled={!hasPendingChanges}
-						onClick={() => {
-							setPendingFunding(null);
-							setPendingBoosts(new Map());
-						}}
-					>
-						Discard Changes
-					</button>
-					<button
-						className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
-						onClick={() => setShowConfirm(true)}
-						disabled={!hasPendingChanges || !!actionLoading}
-					>
-						{actionLoading === "save" ? "Saving..." : "Save Changes"}
-					</button>
-					{viewMode === "next" && (
-						<button
-							className="btn btn-ghost btn-sm"
-							onClick={() => setShowRevertConfirm(true)}
-						>
-							Revert to Current Month
-						</button>
-					)}
-				</div>
-			)}
-
 			{/* ── Billing Summary ── */}
 			<div className="card bg-base-200">
 				<div className="card-body p-4 space-y-1">
@@ -1104,26 +1073,55 @@ export default function SubscriptionPage() {
 					</div>
 
 					{viewMode !== "next" && deliveryEstimate.hours > 0 && (
-						<>
-							<div className="flex justify-between text-sm text-base-content/50">
-								<span>Delivery ({deliveryEstimate.hours} hrs)</span>
-								<span>
-									{deliveryEstimate.net > 0
-										? `approx. ${fmt(deliveryEstimate.net)}`
-										: <span className="text-success">covered by $1 credit</span>
-									}
-								</span>
-							</div>
-							<p className="text-[11px] text-base-content/30">
-								Delivery estimate assumes 1080p video. Audio and text cost far less.
-							</p>
-						</>
+						<div className="flex justify-between text-sm text-base-content/50">
+							<span>
+								Delivery ({deliveryEstimate.hours} hrs)
+								<InfoTip text="Delivery estimate assumes 1080p video rate. Audio and text content cost far less to deliver. Your $1/mo delivery credit is applied first." />
+							</span>
+							<span>
+								{deliveryEstimate.net > 0
+									? `approx. ${fmt(deliveryEstimate.net)}`
+									: <span className="text-success">covered by $1 credit</span>
+								}
+							</span>
+						</div>
 					)}
 
 					{sub.currentPeriodEnd && viewMode === "current" && (
 						<p className="text-xs text-base-content/40 mt-1">
 							Next charge: {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
 						</p>
+					)}
+
+					{/* Save / Discard buttons */}
+					{canEdit && (
+						<div className="flex items-center justify-end gap-2 pt-2 border-t border-base-content/10 mt-2">
+							{viewMode === "next" && (
+								<button
+									className="btn btn-ghost btn-xs"
+									onClick={() => setShowRevertConfirm(true)}
+								>
+									Revert to Current Month
+								</button>
+							)}
+							<button
+								className="btn btn-outline btn-warning btn-xs"
+								disabled={!hasPendingChanges}
+								onClick={() => {
+									setPendingFunding(null);
+									setPendingBoosts(new Map());
+								}}
+							>
+								Discard Changes
+							</button>
+							<button
+								className={`btn btn-primary btn-xs ${actionLoading === "save" ? "btn-disabled" : ""}`}
+								onClick={() => setShowConfirm(true)}
+								disabled={!hasPendingChanges || !!actionLoading}
+							>
+								{actionLoading === "save" ? "Saving..." : "Save Changes"}
+							</button>
+						</div>
 					)}
 				</div>
 			</div>
