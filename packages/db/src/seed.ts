@@ -938,13 +938,25 @@ async function seed() {
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 			const cycle = currentBillingCycle();
 
+			// First pass: compute $1-rounded boost amounts, then assign leftover to time pool
+			const boostAmounts = new Map<string, number>();
+			let totalAllocatedBoost = 0;
+			for (const [creatorUsername, target] of entries) {
+				const proportion = target.seconds / totalSeconds;
+				const boostAmt = Math.floor(boostPool * proportion); // $1 increments
+				boostAmounts.set(creatorUsername, boostAmt);
+				totalAllocatedBoost += boostAmt;
+			}
+			// Unallocated boost (from rounding) goes back to time pool
+			const effectiveTimePool = timePool + (boostPool - totalAllocatedBoost);
+
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
 				if (!creatorId) continue;
 
 				const proportion = target.seconds / totalSeconds;
-				const poolAmt = Math.round(timePool * proportion * 100) / 100;
-				const boostAmt = Math.round(boostPool * proportion * 100) / 100;
+				const poolAmt = Math.round(effectiveTimePool * proportion * 100) / 100;
+				const boostAmt = boostAmounts.get(creatorUsername) ?? 0;
 
 				try {
 					await db.insert(poolDistributions).values({
@@ -959,13 +971,12 @@ async function seed() {
 					// unique constraint
 				}
 			}
-			// -- Boost allocations (matching pool distribution proportions) --
-			for (const [creatorUsername, target] of entries) {
+			// -- Boost allocations (matching pool distribution proportions, $1 increments) --
+			for (const [creatorUsername] of entries) {
 				const cId = createdUserIds[creatorUsername];
 				if (!cId) continue;
 
-				const proportion = target.seconds / totalSeconds;
-				const boostAmt = Math.round(boostPool * proportion * 100) / 100;
+				const boostAmt = boostAmounts.get(creatorUsername) ?? 0;
 
 				try {
 					await db.insert(boostAllocations).values({

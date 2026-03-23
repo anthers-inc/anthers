@@ -96,9 +96,11 @@ const BAR_MAX = 35.2;
 const GATE_THRESHOLDS_VISUAL = [2, 4, 8, 16, 32];
 
 function BoostBar({
-	value, boostPool, gates, onChange, disabled,
+	value, committedValue, boostPool, gates, onChange, disabled,
 }: {
 	value: number;
+	/** The committed (saved) boost value — used to show pending fill in yellow */
+	committedValue: number;
 	boostPool: number;
 	gates: CreatorGate[];
 	onChange: (v: number) => void;
@@ -112,24 +114,23 @@ function BoostBar({
 
 	const boostGates = gates.filter((g) => g.gateType === "boost");
 
-	// Slider max = highest boost gate threshold, or boostPool if no gates
 	const highestGate = boostGates.length > 0
 		? Math.max(...boostGates.map((g) => Number(g.threshold)))
 		: boostPool;
 	const sliderMax = Math.max(highestGate, 1);
-	const barMax = sliderMax * 1.1; // 10% headroom
-	const fillPct = Math.min((value / barMax) * 100, 100);
-	const thumbPct = Math.min((value / barMax) * 100, 100);
+	const barMax = sliderMax * 1.1;
+	const committedPct = Math.min((committedValue / barMax) * 100, 100);
+	const pendingPct = Math.min((value / barMax) * 100, 100);
+	const thumbPct = pendingPct;
+	const hasPending = value !== committedValue;
 
-	// Convert mouse x → dollar value
 	const xToValue = useCallback((clientX: number) => {
 		const rect = trackRef.current?.getBoundingClientRect();
 		if (!rect) return value;
 		const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-		return Math.round(pct * barMax); // $1 snaps
+		return Math.round(pct * barMax);
 	}, [barMax, value]);
 
-	// Mouse/touch drag handlers
 	const handlePointerDown = useCallback((e: React.PointerEvent) => {
 		if (disabled || useCustom) return;
 		e.preventDefault();
@@ -144,24 +145,34 @@ function BoostBar({
 		onChange(xToValue(e.clientX));
 	}, [dragging, onChange, xToValue]);
 
-	const handlePointerUp = useCallback(() => {
-		setDragging(false);
-	}, []);
-
-	// Gate segments for hover tooltips (only active when not dragging)
-	const segments: { start: number; end: number; gate: CreatorGate }[] = [];
-	if (boostGates.length > 0) {
-		for (let i = 0; i < boostGates.length; i++) {
-			const prev = i === 0 ? 0 : Number(boostGates[i - 1].threshold);
-			segments.push({ start: prev, end: Number(boostGates[i].threshold), gate: boostGates[i] });
-		}
-		const last = boostGates[boostGates.length - 1];
-		segments.push({ start: Number(last.threshold), end: barMax, gate: last });
-	}
+	const handlePointerUp = useCallback(() => { setDragging(false); }, []);
 
 	return (
 		<div className={disabled ? "opacity-50" : ""}>
-			{/* Combined interactive track */}
+			{/* Tier name labels above the track */}
+			{boostGates.length > 0 && (
+				<div className="relative h-4 mb-0.5" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
+					{boostGates.map((gate) => {
+						const pos = (Number(gate.threshold) / barMax) * 100;
+						const unlocked = value >= Number(gate.threshold);
+						return (
+							<span
+								key={`name-${gate.threshold}`}
+								className={`absolute text-[9px] leading-tight -translate-x-1/2 cursor-help ${
+									unlocked ? "text-primary font-semibold" : "text-base-content/40"
+								}`}
+								style={{ left: `${pos}%` }}
+								onMouseEnter={() => setTooltip({ gate })}
+								onMouseLeave={() => setTooltip(null)}
+							>
+								{gate.label}
+							</span>
+						);
+					})}
+				</div>
+			)}
+
+			{/* Interactive track + value */}
 			<div className="flex items-center gap-2">
 				<div
 					ref={trackRef}
@@ -169,33 +180,23 @@ function BoostBar({
 					onPointerDown={handlePointerDown}
 					onPointerMove={handlePointerMove}
 					onPointerUp={handlePointerUp}
-					onPointerLeave={() => { if (!dragging) setTooltip(null); }}
 				>
-					{/* Track background */}
 					<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
-						{/* Fill */}
+						{/* Committed fill (primary) */}
 						<div
-							className="absolute inset-y-0 left-0 bg-primary/30 rounded-full"
-							style={{ width: `${fillPct}%` }}
+							className="absolute inset-y-0 left-0 bg-primary/40 rounded-full"
+							style={{ width: `${committedPct}%` }}
 						/>
-
-						{/* Hoverable gate segments (only show tooltips when not dragging) */}
-						{!dragging && segments.map((seg, i) => {
-							const segStart = (seg.start / barMax) * 100;
-							const segEnd = (seg.end / barMax) * 100;
-							const unlocked = value >= Number(seg.gate.threshold);
-							return (
-								<div
-									key={`seg-${i}`}
-									className={`absolute inset-y-0 ${
-										unlocked ? "bg-primary/40 hover:bg-primary/60" : "hover:bg-base-content/10"
-									}`}
-									style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
-									onPointerEnter={(e) => { e.stopPropagation(); setTooltip({ gate: seg.gate }); }}
-									onPointerLeave={(e) => { e.stopPropagation(); setTooltip(null); }}
-								/>
-							);
-						})}
+						{/* Pending fill (yellow, only the delta above committed) */}
+						{hasPending && value > committedValue && (
+							<div
+								className="absolute inset-y-0 bg-warning/40 rounded-r-full"
+								style={{
+									left: `${committedPct}%`,
+									width: `${pendingPct - committedPct}%`,
+								}}
+							/>
+						)}
 
 						{/* Gate hash lines */}
 						{boostGates.map((gate) => {
@@ -212,9 +213,11 @@ function BoostBar({
 						})}
 					</div>
 
-					{/* Draggable thumb */}
+					{/* Thumb */}
 					<div
-						className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary border-2 border-primary shadow-md pointer-events-none"
+						className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
+							hasPending ? "bg-warning border-warning" : "bg-primary border-primary"
+						}`}
 						style={{ left: `${thumbPct}%` }}
 					/>
 				</div>
@@ -238,10 +241,7 @@ function BoostBar({
 						<input
 							type="number"
 							className="input input-xs input-bordered w-14 text-right font-medium text-primary"
-							min={0}
-							step={1}
-							value={customInput}
-							disabled={disabled}
+							min={0} step={1} value={customInput} disabled={disabled}
 							onChange={(e) => {
 								setCustomInput(e.target.value);
 								const val = parseInt(e.target.value, 10);
@@ -249,14 +249,14 @@ function BoostBar({
 							}}
 						/>
 					) : (
-						<span className="text-sm text-primary font-medium w-8 text-right">${value}</span>
+						<span className={`text-sm font-medium w-8 text-right ${hasPending ? "text-warning" : "text-primary"}`}>${value}</span>
 					)}
 				</div>
 			</div>
 
 			{/* Gate dollar labels below track */}
 			{boostGates.length > 0 && (
-				<div className="relative h-3.5 mt-0.5 ml-0" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
+				<div className="relative h-3 mt-0.5" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
 					{boostGates.map((gate) => {
 						const pos = (Number(gate.threshold) / barMax) * 100;
 						return (
@@ -274,7 +274,7 @@ function BoostBar({
 				</div>
 			)}
 
-			{/* Tooltip */}
+			{/* Tooltip (shown when hovering tier names above the track) */}
 			{tooltip && trackRef.current && (
 				<div className="relative">
 					<div
@@ -486,14 +486,14 @@ export default function SubscriptionPage() {
 	// Committed boost map
 	const committedBoostMap = useMemo(() => {
 		const map = new Map<number, number>();
-		for (const b of committedBoosts) map.set(b.creatorId, parseFloat(b.amount));
+		for (const b of committedBoosts) map.set(b.creatorId, Math.round(parseFloat(b.amount)));
 		return map;
 	}, [committedBoosts]);
 
 	// Build rows with pending boost values
 	const rows: CreatorRow[] = useMemo(() => {
 		return distributions.map((d) => {
-			const committed = committedBoostMap.get(d.creatorId) ?? parseFloat(d.boostAmount);
+			const committed = committedBoostMap.get(d.creatorId) ?? Math.round(parseFloat(d.boostAmount));
 			const pending = pendingBoosts.get(d.creatorId) ?? committed;
 			return {
 				creatorId: d.creatorId,
@@ -908,10 +908,11 @@ export default function SubscriptionPage() {
 											</td>
 											<td className="text-sm">{formatHours(row.timeSeconds)}</td>
 											<td className="text-sm text-success">{fmt(row.poolAmount)}</td>
-											<td>
+											<td className="align-top pt-2">
 												{canEdit ? (
 													<BoostBar
 														value={row.pendingBoost}
+														committedValue={row.committedBoost}
 														boostPool={financials.boostPool}
 														gates={row.gates}
 														onChange={(v) => handleBoostChange(row.creatorId, v)}
@@ -920,11 +921,13 @@ export default function SubscriptionPage() {
 												) : (
 													<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
 												)}
+											</td>
+											<td className="text-right text-sm font-medium align-top pt-2">
+												{fmt(rowTotal)}
 												{boostChanged && (
-													<span className="text-[10px] text-warning ml-1">(pending)</span>
+													<div className="text-[10px] text-warning">(pending)</div>
 												)}
 											</td>
-											<td className="text-right text-sm font-medium">{fmt(rowTotal)}</td>
 										</tr>
 									);
 								})}
