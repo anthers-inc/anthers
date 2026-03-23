@@ -281,7 +281,6 @@ function BoostBar({
 						className="absolute z-50 bottom-0 mb-1 pointer-events-none"
 						style={{
 							left: `${(Number(tooltip.gate.threshold) / barMax) * 100}%`,
-							transform: "translateX(-50%)",
 						}}
 					>
 						<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
