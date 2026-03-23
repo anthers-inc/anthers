@@ -174,7 +174,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-pool-income",
 							title: "Subscription Pool Income",
 							description:
-								"Earn from the Creator Pool proportional to engagement time across all subscribers.",
+								"Earn from the Time Pool proportional to engagement time across all subscribers.",
 							status: "planned",
 							startQ: 1,
 							endQ: 2,

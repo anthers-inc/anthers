@@ -69,7 +69,7 @@ const wikiAreas: WikiArea[] = [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Transparent Pricing", file: "01-TransparentPricing.md" },
 					{ name: "Anthers Foundation", file: "02-CommunityResilienceFund.md" },
-					{ name: "Creator Pool", file: "03-CreatorPool.md" },
+					{ name: "Time Pool", file: "03-CreatorPool.md" },
 				],
 			},
 			{

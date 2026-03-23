@@ -155,6 +155,24 @@ export const comments = pgTable("comments", {
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const bookmarks = pgTable(
+	"bookmarks",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "cascade" }),
+		sortOrder: integer("sort_order").notNull().default(0),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_bookmarks_user").on(table.userId, table.sortOrder),
+	],
+);
+
 export const ratings = pgTable(
 	"ratings",
 	{

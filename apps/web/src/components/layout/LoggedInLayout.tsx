@@ -92,6 +92,7 @@ function LoggedInLayoutInner() {
 							</li>
 							<div className="divider my-0 px-2" />
 							<li><Link to="/subscription">Subscription</Link></li>
+							<li><Link to="/purchases">Purchases</Link></li>
 							<li><Link to={`/${user?.username}`}>Profile</Link></li>
 							<li><Link to="/settings">Settings</Link></li>
 							<div className="divider my-0 px-2" />
