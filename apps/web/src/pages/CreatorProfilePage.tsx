@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState, useMemo } from "react";
+import { useParams, Link } from "react-router-dom";
 import { client } from "../lib/rpc";
-import type { PublicUser, Project, PostListItem } from "../lib/types";
+import type { PublicUser, Project, PostListItem, CreatorStatus, CreatorGate } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentCard from "../components/cards/ContentCard";
@@ -9,7 +9,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
-import { LinkIcon, MapPinIcon, PencilIcon, CameraIcon } from "@heroicons/react/24/outline";
+import { LinkIcon, MapPinIcon, PencilIcon, CameraIcon, LockClosedIcon, LockOpenIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 
 const apiBase =
 	window.location.hostname === "localhost" ||
@@ -17,7 +17,281 @@ const apiBase =
 		? "http://localhost:8000"
 		: "";
 
-type Tab = "all" | "games" | "videos" | "audio" | "writing" | "about";
+type Tab = "all" | "games" | "videos" | "audio" | "writing" | "tiers" | "about";
+
+const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
+	{ id: "root", name: "Root", price: 3 },
+	{ id: "sprout", name: "Sprout", price: 7 },
+	{ id: "petal", name: "Petal", price: 15 },
+	{ id: "bloom", name: "Bloom", price: 30 },
+];
+
+function tierNameFor(id: string): string {
+	return (id.charAt(0).toUpperCase() + id.slice(1)) || "Free";
+}
+
+/** Check if a post is accessible given the user's creator status */
+function isPostAccessible(
+	post: PostListItem,
+	status: CreatorStatus | null,
+	isOwnProfile: boolean,
+): { accessible: boolean; reason: string } {
+	if (post.visibility === "public") return { accessible: true, reason: "public" };
+	if (isOwnProfile) return { accessible: true, reason: "creator" };
+	if (!status || status.anthersTier === "free") {
+		return { accessible: false, reason: post.visibility === "gated" ? "gate_locked" : "no_subscription" };
+	}
+	if (post.visibility === "subscribers_only") return { accessible: true, reason: "subscriber" };
+	if (post.visibility === "gated") {
+		// Check if any gate is cleared
+		if (status.unlockedGates.length > 0) return { accessible: true, reason: "gate_unlocked" };
+		return { accessible: false, reason: "gate_locked" };
+	}
+	return { accessible: true, reason: "unknown" };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Gated content wrapper                                              */
+/* ------------------------------------------------------------------ */
+
+function GatedContentWrapper({
+	children, post, access, gates,
+}: {
+	children: React.ReactNode;
+	post: PostListItem;
+	access: { accessible: boolean; reason: string };
+	gates: CreatorGate[];
+}) {
+	if (post.visibility === "public") return <>{children}</>;
+
+	const isLocked = !access.accessible;
+	const lowestBoostGate = gates.find((g) => g.gateType === "boost");
+	const lowestTierGate = gates.find((g) => g.gateType === "anthers_tier");
+
+	let lockLabel = "";
+	if (access.reason === "gate_locked") {
+		if (lowestBoostGate) {
+			lockLabel = `$${lowestBoostGate.threshold} boost`;
+		} else if (lowestTierGate) {
+			const t = TIER_THRESHOLDS.find((t) => Number(t.price) === Number(lowestTierGate.threshold));
+			lockLabel = t ? `${t.name}+` : `$${lowestTierGate.threshold}+`;
+		}
+	} else if (access.reason === "no_subscription") {
+		lockLabel = "Subscribers only";
+	}
+
+	return (
+		<div className="relative group">
+			{/* Content (blurred if locked) */}
+			<div className={isLocked ? "blur-[2px] opacity-60 pointer-events-none select-none" : ""}>
+				{children}
+			</div>
+
+			{/* Badge overlay */}
+			<div className="absolute top-2 right-2 z-10">
+				{isLocked ? (
+					<div className="badge badge-sm gap-1 bg-base-300/90 border-base-content/20">
+						<LockClosedIcon className="w-3 h-3" />
+						{lockLabel || "Locked"}
+					</div>
+				) : post.visibility !== "public" && (
+					<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
+						<LockOpenIcon className="w-3 h-3" />
+						Unlocked
+					</div>
+				)}
+			</div>
+
+			{/* Click-through overlay for locked content */}
+			{isLocked && (
+				<div className="absolute inset-0 flex items-center justify-center z-10 cursor-default">
+					<div className="bg-base-300/90 rounded-lg px-4 py-2 text-center">
+						<LockClosedIcon className="w-5 h-5 mx-auto mb-1 text-base-content/50" />
+						<p className="text-xs text-base-content/60">
+							{lockLabel || "Locked content"}
+						</p>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tiers tab                                                          */
+/* ------------------------------------------------------------------ */
+
+function TiersTab({
+	gates, unlockedGates, userTier, userBoost, creatorName,
+}: {
+	gates: CreatorGate[];
+	unlockedGates: number[];
+	userTier: string;
+	userBoost: string;
+	creatorName: string;
+}) {
+	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_tier");
+	const boostGates = gates.filter((g) => g.gateType === "boost");
+	const unlockedSet = new Set(unlockedGates);
+
+	if (gates.length === 0) {
+		return (
+			<EmptyState
+				title="No tiers configured"
+				description={`${creatorName} hasn't set up any content tiers yet. All content is publicly available.`}
+			/>
+		);
+	}
+
+	return (
+		<div className="max-w-2xl space-y-8">
+			{/* User's current status */}
+			{userTier !== "free" && (
+				<div className="card bg-base-200">
+					<div className="card-body py-3 px-4">
+						<div className="flex items-center justify-between text-sm">
+							<span className="text-base-content/60">Your status with {creatorName}</span>
+							<div className="flex items-center gap-2">
+								<span className="badge badge-sm badge-outline">
+									{tierNameFor(userTier)}
+								</span>
+								{parseFloat(userBoost) > 0 && (
+									<span className="badge badge-sm badge-primary badge-outline">
+										${userBoost} boost
+									</span>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Anthers Tiers */}
+			{anthersTierGates.length > 0 && (
+				<div>
+					<h3 className="text-lg font-bold mb-1">Anthers Tiers</h3>
+					<p className="text-sm text-base-content/50 mb-3">
+						Platform-wide tiers based on your Anthers subscription level.
+					</p>
+					<div className="space-y-2">
+						{anthersTierGates.map((gate) => {
+							const unlocked = unlockedSet.has(gate.id);
+							const tierInfo = TIER_THRESHOLDS.find(
+								(t) => Number(t.price) === Number(gate.threshold),
+							);
+							return (
+								<div
+									key={gate.id}
+									className={`card border ${unlocked ? "border-success/40 bg-success/5" : "border-base-content/10 bg-base-200"}`}
+								>
+									<div className="card-body p-4">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-2">
+												{unlocked ? (
+													<CheckCircleIcon className="w-5 h-5 text-success flex-shrink-0" />
+												) : (
+													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
+												)}
+												<div>
+													<span className="font-medium">
+														{tierInfo?.name ?? gate.label}
+													</span>
+													<span className="text-base-content/40 ml-2 text-sm">
+														${gate.threshold}/mo
+													</span>
+												</div>
+											</div>
+											{unlocked && (
+												<span className="badge badge-sm badge-success">Unlocked</span>
+											)}
+										</div>
+										{gate.description && (
+											<p className="text-sm text-base-content/60 mt-1 ml-7">
+												{gate.description}
+											</p>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</div>
+			)}
+
+			{/* Boost Tiers */}
+			{boostGates.length > 0 && (
+				<div>
+					<h3 className="text-lg font-bold mb-1">Boost Tiers</h3>
+					<p className="text-sm text-base-content/50 mb-3">
+						Custom tiers set by {creatorName}. Boost this creator to unlock.
+					</p>
+					<div className="space-y-2">
+						{boostGates.map((gate) => {
+							const unlocked = unlockedSet.has(gate.id);
+							const currentBoost = parseFloat(userBoost);
+							const threshold = parseFloat(gate.threshold);
+							const remaining = Math.max(0, threshold - currentBoost);
+							return (
+								<div
+									key={gate.id}
+									className={`card border ${unlocked ? "border-success/40 bg-success/5" : "border-base-content/10 bg-base-200"}`}
+								>
+									<div className="card-body p-4">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-2">
+												{unlocked ? (
+													<CheckCircleIcon className="w-5 h-5 text-success flex-shrink-0" />
+												) : (
+													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
+												)}
+												<div>
+													<span className="font-medium">{gate.label}</span>
+													<span className="text-base-content/40 ml-2 text-sm">
+														${gate.threshold}/mo boost
+													</span>
+												</div>
+											</div>
+											{unlocked ? (
+												<span className="badge badge-sm badge-success">Unlocked</span>
+											) : remaining > 0 && (
+												<span className="text-xs text-base-content/40">
+													${remaining.toFixed(2)} more to unlock
+												</span>
+											)}
+										</div>
+										{gate.description && (
+											<p className="text-sm text-base-content/60 mt-1 ml-7">
+												{gate.description}
+											</p>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</div>
+			)}
+
+			{/* Upgrade prompt */}
+			{userTier === "free" && (
+				<div className="card bg-base-200">
+					<div className="card-body text-center">
+						<p className="text-sm text-base-content/60 mb-2">
+							Subscribe to Anthers to start unlocking tiers and supporting {creatorName}.
+						</p>
+						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
+							Choose a Plan
+						</Link>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main component                                                     */
+/* ------------------------------------------------------------------ */
 
 export default function CreatorProfilePage() {
 	const { username } = useParams<{ username: string }>();
@@ -30,6 +304,7 @@ export default function CreatorProfilePage() {
 	const [loading, setLoading] = useState(true);
 	const [isFollowing, setIsFollowing] = useState(false);
 	const [followerCount, setFollowerCount] = useState(0);
+	const [creatorStatus, setCreatorStatus] = useState<CreatorStatus | null>(null);
 
 	const isOwnProfile = currentUser?.username === username;
 
@@ -170,14 +445,18 @@ export default function CreatorProfilePage() {
 			fetch(apiBase + "/api/content/posts?creator=" + username, {
 				credentials: "include",
 			}).then((res) => res.json()),
+			fetch(apiBase + "/api/subscriptions/creator-status/" + username, {
+				credentials: "include",
+			}).then((res) => res.ok ? res.json() : null).catch(() => null),
 		])
-			.then(([creatorData, projectData, postData]) => {
+			.then(([creatorData, projectData, postData, statusData]) => {
 				const userData = (creatorData as { user: PublicUser }).user;
 				setCreator(userData);
 				setIsFollowing(userData.isFollowing);
 				setFollowerCount(userData.followerCount);
 				setProjects(projectData.projects);
 				setPosts(postData.posts);
+				if (statusData) setCreatorStatus(statusData as CreatorStatus);
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
@@ -443,12 +722,27 @@ export default function CreatorProfilePage() {
 							</button>
 						)}
 						{isAuthenticated && !isOwnProfile && (
-							<button
-								className={`btn mt-4 sm:mt-12 ${isFollowing ? "btn-outline" : "btn-primary"}`}
-								onClick={handleFollow}
-							>
-								{isFollowing ? "Following" : "Follow"}
-							</button>
+							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
+								<button
+									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
+									onClick={handleFollow}
+								>
+									{isFollowing ? "Following" : "Follow"}
+								</button>
+								{/* Tier/boost badges */}
+								{creatorStatus && creatorStatus.anthersTier !== "free" && (
+									<div className="flex items-center gap-2 text-xs">
+										<span className="badge badge-sm badge-outline">
+											{tierNameFor(creatorStatus.anthersTier)}
+										</span>
+										{parseFloat(creatorStatus.boostAmount) > 0 && (
+											<span className="badge badge-sm badge-primary badge-outline">
+												${creatorStatus.boostAmount} boost
+											</span>
+										)}
+									</div>
+								)}
+							</div>
 						)}
 					</div>
 				)}
@@ -461,6 +755,7 @@ export default function CreatorProfilePage() {
 						["videos", `Videos (${videoPosts.length})`],
 						["audio", `Audio (${audioPosts.length})`],
 						["writing", `Writing (${textPosts.length})`],
+						["tiers", "Tiers"],
 						["about", "About"],
 					] as const).map(([key, label]) => (
 						<button
@@ -478,13 +773,18 @@ export default function CreatorProfilePage() {
 					{tab === "all" && (
 						allItems.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{allItems.map((entry) =>
-									entry.type === "project" ? (
-										<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
-									) : (
-										<ContentCard key={`post-${entry.item.id}`} post={entry.item as PostListItem} />
-									)
-								)}
+								{allItems.map((entry) => {
+									if (entry.type === "project") {
+										return <ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />;
+									}
+									const post = entry.item as PostListItem;
+									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									return (
+										<GatedContentWrapper key={`post-${post.id}`} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+											<ContentCard post={post} />
+										</GatedContentWrapper>
+									);
+								})}
 							</div>
 						) : (
 							<EmptyState
@@ -512,9 +812,14 @@ export default function CreatorProfilePage() {
 					{tab === "videos" && (
 						videoPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{videoPosts.map((post) => (
-									<ContentCard key={post.id} post={post} />
-								))}
+								{videoPosts.map((post) => {
+									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									return (
+										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+											<ContentCard post={post} />
+										</GatedContentWrapper>
+									);
+								})}
 							</div>
 						) : (
 							<EmptyState
@@ -527,9 +832,14 @@ export default function CreatorProfilePage() {
 					{tab === "audio" && (
 						audioPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{audioPosts.map((post) => (
-									<ContentCard key={post.id} post={post} />
-								))}
+								{audioPosts.map((post) => {
+									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									return (
+										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+											<ContentCard post={post} />
+										</GatedContentWrapper>
+									);
+								})}
 							</div>
 						) : (
 							<EmptyState
@@ -542,9 +852,14 @@ export default function CreatorProfilePage() {
 					{tab === "writing" && (
 						textPosts.length > 0 ? (
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
-								{textPosts.map((post) => (
-									<ContentCard key={post.id} post={post} />
-								))}
+								{textPosts.map((post) => {
+									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									return (
+										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+											<ContentCard post={post} />
+										</GatedContentWrapper>
+									);
+								})}
 							</div>
 						) : (
 							<EmptyState
@@ -552,6 +867,16 @@ export default function CreatorProfilePage() {
 								description={`${creator.displayName || creator.username} hasn't published any articles.`}
 							/>
 						)
+					)}
+
+					{tab === "tiers" && (
+						<TiersTab
+							gates={creatorStatus?.gates ?? []}
+							unlockedGates={creatorStatus?.unlockedGates ?? []}
+							userTier={creatorStatus?.anthersTier ?? "free"}
+							userBoost={creatorStatus?.boostAmount ?? "0.00"}
+							creatorName={creator.displayName || creator.username}
+						/>
 					)}
 
 					{tab === "about" && (
