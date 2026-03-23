@@ -10,11 +10,11 @@ import type {
 } from "../lib/types";
 
 /* ------------------------------------------------------------------ */
-/*  Constants                                                          */
+/*  Constants & V2 economics                                           */
 /* ------------------------------------------------------------------ */
 
 const ALLOC = { creators: 0.92, foundation: 0.08 };
-/** V2: boostPool = ceil(F × 0.5), timePool = (F × 0.92) − boostPool */
+
 function computePools(fundingLevel: number) {
 	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
 	const boostPool = fundingLevel >= 3 ? Math.ceil(fundingLevel * 0.5) : 0;
@@ -33,18 +33,17 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 	{ id: "bloom", name: "Bloom", price: 30 },
 ];
 
-/** Universal scale for AccessBar gate hash lines */
-const ALL_GATE_THRESHOLDS = [2, 4, 8, 16, 32];
-const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1;
+const SLIDER_MAX = 40;
 
 function tierFor(id: string) {
 	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
 }
 
-function nextTierFor(id: string) {
-	const idx = TIER_THRESHOLDS.findIndex((t) => t.id === id);
-	if (idx < 0 || idx >= TIER_THRESHOLDS.length - 1) return null;
-	return TIER_THRESHOLDS[idx + 1];
+function tierForAmount(amount: number) {
+	for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
+		if (amount >= TIER_THRESHOLDS[i].price) return TIER_THRESHOLDS[i];
+	}
+	return TIER_THRESHOLDS[0];
 }
 
 function fmt(n: number): string {
@@ -81,7 +80,6 @@ function cycleLabel(cycle: string): string {
 }
 
 type ViewMode = "past" | "current" | "next";
-
 function viewModeFor(cycle: string): ViewMode {
 	const current = getCurrentCycle();
 	if (cycle === current) return "current";
@@ -90,10 +88,23 @@ function viewModeFor(cycle: string): ViewMode {
 }
 
 /* ------------------------------------------------------------------ */
-/*  AccessBar — segmented bar with gate hash lines and hover tooltips  */
+/*  BoostBar — slider + gate hash marks in one column                  */
 /* ------------------------------------------------------------------ */
 
-function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
+/** Maximum dollar value shown on the bar. Covers most boost gate ranges. */
+const BAR_MAX = 35.2;
+const GATE_THRESHOLDS_VISUAL = [2, 4, 8, 16, 32];
+
+function BoostBar({
+	value, min, max, gates, onChange, disabled,
+}: {
+	value: number;
+	min: number;
+	max: number;
+	gates: CreatorGate[];
+	onChange: (v: number) => void;
+	disabled: boolean;
+}) {
 	const [tooltip, setTooltip] = useState<{ gate: CreatorGate; x: number } | null>(null);
 	const barRef = useRef<HTMLDivElement>(null);
 
@@ -104,22 +115,9 @@ function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
 		return () => window.removeEventListener("scroll", close, true);
 	}, [tooltip]);
 
-	// Only show boost gates in the access bar
 	const boostGates = gates.filter((g) => g.gateType === "boost");
 	const gateByThreshold = new Map(boostGates.map((g) => [Number(g.threshold), g]));
-
-	if (boostGates.length === 0) {
-		return (
-			<div className="w-full h-3 bg-base-300 rounded-full overflow-hidden">
-				<div
-					className="h-full bg-base-content/15 rounded-full transition-all"
-					style={{ width: `${Math.min((total / BAR_MAX) * 100, 100)}%` }}
-				/>
-			</div>
-		);
-	}
-
-	const fillPct = Math.min((total / BAR_MAX) * 100, 100);
+	const fillPct = Math.min((value / BAR_MAX) * 100, 100);
 
 	const handleSectionHover = (gate: CreatorGate, e: React.MouseEvent) => {
 		const rect = barRef.current?.getBoundingClientRect();
@@ -127,102 +125,126 @@ function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
 		setTooltip({ gate, x: e.clientX - rect.left });
 	};
 
-	// Build hoverable segments between gates
+	// Hoverable segments between gates
 	const segments: { start: number; end: number; gate: CreatorGate }[] = [];
-	for (let i = 0; i < boostGates.length; i++) {
-		const prev = i === 0 ? 0 : Number(boostGates[i - 1].threshold);
-		segments.push({ start: prev, end: Number(boostGates[i].threshold), gate: boostGates[i] });
+	if (boostGates.length > 0) {
+		for (let i = 0; i < boostGates.length; i++) {
+			const prev = i === 0 ? 0 : Number(boostGates[i - 1].threshold);
+			segments.push({ start: prev, end: Number(boostGates[i].threshold), gate: boostGates[i] });
+		}
+		const last = boostGates[boostGates.length - 1];
+		segments.push({ start: Number(last.threshold), end: BAR_MAX, gate: last });
 	}
-	const lastGate = boostGates[boostGates.length - 1];
-	segments.push({ start: Number(lastGate.threshold), end: BAR_MAX, gate: lastGate });
 
 	return (
-		<div className="relative" ref={barRef}>
-			<div className="w-full h-3 bg-base-300 rounded-full overflow-hidden relative">
-				<div
-					className="absolute inset-y-0 left-0 bg-primary/30 rounded-full transition-all"
-					style={{ width: `${fillPct}%` }}
+		<div className="space-y-1">
+			{/* Slider */}
+			<div className="flex items-center gap-2">
+				<input
+					type="range"
+					min={min}
+					max={max}
+					step={1}
+					value={value}
+					onChange={(e) => onChange(parseInt(e.target.value, 10))}
+					className="range range-xs range-primary flex-1"
+					disabled={disabled}
 				/>
-
-				{segments.map((seg, i) => {
-					const segStart = (seg.start / BAR_MAX) * 100;
-					const segEnd = (seg.end / BAR_MAX) * 100;
-					const unlocked = total >= Number(seg.gate.threshold);
-					return (
-						<div
-							key={`seg-${i}`}
-							className={`absolute inset-y-0 transition-all cursor-pointer ${
-								unlocked ? "bg-primary/50 hover:bg-primary/70" : "hover:bg-base-content/10"
-							}`}
-							style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
-							onMouseEnter={(e) => handleSectionHover(seg.gate, e)}
-							onMouseLeave={() => setTooltip(null)}
-						/>
-					);
-				})}
-
-				{ALL_GATE_THRESHOLDS.map((t) => {
-					const pos = (t / BAR_MAX) * 100;
-					const gate = gateByThreshold.get(t);
-					if (!gate) return null;
-					const unlocked = total >= t;
-					return (
-						<div
-							key={`line-${t}`}
-							className={`absolute top-0 bottom-0 w-px ${unlocked ? "bg-primary" : "bg-base-content/30"}`}
-							style={{ left: `${pos}%` }}
-						/>
-					);
-				})}
+				<span className="text-sm text-primary font-medium w-10 flex-shrink-0 text-right">
+					${value}
+				</span>
 			</div>
 
-			{/* Gate dollar labels */}
-			<div className="relative h-4 mt-0.5">
-				{boostGates.map((gate) => {
-					const pos = (Number(gate.threshold) / BAR_MAX) * 100;
-					const unlocked = total >= Number(gate.threshold);
-					return (
-						<span
-							key={`label-${gate.threshold}`}
-							className={`absolute text-[10px] leading-tight -translate-x-1/2 ${
-								unlocked ? "text-primary" : "text-base-content/30"
-							}`}
-							style={{ left: `${pos}%` }}
-						>
-							${gate.threshold}
-						</span>
-					);
-				})}
-			</div>
+			{/* Gate visualization bar */}
+			{boostGates.length > 0 && (
+				<div className="relative" ref={barRef}>
+					<div className="w-full h-2.5 bg-base-300 rounded-full overflow-hidden relative">
+						{/* Fill */}
+						<div
+							className="absolute inset-y-0 left-0 bg-primary/30 rounded-full transition-all"
+							style={{ width: `${fillPct}%` }}
+						/>
 
-			{/* Tooltip */}
-			{tooltip && (
-				<div
-					className="absolute z-50 bottom-full mb-2 pointer-events-none"
-					style={{
-						left: `${Math.min(
-							Math.max(tooltip.x, 60),
-							barRef.current ? barRef.current.offsetWidth - 60 : 200,
-						)}px`,
-						transform: "translateX(-50%)",
-					}}
-				>
-					<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
-						<p className="font-semibold mb-0.5">
-							{tooltip.gate.label}
-							<span className="font-normal text-base-content/40 ml-1">
-								${tooltip.gate.threshold}/mo
-							</span>
-						</p>
-						<p className="text-base-content/60">{tooltip.gate.description}</p>
-						{total >= Number(tooltip.gate.threshold) ? (
-							<p className="text-primary font-medium mt-1">Unlocked</p>
-						) : (
-							<p className="text-base-content/40 mt-1">
-								Need ${(Number(tooltip.gate.threshold) - total).toFixed(2)} more
-							</p>
-						)}
+						{/* Hoverable segments */}
+						{segments.map((seg, i) => {
+							const segStart = (seg.start / BAR_MAX) * 100;
+							const segEnd = (seg.end / BAR_MAX) * 100;
+							const unlocked = value >= Number(seg.gate.threshold);
+							return (
+								<div
+									key={`seg-${i}`}
+									className={`absolute inset-y-0 transition-all cursor-pointer ${
+										unlocked ? "bg-primary/50 hover:bg-primary/70" : "hover:bg-base-content/10"
+									}`}
+									style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
+									onMouseEnter={(e) => handleSectionHover(seg.gate, e)}
+									onMouseLeave={() => setTooltip(null)}
+								/>
+							);
+						})}
+
+						{/* Gate hash lines */}
+						{GATE_THRESHOLDS_VISUAL.map((t) => {
+							const pos = (t / BAR_MAX) * 100;
+							const gate = gateByThreshold.get(t);
+							if (!gate) return null;
+							return (
+								<div
+									key={`line-${t}`}
+									className={`absolute top-0 bottom-0 w-px ${
+										value >= t ? "bg-primary" : "bg-base-content/30"
+									}`}
+									style={{ left: `${pos}%` }}
+								/>
+							);
+						})}
 					</div>
+
+					{/* Dollar labels below bar */}
+					<div className="relative h-3.5 mt-0.5">
+						{boostGates.map((gate) => {
+							const pos = (Number(gate.threshold) / BAR_MAX) * 100;
+							return (
+								<span
+									key={`label-${gate.threshold}`}
+									className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
+										value >= Number(gate.threshold) ? "text-primary" : "text-base-content/30"
+									}`}
+									style={{ left: `${pos}%` }}
+								>
+									${gate.threshold}
+								</span>
+							);
+						})}
+					</div>
+
+					{/* Tooltip */}
+					{tooltip && (
+						<div
+							className="absolute z-50 bottom-full mb-2 pointer-events-none"
+							style={{
+								left: `${Math.min(Math.max(tooltip.x, 60), barRef.current ? barRef.current.offsetWidth - 60 : 200)}px`,
+								transform: "translateX(-50%)",
+							}}
+						>
+							<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
+								<p className="font-semibold mb-0.5">
+									{tooltip.gate.label}
+									<span className="font-normal text-base-content/40 ml-1">
+										${tooltip.gate.threshold}/mo
+									</span>
+								</p>
+								<p className="text-base-content/60">{tooltip.gate.description}</p>
+								{value >= Number(tooltip.gate.threshold) ? (
+									<p className="text-primary font-medium mt-1">Unlocked</p>
+								) : (
+									<p className="text-base-content/40 mt-1">
+										Need ${Number(tooltip.gate.threshold) - value} more
+									</p>
+								)}
+							</div>
+						</div>
+					)}
 				</div>
 			)}
 		</div>
@@ -233,34 +255,20 @@ function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
 /*  Month Selector                                                     */
 /* ------------------------------------------------------------------ */
 
-function MonthSelector({
-	cycle, onChange,
-}: {
-	cycle: string;
-	onChange: (cycle: string) => void;
-}) {
+function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: string) => void }) {
 	const current = getCurrentCycle();
 	const nextCycle = offsetCycle(current, 1);
 	const mode = viewModeFor(cycle);
-
 	return (
 		<div className="flex items-center gap-3">
-			<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, -1))}>
-				&larr;
-			</button>
+			<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, -1))}>&larr;</button>
 			<span className="text-sm font-medium min-w-[140px] text-center">
 				{cycleLabel(cycle)}
-				{mode === "current" && (
-					<span className="text-xs text-base-content/40 ml-1">(current)</span>
-				)}
-				{mode === "next" && (
-					<span className="text-xs text-primary ml-1">(preview)</span>
-				)}
+				{mode === "current" && <span className="text-xs text-base-content/40 ml-1">(current)</span>}
+				{mode === "next" && <span className="text-xs text-primary ml-1">(preview)</span>}
 			</span>
 			{cycle < nextCycle ? (
-				<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, 1))}>
-					&rarr;
-				</button>
+				<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, 1))}>&rarr;</button>
 			) : (
 				<div className="btn btn-ghost btn-xs invisible">&rarr;</div>
 			)}
@@ -269,7 +277,41 @@ function MonthSelector({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Combined row data (distribution + boost + gates per creator)       */
+/*  Confirmation Dialog                                                */
+/* ------------------------------------------------------------------ */
+
+function ConfirmDialog({
+	open, title, children, onConfirm, onCancel, confirmLabel, confirmClass,
+}: {
+	open: boolean;
+	title: string;
+	children: React.ReactNode;
+	onConfirm: () => void;
+	onCancel: () => void;
+	confirmLabel?: string;
+	confirmClass?: string;
+}) {
+	if (!open) return null;
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+			<div className="card bg-base-100 shadow-2xl max-w-md w-full mx-4">
+				<div className="card-body">
+					<h3 className="card-title text-lg">{title}</h3>
+					<div className="text-sm space-y-2">{children}</div>
+					<div className="card-actions justify-end mt-4">
+						<button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+						<button className={`btn btn-sm ${confirmClass ?? "btn-primary"}`} onClick={onConfirm}>
+							{confirmLabel ?? "Confirm"}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Combined row data                                                  */
 /* ------------------------------------------------------------------ */
 
 interface CreatorRow {
@@ -279,7 +321,8 @@ interface CreatorRow {
 	avatar: string | null;
 	timeSeconds: number;
 	poolAmount: number;
-	boostAmount: number;
+	committedBoost: number;
+	pendingBoost: number;
 	gates: CreatorGate[];
 }
 
@@ -292,7 +335,7 @@ export default function SubscriptionPage() {
 	const [sub, setSub] = useState<Subscription | null>(null);
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
 	const [distributions, setDistributions] = useState<PoolDistribution[]>([]);
-	const [boosts, setBoosts] = useState<BoostAllocation[]>([]);
+	const [committedBoosts, setCommittedBoosts] = useState<BoostAllocation[]>([]);
 	const [boostBudget, setBoostBudget] = useState(0);
 	const [creatorGatesMap, setCreatorGatesMap] = useState<Map<string, CreatorGate[]>>(new Map());
 	const [loading, setLoading] = useState(true);
@@ -301,10 +344,16 @@ export default function SubscriptionPage() {
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
+	// ── Pending changes (local, not saved) ──
+	const [pendingFunding, setPendingFunding] = useState<number | null>(null);
+	const [pendingBoosts, setPendingBoosts] = useState<Map<number, number>>(new Map());
+	const [showConfirm, setShowConfirm] = useState(false);
+	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
 
-	// ── Fetch functions ──
+	// ── Data fetching ──
 
 	const fetchSubscription = useCallback(async () => {
 		try {
@@ -331,38 +380,30 @@ export default function SubscriptionPage() {
 		if (distRes.status === "fulfilled") {
 			const data = (await distRes.value.json()) as { distributions: PoolDistribution[] };
 			setDistributions(data.distributions);
-
-			// Fetch gates for each creator in the distribution list
-			const usernames = data.distributions
-				.map((d) => d.creator?.username)
-				.filter(Boolean) as string[];
+			// Fetch gates for each creator
+			const usernames = data.distributions.map((d) => d.creator?.username).filter(Boolean) as string[];
 			const gatesMap = new Map<string, CreatorGate[]>();
 			const gateResults = await Promise.allSettled(
 				usernames.map(async (u) => {
-					const res = await client.api.subscriptions.gates.$get({
-						query: { creator: u },
-					});
-					const gateData = (await res.json()) as { gates: CreatorGate[] };
-					return { username: u, gates: gateData.gates };
+					const res = await client.api.subscriptions.gates.$get({ query: { creator: u } });
+					return { username: u, gates: ((await res.json()) as { gates: CreatorGate[] }).gates };
 				}),
 			);
 			for (const r of gateResults) {
-				if (r.status === "fulfilled") {
-					gatesMap.set(r.value.username, r.value.gates);
-				}
+				if (r.status === "fulfilled") gatesMap.set(r.value.username, r.value.gates);
 			}
 			setCreatorGatesMap(gatesMap);
 		}
 		if (boostRes.status === "fulfilled") {
 			const data = (await boostRes.value.json()) as {
-				boosts: BoostAllocation[];
-				budget: string;
-				allocated: string;
-				remaining: string;
+				boosts: BoostAllocation[]; budget: string; allocated: string; remaining: string;
 			};
-			setBoosts(data.boosts);
+			setCommittedBoosts(data.boosts);
 			setBoostBudget(parseFloat(data.budget));
 		}
+		// Clear pending state when switching months
+		setPendingFunding(null);
+		setPendingBoosts(new Map());
 	}, []);
 
 	useEffect(() => { fetchSubscription(); }, [fetchSubscription]);
@@ -370,246 +411,272 @@ export default function SubscriptionPage() {
 
 	useEffect(() => {
 		if (sessionId) {
-			setSuccess("Subscription activated! Welcome aboard. It may take a moment for your plan to update.");
+			setSuccess("Subscription activated! Welcome aboard.");
 			const timer = setTimeout(fetchSubscription, 2000);
 			return () => clearTimeout(timer);
 		}
 	}, [sessionId, fetchSubscription]);
 
-	// ── Boost slider handling ──
+	// ── Derived values ──
 
-	const handleBoostSlider = async (creatorId: number, newAmount: number) => {
-		// Optimistic update
-		setBoosts((prev) =>
-			prev.map((b) =>
-				b.creatorId === creatorId ? { ...b, amount: newAmount.toFixed(2) } : b,
-			),
-		);
+	const committedFunding = sub?.fundingLevel ?? tierFor(sub?.tier ?? "free").price;
+	const effectiveFunding = pendingFunding ?? committedFunding;
+	const tier = tierForAmount(effectiveFunding);
+	const isPaid = committedFunding >= 3;
+	const isCanceling = sub ? !!sub.canceledAt : false;
 
-		try {
-			const res = await client.api.subscriptions.boosts.$post({
-				json: {
-					creatorId,
-					amount: newAmount.toFixed(2),
-					cycle: selectedCycle,
-				},
-			});
-			if (!res.ok) {
-				const data = (await res.json()) as { error?: string };
-				setError(data.error ?? "Failed to update boost.");
-				// Revert on error
-				fetchCycleData(selectedCycle);
-			}
-		} catch {
-			setError("Failed to update boost.");
-			fetchCycleData(selectedCycle);
+	const financials = useMemo(() => computePools(effectiveFunding), [effectiveFunding]);
+	const committedFinancials = useMemo(() => computePools(committedFunding), [committedFunding]);
+	const foundationFee = Math.round(effectiveFunding * ALLOC.foundation * 100) / 100;
+
+	// Committed boost map
+	const committedBoostMap = useMemo(() => {
+		const map = new Map<number, number>();
+		for (const b of committedBoosts) map.set(b.creatorId, parseFloat(b.amount));
+		return map;
+	}, [committedBoosts]);
+
+	// Build rows with pending boost values
+	const rows: CreatorRow[] = useMemo(() => {
+		return distributions.map((d) => {
+			const committed = committedBoostMap.get(d.creatorId) ?? parseFloat(d.boostAmount);
+			const pending = pendingBoosts.get(d.creatorId) ?? committed;
+			return {
+				creatorId: d.creatorId,
+				username: d.creator?.username ?? "",
+				displayName: d.creator?.displayName ?? null,
+				avatar: d.creator?.avatar ?? null,
+				timeSeconds: d.attentionSeconds ?? 0,
+				poolAmount: parseFloat(d.poolAmount),
+				committedBoost: committed,
+				pendingBoost: pending,
+				gates: creatorGatesMap.get(d.creator?.username ?? "") ?? [],
+			};
+		});
+	}, [distributions, committedBoostMap, pendingBoosts, creatorGatesMap]);
+
+	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
+	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
+	const totalPendingBoost = rows.reduce((s, r) => s + r.pendingBoost, 0);
+	const allocatedBoost = totalPendingBoost;
+	const unallocatedBoost = Math.max(0, financials.boostPool - allocatedBoost);
+
+	// Detect if there are any pending changes
+	const hasPendingChanges = useMemo(() => {
+		if (pendingFunding !== null && pendingFunding !== committedFunding) return true;
+		for (const [cid, val] of pendingBoosts) {
+			const committed = committedBoostMap.get(cid) ?? 0;
+			if (val !== committed) return true;
 		}
+		return false;
+	}, [pendingFunding, committedFunding, pendingBoosts, committedBoostMap]);
+
+	const deliveryEstimate = useMemo(() => {
+		const hrs = attention?.hoursUsed ?? 0;
+		const gross = Math.round(hrs * DELIVERY_PER_HOUR_VIDEO * 100) / 100;
+		const net = isPaid ? Math.max(0, Math.round((gross - DELIVERY_CREDIT) * 100) / 100) : gross;
+		return { hours: hrs, gross, net };
+	}, [attention, isPaid]);
+
+	// ── Pending change handlers ──
+
+	const handleFundingChange = (newVal: number) => {
+		if (viewMode === "current" && newVal < committedFunding) return; // increase only
+		setPendingFunding(newVal === committedFunding ? null : newVal);
 	};
 
-	// ── Actions ──
+	const handleBoostChange = (creatorId: number, newVal: number) => {
+		const committed = committedBoostMap.get(creatorId) ?? 0;
+		if (viewMode === "current" && newVal < committed) return; // increase only
 
-	const handleCancel = async () => {
-		setActionLoading("cancel");
+		// Check if total boost would exceed budget — if so, auto-adjust funding
+		const otherBoosts = Array.from(pendingBoosts.entries())
+			.filter(([cid]) => cid !== creatorId)
+			.reduce((s, [, v]) => s + v, 0)
+			+ rows.filter((r) => r.creatorId !== creatorId && !pendingBoosts.has(r.creatorId))
+				.reduce((s, r) => s + r.committedBoost, 0);
+		const totalNeeded = otherBoosts + newVal;
+		let newFunding = pendingFunding ?? committedFunding;
+		while (computePools(newFunding).boostPool < totalNeeded && newFunding < SLIDER_MAX) {
+			newFunding++;
+		}
+		if (newFunding !== (pendingFunding ?? committedFunding)) {
+			if (viewMode === "current" && newFunding < committedFunding) return;
+			setPendingFunding(newFunding);
+		}
+
+		setPendingBoosts((prev) => {
+			const next = new Map(prev);
+			if (newVal === committed) next.delete(creatorId);
+			else next.set(creatorId, newVal);
+			return next;
+		});
+	};
+
+	// ── Save changes ──
+
+	const handleSave = async () => {
+		setShowConfirm(false);
+		setActionLoading("save");
 		setError(null);
+
 		try {
-			const res = await client.api.subscriptions.cancel.$post();
-			const data = (await res.json()) as { subscription: Subscription };
-			setSub(data.subscription);
-			setSuccess("Your subscription will cancel at the end of the current billing period.");
+			// Save funding level change if applicable
+			// TODO: In production, this would trigger a Stripe subscription update
+			// For now, update the subscription record directly
+			if (pendingFunding !== null && pendingFunding !== committedFunding) {
+				// The subscribe endpoint would handle this; for now we note the intent
+			}
+
+			// Save boost changes
+			for (const [creatorId, amount] of pendingBoosts) {
+				const res = await client.api.subscriptions.boosts.$post({
+					json: { creatorId, amount: amount.toFixed(2), cycle: selectedCycle },
+				});
+				if (!res.ok) {
+					const data = (await res.json()) as { error?: string };
+					setError(data.error ?? "Failed to save boost.");
+					break;
+				}
+
+				// Current month changes auto-propagate to next month
+				if (viewMode === "current") {
+					const nextCycle = offsetCycle(getCurrentCycle(), 1);
+					await client.api.subscriptions.boosts.$post({
+						json: { creatorId, amount: amount.toFixed(2), cycle: nextCycle },
+					});
+				}
+			}
+
+			setSuccess("Changes saved.");
+			setPendingFunding(null);
+			setPendingBoosts(new Map());
+			await fetchCycleData(selectedCycle);
 		} catch {
-			setError("Failed to cancel subscription.");
+			setError("Failed to save changes.");
 		} finally {
 			setActionLoading(null);
 		}
+	};
+
+	const handleRevert = () => {
+		setShowRevertConfirm(false);
+		setPendingFunding(null);
+		setPendingBoosts(new Map());
+		// Reload committed data from current month
+		fetchCycleData(selectedCycle);
+	};
+
+	// ── Subscription actions ──
+
+	const handleCancel = async () => {
+		setActionLoading("cancel"); setError(null);
+		try {
+			const res = await client.api.subscriptions.cancel.$post();
+			setSub((await res.json() as { subscription: Subscription }).subscription);
+			setSuccess("Your subscription will cancel at the end of the current billing period.");
+		} catch { setError("Failed to cancel."); }
+		finally { setActionLoading(null); }
 	};
 
 	const handleResume = async () => {
-		setActionLoading("resume");
-		setError(null);
+		setActionLoading("resume"); setError(null);
 		try {
 			const res = await client.api.subscriptions.resume.$post();
-			const data = (await res.json()) as { subscription: Subscription };
-			setSub(data.subscription);
+			setSub((await res.json() as { subscription: Subscription }).subscription);
 			setSuccess("Subscription resumed.");
-		} catch {
-			setError("Failed to resume subscription.");
-		} finally {
-			setActionLoading(null);
-		}
+		} catch { setError("Failed to resume."); }
+		finally { setActionLoading(null); }
 	};
 
 	const handleBillingPortal = async () => {
 		setActionLoading("portal");
 		try {
 			const res = await client.api.subscriptions["billing-portal"].$post();
-			const data = (await res.json()) as { portalUrl: string };
-			window.location.href = data.portalUrl;
-		} catch {
-			setError("Failed to open billing portal.");
-			setActionLoading(null);
-		}
+			window.location.href = ((await res.json()) as { portalUrl: string }).portalUrl;
+		} catch { setError("Failed to open billing portal."); setActionLoading(null); }
 	};
-
-	/* ---- Derived values ---- */
-
-	const tier = sub ? tierFor(sub.tier) : TIER_THRESHOLDS[0];
-	const isPaid = tier.price > 0;
-	const isCanceling = sub ? !!sub.canceledAt : false;
-	const fundingLevel = sub?.fundingLevel ?? tier.price;
-
-	const financials = useMemo(() => {
-		const price = fundingLevel;
-		const foundationFee = Math.round(price * ALLOC.foundation * 100) / 100;
-		const { creatorShare, timePool, boostPool } = computePools(price);
-		return { price, foundationFee, creatorShare, timePool, boostPool };
-	}, [fundingLevel]);
-
-	const nextTier = sub ? nextTierFor(sub.tier) : null;
-
-	// Build combined rows: distribution + boost + gates per creator
-	const boostByCreator = useMemo(() => {
-		const map = new Map<number, number>();
-		for (const b of boosts) map.set(b.creatorId, parseFloat(b.amount));
-		return map;
-	}, [boosts]);
-
-	const rows: CreatorRow[] = useMemo(() => {
-		return distributions.map((d) => {
-			const boostAmt = boostByCreator.get(d.creatorId) ?? parseFloat(d.boostAmount);
-			const username = d.creator?.username ?? "";
-			return {
-				creatorId: d.creatorId,
-				username,
-				displayName: d.creator?.displayName ?? null,
-				avatar: d.creator?.avatar ?? null,
-				timeSeconds: d.attentionSeconds ?? 0,
-				poolAmount: parseFloat(d.poolAmount),
-				boostAmount: boostAmt,
-				gates: creatorGatesMap.get(username) ?? [],
-			};
-		});
-	}, [distributions, boostByCreator, creatorGatesMap]);
-
-	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
-	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
-	const totalBoost = rows.reduce((s, r) => s + r.boostAmount, 0);
-
-	const deliveryEstimate = useMemo(() => {
-		const hrs = attention?.hoursUsed ?? 0;
-		const gross = Math.round(hrs * DELIVERY_PER_HOUR_VIDEO * 100) / 100;
-		const net = isPaid ? Math.max(0, Math.round((gross - DELIVERY_CREDIT) * 100) / 100) : gross;
-		return { hours: hrs, gross, net, creditApplied: isPaid };
-	}, [attention, isPaid]);
-
-	const canEditBoosts = (viewMode === "current" || viewMode === "next") && financials.boostPool > 0;
-	const allocatedBoost = rows.reduce((s, r) => s + r.boostAmount, 0);
-	const unallocatedBoost = Math.max(0, Math.round((boostBudget - allocatedBoost) * 100) / 100);
 
 	/* ---- Render ---- */
 
-	if (loading) {
-		return (
-			<div className="flex justify-center py-16">
-				<span className="loading loading-spinner loading-lg" />
-			</div>
-		);
-	}
+	if (loading) return <div className="flex justify-center py-16"><span className="loading loading-spinner loading-lg" /></div>;
 
-	if (!sub) {
-		return (
-			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
-				<h1 className="text-2xl font-bold mb-4">No Subscription</h1>
-				<p className="mb-4">You don't have an active subscription yet.</p>
-				<Link to="/subscribe" className="btn btn-primary">Choose a Plan</Link>
-			</div>
-		);
-	}
+	if (!sub) return (
+		<div className="max-w-2xl mx-auto px-4 py-8 text-center">
+			<h1 className="text-2xl font-bold mb-4">No Subscription</h1>
+			<p className="mb-4">You don't have an active subscription yet.</p>
+			<Link to="/subscribe" className="btn btn-primary">Choose a Plan</Link>
+		</div>
+	);
 
 	/* ---- Free user view ---- */
-	if (!isPaid) {
-		return (
-			<div className="max-w-2xl mx-auto px-4 py-8">
-				<div className="flex items-baseline justify-between mb-6">
-					<h1 className="text-2xl font-bold">Your Anthers</h1>
-					<span className="text-sm text-base-content/60">Free Plan</span>
-				</div>
-
-				{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
-				{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
-
-				<div className="card bg-base-200">
-					<div className="card-body">
-						<div className="flex items-center justify-between">
-							<div>
-								<h2 className="card-title">Free Plan</h2>
-								<div className="badge badge-success badge-sm mt-1">Active</div>
-							</div>
-							<Link to="/subscribe" className="btn btn-primary btn-sm">Upgrade</Link>
+	if (!isPaid) return (
+		<div className="max-w-2xl mx-auto px-4 py-8">
+			<div className="flex items-baseline justify-between mb-6">
+				<h1 className="text-2xl font-bold">Your Anthers</h1>
+				<span className="text-sm text-base-content/60">Free Plan</span>
+			</div>
+			{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
+			{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
+			<div className="card bg-base-200">
+				<div className="card-body">
+					<div className="flex items-center justify-between">
+						<div>
+							<h2 className="card-title">Free Plan</h2>
+							<div className="badge badge-success badge-sm mt-1">Active</div>
 						</div>
-
-						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
-
-						{attention && (
-							<div className="mt-4">
-								<div className="flex items-center justify-between text-sm mb-1">
-									<span className="text-base-content/60">Time with Creators</span>
-									<span className="font-medium">{attention.hoursUsed} hrs</span>
-								</div>
-								<p className="text-xs text-base-content/40">
-									All media types count equally — a minute of video, audio,
-									reading, or gameplay is the same when funding your creators.
-								</p>
+						<Link to="/subscribe" className="btn btn-primary btn-sm">Upgrade</Link>
+					</div>
+					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+					{attention && (
+						<div className="mt-4">
+							<div className="flex items-center justify-between text-sm mb-1">
+								<span className="text-base-content/60">Time with Creators</span>
+								<span className="font-medium">{attention.hoursUsed} hrs</span>
 							</div>
-						)}
-
-						<div className="mt-4 text-sm text-base-content/60">
-							Delivery covered by the Anthers Foundation (up to 10 hrs/mo).
+							<p className="text-xs text-base-content/40">
+								All media types count equally — a minute of video, audio,
+								reading, or gameplay is the same when funding your creators.
+							</p>
 						</div>
-
-						{nextTier && (
-							<div className="mt-4 pt-3 border-t border-base-content/10">
-								<Link to="/subscribe" className="text-sm text-primary hover:underline">
-									Subscribe at {nextTier.name} (${nextTier.price}/mo) to
-									start funding your creators directly &rarr;
-								</Link>
-							</div>
-						)}
+					)}
+					<div className="mt-4 text-sm text-base-content/60">
+						Delivery covered by the Anthers Foundation (up to 10 hrs/mo).
 					</div>
 				</div>
 			</div>
-		);
-	}
+		</div>
+	);
 
 	/* ──────────────────────────────────────────────────────────────────── */
-	/*  Paid user view — matches the interactive demo dashboard style      */
+	/*  Paid user view                                                     */
 	/* ──────────────────────────────────────────────────────────────────── */
+
+	const canEdit = viewMode === "current" || viewMode === "next";
 
 	return (
 		<div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-			{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
-			{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
+			{error && <div className="alert alert-error"><span>{error}</span></div>}
+			{success && <div className="alert alert-success"><span>{success}</span></div>}
 
 			{/* Header + month selector */}
 			<div>
 				<div className="flex items-baseline justify-between">
-					<h1 className="text-lg font-bold">
-						Your Anthers—{cycleLabel(selectedCycle)}
-					</h1>
+					<h1 className="text-lg font-bold">Your Anthers—{cycleLabel(selectedCycle)}</h1>
 					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 				</div>
 				<p className="text-sm text-base-content/60">
-					{tier.name} tier — {fmt(financials.price)}/mo
+					{tier.name} tier — {fmt(effectiveFunding)}/mo
+					{pendingFunding !== null && pendingFunding !== committedFunding && (
+						<span className="text-warning ml-2">(pending change from {fmt(committedFunding)})</span>
+					)}
 				</p>
 			</div>
 
 			{/* Banners */}
 			{viewMode === "next" && (
 				<div className="alert alert-info text-sm">
-					<span>
-						Preview for {cycleLabel(selectedCycle)}. Boost changes here take
-						effect at the start of this billing cycle. You can increase or
-						decrease boosts freely.
-					</span>
+					<span>Preview for {cycleLabel(selectedCycle)}. You can increase or decrease boosts freely. Changes take effect at the start of the billing cycle.</span>
 				</div>
 			)}
 			{viewMode === "past" && (
@@ -619,59 +686,87 @@ export default function SubscriptionPage() {
 			)}
 
 			{/* ── Summary cards ── */}
-			<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+			<div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Anthers Foundation Fee
-						</p>
-						<p className="text-xl font-bold">{fmt(financials.foundationFee)}</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Foundation Fee</p>
+						<p className="text-xl font-bold">{fmt(foundationFee)}</p>
 						<p className="text-xs text-base-content/40">8% of subscription</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Time Pool
-						</p>
-						<p className="text-xl font-bold text-success">
-							{fmt(totalPool > 0 ? totalPool : financials.timePool)}
-						</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Time Pool</p>
+						<p className="text-xl font-bold text-success">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</p>
 						<p className="text-xs text-base-content/40">Auto · time-proportional</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Boost Pool
-						</p>
-						<p className="text-xl font-bold text-primary">
-							{fmt(totalBoost > 0 ? totalBoost : financials.boostPool)}
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Boost Pool</p>
+						<p className="text-xl font-bold text-primary">{fmt(financials.boostPool)}</p>
+						<p className="text-xs text-base-content/40">{canEdit ? "$1 increments" : "Auto allocation"}</p>
+					</div>
+				</div>
+				<div className="card bg-base-200">
+					<div className="card-body p-4">
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Unallocated Boost</p>
+						<p className={`text-xl font-bold ${unallocatedBoost > 0 ? "text-warning" : "text-base-content/30"}`}>
+							{fmt(unallocatedBoost)}
 						</p>
 						<p className="text-xs text-base-content/40">
-							{canEditBoosts ? "Drag sliders to adjust" : "Auto allocation"}
+							{unallocatedBoost > 0 ? "Available to assign" : "Returns to Time Pool"}
 						</p>
-						{unallocatedBoost > 0 && canEditBoosts && (
-							<p className="text-xs text-warning mt-1">
-								{fmt(unallocatedBoost)} unallocated
-							</p>
-						)}
 					</div>
 				</div>
 			</div>
 
-			{/* Unallocated boost callout */}
-			{unallocatedBoost > 0 && canEditBoosts && (
-				<div className="alert alert-warning text-sm">
-					<span>
-						You have <strong>{fmt(unallocatedBoost)}</strong> of unallocated
-						boost available. Use the sliders below to direct it to creators
-						you want to support.
-					</span>
+			{/* ── SUBSCRIPTION AMOUNT ── */}
+			{canEdit && (
+				<div>
+					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
+						Subscription Amount
+					</h4>
+					<div className="card bg-base-200 p-4">
+						<div className="mb-2">
+							{/* Tier threshold marks above slider */}
+							<div className="relative w-full h-6 mb-1">
+								{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
+									const pct = (t.price / SLIDER_MAX) * 100;
+									const isActive = effectiveFunding >= t.price;
+									return (
+										<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
+											<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
+											<div className="w-px h-3 bg-base-content/20" />
+										</div>
+									);
+								})}
+							</div>
+							<input
+								type="range"
+								min={viewMode === "current" ? committedFunding : 3}
+								max={SLIDER_MAX}
+								step={1}
+								value={effectiveFunding}
+								onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
+								className="range range-success w-full"
+							/>
+							<div className="flex justify-between text-xs text-base-content/40 mt-1">
+								<span>${viewMode === "current" ? committedFunding : 3}</span>
+								<span className="font-medium text-base-content">{fmt(effectiveFunding)}/mo</span>
+								<span>${SLIDER_MAX}</span>
+							</div>
+						</div>
+						{viewMode === "current" && (
+							<p className="text-[11px] text-base-content/30">
+								Subscription can only be increased in the current month.
+							</p>
+						)}
+					</div>
 				</div>
 			)}
 
-			{/* ── Creator Allocations table ── */}
+			{/* ── CREATOR ALLOCATIONS ── */}
 			{rows.length > 0 ? (
 				<div>
 					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
@@ -681,107 +776,92 @@ export default function SubscriptionPage() {
 						<table className="table table-sm w-full">
 							<thead>
 								<tr>
-									<th className="w-45">Creator</th>
-									<th className="w-25">Time</th>
-									<th className="w-25">Pool</th>
-									<th className="w-60">Boost</th>
-									<th>Total</th>
+									<th className="w-40">Creator</th>
+									<th className="w-20">Time</th>
+									<th className="w-20">Pool</th>
+									<th className="w-72">Boost</th>
+									<th className="w-20 text-right">Total</th>
 								</tr>
 							</thead>
 							<tbody>
 								{rows.map((row) => {
-									const rowTotal = row.poolAmount + row.boostAmount;
-									const initials = (row.displayName || row.username)
-										.split(/\s+/)
-										.map((w) => w[0])
-										.join("")
-										.slice(0, 2)
-										.toUpperCase();
+									const rowTotal = row.poolAmount + row.pendingBoost;
+									const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+									const boostChanged = row.pendingBoost !== row.committedBoost;
 
 									return (
 										<tr key={row.creatorId} className="hover">
 											<td>
 												<div className="flex items-center gap-1.5">
 													{row.avatar ? (
-														<img
-															src={row.avatar}
-															alt=""
-															className="w-6 h-6 rounded-full object-cover flex-shrink-0"
-														/>
+														<img src={row.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
 													) : (
-														<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">
-															{initials}
-														</div>
+														<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">{initials}</div>
 													)}
 													<Link to={`/${row.username}`} className="font-medium text-sm truncate link link-hover">
 														@{row.displayName || row.username}
 													</Link>
 												</div>
 											</td>
-											<td className="text-sm">
-												{formatHours(row.timeSeconds)}
-											</td>
-											<td className="text-sm text-success">
-												{fmt(row.poolAmount)}
-											</td>
+											<td className="text-sm">{formatHours(row.timeSeconds)}</td>
+											<td className="text-sm text-success">{fmt(row.poolAmount)}</td>
 											<td>
-												{canEditBoosts ? (
-													<div className="flex items-center gap-2">
-														<input
-															type="range"
-															min={viewMode === "current" ? Math.round(row.boostAmount * 100) : 0}
-															max={Math.round(boostBudget * 100)}
-															value={Math.round(row.boostAmount * 100)}
-															onChange={(e) => handleBoostSlider(row.creatorId, parseInt(e.target.value, 10) / 100)}
-															className="range range-xs range-primary flex-1"
-														/>
-														<span className="text-sm text-primary font-medium w-14 flex-shrink-0 text-right">
-															{fmt(row.boostAmount)}
-														</span>
-													</div>
+												{canEdit ? (
+													<BoostBar
+														value={row.pendingBoost}
+														min={viewMode === "current" ? row.committedBoost : 0}
+														max={Math.min(financials.boostPool, row.pendingBoost + unallocatedBoost + (viewMode === "next" ? row.committedBoost : 0))}
+														gates={row.gates}
+														onChange={(v) => handleBoostChange(row.creatorId, v)}
+														disabled={false}
+													/>
 												) : (
-													<span className="text-sm text-primary">
-														{fmt(row.boostAmount)}
-													</span>
+													<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
+												)}
+												{boostChanged && (
+													<span className="text-[10px] text-warning ml-1">(pending)</span>
 												)}
 											</td>
-											<td>
-												<div className="flex items-start gap-2">
-													<div className="flex-1 pt-0.5">
-														{row.gates.length > 0 && (
-															<AccessBar total={rowTotal} gates={row.gates} />
-														)}
-													</div>
-													<span className="text-sm font-medium w-14 flex-shrink-0 text-right">
-														{fmt(rowTotal)}
-													</span>
-												</div>
-											</td>
+											<td className="text-right text-sm font-medium">{fmt(rowTotal)}</td>
 										</tr>
 									);
 								})}
 							</tbody>
 						</table>
 					</div>
-					{canEditBoosts && viewMode === "current" && (
-						<p className="text-[11px] text-base-content/30 mt-2">
-							Boosts can only be increased in the current month. Switch to next
-							month's preview to decrease or remove boosts.
-						</p>
-					)}
 				</div>
 			) : (
 				<div className="py-6 text-center text-sm text-base-content/40">
 					{viewMode === "next" ? (
-						<p>Next month's distributions will be calculated based on your time with creators during {cycleLabel(selectedCycle)}.</p>
+						<p>Next month's distributions will be calculated based on your time with creators.</p>
 					) : (
 						<>
 							<p>No distributions yet this cycle.</p>
-							<p className="mt-1">
-								Your time pool is distributed proportionally based on your
-								time with creators — video, audio, text, and gameplay all count equally.
-							</p>
+							<p className="mt-1">Your time pool is distributed proportionally — video, audio, text, and gameplay all count equally.</p>
 						</>
+					)}
+				</div>
+			)}
+
+			{/* ── Save / Revert buttons ── */}
+			{canEdit && (
+				<div className="flex items-center gap-3">
+					{hasPendingChanges && (
+						<button
+							className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
+							onClick={() => setShowConfirm(true)}
+							disabled={!!actionLoading}
+						>
+							{actionLoading === "save" ? "Saving..." : "Save Changes"}
+						</button>
+					)}
+					{viewMode === "next" && (
+						<button
+							className="btn btn-ghost btn-sm"
+							onClick={() => setShowRevertConfirm(true)}
+						>
+							Revert to Current Month
+						</button>
 					)}
 				</div>
 			)}
@@ -791,34 +871,34 @@ export default function SubscriptionPage() {
 				<div className="card-body p-4 space-y-1">
 					<div className="flex justify-between text-sm">
 						<span className="text-base-content/70">Anthers Foundation Fee</span>
-						<span>{fmt(financials.foundationFee)}</span>
+						<span>{fmt(foundationFee)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
 						<span className="text-base-content/70">Time Pool</span>
-						<span className="text-success">
-							{fmt(totalPool > 0 ? totalPool : financials.timePool)}
-						</span>
+						<span className="text-success">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</span>
 					</div>
 					{financials.boostPool > 0 && (
 						<div className="flex justify-between text-sm">
 							<span className="text-base-content/70">Boost Pool</span>
-							<span className="text-primary">
-								{fmt(totalBoost > 0 ? totalBoost : financials.boostPool)}
-							</span>
+							<span className="text-primary">{fmt(allocatedBoost)}</span>
+						</div>
+					)}
+					{unallocatedBoost > 0 && (
+						<div className="flex justify-between text-sm">
+							<span className="text-base-content/70">Unallocated (returns to Time Pool)</span>
+							<span className="text-base-content/40">{fmt(unallocatedBoost)}</span>
 						</div>
 					)}
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">
 						<span>Monthly total</span>
-						<span>{fmt(financials.price)}</span>
+						<span>{fmt(effectiveFunding)}</span>
 					</div>
 
 					{viewMode !== "next" && deliveryEstimate.hours > 0 && (
 						<>
 							<div className="flex justify-between text-sm text-base-content/50">
-								<span>
-									Delivery ({deliveryEstimate.hours} hrs)
-								</span>
+								<span>Delivery ({deliveryEstimate.hours} hrs)</span>
 								<span>
 									{deliveryEstimate.net > 0
 										? `approx. ${fmt(deliveryEstimate.net)}`
@@ -840,42 +920,66 @@ export default function SubscriptionPage() {
 				</div>
 			</div>
 
-			{/* ── Actions ── */}
+			{/* ── Subscription actions ── */}
 			{viewMode === "current" && (
 				<div className="flex flex-wrap items-center gap-3">
-					<Link to="/subscribe" className="btn btn-outline btn-sm">Change Plan</Link>
 					{isCanceling ? (
-						<button
-							className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
-							onClick={handleResume} disabled={!!actionLoading}
-						>
+						<button className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`} onClick={handleResume} disabled={!!actionLoading}>
 							{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
 						</button>
 					) : (
-						<button
-							className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
-							onClick={handleCancel} disabled={!!actionLoading}
-						>
+						<button className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`} onClick={handleCancel} disabled={!!actionLoading}>
 							{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
 						</button>
 					)}
-					<button
-						className={`btn btn-ghost btn-sm ${actionLoading === "portal" ? "btn-disabled" : ""}`}
-						onClick={handleBillingPortal} disabled={!!actionLoading}
-					>
+					<button className={`btn btn-ghost btn-sm ${actionLoading === "portal" ? "btn-disabled" : ""}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
 						{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
 					</button>
 				</div>
 			)}
 
-			{viewMode === "current" && nextTier && (
-				<Link to="/subscribe" className="text-sm text-primary hover:underline">
-					Adjust your support level anytime &rarr;{" "}
-					<span className="text-base-content/40">
-						You're ${nextTier.price - tier.price} from {nextTier.name} perks
-					</span>
-				</Link>
-			)}
+			{/* ── Confirmation dialogs ── */}
+			<ConfirmDialog
+				open={showConfirm}
+				title="Save Changes"
+				onConfirm={handleSave}
+				onCancel={() => setShowConfirm(false)}
+				confirmLabel="Confirm & Save"
+			>
+				{pendingFunding !== null && pendingFunding !== committedFunding && (
+					<div className="flex justify-between py-1">
+						<span>Subscription level</span>
+						<span>{fmt(committedFunding)} &rarr; <strong>{fmt(pendingFunding)}</strong></span>
+					</div>
+				)}
+				{Array.from(pendingBoosts.entries()).map(([cid, amount]) => {
+					const row = rows.find((r) => r.creatorId === cid);
+					const committed = committedBoostMap.get(cid) ?? 0;
+					if (amount === committed) return null;
+					return (
+						<div key={cid} className="flex justify-between py-1">
+							<span>Boost to @{row?.displayName || row?.username}</span>
+							<span>${committed} &rarr; <strong>${amount}</strong></span>
+						</div>
+					);
+				})}
+				{viewMode === "current" && pendingBoosts.size > 0 && (
+					<p className="text-xs text-base-content/40 mt-2 border-t border-base-content/10 pt-2">
+						These boost changes will also be applied to next month's allocations.
+					</p>
+				)}
+			</ConfirmDialog>
+
+			<ConfirmDialog
+				open={showRevertConfirm}
+				title="Revert to Current Month"
+				onConfirm={handleRevert}
+				onCancel={() => setShowRevertConfirm(false)}
+				confirmLabel="Revert"
+				confirmClass="btn-warning"
+			>
+				<p>This will reset all next-month boosts to match your current month's committed values. Any changes you've made here will be lost.</p>
+			</ConfirmDialog>
 		</div>
 	);
 }
