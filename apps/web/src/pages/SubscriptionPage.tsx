@@ -794,13 +794,13 @@ export default function SubscriptionPage() {
 				{/* ── SUBSCRIPTION AMOUNT ── */}
 				{canEdit && (
 					<div>
-						<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+						<div className="divider text-sm text-base-content/40 my-2">
 							Subscription Amount
 							<InfoTip text={viewMode === "current"
 								? "Your monthly funding level. Can only be increased in the current month. Determines your Anthers Tier, Time Pool, and Boost Pool budget."
 								: "Your monthly funding level for the upcoming billing cycle. You can increase or decrease freely before the cycle starts."
 							} />
-						</h4>
+						</div>
 						{/* Tier threshold marks above slider */}
 						<div className="relative w-full h-6 mb-1">
 							{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
@@ -839,12 +839,12 @@ export default function SubscriptionPage() {
 					</div>
 				)}
 
-				{/* ── CREATOR ALLOCATIONS ── */}
+			{/* ── CREATOR ALLOCATIONS ── */}
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+					<div className="divider text-sm text-base-content/40 my-2">
 						Creator Allocations
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
-					</h4>
+					</div>
 					{rows.length > 0 ? (
 						<div className="overflow-x-auto">
 							<table className="table table-sm w-full">
@@ -931,7 +931,7 @@ export default function SubscriptionPage() {
 				</div>
 
 				{/* ── COST BREAKDOWN ── */}
-				<div className="divider text-xs text-base-content/30 my-2">Cost Breakdown</div>
+				<div className="divider text-sm text-base-content/40 my-2">Cost Breakdown</div>
 				<div className="flex justify-center mb-4">
 					<div className="text-sm w-full max-w-lg">
 						{/* Subscription header */}
@@ -1037,11 +1037,11 @@ export default function SubscriptionPage() {
 					</div>
 				</div>
 
-				{/* ── Action buttons ── */}
-				<div className="flex items-start justify-between">
+				{/* ── Action buttons (flanking the cost breakdown) ── */}
+				<div className="flex items-end justify-center gap-8">
 					{/* Left: subscription management */}
 					{viewMode === "current" ? (
-						<div className="flex flex-col gap-2">
+						<div className="flex flex-col gap-2 flex-shrink-0">
 							<button className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
 								{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
 							</button>
@@ -1055,11 +1055,14 @@ export default function SubscriptionPage() {
 								</button>
 							)}
 						</div>
-					) : <div />}
+					) : <div className="flex-shrink-0 w-36" />}
+
+					{/* Center: cost breakdown (already rendered above via divider) */}
+					<div className="flex-shrink-0 w-36" />
 
 					{/* Right: save/discard */}
 					{canEdit ? (
-						<div className="flex flex-col gap-2 items-end">
+						<div className="flex flex-col gap-2 items-end flex-shrink-0">
 							<button
 								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
 								onClick={() => setShowConfirm(true)}
@@ -1080,7 +1083,7 @@ export default function SubscriptionPage() {
 								</button>
 							)}
 						</div>
-					) : <div />}
+					) : <div className="flex-shrink-0 w-36" />}
 				</div>
 
 			</div>{/* end main panel */}
