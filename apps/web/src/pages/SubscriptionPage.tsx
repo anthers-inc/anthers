@@ -35,6 +35,9 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 
 const SLIDER_MAX = 50;
 
+/** Color used for pending changes (boost pending fill, subscription pending, text indicators) */
+const PENDING_COLOR = "#A944CC";
+
 function tierFor(id: string) {
 	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
 }
@@ -207,13 +210,14 @@ function BoostBar({
 							className="absolute inset-y-0 left-0 bg-primary/60 rounded-full"
 							style={{ width: `${committedPct}%` }}
 						/>
-						{/* Pending fill (yellow, only the delta above committed) */}
+						{/* Pending fill */}
 						{hasPending && value > committedValue && (
 							<div
-								className="absolute inset-y-0 bg-error/60 rounded-r-full"
+								className="absolute inset-y-0 rounded-r-full"
 								style={{
 									left: `${committedPct}%`,
 									width: `${pendingPct - committedPct}%`,
+									backgroundColor: `${PENDING_COLOR}99`,
 								}}
 							/>
 						)}
@@ -235,10 +239,11 @@ function BoostBar({
 
 					{/* Thumb */}
 					<div
-						className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
-							hasPending ? "bg-error border-error" : "bg-primary border-primary"
-						}`}
-						style={{ left: `${thumbPct}%` }}
+						className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${hasPending ? "" : "bg-primary border-primary"}`}
+						style={{
+							left: `${thumbPct}%`,
+							...(hasPending ? { backgroundColor: PENDING_COLOR, borderColor: PENDING_COLOR } : {}),
+						}}
 					/>
 				</div>
 			</div>
@@ -1011,7 +1016,7 @@ export default function SubscriptionPage() {
 						</h2>
 						<p className="text-sm text-base-content/60 mb-3">
 							{tier.name} tier
-							{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
+							{hasPendingSub && <span className="ml-1" style={{ color: PENDING_COLOR }}>(pending change)</span>}
 						</p>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 					</div>
@@ -1065,15 +1070,49 @@ export default function SubscriptionPage() {
 								);
 							})}
 						</div>
-						<input
-							type="range"
-							min={0}
-							max={SLIDER_MAX}
-							step={1}
-							value={effectiveFunding}
-							onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
-							className="range range-success w-full"
-						/>
+						{/* Custom track with committed/pending fill */}
+						{(() => {
+							const cPct = (committedFunding / SLIDER_MAX) * 100;
+							const pPct = (effectiveFunding / SLIDER_MAX) * 100;
+							return (
+								<div
+									className="relative h-5 select-none cursor-pointer"
+									onPointerDown={(e) => {
+										const rect = e.currentTarget.getBoundingClientRect();
+										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+										handleFundingChange(Math.round(pct * SLIDER_MAX));
+										e.preventDefault();
+										(e.target as HTMLElement).setPointerCapture(e.pointerId);
+									}}
+									onPointerMove={(e) => {
+										if (!(e.buttons & 1)) return;
+										const rect = e.currentTarget.getBoundingClientRect();
+										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+										handleFundingChange(Math.round(pct * SLIDER_MAX));
+									}}
+								>
+									<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
+										{/* Committed fill (teal) */}
+										<div className="absolute inset-y-0 left-0 bg-success/60 rounded-full" style={{ width: `${cPct}%` }} />
+										{/* Pending fill */}
+										{hasPendingSub && effectiveFunding > committedFunding && (
+											<div
+												className="absolute inset-y-0 rounded-r-full"
+												style={{ left: `${cPct}%`, width: `${pPct - cPct}%`, backgroundColor: `${PENDING_COLOR}99` }}
+											/>
+										)}
+									</div>
+									{/* Thumb */}
+									<div
+										className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${hasPendingSub ? "" : "bg-success border-success"}`}
+										style={{
+											left: `${pPct}%`,
+											...(hasPendingSub ? { backgroundColor: PENDING_COLOR, borderColor: PENDING_COLOR } : {}),
+										}}
+									/>
+								</div>
+							);
+						})()}
 						{/* Tick marks below slider */}
 						<div className="relative w-full h-6 mt-1">
 							{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
@@ -1129,7 +1168,7 @@ export default function SubscriptionPage() {
 												<div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
 												<span className="text-base-content/70 truncate flex-1">{row.displayName || row.username}</span>
 												<span className="text-base-content/40 tabular-nums">{pct}%</span>
-												<span className={`tabular-nums ${poolChanged ? "text-error" : "text-success"}`}>{fmt(displayPool)}</span>
+												<span className={`tabular-nums ${poolChanged ? "" : "text-success"}`} style={poolChanged ? { color: PENDING_COLOR } : undefined}>{fmt(displayPool)}</span>
 											</div>
 										);
 									})}
@@ -1193,7 +1232,7 @@ export default function SubscriptionPage() {
 													<span className="text-xs text-primary font-medium ml-auto tabular-nums">
 														${row.pendingBoost}.00
 													</span>
-													{boostChanged && <span className="text-[9px] text-error">(pending)</span>}
+													{boostChanged && <span className="text-[9px]" style={{ color: PENDING_COLOR }}>(pending)</span>}
 												</div>
 												{/* Boost slider */}
 												{canEdit ? (
@@ -1236,7 +1275,7 @@ export default function SubscriptionPage() {
 						<div className="flex items-center justify-between py-2 border-b border-base-content/10">
 							<span className="text-base-content/60">Subscription</span>
 							<div className="flex items-baseline gap-1">
-								<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>${effectiveFunding}</span>
+								<span className="text-xl font-bold" style={hasPendingSub ? { color: PENDING_COLOR } : undefined}>${effectiveFunding}</span>
 								<span className="text-base-content/40 text-xs">/mo</span>
 							</div>
 						</div>
@@ -1322,7 +1361,7 @@ export default function SubscriptionPage() {
 						<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
 							<span className="font-bold">{viewMode === "next" ? "Monthly total" : "Total w/Fees"}</span>
 							<div className="flex items-baseline gap-1">
-								<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>{fmt(viewMode === "next" ? effectiveFunding : totalWithFees)}</span>
+								<span className="text-xl font-bold" style={hasPendingSub ? { color: PENDING_COLOR } : undefined}>{fmt(viewMode === "next" ? effectiveFunding : totalWithFees)}</span>
 								<span className="text-base-content/40 text-xs">/mo</span>
 							</div>
 						</div>
