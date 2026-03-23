@@ -562,6 +562,41 @@ export default function SubscriptionPage() {
 	const handleFundingChange = (newVal: number) => {
 		if (viewMode === "current" && newVal < committedFunding) return; // increase only
 		setPendingFunding(newVal === committedFunding ? null : newVal);
+
+		// If funding decreased, clamp boosts to fit the new budget
+		const newBudget = computePools(newVal).boostPool;
+		const currentBoosts: { creatorId: number; amount: number }[] = rows.map((r) => ({
+			creatorId: r.creatorId,
+			amount: pendingBoosts.get(r.creatorId) ?? r.committedBoost,
+		}));
+		const totalAllocated = currentBoosts.reduce((s, b) => s + b.amount, 0);
+
+		if (totalAllocated > newBudget) {
+			// Trim from smallest boosts first
+			const sorted = [...currentBoosts].sort((a, b) => a.amount - b.amount);
+			let excess = totalAllocated - newBudget;
+			const newBoostMap = new Map(pendingBoosts);
+
+			for (const entry of sorted) {
+				if (excess <= 0) break;
+				const committed = committedBoostMap.get(entry.creatorId) ?? 0;
+				// In current month, can't go below committed
+				const floor = viewMode === "current" ? committed : 0;
+				const reducible = entry.amount - floor;
+				const reduction = Math.min(reducible, excess);
+				if (reduction > 0) {
+					const newAmount = entry.amount - reduction;
+					if (newAmount === committed) {
+						newBoostMap.delete(entry.creatorId);
+					} else {
+						newBoostMap.set(entry.creatorId, newAmount);
+					}
+					excess -= reduction;
+				}
+			}
+
+			setPendingBoosts(newBoostMap);
+		}
 	};
 
 	const handleBoostChange = (creatorId: number, newVal: number) => {
