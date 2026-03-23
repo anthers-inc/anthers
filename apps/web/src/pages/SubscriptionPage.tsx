@@ -953,7 +953,7 @@ export default function SubscriptionPage() {
 														boostPool={financials.boostPool}
 														gates={row.gates}
 														onChange={(v) => handleBoostChange(row.creatorId, v)}
-														disabled={viewMode === "current" && unallocatedBoost <= 0}
+														disabled={viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges}
 													/>
 												) : (
 													<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
@@ -986,10 +986,11 @@ export default function SubscriptionPage() {
 			)}
 
 			{/* ── Save / Discard / Revert buttons ── */}
-			{canEdit && hasPendingChanges && (
+			{canEdit && (
 				<div className="flex items-center justify-center gap-3">
 					<button
-						className="btn btn-ghost btn-sm"
+						className="btn btn-outline btn-error btn-sm"
+						disabled={!hasPendingChanges}
 						onClick={() => {
 							setPendingFunding(null);
 							setPendingBoosts(new Map());
@@ -1000,20 +1001,18 @@ export default function SubscriptionPage() {
 					<button
 						className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
 						onClick={() => setShowConfirm(true)}
-						disabled={!!actionLoading}
+						disabled={!hasPendingChanges || !!actionLoading}
 					>
 						{actionLoading === "save" ? "Saving..." : "Save Changes"}
 					</button>
-				</div>
-			)}
-			{canEdit && viewMode === "next" && !hasPendingChanges && (
-				<div className="flex items-center justify-center">
-					<button
-						className="btn btn-ghost btn-sm"
-						onClick={() => setShowRevertConfirm(true)}
-					>
-						Revert to Current Month
-					</button>
+					{viewMode === "next" && (
+						<button
+							className="btn btn-ghost btn-sm"
+							onClick={() => setShowRevertConfirm(true)}
+						>
+							Revert to Current Month
+						</button>
+					)}
 				</div>
 			)}
 
