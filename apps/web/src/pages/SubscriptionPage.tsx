@@ -36,7 +36,7 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 const SLIDER_MAX = 50;
 
 /** Color used for pending changes (boost pending fill, subscription pending, text indicators) */
-const PENDING_COLOR = "#A944CC";
+const PENDING_COLOR = "#C04475";
 
 function tierFor(id: string) {
 	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
