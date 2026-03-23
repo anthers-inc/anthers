@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type {
@@ -6,6 +6,7 @@ import type {
 	AttentionSummary,
 	PoolDistribution,
 	BoostAllocation,
+	CreatorGate,
 } from "../lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -13,7 +14,7 @@ import type {
 /* ------------------------------------------------------------------ */
 
 const ALLOC = { creators: 0.92, foundation: 0.08 };
-const CREATOR_POOL = 2.76;
+const CREATOR_POOL_FIXED = 2.76;
 
 const DELIVERY_PER_HOUR_VIDEO = 112.5 * 60 / 1024 * 0.01;
 const DELIVERY_CREDIT = 1.00;
@@ -25,6 +26,10 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 	{ id: "petal", name: "Petal", price: 15 },
 	{ id: "bloom", name: "Bloom", price: 30 },
 ];
+
+/** Universal scale for AccessBar gate hash lines */
+const ALL_GATE_THRESHOLDS = [2, 4, 8, 16, 32];
+const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1;
 
 function tierFor(id: string) {
 	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
@@ -79,6 +84,146 @@ function viewModeFor(cycle: string): ViewMode {
 }
 
 /* ------------------------------------------------------------------ */
+/*  AccessBar — segmented bar with gate hash lines and hover tooltips  */
+/* ------------------------------------------------------------------ */
+
+function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
+	const [tooltip, setTooltip] = useState<{ gate: CreatorGate; x: number } | null>(null);
+	const barRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!tooltip) return;
+		const close = () => setTooltip(null);
+		window.addEventListener("scroll", close, true);
+		return () => window.removeEventListener("scroll", close, true);
+	}, [tooltip]);
+
+	// Only show boost gates in the access bar
+	const boostGates = gates.filter((g) => g.gateType === "boost");
+	const gateByThreshold = new Map(boostGates.map((g) => [Number(g.threshold), g]));
+
+	if (boostGates.length === 0) {
+		return (
+			<div className="w-full h-3 bg-base-300 rounded-full overflow-hidden">
+				<div
+					className="h-full bg-base-content/15 rounded-full transition-all"
+					style={{ width: `${Math.min((total / BAR_MAX) * 100, 100)}%` }}
+				/>
+			</div>
+		);
+	}
+
+	const fillPct = Math.min((total / BAR_MAX) * 100, 100);
+
+	const handleSectionHover = (gate: CreatorGate, e: React.MouseEvent) => {
+		const rect = barRef.current?.getBoundingClientRect();
+		if (!rect) return;
+		setTooltip({ gate, x: e.clientX - rect.left });
+	};
+
+	// Build hoverable segments between gates
+	const segments: { start: number; end: number; gate: CreatorGate }[] = [];
+	for (let i = 0; i < boostGates.length; i++) {
+		const prev = i === 0 ? 0 : Number(boostGates[i - 1].threshold);
+		segments.push({ start: prev, end: Number(boostGates[i].threshold), gate: boostGates[i] });
+	}
+	const lastGate = boostGates[boostGates.length - 1];
+	segments.push({ start: Number(lastGate.threshold), end: BAR_MAX, gate: lastGate });
+
+	return (
+		<div className="relative" ref={barRef}>
+			<div className="w-full h-3 bg-base-300 rounded-full overflow-hidden relative">
+				<div
+					className="absolute inset-y-0 left-0 bg-primary/30 rounded-full transition-all"
+					style={{ width: `${fillPct}%` }}
+				/>
+
+				{segments.map((seg, i) => {
+					const segStart = (seg.start / BAR_MAX) * 100;
+					const segEnd = (seg.end / BAR_MAX) * 100;
+					const unlocked = total >= Number(seg.gate.threshold);
+					return (
+						<div
+							key={`seg-${i}`}
+							className={`absolute inset-y-0 transition-all cursor-pointer ${
+								unlocked ? "bg-primary/50 hover:bg-primary/70" : "hover:bg-base-content/10"
+							}`}
+							style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
+							onMouseEnter={(e) => handleSectionHover(seg.gate, e)}
+							onMouseLeave={() => setTooltip(null)}
+						/>
+					);
+				})}
+
+				{ALL_GATE_THRESHOLDS.map((t) => {
+					const pos = (t / BAR_MAX) * 100;
+					const gate = gateByThreshold.get(t);
+					if (!gate) return null;
+					const unlocked = total >= t;
+					return (
+						<div
+							key={`line-${t}`}
+							className={`absolute top-0 bottom-0 w-px ${unlocked ? "bg-primary" : "bg-base-content/30"}`}
+							style={{ left: `${pos}%` }}
+						/>
+					);
+				})}
+			</div>
+
+			{/* Gate dollar labels */}
+			<div className="relative h-4 mt-0.5">
+				{boostGates.map((gate) => {
+					const pos = (Number(gate.threshold) / BAR_MAX) * 100;
+					const unlocked = total >= Number(gate.threshold);
+					return (
+						<span
+							key={`label-${gate.threshold}`}
+							className={`absolute text-[10px] leading-tight -translate-x-1/2 ${
+								unlocked ? "text-primary" : "text-base-content/30"
+							}`}
+							style={{ left: `${pos}%` }}
+						>
+							${gate.threshold}
+						</span>
+					);
+				})}
+			</div>
+
+			{/* Tooltip */}
+			{tooltip && (
+				<div
+					className="absolute z-50 bottom-full mb-2 pointer-events-none"
+					style={{
+						left: `${Math.min(
+							Math.max(tooltip.x, 60),
+							barRef.current ? barRef.current.offsetWidth - 60 : 200,
+						)}px`,
+						transform: "translateX(-50%)",
+					}}
+				>
+					<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
+						<p className="font-semibold mb-0.5">
+							{tooltip.gate.label}
+							<span className="font-normal text-base-content/40 ml-1">
+								${tooltip.gate.threshold}/mo
+							</span>
+						</p>
+						<p className="text-base-content/60">{tooltip.gate.description}</p>
+						{total >= Number(tooltip.gate.threshold) ? (
+							<p className="text-primary font-medium mt-1">Unlocked</p>
+						) : (
+							<p className="text-base-content/40 mt-1">
+								Need ${(Number(tooltip.gate.threshold) - total).toFixed(2)} more
+							</p>
+						)}
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Month Selector                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -94,10 +239,7 @@ function MonthSelector({
 
 	return (
 		<div className="flex items-center gap-3">
-			<button
-				className="btn btn-ghost btn-xs"
-				onClick={() => onChange(offsetCycle(cycle, -1))}
-			>
+			<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, -1))}>
 				&larr;
 			</button>
 			<span className="text-sm font-medium min-w-[140px] text-center">
@@ -110,10 +252,7 @@ function MonthSelector({
 				)}
 			</span>
 			{cycle < nextCycle ? (
-				<button
-					className="btn btn-ghost btn-xs"
-					onClick={() => onChange(offsetCycle(cycle, 1))}
-				>
+				<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, 1))}>
 					&rarr;
 				</button>
 			) : (
@@ -124,6 +263,21 @@ function MonthSelector({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Combined row data (distribution + boost + gates per creator)       */
+/* ------------------------------------------------------------------ */
+
+interface CreatorRow {
+	creatorId: number;
+	username: string;
+	displayName: string | null;
+	avatar: string | null;
+	timeSeconds: number;
+	poolAmount: number;
+	boostAmount: number;
+	gates: CreatorGate[];
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -131,21 +285,15 @@ export default function SubscriptionPage() {
 	const [searchParams] = useSearchParams();
 	const [sub, setSub] = useState<Subscription | null>(null);
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
-	const [distributions, setDistributions] = useState<{
-		distributions: PoolDistribution[];
-	} | null>(null);
-	const [boosts, setBoosts] = useState<{
-		boosts: BoostAllocation[];
-		budget: string;
-		allocated: string;
-		remaining: string;
-	} | null>(null);
+	const [distributions, setDistributions] = useState<PoolDistribution[]>([]);
+	const [boosts, setBoosts] = useState<BoostAllocation[]>([]);
+	const [boostBudget, setBoostBudget] = useState(0);
+	const [creatorGatesMap, setCreatorGatesMap] = useState<Map<string, CreatorGate[]>>(new Map());
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
-	const [boostSaving, setBoostSaving] = useState<number | null>(null);
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
@@ -166,60 +314,72 @@ export default function SubscriptionPage() {
 
 	const fetchCycleData = useCallback(async (cycle: string) => {
 		const [attRes, distRes, boostRes] = await Promise.allSettled([
-			client.api.subscriptions.attention.summary.$get({
-				query: { cycle },
-			}),
-			client.api.subscriptions.distributions.$get({
-				query: { cycle },
-			}),
-			client.api.subscriptions.boosts.$get({
-				query: { cycle },
-			}),
+			client.api.subscriptions.attention.summary.$get({ query: { cycle } }),
+			client.api.subscriptions.distributions.$get({ query: { cycle } }),
+			client.api.subscriptions.boosts.$get({ query: { cycle } }),
 		]);
 
 		if (attRes.status === "fulfilled") {
 			setAttention((await attRes.value.json()) as AttentionSummary);
 		}
 		if (distRes.status === "fulfilled") {
-			setDistributions(
-				(await distRes.value.json()) as { distributions: PoolDistribution[] },
+			const data = (await distRes.value.json()) as { distributions: PoolDistribution[] };
+			setDistributions(data.distributions);
+
+			// Fetch gates for each creator in the distribution list
+			const usernames = data.distributions
+				.map((d) => d.creator?.username)
+				.filter(Boolean) as string[];
+			const gatesMap = new Map<string, CreatorGate[]>();
+			const gateResults = await Promise.allSettled(
+				usernames.map(async (u) => {
+					const res = await client.api.subscriptions.gates.$get({
+						query: { creator: u },
+					});
+					const gateData = (await res.json()) as { gates: CreatorGate[] };
+					return { username: u, gates: gateData.gates };
+				}),
 			);
+			for (const r of gateResults) {
+				if (r.status === "fulfilled") {
+					gatesMap.set(r.value.username, r.value.gates);
+				}
+			}
+			setCreatorGatesMap(gatesMap);
 		}
 		if (boostRes.status === "fulfilled") {
-			setBoosts(
-				(await boostRes.value.json()) as {
-					boosts: BoostAllocation[];
-					budget: string;
-					allocated: string;
-					remaining: string;
-				},
-			);
+			const data = (await boostRes.value.json()) as {
+				boosts: BoostAllocation[];
+				budget: string;
+				allocated: string;
+				remaining: string;
+			};
+			setBoosts(data.boosts);
+			setBoostBudget(parseFloat(data.budget));
 		}
 	}, []);
 
-	useEffect(() => {
-		fetchSubscription();
-	}, [fetchSubscription]);
-
-	useEffect(() => {
-		fetchCycleData(selectedCycle);
-	}, [selectedCycle, fetchCycleData]);
+	useEffect(() => { fetchSubscription(); }, [fetchSubscription]);
+	useEffect(() => { fetchCycleData(selectedCycle); }, [selectedCycle, fetchCycleData]);
 
 	useEffect(() => {
 		if (sessionId) {
-			setSuccess(
-				"Subscription activated! Welcome aboard. It may take a moment for your plan to update.",
-			);
+			setSuccess("Subscription activated! Welcome aboard. It may take a moment for your plan to update.");
 			const timer = setTimeout(fetchSubscription, 2000);
 			return () => clearTimeout(timer);
 		}
 	}, [sessionId, fetchSubscription]);
 
-	// ── Boost editing ──
+	// ── Boost slider handling ──
 
-	const handleBoostChange = async (creatorId: number, newAmount: number) => {
-		setBoostSaving(creatorId);
-		setError(null);
+	const handleBoostSlider = async (creatorId: number, newAmount: number) => {
+		// Optimistic update
+		setBoosts((prev) =>
+			prev.map((b) =>
+				b.creatorId === creatorId ? { ...b, amount: newAmount.toFixed(2) } : b,
+			),
+		);
+
 		try {
 			const res = await client.api.subscriptions.boosts.$post({
 				json: {
@@ -231,24 +391,12 @@ export default function SubscriptionPage() {
 			if (!res.ok) {
 				const data = (await res.json()) as { error?: string };
 				setError(data.error ?? "Failed to update boost.");
-			} else {
-				// Re-fetch boost data for the cycle
-				const boostRes = await client.api.subscriptions.boosts.$get({
-					query: { cycle: selectedCycle },
-				});
-				setBoosts(
-					(await boostRes.json()) as {
-						boosts: BoostAllocation[];
-						budget: string;
-						allocated: string;
-						remaining: string;
-					},
-				);
+				// Revert on error
+				fetchCycleData(selectedCycle);
 			}
 		} catch {
 			setError("Failed to update boost.");
-		} finally {
-			setBoostSaving(null);
+			fetchCycleData(selectedCycle);
 		}
 	};
 
@@ -301,35 +449,46 @@ export default function SubscriptionPage() {
 	const tier = sub ? tierFor(sub.tier) : TIER_THRESHOLDS[0];
 	const isPaid = tier.price > 0;
 	const isCanceling = sub ? !!sub.canceledAt : false;
+	const fundingLevel = sub?.fundingLevel ?? tier.price;
 
 	const financials = useMemo(() => {
-		const price = sub?.fundingLevel ?? tier.price;
+		const price = fundingLevel;
 		const foundationFee = Math.round(price * ALLOC.foundation * 100) / 100;
 		const creatorShare = Math.round(price * ALLOC.creators * 100) / 100;
-		const poolAmount = Math.min(CREATOR_POOL, creatorShare);
-		const boostAmount = Math.max(0, Math.round((creatorShare - poolAmount) * 100) / 100);
-		return { price, foundationFee, creatorShare, poolAmount, boostAmount };
-	}, [sub, tier]);
+		const poolAmount = Math.min(CREATOR_POOL_FIXED, creatorShare);
+		const boostPool = Math.max(0, Math.round((creatorShare - poolAmount) * 100) / 100);
+		return { price, foundationFee, creatorShare, poolAmount, boostPool };
+	}, [fundingLevel]);
 
-	const distTotals = useMemo(() => {
-		if (!distributions) return null;
-		const dists = distributions.distributions;
-		let totalSeconds = 0;
-		let totalPool = 0;
-		let totalBoost = 0;
-		for (const d of dists) {
-			totalSeconds += d.attentionSeconds ?? 0;
-			totalPool += parseFloat(d.poolAmount);
-			totalBoost += parseFloat(d.boostAmount);
-		}
-		return {
-			totalSeconds,
-			totalPool: Math.round(totalPool * 100) / 100,
-			totalBoost: Math.round(totalBoost * 100) / 100,
-			totalCreator: Math.round((totalPool + totalBoost) * 100) / 100,
-			count: dists.length,
-		};
-	}, [distributions]);
+	const nextTier = sub ? nextTierFor(sub.tier) : null;
+
+	// Build combined rows: distribution + boost + gates per creator
+	const boostByCreator = useMemo(() => {
+		const map = new Map<number, number>();
+		for (const b of boosts) map.set(b.creatorId, parseFloat(b.amount));
+		return map;
+	}, [boosts]);
+
+	const rows: CreatorRow[] = useMemo(() => {
+		return distributions.map((d) => {
+			const boostAmt = boostByCreator.get(d.creatorId) ?? parseFloat(d.boostAmount);
+			const username = d.creator?.username ?? "";
+			return {
+				creatorId: d.creatorId,
+				username,
+				displayName: d.creator?.displayName ?? null,
+				avatar: d.creator?.avatar ?? null,
+				timeSeconds: d.attentionSeconds ?? 0,
+				poolAmount: parseFloat(d.poolAmount),
+				boostAmount: boostAmt,
+				gates: creatorGatesMap.get(username) ?? [],
+			};
+		});
+	}, [distributions, boostByCreator, creatorGatesMap]);
+
+	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
+	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
+	const totalBoost = rows.reduce((s, r) => s + r.boostAmount, 0);
 
 	const deliveryEstimate = useMemo(() => {
 		const hrs = attention?.hoursUsed ?? 0;
@@ -338,18 +497,7 @@ export default function SubscriptionPage() {
 		return { hours: hrs, gross, net, creditApplied: isPaid };
 	}, [attention, isPaid]);
 
-	const nextTier = sub ? nextTierFor(sub.tier) : null;
-
-	// Build a map of creatorId → boost amount for the Boost column
-	const boostByCreator = useMemo(() => {
-		const map = new Map<number, BoostAllocation>();
-		if (boosts) {
-			for (const b of boosts.boosts) {
-				map.set(b.creatorId, b);
-			}
-		}
-		return map;
-	}, [boosts]);
+	const canEditBoosts = (viewMode === "current" || viewMode === "next") && financials.boostPool > 0;
 
 	/* ---- Render ---- */
 
@@ -366,9 +514,7 @@ export default function SubscriptionPage() {
 			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
 				<h1 className="text-2xl font-bold mb-4">No Subscription</h1>
 				<p className="mb-4">You don't have an active subscription yet.</p>
-				<Link to="/subscribe" className="btn btn-primary">
-					Choose a Plan
-				</Link>
+				<Link to="/subscribe" className="btn btn-primary">Choose a Plan</Link>
 			</div>
 		);
 	}
@@ -382,12 +528,8 @@ export default function SubscriptionPage() {
 					<span className="text-sm text-base-content/60">Free Plan</span>
 				</div>
 
-				{error && (
-					<div className="alert alert-error mb-4"><span>{error}</span></div>
-				)}
-				{success && (
-					<div className="alert alert-success mb-4"><span>{success}</span></div>
-				)}
+				{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
+				{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
 
 				<div className="card bg-base-200">
 					<div className="card-body">
@@ -396,9 +538,7 @@ export default function SubscriptionPage() {
 								<h2 className="card-title">Free Plan</h2>
 								<div className="badge badge-success badge-sm mt-1">Active</div>
 							</div>
-							<Link to="/subscribe" className="btn btn-primary btn-sm">
-								Upgrade
-							</Link>
+							<Link to="/subscribe" className="btn btn-primary btn-sm">Upgrade</Link>
 						</div>
 
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
@@ -434,339 +574,285 @@ export default function SubscriptionPage() {
 		);
 	}
 
-	/* ---- Paid user view ---- */
-
-	const hasDists = distributions && distributions.distributions.length > 0;
-	const boostBudget = parseFloat(boosts?.budget ?? "0");
-	const canEditBoosts = viewMode === "current" || viewMode === "next";
+	/* ──────────────────────────────────────────────────────────────────── */
+	/*  Paid user view — matches the interactive demo dashboard style      */
+	/* ──────────────────────────────────────────────────────────────────── */
 
 	return (
-		<div className="max-w-2xl mx-auto px-4 py-8">
-			{/* Header */}
-			<div className="flex items-baseline justify-between mb-2">
-				<h1 className="text-2xl font-bold">Your Anthers</h1>
-				<span className="text-sm text-base-content/60">
-					{tier.name} Plan ({fmt(financials.price)}/mo)
-				</span>
+		<div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+			{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
+			{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
+
+			{/* Header + month selector */}
+			<div>
+				<div className="flex items-baseline justify-between">
+					<h1 className="text-lg font-bold">
+						Your Anthers—{cycleLabel(selectedCycle)}
+					</h1>
+					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+				</div>
+				<p className="text-sm text-base-content/60">
+					{tier.name} tier — {fmt(financials.price)}/mo
+				</p>
 			</div>
 
-			{/* Month selector */}
-			<div className="flex justify-center mb-4">
-				<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
-			</div>
-
-			{error && (
-				<div className="alert alert-error mb-4"><span>{error}</span></div>
-			)}
-			{success && (
-				<div className="alert alert-success mb-4"><span>{success}</span></div>
-			)}
-
-			{/* Next-month preview banner */}
+			{/* Banners */}
 			{viewMode === "next" && (
-				<div className="alert alert-info mb-4 text-sm">
+				<div className="alert alert-info text-sm">
 					<span>
-						Preview for {cycleLabel(selectedCycle)}. Boost changes here will
-						take effect at the start of this billing cycle. You can increase
-						or decrease boosts freely.
+						Preview for {cycleLabel(selectedCycle)}. Boost changes here take
+						effect at the start of this billing cycle. You can increase or
+						decrease boosts freely.
 					</span>
 				</div>
 			)}
-
-			{/* Past month banner */}
 			{viewMode === "past" && (
-				<div className="alert mb-4 text-sm bg-base-200">
-					<span>
-						Historical view for {cycleLabel(selectedCycle)}. This is a
-						read-only summary of your billing for this period.
-					</span>
+				<div className="alert text-sm bg-base-200">
+					<span>Historical view — read-only summary for {cycleLabel(selectedCycle)}.</span>
 				</div>
 			)}
 
-			{/* Status badges (current month only) */}
-			{viewMode === "current" && (
-				<div className="flex items-center gap-2 mb-4">
-					{sub.isActive ? (
-						<div className="badge badge-success badge-sm">Active</div>
-					) : (
-						<div className="badge badge-error badge-sm">Inactive</div>
-					)}
-					{isCanceling && (
-						<div className="badge badge-warning badge-sm">
-							Cancels at period end
-						</div>
-					)}
-					{sub.currentPeriodEnd && (
-						<span className="text-xs text-base-content/40">
-							{isCanceling ? "Access until" : "Next billing date"}:{" "}
-							{new Date(sub.currentPeriodEnd).toLocaleDateString()}
-						</span>
-					)}
-				</div>
-			)}
-
-			{/* ═══════════ Subscription split ═══════════ */}
-			<div className="border-t-2 border-base-content/20 pt-4">
-				<div className="flex justify-between text-sm mb-3">
-					<span className="text-base-content/50">
-						Anthers Foundation Fee (8%)
-					</span>
-					<span className="text-base-content/50">
-						{fmt(financials.foundationFee)}
-					</span>
-				</div>
-
-				<div className="flex justify-between text-sm">
-					<span>
-						Creator Pool{" "}
-						<span className="text-base-content/40">(auto, time-proportional)</span>
-					</span>
-					<span className="font-medium">{fmt(financials.poolAmount)}</span>
-				</div>
-
-				{financials.boostAmount > 0 && (
-					<div className="flex justify-between text-sm mt-1">
-						<span>
-							Boost Pool{" "}
-							<span className="text-base-content/40">
-								({boosts?.budget ? `${fmt(parseFloat(boosts.budget))} budget` : "auto allocation"})
-							</span>
-						</span>
-						<span className="font-medium">{fmt(financials.boostAmount)}</span>
+			{/* ── Summary cards ── */}
+			<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+				<div className="card bg-base-200">
+					<div className="card-body p-4">
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Anthers Foundation Fee
+						</p>
+						<p className="text-xl font-bold">{fmt(financials.foundationFee)}</p>
+						<p className="text-xs text-base-content/40">8% of subscription</p>
 					</div>
-				)}
+				</div>
+				<div className="card bg-base-200">
+					<div className="card-body p-4">
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Creator Pool
+						</p>
+						<p className="text-xl font-bold text-success">
+							{fmt(totalPool > 0 ? totalPool : financials.poolAmount)}
+						</p>
+						<p className="text-xs text-base-content/40">Auto · time-proportional</p>
+					</div>
+				</div>
+				<div className="card bg-base-200">
+					<div className="card-body p-4">
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">
+							Boost Pool
+						</p>
+						<p className="text-xl font-bold text-primary">
+							{fmt(totalBoost > 0 ? totalBoost : financials.boostPool)}
+						</p>
+						<p className="text-xs text-base-content/40">
+							{canEditBoosts ? "Drag sliders to adjust" : "Auto allocation"}
+						</p>
+					</div>
+				</div>
+			</div>
 
-				{/* ── Per-creator distribution table ── */}
-				{hasDists ? (
-					<div className="mt-4 overflow-x-auto">
-						<table className="table table-sm">
+			{/* ── Subscription Allocations table ── */}
+			{rows.length > 0 ? (
+				<div>
+					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
+						Subscription Allocations
+					</h4>
+					<div className="overflow-x-auto">
+						<table className="table table-sm w-full">
 							<thead>
-								<tr className="text-base-content/50">
-									<th className="font-normal">Creator</th>
-									<th className="font-normal text-right">Time</th>
-									<th className="font-normal text-right">Pool</th>
-									{financials.boostAmount > 0 && (
-										<th className="font-normal text-right">Boost</th>
-									)}
-									<th className="font-normal text-right">Total</th>
+								<tr>
+									<th className="w-45">Creator</th>
+									<th className="w-25">Time</th>
+									<th className="w-25">Pool</th>
+									<th className="w-60">Boost</th>
+									<th>Total</th>
 								</tr>
 							</thead>
 							<tbody>
-								{distributions!.distributions.map((d) => {
-									const boostAlloc = boostByCreator.get(d.creatorId);
-									const boostAmt = boostAlloc ? parseFloat(boostAlloc.amount) : parseFloat(d.boostAmount);
-									const total = parseFloat(d.poolAmount) + boostAmt;
-									const isSaving = boostSaving === d.creatorId;
+								{rows.map((row) => {
+									const rowTotal = row.poolAmount + row.boostAmount;
+									const initials = (row.displayName || row.username)
+										.split(/\s+/)
+										.map((w) => w[0])
+										.join("")
+										.slice(0, 2)
+										.toUpperCase();
 
 									return (
-										<tr key={d.id}>
+										<tr key={row.creatorId} className="hover">
 											<td>
-												<Link
-													to={`/${d.creator?.username}`}
-													className="link link-hover"
-												>
-													{d.creator?.displayName || d.creator?.username}
-												</Link>
-											</td>
-											<td className="text-right text-base-content/50">
-												{formatHours(d.attentionSeconds ?? 0)}
-											</td>
-											<td className="text-right">{fmt(parseFloat(d.poolAmount))}</td>
-											{financials.boostAmount > 0 && (
-												<td className="text-right">
-													{canEditBoosts && boostBudget > 0 ? (
-														<div className="flex items-center justify-end gap-1">
-															{isSaving && (
-																<span className="loading loading-spinner loading-xs" />
-															)}
-															<input
-																type="number"
-																className="input input-xs w-20 text-right"
-																min={viewMode === "current" ? boostAmt : 0}
-																max={boostBudget}
-																step="0.01"
-																value={boostAmt.toFixed(2)}
-																onChange={(e) => {
-																	const val = parseFloat(e.target.value);
-																	if (!isNaN(val)) {
-																		handleBoostChange(d.creatorId, val);
-																	}
-																}}
-																disabled={isSaving}
-															/>
-														</div>
+												<div className="flex items-center gap-1.5">
+													{row.avatar ? (
+														<img
+															src={row.avatar}
+															alt=""
+															className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+														/>
 													) : (
-														boostAmt > 0 ? fmt(boostAmt) : "—"
+														<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">
+															{initials}
+														</div>
 													)}
-												</td>
-											)}
-											<td className="text-right font-medium">
-												{fmt(total)}
+													<Link to={`/${row.username}`} className="font-medium text-sm truncate link link-hover">
+														@{row.displayName || row.username}
+													</Link>
+												</div>
+											</td>
+											<td className="text-sm">
+												{formatHours(row.timeSeconds)}
+											</td>
+											<td className="text-sm text-success">
+												{fmt(row.poolAmount)}
+											</td>
+											<td>
+												{canEditBoosts ? (
+													<div className="flex items-center gap-2">
+														<input
+															type="range"
+															min={viewMode === "current" ? Math.round(row.boostAmount * 100) : 0}
+															max={Math.round(boostBudget * 100)}
+															value={Math.round(row.boostAmount * 100)}
+															onChange={(e) => handleBoostSlider(row.creatorId, parseInt(e.target.value, 10) / 100)}
+															className="range range-xs range-primary flex-1"
+														/>
+														<span className="text-sm text-primary font-medium w-14 flex-shrink-0 text-right">
+															{fmt(row.boostAmount)}
+														</span>
+													</div>
+												) : (
+													<span className="text-sm text-primary">
+														{fmt(row.boostAmount)}
+													</span>
+												)}
+											</td>
+											<td>
+												<div className="flex items-start gap-2">
+													<div className="flex-1 pt-0.5">
+														{row.gates.length > 0 && (
+															<AccessBar total={rowTotal} gates={row.gates} />
+														)}
+													</div>
+													<span className="text-sm font-medium w-14 flex-shrink-0 text-right">
+														{fmt(rowTotal)}
+													</span>
+												</div>
 											</td>
 										</tr>
 									);
 								})}
 							</tbody>
-							{distTotals && distTotals.count > 1 && (
-								<tfoot>
-									<tr className="border-t border-base-content/20">
-										<td className="text-base-content/50">
-											{distTotals.count} creators
-										</td>
-										<td className="text-right text-base-content/50">
-											{formatHours(distTotals.totalSeconds)}
-										</td>
-										<td className="text-right font-medium">
-											{fmt(distTotals.totalPool)}
-										</td>
-										{financials.boostAmount > 0 && (
-											<td className="text-right font-medium">
-												{distTotals.totalBoost > 0
-													? fmt(distTotals.totalBoost)
-													: "—"}
-											</td>
-										)}
-										<td className="text-right font-bold">
-											{fmt(distTotals.totalCreator)}
-										</td>
-									</tr>
-								</tfoot>
-							)}
 						</table>
-
-						{/* Boost editing hint */}
-						{canEditBoosts && boostBudget > 0 && (
-							<p className="text-[11px] text-base-content/30 mt-2">
-								{viewMode === "current"
-									? "Boosts can only be increased in the current month. Switch to next month's preview to decrease or remove boosts."
-									: "You can freely adjust next month's boosts. Changes take effect at the start of the billing cycle."}
-							</p>
-						)}
 					</div>
-				) : (
-					<div className="mt-4 py-6 text-center text-sm text-base-content/40">
-						{viewMode === "next" ? (
-							<p>
-								Next month's distributions will be calculated based on your
-								time with creators during {cycleLabel(selectedCycle)}.
+					{canEditBoosts && viewMode === "current" && (
+						<p className="text-[11px] text-base-content/30 mt-2">
+							Boosts can only be increased in the current month. Switch to next
+							month's preview to decrease or remove boosts.
+						</p>
+					)}
+				</div>
+			) : (
+				<div className="py-6 text-center text-sm text-base-content/40">
+					{viewMode === "next" ? (
+						<p>Next month's distributions will be calculated based on your time with creators during {cycleLabel(selectedCycle)}.</p>
+					) : (
+						<>
+							<p>No distributions yet this cycle.</p>
+							<p className="mt-1">
+								Your creator pool is distributed proportionally based on your
+								time with creators — video, audio, text, and gameplay all count equally.
 							</p>
-						) : (
-							<>
-								<p>No distributions yet this cycle.</p>
-								<p className="mt-1">
-									Your creator pool is distributed proportionally based on your
-									time with creators — whether you're watching videos, reading
-									articles, listening to music, or playing games.
-								</p>
-							</>
-						)}
+						</>
+					)}
+				</div>
+			)}
+
+			{/* ── Billing Summary ── */}
+			<div className="card bg-base-200">
+				<div className="card-body p-4 space-y-1">
+					<div className="flex justify-between text-sm">
+						<span className="text-base-content/70">Anthers Foundation Fee</span>
+						<span>{fmt(financials.foundationFee)}</span>
 					</div>
-				)}
-			</div>
-
-			{/* ═══════════ Bottom summary ═══════════ */}
-			<div className="border-t-2 border-base-content/20 pt-4 mt-2 space-y-2 text-sm">
-				<div className="flex justify-between">
-					<span>Creator support</span>
-					<span className="font-medium">{fmt(financials.creatorShare)}</span>
-				</div>
-
-				<div className="flex justify-between">
-					<span>Anthers Foundation Fee</span>
-					<span className="font-medium">{fmt(financials.foundationFee)}</span>
-				</div>
-
-				<div className="flex justify-between pt-1 border-t border-base-content/10">
-					<span className="font-semibold">Subscription</span>
-					<span className="font-semibold">{fmt(financials.price)}</span>
-				</div>
-
-				{viewMode !== "next" && (
-					<>
-						<div className="flex justify-between text-base-content/50">
-							<span>
-								Delivery
-								{deliveryEstimate.hours > 0 && (
-									<span className="text-base-content/30">
-										{" "}({deliveryEstimate.hours} hrs across all media)
-									</span>
-								)}
-							</span>
-							<span>
-								{deliveryEstimate.hours > 0 ? (
-									deliveryEstimate.net > 0
-										? <>~{fmt(deliveryEstimate.net)}</>
-										: <span className="text-success">covered</span>
-								) : "—"}
+					<div className="flex justify-between text-sm">
+						<span className="text-base-content/70">Creator Pool</span>
+						<span className="text-success">
+							{fmt(totalPool > 0 ? totalPool : financials.poolAmount)}
+						</span>
+					</div>
+					{financials.boostPool > 0 && (
+						<div className="flex justify-between text-sm">
+							<span className="text-base-content/70">Boost Pool</span>
+							<span className="text-primary">
+								{fmt(totalBoost > 0 ? totalBoost : financials.boostPool)}
 							</span>
 						</div>
+					)}
+					<div className="divider my-1" />
+					<div className="flex justify-between text-sm font-bold">
+						<span>Monthly total</span>
+						<span>{fmt(financials.price)}</span>
+					</div>
 
-						{deliveryEstimate.hours > 0 && deliveryEstimate.creditApplied && (
-							<p className="text-[11px] text-base-content/30 leading-snug">
-								{deliveryEstimate.net > 0
-									? `Estimate assumes 1080p video rate. Your $1/mo delivery credit has been applied (${fmt(deliveryEstimate.gross)} gross − $1.00 credit). Audio and text cost far less to deliver.`
-									: `Your $1/mo delivery credit covers this. Audio and text cost far less than video to deliver.`
-								}
-							</p>
-						)}
-
-						{deliveryEstimate.net > 0 && (
-							<div className="flex justify-between pt-1 border-t border-base-content/10">
-								<span className="font-semibold">Estimated total</span>
-								<span className="font-semibold">
-									~{fmt(financials.price + deliveryEstimate.net)}
+					{viewMode !== "next" && deliveryEstimate.hours > 0 && (
+						<>
+							<div className="flex justify-between text-sm text-base-content/50">
+								<span>
+									Delivery ({deliveryEstimate.hours} hrs)
+								</span>
+								<span>
+									{deliveryEstimate.net > 0
+										? `~${fmt(deliveryEstimate.net)}`
+										: <span className="text-success">covered by $1 credit</span>
+									}
 								</span>
 							</div>
-						)}
-					</>
-				)}
+							<p className="text-[11px] text-base-content/30">
+								Delivery estimate assumes 1080p video. Audio and text cost far less.
+							</p>
+						</>
+					)}
+
+					{sub.currentPeriodEnd && viewMode === "current" && (
+						<p className="text-xs text-base-content/40 mt-1">
+							Next charge: {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+						</p>
+					)}
+				</div>
 			</div>
 
-			{/* ═══════════ Actions (current month only) ═══════════ */}
+			{/* ── Actions ── */}
 			{viewMode === "current" && (
-				<div className="mt-6 flex flex-wrap items-center gap-3">
-					<Link to="/subscribe" className="btn btn-outline btn-sm">
-						Change Plan
-					</Link>
-
+				<div className="flex flex-wrap items-center gap-3">
+					<Link to="/subscribe" className="btn btn-outline btn-sm">Change Plan</Link>
 					{isCanceling ? (
 						<button
 							className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
-							onClick={handleResume}
-							disabled={!!actionLoading}
+							onClick={handleResume} disabled={!!actionLoading}
 						>
 							{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
 						</button>
 					) : (
 						<button
 							className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
-							onClick={handleCancel}
-							disabled={!!actionLoading}
+							onClick={handleCancel} disabled={!!actionLoading}
 						>
 							{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
 						</button>
 					)}
-
 					<button
 						className={`btn btn-ghost btn-sm ${actionLoading === "portal" ? "btn-disabled" : ""}`}
-						onClick={handleBillingPortal}
-						disabled={!!actionLoading}
+						onClick={handleBillingPortal} disabled={!!actionLoading}
 					>
 						{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
 					</button>
 				</div>
 			)}
 
-			{/* ═══════════ Footer nudges ═══════════ */}
 			{viewMode === "current" && nextTier && (
-				<div className="mt-4">
-					<Link to="/subscribe" className="text-sm text-primary hover:underline">
-						Adjust your support level anytime &rarr;{" "}
-						<span className="text-base-content/40">
-							You're ${nextTier.price - tier.price} from {nextTier.name} perks
-						</span>
-					</Link>
-				</div>
+				<Link to="/subscribe" className="text-sm text-primary hover:underline">
+					Adjust your support level anytime &rarr;{" "}
+					<span className="text-base-content/40">
+						You're ${nextTier.price - tier.price} from {nextTier.name} perks
+					</span>
+				</Link>
 			)}
 		</div>
 	);
