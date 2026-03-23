@@ -591,8 +591,10 @@ function CreatorSupportSection() {
 			<p className="text-xs text-base-content/60 leading-relaxed">
 				92% of your subscription goes to creators through two pools.
 				The <strong>Creator Pool</strong> ($2.76) is distributed automatically,
-				proportional to time spent engaging. The <strong>Boost Pool</strong> is
-				everything above that — it lets you direct extra funds to specific
+				proportional to your time with each creator — whether you're
+				watching videos, listening to music, reading articles, or
+				playing games. The <strong>Boost Pool</strong> is everything
+				above that — it lets you direct extra funds to specific
 				creators. Your boost determines which gated content you unlock.
 				Boost starts at any funding level above $3.
 			</p>
@@ -629,14 +631,80 @@ function FeesSection() {
 				<h3 className="font-semibold text-sm">Fees</h3>
 			</div>
 			<p className="text-xs text-base-content/60 leading-relaxed">
-				<strong>Delivery:</strong> bandwidth cost of content you watch,
-				billed based on actual usage. Smart quality controls, local
-				caching, downloads, and shared viewing help keep costs low.{" "}
+				<strong>Delivery:</strong> bandwidth cost of content you consume,
+				billed based on actual usage. Video costs the most; audio is
+				~30x cheaper per minute; text is essentially free. Smart quality
+				controls, caching, downloads, and shared viewing help keep costs
+				low.{" "}
 				<strong>Processing:</strong> 2.9% + $0.30 for credit/debit cards,
 				or 0.8% (max $5) for bank payments (ACH).{" "}
 				<strong>Sales tax:</strong> estimated at the national average
 				(~6.6%). Actual tax may vary by state and locality.
 			</p>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Creator scenario sliders                                          */
+/* ------------------------------------------------------------------ */
+
+function CreatorSliders({
+	label, timePct, boostPct, boostAmt, boostDisabled,
+	onTimeChange, onBoostChange, poolColor, boostColor,
+}: {
+	label: string;
+	timePct: number;
+	boostPct: number;
+	boostAmt: string;
+	boostDisabled: boolean;
+	onTimeChange: (v: number) => void;
+	onBoostChange: (v: number) => void;
+	poolColor: string;
+	boostColor: string;
+}) {
+	const [hover, setHover] = useState<"time" | "boost" | null>(null);
+
+	return (
+		<div className="space-y-2 px-4 first:pl-0">
+			<label className="text-xs font-semibold text-center block">{label}</label>
+			<div className="flex items-center gap-2"
+				 onMouseEnter={() => setHover("time")}
+				 onMouseLeave={() => setHover(null)}
+			>
+				<span className="text-[10px] text-base-content/40 w-12">Time</span>
+				<input type="range" min={0} max={100} step={1} value={timePct}
+					   onChange={(e) => onTimeChange(Number(e.target.value))}
+					   className="range range-xs flex-1"
+					   style={{ color: poolColor }} />
+				<span className="text-xs w-8 text-right">{timePct}%</span>
+			</div>
+			<div className="flex items-center gap-2"
+				 onMouseEnter={() => setHover("boost")}
+				 onMouseLeave={() => setHover(null)}
+			>
+				<span className="text-[10px] text-base-content/40 w-12">Boost</span>
+				<input type="range" min={0} max={100} step={1} value={boostPct}
+					   onChange={(e) => onBoostChange(Number(e.target.value))}
+					   className="range range-xs flex-1"
+					   style={{ color: boostColor }}
+					   disabled={boostDisabled} />
+				<span className="text-xs w-8 text-right">{boostAmt}</span>
+			</div>
+			<div className="mt-1 space-y-0.5">
+				<p className={`text-[10px] leading-tight transition-colors duration-200 ${
+					hover === "time" ? "text-base-content/60" : "text-base-content/20"
+				}`}>
+					Time — your consumption across all media. Drives the
+					Creator Pool split automatically.
+				</p>
+				<p className={`text-[10px] leading-tight transition-colors duration-200 ${
+					hover === "boost" ? "text-base-content/60" : "text-base-content/20"
+				}`}>
+					Boost — extra funds you direct to this creator.
+					Determines which gated content you unlock.
+				</p>
+			</div>
 		</div>
 	);
 }
@@ -661,15 +729,15 @@ export default function SubscribePage() {
 	// --- Interactive controls ---
 	const [fundingLevel, setFundingLevel] = useState(DEFAULT_FUNDING);
 
-	// Creator watch % — zero-sum, always sums to 100
-	const [watchPcts, setWatchPcts] = useState<[number, number, number]>([51, 26, 23]);
+	// Creator time % — zero-sum, always sums to 100
+	const [timePcts, setTimePcts] = useState<[number, number, number]>([51, 26, 23]);
 
 	/**
 	 * Update one slider in a zero-sum triple and distribute the change
 	 * equally across the other two, clamping at 0.
 	 */
-	const setWatch = useCallback((idx: 0 | 1 | 2, newVal: number) => {
-		setWatchPcts((prev) => zeroSumUpdate(prev, idx, newVal, 100));
+	const setTime = useCallback((idx: 0 | 1 | 2, newVal: number) => {
+		setTimePcts((prev) => zeroSumUpdate(prev, idx, newVal, 100));
 	}, []);
 
 	// Creator boost % — zero-sum, always sums to 100
@@ -684,7 +752,7 @@ export default function SubscribePage() {
 		setBoostPcts((prev) => zeroSumUpdate(prev, idx, newVal, 100));
 	}, []);
 
-	// Streaming hours (non-linear slider: 0–1000 position → 0–200 hrs quadratic)
+	// Content hours (non-linear slider: 0–1000 position → 0–200 hrs)
 	const [streamSlider, setStreamSlider] = useState(() => hrsToSlider(25));
 	const streamHours = sliderToHrs(streamSlider);
 
@@ -706,9 +774,9 @@ export default function SubscribePage() {
 	const showDiagram = fundingLevel > 0 || deliveryAmt > 0;
 
 	const poolSplits: [number, number, number] = [
-		watchPcts[0] / 100,
-		watchPcts[1] / 100,
-		watchPcts[2] / 100,
+		timePcts[0] / 100,
+		timePcts[1] / 100,
+		timePcts[2] / 100,
 	];
 
 	const boostSplits: [number, number, number] = [
@@ -841,9 +909,9 @@ export default function SubscribePage() {
 						Build Your Scenario
 					</h2>
 					<p className="text-sm text-base-content/60 text-center max-w-2xl mx-auto mb-6">
-						Set your subscription level, adjust how you split watch time
-						and boost funds across creators, estimate your streaming usage,
-						and see the full cost breakdown below.
+						Set your subscription level, adjust how you split time
+						and boost funds across creators, estimate your content
+						consumption, and see the full cost breakdown below.
 					</p>
 
 					{/* ---- Subscription funding slider ---- */}
@@ -854,74 +922,47 @@ export default function SubscribePage() {
 					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-x divide-base-content/10 mb-2">
 
 						{/* Creator A */}
-						<div className="space-y-2 px-4 first:pl-0 last:pr-0">
-							<label className="text-xs font-semibold text-center block">Creator A</label>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
-								<input type="range" min={0} max={100} step={1} value={watchPcts[0]}
-									   onChange={(e) => setWatch(0, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.pool }} />
-								<span className="text-xs w-8 text-right">{watchPcts[0]}%</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
-								<input type="range" min={0} max={100} step={1} value={boostPcts[0]}
-									   onChange={(e) => setBoost(0, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.boost }}
-									   disabled={boostTotal <= 0} />
-								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[0])}</span>
-							</div>
-						</div>
+						<CreatorSliders
+							label="Creator A"
+							timePct={timePcts[0]}
+							boostPct={boostPcts[0]}
+							boostAmt={fmt(boostTotal * boostSplits[0])}
+							boostDisabled={boostTotal <= 0}
+							onTimeChange={(v) => setTime(0, v)}
+							onBoostChange={(v) => setBoost(0, v)}
+							poolColor={COLORS.pool}
+							boostColor={COLORS.boost}
+						/>
 
 						{/* Creator B */}
-						<div className="space-y-2 px-4">
-							<label className="text-xs font-semibold text-center block">Creator B</label>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
-								<input type="range" min={0} max={100} step={1} value={watchPcts[1]}
-									   onChange={(e) => setWatch(1, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.pool }} />
-								<span className="text-xs w-8 text-right">{watchPcts[1]}%</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
-								<input type="range" min={0} max={100} step={1} value={boostPcts[1]}
-									   onChange={(e) => setBoost(1, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.boost }}
-									   disabled={boostTotal <= 0} />
-								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[1])}</span>
-							</div>
-						</div>
+						<CreatorSliders
+							label="Creator B"
+							timePct={timePcts[1]}
+							boostPct={boostPcts[1]}
+							boostAmt={fmt(boostTotal * boostSplits[1])}
+							boostDisabled={boostTotal <= 0}
+							onTimeChange={(v) => setTime(1, v)}
+							onBoostChange={(v) => setBoost(1, v)}
+							poolColor={COLORS.pool}
+							boostColor={COLORS.boost}
+						/>
 
 						{/* Creator C */}
-						<div className="space-y-2 px-4">
-							<label className="text-xs font-semibold text-center block">Creator C</label>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Watch</span>
-								<input type="range" min={0} max={100} step={1} value={watchPcts[2]}
-									   onChange={(e) => setWatch(2, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.pool }} />
-								<span className="text-xs w-8 text-right">{watchPcts[2]}%</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<span className="text-[10px] text-base-content/40 w-12">Boost</span>
-								<input type="range" min={0} max={100} step={1} value={boostPcts[2]}
-									   onChange={(e) => setBoost(2, Number(e.target.value))}
-									   className="range range-xs flex-1"
-									   style={{ color: COLORS.boost }}
-									   disabled={boostTotal <= 0} />
-								<span className="text-xs w-8 text-right">{fmt(boostTotal * boostSplits[2])}</span>
-							</div>
-						</div>
+						<CreatorSliders
+							label="Creator C"
+							timePct={timePcts[2]}
+							boostPct={boostPcts[2]}
+							boostAmt={fmt(boostTotal * boostSplits[2])}
+							boostDisabled={boostTotal <= 0}
+							onTimeChange={(v) => setTime(2, v)}
+							onBoostChange={(v) => setBoost(2, v)}
+							poolColor={COLORS.pool}
+							boostColor={COLORS.boost}
+						/>
 
-						{/* Streaming hours */}
+						{/* Content delivery hours */}
 						<div className="space-y-2 px-4 last:pr-0">
-							<label className="text-xs font-semibold text-center block">Streaming</label>
+							<label className="text-xs font-semibold text-center block">Content Delivery</label>
 							<div className="flex items-center gap-2">
 								{(() => {
 									const creditThresholdHrs = Math.round(DELIVERY_CREDIT / DELIVERY_PER_HOUR);
@@ -954,9 +995,9 @@ export default function SubscribePage() {
 									</span>
 							</p>
 							<p className="text-[10px] text-base-content/30 leading-tight">
-								Assumes 1080/60 video (~{fmt(grossDelivery)} gross). Will be
-								lower for audio, text, or if you watch with friends, download
-								for rewatching, or use auto-quality/audio-only.
+								Assumes 1080/60 video (~{fmt(grossDelivery)} gross). Audio
+								costs ~30x less, text is essentially free. Downloads,
+								caching, shared viewing, and auto-quality also reduce costs.
 							</p>
 						</div>
 					</div>
@@ -1123,9 +1164,9 @@ export default function SubscribePage() {
 								<p className="text-sm text-base-content/60 leading-relaxed">
 									Every Anthers user — including free users — gets a <strong>$1/month delivery
 									credit</strong> funded by the Anthers Foundation. That's enough for roughly
-									15 hours of 1080p video, and even more for audio or text content. At your
-									current streaming level, the Foundation covers your entire delivery
-									cost — you won't be charged anything for delivery.
+									15 hours of 1080p video — and significantly more for audio or text,
+									which cost a fraction of video to deliver. At your current consumption
+									level, the Foundation covers your entire delivery cost.
 								</p>
 								<p className="text-xs text-base-content/40 mt-4">
 									Increase your subscription or streaming above the credit to see the

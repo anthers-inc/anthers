@@ -9,7 +9,19 @@
  * and removed without affecting real data.
  */
 
-import { db, users, projects, posts, ratings, comments } from "./index.js";
+import {
+	db,
+	users,
+	projects,
+	posts,
+	ratings,
+	comments,
+	follows,
+	purchases,
+	subscriptions,
+	attentionEvents,
+	poolDistributions,
+} from "./index.js";
 import { and, eq, like } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
@@ -368,6 +380,127 @@ const COMMENT_BODIES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Test users (non-creators — for testing the subscriber experience)
+// ---------------------------------------------------------------------------
+
+interface SeedUser {
+	username: string;
+	email: string;
+	displayName: string;
+	bio: string;
+	tier: "free" | "sprout";
+	/** Usernames of creators this user follows */
+	follows: string[];
+	/** Project titles this user has purchased */
+	purchaseTitles: string[];
+	/** Attention time targets (seconds) per creator username */
+	attentionTargets: Record<string, { seconds: number; eventTypes: string[] }>;
+}
+
+const TEST_USERS: SeedUser[] = [
+	{
+		username: `${SEED_PREFIX}casey`,
+		email: "casey@seed.anthers.dev",
+		displayName: "Casey Rivera",
+		bio: "Games, podcasts, and too many open tabs.",
+		tier: "sprout",
+		follows: [
+			`${SEED_PREFIX}novapixel`,
+			`${SEED_PREFIX}sagemoreno`,
+			`${SEED_PREFIX}marisol`,
+			`${SEED_PREFIX}hexbound`,
+		],
+		purchaseTitles: ["Moonvale", "Tile Garden"],
+		attentionTargets: {
+			[`${SEED_PREFIX}novapixel`]:  { seconds: 29520, eventTypes: ["play", "read"] },       // ~8.2 hrs
+			[`${SEED_PREFIX}sagemoreno`]: { seconds: 23400, eventTypes: ["read", "listen"] },      // ~6.5 hrs
+			[`${SEED_PREFIX}hexbound`]:   { seconds: 18360, eventTypes: ["play", "read"] },        // ~5.1 hrs
+			[`${SEED_PREFIX}marisol`]:    { seconds: 10800, eventTypes: ["play", "read"] },        // ~3.0 hrs
+			[`${SEED_PREFIX}fluxbeats`]:  { seconds: 5400,  eventTypes: ["play"] },                // ~1.5 hrs
+		},
+	},
+	{
+		username: `${SEED_PREFIX}jordan`,
+		email: "jordan@seed.anthers.dev",
+		displayName: "Jordan Park",
+		bio: "Lurker turned listener. Mostly here for the music and the horror games.",
+		tier: "free",
+		follows: [
+			`${SEED_PREFIX}fluxbeats`,
+			`${SEED_PREFIX}marisol`,
+			`${SEED_PREFIX}novapixel`,
+		],
+		purchaseTitles: ["The Quiet House"],
+		attentionTargets: {
+			[`${SEED_PREFIX}novapixel`]:  { seconds: 10800, eventTypes: ["play", "read"] },       // ~3.0 hrs
+			[`${SEED_PREFIX}fluxbeats`]:  { seconds: 7200,  eventTypes: ["play", "listen"] },     // ~2.0 hrs
+			[`${SEED_PREFIX}marisol`]:    { seconds: 5400,  eventTypes: ["play", "read"] },        // ~1.5 hrs
+			[`${SEED_PREFIX}sagemoreno`]: { seconds: 1800,  eventTypes: ["read"] },                // ~0.5 hrs
+		},
+	},
+];
+
+// ---------------------------------------------------------------------------
+// Attention event generation helpers
+// ---------------------------------------------------------------------------
+
+function currentBillingCycle(): string {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function billingCycleStart(): Date {
+	const now = new Date();
+	return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function billingCycleEnd(): Date {
+	const now = new Date();
+	return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+}
+
+/**
+ * Generate a batch of attention events that sum to approximately `targetSeconds`.
+ * Events are spread across days in the current billing cycle with realistic durations.
+ */
+function buildAttentionEvents(
+	userId: number,
+	creatorId: number,
+	targetSeconds: number,
+	eventTypes: string[],
+): {
+	userId: number;
+	creatorId: number;
+	eventType: string;
+	durationSeconds: number;
+	createdAt: Date;
+}[] {
+	const events: ReturnType<typeof buildAttentionEvents> = [];
+	const start = billingCycleStart();
+	const now = new Date();
+	const daysElapsed = Math.max(1, Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+
+	let remaining = targetSeconds;
+	while (remaining > 0) {
+		const duration = Math.min(remaining, randomInt(30, 300));
+		const day = randomInt(0, daysElapsed - 1);
+		const date = new Date(start);
+		date.setDate(date.getDate() + day);
+		date.setHours(randomInt(8, 23), randomInt(0, 59), randomInt(0, 59));
+
+		events.push({
+			userId,
+			creatorId,
+			eventType: pick(eventTypes),
+			durationSeconds: duration,
+			createdAt: date,
+		});
+		remaining -= duration;
+	}
+	return events;
+}
+
+// ---------------------------------------------------------------------------
 // Seed logic
 // ---------------------------------------------------------------------------
 
@@ -589,16 +722,184 @@ async function seed() {
 	}
 	console.log("  Comments created.");
 
+	// ---- 6. Create test users (subscribers) ----
+	console.log("Creating test users...");
+	const testUserIds: Record<string, number> = {};
+
+	for (const tu of TEST_USERS) {
+		const existing = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, tu.username))
+			.limit(1);
+
+		if (existing.length > 0) {
+			console.log(`  Skipping ${tu.username} (already exists)`);
+			testUserIds[tu.username] = existing[0].id;
+			continue;
+		}
+
+		const [inserted] = await db
+			.insert(users)
+			.values({
+				username: tu.username,
+				email: tu.email,
+				passwordHash,
+				displayName: tu.displayName,
+				bio: tu.bio,
+				isCreator: false,
+				emailVerified: true,
+			})
+			.returning({ id: users.id });
+
+		testUserIds[tu.username] = inserted.id;
+		console.log(`  Created ${tu.username} (id: ${inserted.id})`);
+
+		const userId = inserted.id;
+
+		// -- Follows --
+		for (const creatorUsername of tu.follows) {
+			const creatorId = createdUserIds[creatorUsername];
+			if (!creatorId) continue;
+			try {
+				await db.insert(follows).values({ followerId: userId, creatorId });
+			} catch {
+				// unique constraint — already exists
+			}
+		}
+		console.log(`    ${tu.follows.length} follows`);
+
+		// -- Purchases --
+		for (const title of tu.purchaseTitles) {
+			const slug = slugify(title);
+			const [proj] = await db
+				.select({ id: projects.id, price: projects.price })
+				.from(projects)
+				.where(eq(projects.slug, slug))
+				.limit(1);
+
+			if (!proj) {
+				console.log(`    Skipping purchase "${title}" (project not found)`);
+				continue;
+			}
+
+			const amount = parseFloat(proj.price ?? "0");
+			if (amount <= 0) continue;
+
+			const processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+			const crfFee = Math.round(amount * 0.08 * 100) / 100;
+			const creatorEarnings = Math.round((amount - crfFee) * 100) / 100;
+			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
+
+			try {
+				await db.insert(purchases).values({
+					buyerId: userId,
+					projectId: proj.id,
+					amount: amount.toFixed(2),
+					processingFee: processingFee.toFixed(2),
+					crfFee: crfFee.toFixed(2),
+					creatorEarnings: creatorEarnings.toFixed(2),
+					stripePaymentIntentId: fakePaymentId,
+					status: "completed",
+				});
+			} catch {
+				// unique constraint on stripePaymentIntentId
+			}
+		}
+		console.log(`    ${tu.purchaseTitles.length} purchases`);
+
+		// -- Subscription --
+		const cycleStart = billingCycleStart();
+		const cycleEnd = billingCycleEnd();
+		try {
+			await db.insert(subscriptions).values({
+				userId,
+				tier: tu.tier,
+				isActive: true,
+				currentPeriodStart: cycleStart,
+				currentPeriodEnd: cycleEnd,
+			});
+		} catch {
+			// unique constraint on userId
+		}
+		console.log(`    subscription: ${tu.tier}`);
+
+		// -- Attention events --
+		let totalEvents = 0;
+		for (const [creatorUsername, target] of Object.entries(tu.attentionTargets)) {
+			const creatorId = createdUserIds[creatorUsername];
+			if (!creatorId) continue;
+
+			const events = buildAttentionEvents(userId, creatorId, target.seconds, target.eventTypes);
+			// Batch insert in chunks of 100
+			for (let i = 0; i < events.length; i += 100) {
+				const chunk = events.slice(i, i + 100);
+				await db.insert(attentionEvents).values(chunk);
+			}
+			totalEvents += events.length;
+		}
+		console.log(`    ${totalEvents} attention events`);
+
+		// -- Pool distributions (paid users only) --
+		if (tu.tier !== "free") {
+			const CREATOR_POOL = 2.76;
+			const tierPrices: Record<string, number> = {
+				root: 3, sprout: 7, petal: 15, bloom: 30,
+			};
+			const tierPrice = tierPrices[tu.tier] ?? 0;
+			const creatorShare = Math.round(tierPrice * 0.92 * 100) / 100;
+			const boostPool = Math.round((creatorShare - CREATOR_POOL) * 100) / 100;
+
+			// Compute attention proportions
+			const entries = Object.entries(tu.attentionTargets);
+			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
+			const cycle = currentBillingCycle();
+
+			for (const [creatorUsername, target] of entries) {
+				const creatorId = createdUserIds[creatorUsername];
+				if (!creatorId) continue;
+
+				const proportion = target.seconds / totalSeconds;
+				const poolAmt = Math.round(CREATOR_POOL * proportion * 100) / 100;
+				const boostAmt = Math.round(boostPool * proportion * 100) / 100;
+
+				try {
+					await db.insert(poolDistributions).values({
+						subscriberId: userId,
+						creatorId,
+						billingCycle: cycle,
+						poolAmount: poolAmt.toFixed(2),
+						boostAmount: boostAmt.toFixed(2),
+						attentionSeconds: target.seconds,
+					});
+				} catch {
+					// unique constraint
+				}
+			}
+			console.log(`    ${entries.length} pool distributions`);
+		}
+	}
+
 	console.log("\nSeed complete!");
 	console.log(
 		`  ${CREATORS.length} creators, ${Object.values(PROJECTS_BY_CREATOR).flat().length} projects, ${Object.values(POSTS_BY_CREATOR).flat().length} posts`,
 	);
 	console.log(
-		`\n  All seed users have password: "${SEED_PASSWORD}"`,
+		`  ${TEST_USERS.length} test users (${TEST_USERS.filter((u) => u.tier !== "free").length} paid, ${TEST_USERS.filter((u) => u.tier === "free").length} free)`,
+	);
+	console.log(
+		`\n  All seed accounts have password: "${SEED_PASSWORD}"`,
 	);
 	console.log(
 		`  All seed usernames start with "${SEED_PREFIX}" for easy identification.`,
 	);
+	console.log("\n  Test accounts:");
+	for (const tu of TEST_USERS) {
+		console.log(`    ${tu.username} — ${tu.tier} tier — ${tu.displayName}`);
+	}
+	for (const c of CREATORS) {
+		console.log(`    ${c.username} — creator — ${c.displayName}`);
+	}
 }
 
 // ---------------------------------------------------------------------------
