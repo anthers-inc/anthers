@@ -1053,7 +1053,7 @@ export default function SubscriptionPage() {
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
 					</div>
 					{rows.length > 0 ? (
-						<div className="grid gap-4" style={{ gridTemplateColumns: "30% 30% 40%" }}>
+						<div className="grid gap-6" style={{ gridTemplateColumns: "30% 40% 30%" }}>
 							{/* ── Left: Time Pool pie chart ── */}
 							<div className="flex flex-col">
 								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Time Pool</p>
