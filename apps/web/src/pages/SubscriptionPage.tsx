@@ -764,18 +764,6 @@ export default function SubscriptionPage() {
 			{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
 			{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
 
-			{/* Header + month selector */}
-			<div className="flex items-baseline justify-between mb-4">
-				<div>
-					<h1 className="text-lg font-bold">Your Anthers—{cycleLabel(selectedCycle)}</h1>
-					<p className="text-sm text-base-content/60">
-						{tier.name} tier
-						{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
-					</p>
-				</div>
-				<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
-			</div>
-
 			{/* Banners */}
 			{viewMode === "next" && (
 				<div className="alert alert-info text-sm mb-4">
@@ -788,8 +776,20 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* ── Main panel (matches SubscribePage card style) ── */}
+			{/* ── Main panel ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto space-y-6">
+
+				{/* Panel header */}
+				<div className="text-center">
+					<h2 className="text-2xl font-bold mb-1">
+						Your Anthers — {cycleLabel(selectedCycle)}
+					</h2>
+					<p className="text-sm text-base-content/60 mb-3">
+						{tier.name} tier
+						{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
+					</p>
+					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+				</div>
 
 				{/* ── SUBSCRIPTION AMOUNT ── */}
 				{canEdit && (
