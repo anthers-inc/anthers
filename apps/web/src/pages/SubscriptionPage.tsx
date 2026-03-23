@@ -984,16 +984,62 @@ export default function SubscriptionPage() {
 			{/* ── Main panel ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto space-y-6">
 
-				{/* Panel header */}
-				<div className="text-center">
-					<h2 className="text-2xl font-bold mb-1">
-						Your Anthers — {cycleLabel(selectedCycle)}
-					</h2>
-					<p className="text-sm text-base-content/60 mb-3">
-						{tier.name} tier
-						{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
-					</p>
-					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+				{/* Panel header with action buttons in corners */}
+				<div className="flex items-start justify-between">
+					{/* Left: subscription management */}
+					{viewMode === "current" ? (
+						<div className="flex flex-col gap-2 flex-shrink-0">
+							<button className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
+								{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
+							</button>
+							{isCanceling ? (
+								<button className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`} onClick={handleResume} disabled={!!actionLoading}>
+									{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
+								</button>
+							) : (
+								<button className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`} onClick={handleCancel} disabled={!!actionLoading}>
+									{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
+								</button>
+							)}
+						</div>
+					) : <div className="w-36 flex-shrink-0" />}
+
+					{/* Center: title + month selector */}
+					<div className="text-center flex-1">
+						<h2 className="text-2xl font-bold mb-1">
+							Your Anthers — {cycleLabel(selectedCycle)}
+						</h2>
+						<p className="text-sm text-base-content/60 mb-3">
+							{tier.name} tier
+							{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
+						</p>
+						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+					</div>
+
+					{/* Right: save/discard */}
+					{canEdit ? (
+						<div className="flex flex-col gap-2 items-end flex-shrink-0">
+							<button
+								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
+								onClick={() => setShowConfirm(true)}
+								disabled={!hasPendingChanges || !!actionLoading}
+							>
+								{actionLoading === "save" ? "Saving..." : "Save Changes"}
+							</button>
+							<button
+								className="btn btn-outline btn-warning btn-sm"
+								disabled={!hasPendingChanges}
+								onClick={() => { setPendingFunding(null); setPendingBoosts(new Map()); }}
+							>
+								Discard Changes
+							</button>
+							{viewMode === "next" && (
+								<button className="btn btn-ghost btn-xs" onClick={() => setShowRevertConfirm(true)}>
+									Revert to Current Month
+								</button>
+							)}
+						</div>
+					) : <div className="w-36 flex-shrink-0" />}
 				</div>
 
 				{/* ── SUBSCRIPTION AMOUNT ── */}
@@ -1289,55 +1335,7 @@ export default function SubscriptionPage() {
 					</div>
 				</div>
 
-				{/* ── Action buttons (flanking the cost breakdown) ── */}
-				<div className="flex items-end justify-center gap-8">
-					{/* Left: subscription management */}
-					{viewMode === "current" ? (
-						<div className="flex flex-col gap-2 flex-shrink-0">
-							<button className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
-								{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
-							</button>
-							{isCanceling ? (
-								<button className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`} onClick={handleResume} disabled={!!actionLoading}>
-									{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
-								</button>
-							) : (
-								<button className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`} onClick={handleCancel} disabled={!!actionLoading}>
-									{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
-								</button>
-							)}
-						</div>
-					) : <div className="flex-shrink-0 w-36" />}
-
-					{/* Center: cost breakdown (already rendered above via divider) */}
-					<div className="flex-shrink-0 w-36" />
-
-					{/* Right: save/discard */}
-					{canEdit ? (
-						<div className="flex flex-col gap-2 items-end flex-shrink-0">
-							<button
-								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
-								onClick={() => setShowConfirm(true)}
-								disabled={!hasPendingChanges || !!actionLoading}
-							>
-								{actionLoading === "save" ? "Saving..." : "Save Changes"}
-							</button>
-							<button
-								className="btn btn-outline btn-warning btn-sm"
-								disabled={!hasPendingChanges}
-								onClick={() => { setPendingFunding(null); setPendingBoosts(new Map()); }}
-							>
-								Discard Changes
-							</button>
-							{viewMode === "next" && (
-								<button className="btn btn-ghost btn-xs" onClick={() => setShowRevertConfirm(true)}>
-									Revert to Current Month
-								</button>
-							)}
-						</div>
-					) : <div className="flex-shrink-0 w-36" />}
-				</div>
-
+	
 			</div>{/* end main panel */}
 
 			{/* ── Confirmation dialogs ── */}
