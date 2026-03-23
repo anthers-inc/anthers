@@ -137,7 +137,7 @@ function BoostBar({
 	}
 
 	return (
-		<div className="space-y-1">
+		<div className={`space-y-1 ${disabled ? "opacity-50" : ""}`}>
 			{/* Slider */}
 			<div className="flex items-center gap-2">
 				<input
@@ -861,7 +861,7 @@ export default function SubscriptionPage() {
 														boostPool={financials.boostPool}
 														gates={row.gates}
 														onChange={(v) => handleBoostChange(row.creatorId, v)}
-														disabled={false}
+														disabled={viewMode === "current" && unallocatedBoost <= 0}
 													/>
 												) : (
 													<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
