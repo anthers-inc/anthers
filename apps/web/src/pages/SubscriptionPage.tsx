@@ -33,7 +33,7 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 	{ id: "bloom", name: "Bloom", price: 30 },
 ];
 
-const SLIDER_MAX = 40;
+const SLIDER_MAX = 50;
 
 function tierFor(id: string) {
 	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
@@ -96,11 +96,11 @@ const BAR_MAX = 35.2;
 const GATE_THRESHOLDS_VISUAL = [2, 4, 8, 16, 32];
 
 function BoostBar({
-	value, min, max, gates, onChange, disabled,
+	value, boostPool, gates, onChange, disabled,
 }: {
 	value: number;
-	min: number;
-	max: number;
+	/** Total boost pool budget — slider ranges from 0 to this */
+	boostPool: number;
 	gates: CreatorGate[];
 	onChange: (v: number) => void;
 	disabled: boolean;
@@ -142,8 +142,8 @@ function BoostBar({
 			<div className="flex items-center gap-2">
 				<input
 					type="range"
-					min={min}
-					max={max}
+					min={0}
+					max={boostPool}
 					step={1}
 					value={value}
 					onChange={(e) => onChange(parseInt(e.target.value, 10))}
@@ -349,6 +349,8 @@ export default function SubscriptionPage() {
 	const [pendingBoosts, setPendingBoosts] = useState<Map<number, number>>(new Map());
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+	const [useCustomAmount, setUseCustomAmount] = useState(false);
+	const [customAmountInput, setCustomAmountInput] = useState("");
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
@@ -728,37 +730,91 @@ export default function SubscriptionPage() {
 						Subscription Amount
 					</h4>
 					<div className="card bg-base-200 p-4">
-						<div className="mb-2">
-							{/* Tier threshold marks above slider */}
-							<div className="relative w-full h-6 mb-1">
-								{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
-									const pct = (t.price / SLIDER_MAX) * 100;
-									const isActive = effectiveFunding >= t.price;
-									return (
-										<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
-											<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
-											<div className="w-px h-3 bg-base-content/20" />
-										</div>
-									);
-								})}
+						<div className="flex gap-4">
+							{/* Slider area */}
+							<div className={`flex-1 ${useCustomAmount ? "opacity-30 pointer-events-none" : ""}`}>
+								{/* Tier threshold marks above slider */}
+								<div className="relative w-full h-6 mb-1">
+									{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
+										const pct = (t.price / SLIDER_MAX) * 100;
+										const isActive = effectiveFunding >= t.price;
+										return (
+											<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
+												<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
+												<div className="w-px h-3 bg-base-content/20" />
+											</div>
+										);
+									})}
+								</div>
+								<input
+									type="range"
+									min={0}
+									max={SLIDER_MAX}
+									step={1}
+									value={effectiveFunding}
+									onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
+									className="range range-success w-full"
+									disabled={useCustomAmount}
+								/>
+								{/* Tick marks below slider */}
+								<div className="relative w-full h-6 mt-1">
+									{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
+										const pct = (tick / SLIDER_MAX) * 100;
+										const isLabeled = tick % 5 === 0;
+										return (
+											<div key={tick} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%` }}>
+												<div className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`} />
+												{isLabeled && (
+													<span className="text-[10px] text-base-content/40 mt-0.5">${tick}</span>
+												)}
+											</div>
+										);
+									})}
+								</div>
 							</div>
-							<input
-								type="range"
-								min={viewMode === "current" ? committedFunding : 3}
-								max={SLIDER_MAX}
-								step={1}
-								value={effectiveFunding}
-								onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
-								className="range range-success w-full"
-							/>
-							<div className="flex justify-between text-xs text-base-content/40 mt-1">
-								<span>${viewMode === "current" ? committedFunding : 3}</span>
-								<span className="font-medium text-base-content">{fmt(effectiveFunding)}/mo</span>
-								<span>${SLIDER_MAX}</span>
+
+							{/* Custom amount toggle + input */}
+							<div className="flex flex-col items-end gap-2 flex-shrink-0 pt-6">
+								<label className="flex items-center gap-2 cursor-pointer">
+									<span className="text-xs text-base-content/50">Custom</span>
+									<input
+										type="checkbox"
+										className="checkbox checkbox-xs checkbox-success"
+										checked={useCustomAmount}
+										onChange={(e) => {
+											const checked = e.target.checked;
+											setUseCustomAmount(checked);
+											if (checked) {
+												setCustomAmountInput(String(effectiveFunding));
+											} else {
+												// Clamp back to slider range
+												const val = parseInt(customAmountInput, 10);
+												if (!isNaN(val) && val >= 3) {
+													handleFundingChange(Math.min(val, SLIDER_MAX));
+												}
+											}
+										}}
+									/>
+								</label>
+								<input
+									type="number"
+									className="input input-xs input-bordered w-20 text-right"
+									min={3}
+									step={1}
+									value={useCustomAmount ? customAmountInput : effectiveFunding}
+									disabled={!useCustomAmount}
+									onChange={(e) => {
+										setCustomAmountInput(e.target.value);
+										const val = parseInt(e.target.value, 10);
+										if (!isNaN(val) && val >= 3) {
+											handleFundingChange(val);
+										}
+									}}
+								/>
 							</div>
 						</div>
 						{viewMode === "current" && (
-							<p className="text-[11px] text-base-content/30">
+							<p className="text-[11px] text-base-content/30 mt-2">
 								Subscription can only be increased in the current month.
 							</p>
 						)}
@@ -809,8 +865,7 @@ export default function SubscriptionPage() {
 												{canEdit ? (
 													<BoostBar
 														value={row.pendingBoost}
-														min={viewMode === "current" ? row.committedBoost : 0}
-														max={Math.min(financials.boostPool, row.pendingBoost + unallocatedBoost + (viewMode === "next" ? row.committedBoost : 0))}
+														boostPool={financials.boostPool}
 														gates={row.gates}
 														onChange={(v) => handleBoostChange(row.creatorId, v)}
 														disabled={false}
