@@ -827,16 +827,37 @@ export default function SubscriptionPage() {
 									);
 								})}
 							</div>
-							<input
-								type="range"
-								min={0}
-								max={SLIDER_MAX}
-								step={1}
-								value={effectiveFunding}
-								onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
-								className="range range-success w-full"
-								disabled={useCustomAmount}
-							/>
+							{/* Range input with committed/pending visual */}
+							<div className="relative w-full">
+								{/* Visual bar behind the range input */}
+								<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 bg-base-300 rounded-full overflow-hidden pointer-events-none z-0">
+									{/* Committed fill */}
+									<div
+										className="absolute inset-y-0 left-0 bg-success/50 rounded-full"
+										style={{ width: `${(committedFunding / SLIDER_MAX) * 100}%` }}
+									/>
+									{/* Pending increase: outline/dashed effect */}
+									{pendingFunding !== null && pendingFunding > committedFunding && (
+										<div
+											className="absolute inset-y-0 border-y-[1.5px] border-r-[1.5px] border-success/60 border-dashed rounded-r-full"
+											style={{
+												left: `${(committedFunding / SLIDER_MAX) * 100}%`,
+												width: `${((pendingFunding - committedFunding) / SLIDER_MAX) * 100}%`,
+											}}
+										/>
+									)}
+								</div>
+								<input
+									type="range"
+									min={0}
+									max={SLIDER_MAX}
+									step={1}
+									value={effectiveFunding}
+									onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
+									className="range range-success w-full relative z-10"
+									disabled={useCustomAmount}
+								/>
+							</div>
 							{/* Tick marks below slider */}
 							<div className="relative w-full h-6 mt-1">
 								{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
@@ -1024,19 +1045,22 @@ export default function SubscriptionPage() {
 						<span>{fmt(foundationFee)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Time Pool</span>
-						<span className="text-success">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</span>
+						<span className="text-base-content/70">
+							Time Pool
+							{unallocatedBoost > 0 && (
+								<span className="text-base-content/40 ml-1">
+									(incl. {fmt(unallocatedBoost)} unallocated boost)
+								</span>
+							)}
+						</span>
+						<span className="text-success">
+							{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}
+						</span>
 					</div>
 					{financials.boostPool > 0 && (
 						<div className="flex justify-between text-sm">
 							<span className="text-base-content/70">Boost Pool</span>
 							<span className="text-primary">{fmt(allocatedBoost)}</span>
-						</div>
-					)}
-					{unallocatedBoost > 0 && (
-						<div className="flex justify-between text-sm">
-							<span className="text-base-content/70">Unallocated (returns to Time Pool)</span>
-							<span className="text-base-content/40">{fmt(unallocatedBoost)}</span>
 						</div>
 					)}
 					<div className="divider my-1" />
