@@ -103,7 +103,7 @@ function InfoTip({ text }: { text: string }) {
 				i
 			</span>
 			{show && (
-				<div className="absolute z-50 left-0 bottom-full mb-1.5 pointer-events-none">
+				<div className="absolute z-50 left-1/2 top-full mt-1 pointer-events-none">
 					<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs text-base-content/70 w-56 font-normal normal-case tracking-normal leading-relaxed">
 						{text}
 					</div>
@@ -304,7 +304,7 @@ function BoostBar({
 			{tooltip && trackRef.current && (
 				<div className="relative">
 					<div
-						className="absolute z-50 bottom-0 mb-1 pointer-events-none"
+						className="absolute z-50 top-0 mt-1 pointer-events-none"
 						style={{
 							left: `${(Number(tooltip.gate.threshold) / barMax) * 100}%`,
 						}}
