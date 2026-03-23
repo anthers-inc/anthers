@@ -1053,9 +1053,9 @@ export default function SubscriptionPage() {
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
 					</div>
 					{rows.length > 0 ? (
-						<div className="grid gap-6" style={{ gridTemplateColumns: "30% 40% 30%" }}>
+						<div className="grid grid-cols-3 divide-x divide-base-content/10">
 							{/* ── Left: Time Pool pie chart ── */}
-							<div className="flex flex-col">
+							<div className="flex flex-col pr-4">
 								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Time Pool</p>
 								<TimePoolPie
 									rows={rows}
@@ -1093,7 +1093,7 @@ export default function SubscriptionPage() {
 							</div>
 
 							{/* ── Center: Creator info card ── */}
-							<div className="flex flex-col">
+							<div className="flex flex-col px-4">
 								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Creator Details</p>
 								{(() => {
 									const focusedRow = rows.find((r) => r.creatorId === focusedCreatorId) ?? null;
@@ -1118,7 +1118,7 @@ export default function SubscriptionPage() {
 							</div>
 
 							{/* ── Right: Boost table ── */}
-							<div className="flex flex-col">
+							<div className="flex flex-col pl-4">
 								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Boost Allocations</p>
 								<div className="space-y-2">
 									{rows.map((row, i) => {
