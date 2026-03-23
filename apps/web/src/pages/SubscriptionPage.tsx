@@ -775,7 +775,7 @@ export default function SubscriptionPage() {
 							Time Pool
 							<InfoTip text="Distributed automatically to creators based on the time you spend with their content. A minute of video, audio, reading, or gameplay all count equally. You don't control this — it flows proportionally to where you spend your time." />
 						</p>
-						<p className="text-xl font-bold text-secondary">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</p>
+						<p className="text-xl font-bold text-accent">{fmt(totalPool > 0 ? totalPool : financials.timePool)}</p>
 						<p className="text-xs text-base-content/40">Auto · time-proportional</p>
 					</div>
 				</div>
@@ -853,15 +853,15 @@ export default function SubscriptionPage() {
 										}}
 									>
 										<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
-											{/* Committed fill (teal) */}
+											{/* Committed fill (pink) */}
 											<div
-												className="absolute inset-y-0 left-0 bg-success/40 rounded-full"
+												className="absolute inset-y-0 left-0 bg-accent/40 rounded-full"
 												style={{ width: `${committedPct}%` }}
 											/>
-											{/* Pending fill (white) */}
+											{/* Pending fill (yellow) */}
 											{hasPendingSub && effectiveFunding > committedFunding && (
 												<div
-													className="absolute inset-y-0 bg-white/40 rounded-r-full"
+													className="absolute inset-y-0 bg-warning/40 rounded-r-full"
 													style={{
 														left: `${committedPct}%`,
 														width: `${pendingPct - committedPct}%`,
@@ -872,7 +872,7 @@ export default function SubscriptionPage() {
 										{/* Thumb */}
 										<div
 											className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
-												hasPendingSub ? "bg-warning border-warning" : "bg-secondary border-secondary"
+												hasPendingSub ? "bg-warning border-warning" : "bg-accent border-accent"
 											}`}
 											style={{ left: `${pendingPct}%` }}
 										/>
@@ -900,13 +900,13 @@ export default function SubscriptionPage() {
 						<div className="flex items-center justify-between mt-3 pt-3 border-t border-base-content/10">
 							<div className="text-sm">
 								{!useCustomAmount ? (
-									<span className="font-semibold text-secondary">{fmt(effectiveFunding)}/mo</span>
+									<span className="font-semibold text-accent">{fmt(effectiveFunding)}/mo</span>
 								) : (
 									<div className="flex items-center gap-2">
 										<span className="text-base-content/50">$</span>
 										<input
 											type="number"
-											className="input input-sm input-bordered w-24 font-semibold text-secondary"
+											className="input input-sm input-bordered w-24 font-semibold text-accent"
 											min={3}
 											step={1}
 											value={customAmountInput}
@@ -997,7 +997,7 @@ export default function SubscriptionPage() {
 											<td className="text-[10px] text-base-content/40 text-right">
 												{timePct > 0 ? `${Math.round(timePct)}%` : ""}
 											</td>
-											<td className={`text-sm ${poolChanged ? "text-warning" : "text-secondary"}`}>
+											<td className={`text-sm ${poolChanged ? "text-warning" : "text-accent"}`}>
 												{fmt(displayPool)}
 											</td>
 											<td className="align-top pt-2">
@@ -1087,7 +1087,7 @@ export default function SubscriptionPage() {
 								</span>
 							)}
 						</span>
-						<span className="text-secondary">
+						<span className="text-accent">
 							{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}
 						</span>
 					</div>
