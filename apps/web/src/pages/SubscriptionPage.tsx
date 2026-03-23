@@ -376,6 +376,211 @@ interface CreatorRow {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Pie chart colors (per-creator, cycling)                            */
+/* ------------------------------------------------------------------ */
+
+const PIE_COLORS = [
+	"#6d28d9", // violet
+	"#2563eb", // blue
+	"#0891b2", // cyan
+	"#059669", // emerald
+	"#d97706", // amber
+	"#dc2626", // red
+	"#c026d3", // fuchsia
+	"#4f46e5", // indigo
+];
+
+/* ------------------------------------------------------------------ */
+/*  TimePoolPie — SVG donut chart of time distribution                 */
+/* ------------------------------------------------------------------ */
+
+function TimePoolPie({
+	rows, totalTime, focusedCreatorId, onHover, onLeave,
+}: {
+	rows: CreatorRow[];
+	totalTime: number;
+	focusedCreatorId: number | null;
+	onHover: (creatorId: number) => void;
+	onLeave: () => void;
+}) {
+	const size = 200;
+	const cx = size / 2;
+	const cy = size / 2;
+	const radius = 75;
+	const strokeWidth = 30;
+
+	if (totalTime === 0 || rows.length === 0) {
+		return (
+			<div className="flex items-center justify-center h-full">
+				<div className="text-sm text-base-content/30 text-center">
+					<p>No time data yet</p>
+				</div>
+			</div>
+		);
+	}
+
+	const circumference = 2 * Math.PI * radius;
+	let offset = 0;
+
+	const slices = rows.map((row, i) => {
+		const pct = row.timeSeconds / totalTime;
+		const dashLength = pct * circumference;
+		const dashOffset = -offset;
+		offset += dashLength;
+		const isFocused = focusedCreatorId === row.creatorId;
+		const isDimmed = focusedCreatorId !== null && !isFocused;
+		return (
+			<circle
+				key={row.creatorId}
+				cx={cx}
+				cy={cy}
+				r={radius}
+				fill="none"
+				stroke={PIE_COLORS[i % PIE_COLORS.length]}
+				strokeWidth={isFocused ? strokeWidth + 6 : strokeWidth}
+				strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+				strokeDashoffset={dashOffset}
+				opacity={isDimmed ? 0.25 : 1}
+				className="transition-all duration-300 cursor-pointer"
+				onMouseEnter={() => onHover(row.creatorId)}
+				onMouseLeave={onLeave}
+				style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}
+			/>
+		);
+	});
+
+	return (
+		<div className="flex items-center justify-center">
+			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+				{slices}
+				{/* Center label */}
+				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
+					{formatHours(totalTime)}
+				</text>
+				<text x={cx} y={cy + 12} textAnchor="middle" className="fill-base-content/50 text-[10px]">
+					total time
+				</text>
+			</svg>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  CreatorInfoCard — shows details about focused creator              */
+/* ------------------------------------------------------------------ */
+
+function CreatorInfoCard({
+	row, colorIndex, totalTime, poolAmount, hoverSource,
+}: {
+	row: CreatorRow | null;
+	colorIndex: number;
+	totalTime: number;
+	poolAmount: number;
+	hoverSource: "pie" | "boost" | null;
+}) {
+	const initials = row
+		? (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()
+		: "";
+	const timePct = row && totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
+	const boostGates = row ? row.gates.filter((g) => g.gateType === "boost") : [];
+
+	return (
+		<div className="card bg-base-300/50 h-full transition-all duration-500">
+			<div className="card-body p-4 flex flex-col">
+				{!row ? (
+					<div className="flex-1 flex items-center justify-center text-center">
+						<div>
+							<p className="text-sm text-base-content/40 mb-1">Creator details</p>
+							<p className="text-xs text-base-content/30">
+								Hover over the time chart or a boost row to see
+								more about a creator.
+							</p>
+						</div>
+					</div>
+				) : (
+					<div className="transition-opacity duration-500">
+						{/* Creator identity */}
+						<div className="flex items-center gap-3 mb-3">
+							{row.avatar ? (
+								<img src={row.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+							) : (
+								<div
+									className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+									style={{ backgroundColor: PIE_COLORS[colorIndex % PIE_COLORS.length] }}
+								>
+									{initials}
+								</div>
+							)}
+							<div className="min-w-0">
+								<Link to={`/${row.username}`} className="font-semibold text-sm link link-hover block truncate">
+									{row.displayName || row.username}
+								</Link>
+								<span className="text-xs text-base-content/50">@{row.username}</span>
+							</div>
+						</div>
+
+						<div className="divider my-1" />
+
+						{/* Context-dependent detail */}
+						{hoverSource === "pie" && (
+							<div className="space-y-2 text-sm">
+								<div className="flex justify-between">
+									<span className="text-base-content/60">Time</span>
+									<span className="font-medium">{formatHours(row.timeSeconds)}</span>
+								</div>
+								<div className="flex justify-between">
+									<span className="text-base-content/60">Share</span>
+									<span className="font-medium">{Math.round(timePct)}%</span>
+								</div>
+								<div className="flex justify-between">
+									<span className="text-base-content/60">Pool amount</span>
+									<span className="font-medium text-success">{fmt(poolAmount)}</span>
+								</div>
+							</div>
+						)}
+
+						{hoverSource === "boost" && (
+							<div className="space-y-2 text-sm">
+								<div className="flex justify-between">
+									<span className="text-base-content/60">Current boost</span>
+									<span className="font-medium text-primary">${row.pendingBoost}.00</span>
+								</div>
+								{boostGates.length > 0 && (
+									<>
+										<p className="text-xs text-base-content/40 mt-2">Boost Tiers</p>
+										{boostGates.map((gate) => {
+											const unlocked = row.pendingBoost >= Number(gate.threshold);
+											return (
+												<div key={gate.id} className="flex items-start gap-2">
+													<span className={`text-xs mt-0.5 ${unlocked ? "text-primary" : "text-base-content/30"}`}>
+														{unlocked ? "✓" : "○"}
+													</span>
+													<div className="flex-1 min-w-0">
+														<div className="flex justify-between">
+															<span className={`text-xs font-medium ${unlocked ? "text-primary" : ""}`}>
+																{gate.label}
+															</span>
+															<span className="text-xs text-base-content/40">${gate.threshold}</span>
+														</div>
+														{gate.description && (
+															<p className="text-[10px] text-base-content/40 leading-snug">{gate.description}</p>
+														)}
+													</div>
+												</div>
+											);
+										})}
+									</>
+								)}
+							</div>
+						)}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -398,6 +603,8 @@ export default function SubscriptionPage() {
 	const [pendingBoosts, setPendingBoosts] = useState<Map<number, number>>(new Map());
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+	const [focusedCreatorId, setFocusedCreatorId] = useState<number | null>(null);
+	const [hoverSource, setHoverSource] = useState<"pie" | "boost" | null>(null);
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
@@ -846,75 +1053,122 @@ export default function SubscriptionPage() {
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
 					</div>
 					{rows.length > 0 ? (
-						<div className="overflow-x-auto">
-							<table className="table table-sm w-full">
-								<thead>
-									<tr>
-										<th className="w-40">Creator</th>
-										<th className="w-48">Time Pool</th>
-										<th>Boost</th>
-										<th className="w-20 text-right">Total</th>
-									</tr>
-								</thead>
-								<tbody>
-									{rows.map((row) => {
-										const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
-										const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
-										const pendingPoolAmt = totalTime > 0
-											? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) / 100
-											: 0;
+						<div className="grid gap-4" style={{ gridTemplateColumns: "30% 30% 40%" }}>
+							{/* ── Left: Time Pool pie chart ── */}
+							<div className="flex flex-col">
+								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Time Pool</p>
+								<TimePoolPie
+									rows={rows}
+									totalTime={totalTime}
+									focusedCreatorId={focusedCreatorId}
+									onHover={(id) => { setFocusedCreatorId(id); setHoverSource("pie"); }}
+									onLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+								/>
+								{/* Legend */}
+								<div className="mt-3 space-y-1">
+									{rows.map((row, i) => {
+										const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
 										const poolChanged = pendingFunding !== null && pendingFunding !== committedFunding;
-										const displayPool = poolChanged ? pendingPoolAmt : row.poolAmount;
-										const rowTotal = displayPool + row.pendingBoost;
-										const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-										const boostChanged = row.pendingBoost !== row.committedBoost;
-
+										const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
+										const displayPool = poolChanged && totalTime > 0
+											? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) / 100
+											: row.poolAmount;
 										return (
-											<tr key={row.creatorId} className="hover">
-												<td>
-													<div className="flex items-center gap-1.5">
-														{row.avatar ? (
-															<img src={row.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
-														) : (
-															<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">{initials}</div>
-														)}
-														<Link to={`/${row.username}`} className="font-medium text-sm truncate link link-hover">
-															@{row.displayName || row.username}
-														</Link>
-													</div>
-												</td>
-												<td className="text-sm">
-													<div className="flex items-center gap-3">
-														<span className="text-base-content/50 tabular-nums">{fmtTime(row.timeSeconds)}</span>
-														<span className="text-base-content/30 text-xs tabular-nums">({Math.round(timePct)}%)</span>
-														<span className={poolChanged ? "text-error" : "text-success"}>{fmt(displayPool)}</span>
-													</div>
-												</td>
-												<td className="align-middle">
-													{canEdit ? (
-														<BoostBar
-															value={row.pendingBoost}
-															committedValue={row.committedBoost}
-															boostPool={financials.boostPool}
-															gates={row.gates}
-															onChange={(v) => handleBoostChange(row.creatorId, v)}
-															disabled={viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges}
-														/>
-													) : (
-														<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
-													)}
-												</td>
-												<td className="text-right text-sm font-medium align-middle">
-													{fmt(rowTotal)}
-													{boostChanged && (
-														<div className="text-[10px] text-error">(pending)</div>
-													)}
-												</td>
-											</tr>
+											<div
+												key={row.creatorId}
+												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-200 ${
+													focusedCreatorId === row.creatorId ? "bg-base-content/5" : ""
+												}`}
+												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("pie"); }}
+												onMouseLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+											>
+												<div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+												<span className="text-base-content/70 truncate flex-1">{row.displayName || row.username}</span>
+												<span className="text-base-content/40 tabular-nums">{pct}%</span>
+												<span className={`tabular-nums ${poolChanged ? "text-error" : "text-success"}`}>{fmt(displayPool)}</span>
+											</div>
 										);
 									})}
-								</tbody>
-							</table>
+								</div>
+							</div>
+
+							{/* ── Center: Creator info card ── */}
+							<div className="flex flex-col">
+								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Creator Details</p>
+								{(() => {
+									const focusedRow = rows.find((r) => r.creatorId === focusedCreatorId) ?? null;
+									const colorIdx = focusedRow ? rows.indexOf(focusedRow) : 0;
+									const poolChanged = pendingFunding !== null && pendingFunding !== committedFunding;
+									const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
+									const focusedPool = focusedRow && totalTime > 0
+										? (poolChanged
+											? Math.round(pendingTimePoolTotal * (focusedRow.timeSeconds / totalTime) * 100) / 100
+											: focusedRow.poolAmount)
+										: 0;
+									return (
+										<CreatorInfoCard
+											row={focusedRow}
+											colorIndex={colorIdx}
+											totalTime={totalTime}
+											poolAmount={focusedPool}
+											hoverSource={hoverSource}
+										/>
+									);
+								})()}
+							</div>
+
+							{/* ── Right: Boost table ── */}
+							<div className="flex flex-col">
+								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">Boost Allocations</p>
+								<div className="space-y-2">
+									{rows.map((row, i) => {
+										const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+										const boostChanged = row.pendingBoost !== row.committedBoost;
+										const isFocused = focusedCreatorId === row.creatorId;
+
+										return (
+											<div
+												key={row.creatorId}
+												className={`rounded-lg p-2 transition-colors duration-200 ${isFocused ? "bg-base-content/5" : ""}`}
+												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("boost"); }}
+												onMouseLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+											>
+												{/* Creator name */}
+												<div className="flex items-center gap-1.5 mb-1">
+													<div
+														className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+														style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+													>
+														{row.avatar ? (
+															<img src={row.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
+														) : initials}
+													</div>
+													<span className="text-xs text-base-content/70 truncate">
+														{row.displayName || row.username}
+													</span>
+													<span className="text-xs text-primary font-medium ml-auto tabular-nums">
+														${row.pendingBoost}.00
+													</span>
+													{boostChanged && <span className="text-[9px] text-error">(pending)</span>}
+												</div>
+												{/* Boost slider */}
+												{canEdit ? (
+													<BoostBar
+														value={row.pendingBoost}
+														committedValue={row.committedBoost}
+														boostPool={financials.boostPool}
+														gates={row.gates}
+														onChange={(v) => handleBoostChange(row.creatorId, v)}
+														disabled={viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges}
+													/>
+												) : (
+													<div className="text-sm text-primary">${row.pendingBoost}.00</div>
+												)}
+											</div>
+										);
+									})}
+								</div>
+							</div>
 						</div>
 					) : (
 						<div className="py-6 text-center text-sm text-base-content/40">
