@@ -73,7 +73,7 @@ export default function App() {
 					path="/demo-infrastructure"
 					element={<InfrastructureDemoPage />}
 				/>
-				<Route path="/user-demo" element={<UserDemoPage />} />
+				<Route path="/demo-user" element={<UserDemoPage />} />
 				<Route path="/wiki/*" element={<WikiPage />} />
 				<Route path="/about" element={<AboutPage />} />
 				<Route path="/vertical-slice" element={<VerticalSlicePage />} />

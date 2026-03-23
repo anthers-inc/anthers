@@ -21,6 +21,9 @@ import {
 	subscriptions,
 	attentionEvents,
 	poolDistributions,
+	boostAllocations,
+	creatorGates,
+	bookmarks,
 } from "./index.js";
 import { and, eq, like } from "drizzle-orm";
 
@@ -383,6 +386,12 @@ const COMMENT_BODIES = [
 // Test users (non-creators — for testing the subscriber experience)
 // ---------------------------------------------------------------------------
 
+interface SeedBookmark {
+	type: "project" | "post" | "creator";
+	/** Project title, post title, or creator username */
+	ref: string;
+}
+
 interface SeedUser {
 	username: string;
 	email: string;
@@ -395,6 +404,8 @@ interface SeedUser {
 	purchaseTitles: string[];
 	/** Attention time targets (seconds) per creator username */
 	attentionTargets: Record<string, { seconds: number; eventTypes: string[] }>;
+	/** Bookmarked items (ordered — first item = sortOrder 0) */
+	bookmarks: SeedBookmark[];
 }
 
 const TEST_USERS: SeedUser[] = [
@@ -418,6 +429,13 @@ const TEST_USERS: SeedUser[] = [
 			[`${SEED_PREFIX}marisol`]:    { seconds: 10800, eventTypes: ["play", "read"] },        // ~3.0 hrs
 			[`${SEED_PREFIX}fluxbeats`]:  { seconds: 5400,  eventTypes: ["play"] },                // ~1.5 hrs
 		},
+		bookmarks: [
+			{ type: "project", ref: "Moonvale" },
+			{ type: "post", ref: "The Myth of the Neutral Platform" },
+			{ type: "creator", ref: `${SEED_PREFIX}hexbound` },
+			{ type: "post", ref: "Designing Horror Without Jumpscares" },
+			{ type: "project", ref: "Antumbra: Chapter 1" },
+		],
 	},
 	{
 		username: `${SEED_PREFIX}jordan`,
@@ -429,6 +447,7 @@ const TEST_USERS: SeedUser[] = [
 			`${SEED_PREFIX}fluxbeats`,
 			`${SEED_PREFIX}marisol`,
 			`${SEED_PREFIX}novapixel`,
+			`${SEED_PREFIX}hexbound`,
 		],
 		purchaseTitles: ["The Quiet House"],
 		attentionTargets: {
@@ -437,6 +456,12 @@ const TEST_USERS: SeedUser[] = [
 			[`${SEED_PREFIX}marisol`]:    { seconds: 5400,  eventTypes: ["play", "read"] },        // ~1.5 hrs
 			[`${SEED_PREFIX}sagemoreno`]: { seconds: 1800,  eventTypes: ["read"] },                // ~0.5 hrs
 		},
+		bookmarks: [
+			{ type: "project", ref: "The Quiet House" },
+			{ type: "creator", ref: `${SEED_PREFIX}fluxbeats` },
+			{ type: "post", ref: "How I Build Reactive Visuals with Three.js" },
+			{ type: "project", ref: "Signal Return" },
+		],
 	},
 ];
 
@@ -722,7 +747,63 @@ async function seed() {
 	}
 	console.log("  Comments created.");
 
-	// ---- 6. Create test users (subscribers) ----
+	// ---- 6. Create creator gates ----
+	console.log("Creating creator gates...");
+
+	// Gate definitions per creator: mix of Anthers Tier gates and Boost gates
+	const GATES_BY_CREATOR: Record<string, { gateType: string; threshold: string; label: string; description: string }[]> = {
+		[`${SEED_PREFIX}novapixel`]: [
+			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Early devlogs and behind-the-scenes screenshots" },
+			{ gateType: "anthers_tier", threshold: "7.00", label: "Sprout", description: "Beta access to in-progress builds" },
+			{ gateType: "boost", threshold: "2.00", label: "Pixel Pal", description: "Weekly pixel art WIP threads" },
+			{ gateType: "boost", threshold: "5.00", label: "Playtester", description: "Access to private playtesting branches and feedback channels" },
+		],
+		[`${SEED_PREFIX}sagemoreno`]: [
+			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Early access to essays (one week before public)" },
+			{ gateType: "boost", threshold: "2.00", label: "Reader", description: "Extended footnotes and research notes" },
+			{ gateType: "boost", threshold: "5.00", label: "Inner Circle", description: "Monthly AMA threads and draft previews" },
+			{ gateType: "boost", threshold: "10.00", label: "Patron", description: "Annual long-form piece dedicated to patron questions" },
+		],
+		[`${SEED_PREFIX}fluxbeats`]: [
+			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Stems and project files for released tracks" },
+			{ gateType: "boost", threshold: "3.00", label: "Listener", description: "Early access to new releases (48-hour window)" },
+			{ gateType: "boost", threshold: "8.00", label: "Collaborator", description: "Unreleased demos, remix packs, and sample libraries" },
+		],
+		[`${SEED_PREFIX}marisol`]: [
+			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "High-resolution art downloads" },
+			{ gateType: "anthers_tier", threshold: "15.00", label: "Petal", description: "Exclusive print-ready illustrations" },
+			{ gateType: "boost", threshold: "2.00", label: "Sketch Club", description: "Weekly process videos and timelapse recordings" },
+			{ gateType: "boost", threshold: "6.00", label: "Studio Access", description: "Full PSD/Procreate files and custom brush packs" },
+		],
+		[`${SEED_PREFIX}hexbound`]: [
+			{ gateType: "anthers_tier", threshold: "7.00", label: "Sprout", description: "Director's commentary audio tracks for all games" },
+			{ gateType: "boost", threshold: "3.00", label: "Insider", description: "Monthly design documents and narrative outlines" },
+			{ gateType: "boost", threshold: "7.00", label: "Patron", description: "Playable prototypes and experimental builds" },
+			{ gateType: "boost", threshold: "15.00", label: "Producer", description: "Vote on next game concept, name in credits" },
+		],
+	};
+
+	for (const [username, gates] of Object.entries(GATES_BY_CREATOR)) {
+		const creatorId = createdUserIds[username];
+		if (!creatorId) continue;
+
+		for (const gate of gates) {
+			try {
+				await db.insert(creatorGates).values({
+					creatorId,
+					gateType: gate.gateType,
+					threshold: gate.threshold,
+					label: gate.label,
+					description: gate.description,
+				});
+			} catch {
+				// skip duplicates on re-seed
+			}
+		}
+	}
+	console.log(`  ${Object.values(GATES_BY_CREATOR).flat().length} creator gates created.`);
+
+	// ---- 7. Create test users (subscribers) ----
 	console.log("Creating test users...");
 	const testUserIds: Record<string, number> = {};
 
@@ -811,10 +892,14 @@ async function seed() {
 		// -- Subscription --
 		const cycleStart = billingCycleStart();
 		const cycleEnd = billingCycleEnd();
+		const tierPrices: Record<string, number> = {
+			free: 0, root: 3, sprout: 7, petal: 15, bloom: 30,
+		};
 		try {
 			await db.insert(subscriptions).values({
 				userId,
 				tier: tu.tier,
+				fundingLevel: tierPrices[tu.tier] ?? 0,
 				isActive: true,
 				currentPeriodStart: cycleStart,
 				currentPeriodEnd: cycleEnd,
@@ -876,7 +961,75 @@ async function seed() {
 					// unique constraint
 				}
 			}
+			// -- Boost allocations (matching pool distribution proportions) --
+			for (const [creatorUsername, target] of entries) {
+				const cId = createdUserIds[creatorUsername];
+				if (!cId) continue;
+
+				const proportion = target.seconds / totalSeconds;
+				const boostAmt = Math.round(boostPool * proportion * 100) / 100;
+
+				try {
+					await db.insert(boostAllocations).values({
+						userId,
+						creatorId: cId,
+						amount: boostAmt.toFixed(2),
+						billingCycle: cycle,
+						isLocked: false,
+					});
+				} catch {
+					// unique constraint
+				}
+			}
+			console.log(`    ${entries.length} boost allocations`);
+
 			console.log(`    ${entries.length} pool distributions`);
+		}
+
+		// -- Bookmarks --
+		if (tu.bookmarks.length > 0) {
+			let bookmarkCount = 0;
+			for (let i = 0; i < tu.bookmarks.length; i++) {
+				const bm = tu.bookmarks[i];
+				const values: {
+					userId: number;
+					sortOrder: number;
+					projectId?: number;
+					postId?: number;
+					creatorId?: number;
+				} = { userId, sortOrder: i };
+
+				if (bm.type === "project") {
+					const slug = slugify(bm.ref);
+					const [proj] = await db
+						.select({ id: projects.id })
+						.from(projects)
+						.where(eq(projects.slug, slug))
+						.limit(1);
+					if (!proj) continue;
+					values.projectId = proj.id;
+				} else if (bm.type === "post") {
+					const [p] = await db
+						.select({ id: posts.id })
+						.from(posts)
+						.where(eq(posts.title, bm.ref))
+						.limit(1);
+					if (!p) continue;
+					values.postId = p.id;
+				} else if (bm.type === "creator") {
+					const cId = createdUserIds[bm.ref];
+					if (!cId) continue;
+					values.creatorId = cId;
+				}
+
+				try {
+					await db.insert(bookmarks).values(values);
+					bookmarkCount++;
+				} catch {
+					// skip duplicates
+				}
+			}
+			console.log(`    ${bookmarkCount} bookmarks`);
 		}
 	}
 
