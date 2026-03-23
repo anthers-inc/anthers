@@ -960,6 +960,7 @@ export default function SubscriptionPage() {
 								<tr>
 									<th className="w-40">Creator</th>
 									<th className="w-20">Time</th>
+									<th className="w-6"></th>
 									<th className="w-20">Pool</th>
 									<th className="w-72">Boost</th>
 									<th className="w-20 text-right">Total</th>
@@ -967,7 +968,14 @@ export default function SubscriptionPage() {
 							</thead>
 							<tbody>
 								{rows.map((row) => {
-									const rowTotal = row.poolAmount + row.pendingBoost;
+									const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
+									const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
+									const pendingPoolAmt = totalTime > 0
+										? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) / 100
+										: 0;
+									const poolChanged = pendingFunding !== null && pendingFunding !== committedFunding;
+									const displayPool = poolChanged ? pendingPoolAmt : row.poolAmount;
+									const rowTotal = displayPool + row.pendingBoost;
 									const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 									const boostChanged = row.pendingBoost !== row.committedBoost;
 
@@ -986,7 +994,12 @@ export default function SubscriptionPage() {
 												</div>
 											</td>
 											<td className="text-sm">{formatHours(row.timeSeconds)}</td>
-											<td className="text-sm text-success">{fmt(row.poolAmount)}</td>
+											<td className="text-[10px] text-base-content/40 text-right">
+												{timePct > 0 ? `${Math.round(timePct)}%` : ""}
+											</td>
+											<td className={`text-sm ${poolChanged ? "text-white" : "text-success"}`}>
+												{fmt(displayPool)}
+											</td>
 											<td className="align-top pt-2">
 												{canEdit ? (
 													<BoostBar
