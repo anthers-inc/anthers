@@ -491,26 +491,19 @@ export default function SubscriptionPage() {
 		const committed = committedBoostMap.get(creatorId) ?? 0;
 		if (viewMode === "current" && newVal < committed) return; // increase only
 
-		// Check if total boost would exceed budget — if so, auto-adjust funding
+		// Cap at available budget (boost pool minus other allocations)
 		const otherBoosts = Array.from(pendingBoosts.entries())
 			.filter(([cid]) => cid !== creatorId)
 			.reduce((s, [, v]) => s + v, 0)
 			+ rows.filter((r) => r.creatorId !== creatorId && !pendingBoosts.has(r.creatorId))
 				.reduce((s, r) => s + r.committedBoost, 0);
-		const totalNeeded = otherBoosts + newVal;
-		let newFunding = pendingFunding ?? committedFunding;
-		while (computePools(newFunding).boostPool < totalNeeded && newFunding < SLIDER_MAX) {
-			newFunding++;
-		}
-		if (newFunding !== (pendingFunding ?? committedFunding)) {
-			if (viewMode === "current" && newFunding < committedFunding) return;
-			setPendingFunding(newFunding);
-		}
+		const available = Math.max(0, financials.boostPool - otherBoosts);
+		const clamped = Math.min(newVal, available);
 
 		setPendingBoosts((prev) => {
 			const next = new Map(prev);
-			if (newVal === committed) next.delete(creatorId);
-			else next.set(creatorId, newVal);
+			if (clamped === committed) next.delete(creatorId);
+			else next.set(creatorId, clamped);
 			return next;
 		});
 	};
@@ -898,26 +891,35 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* ── Save / Revert buttons ── */}
-			{canEdit && (
-				<div className="flex items-center gap-3">
-					{hasPendingChanges && (
-						<button
-							className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
-							onClick={() => setShowConfirm(true)}
-							disabled={!!actionLoading}
-						>
-							{actionLoading === "save" ? "Saving..." : "Save Changes"}
-						</button>
-					)}
-					{viewMode === "next" && (
-						<button
-							className="btn btn-ghost btn-sm"
-							onClick={() => setShowRevertConfirm(true)}
-						>
-							Revert to Current Month
-						</button>
-					)}
+			{/* ── Save / Discard / Revert buttons ── */}
+			{canEdit && hasPendingChanges && (
+				<div className="flex items-center justify-center gap-3">
+					<button
+						className="btn btn-ghost btn-sm"
+						onClick={() => {
+							setPendingFunding(null);
+							setPendingBoosts(new Map());
+						}}
+					>
+						Discard Changes
+					</button>
+					<button
+						className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
+						onClick={() => setShowConfirm(true)}
+						disabled={!!actionLoading}
+					>
+						{actionLoading === "save" ? "Saving..." : "Save Changes"}
+					</button>
+				</div>
+			)}
+			{canEdit && viewMode === "next" && !hasPendingChanges && (
+				<div className="flex items-center justify-center">
+					<button
+						className="btn btn-ghost btn-sm"
+						onClick={() => setShowRevertConfirm(true)}
+					>
+						Revert to Current Month
+					</button>
 				</div>
 			)}
 
