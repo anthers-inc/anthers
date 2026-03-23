@@ -99,13 +99,14 @@ function BoostBar({
 	value, boostPool, gates, onChange, disabled,
 }: {
 	value: number;
-	/** Total boost pool budget — slider ranges from 0 to this */
 	boostPool: number;
 	gates: CreatorGate[];
 	onChange: (v: number) => void;
 	disabled: boolean;
 }) {
 	const [tooltip, setTooltip] = useState<{ gate: CreatorGate; x: number } | null>(null);
+	const [useCustom, setUseCustom] = useState(false);
+	const [customInput, setCustomInput] = useState("");
 	const barRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -117,7 +118,14 @@ function BoostBar({
 
 	const boostGates = gates.filter((g) => g.gateType === "boost");
 	const gateByThreshold = new Map(boostGates.map((g) => [Number(g.threshold), g]));
-	const fillPct = Math.min((value / BAR_MAX) * 100, 100);
+
+	// Slider max = highest boost gate threshold for this creator, or boostPool if no gates
+	const highestGate = boostGates.length > 0
+		? Math.max(...boostGates.map((g) => Number(g.threshold)))
+		: boostPool;
+	const sliderMax = Math.max(highestGate, 1);
+	const barMax = sliderMax * 1.1; // 10% headroom for the gate visualization
+	const fillPct = Math.min((value / barMax) * 100, 100);
 
 	const handleSectionHover = (gate: CreatorGate, e: React.MouseEvent) => {
 		const rect = barRef.current?.getBoundingClientRect();
@@ -125,7 +133,6 @@ function BoostBar({
 		setTooltip({ gate, x: e.clientX - rect.left });
 	};
 
-	// Hoverable segments between gates
 	const segments: { start: number; end: number; gate: CreatorGate }[] = [];
 	if (boostGates.length > 0) {
 		for (let i = 0; i < boostGates.length; i++) {
@@ -133,42 +140,69 @@ function BoostBar({
 			segments.push({ start: prev, end: Number(boostGates[i].threshold), gate: boostGates[i] });
 		}
 		const last = boostGates[boostGates.length - 1];
-		segments.push({ start: Number(last.threshold), end: BAR_MAX, gate: last });
+		segments.push({ start: Number(last.threshold), end: barMax, gate: last });
 	}
 
 	return (
 		<div className={`space-y-1 ${disabled ? "opacity-50" : ""}`}>
-			{/* Slider */}
+			{/* Slider + custom input */}
 			<div className="flex items-center gap-2">
 				<input
 					type="range"
 					min={0}
-					max={boostPool}
+					max={sliderMax}
 					step={1}
-					value={value}
-					onChange={(e) => onChange(parseInt(e.target.value, 10))}
-					className="range range-xs range-primary flex-1"
-					disabled={disabled}
+					value={Math.min(value, sliderMax)}
+					onChange={(e) => !useCustom && onChange(parseInt(e.target.value, 10))}
+					className={`range range-xs range-primary flex-1 ${useCustom ? "opacity-30 pointer-events-none" : ""}`}
+					disabled={disabled || useCustom}
 				/>
-				<span className="text-sm text-primary font-medium w-10 flex-shrink-0 text-right">
-					${value}
-				</span>
+				{/* Custom toggle + value */}
+				<div className="flex items-center gap-1.5 flex-shrink-0">
+					<label className="swap swap-rotate" title="Custom amount">
+						<input
+							type="checkbox"
+							checked={useCustom}
+							onChange={(e) => {
+								setUseCustom(e.target.checked);
+								if (e.target.checked) setCustomInput(String(value));
+							}}
+							disabled={disabled}
+						/>
+						<span className="swap-off text-[10px] text-base-content/40 select-none cursor-pointer">$</span>
+						<span className="swap-on text-[10px] text-primary select-none cursor-pointer">$</span>
+					</label>
+					{useCustom ? (
+						<input
+							type="number"
+							className="input input-xs input-bordered w-14 text-right font-medium text-primary"
+							min={0}
+							step={1}
+							value={customInput}
+							disabled={disabled}
+							onChange={(e) => {
+								setCustomInput(e.target.value);
+								const val = parseInt(e.target.value, 10);
+								if (!isNaN(val) && val >= 0) onChange(val);
+							}}
+						/>
+					) : (
+						<span className="text-sm text-primary font-medium w-8 text-right">${value}</span>
+					)}
+				</div>
 			</div>
 
 			{/* Gate visualization bar */}
 			{boostGates.length > 0 && (
 				<div className="relative" ref={barRef}>
 					<div className="w-full h-2.5 bg-base-300 rounded-full overflow-hidden relative">
-						{/* Fill */}
 						<div
 							className="absolute inset-y-0 left-0 bg-primary/30 rounded-full transition-all"
 							style={{ width: `${fillPct}%` }}
 						/>
-
-						{/* Hoverable segments */}
 						{segments.map((seg, i) => {
-							const segStart = (seg.start / BAR_MAX) * 100;
-							const segEnd = (seg.end / BAR_MAX) * 100;
+							const segStart = (seg.start / barMax) * 100;
+							const segEnd = (seg.end / barMax) * 100;
 							const unlocked = value >= Number(seg.gate.threshold);
 							return (
 								<div
@@ -182,28 +216,22 @@ function BoostBar({
 								/>
 							);
 						})}
-
-						{/* Gate hash lines */}
-						{GATE_THRESHOLDS_VISUAL.map((t) => {
-							const pos = (t / BAR_MAX) * 100;
-							const gate = gateByThreshold.get(t);
-							if (!gate) return null;
+						{boostGates.map((gate) => {
+							const pos = (Number(gate.threshold) / barMax) * 100;
 							return (
 								<div
-									key={`line-${t}`}
+									key={`line-${gate.threshold}`}
 									className={`absolute top-0 bottom-0 w-px ${
-										value >= t ? "bg-primary" : "bg-base-content/30"
+										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/30"
 									}`}
 									style={{ left: `${pos}%` }}
 								/>
 							);
 						})}
 					</div>
-
-					{/* Dollar labels below bar */}
 					<div className="relative h-3.5 mt-0.5">
 						{boostGates.map((gate) => {
-							const pos = (Number(gate.threshold) / BAR_MAX) * 100;
+							const pos = (Number(gate.threshold) / barMax) * 100;
 							return (
 								<span
 									key={`label-${gate.threshold}`}
@@ -217,8 +245,6 @@ function BoostBar({
 							);
 						})}
 					</div>
-
-					{/* Tooltip */}
 					{tooltip && (
 						<div
 							className="absolute z-50 bottom-full mb-2 pointer-events-none"
@@ -230,17 +256,13 @@ function BoostBar({
 							<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
 								<p className="font-semibold mb-0.5">
 									{tooltip.gate.label}
-									<span className="font-normal text-base-content/40 ml-1">
-										${tooltip.gate.threshold}/mo
-									</span>
+									<span className="font-normal text-base-content/40 ml-1">${tooltip.gate.threshold}/mo</span>
 								</p>
 								<p className="text-base-content/60">{tooltip.gate.description}</p>
 								{value >= Number(tooltip.gate.threshold) ? (
 									<p className="text-primary font-medium mt-1">Unlocked</p>
 								) : (
-									<p className="text-base-content/40 mt-1">
-										Need ${Number(tooltip.gate.threshold) - value} more
-									</p>
+									<p className="text-base-content/40 mt-1">Need ${Number(tooltip.gate.threshold) - value} more</p>
 								)}
 							</div>
 						</div>
@@ -650,7 +672,7 @@ export default function SubscriptionPage() {
 	const canEdit = viewMode === "current" || viewMode === "next";
 
 	return (
-		<div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+		<div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 			{error && <div className="alert alert-error"><span>{error}</span></div>}
 			{success && <div className="alert alert-success"><span>{success}</span></div>}
 
@@ -723,88 +745,90 @@ export default function SubscriptionPage() {
 						Subscription Amount
 					</h4>
 					<div className="card bg-base-200 p-4">
-						<div className="flex gap-4">
-							{/* Slider area */}
-							<div className={`flex-1 ${useCustomAmount ? "opacity-30 pointer-events-none" : ""}`}>
-								{/* Tier threshold marks above slider */}
-								<div className="relative w-full h-6 mb-1">
-									{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
-										const pct = (t.price / SLIDER_MAX) * 100;
-										const isActive = effectiveFunding >= t.price;
-										return (
-											<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
-												<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
-												<div className="w-px h-3 bg-base-content/20" />
-											</div>
-										);
-									})}
-								</div>
-								<input
-									type="range"
-									min={0}
-									max={SLIDER_MAX}
-									step={1}
-									value={effectiveFunding}
-									onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
-									className="range range-success w-full"
-									disabled={useCustomAmount}
-								/>
-								{/* Tick marks below slider */}
-								<div className="relative w-full h-6 mt-1">
-									{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
-										const pct = (tick / SLIDER_MAX) * 100;
-										const isLabeled = tick % 5 === 0;
-										return (
-											<div key={tick} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%` }}>
-												<div className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`} />
-												{isLabeled && (
-													<span className="text-[10px] text-base-content/40 mt-0.5">${tick}</span>
-												)}
-											</div>
-										);
-									})}
-								</div>
+						{/* Slider area */}
+						<div className={useCustomAmount ? "opacity-30 pointer-events-none" : ""}>
+							{/* Tier threshold marks above slider */}
+							<div className="relative w-full h-6 mb-1">
+								{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
+									const pct = (t.price / SLIDER_MAX) * 100;
+									const isActive = effectiveFunding >= t.price;
+									return (
+										<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
+											<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
+											<div className="w-px h-3 bg-base-content/20" />
+										</div>
+									);
+								})}
 							</div>
+							<input
+								type="range"
+								min={0}
+								max={SLIDER_MAX}
+								step={1}
+								value={effectiveFunding}
+								onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
+								className="range range-success w-full"
+								disabled={useCustomAmount}
+							/>
+							{/* Tick marks below slider */}
+							<div className="relative w-full h-6 mt-1">
+								{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
+									const pct = (tick / SLIDER_MAX) * 100;
+									const isLabeled = tick % 5 === 0;
+									return (
+										<div key={tick} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%` }}>
+											<div className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`} />
+											{isLabeled && (
+												<span className="text-[10px] text-base-content/40 mt-0.5">${tick}</span>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						</div>
 
-							{/* Custom amount toggle + input */}
-							<div className="flex flex-col items-end gap-2 flex-shrink-0 pt-6">
-								<label className="flex items-center gap-2 cursor-pointer">
-									<span className="text-xs text-base-content/50">Custom</span>
-									<input
-										type="checkbox"
-										className="checkbox checkbox-xs checkbox-success"
-										checked={useCustomAmount}
-										onChange={(e) => {
-											const checked = e.target.checked;
-											setUseCustomAmount(checked);
-											if (checked) {
-												setCustomAmountInput(String(effectiveFunding));
-											} else {
-												// Clamp back to slider range
-												const val = parseInt(customAmountInput, 10);
-												if (!isNaN(val) && val >= 3) {
-													handleFundingChange(Math.min(val, SLIDER_MAX));
-												}
-											}
-										}}
-									/>
-								</label>
+						{/* Amount display + custom toggle */}
+						<div className="flex items-center justify-between mt-3 pt-3 border-t border-base-content/10">
+							<div className="text-sm">
+								{!useCustomAmount ? (
+									<span className="font-semibold text-success">{fmt(effectiveFunding)}/mo</span>
+								) : (
+									<div className="flex items-center gap-2">
+										<span className="text-base-content/50">$</span>
+										<input
+											type="number"
+											className="input input-sm input-bordered w-24 font-semibold text-success"
+											min={3}
+											step={1}
+											value={customAmountInput}
+											onChange={(e) => {
+												setCustomAmountInput(e.target.value);
+												const val = parseInt(e.target.value, 10);
+												if (!isNaN(val) && val >= 3) handleFundingChange(val);
+											}}
+										/>
+										<span className="text-base-content/50">/mo</span>
+									</div>
+								)}
+							</div>
+							<label className="flex items-center gap-2 cursor-pointer select-none">
+								<span className="text-xs text-base-content/50">Custom amount</span>
 								<input
-									type="number"
-									className="input input-xs input-bordered w-20 text-right"
-									min={3}
-									step={1}
-									value={useCustomAmount ? customAmountInput : effectiveFunding}
-									disabled={!useCustomAmount}
+									type="checkbox"
+									className="toggle toggle-xs toggle-success"
+									checked={useCustomAmount}
 									onChange={(e) => {
-										setCustomAmountInput(e.target.value);
-										const val = parseInt(e.target.value, 10);
-										if (!isNaN(val) && val >= 3) {
-											handleFundingChange(val);
+										const checked = e.target.checked;
+										setUseCustomAmount(checked);
+										if (checked) {
+											setCustomAmountInput(String(effectiveFunding));
+										} else {
+											const val = parseInt(customAmountInput, 10);
+											if (!isNaN(val) && val >= 3) handleFundingChange(Math.min(val, SLIDER_MAX));
 										}
 									}}
 								/>
-							</div>
+							</label>
 						</div>
 						{viewMode === "current" && (
 							<p className="text-[11px] text-base-content/30 mt-2">
