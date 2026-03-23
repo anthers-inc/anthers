@@ -173,7 +173,7 @@ function BoostBar({
 	const handlePointerUp = useCallback(() => { setDragging(false); }, []);
 
 	return (
-		<div className={disabled ? "opacity-50" : ""}>
+		<div className={disabled ? "opacity-60" : ""}>
 			{/* Tier name labels above the track */}
 			{boostGates.length > 0 && (
 				<div className="relative h-4 mb-0.5">
@@ -184,7 +184,7 @@ function BoostBar({
 							<span
 								key={`name-${gate.threshold}`}
 								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									unlocked ? "text-primary font-semibold" : "text-base-content/40"
+									unlocked ? "text-primary font-semibold" : "text-base-content/50"
 								}`}
 								style={{ left: `${pos}%` }}
 							>
@@ -207,7 +207,7 @@ function BoostBar({
 					<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
 						{/* Committed fill (primary) */}
 						<div
-							className="absolute inset-y-0 left-0 bg-primary/60 rounded-full"
+							className="absolute inset-y-0 left-0 bg-primary/80 rounded-full"
 							style={{ width: `${committedPct}%` }}
 						/>
 						{/* Pending fill */}
@@ -217,7 +217,7 @@ function BoostBar({
 								style={{
 									left: `${committedPct}%`,
 									width: `${pendingPct - committedPct}%`,
-									backgroundColor: `${PENDING_COLOR}99`,
+									backgroundColor: `${PENDING_COLOR}CC`,
 								}}
 							/>
 						)}
@@ -229,7 +229,7 @@ function BoostBar({
 								<div
 									key={`line-${gate.threshold}`}
 									className={`absolute top-0 bottom-0 w-px pointer-events-none ${
-										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/30"
+										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/40"
 									}`}
 									style={{ left: `${pos}%` }}
 								/>
@@ -257,7 +257,7 @@ function BoostBar({
 							<span
 								key={`label-${gate.threshold}`}
 								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									value >= Number(gate.threshold) ? "text-primary" : "text-base-content/30"
+									value >= Number(gate.threshold) ? "text-primary" : "text-base-content/40"
 								}`}
 								style={{ left: `${pos}%` }}
 							>
@@ -425,7 +425,7 @@ function TimePoolPie({
 				stroke={PIE_COLORS[i % PIE_COLORS.length]}
 				strokeWidth={strokeWidth}
 				strokeLinecap="butt"
-				opacity={isDimmed ? 0.3 : 1}
+				opacity={isDimmed ? 0.4 : 1}
 				className="transition-opacity duration-1000 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
 				onMouseLeave={onLeave}
@@ -494,7 +494,7 @@ function CreatorInfoCard({
 				<div className="divider my-1" />
 
 				{/* Time Pool section — highlighted when source is pie */}
-				<div className={`transition-opacity duration-1000 ${hoverSource === "pie" ? "opacity-100" : "opacity-40"}`}>
+				<div className={`transition-opacity duration-1000 ${hoverSource === "pie" ? "opacity-100" : "opacity-50"}`}>
 					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Time Pool</p>
 					<div className="space-y-1 text-sm">
 						<div className="flex justify-between">
@@ -515,7 +515,7 @@ function CreatorInfoCard({
 				<div className="divider my-1" />
 
 				{/* Boost section — highlighted when source is boost */}
-				<div className={`transition-opacity duration-1000 ${hoverSource === "boost" ? "opacity-100" : "opacity-40"}`}>
+				<div className={`transition-opacity duration-1000 ${hoverSource === "boost" ? "opacity-100" : "opacity-50"}`}>
 					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Boost</p>
 					<div className="space-y-1 text-sm">
 						<div className="flex justify-between">
@@ -1050,7 +1050,7 @@ export default function SubscriptionPage() {
 				{/* ── SUBSCRIPTION AMOUNT ── */}
 				{canEdit && (
 					<div>
-						<div className="divider text-sm text-base-content/40 my-2">
+						<div className="divider text-sm text-base-content/50 my-2">
 							Subscription Amount
 							<InfoTip text={viewMode === "current"
 								? "Your monthly funding level. Can only be increased in the current month. Determines your Anthers Tier, Time Pool, and Boost Pool budget."
@@ -1064,7 +1064,7 @@ export default function SubscriptionPage() {
 								const isActive = effectiveFunding >= t.price;
 								return (
 									<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
-										<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/40"}`}>{t.name}</span>
+										<span className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/50"}`}>{t.name}</span>
 										<div className="w-px h-3 bg-base-content/20" />
 									</div>
 								);
@@ -1093,12 +1093,12 @@ export default function SubscriptionPage() {
 								>
 									<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
 										{/* Committed fill (teal) */}
-										<div className="absolute inset-y-0 left-0 bg-success/60 rounded-full" style={{ width: `${cPct}%` }} />
+										<div className="absolute inset-y-0 left-0 bg-success/80 rounded-full" style={{ width: `${cPct}%` }} />
 										{/* Pending fill */}
 										{hasPendingSub && effectiveFunding > committedFunding && (
 											<div
 												className="absolute inset-y-0 rounded-r-full"
-												style={{ left: `${cPct}%`, width: `${pPct - cPct}%`, backgroundColor: `${PENDING_COLOR}99` }}
+												style={{ left: `${cPct}%`, width: `${pPct - cPct}%`, backgroundColor: `${PENDING_COLOR}CC` }}
 											/>
 										)}
 									</div>
@@ -1121,7 +1121,7 @@ export default function SubscriptionPage() {
 								return (
 									<div key={tick} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%` }}>
 										<div className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`} />
-										{isLabeled && <span className="text-[10px] text-base-content/40 mt-0.5">${tick}</span>}
+										{isLabeled && <span className="text-[10px] text-base-content/50 mt-0.5">${tick}</span>}
 									</div>
 								);
 							})}
@@ -1131,7 +1131,7 @@ export default function SubscriptionPage() {
 
 			{/* ── CREATOR ALLOCATIONS ── */}
 				<div>
-					<div className="divider text-sm text-base-content/40 my-2">
+					<div className="divider text-sm text-base-content/50 my-2">
 						Creator Allocations
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
 					</div>
@@ -1268,7 +1268,7 @@ export default function SubscriptionPage() {
 				</div>
 
 				{/* ── COST BREAKDOWN ── */}
-				<div className="divider text-sm text-base-content/40 my-2">Cost Breakdown</div>
+				<div className="divider text-sm text-base-content/50 my-2">Cost Breakdown</div>
 				<div className="flex justify-center mb-4">
 					<div className="text-sm w-full max-w-lg">
 						{/* Subscription header */}
