@@ -752,52 +752,59 @@ export default function SubscriptionPage() {
 	const cardFee = Math.round((subtotalForFees * 0.029 + 0.30) * 100) / 100;
 	const totalWithFees = Math.round((effectiveFunding + deliveryAmt + salesTax + cardFee) * 100) / 100;
 
+	// Format seconds as HH:MM
+	const fmtTime = (seconds: number) => {
+		const h = Math.floor(seconds / 3600);
+		const m = Math.round((seconds % 3600) / 60);
+		return `${h}:${String(m).padStart(2, "0")}`;
+	};
+
 	return (
-		<div className="mx-auto px-4 py-8 space-y-6" style={{ maxWidth: "110rem" }}>
-			{error && <div className="alert alert-error"><span>{error}</span></div>}
-			{success && <div className="alert alert-success"><span>{success}</span></div>}
+		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
+			{error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
+			{success && <div className="alert alert-success mb-4"><span>{success}</span></div>}
 
 			{/* Header + month selector */}
-			<div>
-				<div className="flex items-baseline justify-between">
+			<div className="flex items-baseline justify-between mb-4">
+				<div>
 					<h1 className="text-lg font-bold">Your Anthers—{cycleLabel(selectedCycle)}</h1>
-					<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+					<p className="text-sm text-base-content/60">
+						{tier.name} tier
+						{hasPendingSub && <span className="text-error ml-1">(pending change)</span>}
+					</p>
 				</div>
-				<p className="text-sm text-base-content/60">
-					{tier.name} tier
-					{hasPendingSub && (
-						<span className="text-error ml-1">(pending change)</span>
-					)}
-				</p>
+				<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 			</div>
 
 			{/* Banners */}
 			{viewMode === "next" && (
-				<div className="alert alert-info text-sm">
-					<span>Preview for {cycleLabel(selectedCycle)}. You can increase or decrease boosts freely. Changes take effect at the start of the billing cycle.</span>
+				<div className="alert alert-info text-sm mb-4">
+					<span>Preview for {cycleLabel(selectedCycle)}. You can increase or decrease boosts freely.</span>
 				</div>
 			)}
 			{viewMode === "past" && (
-				<div className="alert text-sm bg-base-200">
+				<div className="alert text-sm bg-base-200 mb-4">
 					<span>Historical view — read-only summary for {cycleLabel(selectedCycle)}.</span>
 				</div>
 			)}
 
-			{/* ── SUBSCRIPTION AMOUNT ── */}
-			{canEdit && (
-				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
-						Subscription Amount
-						<InfoTip text={viewMode === "current"
-							? "Your monthly funding level. Can only be increased in the current month. Determines your Anthers Tier, Time Pool, and Boost Pool budget."
-							: "Your monthly funding level for the upcoming billing cycle. You can increase or decrease freely before the cycle starts."
-						} />
-					</h4>
-					<div className="card bg-base-200 p-4">
+			{/* ── Main panel (matches SubscribePage card style) ── */}
+			<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto space-y-6">
+
+				{/* ── SUBSCRIPTION AMOUNT ── */}
+				{canEdit && (
+					<div>
+						<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+							Subscription Amount
+							<InfoTip text={viewMode === "current"
+								? "Your monthly funding level. Can only be increased in the current month. Determines your Anthers Tier, Time Pool, and Boost Pool budget."
+								: "Your monthly funding level for the upcoming billing cycle. You can increase or decrease freely before the cycle starts."
+							} />
+						</h4>
 						{/* Tier threshold marks above slider */}
 						<div className="relative w-full h-6 mb-1">
 							{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
-								const pct = (t.price / SLIDER_MAX) * 100;
+								const pct = ((t.price - 0) / (SLIDER_MAX - 0)) * 100;
 								const isActive = effectiveFunding >= t.price;
 								return (
 									<div key={t.id} className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct}%`, bottom: 0 }}>
@@ -807,37 +814,15 @@ export default function SubscriptionPage() {
 								);
 							})}
 						</div>
-						{/* Custom track */}
-						{(() => {
-							const committedPct = (committedFunding / SLIDER_MAX) * 100;
-							const pendingPct = (effectiveFunding / SLIDER_MAX) * 100;
-							return (
-								<div
-									className="relative h-5 select-none cursor-pointer"
-									onPointerDown={(e) => {
-										const rect = e.currentTarget.getBoundingClientRect();
-										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-										handleFundingChange(Math.round(pct * SLIDER_MAX));
-										e.preventDefault();
-										(e.target as HTMLElement).setPointerCapture(e.pointerId);
-									}}
-									onPointerMove={(e) => {
-										if (!(e.buttons & 1)) return;
-										const rect = e.currentTarget.getBoundingClientRect();
-										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-										handleFundingChange(Math.round(pct * SLIDER_MAX));
-									}}
-								>
-									<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
-										<div className="absolute inset-y-0 left-0 bg-success/60 rounded-full" style={{ width: `${committedPct}%` }} />
-										{hasPendingSub && effectiveFunding > committedFunding && (
-											<div className="absolute inset-y-0 bg-error/60 rounded-r-full" style={{ left: `${committedPct}%`, width: `${pendingPct - committedPct}%` }} />
-										)}
-									</div>
-									<div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${hasPendingSub ? "bg-error border-error" : "bg-success border-success"}`} style={{ left: `${pendingPct}%` }} />
-								</div>
-							);
-						})()}
+						<input
+							type="range"
+							min={0}
+							max={SLIDER_MAX}
+							step={1}
+							value={effectiveFunding}
+							onChange={(e) => handleFundingChange(parseInt(e.target.value, 10))}
+							className="range range-success w-full"
+						/>
 						{/* Tick marks below slider */}
 						<div className="relative w-full h-6 mt-1">
 							{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
@@ -852,259 +837,253 @@ export default function SubscriptionPage() {
 							})}
 						</div>
 					</div>
-				</div>
-			)}
+				)}
 
-			{/* ── CREATOR ALLOCATIONS ── */}
-			{rows.length > 0 ? (
+				{/* ── CREATOR ALLOCATIONS ── */}
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
+					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
 						Creator Allocations
 						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
 					</h4>
-					<div className="overflow-x-auto">
-						<table className="table table-sm w-full">
-							<thead>
-								<tr>
-									<th className="w-40">Creator</th>
-									<th className="w-20">Time</th>
-									<th className="w-6"></th>
-									<th className="w-20">Pool</th>
-									<th className="w-72">Boost</th>
-									<th className="w-20 text-right">Total</th>
-								</tr>
-							</thead>
-							<tbody>
-								{rows.map((row) => {
-									const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
-									const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
-									const pendingPoolAmt = totalTime > 0
-										? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) / 100
-										: 0;
-									const poolChanged = pendingFunding !== null && pendingFunding !== committedFunding;
-									const displayPool = poolChanged ? pendingPoolAmt : row.poolAmount;
-									const rowTotal = displayPool + row.pendingBoost;
-									const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-									const boostChanged = row.pendingBoost !== row.committedBoost;
+					{rows.length > 0 ? (
+						<div className="overflow-x-auto">
+							<table className="table table-sm w-full">
+								<thead>
+									<tr>
+										<th className="w-40">Creator</th>
+										<th className="w-48">Time Pool</th>
+										<th>Boost</th>
+										<th className="w-20 text-right">Total</th>
+									</tr>
+								</thead>
+								<tbody>
+									{rows.map((row) => {
+										const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
+										const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
+										const pendingPoolAmt = totalTime > 0
+											? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) / 100
+											: 0;
+										const poolChanged = pendingFunding !== null && pendingFunding !== committedFunding;
+										const displayPool = poolChanged ? pendingPoolAmt : row.poolAmount;
+										const rowTotal = displayPool + row.pendingBoost;
+										const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+										const boostChanged = row.pendingBoost !== row.committedBoost;
 
-									return (
-										<tr key={row.creatorId} className="hover">
-											<td>
-												<div className="flex items-center gap-1.5">
-													{row.avatar ? (
-														<img src={row.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+										return (
+											<tr key={row.creatorId} className="hover">
+												<td>
+													<div className="flex items-center gap-1.5">
+														{row.avatar ? (
+															<img src={row.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+														) : (
+															<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">{initials}</div>
+														)}
+														<Link to={`/${row.username}`} className="font-medium text-sm truncate link link-hover">
+															@{row.displayName || row.username}
+														</Link>
+													</div>
+												</td>
+												<td className="text-sm">
+													<div className="flex items-center gap-3">
+														<span className="text-base-content/50 tabular-nums">{fmtTime(row.timeSeconds)}</span>
+														<span className="text-base-content/30 text-xs tabular-nums">({Math.round(timePct)}%)</span>
+														<span className={poolChanged ? "text-error" : "text-success"}>{fmt(displayPool)}</span>
+													</div>
+												</td>
+												<td className="align-middle">
+													{canEdit ? (
+														<BoostBar
+															value={row.pendingBoost}
+															committedValue={row.committedBoost}
+															boostPool={financials.boostPool}
+															gates={row.gates}
+															onChange={(v) => handleBoostChange(row.creatorId, v)}
+															disabled={viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges}
+														/>
 													) : (
-														<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">{initials}</div>
+														<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
 													)}
-													<Link to={`/${row.username}`} className="font-medium text-sm truncate link link-hover">
-														@{row.displayName || row.username}
-													</Link>
-												</div>
-											</td>
-											<td className="text-sm">{formatHours(row.timeSeconds)}</td>
-											<td className="text-[10px] text-base-content/40 text-right">
-												{timePct > 0 ? `${Math.round(timePct)}%` : ""}
-											</td>
-											<td className={`text-sm ${poolChanged ? "text-error" : "text-success"}`}>
-												{fmt(displayPool)}
-											</td>
-											<td className="align-top pt-2">
-												{canEdit ? (
-													<BoostBar
-														value={row.pendingBoost}
-														committedValue={row.committedBoost}
-														boostPool={financials.boostPool}
-														gates={row.gates}
-														onChange={(v) => handleBoostChange(row.creatorId, v)}
-														disabled={viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges}
-													/>
-												) : (
-													<span className="text-sm text-primary">{fmt(row.pendingBoost)}</span>
-												)}
-											</td>
-											<td className="text-right text-sm font-medium align-top pt-2">
-												{fmt(rowTotal)}
-												{boostChanged && (
-													<div className="text-[10px] text-error">(pending)</div>
-												)}
-											</td>
-										</tr>
-									);
-								})}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			) : (
-				<div className="py-6 text-center text-sm text-base-content/40">
-					{viewMode === "next" ? (
-						<p>Next month's distributions will be calculated based on your time with creators.</p>
+												</td>
+												<td className="text-right text-sm font-medium align-middle">
+													{fmt(rowTotal)}
+													{boostChanged && (
+														<div className="text-[10px] text-error">(pending)</div>
+													)}
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</div>
 					) : (
-						<>
-							<p>No distributions yet this cycle.</p>
-							<p className="mt-1">Your time pool is distributed proportionally — video, audio, text, and gameplay all count equally.</p>
-						</>
+						<div className="py-6 text-center text-sm text-base-content/40">
+							{viewMode === "next" ? (
+								<p>Next month's distributions will be calculated based on your time with creators.</p>
+							) : (
+								<>
+									<p>No distributions yet this cycle.</p>
+									<p className="mt-1">Your time pool is distributed proportionally — video, audio, text, and gameplay all count equally.</p>
+								</>
+							)}
+						</div>
 					)}
 				</div>
-			)}
 
-			{/* ── Cost Breakdown + Actions ── */}
-			<div className="flex items-end gap-6">
-				{/* Left: subscription actions */}
-				{viewMode === "current" && (
-					<div className="flex flex-col gap-2 flex-shrink-0">
-						{isCanceling ? (
-							<button className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`} onClick={handleResume} disabled={!!actionLoading}>
-								{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
-							</button>
-						) : (
-							<button className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`} onClick={handleCancel} disabled={!!actionLoading}>
-								{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
-							</button>
-						)}
-						<button className={`btn btn-ghost btn-sm ${actionLoading === "portal" ? "btn-disabled" : ""}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
-							{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
-						</button>
-					</div>
-				)}
-
-				{/* Center: cost breakdown */}
-				<div className="flex-1 text-sm max-w-lg mx-auto">
-					{/* Subscription header */}
-					<div className="flex items-center justify-between py-2 border-b border-base-content/10">
-						<span className="text-base-content/60">Subscription</span>
-						<div className="flex items-baseline gap-1">
-							<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>
-								${effectiveFunding}
-							</span>
-							<span className="text-base-content/40 text-xs">/mo</span>
+				{/* ── COST BREAKDOWN ── */}
+				<div className="divider text-xs text-base-content/30 my-2">Cost Breakdown</div>
+				<div className="flex justify-center mb-4">
+					<div className="text-sm w-full max-w-lg">
+						{/* Subscription header */}
+						<div className="flex items-center justify-between py-2 border-b border-base-content/10">
+							<span className="text-base-content/60">Subscription</span>
+							<div className="flex items-baseline gap-1">
+								<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>${effectiveFunding}</span>
+								<span className="text-base-content/40 text-xs">/mo</span>
+							</div>
 						</div>
-					</div>
 
-					{/* Line items */}
-					<div className="py-2 space-y-1.5">
-						<div className="flex items-center justify-between">
-							<div className="flex items-center gap-2">
-								<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.timePool }} />
-								<span className="text-base-content/70">
-									Time Pool
+						{/* Line items */}
+						<div className="py-2 space-y-1.5">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.timePool }} />
+									<span className="text-base-content/70">
+										Time Pool
+										{unallocatedBoost > 0 && (
+											<span className="text-base-content/40 text-xs ml-1">(incl. {fmt(unallocatedBoost)} unallocated boost)</span>
+										)}
+									</span>
+								</div>
+								<div className="flex items-center gap-1">
+									<strong className="text-success">{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}</strong>
 									<InfoTip text="Distributed automatically to creators based on the time you spend with their content. A minute of video, audio, reading, or gameplay all count equally." />
-								</span>
-								{unallocatedBoost > 0 && (
-									<span className="text-base-content/40 text-xs">
-										(incl. {fmt(unallocatedBoost)} unallocated boost)
-									</span>
-								)}
+								</div>
 							</div>
-							<strong className="text-success">
-								{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}
-							</strong>
-						</div>
-						{financials.boostPool > 0 && (
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.boost }} />
-									<span className="text-base-content/70">
-										Boost Pool
+							{financials.boostPool > 0 && (
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.boost }} />
+										<span className="text-base-content/70">Boost Pool</span>
+									</div>
+									<div className="flex items-center gap-1">
+										<strong className="text-primary">{fmt(allocatedBoost)}</strong>
 										<InfoTip text="Funds you direct to specific creators in $1 increments. Your boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
-									</span>
+									</div>
 								</div>
-								<strong className="text-primary">{fmt(allocatedBoost)}</strong>
-							</div>
-						)}
-						<div className="flex items-center justify-between">
-							<div className="flex items-center gap-2">
-								<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.foundation }} />
-								<span className="text-base-content/70">
-									Anthers Foundation
-									<InfoTip text="8% of your subscription funds the Anthers Foundation, which allocates between charitable programs (min 50%) and organizational operations. Quarterly reports show exactly how the fee is spent." />
-								</span>
-							</div>
-							<strong>{fmt(foundationFee)}</strong>
-						</div>
-						{viewMode !== "next" && (
+							)}
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-2">
-									<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.delivery }} />
-									<span className="text-base-content/70">
-										Delivery
-										<InfoTip text="Bandwidth cost of content you consume. Estimate assumes 1080p video — audio and text cost far less. Your $1/mo delivery credit is applied first." />
-										{deliveryAmt > 0 && (
-											<span className="text-base-content/40 text-xs ml-1">
-												({fmt(grossDelivery)} − $1.00 credit)
-											</span>
-										)}
-										{deliveryAmt === 0 && deliveryEstimate.hours > 0 && (
-											<span className="text-success text-xs ml-1">($1 credit covers this)</span>
-										)}
-									</span>
+									<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.foundation }} />
+									<span className="text-base-content/70">Anthers Foundation</span>
 								</div>
-								<strong>{fmt(deliveryAmt)}</strong>
+								<div className="flex items-center gap-1">
+									<strong>{fmt(foundationFee)}</strong>
+									<InfoTip text="8% of your subscription funds the Anthers Foundation, which allocates between charitable programs (min 50%) and organizational operations. Quarterly reports show exactly how the fee is spent." />
+								</div>
 							</div>
-						)}
-						{viewMode !== "next" && (
-							<>
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-2">
-										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.salesTax }} />
-										<span className="text-base-content/70">Est. sales tax</span>
+							{viewMode !== "next" && (
+								<>
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.delivery }} />
+											<span className="text-base-content/70">
+												Delivery
+												{deliveryAmt > 0 && (
+													<span className="text-base-content/40 text-xs ml-1">({fmt(grossDelivery)} − $1.00 credit)</span>
+												)}
+												{deliveryAmt === 0 && deliveryEstimate.hours > 0 && (
+													<span className="text-success text-xs ml-1">($1 credit covers this)</span>
+												)}
+											</span>
+										</div>
+										<div className="flex items-center gap-1">
+											<strong>{fmt(deliveryAmt)}</strong>
+											<InfoTip text="Bandwidth cost of content you consume. Estimate assumes 1080p video — audio and text cost far less. Your $1/mo delivery credit is applied first." />
+										</div>
 									</div>
-									<strong>{fmt(salesTax)}</strong>
-								</div>
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-2">
-										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.cardFee }} />
-										<span className="text-base-content/70">Card fee</span>
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.salesTax }} />
+											<span className="text-base-content/70">Est. sales tax</span>
+										</div>
+										<strong>{fmt(salesTax)}</strong>
 									</div>
-									<strong>{fmt(cardFee)}</strong>
-								</div>
-							</>
-						)}
-					</div>
-
-					{/* Total */}
-					<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
-						<span className="font-bold">{viewMode === "next" ? "Monthly total" : "Total w/Fees"}</span>
-						<div className="flex items-baseline gap-1">
-							<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>
-								{fmt(viewMode === "next" ? effectiveFunding : totalWithFees)}
-							</span>
-							<span className="text-base-content/40 text-xs">/mo</span>
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: DOT_COLORS.cardFee }} />
+											<span className="text-base-content/70">Card fee</span>
+										</div>
+										<strong>{fmt(cardFee)}</strong>
+									</div>
+								</>
+							)}
 						</div>
-					</div>
 
-					{sub.currentPeriodEnd && viewMode === "current" && (
-						<p className="text-xs text-base-content/40 mt-1">
-							Next charge: {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-						</p>
-					)}
+						{/* Total */}
+						<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
+							<span className="font-bold">{viewMode === "next" ? "Monthly total" : "Total w/Fees"}</span>
+							<div className="flex items-baseline gap-1">
+								<span className={`text-xl font-bold ${hasPendingSub ? "text-error" : ""}`}>{fmt(viewMode === "next" ? effectiveFunding : totalWithFees)}</span>
+								<span className="text-base-content/40 text-xs">/mo</span>
+							</div>
+						</div>
+
+						{sub.currentPeriodEnd && viewMode === "current" && (
+							<p className="text-xs text-base-content/40 mt-1">
+								Next charge: {new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+							</p>
+						)}
+					</div>
 				</div>
 
-				{/* Right: save/discard */}
-				{canEdit && (
-					<div className="flex flex-col gap-2 flex-shrink-0 items-end">
-						<button
-							className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
-							onClick={() => setShowConfirm(true)}
-							disabled={!hasPendingChanges || !!actionLoading}
-						>
-							{actionLoading === "save" ? "Saving..." : "Save Changes"}
-						</button>
-						<button
-							className="btn btn-outline btn-warning btn-sm"
-							disabled={!hasPendingChanges}
-							onClick={() => { setPendingFunding(null); setPendingBoosts(new Map()); }}
-						>
-							Discard Changes
-						</button>
-						{viewMode === "next" && (
-							<button className="btn btn-ghost btn-xs" onClick={() => setShowRevertConfirm(true)}>
-								Revert to Current Month
+				{/* ── Action buttons ── */}
+				<div className="flex items-start justify-between">
+					{/* Left: subscription management */}
+					{viewMode === "current" ? (
+						<div className="flex flex-col gap-2">
+							<button className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`} onClick={handleBillingPortal} disabled={!!actionLoading}>
+								{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
 							</button>
-						)}
-					</div>
-				)}
-			</div>
+							{isCanceling ? (
+								<button className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`} onClick={handleResume} disabled={!!actionLoading}>
+									{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
+								</button>
+							) : (
+								<button className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`} onClick={handleCancel} disabled={!!actionLoading}>
+									{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
+								</button>
+							)}
+						</div>
+					) : <div />}
+
+					{/* Right: save/discard */}
+					{canEdit ? (
+						<div className="flex flex-col gap-2 items-end">
+							<button
+								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
+								onClick={() => setShowConfirm(true)}
+								disabled={!hasPendingChanges || !!actionLoading}
+							>
+								{actionLoading === "save" ? "Saving..." : "Save Changes"}
+							</button>
+							<button
+								className="btn btn-outline btn-warning btn-sm"
+								disabled={!hasPendingChanges}
+								onClick={() => { setPendingFunding(null); setPendingBoosts(new Map()); }}
+							>
+								Discard Changes
+							</button>
+							{viewMode === "next" && (
+								<button className="btn btn-ghost btn-xs" onClick={() => setShowRevertConfirm(true)}>
+									Revert to Current Month
+								</button>
+							)}
+						</div>
+					) : <div />}
+				</div>
+
+			</div>{/* end main panel */}
 
 			{/* ── Confirmation dialogs ── */}
 			<ConfirmDialog
