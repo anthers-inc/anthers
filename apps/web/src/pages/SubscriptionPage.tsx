@@ -132,7 +132,6 @@ function BoostBar({
 	onChange: (v: number) => void;
 	disabled: boolean;
 }) {
-	const [tooltip, setTooltip] = useState<{ gate: CreatorGate } | null>(null);
 	const [dragging, setDragging] = useState(false);
 	const trackRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +159,6 @@ function BoostBar({
 		e.preventDefault();
 		(e.target as HTMLElement).setPointerCapture(e.pointerId);
 		setDragging(true);
-		setTooltip(null);
 		onChange(xToValue(e.clientX));
 	}, [disabled, onChange, xToValue]);
 
@@ -182,12 +180,10 @@ function BoostBar({
 						return (
 							<span
 								key={`name-${gate.threshold}`}
-								className={`absolute text-[9px] leading-tight -translate-x-1/2 cursor-help ${
+								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
 									unlocked ? "text-primary font-semibold" : "text-base-content/40"
 								}`}
 								style={{ left: `${pos}%` }}
-								onMouseEnter={() => setTooltip({ gate })}
-								onMouseLeave={() => setTooltip(null)}
 							>
 								{gate.label}
 							</span>
@@ -272,31 +268,7 @@ function BoostBar({
 				</div>
 			)}
 
-			{/* Tooltip (shown when hovering tier names above the track) */}
-			{tooltip && trackRef.current && (
-				<div className="relative">
-					<div
-						className="absolute z-50 top-0 mt-1 pointer-events-none"
-						style={{
-							left: `${(Number(tooltip.gate.threshold) / barMax) * 100}%`,
-						}}
-					>
-						<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
-							<p className="font-semibold mb-0.5">
-								{tooltip.gate.label}
-								<span className="font-normal text-base-content/40 ml-1">${tooltip.gate.threshold}/mo</span>
-							</p>
-							<p className="text-base-content/60">{tooltip.gate.description}</p>
-							{value >= Number(tooltip.gate.threshold) ? (
-								<p className="text-primary font-medium mt-1">Unlocked</p>
-							) : (
-								<p className="text-base-content/40 mt-1">Need ${Number(tooltip.gate.threshold) - value} more</p>
-							)}
-						</div>
-					</div>
-				</div>
-			)}
-		</div>
+			</div>
 	);
 }
 
@@ -441,7 +413,7 @@ function TimePoolPie({
 				strokeDasharray={`${dashLength} ${circumference - dashLength}`}
 				strokeDashoffset={dashOffset}
 				opacity={isDimmed ? 0.25 : 1}
-				className="transition-all duration-700 cursor-pointer"
+				className="transition-all duration-1000 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
 				onMouseLeave={onLeave}
 				style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}
@@ -510,7 +482,7 @@ function CreatorInfoCard({
 				<div className="divider my-1" />
 
 				{/* Time Pool section — highlighted when source is pie */}
-				<div className={`transition-opacity duration-700 ${hoverSource === "pie" ? "opacity-100" : "opacity-40"}`}>
+				<div className={`transition-opacity duration-1000 ${hoverSource === "pie" ? "opacity-100" : "opacity-40"}`}>
 					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Time Pool</p>
 					<div className="space-y-1 text-sm">
 						<div className="flex justify-between">
@@ -531,7 +503,7 @@ function CreatorInfoCard({
 				<div className="divider my-1" />
 
 				{/* Boost section — highlighted when source is boost */}
-				<div className={`transition-opacity duration-700 ${hoverSource === "boost" ? "opacity-100" : "opacity-40"}`}>
+				<div className={`transition-opacity duration-1000 ${hoverSource === "boost" ? "opacity-100" : "opacity-40"}`}>
 					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Boost</p>
 					<div className="space-y-1 text-sm">
 						<div className="flex justify-between">
@@ -595,6 +567,23 @@ export default function SubscriptionPage() {
 	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 	const [focusedCreatorId, setFocusedCreatorId] = useState<number | null>(null);
 	const [hoverSource, setHoverSource] = useState<"pie" | "boost">("pie");
+	const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	/** Debounced focus change — waits 500ms before switching creator */
+	const debouncedFocus = useCallback((creatorId: number, source: "pie" | "boost") => {
+		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+		hoverTimerRef.current = setTimeout(() => {
+			setFocusedCreatorId(creatorId);
+			setHoverSource(source);
+		}, 250);
+	}, []);
+
+	const cancelDebouncedFocus = useCallback(() => {
+		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+	}, []);
+
+	// Cleanup timer on unmount
+	useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); }, []);
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
@@ -1063,8 +1052,8 @@ export default function SubscriptionPage() {
 									rows={rows}
 									totalTime={totalTime}
 									focusedCreatorId={focusedCreatorId}
-									onHover={(id) => { setFocusedCreatorId(id); setHoverSource("pie"); }}
-									onLeave={() => {}}
+									onHover={(id) => debouncedFocus(id, "pie")}
+									onLeave={cancelDebouncedFocus}
 								/>
 								{/* Legend */}
 								<div className="mt-3 space-y-1">
@@ -1078,11 +1067,11 @@ export default function SubscriptionPage() {
 										return (
 											<div
 												key={row.creatorId}
-												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-700 ${
+												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-1000 ${
 													focusedCreatorId === row.creatorId ? "bg-base-content/5" : ""
 												}`}
-												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("pie"); }}
-												onMouseLeave={() => {}}
+												onMouseEnter={() => debouncedFocus(row.creatorId, "pie")}
+												onMouseLeave={cancelDebouncedFocus}
 											>
 												<div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
 												<span className="text-base-content/70 truncate flex-1">{row.displayName || row.username}</span>
@@ -1131,9 +1120,9 @@ export default function SubscriptionPage() {
 										return (
 											<div
 												key={row.creatorId}
-												className={`rounded-lg p-2 transition-colors duration-700 ${isFocused ? "bg-base-content/5" : ""}`}
-												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("boost"); }}
-												onMouseLeave={() => {}}
+												className={`rounded-lg p-2 transition-colors duration-1000 ${isFocused ? "bg-base-content/5" : ""}`}
+												onMouseEnter={() => debouncedFocus(row.creatorId, "boost")}
+												onMouseLeave={cancelDebouncedFocus}
 											>
 												{/* Creator name */}
 												<div className="flex items-center gap-1.5 mb-1">
