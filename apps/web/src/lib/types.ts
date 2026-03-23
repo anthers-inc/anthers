@@ -233,6 +233,7 @@ export interface Subscription {
 	id?: number;
 	userId?: number;
 	tier: string;
+	fundingLevel?: number;
 	stripeCustomerId?: string | null;
 	stripeSubscriptionId?: string | null;
 	isActive: boolean | null;
@@ -303,11 +304,45 @@ export interface ContentAccessResponse {
 export interface CreatorGate {
 	id: number;
 	creatorId: number;
+	gateType: "boost" | "anthers_tier";
 	threshold: string;
 	label: string;
 	description: string | null;
 	createdAt: string;
 	updatedAt: string;
+}
+
+export interface CreatorStatus {
+	anthersTier: string;
+	fundingLevel: number;
+	boostAmount: string;
+	gates: CreatorGate[];
+	unlockedGates: number[];
+}
+
+export interface Bookmark {
+	id: number;
+	userId: number;
+	projectId: number | null;
+	postId: number | null;
+	creatorId: number | null;
+	sortOrder: number;
+	createdAt: string;
+	project?: {
+		title: string;
+		slug: string;
+		coverImage: string | null;
+		mediaType: string;
+	} | null;
+	post?: {
+		title: string;
+		contentType: string;
+	} | null;
+	creator?: {
+		username: string;
+		displayName: string | null;
+		avatar: string | null;
+	} | null;
 }
 
 // ─── Analytics / Integration Types ───

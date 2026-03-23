@@ -433,7 +433,7 @@ export default function ForCreatorsPage() {
 								<tr>
 									<th>Tier</th>
 									<th className="text-right">Price</th>
-									<th className="text-right">Creator Pool</th>
+									<th className="text-right">Time Pool</th>
 									<th className="text-right">Boost Pool</th>
 								</tr>
 							</thead>
@@ -479,7 +479,7 @@ export default function ForCreatorsPage() {
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4">
 						These are values at each tier threshold — users can fund at any $1
-						increment and boost scales continuously. Creator Pool is fixed at
+						increment and boost scales continuously. Time Pool is fixed at
 						$2.76/mo at any funding level $3+, distributed proportionally by
 						attention time. †Boost starts above $3, so a user at exactly $3 has
 						no boost; at $4 they have $0.92 in boost. Subscriptions coming soon.

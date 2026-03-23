@@ -21,6 +21,7 @@ export const subscriptions = pgTable("subscriptions", {
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
 	tier: varchar("tier", { length: 20 }).notNull().default("free"), // free | root | sprout | petal | bloom
+	fundingLevel: integer("funding_level").notNull().default(0), // actual monthly funding in whole dollars
 	stripeCustomerId: varchar("stripe_customer_id", { length: 255 }).default(""),
 	stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).default(""),
 	isActive: boolean("is_active").default(true),
@@ -110,6 +111,7 @@ export const creatorGates = pgTable("creator_gates", {
 	creatorId: integer("creator_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
+	gateType: varchar("gate_type", { length: 20 }).notNull().default("boost"), // "boost" | "anthers_tier"
 	threshold: numeric("threshold", { precision: 5, scale: 2 }).notNull(),
 	label: varchar("label", { length: 100 }).notNull(),
 	description: text("description").default(""),

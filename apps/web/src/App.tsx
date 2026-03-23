@@ -46,6 +46,7 @@ import BuildsPage from "./pages/BuildsPage";
 import PostFormPage from "./pages/PostFormPage";
 import LibraryPage from "./pages/LibraryPage";
 import SubscriptionPage from "./pages/SubscriptionPage";
+import PurchasesPage from "./pages/PurchasesPage";
 import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 import JamFormPage from "./pages/JamFormPage";
 import ImportPage from "./pages/ImportPage";
@@ -73,7 +74,7 @@ export default function App() {
 					path="/demo-infrastructure"
 					element={<InfrastructureDemoPage />}
 				/>
-				<Route path="/user-demo" element={<UserDemoPage />} />
+				<Route path="/demo-user" element={<UserDemoPage />} />
 				<Route path="/wiki/*" element={<WikiPage />} />
 				<Route path="/about" element={<AboutPage />} />
 				<Route path="/vertical-slice" element={<VerticalSlicePage />} />
@@ -192,6 +193,14 @@ export default function App() {
 					element={
 						<ProtectedRoute>
 							<SubscriptionPage />
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/purchases"
+					element={
+						<ProtectedRoute>
+							<PurchasesPage />
 						</ProtectedRoute>
 					}
 				/>

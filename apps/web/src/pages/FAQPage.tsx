@@ -68,7 +68,7 @@ const FAQ_ITEMS: FAQItem[] = [
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>92%</strong> goes to creators (via the Creator Pool and your
+						<strong>92%</strong> goes to creators (via the Time Pool and your
 						Boost allocations)
 					</li>
 					<li>
@@ -77,11 +77,10 @@ const FAQ_ITEMS: FAQItem[] = [
 					</li>
 				</ul>
 				<p>
-					The Creator Pool ($2.76/mo at any funding level $3+) is distributed
-					based on your attention time — the creators you actually engage with
-					get paid. Any funding above the first $3 goes to your Boost Pool,
-					which lets you direct funds to specific creators and unlock gated
-					content.
+					Your 92% creator share is split between the Time Pool (distributed
+					automatically based on the time you spend with creators) and the
+					Boost Pool (which you direct to specific creators to unlock gated
+					content). Both pools scale with your funding level.
 				</p>
 			</div>
 		),

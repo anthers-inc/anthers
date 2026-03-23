@@ -9,6 +9,7 @@ import {
 	inlineImages,
 	comments,
 	ratings,
+	bookmarks,
 } from "./content.js";
 import { stripeAccounts, purchases, crfLedger, crfSubsidies } from "./payments.js";
 import {
@@ -42,6 +43,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	inlineImages: many(inlineImages),
 	comments: many(comments),
 	ratings: many(ratings),
+	bookmarks: many(bookmarks, { relationName: "bookmarkOwner" }),
+	bookmarkedBy: many(bookmarks, { relationName: "bookmarkCreator" }),
 
 	// Payments
 	stripeAccount: one(stripeAccounts),
@@ -142,6 +145,21 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 export const ratingsRelations = relations(ratings, ({ one }) => ({
 	user: one(users, { fields: [ratings.userId], references: [users.id] }),
 	project: one(projects, { fields: [ratings.projectId], references: [projects.id] }),
+}));
+
+export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
+	user: one(users, {
+		fields: [bookmarks.userId],
+		references: [users.id],
+		relationName: "bookmarkOwner",
+	}),
+	project: one(projects, { fields: [bookmarks.projectId], references: [projects.id] }),
+	post: one(posts, { fields: [bookmarks.postId], references: [posts.id] }),
+	creator: one(users, {
+		fields: [bookmarks.creatorId],
+		references: [users.id],
+		relationName: "bookmarkCreator",
+	}),
 }));
 
 // ─── Payments ────────────────────────────────────────────────────────────────

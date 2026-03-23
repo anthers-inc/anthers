@@ -51,7 +51,7 @@ const DEMO_PLAN = {
 	tier: "Sprout",
 	price: 10,
 	foundation: 0.80,
-	creatorPool: 2.76,
+	timePool: 2.44,
 	boostPool: 6.44,
 	month: "February 2026",
 };
@@ -493,7 +493,7 @@ function SubscriptionDashboardDemo() {
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Creator Pool
+							Time Pool
 						</p>
 						<p className="text-xl font-bold text-success">
 							${totalPool.toFixed(2)}
@@ -606,7 +606,7 @@ function SubscriptionDashboardDemo() {
 						<span>${DEMO_PLAN.foundation.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Creator Pool</span>
+						<span className="text-base-content/70">Time Pool</span>
 						<span className="text-success">${totalPool.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">

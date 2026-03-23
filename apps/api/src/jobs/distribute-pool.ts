@@ -1,13 +1,12 @@
 /**
- * Pool distribution job: distribute creator pool based on attention time.
- *
- * Ported from _legacy/backend/subscriptions/tasks.py distribute_pool()
+ * Pool distribution job: distribute Time Pool based on attention time.
  *
  * For each active paid subscriber:
  * 1. Sum attention seconds per creator during the billing cycle.
- * 2. Distribute the subscriber's creator_pool_amount proportionally.
- * 3. Apply any boost allocations.
- * 4. Create/update PoolDistribution ledger entries.
+ * 2. Compute the subscriber's Time Pool (V2: creatorShare − boostPool).
+ * 3. Distribute Time Pool proportionally by attention time.
+ * 4. Apply any boost allocations.
+ * 5. Create/update PoolDistribution ledger entries.
  */
 
 import Decimal from "decimal.js";
@@ -26,10 +25,17 @@ export interface DistributePoolData {
 }
 
 /**
- * Fixed creator pool amount: 92% of the first $3 tier threshold.
- * This is the same for every paid subscriber regardless of their funding level.
+ * V2 economics: Time Pool and Boost Pool are computed from the subscriber's
+ * funding level. Boost Pool = ceil(fundingLevel × 0.5), Time Pool = remainder
+ * of the 92% creator share. Unallocated boost flows back into the Time Pool.
  */
-const CREATOR_POOL_AMOUNT = "2.76";
+function computeTimePoolAmount(fundingLevel: number): string {
+	if (fundingLevel < 3) return "0.00";
+	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
+	const boostPool = Math.ceil(fundingLevel * 0.5);
+	const timePool = Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
+	return timePool.toFixed(2);
+}
 
 function getBillingCycle(sub: {
 	currentPeriodStart: Date | null;
@@ -58,6 +64,7 @@ function billingCycleDate(cycleStart: Date): string {
 async function distributeForSubscriber(sub: {
 	id: number;
 	userId: number;
+	fundingLevel: number;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
@@ -92,8 +99,8 @@ async function distributeForSubscriber(sub: {
 		}
 	}
 
-	// 2. Calculate proportional pool distribution
-	const poolAmount = new Decimal(CREATOR_POOL_AMOUNT);
+	// 2. Calculate proportional Time Pool distribution
+	const poolAmount = new Decimal(computeTimePoolAmount(sub.fundingLevel));
 	const distributions = new Map<
 		number,
 		{

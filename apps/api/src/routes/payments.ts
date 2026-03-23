@@ -8,7 +8,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import {
 	users,
@@ -193,6 +193,19 @@ const paymentRoutes = new Hono()
 	// ── Purchase History ─────────────────────────────────────────────────────
 	.get("/purchases", requireAuth, async (c) => {
 		const user = c.get("user");
+		const month = c.req.query("month"); // optional YYYY-MM filter
+
+		const conditions = [
+			eq(purchases.buyerId, user.id),
+			eq(purchases.status, "completed"),
+		];
+
+		if (month) {
+			const start = new Date(`${month}-01T00:00:00`);
+			const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+			conditions.push(gte(purchases.createdAt, start));
+			conditions.push(lte(purchases.createdAt, end));
+		}
 
 		const result = await db
 			.select({
@@ -200,10 +213,16 @@ const paymentRoutes = new Hono()
 				projectTitle: projects.title,
 				projectSlug: projects.slug,
 				projectCoverImage: projects.coverImage,
+				projectMediaType: projects.mediaType,
+				creatorId: projects.creatorId,
+				creatorUsername: users.username,
+				creatorDisplayName: users.displayName,
+				creatorAvatar: users.avatar,
 			})
 			.from(purchases)
 			.innerJoin(projects, eq(purchases.projectId, projects.id))
-			.where(and(eq(purchases.buyerId, user.id), eq(purchases.status, "completed")))
+			.innerJoin(users, eq(projects.creatorId, users.id))
+			.where(and(...conditions))
 			.orderBy(desc(purchases.createdAt));
 
 		return c.json({
@@ -213,6 +232,12 @@ const paymentRoutes = new Hono()
 					title: r.projectTitle,
 					slug: r.projectSlug,
 					coverImage: r.projectCoverImage,
+					mediaType: r.projectMediaType,
+				},
+				creator: {
+					username: r.creatorUsername,
+					displayName: r.creatorDisplayName,
+					avatar: r.creatorAvatar,
 				},
 			})),
 		});

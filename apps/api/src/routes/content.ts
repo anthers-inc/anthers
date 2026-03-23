@@ -30,6 +30,7 @@ import {
 	inlineImages,
 	comments,
 	ratings,
+	bookmarks,
 } from "@anthers/db/schema";
 import { requireAuth } from "../middleware/auth.js";
 import { requireCreator } from "../middleware/auth.js";
@@ -1128,6 +1129,129 @@ const contentRoutes = new Hono()
 			.returning();
 
 		return c.json({ inlineImage }, 201);
+	})
+
+	// ── Bookmarks ────────────────────────────────────────────────────────────
+	// User-ordered list of bookmarked projects, posts, and creators.
+	// Bookmarks serve as a personal list: track an ongoing series, flag
+	// something for later, or pin important items. Users control the order
+	// by dragging items up/down.
+
+	.get("/bookmarks", requireAuth, async (c) => {
+		const user = c.get("user");
+
+		const result = await db
+			.select({
+				bookmark: bookmarks,
+				projectTitle: projects.title,
+				projectSlug: projects.slug,
+				projectCoverImage: projects.coverImage,
+				projectMediaType: projects.mediaType,
+				postTitle: posts.title,
+				postContentType: posts.contentType,
+				postCreatorId: posts.creatorId,
+				creatorUsername: users.username,
+				creatorDisplayName: users.displayName,
+				creatorAvatar: users.avatar,
+			})
+			.from(bookmarks)
+			.leftJoin(projects, eq(bookmarks.projectId, projects.id))
+			.leftJoin(posts, eq(bookmarks.postId, posts.id))
+			.leftJoin(users, eq(bookmarks.creatorId, users.id))
+			.where(eq(bookmarks.userId, user.id))
+			.orderBy(asc(bookmarks.sortOrder));
+
+		return c.json({
+			bookmarks: result.map((r) => ({
+				...r.bookmark,
+				project: r.bookmark.projectId ? {
+					title: r.projectTitle,
+					slug: r.projectSlug,
+					coverImage: r.projectCoverImage,
+					mediaType: r.projectMediaType,
+				} : null,
+				post: r.bookmark.postId ? {
+					title: r.postTitle,
+					contentType: r.postContentType,
+				} : null,
+				creator: r.bookmark.creatorId ? {
+					username: r.creatorUsername,
+					displayName: r.creatorDisplayName,
+					avatar: r.creatorAvatar,
+				} : null,
+			})),
+		});
+	})
+
+	.post(
+		"/bookmarks",
+		requireAuth,
+		zValidator("json", z.object({
+			projectId: z.number().int().optional(),
+			postId: z.number().int().optional(),
+			creatorId: z.number().int().optional(),
+		}).refine(
+			(d) => [d.projectId, d.postId, d.creatorId].filter(Boolean).length === 1,
+			"Exactly one of projectId, postId, or creatorId must be provided",
+		)),
+		async (c) => {
+			const user = c.get("user");
+			const data = c.req.valid("json");
+
+			// Set sortOrder to end of list
+			const [maxSort] = await db
+				.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+				.from(bookmarks)
+				.where(eq(bookmarks.userId, user.id));
+
+			const [bookmark] = await db
+				.insert(bookmarks)
+				.values({
+					userId: user.id,
+					projectId: data.projectId ?? null,
+					postId: data.postId ?? null,
+					creatorId: data.creatorId ?? null,
+					sortOrder: Number(maxSort.max) + 1,
+				})
+				.returning();
+
+			return c.json({ bookmark }, 201);
+		},
+	)
+
+	.patch(
+		"/bookmarks/reorder",
+		requireAuth,
+		zValidator("json", z.object({
+			/** Ordered array of bookmark IDs, from top to bottom */
+			ids: z.array(z.number().int()),
+		})),
+		async (c) => {
+			const user = c.get("user");
+			const { ids } = c.req.valid("json");
+
+			for (let i = 0; i < ids.length; i++) {
+				await db
+					.update(bookmarks)
+					.set({ sortOrder: i })
+					.where(and(eq(bookmarks.id, ids[i]), eq(bookmarks.userId, user.id)));
+			}
+
+			return c.json({ success: true });
+		},
+	)
+
+	.delete("/bookmarks/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.param();
+
+		const deleted = await db
+			.delete(bookmarks)
+			.where(and(eq(bookmarks.id, Number(id)), eq(bookmarks.userId, user.id)))
+			.returning({ id: bookmarks.id });
+
+		if (deleted.length === 0) return c.json({ error: "Bookmark not found" }, 404);
+		return c.body(null, 204);
 	});
 
 export { contentRoutes };

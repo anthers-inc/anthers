@@ -57,7 +57,13 @@ const ALLOC = {
 	foundationOps: 0.40,
 };
 
-const CREATOR_POOL = 2.76;
+/** V2: Boost Pool = ceil(F × 0.5), Time Pool = (F × 0.92) − boostPool */
+function computePools(fundingLevel: number) {
+	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
+	const boostPool = fundingLevel >= 3 ? Math.ceil(fundingLevel * 0.5) : 0;
+	const timePool = Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
+	return { creatorShare, boostPool, timePool };
+}
 
 /** 1080p60 midpoint ~15 Mbps = ~112.5 MB/min. Delivery at $0.01/GiB. */
 const DELIVERY_PER_HOUR = 112.5 * 60 / 1024 * 0.01; // ~$0.066/hr
@@ -188,12 +194,12 @@ interface SankeyParams {
 
 /**
  * Three root inputs:
- *   0: Subscription        (creator pool, boost, foundation fee)
+ *   0: Subscription        (time pool, boost, foundation fee)
  *   1: Fees                (user-paid delivery overage, card/bank fee, sales tax)
  *   2: Foundation Credit   ($1/mo delivery credit, always present)
  *
  * Subscription side:
- *   3: Creator Pool
+ *   3: Time Pool
  *   4: Boost Pool
  *   5: Creator A
  *   6: Creator B
@@ -213,8 +219,9 @@ function buildSankey(p: SankeyParams) {
 
 	const creatorTotal = isFree ? 0 : r2(price * ALLOC.creators);
 	const foundationTotal = isFree ? 0 : r2(price - creatorTotal);
-	const poolAmount = isFree ? 0 : Math.min(CREATOR_POOL, creatorTotal);
-	const boostAmount = isFree ? 0 : r2(creatorTotal - poolAmount);
+	const { timePool: computedTimePool, boostPool: computedBoostPool } = computePools(price);
+	const poolAmount = isFree ? 0 : computedTimePool;
+	const boostAmount = isFree ? 0 : computedBoostPool;
 	const hasBoost = boostAmount > 0;
 
 	// Foundation credit covers up to $1 of delivery
@@ -251,7 +258,7 @@ function buildSankey(p: SankeyParams) {
 		{ name: "User Subscription" },
 		{ name: "User Fees" },
 		{ name: "Foundation Credit" },
-		{ name: "Creator Pool" },
+		{ name: "Time Pool" },
 		{ name: "Boost Pool" },
 		{ name: "Creator A" },
 		{ name: "Creator B" },
@@ -301,7 +308,7 @@ function buildSankey(p: SankeyParams) {
 		{ label: "User Subscription",  sub: fmt(price),                color: COLORS.muted },
 		{ label: "User Fees",          sub: fmt(feesTotal),            color: COLORS.cardFee },
 		{ label: "Foundation Credit",  sub: fmt(creditUsed),           color: COLORS.programs },
-		{ label: "Creator Pool",       sub: fmt(poolAmount),           color: COLORS.pool },
+		{ label: "Time Pool",       sub: fmt(poolAmount),           color: COLORS.pool },
 		{ label: "Boost Pool",         sub: fmt(boostAmount),          color: COLORS.boost },
 		{ label: "Creator A",          sub: fmt(crA),                  color: COLORS.crA },
 		{ label: "Creator B",          sub: fmt(crB),                  color: COLORS.crB },
@@ -356,7 +363,7 @@ const FEE_LEAF_NODES: Set<number> = new Set([11, 12, 13]);
 type SectionKey = "support" | "foundation" | "fees" | null;
 
 function nodeToSection(index: number): SectionKey {
-	// Creator Pool (3), Boost Pool (4), Creators (5-7)
+	// Time Pool (3), Boost Pool (4), Creators (5-7)
 	if (index === 3 || index === 4) return "support";
 	if (CREATOR_NODES.has(index)) return "support";
 	// Foundation (8), Programs (9), Operations (10)
@@ -590,7 +597,7 @@ function CreatorSupportSection() {
 			</div>
 			<p className="text-xs text-base-content/60 leading-relaxed">
 				92% of your subscription goes to creators through two pools.
-				The <strong>Creator Pool</strong> ($2.76) is distributed automatically,
+				The <strong>Time Pool</strong> ($2.76) is distributed automatically,
 				proportional to your time with each creator — whether you're
 				watching videos, listening to music, reading articles, or
 				playing games. The <strong>Boost Pool</strong> is everything
@@ -696,7 +703,7 @@ function CreatorSliders({
 					hover === "time" ? "text-base-content/60" : "text-base-content/20"
 				}`}>
 					Time — your consumption across all media. Drives the
-					Creator Pool split automatically.
+					Time Pool split automatically.
 				</p>
 				<p className={`text-[10px] leading-tight transition-colors duration-200 ${
 					hover === "boost" ? "text-base-content/60" : "text-base-content/20"
@@ -744,8 +751,7 @@ export default function SubscribePage() {
 	const [boostPcts, setBoostPcts] = useState<[number, number, number]>([68, 20, 12]);
 
 	const boostTotal = useMemo(() => {
-		const cs = r2(fundingLevel * ALLOC.creators);
-		return Math.max(0, r2(cs - CREATOR_POOL));
+		return computePools(fundingLevel).boostPool;
 	}, [fundingLevel]);
 
 	const setBoost = useCallback((idx: 0 | 1 | 2, newVal: number) => {
@@ -1025,9 +1031,9 @@ export default function SubscribePage() {
 								<div className="flex items-center justify-between">
 									<div className="flex items-center gap-2">
 										<div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORS.pool }} />
-										<span className="text-base-content/70">Creator Pool</span>
+										<span className="text-base-content/70">Time Pool</span>
 									</div>
-									<strong>{fmt(Math.min(CREATOR_POOL, r2(fundingLevel * ALLOC.creators)))}</strong>
+									<strong>{fmt(computePools(fundingLevel).timePool)}</strong>
 								</div>
 								{sankeyData.hasBoost && (
 									<div className="flex items-center justify-between">

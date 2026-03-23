@@ -38,12 +38,21 @@ const TIERS = [
 	{ id: "bloom", name: "Bloom", price: 30, features: ["Everything in Petal", "Boost allocation (varies by funding level, $24.84+ at threshold)", "Creator analytics insights"] },
 ];
 
-/** Compute boost budget from actual funding level. */
+/**
+ * V2 economics: Boost Pool = ceil(fundingLevel × 0.5), in $1 increments.
+ * Time Pool = (fundingLevel × 0.92) − boostPool.
+ * Unallocated boost flows back to the Time Pool.
+ */
 function computeBoostBudget(fundingLevel: number): number {
 	if (fundingLevel < 3) return 0;
+	return Math.ceil(fundingLevel * 0.5);
+}
+
+function computeTimePool(fundingLevel: number): number {
+	if (fundingLevel < 3) return 0;
 	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
-	const creatorPool = 2.76; // fixed at 92% of $3 Root threshold
-	return Math.max(0, Number((creatorShare - creatorPool).toFixed(2)));
+	const boostPool = computeBoostBudget(fundingLevel);
+	return Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
 }
 
 function getCurrentBillingCycle(): string {
@@ -219,7 +228,11 @@ const subscriptionRoutes = new Hono()
 	// ── Attention Summary ────────────────────────────────────────────────────
 	.get("/attention/summary", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
+
+		// Compute cycle end (first day of next month)
+		const cycleDate = new Date(cycle + "T00:00:00");
+		const cycleEnd = new Date(cycleDate.getFullYear(), cycleDate.getMonth() + 1, 1);
 
 		const [summary] = await db
 			.select({
@@ -230,7 +243,8 @@ const subscriptionRoutes = new Hono()
 			.where(
 				and(
 					eq(attentionEvents.userId, user.id),
-					gte(attentionEvents.createdAt, new Date(cycle)),
+					gte(attentionEvents.createdAt, cycleDate),
+					lte(attentionEvents.createdAt, cycleEnd),
 				),
 			);
 
@@ -308,7 +322,7 @@ const subscriptionRoutes = new Hono()
 	// ── Boost Allocations ────────────────────────────────────────────────────
 	.get("/boosts", requireAuth, async (c) => {
 		const user = c.get("user");
-		const cycle = getCurrentBillingCycle();
+		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
 
 		const result = await db
 			.select({
@@ -325,18 +339,13 @@ const subscriptionRoutes = new Hono()
 				),
 			);
 
-		// Get user's subscription to determine funding level
 		const [sub] = await db
-			.select({ tier: subscriptions.tier })
+			.select({ fundingLevel: subscriptions.fundingLevel })
 			.from(subscriptions)
 			.where(eq(subscriptions.userId, user.id))
 			.limit(1);
 
-		// TODO: The subscription data model needs a `funding_level` field so we
-		// can compute boost from the actual funding amount. For now, fall back
-		// to the tier's threshold price as a proxy.
-		const tierPrices: Record<string, number> = { free: 0, root: 3, sprout: 7, petal: 15, bloom: 30 };
-		const fundingLevel = tierPrices[sub?.tier ?? "free"] ?? 0;
+		const fundingLevel = sub?.fundingLevel ?? 0;
 		const budget = computeBoostBudget(fundingLevel);
 		const allocated = result.reduce((sum, r) => sum + Number(r.boost.amount), 0);
 
@@ -360,30 +369,55 @@ const subscriptionRoutes = new Hono()
 		zValidator("json", z.object({
 			creatorId: z.number().int(),
 			amount: z.string().regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format"),
+			cycle: z.string().regex(/^\d{4}-\d{2}-01$/).optional(),
 		})),
 		async (c) => {
 			const user = c.get("user");
-			const { creatorId, amount } = c.req.valid("json");
+			const { creatorId, amount, cycle: requestedCycle } = c.req.valid("json");
 			const amountNum = Number(amount);
-			const cycle = getCurrentBillingCycle();
+			const currentCycle = getCurrentBillingCycle();
+			const cycle = requestedCycle ?? currentCycle;
 
-			// Get user's subscription to determine funding level
+			// Only allow editing current or next month
+			const cycleDate = new Date(cycle + "T00:00:00");
+			const currentDate = new Date(currentCycle + "T00:00:00");
+			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+
+			if (cycle !== currentCycle && cycle !== nextCycle) {
+				return c.json({ error: "Can only edit boosts for current or next billing cycle" }, 400);
+			}
+
 			const [sub] = await db
-				.select({ tier: subscriptions.tier })
+				.select({ fundingLevel: subscriptions.fundingLevel })
 				.from(subscriptions)
 				.where(eq(subscriptions.userId, user.id))
 				.limit(1);
 
-			// TODO: The subscription data model needs a `funding_level` field so we
-			// can compute boost from the actual funding amount. For now, fall back
-			// to the tier's threshold price as a proxy.
-			const tierPrices: Record<string, number> = { free: 0, root: 3, sprout: 7, petal: 15, bloom: 30 };
-			const fundingLevel = tierPrices[sub?.tier ?? "free"] ?? 0;
+			const fundingLevel = sub?.fundingLevel ?? 0;
 			const budget = computeBoostBudget(fundingLevel);
 
-			// Boost is available at any funding level above $3, regardless of tier name
 			if (budget === 0) {
 				return c.json({ error: "Boost allocations require a funding level above $3" }, 400);
+			}
+
+			// Current month: can only increase, not decrease
+			if (cycle === currentCycle) {
+				const [existing] = await db
+					.select({ amount: boostAllocations.amount })
+					.from(boostAllocations)
+					.where(
+						and(
+							eq(boostAllocations.userId, user.id),
+							eq(boostAllocations.creatorId, creatorId),
+							eq(boostAllocations.billingCycle, cycle),
+						),
+					)
+					.limit(1);
+
+				if (existing && amountNum < Number(existing.amount)) {
+					return c.json({ error: "Cannot decrease boost in the current billing cycle" }, 400);
+				}
 			}
 
 			// Check total allocated (excluding the creator being updated)
@@ -406,7 +440,10 @@ const subscriptionRoutes = new Hono()
 			}
 
 			if (amountNum === 0) {
-				// Remove allocation
+				// Remove allocation (only allowed for next month)
+				if (cycle === currentCycle) {
+					return c.json({ error: "Cannot remove boost in the current billing cycle" }, 400);
+				}
 				await db
 					.delete(boostAllocations)
 					.where(
@@ -438,26 +475,35 @@ const subscriptionRoutes = new Hono()
 	)
 
 	// ── Creator Gates ────────────────────────────────────────────────────────
-	.get("/gates", requireAuth, async (c) => {
-		const user = c.get("user");
+	.get("/gates", async (c) => {
 		const creatorUsername = c.req.query("creator");
 
-		let creatorId = user.id;
-		if (creatorUsername) {
-			const [creator] = await db
-				.select({ id: users.id })
-				.from(users)
-				.where(eq(users.username, creatorUsername))
-				.limit(1);
-			if (!creator) return c.json({ error: "Creator not found" }, 404);
-			creatorId = creator.id;
+		if (!creatorUsername) {
+			// If no creator specified, require auth and return own gates
+			const userId = await getOptionalUserId(c);
+			if (!userId) return c.json({ error: "Unauthorized" }, 401);
+
+			const gates = await db
+				.select()
+				.from(creatorGates)
+				.where(eq(creatorGates.creatorId, userId))
+				.orderBy(creatorGates.gateType, creatorGates.threshold);
+
+			return c.json({ gates });
 		}
+
+		const [creator] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, creatorUsername))
+			.limit(1);
+		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
 		const gates = await db
 			.select()
 			.from(creatorGates)
-			.where(eq(creatorGates.creatorId, creatorId))
-			.orderBy(creatorGates.threshold);
+			.where(eq(creatorGates.creatorId, creator.id))
+			.orderBy(creatorGates.gateType, creatorGates.threshold);
 
 		return c.json({ gates });
 	})
@@ -560,10 +606,35 @@ const subscriptionRoutes = new Hono()
 			return c.json({ access: true, reason: "subscriber" });
 		}
 
-		// Gated: check boost vs gate threshold
+		// Gated: check both Anthers Tier gates and Boost gates
 		if (post.visibility === "gated") {
 			const cycle = getCurrentBillingCycle();
 
+			// Load all gates for this creator
+			const gates = await db
+				.select()
+				.from(creatorGates)
+				.where(eq(creatorGates.creatorId, post.creatorId))
+				.orderBy(creatorGates.threshold);
+
+			if (gates.length === 0) {
+				// No gates defined — treat as subscriber-accessible
+				return c.json({ access: true, reason: "subscriber" });
+			}
+
+			// Check Anthers Tier gates: compare user's funding level against tier thresholds
+			const anthersTierGates = gates.filter((g) => g.gateType === "anthers_tier");
+			const boostGates = gates.filter((g) => g.gateType === "boost");
+
+			// Get user funding level
+			const fundingLevel = sub?.fundingLevel ?? 0;
+
+			// Check if any Anthers Tier gate is cleared
+			const clearedTierGate = anthersTierGates.some(
+				(g) => fundingLevel >= Number(g.threshold),
+			);
+
+			// Check if any Boost gate is cleared
 			const [boost] = await db
 				.select({ amount: boostAllocations.amount })
 				.from(boostAllocations)
@@ -576,26 +647,98 @@ const subscriptionRoutes = new Hono()
 				)
 				.limit(1);
 
-			const [lowestGate] = await db
-				.select({ threshold: creatorGates.threshold })
-				.from(creatorGates)
-				.where(eq(creatorGates.creatorId, post.creatorId))
-				.orderBy(creatorGates.threshold)
-				.limit(1);
+			const boostAmount = Number(boost?.amount ?? 0);
+			const lowestBoostGate = boostGates[0];
+			const clearedBoostGate = lowestBoostGate && boostAmount >= Number(lowestBoostGate.threshold);
 
-			if (lowestGate && boost && Number(boost.amount) >= Number(lowestGate.threshold)) {
+			if (clearedTierGate || clearedBoostGate) {
 				return c.json({ access: true, reason: "gate_unlocked" });
 			}
 
 			return c.json({
 				access: false,
 				reason: "gate_locked",
-				lowestThreshold: lowestGate?.threshold ?? null,
+				lowestThreshold: lowestBoostGate?.threshold ?? anthersTierGates[0]?.threshold ?? null,
 				currentBoost: boost?.amount ?? "0.00",
 			});
 		}
 
 		return c.json({ access: true, reason: "unknown" });
+	})
+
+	// ── Creator Status (for creator page tier/boost display) ────────────────
+	.get("/creator-status/:username", async (c) => {
+		const { username } = c.req.param();
+		const currentUserId = await getOptionalUserId(c);
+
+		// Look up the creator
+		const [creator] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+		if (!creator) return c.json({ error: "Creator not found" }, 404);
+
+		// Get the creator's gates
+		const gates = await db
+			.select()
+			.from(creatorGates)
+			.where(eq(creatorGates.creatorId, creator.id))
+			.orderBy(creatorGates.gateType, creatorGates.threshold);
+
+		if (!currentUserId) {
+			return c.json({
+				anthersTier: "free",
+				fundingLevel: 0,
+				boostAmount: "0.00",
+				gates,
+				unlockedGates: [],
+			});
+		}
+
+		// Get user's subscription
+		const [sub] = await db
+			.select({ tier: subscriptions.tier, fundingLevel: subscriptions.fundingLevel })
+			.from(subscriptions)
+			.where(eq(subscriptions.userId, currentUserId))
+			.limit(1);
+
+		const tier = sub?.tier ?? "free";
+		const fundingLevel = sub?.fundingLevel ?? 0;
+
+		// Get user's boost allocation to this creator
+		const cycle = getCurrentBillingCycle();
+		const [boost] = await db
+			.select({ amount: boostAllocations.amount })
+			.from(boostAllocations)
+			.where(
+				and(
+					eq(boostAllocations.userId, currentUserId),
+					eq(boostAllocations.creatorId, creator.id),
+					eq(boostAllocations.billingCycle, cycle),
+				),
+			)
+			.limit(1);
+
+		const boostAmount = boost?.amount ?? "0.00";
+
+		// Determine which gates are unlocked
+		const unlockedGates = gates
+			.filter((g) => {
+				if (g.gateType === "anthers_tier") {
+					return fundingLevel >= Number(g.threshold);
+				}
+				return Number(boostAmount) >= Number(g.threshold);
+			})
+			.map((g) => g.id);
+
+		return c.json({
+			anthersTier: tier,
+			fundingLevel,
+			boostAmount,
+			gates,
+			unlockedGates,
+		});
 	})
 
 	// ── Subscription Webhook ─────────────────────────────────────────────────
