@@ -411,7 +411,6 @@ function TimePoolPie({
 				className="transition-all duration-1000 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
 				onMouseLeave={onLeave}
-				style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}
 			/>
 		);
 	});
@@ -419,7 +418,9 @@ function TimePoolPie({
 	return (
 		<div className="flex items-center justify-center">
 			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-				{slices}
+				<g style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}>
+					{slices}
+				</g>
 				{/* Center label */}
 				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
 					{formatHours(totalTime)}
