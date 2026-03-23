@@ -14,7 +14,22 @@ help: ## Show this help
 up: ## Start dev database (PostgreSQL)
 	$(COMPOSE_DEV) up -d
 
-down: ## Stop dev databases
+down: ## Stop dev servers + database
+	@DEV_PID=$$(cat .dev.pid 2>/dev/null); \
+	if [ -n "$$DEV_PID" ]; then \
+		echo "  -> Stopping dev servers (pid $$DEV_PID)..."; \
+		kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; \
+		rm -f .dev.pid; \
+	else \
+		for PORT in 8000 3000; do \
+			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
+			if [ -n "$$PORT_PID" ]; then \
+				echo "  -> Killing process on port $$PORT (pid $$PORT_PID)"; \
+				kill $$PORT_PID 2>/dev/null || true; \
+			fi; \
+		done; \
+	fi
+	@echo "  -> Stopping dev database..."
 	$(COMPOSE_DEV) down
 
 logs: ## Follow database logs
@@ -28,7 +43,14 @@ ps: ## Show running containers
 install: ## Install all dependencies
 	bun install
 
-dev: ## Start API and web dev servers
+dev: ## Start dev database (if needed) + API and web dev servers
+	@if ! $(COMPOSE_DEV) ps --status running --format '{{.Service}}' 2>/dev/null | grep -q '^db$$'; then \
+		echo "  -> Starting dev database..."; \
+		$(COMPOSE_DEV) up -d; \
+		echo "  -> Waiting for database to be ready..."; \
+		until $(COMPOSE_DEV) exec -T db pg_isready -U postgres >/dev/null 2>&1; do sleep 0.5; done; \
+		echo "  -> Database ready"; \
+	fi
 	@KILLED=0; \
 	for PORT in 8000 3000; do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
