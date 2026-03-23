@@ -498,6 +498,8 @@ export default function SubscriptionPage() {
 	}, [attention, isPaid]);
 
 	const canEditBoosts = (viewMode === "current" || viewMode === "next") && financials.boostPool > 0;
+	const allocatedBoost = rows.reduce((s, r) => s + r.boostAmount, 0);
+	const unallocatedBoost = Math.max(0, Math.round((boostBudget - allocatedBoost) * 100) / 100);
 
 	/* ---- Render ---- */
 
@@ -645,15 +647,31 @@ export default function SubscriptionPage() {
 						<p className="text-xs text-base-content/40">
 							{canEditBoosts ? "Drag sliders to adjust" : "Auto allocation"}
 						</p>
+						{unallocatedBoost > 0 && canEditBoosts && (
+							<p className="text-xs text-warning mt-1">
+								{fmt(unallocatedBoost)} unallocated
+							</p>
+						)}
 					</div>
 				</div>
 			</div>
 
-			{/* ── Subscription Allocations table ── */}
+			{/* Unallocated boost callout */}
+			{unallocatedBoost > 0 && canEditBoosts && (
+				<div className="alert alert-warning text-sm">
+					<span>
+						You have <strong>{fmt(unallocatedBoost)}</strong> of unallocated
+						boost available. Use the sliders below to direct it to creators
+						you want to support.
+					</span>
+				</div>
+			)}
+
+			{/* ── Creator Allocations table ── */}
 			{rows.length > 0 ? (
 				<div>
 					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-2">
-						Subscription Allocations
+						Creator Allocations
 					</h4>
 					<div className="overflow-x-auto">
 						<table className="table table-sm w-full">
@@ -799,7 +817,7 @@ export default function SubscriptionPage() {
 								</span>
 								<span>
 									{deliveryEstimate.net > 0
-										? `~${fmt(deliveryEstimate.net)}`
+										? `approx. ${fmt(deliveryEstimate.net)}`
 										: <span className="text-success">covered by $1 credit</span>
 									}
 								</span>
