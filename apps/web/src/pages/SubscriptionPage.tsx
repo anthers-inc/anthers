@@ -386,38 +386,40 @@ function TimePoolPie({
 		);
 	}
 
-	const circumference = 2 * Math.PI * radius;
-	let offset = 0;
+	// Build arc paths for each slice (no overlapping circles)
+	const arcPath = (startAngle: number, endAngle: number, r: number) => {
+		const start = {
+			x: cx + r * Math.cos(startAngle),
+			y: cy + r * Math.sin(startAngle),
+		};
+		const end = {
+			x: cx + r * Math.cos(endAngle),
+			y: cy + r * Math.sin(endAngle),
+		};
+		const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+		return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+	};
 
-	// Build slice data with precomputed offsets
-	const sliceData = rows.map((row, i) => {
+	let angleOffset = -Math.PI / 2; // start at 12 o'clock
+	const slices = rows.map((row, i) => {
 		const pct = row.timeSeconds / totalTime;
-		const dashLength = pct * circumference;
-		const dashOffset = -offset;
-		offset += dashLength;
-		return { row, i, dashLength, dashOffset };
-	});
+		const sliceAngle = pct * 2 * Math.PI;
+		// Clamp to avoid full-circle arc (which SVG can't draw as a single arc)
+		const startAngle = angleOffset;
+		const endAngle = angleOffset + Math.min(sliceAngle, 2 * Math.PI - 0.001);
+		angleOffset += sliceAngle;
 
-	// Render: dimmed slices first, focused slice last (on top)
-	const focusedIdx = sliceData.findIndex((s) => s.row.creatorId === focusedCreatorId);
-	const ordered = focusedIdx >= 0
-		? [...sliceData.filter((_, i) => i !== focusedIdx), sliceData[focusedIdx]]
-		: sliceData;
-
-	const slices = ordered.map(({ row, i, dashLength, dashOffset }) => {
 		const isFocused = focusedCreatorId === row.creatorId;
 		const isDimmed = focusedCreatorId !== null && !isFocused;
+
 		return (
-			<circle
+			<path
 				key={row.creatorId}
-				cx={cx}
-				cy={cy}
-				r={radius}
+				d={arcPath(startAngle, endAngle, radius)}
 				fill="none"
 				stroke={PIE_COLORS[i % PIE_COLORS.length]}
 				strokeWidth={strokeWidth}
-				strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-				strokeDashoffset={dashOffset}
+				strokeLinecap="butt"
 				opacity={isDimmed ? 0.3 : 1}
 				className="transition-opacity duration-1000 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
@@ -429,9 +431,7 @@ function TimePoolPie({
 	return (
 		<div className="flex items-center justify-center">
 			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-				<g style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}>
-					{slices}
-				</g>
+				{slices}
 				{/* Center label */}
 				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
 					{formatHours(totalTime)}
