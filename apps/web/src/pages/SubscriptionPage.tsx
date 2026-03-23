@@ -441,7 +441,7 @@ function TimePoolPie({
 				strokeDasharray={`${dashLength} ${circumference - dashLength}`}
 				strokeDashoffset={dashOffset}
 				opacity={isDimmed ? 0.25 : 1}
-				className="transition-all duration-300 cursor-pointer"
+				className="transition-all duration-700 cursor-pointer"
 				onMouseEnter={() => onHover(row.creatorId)}
 				onMouseLeave={onLeave}
 				style={{ transformOrigin: `${cx}px ${cy}px`, transform: "rotate(-90deg)" }}
@@ -476,105 +476,95 @@ function CreatorInfoCard({
 	colorIndex: number;
 	totalTime: number;
 	poolAmount: number;
-	hoverSource: "pie" | "boost" | null;
+	hoverSource: "pie" | "boost";
 }) {
-	const initials = row
-		? (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()
-		: "";
-	const timePct = row && totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
-	const boostGates = row ? row.gates.filter((g) => g.gateType === "boost") : [];
+	if (!row) return null;
+
+	const initials = (row.displayName || row.username).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+	const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
+	const boostGates = row.gates.filter((g) => g.gateType === "boost");
 
 	return (
-		<div className="card bg-base-300/50 h-full transition-all duration-500">
+		<div className="card bg-base-300/50 h-full">
 			<div className="card-body p-4 flex flex-col">
-				{!row ? (
-					<div className="flex-1 flex items-center justify-center text-center">
-						<div>
-							<p className="text-sm text-base-content/40 mb-1">Creator details</p>
-							<p className="text-xs text-base-content/30">
-								Hover over the time chart or a boost row to see
-								more about a creator.
-							</p>
+				{/* Creator identity (always shown) */}
+				<div className="flex items-center gap-3 mb-3">
+					{row.avatar ? (
+						<img src={row.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+					) : (
+						<div
+							className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+							style={{ backgroundColor: PIE_COLORS[colorIndex % PIE_COLORS.length] }}
+						>
+							{initials}
+						</div>
+					)}
+					<div className="min-w-0">
+						<Link to={`/${row.username}`} className="font-semibold text-sm link link-hover block truncate">
+							{row.displayName || row.username}
+						</Link>
+						<span className="text-xs text-base-content/50">@{row.username}</span>
+					</div>
+				</div>
+
+				<div className="divider my-1" />
+
+				{/* Time Pool section — highlighted when source is pie */}
+				<div className={`transition-opacity duration-700 ${hoverSource === "pie" ? "opacity-100" : "opacity-40"}`}>
+					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Time Pool</p>
+					<div className="space-y-1 text-sm">
+						<div className="flex justify-between">
+							<span className="text-base-content/60">Time</span>
+							<span className="font-medium">{formatHours(row.timeSeconds)}</span>
+						</div>
+						<div className="flex justify-between">
+							<span className="text-base-content/60">Share</span>
+							<span className="font-medium">{Math.round(timePct)}%</span>
+						</div>
+						<div className="flex justify-between">
+							<span className="text-base-content/60">Pool amount</span>
+							<span className="font-medium text-success">{fmt(poolAmount)}</span>
 						</div>
 					</div>
-				) : (
-					<div className="transition-opacity duration-500">
-						{/* Creator identity */}
-						<div className="flex items-center gap-3 mb-3">
-							{row.avatar ? (
-								<img src={row.avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-							) : (
-								<div
-									className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-									style={{ backgroundColor: PIE_COLORS[colorIndex % PIE_COLORS.length] }}
-								>
-									{initials}
-								</div>
-							)}
-							<div className="min-w-0">
-								<Link to={`/${row.username}`} className="font-semibold text-sm link link-hover block truncate">
-									{row.displayName || row.username}
-								</Link>
-								<span className="text-xs text-base-content/50">@{row.username}</span>
-							</div>
+				</div>
+
+				<div className="divider my-1" />
+
+				{/* Boost section — highlighted when source is boost */}
+				<div className={`transition-opacity duration-700 ${hoverSource === "boost" ? "opacity-100" : "opacity-40"}`}>
+					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Boost</p>
+					<div className="space-y-1 text-sm">
+						<div className="flex justify-between">
+							<span className="text-base-content/60">Current boost</span>
+							<span className="font-medium text-primary">${row.pendingBoost}.00</span>
 						</div>
-
-						<div className="divider my-1" />
-
-						{/* Context-dependent detail */}
-						{hoverSource === "pie" && (
-							<div className="space-y-2 text-sm">
-								<div className="flex justify-between">
-									<span className="text-base-content/60">Time</span>
-									<span className="font-medium">{formatHours(row.timeSeconds)}</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-base-content/60">Share</span>
-									<span className="font-medium">{Math.round(timePct)}%</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-base-content/60">Pool amount</span>
-									<span className="font-medium text-success">{fmt(poolAmount)}</span>
-								</div>
-							</div>
-						)}
-
-						{hoverSource === "boost" && (
-							<div className="space-y-2 text-sm">
-								<div className="flex justify-between">
-									<span className="text-base-content/60">Current boost</span>
-									<span className="font-medium text-primary">${row.pendingBoost}.00</span>
-								</div>
-								{boostGates.length > 0 && (
-									<>
-										<p className="text-xs text-base-content/40 mt-2">Boost Tiers</p>
-										{boostGates.map((gate) => {
-											const unlocked = row.pendingBoost >= Number(gate.threshold);
-											return (
-												<div key={gate.id} className="flex items-start gap-2">
-													<span className={`text-xs mt-0.5 ${unlocked ? "text-primary" : "text-base-content/30"}`}>
-														{unlocked ? "✓" : "○"}
+						{boostGates.length > 0 && (
+							<div className="mt-1 space-y-1.5">
+								{boostGates.map((gate) => {
+									const unlocked = row.pendingBoost >= Number(gate.threshold);
+									return (
+										<div key={gate.id} className="flex items-start gap-2">
+											<span className={`text-xs mt-0.5 ${unlocked ? "text-primary" : "text-base-content/30"}`}>
+												{unlocked ? "✓" : "○"}
+											</span>
+											<div className="flex-1 min-w-0">
+												<div className="flex justify-between">
+													<span className={`text-xs font-medium ${unlocked ? "text-primary" : ""}`}>
+														{gate.label}
 													</span>
-													<div className="flex-1 min-w-0">
-														<div className="flex justify-between">
-															<span className={`text-xs font-medium ${unlocked ? "text-primary" : ""}`}>
-																{gate.label}
-															</span>
-															<span className="text-xs text-base-content/40">${gate.threshold}</span>
-														</div>
-														{gate.description && (
-															<p className="text-[10px] text-base-content/40 leading-snug">{gate.description}</p>
-														)}
-													</div>
+													<span className="text-xs text-base-content/40">${gate.threshold}</span>
 												</div>
-											);
-										})}
-									</>
-								)}
+												{gate.description && (
+													<p className="text-[10px] text-base-content/40 leading-snug">{gate.description}</p>
+												)}
+											</div>
+										</div>
+									);
+								})}
 							</div>
 						)}
 					</div>
-				)}
+				</div>
 			</div>
 		</div>
 	);
@@ -604,10 +594,14 @@ export default function SubscriptionPage() {
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 	const [focusedCreatorId, setFocusedCreatorId] = useState<number | null>(null);
-	const [hoverSource, setHoverSource] = useState<"pie" | "boost" | null>(null);
+	const [hoverSource, setHoverSource] = useState<"pie" | "boost">("pie");
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
+
+	// TODO: Rotate default creator archetype — currently always "Top Creator"
+	// (most time this cycle). Future archetypes: Trending Creator (increasing
+	// time vs. previous cycles), New Creator (newest creator with time), etc.
 
 	// ── Data fetching ──
 
@@ -716,6 +710,14 @@ export default function SubscriptionPage() {
 	const totalPendingBoost = rows.reduce((s, r) => s + r.pendingBoost, 0);
 	const allocatedBoost = totalPendingBoost;
 	const unallocatedBoost = Math.max(0, financials.boostPool - allocatedBoost);
+
+	// Default focus to top creator (most time) when rows load
+	useEffect(() => {
+		if (rows.length > 0 && focusedCreatorId === null) {
+			const top = [...rows].sort((a, b) => b.timeSeconds - a.timeSeconds)[0];
+			if (top) setFocusedCreatorId(top.creatorId);
+		}
+	}, [rows, focusedCreatorId]);
 
 	// Detect if there are any pending changes
 	const hasPendingChanges = useMemo(() => {
@@ -1062,7 +1064,7 @@ export default function SubscriptionPage() {
 									totalTime={totalTime}
 									focusedCreatorId={focusedCreatorId}
 									onHover={(id) => { setFocusedCreatorId(id); setHoverSource("pie"); }}
-									onLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+									onLeave={() => {}}
 								/>
 								{/* Legend */}
 								<div className="mt-3 space-y-1">
@@ -1076,11 +1078,11 @@ export default function SubscriptionPage() {
 										return (
 											<div
 												key={row.creatorId}
-												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-200 ${
+												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-700 ${
 													focusedCreatorId === row.creatorId ? "bg-base-content/5" : ""
 												}`}
 												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("pie"); }}
-												onMouseLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+												onMouseLeave={() => {}}
 											>
 												<div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
 												<span className="text-base-content/70 truncate flex-1">{row.displayName || row.username}</span>
@@ -1129,9 +1131,9 @@ export default function SubscriptionPage() {
 										return (
 											<div
 												key={row.creatorId}
-												className={`rounded-lg p-2 transition-colors duration-200 ${isFocused ? "bg-base-content/5" : ""}`}
+												className={`rounded-lg p-2 transition-colors duration-700 ${isFocused ? "bg-base-content/5" : ""}`}
 												onMouseEnter={() => { setFocusedCreatorId(row.creatorId); setHoverSource("boost"); }}
-												onMouseLeave={() => { setFocusedCreatorId(null); setHoverSource(null); }}
+												onMouseLeave={() => {}}
 											>
 												{/* Creator name */}
 												<div className="flex items-center gap-1.5 mb-1">
