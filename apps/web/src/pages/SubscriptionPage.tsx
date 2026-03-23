@@ -216,7 +216,7 @@ function BoostBar({
 						{/* Pending fill (yellow, only the delta above committed) */}
 						{hasPending && value > committedValue && (
 							<div
-								className="absolute inset-y-0 bg-warning/60 rounded-r-full"
+								className="absolute inset-y-0 bg-error/60 rounded-r-full"
 								style={{
 									left: `${committedPct}%`,
 									width: `${pendingPct - committedPct}%`,
@@ -242,7 +242,7 @@ function BoostBar({
 					{/* Thumb */}
 					<div
 						className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
-							hasPending ? "bg-warning border-warning" : "bg-primary border-primary"
+							hasPending ? "bg-error border-error" : "bg-primary border-primary"
 						}`}
 						style={{ left: `${thumbPct}%` }}
 					/>
@@ -275,7 +275,7 @@ function BoostBar({
 							}}
 						/>
 					) : (
-						<span className={`text-sm font-medium w-8 text-right ${hasPending ? "text-warning" : "text-primary"}`}>${value}</span>
+						<span className={`text-sm font-medium w-8 text-right ${hasPending ? "text-error" : "text-primary"}`}>${value}</span>
 					)}
 				</div>
 			</div>
@@ -740,7 +740,7 @@ export default function SubscriptionPage() {
 				<p className="text-sm text-base-content/60">
 					{tier.name} tier — {fmt(effectiveFunding)}/mo
 					{pendingFunding !== null && pendingFunding !== committedFunding && (
-						<span className="text-warning ml-2">(pending change from {fmt(committedFunding)})</span>
+						<span className="text-error ml-2">(pending change from {fmt(committedFunding)})</span>
 					)}
 				</p>
 			</div>
@@ -795,7 +795,7 @@ export default function SubscriptionPage() {
 							Unallocated Boost
 							<InfoTip text="Boost budget you haven't assigned to any creator yet. Any unallocated boost is returned to the Time Pool and distributed proportionally across the creators you spend time with." />
 						</p>
-						<p className={`text-xl font-bold ${unallocatedBoost > 0 ? "text-warning" : "text-base-content/30"}`}>
+						<p className={`text-xl font-bold ${unallocatedBoost > 0 ? "text-error" : "text-base-content/30"}`}>
 							{fmt(unallocatedBoost)}
 						</p>
 						<p className="text-xs text-base-content/40">
@@ -861,7 +861,7 @@ export default function SubscriptionPage() {
 											{/* Pending fill (yellow) */}
 											{hasPendingSub && effectiveFunding > committedFunding && (
 												<div
-													className="absolute inset-y-0 bg-warning/60 rounded-r-full"
+													className="absolute inset-y-0 bg-error/60 rounded-r-full"
 													style={{
 														left: `${committedPct}%`,
 														width: `${pendingPct - committedPct}%`,
@@ -872,7 +872,7 @@ export default function SubscriptionPage() {
 										{/* Thumb */}
 										<div
 											className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${
-												hasPendingSub ? "bg-warning border-warning" : "bg-success border-success"
+												hasPendingSub ? "bg-error border-error" : "bg-success border-success"
 											}`}
 											style={{ left: `${pendingPct}%` }}
 										/>
@@ -997,7 +997,7 @@ export default function SubscriptionPage() {
 											<td className="text-[10px] text-base-content/40 text-right">
 												{timePct > 0 ? `${Math.round(timePct)}%` : ""}
 											</td>
-											<td className={`text-sm ${poolChanged ? "text-warning" : "text-success"}`}>
+											<td className={`text-sm ${poolChanged ? "text-error" : "text-success"}`}>
 												{fmt(displayPool)}
 											</td>
 											<td className="align-top pt-2">
@@ -1017,7 +1017,7 @@ export default function SubscriptionPage() {
 											<td className="text-right text-sm font-medium align-top pt-2">
 												{fmt(rowTotal)}
 												{boostChanged && (
-													<div className="text-[10px] text-warning">(pending)</div>
+													<div className="text-[10px] text-error">(pending)</div>
 												)}
 											</td>
 										</tr>
@@ -1044,7 +1044,7 @@ export default function SubscriptionPage() {
 			{canEdit && (
 				<div className="flex items-center justify-center gap-3">
 					<button
-						className="btn btn-outline btn-error btn-sm"
+						className="btn btn-outline btn-warning btn-sm"
 						disabled={!hasPendingChanges}
 						onClick={() => {
 							setPendingFunding(null);
@@ -1184,7 +1184,7 @@ export default function SubscriptionPage() {
 				onConfirm={handleRevert}
 				onCancel={() => setShowRevertConfirm(false)}
 				confirmLabel="Revert"
-				confirmClass="btn-warning"
+				confirmClass="btn-error"
 			>
 				<p>This will reset all next-month boosts to match your current month's committed values. Any changes you've made here will be lost.</p>
 			</ConfirmDialog>
