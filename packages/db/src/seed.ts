@@ -927,13 +927,11 @@ async function seed() {
 
 		// -- Pool distributions (paid users only) --
 		if (tu.tier !== "free") {
-			const CREATOR_POOL = 2.76;
-			const tierPrices: Record<string, number> = {
-				root: 3, sprout: 7, petal: 15, bloom: 30,
-			};
-			const tierPrice = tierPrices[tu.tier] ?? 0;
-			const creatorShare = Math.round(tierPrice * 0.92 * 100) / 100;
-			const boostPool = Math.round((creatorShare - CREATOR_POOL) * 100) / 100;
+			// V2 economics: boostPool = ceil(fundingLevel × 0.5), timePool = creatorShare − boostPool
+			const fundLevel = tierPrices[tu.tier] ?? 0;
+			const creatorShare = Math.round(fundLevel * 0.92 * 100) / 100;
+			const boostPool = Math.ceil(fundLevel * 0.5);
+			const timePool = Math.round((creatorShare - boostPool) * 100) / 100;
 
 			// Compute attention proportions
 			const entries = Object.entries(tu.attentionTargets);
@@ -945,7 +943,7 @@ async function seed() {
 				if (!creatorId) continue;
 
 				const proportion = target.seconds / totalSeconds;
-				const poolAmt = Math.round(CREATOR_POOL * proportion * 100) / 100;
+				const poolAmt = Math.round(timePool * proportion * 100) / 100;
 				const boostAmt = Math.round(boostPool * proportion * 100) / 100;
 
 				try {

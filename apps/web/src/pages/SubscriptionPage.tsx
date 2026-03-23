@@ -14,7 +14,13 @@ import type {
 /* ------------------------------------------------------------------ */
 
 const ALLOC = { creators: 0.92, foundation: 0.08 };
-const CREATOR_POOL_FIXED = 2.76;
+/** V2: boostPool = ceil(F × 0.5), timePool = (F × 0.92) − boostPool */
+function computePools(fundingLevel: number) {
+	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
+	const boostPool = fundingLevel >= 3 ? Math.ceil(fundingLevel * 0.5) : 0;
+	const timePool = Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
+	return { creatorShare, boostPool, timePool };
+}
 
 const DELIVERY_PER_HOUR_VIDEO = 112.5 * 60 / 1024 * 0.01;
 const DELIVERY_CREDIT = 1.00;
@@ -454,10 +460,8 @@ export default function SubscriptionPage() {
 	const financials = useMemo(() => {
 		const price = fundingLevel;
 		const foundationFee = Math.round(price * ALLOC.foundation * 100) / 100;
-		const creatorShare = Math.round(price * ALLOC.creators * 100) / 100;
-		const poolAmount = Math.min(CREATOR_POOL_FIXED, creatorShare);
-		const boostPool = Math.max(0, Math.round((creatorShare - poolAmount) * 100) / 100);
-		return { price, foundationFee, creatorShare, poolAmount, boostPool };
+		const { creatorShare, timePool, boostPool } = computePools(price);
+		return { price, foundationFee, creatorShare, timePool, boostPool };
 	}, [fundingLevel]);
 
 	const nextTier = sub ? nextTierFor(sub.tier) : null;
@@ -628,10 +632,10 @@ export default function SubscriptionPage() {
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Creator Pool
+							Time Pool
 						</p>
 						<p className="text-xl font-bold text-success">
-							{fmt(totalPool > 0 ? totalPool : financials.poolAmount)}
+							{fmt(totalPool > 0 ? totalPool : financials.timePool)}
 						</p>
 						<p className="text-xs text-base-content/40">Auto · time-proportional</p>
 					</div>
@@ -774,7 +778,7 @@ export default function SubscriptionPage() {
 						<>
 							<p>No distributions yet this cycle.</p>
 							<p className="mt-1">
-								Your creator pool is distributed proportionally based on your
+								Your time pool is distributed proportionally based on your
 								time with creators — video, audio, text, and gameplay all count equally.
 							</p>
 						</>
@@ -790,9 +794,9 @@ export default function SubscriptionPage() {
 						<span>{fmt(financials.foundationFee)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Creator Pool</span>
+						<span className="text-base-content/70">Time Pool</span>
 						<span className="text-success">
-							{fmt(totalPool > 0 ? totalPool : financials.poolAmount)}
+							{fmt(totalPool > 0 ? totalPool : financials.timePool)}
 						</span>
 					</div>
 					{financials.boostPool > 0 && (

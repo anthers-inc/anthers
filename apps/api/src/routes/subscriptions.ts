@@ -38,12 +38,21 @@ const TIERS = [
 	{ id: "bloom", name: "Bloom", price: 30, features: ["Everything in Petal", "Boost allocation (varies by funding level, $24.84+ at threshold)", "Creator analytics insights"] },
 ];
 
-/** Compute boost budget from actual funding level. */
+/**
+ * V2 economics: Boost Pool = ceil(fundingLevel × 0.5), in $1 increments.
+ * Time Pool = (fundingLevel × 0.92) − boostPool.
+ * Unallocated boost flows back to the Time Pool.
+ */
 function computeBoostBudget(fundingLevel: number): number {
 	if (fundingLevel < 3) return 0;
+	return Math.ceil(fundingLevel * 0.5);
+}
+
+function computeTimePool(fundingLevel: number): number {
+	if (fundingLevel < 3) return 0;
 	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
-	const creatorPool = 2.76; // fixed at 92% of $3 Root threshold
-	return Math.max(0, Number((creatorShare - creatorPool).toFixed(2)));
+	const boostPool = computeBoostBudget(fundingLevel);
+	return Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
 }
 
 function getCurrentBillingCycle(): string {
