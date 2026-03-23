@@ -173,7 +173,7 @@ function BoostBar({
 		<div className={disabled ? "opacity-50" : ""}>
 			{/* Tier name labels above the track */}
 			{boostGates.length > 0 && (
-				<div className="relative h-4 mb-0.5" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
+				<div className="relative h-4 mb-0.5">
 					{boostGates.map((gate) => {
 						const pos = (Number(gate.threshold) / barMax) * 100;
 						const unlocked = value >= Number(gate.threshold);
@@ -192,11 +192,11 @@ function BoostBar({
 				</div>
 			)}
 
-			{/* Interactive track + value */}
-			<div className="flex items-center gap-2">
+			{/* Interactive track */}
+			<div>
 				<div
 					ref={trackRef}
-					className={`relative flex-1 h-5 select-none ${disabled ? "pointer-events-none" : "cursor-pointer"}`}
+					className={`relative h-5 select-none ${disabled ? "pointer-events-none" : "cursor-pointer"}`}
 					onPointerDown={handlePointerDown}
 					onPointerMove={handlePointerMove}
 					onPointerUp={handlePointerUp}
@@ -241,16 +241,11 @@ function BoostBar({
 						style={{ left: `${thumbPct}%` }}
 					/>
 				</div>
-
-				{/* Value display */}
-				<div className="flex items-center flex-shrink-0">
-					<span className={`text-sm font-medium w-8 text-right ${hasPending ? "text-error" : "text-primary"}`}>${value}</span>
-				</div>
 			</div>
 
 			{/* Gate dollar labels below track */}
 			{boostGates.length > 0 && (
-				<div className="relative h-3 mt-0.5" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
+				<div className="relative h-3 mt-0.5">
 					{boostGates.map((gate) => {
 						const pos = (Number(gate.threshold) / barMax) * 100;
 						return (
