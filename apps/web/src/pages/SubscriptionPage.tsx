@@ -309,7 +309,7 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 	const nextCycle = offsetCycle(current, 1);
 	const mode = viewModeFor(cycle);
 	return (
-		<div className="flex items-center gap-3">
+		<div className="flex items-center justify-center gap-3">
 			<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, -1))}>&larr;</button>
 			<span className="text-sm font-medium min-w-[140px] text-center">
 				{cycleLabel(cycle)}
