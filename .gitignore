@@ -12,6 +12,9 @@ bun.lock
 # ─── Docker ───
 .deployment-state
 
+# ─── Dev Runtime ───
+.dev.pid
+
 # ─── IDE ───
 .vscode/
 .idea/
