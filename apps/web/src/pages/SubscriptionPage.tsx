@@ -104,35 +104,51 @@ function BoostBar({
 	onChange: (v: number) => void;
 	disabled: boolean;
 }) {
-	const [tooltip, setTooltip] = useState<{ gate: CreatorGate; x: number } | null>(null);
+	const [tooltip, setTooltip] = useState<{ gate: CreatorGate } | null>(null);
+	const [dragging, setDragging] = useState(false);
 	const [useCustom, setUseCustom] = useState(false);
 	const [customInput, setCustomInput] = useState("");
-	const barRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		if (!tooltip) return;
-		const close = () => setTooltip(null);
-		window.addEventListener("scroll", close, true);
-		return () => window.removeEventListener("scroll", close, true);
-	}, [tooltip]);
+	const trackRef = useRef<HTMLDivElement>(null);
 
 	const boostGates = gates.filter((g) => g.gateType === "boost");
-	const gateByThreshold = new Map(boostGates.map((g) => [Number(g.threshold), g]));
 
-	// Slider max = highest boost gate threshold for this creator, or boostPool if no gates
+	// Slider max = highest boost gate threshold, or boostPool if no gates
 	const highestGate = boostGates.length > 0
 		? Math.max(...boostGates.map((g) => Number(g.threshold)))
 		: boostPool;
 	const sliderMax = Math.max(highestGate, 1);
-	const barMax = sliderMax * 1.1; // 10% headroom for the gate visualization
+	const barMax = sliderMax * 1.1; // 10% headroom
 	const fillPct = Math.min((value / barMax) * 100, 100);
+	const thumbPct = Math.min((value / barMax) * 100, 100);
 
-	const handleSectionHover = (gate: CreatorGate, e: React.MouseEvent) => {
-		const rect = barRef.current?.getBoundingClientRect();
-		if (!rect) return;
-		setTooltip({ gate, x: e.clientX - rect.left });
-	};
+	// Convert mouse x → dollar value
+	const xToValue = useCallback((clientX: number) => {
+		const rect = trackRef.current?.getBoundingClientRect();
+		if (!rect) return value;
+		const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+		return Math.round(pct * barMax); // $1 snaps
+	}, [barMax, value]);
 
+	// Mouse/touch drag handlers
+	const handlePointerDown = useCallback((e: React.PointerEvent) => {
+		if (disabled || useCustom) return;
+		e.preventDefault();
+		(e.target as HTMLElement).setPointerCapture(e.pointerId);
+		setDragging(true);
+		setTooltip(null);
+		onChange(xToValue(e.clientX));
+	}, [disabled, useCustom, onChange, xToValue]);
+
+	const handlePointerMove = useCallback((e: React.PointerEvent) => {
+		if (!dragging) return;
+		onChange(xToValue(e.clientX));
+	}, [dragging, onChange, xToValue]);
+
+	const handlePointerUp = useCallback(() => {
+		setDragging(false);
+	}, []);
+
+	// Gate segments for hover tooltips (only active when not dragging)
 	const segments: { start: number; end: number; gate: CreatorGate }[] = [];
 	if (boostGates.length > 0) {
 		for (let i = 0; i < boostGates.length; i++) {
@@ -144,19 +160,65 @@ function BoostBar({
 	}
 
 	return (
-		<div className={`space-y-1 ${disabled ? "opacity-50" : ""}`}>
-			{/* Slider + custom input */}
+		<div className={disabled ? "opacity-50" : ""}>
+			{/* Combined interactive track */}
 			<div className="flex items-center gap-2">
-				<input
-					type="range"
-					min={0}
-					max={sliderMax}
-					step={1}
-					value={Math.min(value, sliderMax)}
-					onChange={(e) => !useCustom && onChange(parseInt(e.target.value, 10))}
-					className={`range range-xs range-primary flex-1 ${useCustom ? "opacity-30 pointer-events-none" : ""}`}
-					disabled={disabled || useCustom}
-				/>
+				<div
+					ref={trackRef}
+					className={`relative flex-1 h-5 select-none ${disabled || useCustom ? "pointer-events-none" : "cursor-pointer"}`}
+					onPointerDown={handlePointerDown}
+					onPointerMove={handlePointerMove}
+					onPointerUp={handlePointerUp}
+					onPointerLeave={() => { if (!dragging) setTooltip(null); }}
+				>
+					{/* Track background */}
+					<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
+						{/* Fill */}
+						<div
+							className="absolute inset-y-0 left-0 bg-primary/30 rounded-full"
+							style={{ width: `${fillPct}%` }}
+						/>
+
+						{/* Hoverable gate segments (only show tooltips when not dragging) */}
+						{!dragging && segments.map((seg, i) => {
+							const segStart = (seg.start / barMax) * 100;
+							const segEnd = (seg.end / barMax) * 100;
+							const unlocked = value >= Number(seg.gate.threshold);
+							return (
+								<div
+									key={`seg-${i}`}
+									className={`absolute inset-y-0 ${
+										unlocked ? "bg-primary/40 hover:bg-primary/60" : "hover:bg-base-content/10"
+									}`}
+									style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
+									onPointerEnter={(e) => { e.stopPropagation(); setTooltip({ gate: seg.gate }); }}
+									onPointerLeave={(e) => { e.stopPropagation(); setTooltip(null); }}
+								/>
+							);
+						})}
+
+						{/* Gate hash lines */}
+						{boostGates.map((gate) => {
+							const pos = (Number(gate.threshold) / barMax) * 100;
+							return (
+								<div
+									key={`line-${gate.threshold}`}
+									className={`absolute top-0 bottom-0 w-px pointer-events-none ${
+										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/30"
+									}`}
+									style={{ left: `${pos}%` }}
+								/>
+							);
+						})}
+					</div>
+
+					{/* Draggable thumb */}
+					<div
+						className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary border-2 border-primary shadow-md pointer-events-none"
+						style={{ left: `${thumbPct}%` }}
+					/>
+				</div>
+
 				{/* Custom toggle + value */}
 				<div className="flex items-center gap-1.5 flex-shrink-0">
 					<label className="swap swap-rotate" title="Custom amount">
@@ -192,81 +254,49 @@ function BoostBar({
 				</div>
 			</div>
 
-			{/* Gate visualization bar */}
+			{/* Gate dollar labels below track */}
 			{boostGates.length > 0 && (
-				<div className="relative" ref={barRef}>
-					<div className="w-full h-2.5 bg-base-300 rounded-full overflow-hidden relative">
-						<div
-							className="absolute inset-y-0 left-0 bg-primary/30 rounded-full transition-all"
-							style={{ width: `${fillPct}%` }}
-						/>
-						{segments.map((seg, i) => {
-							const segStart = (seg.start / barMax) * 100;
-							const segEnd = (seg.end / barMax) * 100;
-							const unlocked = value >= Number(seg.gate.threshold);
-							return (
-								<div
-									key={`seg-${i}`}
-									className={`absolute inset-y-0 transition-all cursor-pointer ${
-										unlocked ? "bg-primary/50 hover:bg-primary/70" : "hover:bg-base-content/10"
-									}`}
-									style={{ left: `${segStart}%`, width: `${segEnd - segStart}%` }}
-									onMouseEnter={(e) => handleSectionHover(seg.gate, e)}
-									onMouseLeave={() => setTooltip(null)}
-								/>
-							);
-						})}
-						{boostGates.map((gate) => {
-							const pos = (Number(gate.threshold) / barMax) * 100;
-							return (
-								<div
-									key={`line-${gate.threshold}`}
-									className={`absolute top-0 bottom-0 w-px ${
-										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/30"
-									}`}
-									style={{ left: `${pos}%` }}
-								/>
-							);
-						})}
-					</div>
-					<div className="relative h-3.5 mt-0.5">
-						{boostGates.map((gate) => {
-							const pos = (Number(gate.threshold) / barMax) * 100;
-							return (
-								<span
-									key={`label-${gate.threshold}`}
-									className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-										value >= Number(gate.threshold) ? "text-primary" : "text-base-content/30"
-									}`}
-									style={{ left: `${pos}%` }}
-								>
-									${gate.threshold}
-								</span>
-							);
-						})}
-					</div>
-					{tooltip && (
-						<div
-							className="absolute z-50 bottom-full mb-2 pointer-events-none"
-							style={{
-								left: `${Math.min(Math.max(tooltip.x, 60), barRef.current ? barRef.current.offsetWidth - 60 : 200)}px`,
-								transform: "translateX(-50%)",
-							}}
-						>
-							<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
-								<p className="font-semibold mb-0.5">
-									{tooltip.gate.label}
-									<span className="font-normal text-base-content/40 ml-1">${tooltip.gate.threshold}/mo</span>
-								</p>
-								<p className="text-base-content/60">{tooltip.gate.description}</p>
-								{value >= Number(tooltip.gate.threshold) ? (
-									<p className="text-primary font-medium mt-1">Unlocked</p>
-								) : (
-									<p className="text-base-content/40 mt-1">Need ${Number(tooltip.gate.threshold) - value} more</p>
-								)}
-							</div>
+				<div className="relative h-3.5 mt-0.5 ml-0" style={{ marginRight: "calc(2rem + 6px + 0.375rem)" }}>
+					{boostGates.map((gate) => {
+						const pos = (Number(gate.threshold) / barMax) * 100;
+						return (
+							<span
+								key={`label-${gate.threshold}`}
+								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
+									value >= Number(gate.threshold) ? "text-primary" : "text-base-content/30"
+								}`}
+								style={{ left: `${pos}%` }}
+							>
+								${gate.threshold}
+							</span>
+						);
+					})}
+				</div>
+			)}
+
+			{/* Tooltip */}
+			{tooltip && trackRef.current && (
+				<div className="relative">
+					<div
+						className="absolute z-50 bottom-0 mb-1 pointer-events-none"
+						style={{
+							left: `${(Number(tooltip.gate.threshold) / barMax) * 100}%`,
+							transform: "translateX(-50%)",
+						}}
+					>
+						<div className="bg-base-300 border border-base-content/10 rounded-lg shadow-lg px-3 py-2 text-xs w-52">
+							<p className="font-semibold mb-0.5">
+								{tooltip.gate.label}
+								<span className="font-normal text-base-content/40 ml-1">${tooltip.gate.threshold}/mo</span>
+							</p>
+							<p className="text-base-content/60">{tooltip.gate.description}</p>
+							{value >= Number(tooltip.gate.threshold) ? (
+								<p className="text-primary font-medium mt-1">Unlocked</p>
+							) : (
+								<p className="text-base-content/40 mt-1">Need ${Number(tooltip.gate.threshold) - value} more</p>
+							)}
 						</div>
-					)}
+					</div>
 				</div>
 			)}
 		</div>
