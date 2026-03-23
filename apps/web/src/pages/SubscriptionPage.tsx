@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type {
 	Subscription,
 	AttentionSummary,
 	PoolDistribution,
+	BoostAllocation,
 } from "../lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -14,9 +15,7 @@ import type {
 const ALLOC = { creators: 0.92, foundation: 0.08 };
 const CREATOR_POOL = 2.76;
 
-/** 1080p60 midpoint ~15 Mbps. Delivery at $0.01/GiB. ~$0.066/hr. */
 const DELIVERY_PER_HOUR_VIDEO = 112.5 * 60 / 1024 * 0.01;
-/** Flat delivery credit for all paid subscribers. */
 const DELIVERY_CREDIT = 1.00;
 
 const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
@@ -49,6 +48,82 @@ function formatHours(seconds: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Cycle helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+function getCurrentCycle(): string {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function offsetCycle(cycle: string, offset: number): string {
+	const d = new Date(cycle + "T00:00:00");
+	d.setMonth(d.getMonth() + offset);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function cycleLabel(cycle: string): string {
+	return new Date(cycle + "T00:00:00").toLocaleString("default", {
+		month: "long",
+		year: "numeric",
+	});
+}
+
+type ViewMode = "past" | "current" | "next";
+
+function viewModeFor(cycle: string): ViewMode {
+	const current = getCurrentCycle();
+	if (cycle === current) return "current";
+	if (cycle > current) return "next";
+	return "past";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Month Selector                                                     */
+/* ------------------------------------------------------------------ */
+
+function MonthSelector({
+	cycle, onChange,
+}: {
+	cycle: string;
+	onChange: (cycle: string) => void;
+}) {
+	const current = getCurrentCycle();
+	const nextCycle = offsetCycle(current, 1);
+	const mode = viewModeFor(cycle);
+
+	return (
+		<div className="flex items-center gap-3">
+			<button
+				className="btn btn-ghost btn-xs"
+				onClick={() => onChange(offsetCycle(cycle, -1))}
+			>
+				&larr;
+			</button>
+			<span className="text-sm font-medium min-w-[140px] text-center">
+				{cycleLabel(cycle)}
+				{mode === "current" && (
+					<span className="text-xs text-base-content/40 ml-1">(current)</span>
+				)}
+				{mode === "next" && (
+					<span className="text-xs text-primary ml-1">(preview)</span>
+				)}
+			</span>
+			{cycle < nextCycle ? (
+				<button
+					className="btn btn-ghost btn-xs"
+					onClick={() => onChange(offsetCycle(cycle, 1))}
+				>
+					&rarr;
+				</button>
+			) : (
+				<div className="btn btn-ghost btn-xs invisible">&rarr;</div>
+			)}
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -59,30 +134,25 @@ export default function SubscriptionPage() {
 	const [distributions, setDistributions] = useState<{
 		distributions: PoolDistribution[];
 	} | null>(null);
+	const [boosts, setBoosts] = useState<{
+		boosts: BoostAllocation[];
+		budget: string;
+		allocated: string;
+		remaining: string;
+	} | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
+	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
+	const [boostSaving, setBoostSaving] = useState<number | null>(null);
 
 	const sessionId = searchParams.get("session_id");
+	const viewMode = viewModeFor(selectedCycle);
 
-	useEffect(() => {
-		fetchSubscription();
-		fetchAttention();
-		fetchDistributions();
-	}, []);
+	// ── Fetch functions ──
 
-	useEffect(() => {
-		if (sessionId) {
-			setSuccess(
-				"Subscription activated! Welcome aboard. It may take a moment for your plan to update.",
-			);
-			const timer = setTimeout(fetchSubscription, 2000);
-			return () => clearTimeout(timer);
-		}
-	}, [sessionId]);
-
-	async function fetchSubscription() {
+	const fetchSubscription = useCallback(async () => {
 		try {
 			const res = await client.api.subscriptions.me.$get();
 			const data = (await res.json()) as { subscription: Subscription };
@@ -92,29 +162,97 @@ export default function SubscriptionPage() {
 		} finally {
 			setLoading(false);
 		}
-	}
+	}, []);
 
-	async function fetchAttention() {
-		try {
-			const res = await client.api.subscriptions.attention.summary.$get();
-			const data = (await res.json()) as AttentionSummary;
-			setAttention(data);
-		} catch {
-			// Non-critical
-		}
-	}
+	const fetchCycleData = useCallback(async (cycle: string) => {
+		const [attRes, distRes, boostRes] = await Promise.allSettled([
+			client.api.subscriptions.attention.summary.$get({
+				query: { cycle },
+			}),
+			client.api.subscriptions.distributions.$get({
+				query: { cycle },
+			}),
+			client.api.subscriptions.boosts.$get({
+				query: { cycle },
+			}),
+		]);
 
-	async function fetchDistributions() {
-		try {
-			const res = await client.api.subscriptions.distributions.$get();
-			const data = (await res.json()) as {
-				distributions: PoolDistribution[];
-			};
-			setDistributions(data);
-		} catch {
-			// Non-critical
+		if (attRes.status === "fulfilled") {
+			setAttention((await attRes.value.json()) as AttentionSummary);
 		}
-	}
+		if (distRes.status === "fulfilled") {
+			setDistributions(
+				(await distRes.value.json()) as { distributions: PoolDistribution[] },
+			);
+		}
+		if (boostRes.status === "fulfilled") {
+			setBoosts(
+				(await boostRes.value.json()) as {
+					boosts: BoostAllocation[];
+					budget: string;
+					allocated: string;
+					remaining: string;
+				},
+			);
+		}
+	}, []);
+
+	useEffect(() => {
+		fetchSubscription();
+	}, [fetchSubscription]);
+
+	useEffect(() => {
+		fetchCycleData(selectedCycle);
+	}, [selectedCycle, fetchCycleData]);
+
+	useEffect(() => {
+		if (sessionId) {
+			setSuccess(
+				"Subscription activated! Welcome aboard. It may take a moment for your plan to update.",
+			);
+			const timer = setTimeout(fetchSubscription, 2000);
+			return () => clearTimeout(timer);
+		}
+	}, [sessionId, fetchSubscription]);
+
+	// ── Boost editing ──
+
+	const handleBoostChange = async (creatorId: number, newAmount: number) => {
+		setBoostSaving(creatorId);
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.boosts.$post({
+				json: {
+					creatorId,
+					amount: newAmount.toFixed(2),
+					cycle: selectedCycle,
+				},
+			});
+			if (!res.ok) {
+				const data = (await res.json()) as { error?: string };
+				setError(data.error ?? "Failed to update boost.");
+			} else {
+				// Re-fetch boost data for the cycle
+				const boostRes = await client.api.subscriptions.boosts.$get({
+					query: { cycle: selectedCycle },
+				});
+				setBoosts(
+					(await boostRes.json()) as {
+						boosts: BoostAllocation[];
+						budget: string;
+						allocated: string;
+						remaining: string;
+					},
+				);
+			}
+		} catch {
+			setError("Failed to update boost.");
+		} finally {
+			setBoostSaving(null);
+		}
+	};
+
+	// ── Actions ──
 
 	const handleCancel = async () => {
 		setActionLoading("cancel");
@@ -165,13 +303,13 @@ export default function SubscriptionPage() {
 	const isCanceling = sub ? !!sub.canceledAt : false;
 
 	const financials = useMemo(() => {
-		const price = tier.price;
+		const price = sub?.fundingLevel ?? tier.price;
 		const foundationFee = Math.round(price * ALLOC.foundation * 100) / 100;
 		const creatorShare = Math.round(price * ALLOC.creators * 100) / 100;
 		const poolAmount = Math.min(CREATOR_POOL, creatorShare);
 		const boostAmount = Math.max(0, Math.round((creatorShare - poolAmount) * 100) / 100);
 		return { price, foundationFee, creatorShare, poolAmount, boostAmount };
-	}, [tier]);
+	}, [sub, tier]);
 
 	const distTotals = useMemo(() => {
 		if (!distributions) return null;
@@ -202,12 +340,16 @@ export default function SubscriptionPage() {
 
 	const nextTier = sub ? nextTierFor(sub.tier) : null;
 
-	const cycleLabel = attention
-		? new Date(attention.cycleStart + "T00:00:00").toLocaleString("default", {
-			month: "long",
-			year: "numeric",
-		})
-		: null;
+	// Build a map of creatorId → boost amount for the Boost column
+	const boostByCreator = useMemo(() => {
+		const map = new Map<number, BoostAllocation>();
+		if (boosts) {
+			for (const b of boosts.boosts) {
+				map.set(b.creatorId, b);
+			}
+		}
+		return map;
+	}, [boosts]);
 
 	/* ---- Render ---- */
 
@@ -236,21 +378,15 @@ export default function SubscriptionPage() {
 		return (
 			<div className="max-w-2xl mx-auto px-4 py-8">
 				<div className="flex items-baseline justify-between mb-6">
-					<h1 className="text-2xl font-bold">
-						{cycleLabel ? `Your Anthers — ${cycleLabel}` : "Your Anthers"}
-					</h1>
+					<h1 className="text-2xl font-bold">Your Anthers</h1>
 					<span className="text-sm text-base-content/60">Free Plan</span>
 				</div>
 
 				{error && (
-					<div className="alert alert-error mb-4">
-						<span>{error}</span>
-					</div>
+					<div className="alert alert-error mb-4"><span>{error}</span></div>
 				)}
 				{success && (
-					<div className="alert alert-success mb-4">
-						<span>{success}</span>
-					</div>
+					<div className="alert alert-success mb-4"><span>{success}</span></div>
 				)}
 
 				<div className="card bg-base-200">
@@ -264,6 +400,8 @@ export default function SubscriptionPage() {
 								Upgrade
 							</Link>
 						</div>
+
+						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 
 						{attention && (
 							<div className="mt-4">
@@ -282,15 +420,6 @@ export default function SubscriptionPage() {
 							Delivery covered by the Anthers Foundation (up to 10 hrs/mo).
 						</div>
 
-						{sub.currentPeriodEnd && (
-							<div className="text-sm text-base-content/60 mt-2">
-								Next billing date:{" "}
-								<span className="font-medium">
-									{new Date(sub.currentPeriodEnd).toLocaleDateString()}
-								</span>
-							</div>
-						)}
-
 						{nextTier && (
 							<div className="mt-4 pt-3 border-t border-base-content/10">
 								<Link to="/subscribe" className="text-sm text-primary hover:underline">
@@ -308,53 +437,76 @@ export default function SubscriptionPage() {
 	/* ---- Paid user view ---- */
 
 	const hasDists = distributions && distributions.distributions.length > 0;
+	const boostBudget = parseFloat(boosts?.budget ?? "0");
+	const canEditBoosts = viewMode === "current" || viewMode === "next";
 
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			{/* Header */}
-			<div className="flex items-baseline justify-between mb-6">
-				<h1 className="text-2xl font-bold">
-					{cycleLabel ? `Your Anthers — ${cycleLabel}` : "Your Anthers"}
-				</h1>
+			<div className="flex items-baseline justify-between mb-2">
+				<h1 className="text-2xl font-bold">Your Anthers</h1>
 				<span className="text-sm text-base-content/60">
-					{tier.name} Plan ({fmt(tier.price)}/mo)
+					{tier.name} Plan ({fmt(financials.price)}/mo)
 				</span>
 			</div>
 
+			{/* Month selector */}
+			<div className="flex justify-center mb-4">
+				<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+			</div>
+
 			{error && (
-				<div className="alert alert-error mb-4">
-					<span>{error}</span>
-				</div>
+				<div className="alert alert-error mb-4"><span>{error}</span></div>
 			)}
 			{success && (
-				<div className="alert alert-success mb-4">
-					<span>{success}</span>
+				<div className="alert alert-success mb-4"><span>{success}</span></div>
+			)}
+
+			{/* Next-month preview banner */}
+			{viewMode === "next" && (
+				<div className="alert alert-info mb-4 text-sm">
+					<span>
+						Preview for {cycleLabel(selectedCycle)}. Boost changes here will
+						take effect at the start of this billing cycle. You can increase
+						or decrease boosts freely.
+					</span>
 				</div>
 			)}
 
-			{/* Status badges */}
-			<div className="flex items-center gap-2 mb-4">
-				{sub.isActive ? (
-					<div className="badge badge-success badge-sm">Active</div>
-				) : (
-					<div className="badge badge-error badge-sm">Inactive</div>
-				)}
-				{isCanceling && (
-					<div className="badge badge-warning badge-sm">
-						Cancels at period end
-					</div>
-				)}
-				{sub.currentPeriodEnd && (
-					<span className="text-xs text-base-content/40">
-						{isCanceling ? "Access until" : "Next billing date"}:{" "}
-						{new Date(sub.currentPeriodEnd).toLocaleDateString()}
+			{/* Past month banner */}
+			{viewMode === "past" && (
+				<div className="alert mb-4 text-sm bg-base-200">
+					<span>
+						Historical view for {cycleLabel(selectedCycle)}. This is a
+						read-only summary of your billing for this period.
 					</span>
-				)}
-			</div>
+				</div>
+			)}
+
+			{/* Status badges (current month only) */}
+			{viewMode === "current" && (
+				<div className="flex items-center gap-2 mb-4">
+					{sub.isActive ? (
+						<div className="badge badge-success badge-sm">Active</div>
+					) : (
+						<div className="badge badge-error badge-sm">Inactive</div>
+					)}
+					{isCanceling && (
+						<div className="badge badge-warning badge-sm">
+							Cancels at period end
+						</div>
+					)}
+					{sub.currentPeriodEnd && (
+						<span className="text-xs text-base-content/40">
+							{isCanceling ? "Access until" : "Next billing date"}:{" "}
+							{new Date(sub.currentPeriodEnd).toLocaleDateString()}
+						</span>
+					)}
+				</div>
+			)}
 
 			{/* ═══════════ Subscription split ═══════════ */}
 			<div className="border-t-2 border-base-content/20 pt-4">
-				{/* Foundation Fee */}
 				<div className="flex justify-between text-sm mb-3">
 					<span className="text-base-content/50">
 						Anthers Foundation Fee (8%)
@@ -364,7 +516,6 @@ export default function SubscriptionPage() {
 					</span>
 				</div>
 
-				{/* Creator Pool */}
 				<div className="flex justify-between text-sm">
 					<span>
 						Creator Pool{" "}
@@ -373,12 +524,13 @@ export default function SubscriptionPage() {
 					<span className="font-medium">{fmt(financials.poolAmount)}</span>
 				</div>
 
-				{/* Boost Pool */}
 				{financials.boostAmount > 0 && (
 					<div className="flex justify-between text-sm mt-1">
 						<span>
 							Boost Pool{" "}
-							<span className="text-base-content/40">(auto allocation)</span>
+							<span className="text-base-content/40">
+								({boosts?.budget ? `${fmt(parseFloat(boosts.budget))} budget` : "auto allocation"})
+							</span>
 						</span>
 						<span className="font-medium">{fmt(financials.boostAmount)}</span>
 					</div>
@@ -401,7 +553,11 @@ export default function SubscriptionPage() {
 							</thead>
 							<tbody>
 								{distributions!.distributions.map((d) => {
-									const total = parseFloat(d.poolAmount) + parseFloat(d.boostAmount);
+									const boostAlloc = boostByCreator.get(d.creatorId);
+									const boostAmt = boostAlloc ? parseFloat(boostAlloc.amount) : parseFloat(d.boostAmount);
+									const total = parseFloat(d.poolAmount) + boostAmt;
+									const isSaving = boostSaving === d.creatorId;
+
 									return (
 										<tr key={d.id}>
 											<td>
@@ -418,9 +574,30 @@ export default function SubscriptionPage() {
 											<td className="text-right">{fmt(parseFloat(d.poolAmount))}</td>
 											{financials.boostAmount > 0 && (
 												<td className="text-right">
-													{parseFloat(d.boostAmount) > 0
-														? fmt(parseFloat(d.boostAmount))
-														: "—"}
+													{canEditBoosts && boostBudget > 0 ? (
+														<div className="flex items-center justify-end gap-1">
+															{isSaving && (
+																<span className="loading loading-spinner loading-xs" />
+															)}
+															<input
+																type="number"
+																className="input input-xs w-20 text-right"
+																min={viewMode === "current" ? boostAmt : 0}
+																max={boostBudget}
+																step="0.01"
+																value={boostAmt.toFixed(2)}
+																onChange={(e) => {
+																	const val = parseFloat(e.target.value);
+																	if (!isNaN(val)) {
+																		handleBoostChange(d.creatorId, val);
+																	}
+																}}
+																disabled={isSaving}
+															/>
+														</div>
+													) : (
+														boostAmt > 0 ? fmt(boostAmt) : "—"
+													)}
 												</td>
 											)}
 											<td className="text-right font-medium">
@@ -456,120 +633,132 @@ export default function SubscriptionPage() {
 								</tfoot>
 							)}
 						</table>
+
+						{/* Boost editing hint */}
+						{canEditBoosts && boostBudget > 0 && (
+							<p className="text-[11px] text-base-content/30 mt-2">
+								{viewMode === "current"
+									? "Boosts can only be increased in the current month. Switch to next month's preview to decrease or remove boosts."
+									: "You can freely adjust next month's boosts. Changes take effect at the start of the billing cycle."}
+							</p>
+						)}
 					</div>
 				) : (
 					<div className="mt-4 py-6 text-center text-sm text-base-content/40">
-						<p>No distributions yet this cycle.</p>
-						<p className="mt-1">
-							Your creator pool is distributed proportionally based on your
-							time with creators — whether you're watching videos, reading
-							articles, listening to music, or playing games.
-						</p>
+						{viewMode === "next" ? (
+							<p>
+								Next month's distributions will be calculated based on your
+								time with creators during {cycleLabel(selectedCycle)}.
+							</p>
+						) : (
+							<>
+								<p>No distributions yet this cycle.</p>
+								<p className="mt-1">
+									Your creator pool is distributed proportionally based on your
+									time with creators — whether you're watching videos, reading
+									articles, listening to music, or playing games.
+								</p>
+							</>
+						)}
 					</div>
 				)}
 			</div>
 
 			{/* ═══════════ Bottom summary ═══════════ */}
 			<div className="border-t-2 border-base-content/20 pt-4 mt-2 space-y-2 text-sm">
-				{/* Creator support */}
 				<div className="flex justify-between">
 					<span>Creator support</span>
 					<span className="font-medium">{fmt(financials.creatorShare)}</span>
 				</div>
 
-				{/* Foundation Fee */}
 				<div className="flex justify-between">
 					<span>Anthers Foundation Fee</span>
 					<span className="font-medium">{fmt(financials.foundationFee)}</span>
 				</div>
 
-				{/* Subscription total line */}
 				<div className="flex justify-between pt-1 border-t border-base-content/10">
 					<span className="font-semibold">Subscription</span>
 					<span className="font-semibold">{fmt(financials.price)}</span>
 				</div>
 
-				{/* Delivery estimate */}
-				<div className="flex justify-between text-base-content/50">
-					<span>
-						Delivery
-						{deliveryEstimate.hours > 0 && (
-							<span className="text-base-content/30">
-								{" "}({deliveryEstimate.hours} hrs across all media)
+				{viewMode !== "next" && (
+					<>
+						<div className="flex justify-between text-base-content/50">
+							<span>
+								Delivery
+								{deliveryEstimate.hours > 0 && (
+									<span className="text-base-content/30">
+										{" "}({deliveryEstimate.hours} hrs across all media)
+									</span>
+								)}
 							</span>
+							<span>
+								{deliveryEstimate.hours > 0 ? (
+									deliveryEstimate.net > 0
+										? <>~{fmt(deliveryEstimate.net)}</>
+										: <span className="text-success">covered</span>
+								) : "—"}
+							</span>
+						</div>
+
+						{deliveryEstimate.hours > 0 && deliveryEstimate.creditApplied && (
+							<p className="text-[11px] text-base-content/30 leading-snug">
+								{deliveryEstimate.net > 0
+									? `Estimate assumes 1080p video rate. Your $1/mo delivery credit has been applied (${fmt(deliveryEstimate.gross)} gross − $1.00 credit). Audio and text cost far less to deliver.`
+									: `Your $1/mo delivery credit covers this. Audio and text cost far less than video to deliver.`
+								}
+							</p>
 						)}
-					</span>
-					<span>
-						{deliveryEstimate.hours > 0 ? (
-							deliveryEstimate.net > 0
-								? <>~{fmt(deliveryEstimate.net)}</>
-								: <span className="text-success">covered</span>
-						) : "—"}
-					</span>
+
+						{deliveryEstimate.net > 0 && (
+							<div className="flex justify-between pt-1 border-t border-base-content/10">
+								<span className="font-semibold">Estimated total</span>
+								<span className="font-semibold">
+									~{fmt(financials.price + deliveryEstimate.net)}
+								</span>
+							</div>
+						)}
+					</>
+				)}
+			</div>
+
+			{/* ═══════════ Actions (current month only) ═══════════ */}
+			{viewMode === "current" && (
+				<div className="mt-6 flex flex-wrap items-center gap-3">
+					<Link to="/subscribe" className="btn btn-outline btn-sm">
+						Change Plan
+					</Link>
+
+					{isCanceling ? (
+						<button
+							className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
+							onClick={handleResume}
+							disabled={!!actionLoading}
+						>
+							{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
+						</button>
+					) : (
+						<button
+							className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
+							onClick={handleCancel}
+							disabled={!!actionLoading}
+						>
+							{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
+						</button>
+					)}
+
+					<button
+						className={`btn btn-ghost btn-sm ${actionLoading === "portal" ? "btn-disabled" : ""}`}
+						onClick={handleBillingPortal}
+						disabled={!!actionLoading}
+					>
+						{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
+					</button>
 				</div>
-
-				{/* Delivery note */}
-				{deliveryEstimate.hours > 0 && deliveryEstimate.creditApplied && (
-					<p className="text-[11px] text-base-content/30 leading-snug">
-						{deliveryEstimate.net > 0
-							? `Estimate assumes 1080p video rate. Your $1/mo delivery credit has been applied (${fmt(deliveryEstimate.gross)} gross − $1.00 credit). Audio and text cost far less to deliver.`
-							: `Your $1/mo delivery credit covers this. Audio and text cost far less than video to deliver.`
-						}
-					</p>
-				)}
-
-				{/* Estimated total */}
-				{deliveryEstimate.net > 0 && (
-					<div className="flex justify-between pt-1 border-t border-base-content/10">
-						<span className="font-semibold">Estimated total</span>
-						<span className="font-semibold">
-							~{fmt(financials.price + deliveryEstimate.net)}
-						</span>
-					</div>
-				)}
-			</div>
-
-			{/* ═══════════ Actions ═══════════ */}
-			<div className="mt-6 flex flex-wrap items-center gap-3">
-				<Link to="/subscribe" className="btn btn-outline btn-sm">
-					Change Plan
-				</Link>
-
-				{isCanceling ? (
-					<button
-						className={`btn btn-success btn-sm ${
-							actionLoading === "resume" ? "btn-disabled" : ""
-						}`}
-						onClick={handleResume}
-						disabled={!!actionLoading}
-					>
-						{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
-					</button>
-				) : (
-					<button
-						className={`btn btn-outline btn-error btn-sm ${
-							actionLoading === "cancel" ? "btn-disabled" : ""
-						}`}
-						onClick={handleCancel}
-						disabled={!!actionLoading}
-					>
-						{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
-					</button>
-				)}
-
-				<button
-					className={`btn btn-ghost btn-sm ${
-						actionLoading === "portal" ? "btn-disabled" : ""
-					}`}
-					onClick={handleBillingPortal}
-					disabled={!!actionLoading}
-				>
-					{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
-				</button>
-			</div>
+			)}
 
 			{/* ═══════════ Footer nudges ═══════════ */}
-			{nextTier && (
+			{viewMode === "current" && nextTier && (
 				<div className="mt-4">
 					<Link to="/subscribe" className="text-sm text-primary hover:underline">
 						Adjust your support level anytime &rarr;{" "}
