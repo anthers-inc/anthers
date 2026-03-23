@@ -184,7 +184,7 @@ function BoostBar({
 							<span
 								key={`name-${gate.threshold}`}
 								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									unlocked ? "text-primary font-semibold" : "text-base-content/50"
+									unlocked ? "text-base-content font-semibold" : "text-base-content/50"
 								}`}
 								style={{ left: `${pos}%` }}
 							>
@@ -229,7 +229,7 @@ function BoostBar({
 								<div
 									key={`line-${gate.threshold}`}
 									className={`absolute top-0 bottom-0 w-px pointer-events-none ${
-										value >= Number(gate.threshold) ? "bg-primary" : "bg-base-content/40"
+										value >= Number(gate.threshold) ? "bg-base-content" : "bg-base-content/40"
 									}`}
 									style={{ left: `${pos}%` }}
 								/>
@@ -257,7 +257,7 @@ function BoostBar({
 							<span
 								key={`label-${gate.threshold}`}
 								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									value >= Number(gate.threshold) ? "text-primary" : "text-base-content/40"
+									value >= Number(gate.threshold) ? "text-base-content" : "text-base-content/40"
 								}`}
 								style={{ left: `${pos}%` }}
 							>
