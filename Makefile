@@ -1,56 +1,19 @@
 # ─── Anthers Makefile ───
 
-COMPOSE_DEV = docker compose -f docker-compose.dev.yml
-
-.PHONY: help up down logs ps dev dev-api dev-worker dev-web dev-down install \
-        db-generate db-migrate db-push db-studio \
+.PHONY: help install dev dev-api dev-worker dev-web dev-down \
+        db-generate db-migrate db-push db-studio db-seed db-reset \
         typecheck test lint format
-
-# ─── Dev Infrastructure ───
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
-
-up: ## Start dev database (PostgreSQL)
-	$(COMPOSE_DEV) up -d
-
-down: ## Stop dev servers + database
-	@DEV_PID=$$(cat .dev.pid 2>/dev/null); \
-	if [ -n "$$DEV_PID" ]; then \
-		echo "  -> Stopping dev servers (pid $$DEV_PID)..."; \
-		kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; \
-		rm -f .dev.pid; \
-	else \
-		for PORT in 8000 3000; do \
-			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
-			if [ -n "$$PORT_PID" ]; then \
-				echo "  -> Killing process on port $$PORT (pid $$PORT_PID)"; \
-				kill $$PORT_PID 2>/dev/null || true; \
-			fi; \
-		done; \
-	fi
-	@echo "  -> Stopping dev database..."
-	$(COMPOSE_DEV) down
-
-logs: ## Follow database logs
-	$(COMPOSE_DEV) logs -f
-
-ps: ## Show running containers
-	$(COMPOSE_DEV) ps
 
 # ─── Application ───
 
 install: ## Install all dependencies
 	bun install
 
-dev: ## Start dev database (if needed) + API and web dev servers
-	@if ! $(COMPOSE_DEV) ps --status running --format '{{.Service}}' 2>/dev/null | grep -q '^db$$'; then \
-		echo "  -> Starting dev database..."; \
-		$(COMPOSE_DEV) up -d; \
-		echo "  -> Waiting for database to be ready..."; \
-		until $(COMPOSE_DEV) exec -T db pg_isready -U postgres >/dev/null 2>&1; do sleep 0.5; done; \
-		echo "  -> Database ready"; \
-	fi
+dev: ## Start API + worker + web dev servers
+	@mkdir -p data
 	@KILLED=0; \
 	for PORT in 8000 3000; do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
@@ -68,6 +31,7 @@ dev: ## Start dev database (if needed) + API and web dev servers
 	rm -f .dev.pid
 
 dev-api: ## Start API dev server only
+	@mkdir -p data
 	@EXISTING_PID=$$(lsof -ti :8000 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
 		echo "  -> WARNING: Port 8000 in use (pid $$EXISTING_PID) — killing to free port"; \
@@ -81,6 +45,7 @@ dev-api: ## Start API dev server only
 	rm -f .dev.pid
 
 dev-worker: ## Start background job worker only
+	@mkdir -p data
 	@setsid bun run dev:worker & DEV_PID=$$!; \
 	echo $$DEV_PID > .dev.pid; \
 	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
@@ -129,13 +94,23 @@ db-generate: ## Generate Drizzle migration from schema changes
 	bun run db:generate
 
 db-migrate: ## Apply pending migrations
+	@mkdir -p data
 	bun run db:migrate
 
 db-push: ## Push schema directly (dev only, no migration files)
+	@mkdir -p data
 	bun run db:push
 
 db-studio: ## Open Drizzle Studio (database GUI)
 	bun run db:studio
+
+db-seed: ## Seed dev database with fake creators/projects/posts
+	@mkdir -p data
+	bun run db:seed
+
+db-reset: ## Drop the dev SQLite files (forces recreate on next start)
+	rm -f data/anthers.db data/anthers.db-wal data/anthers.db-shm
+	rm -f data/anthers-queue.db data/anthers-queue.db-wal data/anthers-queue.db-shm
 
 # ─── Quality ───
 

@@ -1,8 +1,15 @@
 import { Database as SqliteDatabase } from "bun:sqlite";
+import { resolve } from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema/index.js";
 
-const url = process.env.DATABASE_URL ?? "./data/anthers.db";
+// Resolve relative DATABASE_URLs against the project root (import.meta.dir
+// is packages/db/src). This keeps the default working regardless of which
+// workspace the command was launched from — bun --filter changes cwd.
+const projectRoot = resolve(import.meta.dir, "..", "..", "..");
+const raw = process.env.DATABASE_URL ?? "./data/anthers.db";
+const url = raw.startsWith("/") ? raw : resolve(projectRoot, raw);
+
 const sqlite = new SqliteDatabase(url, { create: true });
 
 // foreign_keys: required for ON DELETE CASCADE / SET NULL.

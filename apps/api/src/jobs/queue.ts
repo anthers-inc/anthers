@@ -16,10 +16,17 @@
  */
 
 import { Database } from "bun:sqlite";
+import { resolve } from "node:path";
 import { Cron } from "croner";
 
-const QUEUE_DATABASE_URL =
-	process.env.QUEUE_DATABASE_URL ?? "./data/anthers-queue.db";
+// Resolve the queue DB path relative to the project root (this file lives at
+// apps/api/src/jobs/queue.ts; root is four ../). Keeps the default working
+// regardless of cwd — bun --filter changes cwd to the workspace dir.
+const projectRoot = resolve(import.meta.dir, "..", "..", "..", "..");
+const rawQueueUrl = process.env.QUEUE_DATABASE_URL ?? "./data/anthers-queue.db";
+const QUEUE_DATABASE_URL = rawQueueUrl.startsWith("/")
+	? rawQueueUrl
+	: resolve(projectRoot, rawQueueUrl);
 
 // ── Queue schema (imperative bootstrap) ──────────────────────────────────────
 

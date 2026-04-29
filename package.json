@@ -15,13 +15,14 @@
     "lint:fix": "bunx biome check --write .",
     "format": "bunx biome format --write .",
     "db:generate": "bunx drizzle-kit generate",
-    "db:migrate": "bunx drizzle-kit migrate",
+    "db:migrate": "bun run packages/db/src/migrate.ts",
     "db:push": "bunx drizzle-kit push",
     "db:studio": "bunx drizzle-kit studio",
     "db:seed": "bun run packages/db/src/seed.ts",
     "db:seed:reset": "bun run packages/db/src/seed.ts --reset"
   },
   "devDependencies": {
+    "better-sqlite3": "11.8.1",
     "drizzle-kit": "0.31.9"
   },
   "dependencies": {
