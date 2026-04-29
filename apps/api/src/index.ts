@@ -26,8 +26,8 @@ const app = new Hono()
 		}),
 	)
 	.use(csrfProtection)
-	// Serve uploaded media files from local filesystem in dev mode
-	.use("/media/*", async (c, next) => {
+	// Serve uploaded content files from local filesystem in dev mode
+	.use("/content/*", async (c, next) => {
 		if (!isLocalStorage) return next();
 		return serveStatic({ root: "../../" })(c, next);
 	})

@@ -1,8 +1,8 @@
 /**
  * Local filesystem storage implementation for development.
  *
- * Files are stored under ./media/ relative to the API working directory.
- * Served via Hono's serveStatic middleware mounted at /media/*.
+ * Files are stored under ./content/ relative to the repo root.
+ * Served via Hono's serveStatic middleware mounted at /content/*.
  */
 
 import { mkdir, unlink, copyFile, access } from "node:fs/promises";
@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import type { StorageService } from "./types.js";
 
-/** Root directory for local media files (repo root /media/) */
-const MEDIA_ROOT = join(import.meta.dir, "../../../../../media");
+/** Root directory for local content files (repo root /content/) */
+const CONTENT_ROOT = join(import.meta.dir, "../../../../../content");
 
 /** Base URL for serving local files */
 function getBaseUrl(): string {
@@ -27,14 +27,14 @@ export class LocalStorageService implements StorageService {
 		_contentType: string,
 		_acl?: "public" | "private",
 	): Promise<string> {
-		const filePath = join(MEDIA_ROOT, key);
+		const filePath = join(CONTENT_ROOT, key);
 		await mkdir(dirname(filePath), { recursive: true });
 		await Bun.write(filePath, body);
 		return key;
 	}
 
 	async downloadToTemp(key: string): Promise<string> {
-		const sourcePath = join(MEDIA_ROOT, key);
+		const sourcePath = join(CONTENT_ROOT, key);
 		const ext = key.includes(".") ? `.${key.split(".").pop()}` : "";
 		const tempPath = join(tmpdir(), `local_dl_${randomUUID()}${ext}`);
 		await copyFile(sourcePath, tempPath);
@@ -46,7 +46,7 @@ export class LocalStorageService implements StorageService {
 		_opts?: { signed?: boolean; expiresIn?: number },
 	): Promise<string> {
 		// Local dev — no signing, just return a URL the static middleware serves
-		return `${getBaseUrl()}/media/${key}`;
+		return `${getBaseUrl()}/content/${key}`;
 	}
 
 	async getPresignedUploadUrl(
@@ -61,7 +61,7 @@ export class LocalStorageService implements StorageService {
 
 	async delete(key: string): Promise<void> {
 		try {
-			await unlink(join(MEDIA_ROOT, key));
+			await unlink(join(CONTENT_ROOT, key));
 		} catch (err: unknown) {
 			// Ignore "file not found" — delete is idempotent
 			if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") return;
@@ -71,7 +71,7 @@ export class LocalStorageService implements StorageService {
 
 	async exists(key: string): Promise<boolean> {
 		try {
-			await access(join(MEDIA_ROOT, key));
+			await access(join(CONTENT_ROOT, key));
 			return true;
 		} catch {
 			return false;
@@ -80,11 +80,11 @@ export class LocalStorageService implements StorageService {
 
 	/** Get the absolute filesystem path for a key (used by serveStatic) */
 	getAbsolutePath(key: string): string {
-		return join(MEDIA_ROOT, key);
+		return join(CONTENT_ROOT, key);
 	}
 
-	/** Get the media root directory (for serveStatic configuration) */
-	static getMediaRoot(): string {
-		return MEDIA_ROOT;
+	/** Get the content root directory (for serveStatic configuration) */
+	static getContentRoot(): string {
+		return CONTENT_ROOT;
 	}
 }
