@@ -1,11 +1,11 @@
 /**
- * pg-boss worker entry point.
+ * Job worker entry point.
  *
  * Run as a separate Bun process: bun run apps/api/src/jobs/worker.ts
  * Or via: make dev-worker
  */
 
-import { boss, QUEUES, ensureBossReady } from "./boss.js";
+import { queue, QUEUES, ensureQueueReady } from "./queue.js";
 import { transcodeVideo, type TranscodeVideoData } from "./transcode-video.js";
 import { processAudio, type ProcessAudioData } from "./process-audio.js";
 import {
@@ -20,13 +20,13 @@ import {
 import { fetchExternalMetrics } from "./fetch-metrics.js";
 
 async function start() {
-	console.log("Starting pg-boss worker...");
-	await ensureBossReady();
-	console.log("pg-boss started. Registering handlers...");
+	console.log("Starting job worker...");
+	await ensureQueueReady();
+	console.log("Queue started. Registering handlers...");
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
-	await boss.work<TranscodeVideoData>(
+	queue.work<TranscodeVideoData>(
 		QUEUES.TRANSCODE_VIDEO,
 		{ localConcurrency: 2 },
 		async (jobs) => {
@@ -37,7 +37,7 @@ async function start() {
 		},
 	);
 
-	await boss.work<ProcessAudioData>(
+	queue.work<ProcessAudioData>(
 		QUEUES.PROCESS_AUDIO,
 		{ localConcurrency: 2 },
 		async (jobs) => {
@@ -48,7 +48,7 @@ async function start() {
 		},
 	);
 
-	await boss.work<CrossPublishData>(
+	queue.work<CrossPublishData>(
 		QUEUES.CROSS_PUBLISH,
 		{ localConcurrency: 2 },
 		async (jobs) => {
@@ -61,7 +61,7 @@ async function start() {
 
 	// ── Scheduled jobs ────────────────────────────────────────────────
 
-	await boss.work<DistributePoolData>(
+	queue.work<DistributePoolData>(
 		QUEUES.DISTRIBUTE_POOL,
 		async (jobs) => {
 			for (const job of jobs) {
@@ -72,26 +72,26 @@ async function start() {
 	);
 
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
-	await boss.work(QUEUES.CALCULATE_CRF, async (jobs) => {
+	queue.work(QUEUES.CALCULATE_CRF, async (jobs) => {
 		for (const job of jobs) {
 			console.log(`[calculate-crf] Processing job ${job.id}`);
 			await calculateCrfSubsidies();
 		}
 	});
 
-	await boss.work(QUEUES.FETCH_METRICS, async (jobs) => {
+	queue.work(QUEUES.FETCH_METRICS, async (jobs) => {
 		for (const job of jobs) {
 			console.log(`[fetch-metrics] Processing job ${job.id}`);
 			await fetchExternalMetrics();
 		}
 	});
 
-	// ── Cron schedules (replaces Celery Beat) ─────────────────────────
+	// ── Cron schedules ────────────────────────────────────────────────
 
-	await boss.schedule(QUEUES.DISTRIBUTE_POOL, "0 0 * * *", {}); // midnight daily
+	queue.schedule(QUEUES.DISTRIBUTE_POOL, "0 0 * * *", {}); // midnight daily
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
-	await boss.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
-	await boss.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
+	queue.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
+	queue.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
 
 	console.log("Worker ready. Listening for jobs...");
 	console.log("Scheduled: distribute-pool (daily), calculate-crf (daily), fetch-metrics (6h)");
@@ -101,7 +101,7 @@ async function start() {
 
 async function shutdown() {
 	console.log("Shutting down worker...");
-	await boss.stop({ graceful: true, timeout: 30000 });
+	await queue.stop({ graceful: true, timeout: 30000 });
 	process.exit(0);
 }
 

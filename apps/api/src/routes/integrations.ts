@@ -18,7 +18,7 @@ import {
 	externalMetricSnapshots,
 } from "@anthers/db/schema";
 import { requireAuth } from "../middleware/auth.js";
-import { boss, QUEUES, JOB_OPTIONS } from "../jobs/boss.js";
+import { queue, QUEUES, JOB_OPTIONS } from "../jobs/queue.js";
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -170,9 +170,11 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
+		// createdAt is stored as ms-epoch INTEGER; convert to ISO date for grouping.
+		const dateExpr = sql<string>`DATE(${attentionEvents.createdAt} / 1000, 'unixepoch')`;
 		const timeseries = await db
 			.select({
-				date: sql<string>`DATE(${attentionEvents.createdAt})`,
+				date: dateExpr,
 				views: sql<number>`COUNT(*) FILTER (WHERE event_type = 'page_view')`,
 				plays: sql<number>`COUNT(*) FILTER (WHERE event_type = 'play')`,
 				watches: sql<number>`COUNT(*) FILTER (WHERE event_type = 'watch')`,
@@ -186,8 +188,8 @@ const integrationRoutes = new Hono()
 					gte(attentionEvents.createdAt, since),
 				),
 			)
-			.groupBy(sql`DATE(${attentionEvents.createdAt})`)
-			.orderBy(sql`DATE(${attentionEvents.createdAt})`);
+			.groupBy(dateExpr)
+			.orderBy(dateExpr);
 
 		return c.json({
 			timeseries: timeseries.map((r) => ({
@@ -340,7 +342,7 @@ const integrationRoutes = new Hono()
 				})
 				.returning();
 
-			await boss.send(
+			queue.send(
 				QUEUES.CROSS_PUBLISH,
 				{ crossPublishId: result.id },
 				JOB_OPTIONS[QUEUES.CROSS_PUBLISH],

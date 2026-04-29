@@ -1,13 +1,34 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# DigitalOcean App Platform spec
+#
+# DEFERRED DECISION (production database hosting strategy):
+#   This config is currently shaped for the Postgres deployment model and is
+#   NOT a working SQLite production deploy. SQLite needs a persistent disk
+#   that the API service, the worker service, and the migrate job can all
+#   read/write. App Platform supports volumes, but with constraints:
+#     - A volume can only be mounted on a service with instance_count: 1.
+#     - Two services cannot mount the same volume.
+#   That means before this app is deployed for real to App Platform, we
+#   need to pick one of:
+#     (A) Collapse the worker into the API process (single service mounts
+#         the volume; ensureQueueReady() boots the worker in the API). Loses
+#         independent scaling/restart of the worker.
+#     (B) Move off App Platform — droplet w/ disk, fly.io w/ volume, or
+#         fly.io + LiteFS for replication. More ops work, more flexibility.
+#     (C) Switch the queue to a separate hosted service (Redis + BullMQ)
+#         and keep SQLite for app data only — but that adds back the
+#         dependency we just removed.
+#   Trigger point: before we send the first non-test traffic to a deployed
+#   environment. Until then this stays as a documentation placeholder, not a
+#   live spec — `doctl apps create` against this would fail.
+# ──────────────────────────────────────────────────────────────────────────────
+
 spec:
   name: anthers
   region: nyc
 
-  databases:
-    - name: db
-      engine: PG
-      version: "17"
-      size: db-s-dev-database
-      num_nodes: 1
+  # No managed database — SQLite lives on a volume mounted into the service.
+  # See deferred-decision note above for why this isn't wired up yet.
 
   services:
     - name: api
@@ -24,7 +45,12 @@ spec:
       envs:
         - key: DATABASE_URL
           scope: RUN_TIME
-          value: ${db.DATABASE_URL}
+          # Will point at a file on the mounted volume once option (A) or (B)
+          # is chosen above. Example: /var/lib/anthers/anthers.sqlite
+          value: PLACEHOLDER
+        - key: QUEUE_DATABASE_URL
+          scope: RUN_TIME
+          value: PLACEHOLDER
         - key: PORT
           scope: RUN_TIME
           value: "8000"
@@ -83,35 +109,10 @@ spec:
           scope: RUN_TIME
           value: PLACEHOLDER
 
-  workers:
-    - name: worker
-      dockerfile_path: apps/api/Dockerfile
-      source_dir: /
-      instance_size_slug: professional-xs
-      instance_count: 1
-      run_command: bun run apps/api/src/jobs/worker.ts
-      envs:
-        - key: DATABASE_URL
-          scope: RUN_TIME
-          value: ${db.DATABASE_URL}
-        - key: STORAGE_BACKEND
-          scope: RUN_TIME
-          value: s3
-        - key: SPACES_KEY
-          scope: RUN_TIME
-          type: SECRET
-        - key: SPACES_SECRET
-          scope: RUN_TIME
-          type: SECRET
-        - key: SPACES_BUCKET
-          scope: RUN_TIME
-          value: anthers-media
-        - key: SPACES_REGION
-          scope: RUN_TIME
-          value: nyc3
-        - key: STRIPE_SECRET_KEY
-          scope: RUN_TIME
-          type: SECRET
+  # Worker service intentionally omitted until the volume-sharing question
+  # above is resolved. Under option (A), the queue boots inside the API
+  # service via ensureQueueReady() (already wired up). Under option (B),
+  # restore a separate worker service that mounts the same persistent disk.
 
   jobs:
     - name: migrate
@@ -124,7 +125,7 @@ spec:
       envs:
         - key: DATABASE_URL
           scope: RUN_TIME
-          value: ${db.DATABASE_URL}
+          value: PLACEHOLDER
 
   static_sites:
     - name: web

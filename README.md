@@ -11,7 +11,6 @@ Anthers is operated as a non-profit organization that is structurally incapable 
 --
 
 - [Bun](https://bun.sh) (runtime, package manager, bundler, test runner)
-- [Docker](https://www.docker.com/) (for local PostgreSQL)
 - [FFmpeg](https://ffmpeg.org/) (media transcoding — HLS, audio normalization, waveform generation)
 
 ## Getting Started
@@ -27,10 +26,7 @@ cp .env.example .env
 # Install dependencies
 bun install
 
-# Start PostgreSQL
-docker compose -f docker-compose.dev.yml up -d
-
-# Run database migrations
+# Run database migrations (creates ./data/anthers.sqlite)
 bun run db:migrate
 
 # (Optional) Seed the database
@@ -51,7 +47,7 @@ The API runs on `http://localhost:8000` and the frontend on `http://localhost:30
 |---|---|
 | `bun run dev` | Start all services (API + worker + frontend) |
 | `bun run dev:api` | API only (port 8000) |
-| `bun run dev:worker` | pg-boss worker only |
+| `bun run dev:worker` | Background job worker only |
 | `bun run dev:web` | Frontend only (port 3000) |
 
 ### Database (Drizzle ORM)
@@ -75,13 +71,6 @@ The API runs on `http://localhost:8000` and the frontend on `http://localhost:30
 | `bun run format` | Biome format |
 | `bun test` | Run tests |
 
-### Docker
-
-```sh
-docker compose -f docker-compose.dev.yml up -d    # Start PostgreSQL
-docker compose -f docker-compose.dev.yml down      # Stop PostgreSQL
-```
-
 ## Project Structure
 --
 
@@ -93,7 +82,7 @@ apps/
       routes/           Route handlers by domain
       middleware/        Auth and CSRF middleware
       services/         Auth, ATProto, image, storage services
-      jobs/             pg-boss worker and job handlers
+      jobs/             Background worker, queue, and job handlers
     Dockerfile          Shared by API, worker, and migration runner
   web/
     src/
@@ -122,8 +111,8 @@ packages/
 | Runtime | Bun |
 | Backend | Hono + Drizzle ORM |
 | Frontend | React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5 |
-| Database | PostgreSQL 17 |
-| Async Jobs | pg-boss |
+| Database | SQLite (via Bun's built-in driver) |
+| Async Jobs | Custom SQLite-backed queue (in-process; cron via croner) |
 | Media | FFmpeg (HLS, audio normalization, waveforms) |
 | Image Processing | sharp |
 | Payments | Stripe Connect |
@@ -136,9 +125,9 @@ packages/
 
 ### Backend
 
-The API is a Hono application on Bun with session-based authentication (argon2id password hashing, PostgreSQL session store, CSRF via Origin header checking). No JWT or token auth.
+The API is a Hono application on Bun with session-based authentication (argon2id password hashing, SQLite session store, CSRF via Origin header checking). No JWT or token auth.
 
-Async jobs run via pg-boss in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, CRF calculation, and metrics fetching.
+Async jobs run on a small SQLite-backed queue (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. The queue uses its own SQLite file (`./data/anthers-queue.sqlite`) to keep claim transactions isolated from app writes.
 
 Storage is abstracted behind a `StorageService` interface with local (dev) and S3 (prod) implementations.
 
@@ -166,7 +155,8 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | SQLite file path (default `./data/anthers.sqlite`) |
+| `QUEUE_DATABASE_URL` | Queue SQLite file path (default `./data/anthers-queue.sqlite`) |
 | `SESSION_SECRET` | Secret for session signing |
 | `STORAGE_BACKEND` | `local` or `s3` |
 | `STRIPE_SECRET_KEY` | Stripe API key |
@@ -175,4 +165,4 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 ## Deployment
 --
 
-Deployment is handled by DigitalOcean App Platform via `.do/app.yaml`. No manual deploy scripts.
+Deployment will be handled by DigitalOcean App Platform via `.do/app.yaml`. The current spec is a documentation placeholder — see the deferred-decision note at the top of `.do/app.yaml` for the open question about how SQLite + the worker process interact with App Platform's volume constraints. This needs a decision before the first non-test deploy.

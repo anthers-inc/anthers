@@ -130,6 +130,6 @@ export async function crossPublish(data: CrossPublishData) {
 				errorMessage: message.slice(0, 1000),
 			})
 			.where(eq(crossPublishResults.id, crossPub.id));
-		throw error; // pg-boss will retry
+		throw error; // queue will retry
 	}
 }
