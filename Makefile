@@ -1,8 +1,11 @@
 # ─── Anthers Makefile ───
 
-.PHONY: help install dev dev-api dev-worker dev-web dev-down \
+.PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed db-reset \
         typecheck test lint format
+
+API_PORT ?= 8000
+WEB_PORT ?= 3000
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -15,7 +18,7 @@ install: ## Install all dependencies
 dev: ## Start API + worker + web dev servers
 	@mkdir -p data
 	@KILLED=0; \
-	for PORT in 8000 3000; do \
+	for PORT in $(API_PORT) $(WEB_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
 		if [ -n "$$EXISTING_PID" ]; then \
 			echo "  -> WARNING: Port $$PORT in use (pid $$EXISTING_PID) — killing to free port"; \
@@ -32,9 +35,9 @@ dev: ## Start API + worker + web dev servers
 
 dev-api: ## Start API dev server only
 	@mkdir -p data
-	@EXISTING_PID=$$(lsof -ti :8000 2>/dev/null); \
+	@EXISTING_PID=$$(lsof -ti :$(API_PORT) 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port 8000 in use (pid $$EXISTING_PID) — killing to free port"; \
+		echo "  -> WARNING: Port $(API_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
 		kill $$EXISTING_PID 2>/dev/null || true; \
 		sleep 1; \
 	fi
@@ -53,9 +56,9 @@ dev-worker: ## Start background job worker only
 	rm -f .dev.pid
 
 dev-web: ## Start web dev server only
-	@EXISTING_PID=$$(lsof -ti :3000 2>/dev/null); \
+	@EXISTING_PID=$$(lsof -ti :$(WEB_PORT) 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
-		echo "  -> WARNING: Port 3000 in use (pid $$EXISTING_PID) — killing to free port"; \
+		echo "  -> WARNING: Port $(WEB_PORT) in use (pid $$EXISTING_PID) — killing to free port"; \
 		kill $$EXISTING_PID 2>/dev/null || true; \
 		sleep 1; \
 	fi
@@ -65,7 +68,7 @@ dev-web: ## Start web dev server only
 	wait $$DEV_PID 2>/dev/null; \
 	rm -f .dev.pid
 
-dev-down: ## Stop dev servers
+down: ## Stop everything
 	@echo "Stopping dev servers..."
 	@DEV_PID=$$(cat .dev.pid 2>/dev/null); \
 	if [ -n "$$DEV_PID" ]; then \
@@ -75,7 +78,7 @@ dev-down: ## Stop dev servers
 	else \
 		echo "  -> No .dev.pid found, checking ports..."; \
 		FOUND=0; \
-		for PORT in 8000 3000; do \
+		for PORT in $(API_PORT) $(WEB_PORT); do \
 			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
 			if [ -n "$$PORT_PID" ]; then \
 				kill $$PORT_PID 2>/dev/null || true; \
@@ -125,3 +128,5 @@ lint: ## Check linting with Biome
 
 format: ## Format code with Biome
 	bun run format
+
+.DEFAULT_GOAL := help
