@@ -155,8 +155,8 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLite file path (default `./data/anthers.sqlite`) |
-| `QUEUE_DATABASE_URL` | Queue SQLite file path (default `./data/anthers-queue.sqlite`) |
+| `DATABASE_URL` | SQLite connection (default `file:./data/anthers.sqlite`) |
+| `QUEUE_DATABASE_URL` | Queue SQLite connection (default `file:./data/anthers-queue.sqlite`) |
 | `SESSION_SECRET` | Secret for session signing |
 | `STORAGE_BACKEND` | `local` or `s3` |
 | `STRIPE_SECRET_KEY` | Stripe API key |

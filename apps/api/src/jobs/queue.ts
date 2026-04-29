@@ -22,8 +22,12 @@ import { Cron } from "croner";
 // Resolve the queue DB path relative to the project root (this file lives at
 // apps/api/src/jobs/queue.ts; root is four ../). Keeps the default working
 // regardless of cwd — bun --filter changes cwd to the workspace dir.
+// bun:sqlite takes a bare path, so the file: URL scheme is stripped first.
 const projectRoot = resolve(import.meta.dir, "..", "..", "..", "..");
-const rawQueueUrl = process.env.QUEUE_DATABASE_URL ?? "./data/anthers-queue.sqlite";
+const rawQueueUrl = (process.env.QUEUE_DATABASE_URL ?? "file:./data/anthers-queue.sqlite").replace(
+	/^file:/,
+	"",
+);
 const QUEUE_DATABASE_URL = rawQueueUrl.startsWith("/")
 	? rawQueueUrl
 	: resolve(projectRoot, rawQueueUrl);

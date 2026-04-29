@@ -6,8 +6,10 @@ import * as schema from "./schema/index.js";
 // Resolve relative DATABASE_URLs against the project root (import.meta.dir
 // is packages/db/src). This keeps the default working regardless of which
 // workspace the command was launched from — bun --filter changes cwd.
+// bun:sqlite's Database constructor takes a bare path, so the file: URL
+// scheme is stripped before resolution.
 const projectRoot = resolve(import.meta.dir, "..", "..", "..");
-const raw = process.env.DATABASE_URL ?? "./data/anthers.sqlite";
+const raw = (process.env.DATABASE_URL ?? "file:./data/anthers.sqlite").replace(/^file:/, "");
 const url = raw.startsWith("/") ? raw : resolve(projectRoot, raw);
 
 const sqlite = new SqliteDatabase(url, { create: true });

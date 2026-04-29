@@ -4,7 +4,7 @@
  * Runs once per deployment as a PRE_DEPLOY job — not at every container startup.
  *
  * Usage: bun run packages/db/src/migrate.ts
- * Requires: DATABASE_URL environment variable (path to SQLite file)
+ * Requires: DATABASE_URL environment variable (file: URL or bare path).
  */
 
 import { Database } from "bun:sqlite";
@@ -12,11 +12,13 @@ import { resolve } from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 
-const url = process.env.DATABASE_URL;
-if (!url) {
+const raw = process.env.DATABASE_URL;
+if (!raw) {
 	console.error("DATABASE_URL is required");
 	process.exit(1);
 }
+// bun:sqlite takes a bare path; strip the file: scheme if present.
+const url = raw.replace(/^file:/, "");
 
 const sqlite = new Database(url, { create: true });
 sqlite.exec("PRAGMA foreign_keys = ON;");
