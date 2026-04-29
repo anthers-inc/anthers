@@ -13,12 +13,12 @@ import {
 	desc,
 	asc,
 	sql,
-	ilike,
+	like,
 	avg,
 	count,
 	inArray,
 } from "drizzle-orm";
-import { boss, QUEUES, JOB_OPTIONS } from "../jobs/boss.js";
+import { queue, QUEUES, JOB_OPTIONS } from "../jobs/queue.js";
 import { db } from "@anthers/db/client";
 import {
 	users,
@@ -156,15 +156,19 @@ const contentRoutes = new Hono()
 		}
 
 		if (tag) {
-			conditions.push(sql`${projects.tags} @> ${JSON.stringify([tag])}::jsonb`);
+			// SQLite JSON: project.tags is stored as a JSON text array; check
+			// containment via json_each.
+			conditions.push(
+				sql`EXISTS (SELECT 1 FROM json_each(${projects.tags}) WHERE value = ${tag})`,
+			);
 		}
 
 		if (search) {
 			conditions.push(
 				or(
-					ilike(projects.title, `%${search}%`),
-					ilike(projects.description, `%${search}%`),
-					ilike(projects.shortDescription, `%${search}%`),
+					like(projects.title, `%${search}%`),
+					like(projects.description, `%${search}%`),
+					like(projects.shortDescription, `%${search}%`),
 				),
 			);
 		}
@@ -182,15 +186,17 @@ const contentRoutes = new Hono()
 					desc(projects.createdAt),
 				];
 				break;
-			case "trending":
+			case "trending": {
+				const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
 				orderClause = [
 					desc(
-						sql`COALESCE((SELECT count(*) FROM attention_events WHERE project_id = ${projects.id} AND created_at >= NOW() - INTERVAL '7 days'), 0)`,
+						sql`COALESCE((SELECT count(*) FROM attention_events WHERE project_id = ${projects.id} AND created_at >= ${sevenDaysAgoMs}), 0)`,
 					),
 					desc(projects.viewCount),
 					desc(projects.createdAt),
 				];
 				break;
+			}
 			case "downloads":
 				orderClause = [desc(projects.downloadCount), desc(projects.createdAt)];
 				break;
@@ -780,7 +786,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			await boss.send(
+			queue.send(
 				QUEUES.TRANSCODE_VIDEO,
 				{ jobId: job.id },
 				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
@@ -794,7 +800,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			await boss.send(
+			queue.send(
 				QUEUES.PROCESS_AUDIO,
 				{ jobId: job.id },
 				JOB_OPTIONS[QUEUES.PROCESS_AUDIO],

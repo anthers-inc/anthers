@@ -3,7 +3,7 @@
  *
  * Ported from _legacy/backend/integrations/tasks.py fetch_external_metrics()
  *
- * Runs every 6 hours via pg-boss schedule.
+ * Runs every 6 hours via the worker's cron schedule.
  */
 
 import { eq, and } from "drizzle-orm";

@@ -9,7 +9,13 @@ dist/
 *.tsbuildinfo
 bun.lock
 
-# ─── Docker ───
+# ─── SQLite ───
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# ─── Deployment ───
 .deployment-state
 
 # ─── Dev Runtime ───

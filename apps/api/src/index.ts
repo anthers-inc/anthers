@@ -13,7 +13,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
-import { ensureBossReady } from "./jobs/boss.js";
+import { ensureQueueReady } from "./jobs/queue.js";
 import { isLocalStorage } from "./services/storage/index.js";
 
 const app = new Hono()
@@ -50,11 +50,11 @@ const app = new Hono()
 	.route("/api/jams", jamRoutes)
 	.route("/api/waitlist", waitlistRoutes);
 
-// Start pg-boss when running as the server (not when imported by tests).
+// Start the job queue when running as the server (not when imported by tests).
 // import.meta.main is true only when this file is the entry point.
 if (import.meta.main) {
-	ensureBossReady().catch((err) =>
-		console.error("pg-boss failed to start:", err),
+	ensureQueueReady().catch((err) =>
+		console.error("Job queue failed to start:", err),
 	);
 }
 

@@ -22,11 +22,10 @@
     "db:seed:reset": "bun run packages/db/src/seed.ts --reset"
   },
   "devDependencies": {
-    "drizzle-kit": "0.31.9",
-    "pg": "8.20.0"
+    "drizzle-kit": "0.31.9"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.1",
-    "pg-boss": "12.14.0"
+    "croner": "9.0.0",
+    "drizzle-orm": "0.45.1"
   }
 }

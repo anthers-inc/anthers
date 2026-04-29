@@ -1,74 +1,77 @@
-import {
-	bigint,
-	boolean,
-	date,
-	integer,
-	numeric,
-	pgTable,
-	serial,
-	text,
-	timestamp,
-	uniqueIndex,
-	varchar,
-} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { users } from "./auth.js";
 import { projects } from "./content.js";
 
-export const stripeAccounts = pgTable("stripe_accounts", {
-	id: serial("id").primaryKey(),
+export const stripeAccounts = sqliteTable("stripe_accounts", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
 	userId: integer("user_id")
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	stripeAccountId: varchar("stripe_account_id", { length: 255 }).notNull().unique(),
-	chargesEnabled: boolean("charges_enabled").default(false),
-	payoutsEnabled: boolean("payouts_enabled").default(false),
-	onboardingComplete: boolean("onboarding_complete").default(false),
-	createdAt: timestamp("created_at").defaultNow().notNull(),
-	updatedAt: timestamp("updated_at").defaultNow().notNull(),
+	stripeAccountId: text("stripe_account_id").notNull().unique(),
+	chargesEnabled: integer("charges_enabled", { mode: "boolean" }).default(false),
+	payoutsEnabled: integer("payouts_enabled", { mode: "boolean" }).default(false),
+	onboardingComplete: integer("onboarding_complete", { mode: "boolean" }).default(false),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.default(sql`(unixepoch() * 1000)`)
+		.notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+		.default(sql`(unixepoch() * 1000)`)
+		.notNull(),
 });
 
-export const purchases = pgTable("purchases", {
-	id: serial("id").primaryKey(),
+// Decimal columns are stored as text to preserve decimal.js precision.
+export const purchases = sqliteTable("purchases", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
 	buyerId: integer("buyer_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
 	projectId: integer("project_id")
 		.notNull()
 		.references(() => projects.id, { onDelete: "cascade" }),
-	amount: numeric("amount", { precision: 8, scale: 2 }).notNull(),
-	processingFee: numeric("processing_fee", { precision: 8, scale: 2 }).notNull(),
-	crfFee: numeric("crf_fee", { precision: 8, scale: 2 }).notNull(), // Legacy column name; stores Anthers Foundation Fee amount
-	creatorEarnings: numeric("creator_earnings", { precision: 8, scale: 2 }).notNull(),
-	stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }).notNull().unique(),
-	status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | completed | failed | refunded
-	createdAt: timestamp("created_at").defaultNow().notNull(),
-	updatedAt: timestamp("updated_at").defaultNow().notNull(),
+	amount: text("amount").notNull(),
+	processingFee: text("processing_fee").notNull(),
+	crfFee: text("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee amount
+	creatorEarnings: text("creator_earnings").notNull(),
+	stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
+	status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.default(sql`(unixepoch() * 1000)`)
+		.notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+		.default(sql`(unixepoch() * 1000)`)
+		.notNull(),
 });
 
-export const crfLedger = pgTable("crf_ledger", {
-	id: serial("id").primaryKey(),
-	amount: numeric("amount", { precision: 8, scale: 2 }).notNull(),
+export const crfLedger = sqliteTable("crf_ledger", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	amount: text("amount").notNull(),
 	purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
-	description: varchar("description", { length: 500 }).notNull(),
-	createdAt: timestamp("created_at").defaultNow().notNull(),
+	description: text("description").notNull(),
+	createdAt: integer("created_at", { mode: "timestamp_ms" })
+		.default(sql`(unixepoch() * 1000)`)
+		.notNull(),
 });
 
-export const crfSubsidies = pgTable(
+// billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
+export const crfSubsidies = sqliteTable(
 	"crf_subsidies",
 	{
-		id: serial("id").primaryKey(),
+		id: integer("id").primaryKey({ autoIncrement: true }),
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		billingCycle: date("billing_cycle").notNull(),
-		estimatedHostingCost: numeric("estimated_hosting_cost", { precision: 8, scale: 2 }).notNull(),
-		creatorEarnings: numeric("creator_earnings", { precision: 8, scale: 2 }).notNull(),
-		subsidyAmount: numeric("subsidy_amount", { precision: 8, scale: 2 }).notNull(),
-		storageBytes: bigint("storage_bytes", { mode: "number" }).default(0),
+		billingCycle: text("billing_cycle").notNull(),
+		estimatedHostingCost: text("estimated_hosting_cost").notNull(),
+		creatorEarnings: text("creator_earnings").notNull(),
+		subsidyAmount: text("subsidy_amount").notNull(),
+		storageBytes: integer("storage_bytes").default(0),
 		projectCount: integer("project_count").default(0),
 		postCount: integer("post_count").default(0),
-		createdAt: timestamp("created_at").defaultNow().notNull(),
+		createdAt: integer("created_at", { mode: "timestamp_ms" })
+			.default(sql`(unixepoch() * 1000)`)
+			.notNull(),
 	},
 	(table) => [
 		uniqueIndex("uq_crf_subsidies_creator_cycle").on(table.creatorId, table.billingCycle),
