@@ -7,7 +7,7 @@ import * as schema from "./schema/index.js";
 // is packages/db/src). This keeps the default working regardless of which
 // workspace the command was launched from — bun --filter changes cwd.
 const projectRoot = resolve(import.meta.dir, "..", "..", "..");
-const raw = process.env.DATABASE_URL ?? "./data/anthers.db";
+const raw = process.env.DATABASE_URL ?? "./data/anthers.sqlite";
 const url = raw.startsWith("/") ? raw : resolve(projectRoot, raw);
 
 const sqlite = new SqliteDatabase(url, { create: true });

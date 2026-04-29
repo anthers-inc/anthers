@@ -4,7 +4,7 @@
  * Provides a small subset of the pg-boss API the app uses: send / work /
  * schedule / start / stop.
  *
- * The queue lives in its own SQLite file (default ./data/anthers-queue.db)
+ * The queue lives in its own SQLite file (default ./data/anthers-queue.sqlite)
  * separate from the app DB. SQLite serializes writers per-database-file, so
  * keeping the queue separate means BEGIN IMMEDIATE on a job claim doesn't
  * stall application writes, and vice versa.
@@ -23,7 +23,7 @@ import { Cron } from "croner";
 // apps/api/src/jobs/queue.ts; root is four ../). Keeps the default working
 // regardless of cwd — bun --filter changes cwd to the workspace dir.
 const projectRoot = resolve(import.meta.dir, "..", "..", "..", "..");
-const rawQueueUrl = process.env.QUEUE_DATABASE_URL ?? "./data/anthers-queue.db";
+const rawQueueUrl = process.env.QUEUE_DATABASE_URL ?? "./data/anthers-queue.sqlite";
 const QUEUE_DATABASE_URL = rawQueueUrl.startsWith("/")
 	? rawQueueUrl
 	: resolve(projectRoot, rawQueueUrl);

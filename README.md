@@ -26,7 +26,7 @@ cp .env.example .env
 # Install dependencies
 bun install
 
-# Run database migrations (creates ./data/anthers.db)
+# Run database migrations (creates ./data/anthers.sqlite)
 bun run db:migrate
 
 # (Optional) Seed the database
@@ -127,7 +127,7 @@ packages/
 
 The API is a Hono application on Bun with session-based authentication (argon2id password hashing, SQLite session store, CSRF via Origin header checking). No JWT or token auth.
 
-Async jobs run on a small SQLite-backed queue (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. The queue uses its own SQLite file (`./data/anthers-queue.db`) to keep claim transactions isolated from app writes.
+Async jobs run on a small SQLite-backed queue (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. The queue uses its own SQLite file (`./data/anthers-queue.sqlite`) to keep claim transactions isolated from app writes.
 
 Storage is abstracted behind a `StorageService` interface with local (dev) and S3 (prod) implementations.
 
@@ -155,8 +155,8 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLite file path (default `./data/anthers.db`) |
-| `QUEUE_DATABASE_URL` | Queue SQLite file path (default `./data/anthers-queue.db`) |
+| `DATABASE_URL` | SQLite file path (default `./data/anthers.sqlite`) |
+| `QUEUE_DATABASE_URL` | Queue SQLite file path (default `./data/anthers-queue.sqlite`) |
 | `SESSION_SECRET` | Secret for session signing |
 | `STORAGE_BACKEND` | `local` or `s3` |
 | `STRIPE_SECRET_KEY` | Stripe API key |

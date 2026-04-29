@@ -46,7 +46,7 @@ spec:
         - key: DATABASE_URL
           scope: RUN_TIME
           # Will point at a file on the mounted volume once option (A) or (B)
-          # is chosen above. Example: /var/lib/anthers/anthers.db
+          # is chosen above. Example: /var/lib/anthers/anthers.sqlite
           value: PLACEHOLDER
         - key: QUEUE_DATABASE_URL
           scope: RUN_TIME

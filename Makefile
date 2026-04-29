@@ -109,8 +109,8 @@ db-seed: ## Seed dev database with fake creators/projects/posts
 	bun run db:seed
 
 db-reset: ## Drop the dev SQLite files (forces recreate on next start)
-	rm -f data/anthers.db data/anthers.db-wal data/anthers.db-shm
-	rm -f data/anthers-queue.db data/anthers-queue.db-wal data/anthers-queue.db-shm
+	rm -f data/anthers.sqlite data/anthers.sqlite-wal data/anthers.sqlite-shm
+	rm -f data/anthers-queue.sqlite data/anthers-queue.sqlite-wal data/anthers-queue.sqlite-shm
 
 # ─── Quality ───
 
