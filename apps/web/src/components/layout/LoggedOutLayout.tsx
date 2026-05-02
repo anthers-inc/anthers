@@ -64,7 +64,7 @@ export default function LoggedOutLayout() {
 						<Link to="/login" className="btn btn-ghost btn-sm">
 							Log in
 						</Link>
-						<Link to="/register" className="btn btn-primary btn-sm">
+						<Link to="/signup" className="btn btn-primary btn-sm">
 							Sign up
 						</Link>
 					</div>

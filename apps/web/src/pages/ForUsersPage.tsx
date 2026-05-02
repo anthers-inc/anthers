@@ -44,7 +44,7 @@ export default function ForUsersPage() {
 								Start Exploring
 							</Link>
 							{!isAuthenticated && (
-								<Link to="/register" className="btn btn-outline btn-lg">
+								<Link to="/signup" className="btn btn-outline btn-lg">
 									Create Free Account
 								</Link>
 							)}
@@ -479,7 +479,7 @@ export default function ForUsersPage() {
 							Browse Projects
 						</Link>
 						{!isAuthenticated && (
-							<Link to="/register" className="btn btn-outline btn-lg">
+							<Link to="/signup" className="btn btn-outline btn-lg">
 								Create Free Account
 							</Link>
 						)}

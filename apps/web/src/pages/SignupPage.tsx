@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import FormField from "../components/ui/FormField";
 
-export default function RegisterPage() {
+export default function SignupPage() {
 	const { signUp } = useAuth();
 	const navigate = useNavigate();
 

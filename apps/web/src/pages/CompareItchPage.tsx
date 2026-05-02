@@ -40,7 +40,7 @@ export default function CompareItchPage() {
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/register"}
+								to={isAuthenticated ? "/dashboard" : "/signup"}
 								className="btn btn-primary btn-lg"
 							>
 								Try Anthers Free
@@ -332,7 +332,7 @@ export default function CompareItchPage() {
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
-							to={isAuthenticated ? "/dashboard/import" : "/register"}
+							to={isAuthenticated ? "/dashboard/import" : "/signup"}
 							className="btn btn-primary"
 						>
 							Import from itch.io
@@ -357,7 +357,7 @@ export default function CompareItchPage() {
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
-							to={isAuthenticated ? "/dashboard" : "/register"}
+							to={isAuthenticated ? "/dashboard" : "/signup"}
 							className="btn btn-primary btn-lg"
 						>
 							Create Your Account

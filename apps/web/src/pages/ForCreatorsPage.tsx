@@ -43,7 +43,7 @@ export default function ForCreatorsPage() {
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/register"}
+								to={isAuthenticated ? "/dashboard" : "/signup"}
 								className="btn btn-primary btn-lg"
 							>
 								Start Creating
@@ -729,7 +729,7 @@ export default function ForCreatorsPage() {
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
-							to={isAuthenticated ? "/dashboard" : "/register"}
+							to={isAuthenticated ? "/dashboard" : "/signup"}
 							className="btn btn-primary btn-lg"
 						>
 							Create Your Account

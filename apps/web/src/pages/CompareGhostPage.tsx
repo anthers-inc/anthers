@@ -40,7 +40,7 @@ export default function CompareGhostPage() {
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/register"}
+								to={isAuthenticated ? "/dashboard" : "/signup"}
 								className="btn btn-primary btn-lg"
 							>
 								Try Anthers Free
@@ -400,7 +400,7 @@ export default function CompareGhostPage() {
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
-							to={isAuthenticated ? "/dashboard" : "/register"}
+							to={isAuthenticated ? "/dashboard" : "/signup"}
 							className="btn btn-primary btn-lg"
 						>
 							Create Your Account
