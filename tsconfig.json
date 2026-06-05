@@ -4,15 +4,11 @@
 		"module": "ESNext",
 		"moduleResolution": "bundler",
 		"strict": true,
-		"esModuleInterop": true,
-		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"noEmit": true,
-		"declaration": true,
-		"declarationMap": true,
-		"composite": true
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true
 	},
-	"exclude": ["node_modules", "dist", "_legacy"]
+	"exclude": ["node_modules", "target", "**/dist"]
 }
