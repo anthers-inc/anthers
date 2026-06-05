@@ -9,15 +9,15 @@
  * 5. Create/update PoolDistribution ledger entries.
  */
 
-import Decimal from "decimal.js";
-import { eq, and, gte, lt, ne, sql, sum } from "drizzle-orm";
 import { db } from "@anthers/db";
 import {
-	subscriptions,
 	attentionEvents,
 	boostAllocations,
 	poolDistributions,
+	subscriptions,
 } from "@anthers/db/schema";
+import Decimal from "decimal.js";
+import { and, eq, gte, lt, ne, sql, sum } from "drizzle-orm";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single subscriber. Otherwise all active paid. */
@@ -37,10 +37,7 @@ function computeTimePoolAmount(fundingLevel: number): string {
 	return timePool.toFixed(2);
 }
 
-function getBillingCycle(sub: {
-	currentPeriodStart: Date | null;
-	currentPeriodEnd: Date | null;
-}) {
+function getBillingCycle(sub: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
 	if (sub.currentPeriodStart && sub.currentPeriodEnd) {
 		return {
 			start: sub.currentPeriodStart,
@@ -75,9 +72,7 @@ async function distributeForSubscriber(sub: {
 	const attentionRows = await db
 		.select({
 			creatorId: attentionEvents.creatorId,
-			totalSeconds: sum(attentionEvents.durationSeconds).as(
-				"total_seconds",
-			),
+			totalSeconds: sum(attentionEvents.durationSeconds).as("total_seconds"),
 		})
 		.from(attentionEvents)
 		.where(
@@ -113,9 +108,7 @@ async function distributeForSubscriber(sub: {
 	if (totalAttention > 0 && poolAmount.gt(0)) {
 		for (const [creatorId, seconds] of attentionByCreator) {
 			const proportion = new Decimal(seconds).div(totalAttention);
-			const amount = poolAmount
-				.mul(proportion)
-				.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+			const amount = poolAmount.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 			if (amount.gt(0)) {
 				distributions.set(creatorId, {
 					poolAmount: amount,
@@ -151,10 +144,7 @@ async function distributeForSubscriber(sub: {
 		.select()
 		.from(boostAllocations)
 		.where(
-			and(
-				eq(boostAllocations.userId, sub.userId),
-				eq(boostAllocations.billingCycle, cycleDate),
-			),
+			and(eq(boostAllocations.userId, sub.userId), eq(boostAllocations.billingCycle, cycleDate)),
 		);
 
 	for (const boost of boosts) {
@@ -201,12 +191,7 @@ export async function distributePool(data: DistributePoolData) {
 	const query = db
 		.select()
 		.from(subscriptions)
-		.where(
-			and(
-				eq(subscriptions.isActive, true),
-				ne(subscriptions.tier, "window"),
-			),
-		);
+		.where(and(eq(subscriptions.isActive, true), ne(subscriptions.tier, "window")));
 
 	const subs = data.subscriptionId
 		? await db
@@ -227,10 +212,7 @@ export async function distributePool(data: DistributePoolData) {
 			await distributeForSubscriber(sub);
 			processed++;
 		} catch (error) {
-			console.error(
-				`Pool distribution failed for user ${sub.userId}:`,
-				error,
-			);
+			console.error(`Pool distribution failed for user ${sub.userId}:`, error);
 		}
 	}
 

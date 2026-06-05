@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { PostListItem } from "../lib/types";
 import ContentCard from "../components/cards/ContentCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import type { PostListItem } from "../lib/types";
 
 const FILTERS = [
 	{ key: "", label: "All" },

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll } from "bun:test";
-import { eq } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users, verificationTokens } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import app from "../index";
 
 const testFetch = app.fetch;

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback } from "react";
-import { client } from "./rpc";
+import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "./auth";
+import { client } from "./rpc";
 
 const FLUSH_INTERVAL_MS = 30_000; // Report every 30 seconds
 const TICK_INTERVAL_MS = 1_000; // Accumulate every 1 second

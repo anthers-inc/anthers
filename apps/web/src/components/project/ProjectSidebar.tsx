@@ -1,17 +1,12 @@
+import { ArrowDownTrayIcon, CodeBracketIcon, EyeIcon, LinkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { Project, PublicUser } from "../../lib/types";
-import { client } from "../../lib/rpc";
 import { useAuth } from "../../lib/auth";
-import {
-	LinkIcon,
-	CodeBracketIcon,
-	EyeIcon,
-	ArrowDownTrayIcon,
-} from "@heroicons/react/24/outline";
+import { client } from "../../lib/rpc";
+import type { Project, PublicUser } from "../../lib/types";
 
 const apiBase =
-	(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -38,7 +33,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 			.then((res) => res.json())
 			.then((data) => {
 				setMoreProjects(
-					(data.projects as Project[]).filter((p) => p.slug !== project.slug).slice(0, 3)
+					(data.projects as Project[]).filter((p) => p.slug !== project.slug).slice(0, 3),
 				);
 			})
 			.catch(console.error);
@@ -80,21 +75,14 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 								/>
 							) : (
 								<div className="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center text-2xl font-bold text-base-content/40">
-									{(creator.displayName || creator.username)
-										.charAt(0)
-										.toUpperCase()}
+									{(creator.displayName || creator.username).charAt(0).toUpperCase()}
 								</div>
 							)}
 						</Link>
-						<Link
-							to={`/${creator.username}`}
-							className="font-semibold link link-hover"
-						>
+						<Link to={`/${creator.username}`} className="font-semibold link link-hover">
 							{creator.displayName || creator.username}
 						</Link>
-						<span className="text-xs text-base-content/50">
-							{creator.followerCount} followers
-						</span>
+						<span className="text-xs text-base-content/50">{creator.followerCount} followers</span>
 						{isAuthenticated && !isOwnProject && (
 							<button
 								className={`btn btn-sm w-full ${isFollowing ? "btn-outline" : "btn-primary"}`}
@@ -113,11 +101,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 					<h3 className="font-semibold text-sm mb-2">Tags</h3>
 					<div className="flex flex-wrap gap-1">
 						{project.tags.map((tag) => (
-							<Link
-								key={tag}
-								to={`/discover?tag=${tag}`}
-								className="badge badge-outline badge-sm"
-							>
+							<Link key={tag} to={`/discover?tag=${tag}`} className="badge badge-outline badge-sm">
 								{tag}
 							</Link>
 						))}

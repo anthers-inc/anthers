@@ -8,20 +8,20 @@
  * for creators who earn less than their hosting costs.
  */
 
-import Decimal from "decimal.js";
-import { eq, and, sum, sql, count, inArray } from "drizzle-orm";
 import { db } from "@anthers/db";
 import {
-	users,
-	projects,
-	posts,
 	assets,
-	purchases,
-	poolDistributions,
 	crfLedger,
 	crfSubsidies,
+	poolDistributions,
+	posts,
+	projects,
+	purchases,
+	users,
 } from "@anthers/db/schema";
 import { estimateHostingCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
+import Decimal from "decimal.js";
+import { and, count, eq, inArray, sql, sum } from "drizzle-orm";
 
 /** Returns the first day of the current month as YYYY-MM-DD for Drizzle date columns. */
 function getCycleDate(): string {
@@ -31,10 +31,7 @@ function getCycleDate(): string {
 	return `${y}-${m}-01`;
 }
 
-async function getCreatorEarnings(
-	creatorId: number,
-	cycleDate: string,
-): Promise<Decimal> {
+async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise<Decimal> {
 	// Pool + boost distributions
 	const [poolResult] = await db
 		.select({
@@ -82,9 +79,7 @@ export async function calculateCrfSubsidies() {
 	const cycleDate = getCycleDate();
 
 	// Get Foundation balance
-	const [balanceResult] = await db
-		.select({ total: sum(crfLedger.amount) })
-		.from(crfLedger);
+	const [balanceResult] = await db.select({ total: sum(crfLedger.amount) }).from(crfLedger);
 
 	const crfBalance = new Decimal(balanceResult?.total ?? "0");
 	if (crfBalance.lte(0)) {
@@ -97,9 +92,7 @@ export async function calculateCrfSubsidies() {
 		.selectDistinct({ id: users.id, username: users.username })
 		.from(users)
 		.innerJoin(projects, eq(projects.creatorId, users.id))
-		.where(
-			and(eq(users.isCreator, true), eq(projects.isPublished, true)),
-		);
+		.where(and(eq(users.isCreator, true), eq(projects.isPublished, true)));
 
 	let subsidized = 0;
 	let totalSubsidy = new Decimal(0);
@@ -109,12 +102,7 @@ export async function calculateCrfSubsidies() {
 		const [existing] = await db
 			.select({ id: crfSubsidies.id })
 			.from(crfSubsidies)
-			.where(
-				and(
-					eq(crfSubsidies.creatorId, creator.id),
-					eq(crfSubsidies.billingCycle, cycleDate),
-				),
-			)
+			.where(and(eq(crfSubsidies.creatorId, creator.id), eq(crfSubsidies.billingCycle, cycleDate)))
 			.limit(1);
 		if (existing) continue;
 
@@ -122,12 +110,7 @@ export async function calculateCrfSubsidies() {
 		const [projectCount] = await db
 			.select({ count: count() })
 			.from(projects)
-			.where(
-				and(
-					eq(projects.creatorId, creator.id),
-					eq(projects.isPublished, true),
-				),
-			);
+			.where(and(eq(projects.creatorId, creator.id), eq(projects.isPublished, true)));
 
 		const [mediaPostCount] = await db
 			.select({ count: count() })
@@ -173,12 +156,7 @@ export async function calculateCrfSubsidies() {
 						await db
 							.select({ count: count() })
 							.from(posts)
-							.where(
-								and(
-									eq(posts.creatorId, creator.id),
-									eq(posts.isPublished, true),
-								),
-							)
+							.where(and(eq(posts.creatorId, creator.id), eq(posts.isPublished, true)))
 					)[0]?.count ?? 0),
 			});
 			continue;

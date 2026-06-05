@@ -1,9 +1,5 @@
+import { PauseIcon, PlayIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Link } from "react-router-dom";
-import {
-	PlayIcon,
-	PauseIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/solid";
 import { useMediaPlayer } from "../../lib/media-player";
 
 function formatTime(seconds: number): string {
@@ -31,11 +27,7 @@ export default function MiniPlayer() {
 			<div className="flex items-center gap-3 px-4 py-2 max-w-screen-xl mx-auto">
 				{/* Thumbnail */}
 				{currentTrack.thumbnail ? (
-					<img
-						src={currentTrack.thumbnail}
-						alt=""
-						className="w-10 h-10 rounded object-cover"
-					/>
+					<img src={currentTrack.thumbnail} alt="" className="w-10 h-10 rounded object-cover" />
 				) : (
 					<div className="w-10 h-10 rounded bg-base-300 flex items-center justify-center">
 						<PlayIcon className="w-5 h-5 text-base-content/30" />
@@ -61,15 +53,8 @@ export default function MiniPlayer() {
 				</span>
 
 				{/* Play/Pause */}
-				<button
-					onClick={isPlaying ? pause : resume}
-					className="btn btn-circle btn-sm btn-ghost"
-				>
-					{isPlaying ? (
-						<PauseIcon className="w-5 h-5" />
-					) : (
-						<PlayIcon className="w-5 h-5" />
-					)}
+				<button onClick={isPlaying ? pause : resume} className="btn btn-circle btn-sm btn-ghost">
+					{isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
 				</button>
 
 				{/* Seek bar */}

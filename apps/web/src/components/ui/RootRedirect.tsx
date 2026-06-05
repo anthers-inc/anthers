@@ -1,7 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
-import LoadingSpinner from "./LoadingSpinner";
 import HomePage from "../../pages/HomePage";
+import LoadingSpinner from "./LoadingSpinner";
 
 /**
  * Handles the / route:

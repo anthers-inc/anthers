@@ -122,10 +122,38 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		contentLibrary: [
 			// 22 videos total, ~1,112 min runtime, 953K monthly views
-			{ label: "Long essays (40-90 min)", mediaType: "video", count: 8, avgDurationMin: 65, monthlyPlays: 420_000, avgPlayMin: 38 },
-			{ label: "Mid-length essays (15-40 min)", mediaType: "video", count: 7, avgDurationMin: 25, monthlyPlays: 350_000, avgPlayMin: 18 },
-			{ label: "Short commentaries (<15 min)", mediaType: "video", count: 5, avgDurationMin: 10, monthlyPlays: 160_000, avgPlayMin: 8 },
-			{ label: "Livestream archives (2-4 hrs)", mediaType: "video", count: 2, avgDurationMin: 180, monthlyPlays: 23_000, avgPlayMin: 45 },
+			{
+				label: "Long essays (40-90 min)",
+				mediaType: "video",
+				count: 8,
+				avgDurationMin: 65,
+				monthlyPlays: 420_000,
+				avgPlayMin: 38,
+			},
+			{
+				label: "Mid-length essays (15-40 min)",
+				mediaType: "video",
+				count: 7,
+				avgDurationMin: 25,
+				monthlyPlays: 350_000,
+				avgPlayMin: 18,
+			},
+			{
+				label: "Short commentaries (<15 min)",
+				mediaType: "video",
+				count: 5,
+				avgDurationMin: 10,
+				monthlyPlays: 160_000,
+				avgPlayMin: 8,
+			},
+			{
+				label: "Livestream archives (2-4 hrs)",
+				mediaType: "video",
+				count: 2,
+				avgDurationMin: 180,
+				monthlyPlays: 23_000,
+				avgPlayMin: 45,
+			},
 		],
 		current: {
 			gross: 2859,
@@ -182,10 +210,38 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ label: "Avg. episode length", value: "~45 min" },
 		],
 		contentLibrary: [
-			{ label: "Full-length episodes (30-60 min)", mediaType: "audio", count: 68, avgDurationMin: 45, monthlyPlays: 72_000, avgPlayMin: 32 },
-			{ label: "Bonus/short episodes (10-20 min)", mediaType: "audio", count: 21, avgDurationMin: 15, monthlyPlays: 13_000, avgPlayMin: 12 },
-			{ label: "Long-form essays (2-5K words)", mediaType: "text", count: 140, avgDurationMin: null, monthlyPlays: 65_000, avgPlayMin: null },
-			{ label: "Short posts & updates", mediaType: "text", count: 60, avgDurationMin: null, monthlyPlays: 22_000, avgPlayMin: null },
+			{
+				label: "Full-length episodes (30-60 min)",
+				mediaType: "audio",
+				count: 68,
+				avgDurationMin: 45,
+				monthlyPlays: 72_000,
+				avgPlayMin: 32,
+			},
+			{
+				label: "Bonus/short episodes (10-20 min)",
+				mediaType: "audio",
+				count: 21,
+				avgDurationMin: 15,
+				monthlyPlays: 13_000,
+				avgPlayMin: 12,
+			},
+			{
+				label: "Long-form essays (2-5K words)",
+				mediaType: "text",
+				count: 140,
+				avgDurationMin: null,
+				monthlyPlays: 65_000,
+				avgPlayMin: null,
+			},
+			{
+				label: "Short posts & updates",
+				mediaType: "text",
+				count: 60,
+				avgDurationMin: null,
+				monthlyPlays: 22_000,
+				avgPlayMin: null,
+			},
 		],
 		current: {
 			gross: 9800,
@@ -209,8 +265,8 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ tier: "Root", price: 3, pool: 0.66, boost: 0.0, total: 0.66 },
 			{ tier: "Sprout", price: 7, pool: 0.62, boost: 0.52, total: 1.14 },
 			{ tier: "Sprout+", price: 10, pool: 0.62, boost: 0.89, total: 1.51 },
-			{ tier: "Petal", price: 15, pool: 0.62, boost: 1.30, total: 1.92 },
-			{ tier: "Bloom", price: 30, pool: 0.60, boost: 3.12, total: 3.72 },
+			{ tier: "Petal", price: 15, pool: 0.62, boost: 1.3, total: 1.92 },
+			{ tier: "Bloom", price: 30, pool: 0.6, boost: 3.12, total: 3.72 },
 		],
 		insight:
 			"Audio and text are incredibly cheap to serve. Sage's entire monthly infrastructure cost is under $50 — less than 0.5% of revenue. This means nearly every dollar from subscribers flows directly to income. Compared to Patreon's 8-12% fee + payment processing, Anthers saves over $1,200/mo at the same subscriber count.",
@@ -243,10 +299,38 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ label: "Avg. game price", value: "$8.50" },
 		],
 		contentLibrary: [
-			{ label: "Game builds (50-500 MB each)", mediaType: "game", count: 4, avgDurationMin: null, monthlyPlays: 420, avgPlayMin: null },
-			{ label: "Devlog videos (5-15 min)", mediaType: "video", count: 47, avgDurationMin: 10, monthlyPlays: 14_000, avgPlayMin: 7 },
-			{ label: "OST albums (audio)", mediaType: "audio", count: 72, avgDurationMin: 4, monthlyPlays: 8_500, avgPlayMin: 3.5 },
-			{ label: "Text devlogs & patch notes", mediaType: "text", count: 30, avgDurationMin: null, monthlyPlays: 4_200, avgPlayMin: null },
+			{
+				label: "Game builds (50-500 MB each)",
+				mediaType: "game",
+				count: 4,
+				avgDurationMin: null,
+				monthlyPlays: 420,
+				avgPlayMin: null,
+			},
+			{
+				label: "Devlog videos (5-15 min)",
+				mediaType: "video",
+				count: 47,
+				avgDurationMin: 10,
+				monthlyPlays: 14_000,
+				avgPlayMin: 7,
+			},
+			{
+				label: "OST albums (audio)",
+				mediaType: "audio",
+				count: 72,
+				avgDurationMin: 4,
+				monthlyPlays: 8_500,
+				avgPlayMin: 3.5,
+			},
+			{
+				label: "Text devlogs & patch notes",
+				mediaType: "text",
+				count: 30,
+				avgDurationMin: null,
+				monthlyPlays: 4_200,
+				avgPlayMin: null,
+			},
 		],
 		current: {
 			gross: 1420,
@@ -268,10 +352,10 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: [
 			{ tier: "Root", price: 3, pool: 0.51, boost: 0.0, total: 0.51 },
-			{ tier: "Sprout", price: 7, pool: 0.48, boost: 0.40, total: 0.88 },
+			{ tier: "Sprout", price: 7, pool: 0.48, boost: 0.4, total: 0.88 },
 			{ tier: "Sprout+", price: 10, pool: 0.48, boost: 0.69, total: 1.17 },
-			{ tier: "Petal", price: 15, pool: 0.48, boost: 1.00, total: 1.48 },
-			{ tier: "Bloom", price: 30, pool: 0.46, boost: 2.40, total: 2.86 },
+			{ tier: "Petal", price: 15, pool: 0.48, boost: 1.0, total: 1.48 },
+			{ tier: "Bloom", price: 30, pool: 0.46, boost: 2.4, total: 2.86 },
 		],
 		insight:
 			"Game developers benefit from both subscription income (devlog followers, OST listeners) and direct sales on the marketplace. Nova's infrastructure costs are minimal — downloads are one-time transfers, not continuous streaming. Combined with direct game sales, even a small subscriber base creates a sustainable income floor that smooths out the feast-or-famine cycle of launch-driven sales.",
@@ -308,9 +392,7 @@ function StatCard({
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body p-4">
-				<p className="text-xs text-base-content/50 uppercase tracking-wide">
-					{label}
-				</p>
+				<p className="text-xs text-base-content/50 uppercase tracking-wide">{label}</p>
 				<p className={`text-xl font-bold ${accent ?? ""}`}>{value}</p>
 				{sub && <p className="text-xs text-base-content/40">{sub}</p>}
 			</div>
@@ -445,9 +527,7 @@ function ContentLibraryTable({ creator }: { creator: DemoCreatorBreakdown }) {
 										<span>{item.label}</span>
 									</div>
 								</td>
-								<td className="text-sm text-right tabular-nums">
-									{item.count}
-								</td>
+								<td className="text-sm text-right tabular-nums">{item.count}</td>
 								<td className="text-sm text-right tabular-nums">
 									{item.monthlyPlays.toLocaleString()}
 								</td>
@@ -470,19 +550,11 @@ function ContentLibraryTable({ creator }: { creator: DemoCreatorBreakdown }) {
 								{creator.contentLibrary.reduce((s, i) => s + i.count, 0)}
 							</td>
 							<td className="text-sm text-right">
-								{creator.contentLibrary
-									.reduce((s, i) => s + i.monthlyPlays, 0)
-									.toLocaleString()}
+								{creator.contentLibrary.reduce((s, i) => s + i.monthlyPlays, 0).toLocaleString()}
 							</td>
-							<td className="text-sm text-right text-base-content/60">
-								{fmtSize(totalStorage)}
-							</td>
-							<td className="text-sm text-right text-base-content/60">
-								{fmtSize(totalDelivery)}
-							</td>
-							<td className="text-sm text-right">
-								{fmtCost(totalInfra)}
-							</td>
+							<td className="text-sm text-right text-base-content/60">{fmtSize(totalStorage)}</td>
+							<td className="text-sm text-right text-base-content/60">{fmtSize(totalDelivery)}</td>
+							<td className="text-sm text-right">{fmtCost(totalInfra)}</td>
 						</tr>
 					</tfoot>
 				</table>
@@ -509,12 +581,10 @@ function ContentLibraryTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			</div>
 
 			<p className="text-xs text-base-content/40">
-				Video assumes {INFRA.videoBitrateMbps} Mbps source bitrate with
-				adaptive multi-quality ladder ({INFRA.qualityLadderMultiplier}x
-				storage). Delivery uses blended average of{" "}
-				{INFRA.videoDeliveryMbPerMin} MB/min across viewer quality tiers.
-				Storage at ${INFRA.storageCostPerGb}/GB/mo, delivery at $
-				{INFRA.deliveryCostPerGb}/GB.
+				Video assumes {INFRA.videoBitrateMbps} Mbps source bitrate with adaptive multi-quality
+				ladder ({INFRA.qualityLadderMultiplier}x storage). Delivery uses blended average of{" "}
+				{INFRA.videoDeliveryMbPerMin} MB/min across viewer quality tiers. Storage at $
+				{INFRA.storageCostPerGb}/GB/mo, delivery at ${INFRA.deliveryCostPerGb}/GB.
 			</p>
 		</div>
 	);
@@ -584,12 +654,8 @@ function ComparisonTable({ creator }: { creator: DemoCreatorBreakdown }) {
 					{rows.map((row) => (
 						<tr key={row.label}>
 							<td className="text-sm text-base-content/70">{row.label}</td>
-							<td className={`text-sm text-right ${row.currentClass ?? ""}`}>
-								{row.currentVal}
-							</td>
-							<td className={`text-sm text-right ${row.anthersClass ?? ""}`}>
-								{row.anthersVal}
-							</td>
+							<td className={`text-sm text-right ${row.currentClass ?? ""}`}>{row.currentVal}</td>
+							<td className={`text-sm text-right ${row.anthersClass ?? ""}`}>{row.anthersVal}</td>
 						</tr>
 					))}
 				</tbody>
@@ -611,9 +677,7 @@ function MilestoneBar({ creator }: { creator: DemoCreatorBreakdown }) {
 							<span className="text-base-content/70">{m.label}</span>
 							<span className="font-medium tabular-nums">
 								{m.subscribers.toLocaleString()} subs
-								<span className="text-base-content/40 ml-1">
-									({m.pctOfAudience}%)
-								</span>
+								<span className="text-base-content/40 ml-1">({m.pctOfAudience}%)</span>
 							</span>
 						</div>
 						<div className="w-full h-2.5 bg-base-300 rounded-full overflow-hidden">
@@ -649,36 +713,38 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 					{creator.revenueByTier.map((row) => {
 						const isExample = row.tier.includes("+");
 						return (
-						<tr key={row.tier} className={isExample ? "text-base-content/50 border-dashed border-t border-base-300/50" : ""}>
-							<td className={`text-sm ${isExample ? "italic" : "font-medium"}`}>{isExample ? `e.g. ${row.tier}` : row.tier}</td>
-							<td className={`text-sm text-right ${isExample ? "italic" : "text-base-content/60"}`}>
-								${row.price}/mo
-							</td>
-							<td className="text-sm text-right text-success">
-								${row.pool.toFixed(2)}
-							</td>
-							<td className="text-sm text-right text-primary">
-								{row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
-							</td>
-							<td className={`text-sm text-right ${isExample ? "" : "font-semibold"}`}>
-								${row.total.toFixed(2)}
-							</td>
-						</tr>
+							<tr
+								key={row.tier}
+								className={
+									isExample ? "text-base-content/50 border-dashed border-t border-base-300/50" : ""
+								}
+							>
+								<td className={`text-sm ${isExample ? "italic" : "font-medium"}`}>
+									{isExample ? `e.g. ${row.tier}` : row.tier}
+								</td>
+								<td
+									className={`text-sm text-right ${isExample ? "italic" : "text-base-content/60"}`}
+								>
+									${row.price}/mo
+								</td>
+								<td className="text-sm text-right text-success">${row.pool.toFixed(2)}</td>
+								<td className="text-sm text-right text-primary">
+									{row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
+								</td>
+								<td className={`text-sm text-right ${isExample ? "" : "font-semibold"}`}>
+									${row.total.toFixed(2)}
+								</td>
+							</tr>
 						);
 					})}
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Named tiers show revenue at the threshold price; "Sprout+" shows $10/mo
-				as an example of continuous $1-increment funding between tiers. Boost
-				scales continuously — actual funding levels vary. Per-subscriber revenue
-				assumes this creator receives{" "}
-				{creator.id === "video"
-					? "~8.6%"
-					: creator.id === "podcast"
-						? "~6.8%"
-						: "~5.2%"}{" "}
-				of a typical subscriber's engagement time.
+				Named tiers show revenue at the threshold price; "Sprout+" shows $10/mo as an example of
+				continuous $1-increment funding between tiers. Boost scales continuously — actual funding
+				levels vary. Per-subscriber revenue assumes this creator receives{" "}
+				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
+				typical subscriber's engagement time.
 			</p>
 		</div>
 	);
@@ -713,11 +779,7 @@ function InfraBreakdown({ creator }: { creator: DemoCreatorBreakdown }) {
 // Creator breakdown panel
 // ---------------------------------------------------------------------------
 
-function CreatorBreakdownPanel({
-	creator,
-}: {
-	creator: DemoCreatorBreakdown;
-}) {
+function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 	return (
 		<div className="space-y-8">
 			{/* Creator header */}
@@ -813,10 +875,7 @@ function CreatorBreakdownPanel({
 					<div className="card bg-base-200/60 shadow-sm">
 						<div className="card-body p-4 space-y-2">
 							{creator.contentStats.map((stat) => (
-								<div
-									key={stat.label}
-									className="flex justify-between text-sm"
-								>
+								<div key={stat.label} className="flex justify-between text-sm">
 									<span className="text-base-content/70">{stat.label}</span>
 									<span className="font-medium">{stat.value}</span>
 								</div>
@@ -829,12 +888,8 @@ function CreatorBreakdownPanel({
 			{/* Insight callout */}
 			<div className="card bg-primary/5 border border-primary/20">
 				<div className="card-body p-4">
-					<h4 className="text-sm font-semibold text-primary mb-1">
-						Key Takeaway
-					</h4>
-					<p className="text-sm text-base-content/70 leading-relaxed">
-						{creator.insight}
-					</p>
+					<h4 className="text-sm font-semibold text-primary mb-1">Key Takeaway</h4>
+					<p className="text-sm text-base-content/70 leading-relaxed">{creator.insight}</p>
 				</div>
 			</div>
 		</div>
@@ -860,10 +915,10 @@ export default function CreatorBreakdownDemoPage() {
 					How your audience translates to income.
 				</h1>
 				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Anthers takes zero percentage cut. Infrastructure is passed through at
-					cost. Below are three real-world creator profiles showing exactly how
-					audience size, content type, and subscriber tiers determine income on
-					Anthers — and how it compares to the platforms you're on today.
+					Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
+					three real-world creator profiles showing exactly how audience size, content type, and
+					subscriber tiers determine income on Anthers — and how it compares to the platforms you're
+					on today.
 				</p>
 			</section>
 
@@ -884,9 +939,7 @@ export default function CreatorBreakdownDemoPage() {
 								}
 							`}
 						>
-							<p
-								className={`text-sm font-semibold ${activeId === c.id ? "text-primary" : ""}`}
-							>
+							<p className={`text-sm font-semibold ${activeId === c.id ? "text-primary" : ""}`}>
 								{c.displayName}
 							</p>
 							<p className="text-xs text-base-content/50">
@@ -902,8 +955,7 @@ export default function CreatorBreakdownDemoPage() {
 				{/* CTA */}
 				<div className="mt-12 text-center">
 					<p className="text-base-content/50 text-sm mb-4">
-						No hidden fees. No percentage cut. Real infrastructure costs,
-						transparently deducted.
+						No hidden fees. No percentage cut. Real infrastructure costs, transparently deducted.
 					</p>
 					<div className="flex flex-wrap justify-center gap-3">
 						<Link to="/for-creators" className="btn btn-primary">

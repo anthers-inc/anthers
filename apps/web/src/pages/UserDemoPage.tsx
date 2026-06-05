@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 const DEMO_PLAN = {
 	tier: "Sprout",
 	price: 10,
-	foundation: 0.80,
+	foundation: 0.8,
 	timePool: 2.44,
 	boostPool: 6.44,
 	month: "February 2026",
@@ -209,7 +209,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 	},
 	{
 		creator: "MAPHRA",
-		item: "\"Cascade\" Stems + Session Files",
+		item: '"Cascade" Stems + Session Files',
 		type: "download",
 		price: 15.0,
 		fee: 1.5,
@@ -244,13 +244,7 @@ const PURCHASE_TYPE_LABELS: Record<DemoPurchase["type"], string> = {
 // AccessBar—segmented bar with uniform gate hash lines and hover tooltips
 // ---------------------------------------------------------------------------
 
-function AccessBar({
-					   total,
-					   gates,
-				   }: {
-	total: number;
-	gates: CreatorGate[];
-}) {
+function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
 	const [tooltip, setTooltip] = useState<{
 		gate: CreatorGate;
 		x: number;
@@ -322,17 +316,13 @@ function AccessBar({
 					const segStart = (seg.start / BAR_MAX) * 100;
 					const segEnd = (seg.end / BAR_MAX) * 100;
 					const isFinalSeg = i === segments.length - 1;
-					const unlocked = isFinalSeg
-						? total >= seg.gate.threshold
-						: total >= seg.gate.threshold;
+					const unlocked = isFinalSeg ? total >= seg.gate.threshold : total >= seg.gate.threshold;
 
 					return (
 						<div
 							key={`seg-${i}`}
 							className={`absolute inset-y-0 transition-all cursor-pointer ${
-								unlocked
-									? "bg-primary/50 hover:bg-primary/70"
-									: "hover:bg-base-content/10"
+								unlocked ? "bg-primary/50 hover:bg-primary/70" : "hover:bg-base-content/10"
 							}`}
 							style={{
 								left: `${segStart}%`,
@@ -376,8 +366,8 @@ function AccessBar({
 							}`}
 							style={{ left: `${pos}%` }}
 						>
-              ${gate.threshold}
-            </span>
+							${gate.threshold}
+						</span>
 					);
 				})}
 			</div>
@@ -398,12 +388,10 @@ function AccessBar({
 						<p className="font-semibold mb-0.5">
 							{tooltip.gate.label}
 							<span className="font-normal text-base-content/40 ml-1">
-                ${tooltip.gate.threshold}/mo
-              </span>
+								${tooltip.gate.threshold}/mo
+							</span>
 						</p>
-						<p className="text-base-content/60">
-							{tooltip.gate.description}
-						</p>
+						<p className="text-base-content/60">{tooltip.gate.description}</p>
 						{total >= tooltip.gate.threshold ? (
 							<p className="text-primary font-medium mt-1">Unlocked</p>
 						) : (
@@ -423,14 +411,9 @@ function AccessBar({
 // ---------------------------------------------------------------------------
 
 function SubscriptionDashboardDemo() {
-	const [boosts, setBoosts] = useState<number[]>(
-		DEMO_ALLOCATIONS.map((a) => a.boostAmount),
-	);
+	const [boosts, setBoosts] = useState<number[]>(DEMO_ALLOCATIONS.map((a) => a.boostAmount));
 
-	const totalWatchHours = DEMO_ALLOCATIONS.reduce(
-		(s, a) => s + a.watchHours,
-		0,
-	);
+	const totalWatchHours = DEMO_ALLOCATIONS.reduce((s, a) => s + a.watchHours, 0);
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalBoost = boosts.reduce((s, b) => s + b, 0);
 
@@ -440,17 +423,11 @@ function SubscriptionDashboardDemo() {
 		newBoosts[idx] = value;
 
 		// Redistribute the difference proportionally among other sliders
-		const othersTotal = newBoosts.reduce(
-			(s, b, i) => (i !== idx ? s + b : s),
-			0,
-		);
+		const othersTotal = newBoosts.reduce((s, b, i) => (i !== idx ? s + b : s), 0);
 		if (othersTotal > 0) {
 			for (let i = 0; i < newBoosts.length; i++) {
 				if (i !== idx) {
-					newBoosts[i] = Math.max(
-						0,
-						newBoosts[i] - diff * (newBoosts[i] / othersTotal),
-					);
+					newBoosts[i] = Math.max(0, newBoosts[i] - diff * (newBoosts[i] / othersTotal));
 				}
 			}
 		}
@@ -471,9 +448,7 @@ function SubscriptionDashboardDemo() {
 		<div className="space-y-6">
 			{/* Header */}
 			<div>
-				<h3 className="text-lg font-bold">
-					Your Anther—{DEMO_PLAN.month}
-				</h3>
+				<h3 className="text-lg font-bold">Your Anther—{DEMO_PLAN.month}</h3>
 				<p className="text-sm text-base-content/60">
 					{DEMO_PLAN.tier} tier — ${DEMO_PLAN.price}/mo
 				</p>
@@ -492,28 +467,16 @@ function SubscriptionDashboardDemo() {
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Time Pool
-						</p>
-						<p className="text-xl font-bold text-success">
-							${totalPool.toFixed(2)}
-						</p>
-						<p className="text-xs text-base-content/40">
-							Auto &middot; watch-time proportional
-						</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Time Pool</p>
+						<p className="text-xl font-bold text-success">${totalPool.toFixed(2)}</p>
+						<p className="text-xs text-base-content/40">Auto &middot; watch-time proportional</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Boost Pool
-						</p>
-						<p className="text-xl font-bold text-primary">
-							${totalBoost.toFixed(2)}
-						</p>
-						<p className="text-xs text-base-content/40">
-							Drag sliders to adjust
-						</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Boost Pool</p>
+						<p className="text-xl font-bold text-primary">${totalBoost.toFixed(2)}</p>
+						<p className="text-xs text-base-content/40">Drag sliders to adjust</p>
 					</div>
 				</div>
 			</div>
@@ -526,71 +489,60 @@ function SubscriptionDashboardDemo() {
 				<div className="overflow-x-auto">
 					<table className="table table-sm w-full">
 						<thead>
-						<tr>
-							{/* Table column widths*/}
-							<th className="w-45">Creator</th>
-							<th className="w-25">Time</th>
-							<th className="w-25">Pool</th>
-							<th className="w-60">Boost</th>
-							<th>Total</th>
-						</tr>
+							<tr>
+								{/* Table column widths*/}
+								<th className="w-45">Creator</th>
+								<th className="w-25">Time</th>
+								<th className="w-25">Pool</th>
+								<th className="w-60">Boost</th>
+								<th>Total</th>
+							</tr>
 						</thead>
 						<tbody>
-						{DEMO_ALLOCATIONS.map((alloc, idx) => {
-							const rowTotal = alloc.poolAmount + boosts[idx];
-							return (
-								<tr key={alloc.username} className="hover">
-									<td className="w-36">
-										<div className="flex items-center gap-1.5">
-											<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">
-												{alloc.avatar}
+							{DEMO_ALLOCATIONS.map((alloc, idx) => {
+								const rowTotal = alloc.poolAmount + boosts[idx];
+								return (
+									<tr key={alloc.username} className="hover">
+										<td className="w-36">
+											<div className="flex items-center gap-1.5">
+												<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold text-base-content/60 flex-shrink-0">
+													{alloc.avatar}
+												</div>
+												<span className="font-medium text-sm truncate">@{alloc.displayName}</span>
 											</div>
-											<span className="font-medium text-sm truncate">
-                          @{alloc.displayName}
-                        </span>
-										</div>
-									</td>
-									<td className="text-sm">
-										{alloc.watchHours.toFixed(1)} hrs
-									</td>
-									<td className="text-sm text-success">
-										${alloc.poolAmount.toFixed(2)}
-									</td>
-									<td>
-										<div className="flex items-center gap-2">
-											<input
-												type="range"
-												min={0}
-												max={DEMO_PLAN.boostPool * 100}
-												value={Math.round(boosts[idx] * 100)}
-												onChange={(e) =>
-													handleSlider(
-														idx,
-														parseInt(e.target.value, 10) / 100,
-													)
-												}
-												className="range range-xs range-primary flex-1"
-											/>
-											<span className="text-sm text-primary font-medium w-12 flex-shrink-0">
-                          ${boosts[idx].toFixed(2)}
-                        </span>
-										</div>
-									</td>
-									<td>
-										<div className="flex items-start gap-2">
-											<div className="flex-1 pt-0.5">
-												{alloc.gates.length > 0 && (
-													<AccessBar total={rowTotal} gates={alloc.gates} />
-												)}
+										</td>
+										<td className="text-sm">{alloc.watchHours.toFixed(1)} hrs</td>
+										<td className="text-sm text-success">${alloc.poolAmount.toFixed(2)}</td>
+										<td>
+											<div className="flex items-center gap-2">
+												<input
+													type="range"
+													min={0}
+													max={DEMO_PLAN.boostPool * 100}
+													value={Math.round(boosts[idx] * 100)}
+													onChange={(e) => handleSlider(idx, parseInt(e.target.value, 10) / 100)}
+													className="range range-xs range-primary flex-1"
+												/>
+												<span className="text-sm text-primary font-medium w-12 flex-shrink-0">
+													${boosts[idx].toFixed(2)}
+												</span>
 											</div>
-											<span className="text-sm font-medium w-12 flex-shrink-0">
-                          ${rowTotal.toFixed(2)}
-                        </span>
-										</div>
-									</td>
-								</tr>
-							);
-						})}
+										</td>
+										<td>
+											<div className="flex items-start gap-2">
+												<div className="flex-1 pt-0.5">
+													{alloc.gates.length > 0 && (
+														<AccessBar total={rowTotal} gates={alloc.gates} />
+													)}
+												</div>
+												<span className="text-sm font-medium w-12 flex-shrink-0">
+													${rowTotal.toFixed(2)}
+												</span>
+											</div>
+										</td>
+									</tr>
+								);
+							})}
 						</tbody>
 					</table>
 				</div>
@@ -600,9 +552,7 @@ function SubscriptionDashboardDemo() {
 			<div className="card bg-base-200">
 				<div className="card-body p-4 space-y-1">
 					<div className="flex justify-between text-sm">
-            <span className="text-base-content/70">
-              Anthers Foundation Fee
-            </span>
+						<span className="text-base-content/70">Anthers Foundation Fee</span>
 						<span>${DEMO_PLAN.foundation.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
@@ -618,9 +568,7 @@ function SubscriptionDashboardDemo() {
 						<span>Monthly total</span>
 						<span>${DEMO_PLAN.price.toFixed(2)}</span>
 					</div>
-					<p className="text-xs text-base-content/40 mt-1">
-						Next charge: March 1, 2026
-					</p>
+					<p className="text-xs text-base-content/40 mt-1">Next charge: March 1, 2026</p>
 				</div>
 			</div>
 		</div>
@@ -638,12 +586,9 @@ function PurchasesDashboardDemo() {
 		<div className="space-y-6">
 			{/* Header */}
 			<div>
-				<h3 className="text-lg font-bold">
-					Purchases—{DEMO_PLAN.month}
-				</h3>
+				<h3 className="text-lg font-bold">Purchases—{DEMO_PLAN.month}</h3>
 				<p className="text-sm text-base-content/60">
-					Direct purchases are charged at time of sale, separate from your
-					subscription.
+					Direct purchases are charged at time of sale, separate from your subscription.
 				</p>
 			</div>
 
@@ -651,32 +596,28 @@ function PurchasesDashboardDemo() {
 			<div className="overflow-x-auto">
 				<table className="table table-sm w-full">
 					<thead>
-					<tr>
-						<th>Item</th>
-						<th className="w-28">Creator</th>
-						<th className="w-24">Type</th>
-						<th className="w-20">Date</th>
-						<th className="w-20">Amount</th>
-					</tr>
+						<tr>
+							<th>Item</th>
+							<th className="w-28">Creator</th>
+							<th className="w-24">Type</th>
+							<th className="w-20">Date</th>
+							<th className="w-20">Amount</th>
+						</tr>
 					</thead>
 					<tbody>
-					{DEMO_PURCHASES.map((purchase, idx) => (
-						<tr key={idx} className="hover">
-							<td className="text-sm">{purchase.item}</td>
-							<td className="text-sm">@{purchase.creator}</td>
-							<td>
-                  <span className="badge badge-sm badge-ghost">
-                    {PURCHASE_TYPE_LABELS[purchase.type]}
-                  </span>
-							</td>
-							<td className="text-sm text-base-content/50">
-								{purchase.date}
-							</td>
-							<td className="text-sm font-medium">
-								${purchase.price.toFixed(2)}
-							</td>
-						</tr>
-					))}
+						{DEMO_PURCHASES.map((purchase, idx) => (
+							<tr key={idx} className="hover">
+								<td className="text-sm">{purchase.item}</td>
+								<td className="text-sm">@{purchase.creator}</td>
+								<td>
+									<span className="badge badge-sm badge-ghost">
+										{PURCHASE_TYPE_LABELS[purchase.type]}
+									</span>
+								</td>
+								<td className="text-sm text-base-content/50">{purchase.date}</td>
+								<td className="text-sm font-medium">${purchase.price.toFixed(2)}</td>
+							</tr>
+						))}
 					</tbody>
 				</table>
 			</div>
@@ -686,20 +627,14 @@ function PurchasesDashboardDemo() {
 				<div className="card-body p-4 space-y-1">
 					{DEMO_PURCHASES.map((p, i) => (
 						<div key={i} className="flex justify-between text-sm">
-              <span className="text-base-content/70 truncate mr-4">
-                {p.item}
-              </span>
+							<span className="text-base-content/70 truncate mr-4">{p.item}</span>
 							<span className="flex-shrink-0 tabular-nums inline-grid grid-cols-[3.25rem_2.0rem_2.5rem_2.0rem_3.25rem] items-center text-right">
-                <span className="text-base-content/50">
-                  ${(p.price - p.fee).toFixed(2)}
-                </span>
-                <span className="text-base-content/30 text-center">+</span>
-                <span className="text-base-content/50">
-                  ${p.fee.toFixed(2)}
-                </span>
-                <span className="text-base-content/30 text-center">=</span>
-                <span>${p.price.toFixed(2)}</span>
-              </span>
+								<span className="text-base-content/50">${(p.price - p.fee).toFixed(2)}</span>
+								<span className="text-base-content/30 text-center">+</span>
+								<span className="text-base-content/50">${p.fee.toFixed(2)}</span>
+								<span className="text-base-content/30 text-center">=</span>
+								<span>${p.price.toFixed(2)}</span>
+							</span>
 						</div>
 					))}
 					<div className="divider my-1" />
@@ -721,9 +656,7 @@ function PurchasesDashboardDemo() {
 // ---------------------------------------------------------------------------
 
 export default function UserDemoPage() {
-	const [activeTab, setActiveTab] = useState<
-		"feed" | "dashboard" | "purchases"
-	>("dashboard");
+	const [activeTab, setActiveTab] = useState<"feed" | "dashboard" | "purchases">("dashboard");
 
 	return (
 		<div className="pb-16">
@@ -732,13 +665,10 @@ export default function UserDemoPage() {
 				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">
 					User Experience
 				</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">
-					See where your money goes.
-				</h1>
+				<h1 className="text-4xl font-bold tracking-tight mb-3">See where your money goes.</h1>
 				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Anthers gives you full transparency over your subscription. Browse
-					your feed, then check your dashboard to see exactly how your money is
-					split across the creators you engage with.
+					Anthers gives you full transparency over your subscription. Browse your feed, then check
+					your dashboard to see exactly how your money is split across the creators you engage with.
 				</p>
 			</section>
 
@@ -748,25 +678,19 @@ export default function UserDemoPage() {
 				<div className="flex gap-2 mb-6">
 					<button
 						onClick={() => setActiveTab("feed")}
-						className={`btn btn-sm ${
-							activeTab === "feed" ? "btn-primary" : "btn-ghost"
-						}`}
+						className={`btn btn-sm ${activeTab === "feed" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Feed
 					</button>
 					<button
 						onClick={() => setActiveTab("dashboard")}
-						className={`btn btn-sm ${
-							activeTab === "dashboard" ? "btn-primary" : "btn-ghost"
-						}`}
+						className={`btn btn-sm ${activeTab === "dashboard" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Subscription Dashboard
 					</button>
 					<button
 						onClick={() => setActiveTab("purchases")}
-						className={`btn btn-sm ${
-							activeTab === "purchases" ? "btn-primary" : "btn-ghost"
-						}`}
+						className={`btn btn-sm ${activeTab === "purchases" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Purchases Dashboard
 					</button>
@@ -812,12 +736,10 @@ export default function UserDemoPage() {
 										/>
 									</svg>
 								</div>
-								<h3 className="text-lg font-bold text-base-content/40 mb-2">
-									Feed Demo
-								</h3>
+								<h3 className="text-lg font-bold text-base-content/40 mb-2">Feed Demo</h3>
 								<p className="text-sm text-base-content/30 max-w-md">
-									A personalized feed of posts, videos, audio, and games from
-									the creators you follow. Coming soon to this demo.
+									A personalized feed of posts, videos, audio, and games from the creators you
+									follow. Coming soon to this demo.
 								</p>
 							</div>
 						)}

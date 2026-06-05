@@ -1,18 +1,17 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
 import {
 	ArrowDownTrayIcon,
 	CheckCircleIcon,
 	ExclamationCircleIcon,
 	MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { client } from "../lib/rpc";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -97,9 +96,7 @@ export default function ImportPage() {
 		setImporting(true);
 		setError(null);
 
-		const gamesToImport = games
-			.filter((g) => selected.has(g.url))
-			.map((g) => ({ url: g.url }));
+		const gamesToImport = games.filter((g) => selected.has(g.url)).map((g) => ({ url: g.url }));
 
 		try {
 			const res = await client.api.integrations.import.itchio.$post({
@@ -133,8 +130,8 @@ export default function ImportPage() {
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
 			<h1 className="text-3xl font-bold mb-2">Import from itch.io</h1>
 			<p className="text-base-content/60 mb-6">
-				Enter your itch.io username to find your public games and import them as
-				draft projects on Anthers.
+				Enter your itch.io username to find your public games and import them as draft projects on
+				Anthers.
 			</p>
 
 			{/* Search form */}
@@ -152,11 +149,7 @@ export default function ImportPage() {
 					className="btn btn-primary"
 					disabled={loading || importing || !username.trim()}
 				>
-					{loading ? (
-						<LoadingSpinner size="sm" />
-					) : (
-						<MagnifyingGlassIcon className="w-5 h-5" />
-					)}
+					{loading ? <LoadingSpinner size="sm" /> : <MagnifyingGlassIcon className="w-5 h-5" />}
 					Search
 				</button>
 			</form>
@@ -174,8 +167,7 @@ export default function ImportPage() {
 					<div className="alert alert-success mb-4">
 						<CheckCircleIcon className="w-5 h-5" />
 						<span>
-							Imported {importedCount} of {results.length} games as draft
-							projects.
+							Imported {importedCount} of {results.length} games as draft projects.
 						</span>
 					</div>
 					<div className="space-y-2">
@@ -187,12 +179,8 @@ export default function ImportPage() {
 								}`}
 							>
 								<div>
-									<span className="font-medium text-sm">
-										{r.title || r.url}
-									</span>
-									{r.error && (
-										<p className="text-xs text-error">{r.error}</p>
-									)}
+									<span className="font-medium text-sm">{r.title || r.url}</span>
+									{r.error && <p className="text-xs text-error">{r.error}</p>}
 								</div>
 								{r.status === "imported" && r.projectSlug && (
 									<Link
@@ -274,9 +262,7 @@ export default function ImportPage() {
 									/>
 								)}
 								<div className="flex-1 min-w-0">
-									<div className="font-medium text-sm truncate">
-										{game.title}
-									</div>
+									<div className="font-medium text-sm truncate">{game.title}</div>
 									{game.shortDescription && (
 										<p className="text-xs text-base-content/50 line-clamp-1">
 											{game.shortDescription}

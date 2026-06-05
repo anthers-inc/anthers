@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Navigate } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { client } from "../../lib/rpc";
 import type { Project } from "../../lib/types";
 import LoadingSpinner from "./LoadingSpinner";

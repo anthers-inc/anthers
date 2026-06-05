@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll } from "bun:test";
-import { sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { sql } from "drizzle-orm";
 import app from "../index";
 
 // Use the app directly via .fetch() for testing (no network needed)

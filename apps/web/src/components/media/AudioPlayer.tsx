@@ -1,5 +1,5 @@
+import { PauseIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
-import { PlayIcon, PauseIcon } from "@heroicons/react/24/solid";
 import WaveformDisplay from "./WaveformDisplay";
 
 interface AudioPlayerProps {
@@ -14,11 +14,7 @@ function formatTime(seconds: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function AudioPlayer({
-	src,
-	waveform,
-	onPlayInMiniPlayer,
-}: AudioPlayerProps) {
+export default function AudioPlayer({ src, waveform, onPlayInMiniPlayer }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
@@ -70,15 +66,8 @@ export default function AudioPlayer({
 			<audio ref={audioRef} src={src} preload="metadata" />
 
 			<div className="flex items-center gap-3">
-				<button
-					onClick={togglePlay}
-					className="btn btn-circle btn-primary btn-sm"
-				>
-					{isPlaying ? (
-						<PauseIcon className="w-4 h-4" />
-					) : (
-						<PlayIcon className="w-4 h-4 ml-0.5" />
-					)}
+				<button onClick={togglePlay} className="btn btn-circle btn-primary btn-sm">
+					{isPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4 ml-0.5" />}
 				</button>
 
 				<div className="flex-1">
@@ -96,10 +85,7 @@ export default function AudioPlayer({
 			</div>
 
 			{onPlayInMiniPlayer && (
-				<button
-					onClick={onPlayInMiniPlayer}
-					className="btn btn-ghost btn-xs mt-2"
-				>
+				<button onClick={onPlayInMiniPlayer} className="btn btn-ghost btn-xs mt-2">
 					Play in mini-player
 				</button>
 			)}

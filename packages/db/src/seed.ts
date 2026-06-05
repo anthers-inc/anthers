@@ -9,23 +9,23 @@
  * and removed without affecting real data.
  */
 
-import {
-	db,
-	users,
-	projects,
-	posts,
-	ratings,
-	comments,
-	follows,
-	purchases,
-	subscriptions,
-	attentionEvents,
-	poolDistributions,
-	boostAllocations,
-	creatorGates,
-	bookmarks,
-} from "./index.js";
 import { and, eq, like } from "drizzle-orm";
+import {
+	attentionEvents,
+	bookmarks,
+	boostAllocations,
+	comments,
+	creatorGates,
+	db,
+	follows,
+	poolDistributions,
+	posts,
+	projects,
+	purchases,
+	ratings,
+	subscriptions,
+	users,
+} from "./index.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -105,7 +105,7 @@ const CREATORS: SeedCreator[] = [
 		username: `${SEED_PREFIX}sagemoreno`,
 		email: "sagemoreno@seed.anthers.dev",
 		displayName: "Sage Moreno",
-		bio: "Writer, podcaster, occasional troublemaker. I write long-form essays on technology, culture, and the spaces between. My podcast \"Undercurrents\" explores stories that don't fit neatly into headlines.",
+		bio: 'Writer, podcaster, occasional troublemaker. I write long-form essays on technology, culture, and the spaces between. My podcast "Undercurrents" explores stories that don\'t fit neatly into headlines.',
 		location: "Brooklyn, NY",
 		websiteUrl: "https://sage.ink",
 	},
@@ -121,7 +121,7 @@ const CREATORS: SeedCreator[] = [
 		username: `${SEED_PREFIX}marisol`,
 		email: "marisol@seed.anthers.dev",
 		displayName: "Marisol Torres",
-		bio: "Illustrator and comic artist. I draw weird things and sometimes they turn into games. Currently serializing \"Antumbra\" — a sci-fi webcomic about light pollution and memory.",
+		bio: 'Illustrator and comic artist. I draw weird things and sometimes they turn into games. Currently serializing "Antumbra" — a sci-fi webcomic about light pollution and memory.',
 		location: "Mexico City, MX",
 		websiteUrl: "https://marisoltorres.art",
 	},
@@ -307,7 +307,7 @@ const POSTS_BY_CREATOR: Record<string, SeedPost[]> = {
 		},
 		{
 			title: "Five Books That Changed How I Think About the Internet",
-			body: "These aren't the usual recommendations. No Zuboff, no Lanier (though both are worth reading). These are the books that changed how I *feel* about the internet, not just how I analyze it.\n\n1. **\"A Pattern Language\" by Christopher Alexander** — Not about the internet at all, but about how physical spaces shape behavior. Every platform designer should read it.\n\n2. **\"The Mushroom at the End of the World\" by Anna Tsing** — About supply chains, precarity, and how value gets created in the gaps between systems. The best metaphor for creator economies I've found.\n\n3. **\"Seeing Like a State\" by James C. Scott** — About how institutions simplify the world to govern it, and what gets lost in the simplification. Essential reading for anyone thinking about content moderation.\n\n4. **\"The Carrier Bag Theory of Fiction\" by Ursula K. Le Guin** — A 5-page essay that reframes narrative from conquest to gathering. Changed how I think about feeds and timelines.\n\n5. **\"Shop Class as Soulcraft\" by Matthew B. Crawford** — About the dignity of manual work and the fraud of \"knowledge work.\" Made me rethink what we mean by \"content creation.\"",
+			body: 'These aren\'t the usual recommendations. No Zuboff, no Lanier (though both are worth reading). These are the books that changed how I *feel* about the internet, not just how I analyze it.\n\n1. **"A Pattern Language" by Christopher Alexander** — Not about the internet at all, but about how physical spaces shape behavior. Every platform designer should read it.\n\n2. **"The Mushroom at the End of the World" by Anna Tsing** — About supply chains, precarity, and how value gets created in the gaps between systems. The best metaphor for creator economies I\'ve found.\n\n3. **"Seeing Like a State" by James C. Scott** — About how institutions simplify the world to govern it, and what gets lost in the simplification. Essential reading for anyone thinking about content moderation.\n\n4. **"The Carrier Bag Theory of Fiction" by Ursula K. Le Guin** — A 5-page essay that reframes narrative from conquest to gathering. Changed how I think about feeds and timelines.\n\n5. **"Shop Class as Soulcraft" by Matthew B. Crawford** — About the dignity of manual work and the fraud of "knowledge work." Made me rethink what we mean by "content creation."',
 			contentType: "text",
 			visibility: "public",
 			estimatedReadMinutes: 9,
@@ -322,8 +322,8 @@ const POSTS_BY_CREATOR: Record<string, SeedPost[]> = {
 			estimatedReadMinutes: 12,
 		},
 		{
-			title: "Remix Contest: Submit Your Take on \"Neon Rain\"",
-			body: "Taking the stems from my latest track \"Neon Rain\" and opening them up for remixes.\n\n**Rules:**\n- Download the stems from the Synthwave Toolkit project page\n- Use at least 2 of the original stems\n- Any genre welcome\n- Submit by March 31, 2026\n- Winners get featured on my page and a free copy of Visualizer Pack Vol. 4 (when it drops)\n\nPost your remix as a project on Anthers and tag it `neon-rain-remix`. I'll listen to every submission.\n\nNo rights transfer — you keep full ownership of your remix.",
+			title: 'Remix Contest: Submit Your Take on "Neon Rain"',
+			body: 'Taking the stems from my latest track "Neon Rain" and opening them up for remixes.\n\n**Rules:**\n- Download the stems from the Synthwave Toolkit project page\n- Use at least 2 of the original stems\n- Any genre welcome\n- Submit by March 31, 2026\n- Winners get featured on my page and a free copy of Visualizer Pack Vol. 4 (when it drops)\n\nPost your remix as a project on Anthers and tag it `neon-rain-remix`. I\'ll listen to every submission.\n\nNo rights transfer — you keep full ownership of your remix.',
 			contentType: "text",
 			visibility: "public",
 			estimatedReadMinutes: 3,
@@ -355,7 +355,7 @@ const POSTS_BY_CREATOR: Record<string, SeedPost[]> = {
 		},
 		{
 			title: "Signal Return Postmortem — 72 Hours of Panic",
-			body: "Signal Return was our Ludum Dare 57 entry. The theme was \"Echoes.\" We finished with 4 hours to spare, which for us is practically luxurious.\n\n## What Went Right\n\n- **Scoping.** We committed to a single mechanic (radio tuning) and one environment (the radio station). No feature creep.\n- **Audio-first design.** We recorded all the radio transmissions on day 1 and built the game around them. This meant the narrative was locked before we wrote a line of code.\n- **The frequency mechanic.** Using a continuous dial instead of discrete channels made the experience feel analog and tactile.\n\n## What Went Wrong\n\n- **The UI.** We ran out of time to make the frequency display readable. Players had trouble distinguishing between frequencies that were 0.1 apart.\n- **No save system.** For a 20-minute game this is fine, but several players reported wanting to replay specific sequences.\n- **Web build issues.** The WebAudio API behaves differently across browsers. We spent 6 hours debugging Firefox-specific timing issues.\n\n## Numbers\n\n- 2,400 plays in the first week\n- 4.1/5 average rating (jam category)\n- 89 comments\n\nWe're expanding Signal Return into a full release. Expect a longer campaign, better UI, and new transmission sources.",
+			body: 'Signal Return was our Ludum Dare 57 entry. The theme was "Echoes." We finished with 4 hours to spare, which for us is practically luxurious.\n\n## What Went Right\n\n- **Scoping.** We committed to a single mechanic (radio tuning) and one environment (the radio station). No feature creep.\n- **Audio-first design.** We recorded all the radio transmissions on day 1 and built the game around them. This meant the narrative was locked before we wrote a line of code.\n- **The frequency mechanic.** Using a continuous dial instead of discrete channels made the experience feel analog and tactile.\n\n## What Went Wrong\n\n- **The UI.** We ran out of time to make the frequency display readable. Players had trouble distinguishing between frequencies that were 0.1 apart.\n- **No save system.** For a 20-minute game this is fine, but several players reported wanting to replay specific sequences.\n- **Web build issues.** The WebAudio API behaves differently across browsers. We spent 6 hours debugging Firefox-specific timing issues.\n\n## Numbers\n\n- 2,400 plays in the first week\n- 4.1/5 average rating (jam category)\n- 89 comments\n\nWe\'re expanding Signal Return into a full release. Expect a longer campaign, better UI, and new transmission sources.',
 			contentType: "text",
 			visibility: "public",
 			estimatedReadMinutes: 8,
@@ -423,11 +423,11 @@ const TEST_USERS: SeedUser[] = [
 		],
 		purchaseTitles: ["Moonvale", "Tile Garden"],
 		attentionTargets: {
-			[`${SEED_PREFIX}novapixel`]:  { seconds: 29520, eventTypes: ["play", "read"] },       // ~8.2 hrs
-			[`${SEED_PREFIX}sagemoreno`]: { seconds: 23400, eventTypes: ["read", "listen"] },      // ~6.5 hrs
-			[`${SEED_PREFIX}hexbound`]:   { seconds: 18360, eventTypes: ["play", "read"] },        // ~5.1 hrs
-			[`${SEED_PREFIX}marisol`]:    { seconds: 10800, eventTypes: ["play", "read"] },        // ~3.0 hrs
-			[`${SEED_PREFIX}fluxbeats`]:  { seconds: 5400,  eventTypes: ["play"] },                // ~1.5 hrs
+			[`${SEED_PREFIX}novapixel`]: { seconds: 29520, eventTypes: ["play", "read"] }, // ~8.2 hrs
+			[`${SEED_PREFIX}sagemoreno`]: { seconds: 23400, eventTypes: ["read", "listen"] }, // ~6.5 hrs
+			[`${SEED_PREFIX}hexbound`]: { seconds: 18360, eventTypes: ["play", "read"] }, // ~5.1 hrs
+			[`${SEED_PREFIX}marisol`]: { seconds: 10800, eventTypes: ["play", "read"] }, // ~3.0 hrs
+			[`${SEED_PREFIX}fluxbeats`]: { seconds: 5400, eventTypes: ["play"] }, // ~1.5 hrs
 		},
 		bookmarks: [
 			{ type: "project", ref: "Moonvale" },
@@ -451,10 +451,10 @@ const TEST_USERS: SeedUser[] = [
 		],
 		purchaseTitles: ["The Quiet House"],
 		attentionTargets: {
-			[`${SEED_PREFIX}novapixel`]:  { seconds: 10800, eventTypes: ["play", "read"] },       // ~3.0 hrs
-			[`${SEED_PREFIX}fluxbeats`]:  { seconds: 7200,  eventTypes: ["play", "listen"] },     // ~2.0 hrs
-			[`${SEED_PREFIX}marisol`]:    { seconds: 5400,  eventTypes: ["play", "read"] },        // ~1.5 hrs
-			[`${SEED_PREFIX}sagemoreno`]: { seconds: 1800,  eventTypes: ["read"] },                // ~0.5 hrs
+			[`${SEED_PREFIX}novapixel`]: { seconds: 10800, eventTypes: ["play", "read"] }, // ~3.0 hrs
+			[`${SEED_PREFIX}fluxbeats`]: { seconds: 7200, eventTypes: ["play", "listen"] }, // ~2.0 hrs
+			[`${SEED_PREFIX}marisol`]: { seconds: 5400, eventTypes: ["play", "read"] }, // ~1.5 hrs
+			[`${SEED_PREFIX}sagemoreno`]: { seconds: 1800, eventTypes: ["read"] }, // ~0.5 hrs
 		},
 		bookmarks: [
 			{ type: "project", ref: "The Quiet House" },
@@ -503,7 +503,10 @@ function buildAttentionEvents(
 	const events: ReturnType<typeof buildAttentionEvents> = [];
 	const start = billingCycleStart();
 	const now = new Date();
-	const daysElapsed = Math.max(1, Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+	const daysElapsed = Math.max(
+		1,
+		Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
+	);
 
 	let remaining = targetSeconds;
 	while (remaining > 0) {
@@ -694,9 +697,7 @@ async function seed() {
 
 	for (const { projectId, creatorUsername } of createdProjectIds) {
 		// Each creator's projects get rated by other seed users
-		const raters = allUserIds.filter(
-			(id) => id !== createdUserIds[creatorUsername],
-		);
+		const raters = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
 
 		for (const raterId of raters) {
 			// Check for existing rating
@@ -726,9 +727,7 @@ async function seed() {
 	// ---- 5. Create some comments ----
 	console.log("Creating seed comments...");
 	for (const { projectId, creatorUsername } of createdProjectIds) {
-		const commenters = allUserIds.filter(
-			(id) => id !== createdUserIds[creatorUsername],
-		);
+		const commenters = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
 
 		// 1-3 comments per project
 		const numComments = randomInt(1, 3);
@@ -751,35 +750,133 @@ async function seed() {
 	console.log("Creating creator gates...");
 
 	// Gate definitions per creator: mix of Anthers Tier gates and Boost gates
-	const GATES_BY_CREATOR: Record<string, { gateType: string; threshold: string; label: string; description: string }[]> = {
+	const GATES_BY_CREATOR: Record<
+		string,
+		{ gateType: string; threshold: string; label: string; description: string }[]
+	> = {
 		[`${SEED_PREFIX}novapixel`]: [
-			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Early devlogs and behind-the-scenes screenshots" },
-			{ gateType: "anthers_tier", threshold: "7.00", label: "Sprout", description: "Beta access to in-progress builds" },
-			{ gateType: "boost", threshold: "2.00", label: "Pixel Pal", description: "Weekly pixel art WIP threads" },
-			{ gateType: "boost", threshold: "5.00", label: "Playtester", description: "Access to private playtesting branches and feedback channels" },
+			{
+				gateType: "anthers_tier",
+				threshold: "3.00",
+				label: "Root",
+				description: "Early devlogs and behind-the-scenes screenshots",
+			},
+			{
+				gateType: "anthers_tier",
+				threshold: "7.00",
+				label: "Sprout",
+				description: "Beta access to in-progress builds",
+			},
+			{
+				gateType: "boost",
+				threshold: "2.00",
+				label: "Pixel Pal",
+				description: "Weekly pixel art WIP threads",
+			},
+			{
+				gateType: "boost",
+				threshold: "5.00",
+				label: "Playtester",
+				description: "Access to private playtesting branches and feedback channels",
+			},
 		],
 		[`${SEED_PREFIX}sagemoreno`]: [
-			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Early access to essays (one week before public)" },
-			{ gateType: "boost", threshold: "2.00", label: "Reader", description: "Extended footnotes and research notes" },
-			{ gateType: "boost", threshold: "5.00", label: "Inner Circle", description: "Monthly AMA threads and draft previews" },
-			{ gateType: "boost", threshold: "10.00", label: "Patron", description: "Annual long-form piece dedicated to patron questions" },
+			{
+				gateType: "anthers_tier",
+				threshold: "3.00",
+				label: "Root",
+				description: "Early access to essays (one week before public)",
+			},
+			{
+				gateType: "boost",
+				threshold: "2.00",
+				label: "Reader",
+				description: "Extended footnotes and research notes",
+			},
+			{
+				gateType: "boost",
+				threshold: "5.00",
+				label: "Inner Circle",
+				description: "Monthly AMA threads and draft previews",
+			},
+			{
+				gateType: "boost",
+				threshold: "10.00",
+				label: "Patron",
+				description: "Annual long-form piece dedicated to patron questions",
+			},
 		],
 		[`${SEED_PREFIX}fluxbeats`]: [
-			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "Stems and project files for released tracks" },
-			{ gateType: "boost", threshold: "3.00", label: "Listener", description: "Early access to new releases (48-hour window)" },
-			{ gateType: "boost", threshold: "8.00", label: "Collaborator", description: "Unreleased demos, remix packs, and sample libraries" },
+			{
+				gateType: "anthers_tier",
+				threshold: "3.00",
+				label: "Root",
+				description: "Stems and project files for released tracks",
+			},
+			{
+				gateType: "boost",
+				threshold: "3.00",
+				label: "Listener",
+				description: "Early access to new releases (48-hour window)",
+			},
+			{
+				gateType: "boost",
+				threshold: "8.00",
+				label: "Collaborator",
+				description: "Unreleased demos, remix packs, and sample libraries",
+			},
 		],
 		[`${SEED_PREFIX}marisol`]: [
-			{ gateType: "anthers_tier", threshold: "3.00", label: "Root", description: "High-resolution art downloads" },
-			{ gateType: "anthers_tier", threshold: "15.00", label: "Petal", description: "Exclusive print-ready illustrations" },
-			{ gateType: "boost", threshold: "2.00", label: "Sketch Club", description: "Weekly process videos and timelapse recordings" },
-			{ gateType: "boost", threshold: "6.00", label: "Studio Access", description: "Full PSD/Procreate files and custom brush packs" },
+			{
+				gateType: "anthers_tier",
+				threshold: "3.00",
+				label: "Root",
+				description: "High-resolution art downloads",
+			},
+			{
+				gateType: "anthers_tier",
+				threshold: "15.00",
+				label: "Petal",
+				description: "Exclusive print-ready illustrations",
+			},
+			{
+				gateType: "boost",
+				threshold: "2.00",
+				label: "Sketch Club",
+				description: "Weekly process videos and timelapse recordings",
+			},
+			{
+				gateType: "boost",
+				threshold: "6.00",
+				label: "Studio Access",
+				description: "Full PSD/Procreate files and custom brush packs",
+			},
 		],
 		[`${SEED_PREFIX}hexbound`]: [
-			{ gateType: "anthers_tier", threshold: "7.00", label: "Sprout", description: "Director's commentary audio tracks for all games" },
-			{ gateType: "boost", threshold: "3.00", label: "Insider", description: "Monthly design documents and narrative outlines" },
-			{ gateType: "boost", threshold: "7.00", label: "Patron", description: "Playable prototypes and experimental builds" },
-			{ gateType: "boost", threshold: "15.00", label: "Producer", description: "Vote on next game concept, name in credits" },
+			{
+				gateType: "anthers_tier",
+				threshold: "7.00",
+				label: "Sprout",
+				description: "Director's commentary audio tracks for all games",
+			},
+			{
+				gateType: "boost",
+				threshold: "3.00",
+				label: "Insider",
+				description: "Monthly design documents and narrative outlines",
+			},
+			{
+				gateType: "boost",
+				threshold: "7.00",
+				label: "Patron",
+				description: "Playable prototypes and experimental builds",
+			},
+			{
+				gateType: "boost",
+				threshold: "15.00",
+				label: "Producer",
+				description: "Vote on next game concept, name in credits",
+			},
 		],
 	};
 
@@ -867,7 +964,7 @@ async function seed() {
 			const amount = parseFloat(proj.price ?? "0");
 			if (amount <= 0) continue;
 
-			const processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
 			const crfFee = Math.round(amount * 0.08 * 100) / 100;
 			const creatorEarnings = Math.round((amount - crfFee) * 100) / 100;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
@@ -893,7 +990,11 @@ async function seed() {
 		const cycleStart = billingCycleStart();
 		const cycleEnd = billingCycleEnd();
 		const tierPrices: Record<string, number> = {
-			free: 0, root: 3, sprout: 7, petal: 15, bloom: 30,
+			free: 0,
+			root: 3,
+			sprout: 7,
+			petal: 15,
+			bloom: 30,
 		};
 		try {
 			await db.insert(subscriptions).values({
@@ -1049,12 +1150,8 @@ async function seed() {
 	console.log(
 		`  ${TEST_USERS.length} test users (${TEST_USERS.filter((u) => u.tier !== "free").length} paid, ${TEST_USERS.filter((u) => u.tier === "free").length} free)`,
 	);
-	console.log(
-		`\n  All seed accounts have password: "${SEED_PASSWORD}"`,
-	);
-	console.log(
-		`  All seed usernames start with "${SEED_PREFIX}" for easy identification.`,
-	);
+	console.log(`\n  All seed accounts have password: "${SEED_PASSWORD}"`);
+	console.log(`  All seed usernames start with "${SEED_PREFIX}" for easy identification.`);
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
 		console.log(`    ${tu.username} — ${tu.tier} tier — ${tu.displayName}`);

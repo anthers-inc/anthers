@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { users } from "./auth.js";
-import { projects, posts } from "./content.js";
+import { posts, projects } from "./content.js";
 
 export const platformConnections = sqliteTable(
 	"platform_connections",

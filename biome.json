@@ -36,12 +36,6 @@
 		}
 	},
 	"files": {
-		"includes": [
-			"**",
-			"!**/node_modules",
-			"!**/dist",
-			"!**/packages/db/drizzle",
-			"!**/*.lock"
-		]
+		"includes": ["**", "!**/node_modules", "!**/dist", "!**/packages/db/drizzle", "!**/*.lock"]
 	}
 }

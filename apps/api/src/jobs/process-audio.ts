@@ -4,13 +4,13 @@
  * Ported from _legacy/backend/content/tasks.py process_audio()
  */
 
-import { eq } from "drizzle-orm";
-import { db } from "@anthers/db";
-import { transcodingJobs, posts } from "@anthers/db/schema";
-import { rm, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { db } from "@anthers/db";
+import { posts, transcodingJobs } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 
 export interface ProcessAudioData {
@@ -20,16 +20,7 @@ export interface ProcessAudioData {
 /** Run ffprobe and return parsed JSON metadata */
 async function ffprobe(filePath: string) {
 	const proc = Bun.spawn(
-		[
-			"ffprobe",
-			"-v",
-			"quiet",
-			"-print_format",
-			"json",
-			"-show_format",
-			"-show_streams",
-			filePath,
-		],
+		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 	const exitCode = await proc.exited;
@@ -41,10 +32,7 @@ async function ffprobe(filePath: string) {
 }
 
 /** Generate waveform peaks (128 data points) using ffprobe frame analysis */
-async function generateWaveform(
-	filePath: string,
-	numPoints = 128,
-): Promise<number[]> {
+async function generateWaveform(filePath: string, numPoints = 128): Promise<number[]> {
 	// Try peak level analysis first
 	const proc = Bun.spawn(
 		[
@@ -85,10 +73,7 @@ async function generateWaveform(
 }
 
 /** Fallback waveform generation using volumedetect per segment */
-async function generateWaveformFallback(
-	filePath: string,
-	numPoints: number,
-): Promise<number[]> {
+async function generateWaveformFallback(filePath: string, numPoints: number): Promise<number[]> {
 	const probe = await ffprobe(filePath);
 	const duration = Number.parseFloat(probe.format?.duration ?? "1");
 	const segmentDuration = duration / numPoints;
@@ -148,10 +133,7 @@ function downsamplePeaks(peaks: number[], targetCount: number): number[] {
 }
 
 async function updateJobProgress(jobId: number, progress: number) {
-	await db
-		.update(transcodingJobs)
-		.set({ progress })
-		.where(eq(transcodingJobs.id, jobId));
+	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
 }
 
 export async function processAudio(data: ProcessAudioData) {
@@ -169,11 +151,7 @@ export async function processAudio(data: ProcessAudioData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
-	const [post] = await db
-		.select()
-		.from(posts)
-		.where(eq(posts.id, job.postId))
-		.limit(1);
+	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
 	const storageKey = post.audioFile ?? "";
@@ -218,9 +196,7 @@ export async function processAudio(data: ProcessAudioData) {
 		const exitCode = await proc.exited;
 		if (exitCode !== 0) {
 			const stderr = await new Response(proc.stderr).text();
-			throw new Error(
-				`Audio normalization failed: ${stderr.slice(0, 500)}`,
-			);
+			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
 		}
 		await updateJobProgress(jobId, 60);
 
@@ -245,8 +221,7 @@ export async function processAudio(data: ProcessAudioData) {
 			})
 			.where(eq(transcodingJobs.id, jobId));
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : String(error);
+		const message = error instanceof Error ? error.message : String(error);
 		await db
 			.update(transcodingJobs)
 			.set({

@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+	ArrowRightIcon,
+	MagnifyingGlassIcon,
+	MusicalNoteIcon,
+	PencilSquareIcon,
+	PuzzlePieceIcon,
+	VideoCameraIcon,
+	XMarkIcon,
+} from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Project } from "../../lib/types";
-import {
-	MagnifyingGlassIcon,
-	XMarkIcon,
-	PuzzlePieceIcon,
-	MusicalNoteIcon,
-	VideoCameraIcon,
-	PencilSquareIcon,
-	ArrowRightIcon,
-} from "@heroicons/react/24/outline";
 
 const MEDIA_TYPE_ICONS: Record<string, typeof PuzzlePieceIcon> = {
 	game: PuzzlePieceIcon,
@@ -52,10 +52,7 @@ export default function SearchBar() {
 	useEffect(() => {
 		if (!panelOpen) return;
 		const handler = (e: MouseEvent) => {
-			if (
-				containerRef.current &&
-				!containerRef.current.contains(e.target as Node)
-			) {
+			if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
 				setFocused(false);
 			}
 		};
@@ -137,9 +134,7 @@ export default function SearchBar() {
 							<XMarkIcon className="w-3.5 h-3.5" />
 						</button>
 					)}
-					{!query && (
-						<kbd className="kbd kbd-xs text-base-content/30">Ctrl K</kbd>
-					)}
+					{!query && <kbd className="kbd kbd-xs text-base-content/30">Ctrl K</kbd>}
 				</div>
 			</form>
 
@@ -157,12 +152,11 @@ export default function SearchBar() {
 							</div>
 							<ul className="menu menu-sm p-0">
 								{results.map((project) => {
-									const Icon =
-										MEDIA_TYPE_ICONS[project.mediaType] || PuzzlePieceIcon;
+									const Icon = MEDIA_TYPE_ICONS[project.mediaType] || PuzzlePieceIcon;
 									return (
 										<li key={project.id}>
 											<Link
-												 to={`/${project.creator?.username ?? "unknown"}/${project.slug}`}
+												to={`/${project.creator?.username ?? "unknown"}/${project.slug}`}
 												className="flex items-center gap-3 px-3 py-2"
 												onClick={() => {
 													setFocused(false);
@@ -181,13 +175,10 @@ export default function SearchBar() {
 													</div>
 												)}
 												<div className="flex-1 min-w-0">
-													<p className="text-sm font-medium truncate">
-														{project.title}
-													</p>
+													<p className="text-sm font-medium truncate">{project.title}</p>
 													{project.creator && (
 														<p className="text-xs text-base-content/50 truncate">
-															{project.creator.displayName ||
-																project.creator.username}
+															{project.creator.displayName || project.creator.username}
 														</p>
 													)}
 												</div>

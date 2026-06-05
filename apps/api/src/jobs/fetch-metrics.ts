@@ -6,13 +6,13 @@
  * Runs every 6 hours via the worker's cron schedule.
  */
 
-import { eq, and } from "drizzle-orm";
 import { db } from "@anthers/db";
 import {
 	crossPublishResults,
-	platformConnections,
 	externalMetricSnapshots,
+	platformConnections,
 } from "@anthers/db/schema";
+import { and, eq } from "drizzle-orm";
 
 interface Metrics {
 	views: number;
@@ -26,22 +26,17 @@ async function fetchYoutubeMetrics(
 ): Promise<Metrics | null> {
 	if (!crossPub.externalId) return null;
 
-	let accessToken = connection.accessToken;
+	const accessToken = connection.accessToken;
 
 	// Refresh if expired
-	if (
-		connection.tokenExpiresAt &&
-		connection.tokenExpiresAt < new Date()
-	) {
+	if (connection.tokenExpiresAt && connection.tokenExpiresAt < new Date()) {
 		// TODO: Implement YouTube OAuth token refresh
 		console.warn("YouTube token expired, skipping metrics fetch");
 		return null;
 	}
 
 	try {
-		const url = new URL(
-			"https://www.googleapis.com/youtube/v3/videos",
-		);
+		const url = new URL("https://www.googleapis.com/youtube/v3/videos");
 		url.searchParams.set("part", "statistics");
 		url.searchParams.set("id", crossPub.externalId);
 
@@ -75,15 +70,12 @@ async function fetchItchioMetrics(
 	if (!crossPub.externalId) return null;
 
 	try {
-		const res = await fetch(
-			`https://itch.io/api/1/key/game/${crossPub.externalId}`,
-			{
-				headers: {
-					Authorization: `Bearer ${connection.apiKey ?? ""}`,
-				},
-				signal: AbortSignal.timeout(15000),
+		const res = await fetch(`https://itch.io/api/1/key/game/${crossPub.externalId}`, {
+			headers: {
+				Authorization: `Bearer ${connection.apiKey ?? ""}`,
 			},
-		);
+			signal: AbortSignal.timeout(15000),
+		});
 
 		if (!res.ok) return null;
 
@@ -151,10 +143,7 @@ export async function fetchExternalMetrics() {
 				comments: metrics.comments,
 			})
 			.onConflictDoUpdate({
-				target: [
-					externalMetricSnapshots.crossPublishId,
-					externalMetricSnapshots.snapshotDate,
-				],
+				target: [externalMetricSnapshots.crossPublishId, externalMetricSnapshots.snapshotDate],
 				set: {
 					views: metrics.views,
 					likes: metrics.likes,
@@ -163,7 +152,5 @@ export async function fetchExternalMetrics() {
 			});
 	}
 
-	console.log(
-		`Fetched external metrics for ${published.length} cross-published items`,
-	);
+	console.log(`Fetched external metrics for ${published.length} cross-published items`);
 }

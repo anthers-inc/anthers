@@ -28,20 +28,13 @@ export interface StorageService {
 	 * - Public files: bare URL (no signing).
 	 * - Private files with `signed: true`: time-limited signed URL.
 	 */
-	getUrl(
-		key: string,
-		opts?: { signed?: boolean; expiresIn?: number },
-	): Promise<string>;
+	getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string>;
 
 	/**
 	 * Get a presigned PUT URL for direct browser-to-storage uploads.
 	 * In local mode this returns the direct upload endpoint URL.
 	 */
-	getPresignedUploadUrl(
-		key: string,
-		contentType: string,
-		expiresIn?: number,
-	): Promise<string>;
+	getPresignedUploadUrl(key: string, contentType: string, expiresIn?: number): Promise<string>;
 
 	/** Delete a file. */
 	delete(key: string): Promise<void>;

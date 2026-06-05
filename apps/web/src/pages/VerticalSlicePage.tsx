@@ -167,18 +167,10 @@ export default function VerticalSlicePage() {
 									onChange={(e) => setPassword(e.target.value)}
 								/>
 								<div className="flex gap-2">
-									<button
-										className="btn btn-primary"
-										onClick={handleSignUp}
-										disabled={loading}
-									>
+									<button className="btn btn-primary" onClick={handleSignUp} disabled={loading}>
 										Sign Up
 									</button>
-									<button
-										className="btn btn-secondary"
-										onClick={handleSignIn}
-										disabled={loading}
-									>
+									<button className="btn btn-secondary" onClick={handleSignIn} disabled={loading}>
 										Sign In
 									</button>
 									<button className="btn btn-ghost" onClick={checkMe}>
@@ -194,9 +186,7 @@ export default function VerticalSlicePage() {
 							<div className="card-body">
 								<div className="flex justify-between items-center">
 									<div>
-										<h2 className="card-title">
-											Signed in as {user.username}
-										</h2>
+										<h2 className="card-title">Signed in as {user.username}</h2>
 										<p className="text-sm text-base-content/70">{user.email}</p>
 									</div>
 									<button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
@@ -232,11 +222,7 @@ export default function VerticalSlicePage() {
 										value={description}
 										onChange={(e) => setDescription(e.target.value)}
 									/>
-									<button
-										type="submit"
-										className="btn btn-primary"
-										disabled={loading}
-									>
+									<button type="submit" className="btn btn-primary" disabled={loading}>
 										Create Project
 									</button>
 								</form>
@@ -254,9 +240,7 @@ export default function VerticalSlicePage() {
 												<div className="text-sm text-base-content/70">
 													/{p.slug} &middot; {p.pricingModel}
 												</div>
-												{p.description && (
-													<div className="text-sm mt-1">{p.description}</div>
-												)}
+												{p.description && <div className="text-sm mt-1">{p.description}</div>}
 											</div>
 										))}
 									</div>

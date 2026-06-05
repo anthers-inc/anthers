@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 const STORAGE_KEY = "anthers_site_access";
 
@@ -12,9 +12,7 @@ type Interest = "user" | "creator" | "both";
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
-	const [authorized, setAuthorized] = useState(
-		() => localStorage.getItem(STORAGE_KEY) === "true",
-	);
+	const [authorized, setAuthorized] = useState(() => localStorage.getItem(STORAGE_KEY) === "true");
 
 	// Password bypass
 	const [showPassword, setShowPassword] = useState(false);
@@ -75,34 +73,29 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 		<div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
 			{/* Hero content */}
 			<div className="max-w-3xl w-full text-center">
-				<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-8 mt-8">
-					Anthers
-				</h1>
+				<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-8 mt-8">Anthers</h1>
 
 				<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
-					A new non-profit building a uniquely nurturing ecosystem 
-					for creators and their communities.
+					A new non-profit building a uniquely nurturing ecosystem for creators and their
+					communities.
 				</p>
 
 				<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-					Games, videos, music, writing, and more — on an open,
-					distributed network. No intrusive ads, no manipulative
-					algorithms, just your direct line to a creative
-					internet worth loving again.
+					Games, videos, music, writing, and more — on an open, distributed network. No intrusive
+					ads, no manipulative algorithms, just your direct line to a creative internet worth loving
+					again.
 				</p>
 
 				<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-					Supporting it all: a charitable foundation dedicated to
-					lifting new and marginalized creators; building a more honest,
-					healthy connection between creators and their audiences; and
-					sharing openly the tools to build creative community
-					without corporate interference or middlemen.
+					Supporting it all: a charitable foundation dedicated to lifting new and marginalized
+					creators; building a more honest, healthy connection between creators and their audiences;
+					and sharing openly the tools to build creative community without corporate interference or
+					middlemen.
 				</p>
 
 				<p className="text-lg text-base-content/65 leading-relaxed mb-10 text-justify">
-					It's not a crazy idea. We've done this before. All it takes is
-					for someone to put people first, and keep profit out of their
-					the equation. All it takes is Anthers.
+					It's not a crazy idea. We've done this before. All it takes is for someone to put people
+					first, and keep profit out of their the equation. All it takes is Anthers.
 				</p>
 
 				{/* Waitlist form */}
@@ -110,21 +103,17 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 					<div className="card-body gap-5">
 						{submitState === "success" ? (
 							<div className="py-4">
-								<p className="text-xl font-medium text-success">
-									You're on the list.
-								</p>
+								<p className="text-xl font-medium text-success">You're on the list.</p>
 								<p className="text-base text-base-content/70 mt-2">
 									We'll reach out when things are ready.
 								</p>
 							</div>
 						) : (
-							<form
-								onSubmit={handleWaitlistSubmit}
-								className="flex flex-col gap-4"
-							>
+							<form onSubmit={handleWaitlistSubmit} className="flex flex-col gap-4">
 								<p className="text-base text-base-content/70">
 									We're excited to share Anthers with you but aren't quite ready yet.
-									<br/>Leave your email and we'll let you know when we're ready for you.
+									<br />
+									Leave your email and we'll let you know when we're ready for you.
 								</p>
 
 								{/* Email input */}
@@ -136,8 +125,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 									value={email}
 									onChange={(e) => {
 										setEmail(e.target.value);
-										if (submitState === "error")
-											setSubmitState("idle");
+										if (submitState === "error") setSubmitState("idle");
 									}}
 								/>
 
@@ -158,9 +146,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 												key={value}
 												type="button"
 												className={`join-item btn flex-1 ${
-													interest === value
-														? "btn-primary"
-														: "btn-ghost border-base-content/20"
+													interest === value ? "btn-primary" : "btn-ghost border-base-content/20"
 												}`}
 												onClick={() => setInterest(value)}
 											>
@@ -171,9 +157,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 								</fieldset>
 
 								{submitState === "error" && (
-									<p className="text-error text-base">
-										Something went wrong. Please try again.
-									</p>
+									<p className="text-error text-base">Something went wrong. Please try again.</p>
 								)}
 
 								<button
@@ -181,9 +165,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 									className="btn btn-primary w-full"
 									disabled={submitState === "submitting"}
 								>
-									{submitState === "submitting"
-										? "Submitting..."
-										: "Keep Me Posted"}
+									{submitState === "submitting" ? "Submitting..." : "Keep Me Posted"}
 								</button>
 							</form>
 						)}
@@ -193,10 +175,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 				{/* Password bypass link */}
 				<div className="mt-8">
 					{showPassword ? (
-						<form
-							onSubmit={handlePasswordSubmit}
-							className="flex gap-2 max-w-xs mx-auto"
-						>
+						<form onSubmit={handlePasswordSubmit} className="flex gap-2 max-w-xs mx-auto">
 							<input
 								type="password"
 								className={`input input-bordered input-sm flex-1 ${passwordError ? "input-error" : ""}`}
@@ -208,11 +187,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 								}}
 								autoFocus
 							/>
-							<button
-								type="submit"
-								className="btn btn-ghost btn-sm"
-								disabled={passwordLoading}
-							>
+							<button type="submit" className="btn btn-ghost btn-sm" disabled={passwordLoading}>
 								{passwordLoading ? "..." : "Enter"}
 							</button>
 						</form>

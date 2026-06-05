@@ -3,22 +3,22 @@
  * itch.io import.
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import {
-	users,
-	projects,
-	posts,
 	attentionEvents,
-	platformConnections,
 	crossPublishResults,
 	externalMetricSnapshots,
+	platformConnections,
+	posts,
+	projects,
+	users,
 } from "@anthers/db/schema";
+import { zValidator } from "@hono/zod-validator";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { z } from "zod";
+import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { requireAuth } from "../middleware/auth.js";
-import { queue, QUEUES, JOB_OPTIONS } from "../jobs/queue.js";
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -44,12 +44,7 @@ const integrationRoutes = new Hono()
 				listens: sql<number>`COUNT(*) FILTER (WHERE event_type = 'listen')`,
 			})
 			.from(attentionEvents)
-			.where(
-				and(
-					eq(attentionEvents.creatorId, user.id),
-					gte(attentionEvents.createdAt, since),
-				),
-			);
+			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)));
 
 		// Content counts
 		const [projectCount] = await db
@@ -182,12 +177,7 @@ const integrationRoutes = new Hono()
 				listens: sql<number>`COUNT(*) FILTER (WHERE event_type = 'listen')`,
 			})
 			.from(attentionEvents)
-			.where(
-				and(
-					eq(attentionEvents.creatorId, user.id),
-					gte(attentionEvents.createdAt, since),
-				),
-			)
+			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)))
 			.groupBy(dateExpr)
 			.orderBy(dateExpr);
 
@@ -232,10 +222,13 @@ const integrationRoutes = new Hono()
 	.post(
 		"/platforms/connect",
 		requireAuth,
-		zValidator("json", z.object({
-			platform: z.enum(["steam", "itchio", "substack"]),
-			apiKey: z.string().min(1),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				platform: z.enum(["steam", "itchio", "substack"]),
+				apiKey: z.string().min(1),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const { platform, apiKey } = c.req.valid("json");
@@ -265,10 +258,7 @@ const integrationRoutes = new Hono()
 		const deleted = await db
 			.delete(platformConnections)
 			.where(
-				and(
-					eq(platformConnections.userId, user.id),
-					eq(platformConnections.platform, platform),
-				),
+				and(eq(platformConnections.userId, user.id), eq(platformConnections.platform, platform)),
 			)
 			.returning({ id: platformConnections.id });
 
@@ -301,11 +291,14 @@ const integrationRoutes = new Hono()
 	.post(
 		"/cross-publish/initiate",
 		requireAuth,
-		zValidator("json", z.object({
-			platform: z.string().min(1),
-			projectId: z.number().int().optional(),
-			postId: z.number().int().optional(),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				platform: z.string().min(1),
+				projectId: z.number().int().optional(),
+				postId: z.number().int().optional(),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const { platform, projectId, postId } = c.req.valid("json");
@@ -386,9 +379,12 @@ const integrationRoutes = new Hono()
 	.post(
 		"/import/itchio",
 		requireAuth,
-		zValidator("json", z.object({
-			games: z.array(z.object({ url: z.string().url() })).max(20),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				games: z.array(z.object({ url: z.string().url() })).max(20),
+			}),
+		),
 		async (c) => {
 			// TODO: Import itch.io games as draft projects
 			return c.json({

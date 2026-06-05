@@ -1,20 +1,20 @@
-import { Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
 import {
+	ArrowPathIcon,
+	ChartBarIcon,
 	CurrencyDollarIcon,
-	GlobeAltIcon,
-	ShieldCheckIcon,
+	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
-	MusicalNoteIcon,
-	DocumentTextIcon,
-	PuzzlePieceIcon,
-	ArrowPathIcon,
-	UserGroupIcon,
-	ServerStackIcon,
+	GlobeAltIcon,
 	LockOpenIcon,
-	ChartBarIcon,
+	MusicalNoteIcon,
+	PuzzlePieceIcon,
+	ServerStackIcon,
+	ShieldCheckIcon,
+	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 export default function CompareItchPage() {
 	const { isAuthenticated } = useAuth();
@@ -32,11 +32,10 @@ export default function CompareItchPage() {
 							Love itch.io? You'll feel right at home.
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							itch.io is a beloved platform that's done more for indie creators
-							than almost anyone. Anthers builds on that same spirit —
-							creator-first economics, open publishing, community game jams —
-							and extends it with multi-media support, transparent pricing, and
-							data portability.
+							itch.io is a beloved platform that's done more for indie creators than almost anyone.
+							Anthers builds on that same spirit — creator-first economics, open publishing,
+							community game jams — and extends it with multi-media support, transparent pricing,
+							and data portability.
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
@@ -60,19 +59,17 @@ export default function CompareItchPage() {
 						Standing on the shoulders of a great platform
 					</h2>
 					<p className="text-base-content/70 leading-relaxed text-center max-w-2xl mx-auto mb-8">
-						itch.io pioneered creator-friendly game distribution. They proved
-						that a platform could put creators first—with open publishing,
-						flexible revenue sharing, customizable pages, and a vibrant
-						community of game jams. Millions of indie games have found their
-						audience because itch.io exists.
+						itch.io pioneered creator-friendly game distribution. They proved that a platform could
+						put creators first—with open publishing, flexible revenue sharing, customizable pages,
+						and a vibrant community of game jams. Millions of indie games have found their audience
+						because itch.io exists.
 					</p>
 					<p className="text-base-content/70 leading-relaxed text-center max-w-2xl mx-auto">
-						Anthers aims to carry that mission forward and expand it. We
-						believe creators deserve 100% of their earnings, support for every
-						medium they work in, and true ownership of their identity and data.
-						If itch.io is the place that showed the world what indie game
-						distribution could be, Anthers is our attempt to build the next
-						chapter—for games, videos, music, and writing all in one place.
+						Anthers aims to carry that mission forward and expand it. We believe creators deserve
+						100% of their earnings, support for every medium they work in, and true ownership of
+						their identity and data. If itch.io is the place that showed the world what indie game
+						distribution could be, Anthers is our attempt to build the next chapter—for games,
+						videos, music, and writing all in one place.
 					</p>
 				</div>
 			</section>
@@ -80,9 +77,7 @@ export default function CompareItchPage() {
 			{/* ───────────── Key Differences ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						What Anthers does differently
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">What Anthers does differently</h2>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
 						<DiffCard
 							icon={<CurrencyDollarIcon className="w-6 h-6" />}
@@ -121,14 +116,11 @@ export default function CompareItchPage() {
 			{/* ───────────── Revenue Comparison ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Keep more of what you earn
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Keep more of what you earn</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						itch.io's revenue sharing is flexible—creators can set their own
-						rate, even down to 0%. But the default is 10%, and many creators
-						leave it there. Anthers takes a fundamentally different approach:
-						your price is your revenue, always.
+						itch.io's revenue sharing is flexible—creators can set their own rate, even down to 0%.
+						But the default is 10%, and many creators leave it there. Anthers takes a fundamentally
+						different approach: your price is your revenue, always.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -182,14 +174,11 @@ export default function CompareItchPage() {
 			{/* ───────────── Multi-Media ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						More than a game marketplace
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">More than a game marketplace</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						itch.io is a fantastic game marketplace. Anthers is a home for
-						every kind of creative work. If you make games <em>and</em> music,
-						if you write devlogs <em>and</em> record podcasts—you don't need
-						four platforms. You need one.
+						itch.io is a fantastic game marketplace. Anthers is a home for every kind of creative
+						work. If you make games <em>and</em> music, if you write devlogs <em>and</em> record
+						podcasts—you don't need four platforms. You need one.
 					</p>
 
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -224,9 +213,7 @@ export default function CompareItchPage() {
 			{/* ───────────── Feature Comparison Table ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Feature by feature
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Feature by feature</h2>
 
 					<div className="overflow-x-auto">
 						<table className="table max-w-3xl mx-auto">
@@ -262,9 +249,9 @@ export default function CompareItchPage() {
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-6 max-w-xl mx-auto">
-						itch.io has a mature, established feature set built over more than
-						a decade. Some Anthers features listed above are actively in
-						development. We're building in the open and shipping fast.
+						itch.io has a mature, established feature set built over more than a decade. Some
+						Anthers features listed above are actively in development. We're building in the open
+						and shipping fast.
 					</p>
 				</div>
 			</section>
@@ -276,10 +263,9 @@ export default function CompareItchPage() {
 						Your identity, your data, your choice
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						itch.io is a great place to publish, but your identity and content
-						live on their servers. Anthers is built on the AT Protocol —
-						the same open standard behind Bluesky—so your creator
-						identity is a portable DID you truly own.
+						itch.io is a great place to publish, but your identity and content live on their
+						servers. Anthers is built on the AT Protocol — the same open standard behind Bluesky—so
+						your creator identity is a portable DID you truly own.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -289,8 +275,8 @@ export default function CompareItchPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Portable identity</h3>
 							<p className="text-sm text-base-content/60">
-								Your creator identity isn't locked to Anthers. It's a DID you
-								own. If you leave, your identity goes with you.
+								Your creator identity isn't locked to Anthers. It's a DID you own. If you leave,
+								your identity goes with you.
 							</p>
 						</div>
 						<div className="text-center">
@@ -299,9 +285,8 @@ export default function CompareItchPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Exportable content</h3>
 							<p className="text-sm text-base-content/60">
-								Your projects, posts, ratings, and interactions are stored as
-								ATProto records. They belong to you structurally, not just by
-								policy.
+								Your projects, posts, ratings, and interactions are stored as ATProto records. They
+								belong to you structurally, not just by policy.
 							</p>
 						</div>
 						<div className="text-center">
@@ -310,8 +295,8 @@ export default function CompareItchPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Federated future</h3>
 							<p className="text-sm text-base-content/60">
-								ATProto enables federation—other nodes can join the network,
-								and content is interoperable across them.
+								ATProto enables federation—other nodes can join the network, and content is
+								interoperable across them.
 							</p>
 						</div>
 					</div>
@@ -321,14 +306,11 @@ export default function CompareItchPage() {
 			{/* ───────────── Import ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-3xl text-center">
-					<h2 className="text-3xl font-bold mb-4">
-						Bring your itch.io projects with you
-					</h2>
+					<h2 className="text-3xl font-bold mb-4">Bring your itch.io projects with you</h2>
 					<p className="text-base-content/60 max-w-2xl mx-auto mb-8 leading-relaxed">
-						Already have projects on itch.io? Anthers's import tool can help
-						you bring your project metadata over so you can get started
-						quickly. You don't have to choose one or the other—publish on
-						both, and let your audience find you wherever they prefer.
+						Already have projects on itch.io? Anthers's import tool can help you bring your project
+						metadata over so you can get started quickly. You don't have to choose one or the
+						other—publish on both, and let your audience find you wherever they prefer.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
@@ -347,13 +329,10 @@ export default function CompareItchPage() {
 			{/* ───────────── CTA ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 text-center max-w-2xl">
-					<h2 className="text-3xl font-bold mb-4">
-						Ready to try something new?
-					</h2>
+					<h2 className="text-3xl font-bold mb-4">Ready to try something new?</h2>
 					<p className="text-base-content/60 mb-8 leading-relaxed">
-						Anthers is free to use. No platform cut, no hidden fees. Publish
-						your work and keep 100% of what you earn. If you love itch.io,
-						you'll love what comes next.
+						Anthers is free to use. No platform cut, no hidden fees. Publish your work and keep 100%
+						of what you earn. If you love itch.io, you'll love what comes next.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
@@ -390,9 +369,7 @@ function DiffCard({
 			</div>
 			<div>
 				<h3 className="font-semibold mb-1">{title}</h3>
-				<p className="text-sm text-base-content/60 leading-relaxed">
-					{description}
-				</p>
+				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
 	);
@@ -410,9 +387,7 @@ function ReceiptLine({
 	negative?: boolean;
 }) {
 	return (
-		<div
-			className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}
-		>
+		<div className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}>
 			<span>{label}</span>
 			<span className={negative ? "text-error" : ""}>{amount}</span>
 		</div>

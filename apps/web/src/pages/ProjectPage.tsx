@@ -1,21 +1,21 @@
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import Markdown from "react-markdown";
+import { useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
-import { client } from '@/lib/rpc';
-import type { Project } from '@/lib/types';
-import { useAuth } from '@/lib/auth';
-import { useAttentionTracker } from '@/lib/attention';
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import ProjectHero from "../components/project/ProjectHero";
-import ProjectEmbed from "../components/project/ProjectEmbed";
-import ProjectScreenshots from "../components/project/ProjectScreenshots";
-import ProjectPricing from "../components/project/ProjectPricing";
-import ProjectDownloads from "../components/project/ProjectDownloads";
-import ProjectDevlog from "../components/project/ProjectDevlog";
+import { useAttentionTracker } from "@/lib/attention";
+import { useAuth } from "@/lib/auth";
+import { client } from "@/lib/rpc";
+import type { Project } from "@/lib/types";
 import ProjectComments from "../components/project/ProjectComments";
+import ProjectDevlog from "../components/project/ProjectDevlog";
+import ProjectDownloads from "../components/project/ProjectDownloads";
+import ProjectEmbed from "../components/project/ProjectEmbed";
+import ProjectHero from "../components/project/ProjectHero";
+import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
+import ProjectScreenshots from "../components/project/ProjectScreenshots";
 import ProjectSidebar from "../components/project/ProjectSidebar";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export default function ProjectPage() {
 	const { slug } = useParams<{ slug: string }>();
@@ -45,7 +45,10 @@ export default function ProjectPage() {
 		client.api.payments.owns[":slug"]
 			.$get({ param: { slug } })
 			.then(async (res) => {
-				if (!res.ok) { setUserOwns(null); return; }
+				if (!res.ok) {
+					setUserOwns(null);
+					return;
+				}
 				const data = await res.json();
 				setUserOwns((data as { owns: boolean }).owns);
 			})
@@ -91,9 +94,7 @@ export default function ProjectPage() {
 					<ProjectHero project={project} />
 
 					{/* Embed */}
-					{project.embedUrl && (
-						<ProjectEmbed embedUrl={project.embedUrl} title={project.title} />
-					)}
+					{project.embedUrl && <ProjectEmbed embedUrl={project.embedUrl} title={project.title} />}
 
 					{/* Screenshots */}
 					<ProjectScreenshots screenshots={project.screenshots ?? []} />
@@ -103,9 +104,7 @@ export default function ProjectPage() {
 						<div>
 							<h2 className="text-xl font-bold mb-4">About</h2>
 							<div className="prose prose-sm max-w-none">
-								<Markdown remarkPlugins={[remarkGfm]}>
-									{project.description}
-								</Markdown>
+								<Markdown remarkPlugins={[remarkGfm]}>{project.description}</Markdown>
 							</div>
 						</div>
 					)}

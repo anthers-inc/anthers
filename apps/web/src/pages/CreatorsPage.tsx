@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import CreatorCard from "../components/cards/CreatorCard";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { PublicUser } from "../lib/types";
-import CreatorCard from "../components/cards/CreatorCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
 
 export default function CreatorsPage() {
 	const [creators, setCreators] = useState<PublicUser[] | null>(null);

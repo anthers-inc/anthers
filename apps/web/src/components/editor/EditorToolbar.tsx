@@ -1,16 +1,15 @@
-import type { Editor } from "@tiptap/react";
 import {
 	BoldIcon,
-	ItalicIcon,
-	ListBulletIcon,
 	CodeBracketIcon,
+	ItalicIcon,
 	LinkIcon,
+	ListBulletIcon,
 	PhotoIcon,
 } from "@heroicons/react/24/outline";
+import type { Editor } from "@tiptap/react";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 

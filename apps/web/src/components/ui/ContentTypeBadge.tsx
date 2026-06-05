@@ -1,8 +1,4 @@
-import {
-	DocumentTextIcon,
-	FilmIcon,
-	MusicalNoteIcon,
-} from "@heroicons/react/24/outline";
+import { DocumentTextIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
 
 const config = {
 	text: { label: "Article", Icon: DocumentTextIcon, color: "badge-info" },

@@ -1,6 +1,6 @@
-import { eq, and, gt, lt, or } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { sessions, users, verificationTokens } from "@anthers/db/schema";
+import { and, eq, gt, lt, or } from "drizzle-orm";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -89,9 +89,7 @@ export async function createEmailVerificationToken(userId: number): Promise<stri
 	// Delete any existing email verification tokens for this user
 	await db
 		.delete(verificationTokens)
-		.where(
-			and(eq(verificationTokens.userId, userId), eq(verificationTokens.type, "email_verify")),
-		);
+		.where(and(eq(verificationTokens.userId, userId), eq(verificationTokens.type, "email_verify")));
 
 	const token = generateToken();
 	await db.insert(verificationTokens).values({
@@ -135,10 +133,7 @@ export async function createPasswordResetToken(userId: number): Promise<string> 
 	await db
 		.delete(verificationTokens)
 		.where(
-			and(
-				eq(verificationTokens.userId, userId),
-				eq(verificationTokens.type, "password_reset"),
-			),
+			and(eq(verificationTokens.userId, userId), eq(verificationTokens.type, "password_reset")),
 		);
 
 	const token = generateToken();
@@ -180,12 +175,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
 	// Delete the used token
 	await db
 		.delete(verificationTokens)
-		.where(
-			and(
-				eq(verificationTokens.token, token),
-				eq(verificationTokens.type, "password_reset"),
-			),
-		);
+		.where(and(eq(verificationTokens.token, token), eq(verificationTokens.type, "password_reset")));
 
 	// Invalidate all existing sessions for security
 	await deleteAllUserSessions(userId);

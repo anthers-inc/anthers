@@ -27,9 +27,7 @@ export function calculateFees(amount: Decimal) {
 		.mul(PROCESSING_RATE)
 		.plus(PROCESSING_FLAT)
 		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-	const foundationFee = amount
-		.mul(FOUNDATION_RATE)
-		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+	const foundationFee = amount.mul(FOUNDATION_RATE).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 	const creatorEarnings = amount;
 	const buyerTotal = amount.plus(processingFee).plus(foundationFee);
 
@@ -46,9 +44,7 @@ export function estimateHostingCost(params: {
 }): Decimal {
 	const storageGb = new Decimal(params.storageBytes).div("1073741824");
 
-	return HOSTING_COSTS.BASE_PER_CREATOR.plus(
-		HOSTING_COSTS.PER_GB_STORAGE.mul(storageGb),
-	)
+	return HOSTING_COSTS.BASE_PER_CREATOR.plus(HOSTING_COSTS.PER_GB_STORAGE.mul(storageGb))
 		.plus(HOSTING_COSTS.PER_PROJECT.mul(params.projectCount))
 		.plus(HOSTING_COSTS.PER_MEDIA_POST.mul(params.mediaPostCount))
 		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);

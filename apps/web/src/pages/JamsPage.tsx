@@ -1,23 +1,22 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import type { GameJam } from "../lib/types";
-import { useAuth } from "../lib/auth";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
 import {
-	PlusIcon,
 	CalendarIcon,
 	ClockIcon,
-	TrophyIcon,
-	SparklesIcon,
-	UserGroupIcon,
 	InformationCircleIcon,
+	PlusIcon,
+	SparklesIcon,
+	TrophyIcon,
+	UserGroupIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
+import type { GameJam } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -70,8 +69,7 @@ function formatDate(dateStr: string): string {
 function formatDateRange(start: string, end: string): string {
 	const s = new Date(start);
 	const e = new Date(end);
-	const sameMonth =
-		s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+	const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
 	if (sameMonth) {
 		return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${e.getDate()}, ${e.getFullYear()}`;
 	}
@@ -80,25 +78,16 @@ function formatDateRange(start: string, end: string): string {
 
 function JamCard({ jam }: { jam: GameJam }) {
 	return (
-		<Link
-			to={`/jams/${jam.slug}`}
-			className="card bg-base-200 hover:bg-base-300 transition-colors"
-		>
+		<Link to={`/jams/${jam.slug}`} className="card bg-base-200 hover:bg-base-300 transition-colors">
 			{jam.coverImage && (
 				<figure className="h-40">
-					<img
-						src={jam.coverImage}
-						alt={jam.title}
-						className="w-full h-full object-cover"
-					/>
+					<img src={jam.coverImage} alt={jam.title} className="w-full h-full object-cover" />
 				</figure>
 			)}
 			<div className="card-body p-4">
 				<div className="flex items-start justify-between gap-2">
 					<h2 className="card-title text-base">{jam.title}</h2>
-					<JamStatusBadge
-						status={(jam as GameJam & { status: string }).status}
-					/>
+					<JamStatusBadge status={(jam as GameJam & { status: string }).status} />
 				</div>
 				<div className="flex flex-col gap-1 text-sm text-base-content/60">
 					<div className="flex items-center gap-1.5">
@@ -111,9 +100,7 @@ function JamCard({ jam }: { jam: GameJam }) {
 					</div>
 				</div>
 				<div className="flex items-center justify-between mt-2">
-					<span className="text-xs text-base-content/40">
-						by {jam.creator?.username}
-					</span>
+					<span className="text-xs text-base-content/40">by {jam.creator?.username}</span>
 					<span className="text-xs text-base-content/50">
 						{jam.entryCount} {jam.entryCount === 1 ? "entry" : "entries"}
 					</span>
@@ -180,42 +167,30 @@ export default function JamsPage() {
 					</button>
 					<p className="font-semibold mb-2">What are Jams?</p>
 					<p className="text-base-content/70 mb-3">
-						Jams are creative contests where sponsors put out calls for content
-						and creators compete to produce their best work. Prizes range from
-						cash to featured placement to professional opportunities.
+						Jams are creative contests where sponsors put out calls for content and creators compete
+						to produce their best work. Prizes range from cash to featured placement to professional
+						opportunities.
 					</p>
 					<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
 						<div className="flex items-start gap-2">
 							<TrophyIcon className="w-4 h-4 text-warning shrink-0 mt-0.5" />
 							<div>
-								<p className="font-medium text-base-content/80">
-									Win prizes
-								</p>
-								<p className="text-base-content/50">
-									Cash, features, and recognition
-								</p>
+								<p className="font-medium text-base-content/80">Win prizes</p>
+								<p className="text-base-content/50">Cash, features, and recognition</p>
 							</div>
 						</div>
 						<div className="flex items-start gap-2">
 							<SparklesIcon className="w-4 h-4 text-primary shrink-0 mt-0.5" />
 							<div>
-								<p className="font-medium text-base-content/80">
-									All media types
-								</p>
-								<p className="text-base-content/50">
-									Games, video, audio, and writing
-								</p>
+								<p className="font-medium text-base-content/80">All media types</p>
+								<p className="text-base-content/50">Games, video, audio, and writing</p>
 							</div>
 						</div>
 						<div className="flex items-start gap-2">
 							<UserGroupIcon className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
 							<div>
-								<p className="font-medium text-base-content/80">
-									Fair competition
-								</p>
-								<p className="text-base-content/50">
-									Size-tiered to spotlight emerging creators
-								</p>
+								<p className="font-medium text-base-content/80">Fair competition</p>
+								<p className="text-base-content/50">Size-tiered to spotlight emerging creators</p>
 							</div>
 						</div>
 					</div>
@@ -267,10 +242,7 @@ export default function JamsPage() {
 					}
 					action={
 						user?.isCreator ? (
-							<Link
-								to="/dashboard/jams/new"
-								className="btn btn-primary btn-sm"
-							>
+							<Link to="/dashboard/jams/new" className="btn btn-primary btn-sm">
 								Host the First Jam
 							</Link>
 						) : undefined

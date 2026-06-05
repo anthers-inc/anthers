@@ -1,7 +1,7 @@
 import { useAuth } from "../../lib/auth";
+import LoadingSpinner from "../ui/LoadingSpinner";
 import LoggedInLayout from "./LoggedInLayout";
 import LoggedOutLayout from "./LoggedOutLayout";
-import LoadingSpinner from "../ui/LoadingSpinner";
 
 /**
  * Auth-aware layout switcher.

@@ -1,18 +1,15 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
 import {
+	HeartIcon,
 	LinkIcon,
 	MapPinIcon,
-	PlayIcon,
 	MusicalNoteIcon,
-	StarIcon,
-	HeartIcon,
+	PlayIcon,
 	SparklesIcon,
+	StarIcon,
 } from "@heroicons/react/24/outline";
-import {
-	PlayIcon as PlaySolid,
-	StarIcon as StarSolid,
-} from "@heroicons/react/24/solid";
+import { PlayIcon as PlaySolid, StarIcon as StarSolid } from "@heroicons/react/24/solid";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Types for fake data
@@ -121,10 +118,25 @@ const DEMO_CREATORS: DemoCreator[] = [
 			},
 		],
 		posts: [
-			{ title: "Moonvale Devlog #47—The Fishing Update", type: "video", duration: "14:32", date: "Feb 21, 2026" },
-			{ title: "OST Preview: \"Lantern Fields\"", type: "audio", duration: "3:44", date: "Feb 18, 2026" },
+			{
+				title: "Moonvale Devlog #47—The Fishing Update",
+				type: "video",
+				duration: "14:32",
+				date: "Feb 21, 2026",
+			},
+			{
+				title: 'OST Preview: "Lantern Fields"',
+				type: "audio",
+				duration: "3:44",
+				date: "Feb 18, 2026",
+			},
 			{ title: "How I Design Pixel Art Tilesets", type: "text", date: "Feb 14, 2026", readMin: 8 },
-			{ title: "Moonvale Devlog #46—NPC Dialogue Trees", type: "video", duration: "11:07", date: "Feb 7, 2026" },
+			{
+				title: "Moonvale Devlog #46—NPC Dialogue Trees",
+				type: "video",
+				duration: "11:07",
+				date: "Feb 7, 2026",
+			},
 		],
 		style: {
 			banner: "linear-gradient(135deg, #2e1065 0%, #6d28d9 50%, #8b5cf6 100%)",
@@ -143,7 +155,7 @@ const DEMO_CREATORS: DemoCreator[] = [
 		displayName: "Sage Moreno",
 		username: "sagemoreno",
 		avatar: "SM",
-		bio: "Writer, podcaster, occasional troublemaker. I write long-form essays on technology, culture, and the spaces between. My podcast \"Undercurrents\" explores stories that don't fit neatly into headlines. Paid subscribers get early access and bonus episodes.",
+		bio: 'Writer, podcaster, occasional troublemaker. I write long-form essays on technology, culture, and the spaces between. My podcast "Undercurrents" explores stories that don\'t fit neatly into headlines. Paid subscribers get early access and bonus episodes.',
 		followers: 11_203,
 		website: "sage.ink",
 		location: "Brooklyn, NY",
@@ -158,12 +170,44 @@ const DEMO_CREATORS: DemoCreator[] = [
 			},
 		],
 		posts: [
-			{ title: "The Myth of the Neutral Platform", type: "text", date: "Feb 24, 2026", readMin: 14 },
-			{ title: "Undercurrents Ep. 89—\"Who Owns Your Feed?\"", type: "audio", duration: "52:18", date: "Feb 20, 2026", premium: true },
-			{ title: "Why I Left Substack (And What Comes Next)", type: "text", date: "Feb 16, 2026", readMin: 11 },
-			{ title: "Undercurrents Ep. 88—\"Digital Homesteading\"", type: "audio", duration: "47:03", date: "Feb 13, 2026" },
-			{ title: "Five Books That Changed How I Think About the Internet", type: "text", date: "Feb 9, 2026", readMin: 9 },
-			{ title: "Video Essay: The Architecture of Trust", type: "video", duration: "23:41", date: "Feb 5, 2026", premium: true },
+			{
+				title: "The Myth of the Neutral Platform",
+				type: "text",
+				date: "Feb 24, 2026",
+				readMin: 14,
+			},
+			{
+				title: 'Undercurrents Ep. 89—"Who Owns Your Feed?"',
+				type: "audio",
+				duration: "52:18",
+				date: "Feb 20, 2026",
+				premium: true,
+			},
+			{
+				title: "Why I Left Substack (And What Comes Next)",
+				type: "text",
+				date: "Feb 16, 2026",
+				readMin: 11,
+			},
+			{
+				title: 'Undercurrents Ep. 88—"Digital Homesteading"',
+				type: "audio",
+				duration: "47:03",
+				date: "Feb 13, 2026",
+			},
+			{
+				title: "Five Books That Changed How I Think About the Internet",
+				type: "text",
+				date: "Feb 9, 2026",
+				readMin: 9,
+			},
+			{
+				title: "Video Essay: The Architecture of Trust",
+				type: "video",
+				duration: "23:41",
+				date: "Feb 5, 2026",
+				premium: true,
+			},
 		],
 		style: {
 			banner: "linear-gradient(160deg, #1c1917 0%, #292524 40%, #44403c 100%)",
@@ -204,11 +248,26 @@ const DEMO_CREATORS: DemoCreator[] = [
 			},
 		],
 		posts: [
-			{ title: "New Track: \"Cascade\"", type: "audio", duration: "4:22", date: "Feb 23, 2026" },
-			{ title: "Live Set @ Tresor Berlin (Full Recording)", type: "video", duration: "1:42:07", date: "Feb 19, 2026" },
-			{ title: "New Track: \"Phase Drift\"", type: "audio", duration: "5:01", date: "Feb 15, 2026" },
-			{ title: "How I Build Reactive Visuals with Three.js", type: "text", date: "Feb 11, 2026", readMin: 12 },
-			{ title: "Remix Contest: Submit Your Take on \"Neon Rain\"", type: "text", date: "Feb 8, 2026", readMin: 3 },
+			{ title: 'New Track: "Cascade"', type: "audio", duration: "4:22", date: "Feb 23, 2026" },
+			{
+				title: "Live Set @ Tresor Berlin (Full Recording)",
+				type: "video",
+				duration: "1:42:07",
+				date: "Feb 19, 2026",
+			},
+			{ title: 'New Track: "Phase Drift"', type: "audio", duration: "5:01", date: "Feb 15, 2026" },
+			{
+				title: "How I Build Reactive Visuals with Three.js",
+				type: "text",
+				date: "Feb 11, 2026",
+				readMin: 12,
+			},
+			{
+				title: 'Remix Contest: Submit Your Take on "Neon Rain"',
+				type: "text",
+				date: "Feb 8, 2026",
+				readMin: 3,
+			},
 		],
 		style: {
 			banner: "linear-gradient(135deg, #042f2e 0%, #0f766e 40%, #14b8a6 100%)",
@@ -276,15 +335,9 @@ function PostRow({ post, style }: { post: DemoPost; style: CreatorStyle }) {
 			</div>
 			{/* Meta */}
 			<div className="flex items-center gap-2 flex-shrink-0">
-				{post.premium && (
-					<span className="badge badge-xs badge-secondary">Premium</span>
-				)}
-				{post.duration && (
-					<span className="text-xs text-base-content/40">{post.duration}</span>
-				)}
-				{post.readMin && (
-					<span className="text-xs text-base-content/40">{post.readMin} min</span>
-				)}
+				{post.premium && <span className="badge badge-xs badge-secondary">Premium</span>}
+				{post.duration && <span className="text-xs text-base-content/40">{post.duration}</span>}
+				{post.readMin && <span className="text-xs text-base-content/40">{post.readMin} min</span>}
 			</div>
 		</div>
 	);
@@ -323,9 +376,7 @@ function PostCard({ post, style }: { post: DemoPost; style: CreatorStyle }) {
 				<h4 className="font-semibold text-sm line-clamp-2">{post.title}</h4>
 				<div className="flex items-center gap-2 mt-auto">
 					<span className="text-xs text-base-content/50">{post.date}</span>
-					{post.premium && (
-						<span className="badge badge-xs badge-secondary">Premium</span>
-					)}
+					{post.premium && <span className="badge badge-xs badge-secondary">Premium</span>}
 					{post.readMin && (
 						<span className="text-xs text-base-content/40">{post.readMin} min read</span>
 					)}
@@ -357,7 +408,8 @@ function MagazineLayout({ creator }: { creator: DemoCreator }) {
 						{featured.duration && ` · ${featured.duration}`}
 					</p>
 					<p className="mt-3 text-sm text-base-content/70 leading-relaxed">
-						A preview excerpt would appear here, drawing the reader in with the opening lines of the piece...
+						A preview excerpt would appear here, drawing the reader in with the opening lines of the
+						piece...
 					</p>
 				</div>
 			)}
@@ -460,7 +512,10 @@ function ListLayout({ creator }: { creator: DemoCreator }) {
 			<h4 className={`text-sm uppercase tracking-wider text-base-content/40`}>Projects</h4>
 			<div className="space-y-3">
 				{projects.map((proj, i) => (
-					<div key={i} className={`flex items-center gap-4 p-4 rounded-lg ${style.cardBg} cursor-default`}>
+					<div
+						key={i}
+						className={`flex items-center gap-4 p-4 rounded-lg ${style.cardBg} cursor-default`}
+					>
 						<span className="text-3xl">{proj.emoji}</span>
 						<div className="flex-1 min-w-0">
 							<p className={`font-medium ${style.headingClass} text-base`}>{proj.title}</p>
@@ -497,20 +552,17 @@ function DemoProfileHeader({ creator }: { creator: DemoCreator }) {
 	return (
 		<>
 			{/* Banner */}
-			<div
-				className="w-full h-40 md:h-52"
-				style={{ background: style.banner }}
-			/>
+			<div className="w-full h-40 md:h-52" style={{ background: style.banner }} />
 			{/* Profile info */}
 			<div className="px-4 sm:px-6">
 				<div className="flex flex-col sm:flex-row items-start gap-4 -mt-10 mb-6">
-					<div className={`w-20 h-20 rounded-full border-4 border-base-100 flex items-center justify-center text-2xl font-bold ${style.accent} bg-base-300`}>
+					<div
+						className={`w-20 h-20 rounded-full border-4 border-base-100 flex items-center justify-center text-2xl font-bold ${style.accent} bg-base-300`}
+					>
 						{creator.avatar}
 					</div>
 					<div className="flex-1 pt-2">
-						<h2 className={`text-xl ${style.headingClass}`}>
-							{creator.displayName}
-						</h2>
+						<h2 className={`text-xl ${style.headingClass}`}>{creator.displayName}</h2>
 						<p className="text-base-content/60 text-sm">
 							@{creator.username} · {creator.followers.toLocaleString()} followers
 						</p>
@@ -550,13 +602,11 @@ export default function CreatorDemoPage() {
 				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">
 					Creator Hubs
 				</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">
-					Your page. Your style.
-				</h1>
+				<h1 className="text-4xl font-bold tracking-tight mb-3">Your page. Your style.</h1>
 				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Every creator on Anthers gets a customizable anther—not a cookie-cutter profile.
-					Choose your layout, colors, and typography. Pin featured work. Organize your
-					content your way. Below are three examples of what's possible.
+					Every creator on Anthers gets a customizable anther—not a cookie-cutter profile. Choose
+					your layout, colors, and typography. Pin featured work. Organize your content your way.
+					Below are three examples of what's possible.
 				</p>
 			</section>
 
@@ -570,16 +620,19 @@ export default function CreatorDemoPage() {
 							onClick={() => setActiveId(c.id)}
 							className={`
 								flex-1 text-left px-4 py-3 rounded-lg border transition-all
-								${activeId === c.id
-									? "border-primary bg-primary/10 shadow-sm"
-									: "border-base-300 bg-base-200/50 hover:border-base-content/20"
+								${
+									activeId === c.id
+										? "border-primary bg-primary/10 shadow-sm"
+										: "border-base-300 bg-base-200/50 hover:border-base-content/20"
 								}
 							`}
 						>
 							<p className={`text-sm font-semibold ${activeId === c.id ? "text-primary" : ""}`}>
 								{c.displayName}
 							</p>
-							<p className="text-xs text-base-content/50">{c.label}—{c.tagline}</p>
+							<p className="text-xs text-base-content/50">
+								{c.label}—{c.tagline}
+							</p>
 						</button>
 					))}
 				</div>
@@ -615,12 +668,10 @@ export default function CreatorDemoPage() {
 				{/* Customization callout */}
 				<div className="mt-8 text-center">
 					<p className="text-base-content/50 text-sm mb-4">
-						Layouts, color palettes, typography, pinned content, and more—all customizable by the creator.
+						Layouts, color palettes, typography, pinned content, and more—all customizable by the
+						creator.
 					</p>
-					<Link
-						to="/for-creators"
-						className="btn btn-primary"
-					>
+					<Link to="/for-creators" className="btn btn-primary">
 						Learn more about Creator Hubs
 					</Link>
 				</div>

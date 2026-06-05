@@ -1,5 +1,5 @@
-import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
+import { createMiddleware } from "hono/factory";
 import { validateSession } from "../services/auth.js";
 
 type SessionUser = {

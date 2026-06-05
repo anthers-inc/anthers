@@ -1,23 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type { Project, Asset } from "../lib/types";
+import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import EmptyState from "../components/ui/EmptyState";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
-import { TrashIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
+import { client } from "../lib/rpc";
+import type { Asset, Project } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024)
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -60,20 +58,15 @@ export default function BuildsPage() {
 			formData.append("version", version);
 
 			try {
-				const res = await fetch(
-					`${apiBase}/api/content/projects/${slug}/assets`,
-					{
-						method: "POST",
-						credentials: "include",
-						body: formData,
-					},
-				);
+				const res = await fetch(`${apiBase}/api/content/projects/${slug}/assets`, {
+					method: "POST",
+					credentials: "include",
+					body: formData,
+				});
 				if (!res.ok) throw new Error("Upload failed");
 				const data = (await res.json()) as { asset: Asset };
 				setProject((prev) =>
-					prev
-						? { ...prev, assets: [data.asset, ...(prev.assets || [])] }
-						: prev,
+					prev ? { ...prev, assets: [data.asset, ...(prev.assets || [])] } : prev,
 				);
 				setFile(null);
 				setVersion("");
@@ -90,13 +83,10 @@ export default function BuildsPage() {
 		async (assetId: number) => {
 			if (!slug) return;
 			try {
-				const res = await fetch(
-					`${apiBase}/api/content/projects/${slug}/assets/${assetId}`,
-					{
-						method: "DELETE",
-						credentials: "include",
-					},
-				);
+				const res = await fetch(`${apiBase}/api/content/projects/${slug}/assets/${assetId}`, {
+					method: "DELETE",
+					credentials: "include",
+				});
 				if (!res.ok) throw new Error("Delete failed");
 				setProject((prev) =>
 					prev
@@ -151,10 +141,7 @@ export default function BuildsPage() {
 			<div className="card bg-base-200 mb-8">
 				<div className="card-body">
 					<h2 className="card-title text-lg">Upload Build</h2>
-					<form
-						onSubmit={handleUpload}
-						className="flex flex-col sm:flex-row gap-3 items-end"
-					>
+					<form onSubmit={handleUpload} className="flex flex-col sm:flex-row gap-3 items-end">
 						<div className="flex-1">
 							<FormField label="File">
 								<input
@@ -193,11 +180,7 @@ export default function BuildsPage() {
 							className={`btn btn-primary ${uploading || !file ? "btn-disabled" : ""}`}
 							disabled={uploading || !file}
 						>
-							{uploading ? (
-								<LoadingSpinner size="sm" />
-							) : (
-								<ArrowUpTrayIcon className="w-4 h-4" />
-							)}
+							{uploading ? <LoadingSpinner size="sm" /> : <ArrowUpTrayIcon className="w-4 h-4" />}
 							Upload
 						</button>
 					</form>

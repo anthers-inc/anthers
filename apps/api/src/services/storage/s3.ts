@@ -5,17 +5,17 @@
  * Spaces is S3-compatible, so this works with any S3-compatible provider.
  */
 
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-	S3Client,
-	PutObjectCommand,
-	GetObjectCommand,
 	DeleteObjectCommand,
+	GetObjectCommand,
 	HeadObjectCommand,
+	PutObjectCommand,
+	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
 import type { StorageService } from "./types.js";
 
 const region = process.env.SPACES_REGION ?? "nyc3";
@@ -51,9 +51,7 @@ export class S3StorageService implements StorageService {
 	}
 
 	async downloadToTemp(key: string): Promise<string> {
-		const response = await s3.send(
-			new GetObjectCommand({ Bucket: bucket, Key: key }),
-		);
+		const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
 
 		if (!response.Body) {
 			throw new Error(`S3 object ${key} has no body`);
@@ -67,26 +65,17 @@ export class S3StorageService implements StorageService {
 		return tempPath;
 	}
 
-	async getUrl(
-		key: string,
-		opts?: { signed?: boolean; expiresIn?: number },
-	): Promise<string> {
+	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		if (opts?.signed) {
-			return getSignedUrl(
-				s3,
-				new GetObjectCommand({ Bucket: bucket, Key: key }),
-				{ expiresIn: opts.expiresIn ?? 3600 },
-			);
+			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+				expiresIn: opts.expiresIn ?? 3600,
+			});
 		}
 		// Bare public URL
 		return `https://${bucket}.${region}.digitaloceanspaces.com/${key}`;
 	}
 
-	async getPresignedUploadUrl(
-		key: string,
-		contentType: string,
-		expiresIn = 3600,
-	): Promise<string> {
+	async getPresignedUploadUrl(key: string, contentType: string, expiresIn = 3600): Promise<string> {
 		return getSignedUrl(
 			s3,
 			new PutObjectCommand({

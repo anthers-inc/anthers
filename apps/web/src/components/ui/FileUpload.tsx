@@ -1,5 +1,5 @@
-import { useRef, useState, useCallback } from "react";
 import { ArrowUpTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useCallback, useRef, useState } from "react";
 
 interface FileUploadProps {
 	accept?: string;
@@ -82,11 +82,7 @@ export default function FileUpload({
 			>
 				{preview ? (
 					<div className="relative">
-						<img
-							src={preview}
-							alt="Preview"
-							className="max-h-48 mx-auto rounded object-contain"
-						/>
+						<img src={preview} alt="Preview" className="max-h-48 mx-auto rounded object-contain" />
 						{onClear && (
 							<button
 								type="button"
@@ -103,9 +99,7 @@ export default function FileUpload({
 				) : (
 					<div className="flex flex-col items-center gap-2 text-base-content/50">
 						<ArrowUpTrayIcon className={compact ? "w-5 h-5" : "w-8 h-8"} />
-						<span className={compact ? "text-xs" : "text-sm"}>
-							{fileName || label}
-						</span>
+						<span className={compact ? "text-xs" : "text-sm"}>{fileName || label}</span>
 					</div>
 				)}
 			</div>

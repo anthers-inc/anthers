@@ -1,18 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
 import type { Screenshot } from "../../lib/types";
-import {
-	ChevronLeftIcon,
-	ChevronRightIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
 
 interface ProjectScreenshotsProps {
 	screenshots: Screenshot[];
 }
 
-export default function ProjectScreenshots({
-	screenshots,
-}: ProjectScreenshotsProps) {
+export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsProps) {
 	const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
 	const close = useCallback(() => setLightboxIndex(null), []);
@@ -24,10 +18,7 @@ export default function ProjectScreenshots({
 		[screenshots.length],
 	);
 	const next = useCallback(
-		() =>
-			setLightboxIndex((i) =>
-				i !== null ? (i + 1) % screenshots.length : null,
-			),
+		() => setLightboxIndex((i) => (i !== null ? (i + 1) % screenshots.length : null)),
 		[screenshots.length],
 	);
 
@@ -99,10 +90,7 @@ export default function ProjectScreenshots({
 						</>
 					)}
 
-					<div
-						className="max-w-5xl max-h-[85vh] p-4"
-						onClick={(e) => e.stopPropagation()}
-					>
+					<div className="max-w-5xl max-h-[85vh] p-4" onClick={(e) => e.stopPropagation()}>
 						<img
 							src={screenshots[lightboxIndex].image}
 							alt={screenshots[lightboxIndex].caption || "Screenshot"}

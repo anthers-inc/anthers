@@ -137,9 +137,7 @@ class JobQueue {
 	send<T>(queue: string, data: T, options?: SendOptions): number {
 		const now = Date.now();
 		const startAfter = options?.startAfter ?? now;
-		const expireInMs = options?.expireInMinutes
-			? options.expireInMinutes * 60 * 1000
-			: null;
+		const expireInMs = options?.expireInMinutes ? options.expireInMinutes * 60 * 1000 : null;
 		const result = this.db
 			.query<{ id: number }, [string, string, number, number, number | null, number, number]>(
 				`INSERT INTO queue_jobs
@@ -159,7 +157,11 @@ class JobQueue {
 		return result?.id ?? -1;
 	}
 
-	work<T>(queue: string, optionsOrHandler: WorkOptions | Handler<T>, maybeHandler?: Handler<T>): void {
+	work<T>(
+		queue: string,
+		optionsOrHandler: WorkOptions | Handler<T>,
+		maybeHandler?: Handler<T>,
+	): void {
 		const options = typeof optionsOrHandler === "function" ? {} : optionsOrHandler;
 		const handler = typeof optionsOrHandler === "function" ? optionsOrHandler : maybeHandler;
 		if (!handler) throw new Error(`work(${queue}): missing handler`);
@@ -291,9 +293,7 @@ class JobQueue {
 	}
 
 	private markFailed(id: number, error: string): void {
-		const row = this.db
-			.query<JobRow, [number]>("SELECT * FROM queue_jobs WHERE id = ?")
-			.get(id);
+		const row = this.db.query<JobRow, [number]>("SELECT * FROM queue_jobs WHERE id = ?").get(id);
 		if (!row) return;
 
 		const now = Date.now();

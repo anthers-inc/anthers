@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../lib/auth";
 import FormField from "../components/ui/FormField";
+import { useAuth } from "../lib/auth";
 
 export default function SignupPage() {
 	const { signUp } = useAuth();
@@ -84,11 +84,7 @@ export default function SignupPage() {
 								required
 							/>
 						</FormField>
-						<button
-							type="submit"
-							className="btn btn-primary w-full mt-2"
-							disabled={loading}
-						>
+						<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
 							{loading ? <span className="loading loading-spinner loading-sm" /> : "Sign up"}
 						</button>
 					</form>

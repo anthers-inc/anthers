@@ -1,23 +1,22 @@
-import { useState, useEffect } from "react";
+import {
+	ArrowDownTrayIcon,
+	ChartBarIcon,
+	PencilSquareIcon,
+	PlusIcon,
+	WrenchScrewdriverIcon,
+} from "@heroicons/react/24/outline";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type { Project, Post, CreatorEarnings } from "../lib/types";
-import { useAuth } from "../lib/auth";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import MediaTypeBadge from "../components/ui/MediaTypeBadge";
 import PricingBadge from "../components/ui/PricingBadge";
-import {
-	PlusIcon,
-	PencilSquareIcon,
-	WrenchScrewdriverIcon,
-	ChartBarIcon,
-	ArrowDownTrayIcon,
-} from "@heroicons/react/24/outline";
+import { useAuth } from "../lib/auth";
+import { client } from "../lib/rpc";
+import type { CreatorEarnings, Post, Project } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -67,24 +66,15 @@ export default function DashboardPage() {
 				<h1 className="text-2xl font-bold">Dashboard</h1>
 				{user?.isCreator && (
 					<div className="flex gap-2">
-						<Link
-							to="/dashboard/import"
-							className="btn btn-ghost btn-sm"
-						>
+						<Link to="/dashboard/import" className="btn btn-ghost btn-sm">
 							<ArrowDownTrayIcon className="w-4 h-4" />
 							Import
 						</Link>
-						<Link
-							to="/dashboard/analytics"
-							className="btn btn-ghost btn-sm"
-						>
+						<Link to="/dashboard/analytics" className="btn btn-ghost btn-sm">
 							<ChartBarIcon className="w-4 h-4" />
 							Analytics
 						</Link>
-						<Link
-							to="/dashboard/projects/new"
-							className="btn btn-primary btn-sm"
-						>
+						<Link to="/dashboard/projects/new" className="btn btn-primary btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Project
 						</Link>
@@ -121,41 +111,29 @@ export default function DashboardPage() {
 						<h2 className="card-title text-lg">Subscriber Earnings</h2>
 						<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
 							<div>
-								<div className="text-xs text-base-content/50 uppercase">
-									Pool Income
-								</div>
-								<div className="text-xl font-bold text-success">
-									${earnings.poolTotal}
-								</div>
+								<div className="text-xs text-base-content/50 uppercase">Pool Income</div>
+								<div className="text-xl font-bold text-success">${earnings.poolTotal}</div>
 							</div>
 							<div>
-								<div className="text-xs text-base-content/50 uppercase">
-									Boost Income
-								</div>
-								<div className="text-xl font-bold text-success">
-									${earnings.boostTotal}
-								</div>
+								<div className="text-xs text-base-content/50 uppercase">Boost Income</div>
+								<div className="text-xl font-bold text-success">${earnings.boostTotal}</div>
 							</div>
 							<div>
-								<div className="text-xs text-base-content/50 uppercase">
-									Total
-								</div>
-								<div className="text-xl font-bold">
-									${earnings.total}
-								</div>
+								<div className="text-xs text-base-content/50 uppercase">Total</div>
+								<div className="text-xl font-bold">${earnings.total}</div>
 							</div>
 							<div>
-								<div className="text-xs text-base-content/50 uppercase">
-									Subscribers
-								</div>
-								<div className="text-xl font-bold">
-									{earnings.subscriberCount}
-								</div>
+								<div className="text-xs text-base-content/50 uppercase">Subscribers</div>
+								<div className="text-xl font-bold">{earnings.subscriberCount}</div>
 							</div>
 						</div>
 						{earnings.cycle && (
 							<p className="text-xs text-base-content/50 mt-2">
-								Cycle: {new Date(earnings.cycle).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+								Cycle:{" "}
+								{new Date(earnings.cycle).toLocaleDateString("en-US", {
+									month: "long",
+									year: "numeric",
+								})}
 							</p>
 						)}
 					</div>
@@ -192,10 +170,7 @@ export default function DashboardPage() {
 											<MediaTypeBadge type={project.mediaType} />
 										</td>
 										<td>
-											<PricingBadge
-												pricingType={project.pricingType}
-												price={project.price}
-											/>
+											<PricingBadge pricingType={project.pricingType} price={project.price} />
 										</td>
 										<td>
 											<span
@@ -231,10 +206,7 @@ export default function DashboardPage() {
 						description="Create your first project to get started."
 						action={
 							user?.isCreator ? (
-								<Link
-									to="/dashboard/projects/new"
-									className="btn btn-primary btn-sm"
-								>
+								<Link to="/dashboard/projects/new" className="btn btn-primary btn-sm">
 									Create Project
 								</Link>
 							) : (
@@ -279,9 +251,7 @@ export default function DashboardPage() {
 										</td>
 										<td>
 											{post.projectId ? (
-												<span className="badge badge-sm badge-outline">
-													Project
-												</span>
+												<span className="badge badge-sm badge-outline">Project</span>
 											) : (
 												<span className="text-base-content/30">—</span>
 											)}
@@ -316,10 +286,7 @@ export default function DashboardPage() {
 						description="Write your first devlog or update."
 						action={
 							user?.isCreator ? (
-								<Link
-									to="/dashboard/posts/new"
-									className="btn btn-primary btn-sm"
-								>
+								<Link to="/dashboard/posts/new" className="btn btn-primary btn-sm">
 									Write a Post
 								</Link>
 							) : undefined

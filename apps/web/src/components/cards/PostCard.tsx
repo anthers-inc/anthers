@@ -33,15 +33,11 @@ export default function PostCard({ post }: { post: Post }) {
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>
-				{post.title && (
-					<h3 className="font-semibold line-clamp-1">{post.title}</h3>
-				)}
+				{post.title && <h3 className="font-semibold line-clamp-1">{post.title}</h3>}
 				<p className="text-sm text-base-content/70 line-clamp-3">{excerpt}</p>
 				{post.projectId && (
 					<div className="mt-auto pt-2">
-						<span className="badge badge-sm badge-outline">
-							Project #{post.projectId}
-						</span>
+						<span className="badge badge-sm badge-outline">Project #{post.projectId}</span>
 					</div>
 				)}
 			</div>

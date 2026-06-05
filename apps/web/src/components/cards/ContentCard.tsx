@@ -1,11 +1,7 @@
+import { LockClosedIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { Link } from "react-router-dom";
 import type { PostListItem } from "../../lib/types";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
-import {
-	PlayIcon,
-	MusicalNoteIcon,
-	LockClosedIcon,
-} from "@heroicons/react/24/solid";
 
 function formatDuration(seconds: number): string {
 	const h = Math.floor(seconds / 3600);
@@ -31,11 +27,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 			{post.contentType === "video" && (
 				<div className="relative aspect-video bg-base-300">
 					{post.thumbnail ? (
-						<img
-							src={post.thumbnail}
-							alt=""
-							className="w-full h-full object-cover"
-						/>
+						<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
 					) : (
 						<div className="w-full h-full flex items-center justify-center">
 							<PlayIcon className="w-12 h-12 text-base-content/20" />
@@ -71,11 +63,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 
 			{post.contentType === "text" && post.thumbnail && (
 				<figure>
-					<img
-						src={post.thumbnail}
-						alt=""
-						className="w-full h-36 object-cover"
-					/>
+					<img src={post.thumbnail} alt="" className="w-full h-36 object-cover" />
 				</figure>
 			)}
 
@@ -99,9 +87,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				</div>
 
 				{/* Title */}
-				{post.title && (
-					<h3 className="font-semibold line-clamp-2">{post.title}</h3>
-				)}
+				{post.title && <h3 className="font-semibold line-clamp-2">{post.title}</h3>}
 
 				{/* Badges row */}
 				<div className="flex items-center gap-2 mt-auto pt-1">

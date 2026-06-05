@@ -5,19 +5,13 @@
  * Or via: make dev-worker
  */
 
-import { queue, QUEUES, ensureQueueReady } from "./queue.js";
-import { transcodeVideo, type TranscodeVideoData } from "./transcode-video.js";
-import { processAudio, type ProcessAudioData } from "./process-audio.js";
-import {
-	distributePool,
-	type DistributePoolData,
-} from "./distribute-pool.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
-import {
-	crossPublish,
-	type CrossPublishData,
-} from "./cross-publish.js";
+import { type CrossPublishData, crossPublish } from "./cross-publish.js";
+import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { fetchExternalMetrics } from "./fetch-metrics.js";
+import { type ProcessAudioData, processAudio } from "./process-audio.js";
+import { ensureQueueReady, QUEUES, queue } from "./queue.js";
+import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 
 async function start() {
 	console.log("Starting job worker...");
@@ -26,50 +20,35 @@ async function start() {
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
-	queue.work<TranscodeVideoData>(
-		QUEUES.TRANSCODE_VIDEO,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[transcode-video] Processing job ${job.id}`);
-				await transcodeVideo(job.data);
-			}
-		},
-	);
+	queue.work<TranscodeVideoData>(QUEUES.TRANSCODE_VIDEO, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[transcode-video] Processing job ${job.id}`);
+			await transcodeVideo(job.data);
+		}
+	});
 
-	queue.work<ProcessAudioData>(
-		QUEUES.PROCESS_AUDIO,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[process-audio] Processing job ${job.id}`);
-				await processAudio(job.data);
-			}
-		},
-	);
+	queue.work<ProcessAudioData>(QUEUES.PROCESS_AUDIO, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[process-audio] Processing job ${job.id}`);
+			await processAudio(job.data);
+		}
+	});
 
-	queue.work<CrossPublishData>(
-		QUEUES.CROSS_PUBLISH,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[cross-publish] Processing job ${job.id}`);
-				await crossPublish(job.data);
-			}
-		},
-	);
+	queue.work<CrossPublishData>(QUEUES.CROSS_PUBLISH, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[cross-publish] Processing job ${job.id}`);
+			await crossPublish(job.data);
+		}
+	});
 
 	// ── Scheduled jobs ────────────────────────────────────────────────
 
-	queue.work<DistributePoolData>(
-		QUEUES.DISTRIBUTE_POOL,
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[distribute-pool] Processing job ${job.id}`);
-				await distributePool(job.data);
-			}
-		},
-	);
+	queue.work<DistributePoolData>(QUEUES.DISTRIBUTE_POOL, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[distribute-pool] Processing job ${job.id}`);
+			await distributePool(job.data);
+		}
+	});
 
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
 	queue.work(QUEUES.CALCULATE_CRF, async (jobs) => {

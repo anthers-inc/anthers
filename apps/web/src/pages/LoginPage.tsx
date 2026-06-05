@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import FormField from "../components/ui/FormField";
+import { useAuth } from "../lib/auth";
 
 export default function LoginPage() {
 	const { signIn, signInWithBluesky } = useAuth();
@@ -118,11 +118,7 @@ export default function LoginPage() {
 								required
 							/>
 						</FormField>
-						<button
-							type="submit"
-							className="btn btn-primary w-full mt-2"
-							disabled={loading}
-						>
+						<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
 							{loading ? <span className="loading loading-spinner loading-sm" /> : "Log in"}
 						</button>
 					</form>

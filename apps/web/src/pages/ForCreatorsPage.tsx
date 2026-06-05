@@ -1,25 +1,25 @@
+import {
+	ArrowDownTrayIcon,
+	ArrowPathIcon,
+	ChartBarIcon,
+	ChatBubbleLeftRightIcon,
+	CurrencyDollarIcon,
+	DocumentTextIcon,
+	EyeIcon,
+	FilmIcon,
+	GlobeAltIcon,
+	LockOpenIcon,
+	MusicalNoteIcon,
+	PaintBrushIcon,
+	PuzzlePieceIcon,
+	ServerStackIcon,
+	ShieldCheckIcon,
+	StarIcon,
+	TrophyIcon,
+	UserGroupIcon,
+} from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import {
-	CurrencyDollarIcon,
-	GlobeAltIcon,
-	UserGroupIcon,
-	ShieldCheckIcon,
-	ArrowDownTrayIcon,
-	PaintBrushIcon,
-	MusicalNoteIcon,
-	FilmIcon,
-	DocumentTextIcon,
-	PuzzlePieceIcon,
-	ChartBarIcon,
-	TrophyIcon,
-	ChatBubbleLeftRightIcon,
-	StarIcon,
-	ArrowPathIcon,
-	EyeIcon,
-	ServerStackIcon,
-	LockOpenIcon,
-} from "@heroicons/react/24/outline";
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
@@ -37,9 +37,8 @@ export default function ForCreatorsPage() {
 							Publish your work. Keep what you earn.
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							Games, videos, music, and writing—all under one roof, one
-							identity, one audience. No platform cut. No hidden fees.
-							Transparent costs you can see and verify.
+							Games, videos, music, and writing—all under one roof, one identity, one audience. No
+							platform cut. No hidden fees. Transparent costs you can see and verify.
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
@@ -59,13 +58,11 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Revenue Comparison ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Creators deserve better
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Creators deserve better</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Existing platforms take 10-30% of your revenue, own your data, and
-						fragment your audience across multiple services. You need a separate
-						account for every medium, a separate audience for every platform.
+						Existing platforms take 10-30% of your revenue, own your data, and fragment your
+						audience across multiple services. You need a separate account for every medium, a
+						separate audience for every platform.
 					</p>
 
 					<div className="overflow-x-auto">
@@ -107,8 +104,8 @@ export default function ForCreatorsPage() {
 						</table>
 					</div>
 					<p className="text-center text-sm text-base-content/40 mt-4">
-						On Anthers, real costs (payment processing, infrastructure) are
-						shown as transparent line items—never a percentage cut.
+						On Anthers, real costs (payment processing, infrastructure) are shown as transparent
+						line items—never a percentage cut.
 					</p>
 				</div>
 			</section>
@@ -116,9 +113,7 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Core Value Props ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						How Anthers works for creators
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">How Anthers works for creators</h2>
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-10">
 						<div className="text-center">
 							<div className="w-14 h-14 rounded-full bg-success/15 flex items-center justify-center mx-auto mb-4">
@@ -126,24 +121,20 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-bold text-lg mb-2">100% to Creators</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								You set a price, you receive that price. Processing fees and
-								infrastructure costs are passed through transparently as
-								itemized line items the buyer sees at checkout—never hidden,
-								never a percentage cut from your earnings.
+								You set a price, you receive that price. Processing fees and infrastructure costs
+								are passed through transparently as itemized line items the buyer sees at
+								checkout—never hidden, never a percentage cut from your earnings.
 							</p>
 						</div>
 						<div className="text-center">
 							<div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mx-auto mb-4">
 								<GlobeAltIcon className="w-7 h-7 text-primary" />
 							</div>
-							<h3 className="font-bold text-lg mb-2">
-								One Home for Everything
-							</h3>
+							<h3 className="font-bold text-lg mb-2">One Home for Everything</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								Games, videos, music, writing—all under one roof, one
-								identity, one audience. A game developer who writes devlogs and
-								composes music shouldn't need three separate platforms.
-								Followers subscribe to <em>you</em>, not a medium.
+								Games, videos, music, writing—all under one roof, one identity, one audience. A game
+								developer who writes devlogs and composes music shouldn't need three separate
+								platforms. Followers subscribe to <em>you</em>, not a medium.
 							</p>
 						</div>
 						<div className="text-center">
@@ -152,10 +143,9 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-bold text-lg mb-2">Community Built In</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								Follows, devlogs, comments, ratings, game jams—everything
-								you need to build and engage your audience lives on the same
-								platform where your work lives. No more scattering your
-								community across Discord, Patreon, and Twitter.
+								Follows, devlogs, comments, ratings, game jams—everything you need to build and
+								engage your audience lives on the same platform where your work lives. No more
+								scattering your community across Discord, Patreon, and Twitter.
 							</p>
 						</div>
 					</div>
@@ -165,13 +155,10 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Multi-Media Showcase ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Every kind of creative work
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Every kind of creative work</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers isn't just for games. Publish anything you create—the
-						platform adapts to the medium while keeping the same tools, the same
-						audience, and the same economics.
+						Anthers isn't just for games. Publish anything you create—the platform adapts to the
+						medium while keeping the same tools, the same audience, and the same economics.
 					</p>
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
 						<MediaCard
@@ -179,44 +166,28 @@ export default function ForCreatorsPage() {
 							title="Games"
 							color="badge-secondary"
 							description="Upload builds for Windows, Mac, Linux. Host HTML5 games playable in the browser. Manage versions, platforms, and pricing."
-							features={[
-								"Multi-platform downloads",
-								"Web game embedding",
-								"Game jam support",
-							]}
+							features={["Multi-platform downloads", "Web game embedding", "Game jam support"]}
 						/>
 						<MediaCard
 							icon={<FilmIcon className="w-8 h-8" />}
 							title="Video"
 							color="badge-error"
 							description="Publish video content alongside your other work. Your devlog videos and your games live in the same place, for the same audience."
-							features={[
-								"Native hosting",
-								"Devlog series",
-								"Creator portfolio",
-							]}
+							features={["Native hosting", "Devlog series", "Creator portfolio"]}
 						/>
 						<MediaCard
 							icon={<MusicalNoteIcon className="w-8 h-8" />}
 							title="Audio"
 							color="badge-success"
 							description="Share music, soundtracks, podcasts. A game composer can publish their soundtrack right alongside the game it belongs to."
-							features={[
-								"Album & track hosting",
-								"Soundtrack bundling",
-								"Streaming playback",
-							]}
+							features={["Album & track hosting", "Soundtrack bundling", "Streaming playback"]}
 						/>
 						<MediaCard
 							icon={<DocumentTextIcon className="w-8 h-8" />}
 							title="Writing"
 							color="badge-info"
 							description="Essays, tutorials, fiction, devlogs. First-class publishing for written content with your full creator profile and audience behind it."
-							features={[
-								"Rich text posts",
-								"Devlog journals",
-								"Standalone essays",
-							]}
+							features={["Rich text posts", "Devlog journals", "Standalone essays"]}
 						/>
 					</div>
 				</div>
@@ -229,29 +200,20 @@ export default function ForCreatorsPage() {
 						Transparent pricing, not platform rent
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						At checkout, buyers see exactly where every penny goes. No hidden
-						fees, no opaque "revenue share." Real infrastructure costs are
-						passed through—and they're tiny.
+						At checkout, buyers see exactly where every penny goes. No hidden fees, no opaque
+						"revenue share." Real infrastructure costs are passed through—and they're tiny.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 						{/* Example receipt */}
 						<div className="card bg-base-200">
 							<div className="card-body">
-								<h3 className="font-bold text-lg mb-3">
-									Example: $10 game (card payment)
-								</h3>
+								<h3 className="font-bold text-lg mb-3">Example: $10 game (card payment)</h3>
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
 									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine
-										label="Anthers Foundation Fee (3%)"
-										amount="$0.30"
-									/>
-									<ReceiptLine
-										label="Payment processing (2.9% + $0.30)"
-										amount="$0.59"
-									/>
+									<ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
+									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
 									<ReceiptLine label="You pay" amount="$10.90" bold />
 								</div>
@@ -280,9 +242,8 @@ export default function ForCreatorsPage() {
 								<div>
 									<h4 className="font-semibold text-sm">Full visibility</h4>
 									<p className="text-sm text-base-content/60">
-										Every fee is itemized and explained. Buyers understand
-										what they're paying for. Creators understand what they're
-										earning.
+										Every fee is itemized and explained. Buyers understand what they're paying for.
+										Creators understand what they're earning.
 									</p>
 								</div>
 							</div>
@@ -291,13 +252,11 @@ export default function ForCreatorsPage() {
 									<ServerStackIcon className="w-5 h-5 text-warning" />
 								</div>
 								<div>
-									 <h4 className="font-semibold text-sm">
-										Anthers Foundation
-									</h4>
+									<h4 className="font-semibold text-sm">Anthers Foundation</h4>
 									<p className="text-sm text-base-content/60">
-										3% of transactions funds the Anthers Foundation, which
-										allocates between charitable programs and organizational
-										operations. It's a community investment, not a platform tax.
+										3% of transactions funds the Anthers Foundation, which allocates between
+										charitable programs and organizational operations. It's a community investment,
+										not a platform tax.
 									</p>
 								</div>
 							</div>
@@ -380,23 +339,20 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Audience Building ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Build your audience in one place
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Build your audience in one place</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Like Patreon and YouTube Memberships, but alongside your actual
-						work. Post devlogs, vlogs, podcasts, and blogs—all under the same
-						profile your games live on. Your audience follows <em>you</em>,
-						not a platform.
+						Like Patreon and YouTube Memberships, but alongside your actual work. Post devlogs,
+						vlogs, podcasts, and blogs—all under the same profile your games live on. Your audience
+						follows <em>you</em>, not a platform.
 					</p>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 						<div className="card bg-base-200">
 							<div className="card-body p-5">
 								<h3 className="font-semibold">Native content creation</h3>
 								<p className="text-sm text-base-content/60">
-									Write devlogs, upload video updates, share podcast episodes —
-									all natively hosted. No linking out to YouTube or Substack.
-									Your content lives where your audience already is.
+									Write devlogs, upload video updates, share podcast episodes — all natively hosted.
+									No linking out to YouTube or Substack. Your content lives where your audience
+									already is.
 								</p>
 							</div>
 						</div>
@@ -404,10 +360,9 @@ export default function ForCreatorsPage() {
 							<div className="card-body p-5">
 								<h3 className="font-semibold">Cross-publishing (coming soon)</h3>
 								<p className="text-sm text-base-content/60">
-									Publish once, distribute everywhere. Push videos to YouTube,
-									builds to Steam and itch.io, posts to Substack—all from your
-									Anthers dashboard. Unified analytics show performance across
-									all platforms.
+									Publish once, distribute everywhere. Push videos to YouTube, builds to Steam and
+									itch.io, posts to Substack—all from your Anthers dashboard. Unified analytics show
+									performance across all platforms.
 								</p>
 							</div>
 						</div>
@@ -422,10 +377,9 @@ export default function ForCreatorsPage() {
 						Subscribers fund creators, not platforms
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Users subscribe to Anthers, and their subscription funds are
-						distributed to creators proportionally based on what they actually
-						watch, read, listen to, and play. No platform cut—just transparent
-						allocation.
+						Users subscribe to Anthers, and their subscription funds are distributed to creators
+						proportionally based on what they actually watch, read, listen to, and play. No platform
+						cut—just transparent allocation.
 					</p>
 					<div className="overflow-x-auto">
 						<table className="table table-sm max-w-3xl mx-auto">
@@ -478,11 +432,10 @@ export default function ForCreatorsPage() {
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4">
-						These are values at each tier threshold — users can fund at any $1
-						increment and boost scales continuously. Time Pool is fixed at
-						$2.76/mo at any funding level $3+, distributed proportionally by
-						attention time. †Boost starts above $3, so a user at exactly $3 has
-						no boost; at $4 they have $0.92 in boost. Subscriptions coming soon.
+						These are values at each tier threshold — users can fund at any $1 increment and boost
+						scales continuously. Time Pool is fixed at $2.76/mo at any funding level $3+,
+						distributed proportionally by attention time. †Boost starts above $3, so a user at
+						exactly $3 has no boost; at $4 they have $0.92 in boost. Subscriptions coming soon.
 					</p>
 				</div>
 			</section>
@@ -490,13 +443,10 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Creator Profile Preview ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Your home on the internet
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Your home on the internet</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Every creator gets a profile page that brings together everything
-						they do. Games, devlogs, music, writing—one identity, one
-						audience, one URL to share.
+						Every creator gets a profile page that brings together everything they do. Games,
+						devlogs, music, writing—one identity, one audience, one URL to share.
 					</p>
 
 					{/* Mock profile card */}
@@ -509,14 +459,12 @@ export default function ForCreatorsPage() {
 								</div>
 								<div className="pb-1">
 									<h3 className="font-bold text-lg">Alex Chen</h3>
-									<p className="text-sm text-base-content/50">
-										@alexchen · 2,847 followers
-									</p>
+									<p className="text-sm text-base-content/50">@alexchen · 2,847 followers</p>
 								</div>
 							</div>
 							<p className="text-sm text-base-content/70 mb-4">
-								Indie game developer and composer. Making puzzle games and
-								ambient soundtracks. Previously shipped Lumina and Glass Garden.
+								Indie game developer and composer. Making puzzle games and ambient soundtracks.
+								Previously shipped Lumina and Glass Garden.
 							</p>
 							<div className="tabs tabs-bordered text-sm">
 								<button className="tab tab-active">Projects (12)</button>
@@ -530,14 +478,9 @@ export default function ForCreatorsPage() {
 									{ title: "Lumina OST", type: "Audio", color: "badge-success" },
 									{ title: "Dev Diary: Shaders", type: "Text", color: "badge-info" },
 								].map((item) => (
-									<div
-										key={item.title}
-										className="p-3 rounded-lg bg-base-300/50"
-									>
+									<div key={item.title} className="p-3 rounded-lg bg-base-300/50">
 										<div className="flex items-center gap-2 mb-1">
-											<span className={`badge badge-xs ${item.color}`}>
-												{item.type}
-											</span>
+											<span className={`badge badge-xs ${item.color}`}>{item.type}</span>
 										</div>
 										<p className="text-sm font-medium">{item.title}</p>
 									</div>
@@ -551,12 +494,10 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Project Page Preview ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Project pages that do the work
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Project pages that do the work</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Every project gets a full-featured page with everything your
-						audience needs—adapted to the type of work you're sharing.
+						Every project gets a full-featured page with everything your audience needs—adapted to
+						the type of work you're sharing.
 					</p>
 
 					{/* Mock project page */}
@@ -571,9 +512,8 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-bold text-xl">Glass Garden</h3>
 							<p className="text-sm text-base-content/60">
-								A meditative puzzle game about growing crystalline gardens.
-								Explore procedurally generated environments and discover hidden
-								patterns in the growth.
+								A meditative puzzle game about growing crystalline gardens. Explore procedurally
+								generated environments and discover hidden patterns in the growth.
 							</p>
 							<div className="flex items-center gap-1 text-warning text-sm mt-1">
 								<StarIcon className="w-4 h-4 fill-current" />
@@ -632,14 +572,11 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Data Portability ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Your data is yours
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Your data is yours</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers is built on the AT Protocol—the same open standard
-						behind Bluesky. Sign in with your Bluesky identity, or create a
-						new one. Your content and audience relationships are portable by
-						design.
+						Anthers is built on the AT Protocol—the same open standard behind Bluesky. Sign in with
+						your Bluesky identity, or create a new one. Your content and audience relationships are
+						portable by design.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -649,9 +586,8 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Portable identity</h3>
 							<p className="text-sm text-base-content/60">
-								Your creator identity isn't locked to Anthers. It's a DID
-							 —a decentralized identifier you own. If you ever leave,
-								your identity goes with you.
+								Your creator identity isn't locked to Anthers. It's a DID —a decentralized
+								identifier you own. If you ever leave, your identity goes with you.
 							</p>
 						</div>
 						<div className="text-center">
@@ -660,9 +596,8 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Exportable content</h3>
 							<p className="text-sm text-base-content/60">
-								Your project pages, devlogs, ratings, and community
-								interactions are stored as ATProto records. They belong
-								to you structurally, not just by policy.
+								Your project pages, devlogs, ratings, and community interactions are stored as
+								ATProto records. They belong to you structurally, not just by policy.
 							</p>
 						</div>
 						<div className="text-center">
@@ -671,9 +606,8 @@ export default function ForCreatorsPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Federated future</h3>
 							<p className="text-sm text-base-content/60">
-								ATProto enables federation—other nodes can join the
-								network, and content is interoperable across them. No
-								single point of control.
+								ATProto enables federation—other nodes can join the network, and content is
+								interoperable across them. No single point of control.
 							</p>
 						</div>
 					</div>
@@ -683,12 +617,10 @@ export default function ForCreatorsPage() {
 			{/* ───────────── Platform Comparison ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Everything in one place
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Everything in one place</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Instead of juggling itch.io + Patreon + YouTube + Substack,
-						Anthers gives you all of it under one identity.
+						Instead of juggling itch.io + Patreon + YouTube + Substack, Anthers gives you all of it
+						under one identity.
 					</p>
 
 					<div className="overflow-x-auto">
@@ -696,21 +628,56 @@ export default function ForCreatorsPage() {
 							<thead>
 								<tr>
 									<th>Feature</th>
-									 <th className="text-center">Anthers</th>
+									<th className="text-center">Anthers</th>
 									<th className="text-center">itch.io</th>
 									<th className="text-center">Patreon</th>
 								</tr>
 							</thead>
 							<tbody>
 								<ComparisonRow feature="Game hosting" anthers={true} itch={true} patreon={false} />
-								<ComparisonRow feature="Video/audio/writing" anthers={true} itch={false} patreon={true} />
-								<ComparisonRow feature="Audience follows" anthers={true} itch={false} patreon={true} />
-								<ComparisonRow feature="Devlogs & posts" anthers={true} itch={true} patreon={true} />
+								<ComparisonRow
+									feature="Video/audio/writing"
+									anthers={true}
+									itch={false}
+									patreon={true}
+								/>
+								<ComparisonRow
+									feature="Audience follows"
+									anthers={true}
+									itch={false}
+									patreon={true}
+								/>
+								<ComparisonRow
+									feature="Devlogs & posts"
+									anthers={true}
+									itch={true}
+									patreon={true}
+								/>
 								<ComparisonRow feature="Game jams" anthers={true} itch={true} patreon={false} />
-								<ComparisonRow feature="100% to creator" anthers={true} itch={false} patreon={false} />
-								<ComparisonRow feature="Transparent fees" anthers={true} itch={false} patreon={false} />
-								<ComparisonRow feature="Data portability" anthers={true} itch={false} patreon={false} />
-								<ComparisonRow feature="Multi-media profile" anthers={true} itch={false} patreon={false} />
+								<ComparisonRow
+									feature="100% to creator"
+									anthers={true}
+									itch={false}
+									patreon={false}
+								/>
+								<ComparisonRow
+									feature="Transparent fees"
+									anthers={true}
+									itch={false}
+									patreon={false}
+								/>
+								<ComparisonRow
+									feature="Data portability"
+									anthers={true}
+									itch={false}
+									patreon={false}
+								/>
+								<ComparisonRow
+									feature="Multi-media profile"
+									anthers={true}
+									itch={false}
+									patreon={false}
+								/>
 							</tbody>
 						</table>
 					</div>
@@ -720,12 +687,10 @@ export default function ForCreatorsPage() {
 			{/* ───────────── CTA ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 text-center max-w-2xl">
-					<h2 className="text-3xl font-bold mb-4">
-						Ready to share your work?
-					</h2>
+					<h2 className="text-3xl font-bold mb-4">Ready to share your work?</h2>
 					<p className="text-base-content/60 mb-8 leading-relaxed">
-						Anthers is free to use. No platform cut, no hidden fees. Just
-						publish your work and keep what you earn.
+						Anthers is free to use. No platform cut, no hidden fees. Just publish your work and keep
+						what you earn.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
@@ -795,27 +760,15 @@ function Feature({
 			</div>
 			<div>
 				<h3 className="font-semibold mb-1">{title}</h3>
-				<p className="text-sm text-base-content/60 leading-relaxed">
-					{description}
-				</p>
+				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
 	);
 }
 
-function ReceiptLine({
-	label,
-	amount,
-	bold,
-}: {
-	label: string;
-	amount: string;
-	bold?: boolean;
-}) {
+function ReceiptLine({ label, amount, bold }: { label: string; amount: string; bold?: boolean }) {
 	return (
-		<div
-			className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}
-		>
+		<div className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}>
 			<span>{label}</span>
 			<span>{amount}</span>
 		</div>

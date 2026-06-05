@@ -1,25 +1,15 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type {
-	GameJam,
-	JamEntry,
-	JamEntryResult,
-	Project,
-} from "../lib/types";
-import { useAuth } from "../lib/auth";
+import { CalendarIcon, TrophyIcon, UsersIcon } from "@heroicons/react/24/outline";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import StarRating from "../components/ui/StarRating";
-import EmptyState from "../components/ui/EmptyState";
-import {
-	CalendarIcon,
-	TrophyIcon,
-	UsersIcon,
-} from "@heroicons/react/24/outline";
+import { useAuth } from "../lib/auth";
+import { client } from "../lib/rpc";
+import type { GameJam, JamEntry, JamEntryResult, Project } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -84,9 +74,7 @@ function EntryCard({
 				>
 					{entry.project?.title}
 				</Link>
-				<p className="text-xs text-base-content/50">
-					by {entry.submitter?.username}
-				</p>
+				<p className="text-xs text-base-content/50">by {entry.submitter?.username}</p>
 				<div className="flex items-center justify-between mt-2">
 					<div className="text-xs text-base-content/50">
 						{entry.voteCount} {entry.voteCount === 1 ? "vote" : "votes"}
@@ -108,13 +96,7 @@ function EntryCard({
 	);
 }
 
-function SubmitEntryForm({
-	jamSlug,
-	onSubmitted,
-}: {
-	jamSlug: string;
-	onSubmitted: () => void;
-}) {
+function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitted: () => void }) {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [selectedProject, setSelectedProject] = useState<number | null>(null);
 	const [submitting, setSubmitting] = useState(false);
@@ -176,9 +158,7 @@ function SubmitEntryForm({
 				<select
 					className="select select-bordered select-sm flex-1"
 					value={selectedProject ?? ""}
-					onChange={(e) =>
-						setSelectedProject(e.target.value ? parseInt(e.target.value) : null)
-					}
+					onChange={(e) => setSelectedProject(e.target.value ? parseInt(e.target.value) : null)}
 				>
 					<option value="">Select a project...</option>
 					{projects.map((p) => (
@@ -248,12 +228,10 @@ export default function JamPage() {
 	const handleVote = async (entryId: number, score: number) => {
 		if (!slug) return;
 		try {
-			const res = await client.api.jams[":slug"].entries[":entryId"].vote.$post(
-				{
-					param: { slug, entryId: String(entryId) },
-					json: { score },
-				},
-			);
+			const res = await client.api.jams[":slug"].entries[":entryId"].vote.$post({
+				param: { slug, entryId: String(entryId) },
+				json: { score },
+			});
 			if (!res.ok) {
 				const data = (await res.json()) as { detail?: string };
 				alert(data?.detail ?? "Failed to vote.");
@@ -276,10 +254,7 @@ export default function JamPage() {
 	if (error || !jam) {
 		return (
 			<div className="max-w-3xl mx-auto px-4 py-8">
-				<EmptyState
-					title="Jam not found"
-					description={error || "This jam doesn't exist."}
-				/>
+				<EmptyState title="Jam not found" description={error || "This jam doesn't exist."} />
 			</div>
 		);
 	}
@@ -294,11 +269,7 @@ export default function JamPage() {
 			{/* Header */}
 			{jam.coverImage && (
 				<div className="rounded-lg overflow-hidden mb-6 h-48 md:h-64">
-					<img
-						src={jam.coverImage}
-						alt={jam.title}
-						className="w-full h-full object-cover"
-					/>
+					<img src={jam.coverImage} alt={jam.title} className="w-full h-full object-cover" />
 				</div>
 			)}
 
@@ -307,10 +278,7 @@ export default function JamPage() {
 					<h1 className="text-3xl font-bold">{jam.title}</h1>
 					<p className="text-sm text-base-content/50 mt-1">
 						Hosted by{" "}
-						<Link
-							to={`/${jam.creator?.username}`}
-							className="link link-hover"
-						>
+						<Link to={`/${jam.creator?.username}`} className="link link-hover">
 							{jam.creator?.username}
 						</Link>
 					</p>
@@ -344,9 +312,7 @@ export default function JamPage() {
 			{jam.theme && (
 				<div className="alert mb-6">
 					<div>
-						<div className="text-xs font-bold uppercase text-base-content/50">
-							Theme
-						</div>
+						<div className="text-xs font-bold uppercase text-base-content/50">Theme</div>
 						<div className="text-lg font-bold">{jam.theme}</div>
 					</div>
 				</div>
@@ -372,10 +338,7 @@ export default function JamPage() {
 			{/* Edit link for owner */}
 			{isOwner && (
 				<div className="mb-6">
-					<Link
-						to={`/dashboard/jams/${jam.slug}/edit`}
-						className="btn btn-outline btn-sm"
-					>
+					<Link to={`/dashboard/jams/${jam.slug}/edit`} className="btn btn-outline btn-sm">
 						Edit Jam
 					</Link>
 				</div>
@@ -386,27 +349,18 @@ export default function JamPage() {
 				<section>
 					<h2 className="text-xl font-bold mb-4">Results</h2>
 					{results!.length === 0 ? (
-						<EmptyState
-							title="No entries"
-							description="This jam had no submissions."
-						/>
+						<EmptyState title="No entries" description="This jam had no submissions." />
 					) : (
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 							{results!.map((entry) => (
-								<EntryCard
-									key={entry.id}
-									entry={entry}
-									showVoting={false}
-								/>
+								<EntryCard key={entry.id} entry={entry} showVoting={false} />
 							))}
 						</div>
 					)}
 				</section>
 			) : (
 				<section>
-					<h2 className="text-xl font-bold mb-4">
-						Entries ({entries.length})
-					</h2>
+					<h2 className="text-xl font-bold mb-4">Entries ({entries.length})</h2>
 					{entries.length === 0 ? (
 						<EmptyState
 							title="No entries yet"
@@ -419,12 +373,7 @@ export default function JamPage() {
 					) : (
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 							{entries.map((entry) => (
-								<EntryCard
-									key={entry.id}
-									entry={entry}
-									showVoting={canVote}
-									onVote={handleVote}
-								/>
+								<EntryCard key={entry.id} entry={entry} showVoting={canVote} onVote={handleVote} />
 							))}
 						</div>
 					)}

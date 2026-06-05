@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
 
 interface SidebarContextValue {
 	/** Whether the sidebar drawer is open */
@@ -24,12 +24,14 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 	);
 
 	return (
-		<SidebarContext value={{
-			sidebarOpen,
-			toggleSidebar,
-			pageContent,
-			setPageContent,
-		}}>
+		<SidebarContext
+			value={{
+				sidebarOpen,
+				toggleSidebar,
+				pageContent,
+				setPageContent,
+			}}
+		>
 			{children}
 		</SidebarContext>
 	);

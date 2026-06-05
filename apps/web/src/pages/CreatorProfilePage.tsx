@@ -1,19 +1,26 @@
-import { useEffect, useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type { PublicUser, Project, PostListItem, CreatorStatus, CreatorGate } from "../lib/types";
-import { useAuth } from "../lib/auth";
-import ProjectCard from "../components/cards/ProjectCard";
+import {
+	CameraIcon,
+	CheckCircleIcon,
+	LinkIcon,
+	LockClosedIcon,
+	LockOpenIcon,
+	MapPinIcon,
+	PencilIcon,
+} from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
+import ProjectCard from "../components/cards/ProjectCard";
 import EmptyState from "../components/ui/EmptyState";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
-import { LinkIcon, MapPinIcon, PencilIcon, CameraIcon, LockClosedIcon, LockOpenIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
+import { client } from "../lib/rpc";
+import type { CreatorGate, CreatorStatus, PostListItem, Project, PublicUser } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -27,7 +34,7 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 ];
 
 function tierNameFor(id: string): string {
-	return (id.charAt(0).toUpperCase() + id.slice(1)) || "Free";
+	return id.charAt(0).toUpperCase() + id.slice(1) || "Free";
 }
 
 /** Check if a post is accessible given the user's creator status */
@@ -39,7 +46,10 @@ function isPostAccessible(
 	if (post.visibility === "public") return { accessible: true, reason: "public" };
 	if (isOwnProfile) return { accessible: true, reason: "creator" };
 	if (!status || status.anthersTier === "free") {
-		return { accessible: false, reason: post.visibility === "gated" ? "gate_locked" : "no_subscription" };
+		return {
+			accessible: false,
+			reason: post.visibility === "gated" ? "gate_locked" : "no_subscription",
+		};
 	}
 	if (post.visibility === "subscribers_only") return { accessible: true, reason: "subscriber" };
 	if (post.visibility === "gated") {
@@ -55,7 +65,10 @@ function isPostAccessible(
 /* ------------------------------------------------------------------ */
 
 function GatedContentWrapper({
-	children, post, access, gates,
+	children,
+	post,
+	access,
+	gates,
 }: {
 	children: React.ReactNode;
 	post: PostListItem;
@@ -94,11 +107,13 @@ function GatedContentWrapper({
 						<LockClosedIcon className="w-3 h-3" />
 						{lockLabel || "Locked"}
 					</div>
-				) : post.visibility !== "public" && (
-					<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
-						<LockOpenIcon className="w-3 h-3" />
-						Unlocked
-					</div>
+				) : (
+					post.visibility !== "public" && (
+						<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
+							<LockOpenIcon className="w-3 h-3" />
+							Unlocked
+						</div>
+					)
 				)}
 			</div>
 
@@ -107,9 +122,7 @@ function GatedContentWrapper({
 				<div className="absolute inset-0 flex items-center justify-center z-10 cursor-default">
 					<div className="bg-base-300/90 rounded-lg px-4 py-2 text-center">
 						<LockClosedIcon className="w-5 h-5 mx-auto mb-1 text-base-content/50" />
-						<p className="text-xs text-base-content/60">
-							{lockLabel || "Locked content"}
-						</p>
+						<p className="text-xs text-base-content/60">{lockLabel || "Locked content"}</p>
 					</div>
 				</div>
 			)}
@@ -122,7 +135,11 @@ function GatedContentWrapper({
 /* ------------------------------------------------------------------ */
 
 function TiersTab({
-	gates, unlockedGates, userTier, userBoost, creatorName,
+	gates,
+	unlockedGates,
+	userTier,
+	userBoost,
+	creatorName,
 }: {
 	gates: CreatorGate[];
 	unlockedGates: number[];
@@ -152,9 +169,7 @@ function TiersTab({
 						<div className="flex items-center justify-between text-sm">
 							<span className="text-base-content/60">Your status with {creatorName}</span>
 							<div className="flex items-center gap-2">
-								<span className="badge badge-sm badge-outline">
-									{tierNameFor(userTier)}
-								</span>
+								<span className="badge badge-sm badge-outline">{tierNameFor(userTier)}</span>
 								{parseFloat(userBoost) > 0 && (
 									<span className="badge badge-sm badge-primary badge-outline">
 										${userBoost} boost
@@ -193,22 +208,16 @@ function TiersTab({
 													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
 												)}
 												<div>
-													<span className="font-medium">
-														{tierInfo?.name ?? gate.label}
-													</span>
+													<span className="font-medium">{tierInfo?.name ?? gate.label}</span>
 													<span className="text-base-content/40 ml-2 text-sm">
 														${gate.threshold}/mo
 													</span>
 												</div>
 											</div>
-											{unlocked && (
-												<span className="badge badge-sm badge-success">Unlocked</span>
-											)}
+											{unlocked && <span className="badge badge-sm badge-success">Unlocked</span>}
 										</div>
 										{gate.description && (
-											<p className="text-sm text-base-content/60 mt-1 ml-7">
-												{gate.description}
-											</p>
+											<p className="text-sm text-base-content/60 mt-1 ml-7">{gate.description}</p>
 										)}
 									</div>
 								</div>
@@ -253,16 +262,16 @@ function TiersTab({
 											</div>
 											{unlocked ? (
 												<span className="badge badge-sm badge-success">Unlocked</span>
-											) : remaining > 0 && (
-												<span className="text-xs text-base-content/40">
-													${remaining.toFixed(2)} more to unlock
-												</span>
+											) : (
+												remaining > 0 && (
+													<span className="text-xs text-base-content/40">
+														${remaining.toFixed(2)} more to unlock
+													</span>
+												)
 											)}
 										</div>
 										{gate.description && (
-											<p className="text-sm text-base-content/60 mt-1 ml-7">
-												{gate.description}
-											</p>
+											<p className="text-sm text-base-content/60 mt-1 ml-7">{gate.description}</p>
 										)}
 									</div>
 								</div>
@@ -364,7 +373,7 @@ export default function CreatorProfilePage() {
 					body: uploadData,
 				});
 				if (!uploadRes.ok) throw new Error("Failed to upload avatar.");
-				const uploadJson = await uploadRes.json() as { url: string };
+				const uploadJson = (await uploadRes.json()) as { url: string };
 				avatarUrl = uploadJson.url;
 			}
 
@@ -378,7 +387,7 @@ export default function CreatorProfilePage() {
 					body: uploadData,
 				});
 				if (!uploadRes.ok) throw new Error("Failed to upload header image.");
-				const uploadJson = await uploadRes.json() as { url: string };
+				const uploadJson = (await uploadRes.json()) as { url: string };
 				headerUrl = uploadJson.url;
 			}
 
@@ -402,9 +411,7 @@ export default function CreatorProfilePage() {
 				const data = await res.json();
 				if (data && typeof data === "object") {
 					const fieldErrors: Record<string, string> = {};
-					for (const [key, val] of Object.entries(
-						data as Record<string, string[]>,
-					)) {
+					for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
 						fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
 					}
 					setEditErrors(fieldErrors);
@@ -447,7 +454,9 @@ export default function CreatorProfilePage() {
 			}).then((res) => res.json()),
 			fetch(apiBase + "/api/subscriptions/creator-status/" + username, {
 				credentials: "include",
-			}).then((res) => res.ok ? res.json() : null).catch(() => null),
+			})
+				.then((res) => (res.ok ? res.json() : null))
+				.catch(() => null),
 		])
 			.then(([creatorData, projectData, postData, statusData]) => {
 				const userData = (creatorData as { user: PublicUser }).user;
@@ -517,11 +526,7 @@ export default function CreatorProfilePage() {
 			{editing ? (
 				<div className="relative w-full h-48 md:h-64 bg-base-300 group">
 					{headerPreview ? (
-						<img
-							src={headerPreview}
-							alt="Header"
-							className="w-full h-full object-cover"
-						/>
+						<img src={headerPreview} alt="Header" className="w-full h-full object-cover" />
 					) : (
 						<div className="w-full h-full bg-base-300" />
 					)}
@@ -574,9 +579,7 @@ export default function CreatorProfilePage() {
 									/>
 								) : (
 									<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-										{(editDisplayName || creator.username)
-											.charAt(0)
-											.toUpperCase()}
+										{(editDisplayName || creator.username).charAt(0).toUpperCase()}
 									</div>
 								)}
 								<label className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
@@ -596,9 +599,7 @@ export default function CreatorProfilePage() {
 								</label>
 							</div>
 							<div className="flex-1 pt-4 w-full">
-								<p className="text-base-content/60 mb-3">
-									@{creator.username}
-								</p>
+								<p className="text-base-content/60 mb-3">@{creator.username}</p>
 							</div>
 						</div>
 
@@ -677,21 +678,15 @@ export default function CreatorProfilePage() {
 							/>
 						) : (
 							<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-								{(creator.displayName || creator.username)
-									.charAt(0)
-									.toUpperCase()}
+								{(creator.displayName || creator.username).charAt(0).toUpperCase()}
 							</div>
 						)}
 						<div className="flex-1 pt-4">
-							<h1 className="text-2xl font-bold">
-								{creator.displayName || creator.username}
-							</h1>
+							<h1 className="text-2xl font-bold">{creator.displayName || creator.username}</h1>
 							<p className="text-base-content/60">
 								@{creator.username} · {followerCount} followers
 							</p>
-							{creator.bio && (
-								<p className="mt-2 text-sm max-w-2xl">{creator.bio}</p>
-							)}
+							{creator.bio && <p className="mt-2 text-sm max-w-2xl">{creator.bio}</p>}
 							<div className="flex items-center gap-4 mt-2 text-sm text-base-content/60">
 								{creator.websiteUrl && (
 									<a
@@ -713,10 +708,7 @@ export default function CreatorProfilePage() {
 							</div>
 						</div>
 						{isAuthenticated && isOwnProfile && (
-							<button
-								className="btn btn-ghost btn-sm mt-4 sm:mt-12"
-								onClick={startEditing}
-							>
+							<button className="btn btn-ghost btn-sm mt-4 sm:mt-12" onClick={startEditing}>
 								<PencilIcon className="w-4 h-4" />
 								Edit Profile
 							</button>
@@ -749,15 +741,17 @@ export default function CreatorProfilePage() {
 
 				{/* Tabs */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
-					{([
-						["all", "All"],
-						["games", `Games (${projects.length})`],
-						["videos", `Videos (${videoPosts.length})`],
-						["audio", `Audio (${audioPosts.length})`],
-						["writing", `Writing (${textPosts.length})`],
-						["tiers", "Tiers"],
-						["about", "About"],
-					] as const).map(([key, label]) => (
+					{(
+						[
+							["all", "All"],
+							["games", `Games (${projects.length})`],
+							["videos", `Videos (${videoPosts.length})`],
+							["audio", `Audio (${audioPosts.length})`],
+							["writing", `Writing (${textPosts.length})`],
+							["tiers", "Tiers"],
+							["about", "About"],
+						] as const
+					).map(([key, label]) => (
 						<button
 							key={key}
 							className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
@@ -770,17 +764,24 @@ export default function CreatorProfilePage() {
 
 				{/* Tab content */}
 				<div className="pb-8">
-					{tab === "all" && (
-						allItems.length > 0 ? (
+					{tab === "all" &&
+						(allItems.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{allItems.map((entry) => {
 									if (entry.type === "project") {
-										return <ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />;
+										return (
+											<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
+										);
 									}
 									const post = entry.item as PostListItem;
 									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
 									return (
-										<GatedContentWrapper key={`post-${post.id}`} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+										<GatedContentWrapper
+											key={`post-${post.id}`}
+											post={post}
+											access={access}
+											gates={creatorStatus?.gates ?? []}
+										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -791,11 +792,10 @@ export default function CreatorProfilePage() {
 								title="No content yet"
 								description={`${creator.displayName || creator.username} hasn't published anything yet.`}
 							/>
-						)
-					)}
+						))}
 
-					{tab === "games" && (
-						projects.length > 0 ? (
+					{tab === "games" &&
+						(projects.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{projects.map((project) => (
 									<ProjectCard key={project.id} project={project} />
@@ -806,16 +806,20 @@ export default function CreatorProfilePage() {
 								title="No games yet"
 								description={`${creator.displayName || creator.username} hasn't published any games.`}
 							/>
-						)
-					)}
+						))}
 
-					{tab === "videos" && (
-						videoPosts.length > 0 ? (
+					{tab === "videos" &&
+						(videoPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{videoPosts.map((post) => {
 									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
 									return (
-										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+										<GatedContentWrapper
+											key={post.id}
+											post={post}
+											access={access}
+											gates={creatorStatus?.gates ?? []}
+										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -826,16 +830,20 @@ export default function CreatorProfilePage() {
 								title="No videos yet"
 								description={`${creator.displayName || creator.username} hasn't published any videos.`}
 							/>
-						)
-					)}
+						))}
 
-					{tab === "audio" && (
-						audioPosts.length > 0 ? (
+					{tab === "audio" &&
+						(audioPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{audioPosts.map((post) => {
 									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
 									return (
-										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+										<GatedContentWrapper
+											key={post.id}
+											post={post}
+											access={access}
+											gates={creatorStatus?.gates ?? []}
+										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -846,16 +854,20 @@ export default function CreatorProfilePage() {
 								title="No audio yet"
 								description={`${creator.displayName || creator.username} hasn't published any audio.`}
 							/>
-						)
-					)}
+						))}
 
-					{tab === "writing" && (
-						textPosts.length > 0 ? (
+					{tab === "writing" &&
+						(textPosts.length > 0 ? (
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
 								{textPosts.map((post) => {
 									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
 									return (
-										<GatedContentWrapper key={post.id} post={post} access={access} gates={creatorStatus?.gates ?? []}>
+										<GatedContentWrapper
+											key={post.id}
+											post={post}
+											access={access}
+											gates={creatorStatus?.gates ?? []}
+										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -866,8 +878,7 @@ export default function CreatorProfilePage() {
 								title="No writing yet"
 								description={`${creator.displayName || creator.username} hasn't published any articles.`}
 							/>
-						)
-					)}
+						))}
 
 					{tab === "tiers" && (
 						<TiersTab

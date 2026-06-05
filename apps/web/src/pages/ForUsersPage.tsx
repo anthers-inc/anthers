@@ -1,23 +1,23 @@
+import {
+	ArrowDownTrayIcon,
+	CurrencyDollarIcon,
+	DocumentTextIcon,
+	FilmIcon,
+	GlobeAltIcon,
+	HeartIcon,
+	LockOpenIcon,
+	MagnifyingGlassIcon,
+	MusicalNoteIcon,
+	PlayIcon,
+	PuzzlePieceIcon,
+	ShieldCheckIcon,
+	SparklesIcon,
+	StarIcon,
+	TrophyIcon,
+	UserGroupIcon,
+} from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import {
-	MagnifyingGlassIcon,
-	PlayIcon,
-	ArrowDownTrayIcon,
-	UserGroupIcon,
-	TrophyIcon,
-	HeartIcon,
-	ShieldCheckIcon,
-	GlobeAltIcon,
-	SparklesIcon,
-	MusicalNoteIcon,
-	FilmIcon,
-	DocumentTextIcon,
-	PuzzlePieceIcon,
-	CurrencyDollarIcon,
-	LockOpenIcon,
-	StarIcon,
-} from "@heroicons/react/24/outline";
 
 export default function ForUsersPage() {
 	const { isAuthenticated } = useAuth();
@@ -35,9 +35,9 @@ export default function ForUsersPage() {
 							Discover, play, and support creators
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							Browse games, music, videos, and writing from independent
-							creators. Play in your browser, download for free, or pay what
-							you want—with every penny going to the person who made it.
+							Browse games, music, videos, and writing from independent creators. Play in your
+							browser, download for free, or pay what you want—with every penny going to the person
+							who made it.
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link to="/discover" className="btn btn-secondary btn-lg">
@@ -50,8 +50,7 @@ export default function ForUsersPage() {
 							)}
 						</div>
 						<p className="mt-6 text-sm text-base-content/40">
-							No account needed to browse, download free content, or play web
-							games.
+							No account needed to browse, download free content, or play web games.
 						</p>
 					</div>
 				</div>
@@ -60,13 +59,10 @@ export default function ForUsersPage() {
 			{/* ───────────── Zero Friction ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						No barriers, no tricks
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">No barriers, no tricks</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Other platforms make you create an account, verify your email, and
-						agree to terms before you can do anything. Anthers gets out of your
-						way.
+						Other platforms make you create an account, verify your email, and agree to terms before
+						you can do anything. Anthers gets out of your way.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-10">
@@ -76,8 +72,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-bold text-lg mb-2">Play instantly</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								HTML5 games run in your browser with one click. No downloads,
-								no installs, no account. See a game, click play, you're in.
+								HTML5 games run in your browser with one click. No downloads, no installs, no
+								account. See a game, click play, you're in.
 							</p>
 						</div>
 						<div className="text-center">
@@ -86,9 +82,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-bold text-lg mb-2">Download freely</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								Free content is genuinely free—no login wall, no email gate,
-								no "subscribe to download" tricks. If a creator made it free,
-								you get it free.
+								Free content is genuinely free—no login wall, no email gate, no "subscribe to
+								download" tricks. If a creator made it free, you get it free.
 							</p>
 						</div>
 						<div className="text-center">
@@ -97,9 +92,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-bold text-lg mb-2">Browse everything</h3>
 							<p className="text-sm text-base-content/60 leading-relaxed">
-								The full catalog is open. Search, filter by media type,
-								explore tags, check ratings—all without signing in.
-								The platform works for you before you commit to it.
+								The full catalog is open. Search, filter by media type, explore tags, check
+								ratings—all without signing in. The platform works for you before you commit to it.
 							</p>
 						</div>
 					</div>
@@ -109,12 +103,10 @@ export default function ForUsersPage() {
 			{/* ───────────── What You'll Find ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						All kinds of creative work
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">All kinds of creative work</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers isn't just games. Creators publish across media—and you
-						can discover all of it in one place, from one search bar.
+						Anthers isn't just games. Creators publish across media—and you can discover all of it
+						in one place, from one search bar.
 					</p>
 
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -145,22 +137,14 @@ export default function ForUsersPage() {
 							title="Audio"
 							color="badge-success"
 							description="Music, soundtracks, podcasts, and audio experiments from artists and composers."
-							highlights={[
-								"Stream directly",
-								"Game soundtracks bundled",
-								"Albums and singles",
-							]}
+							highlights={["Stream directly", "Game soundtracks bundled", "Albums and singles"]}
 						/>
 						<ContentCard
 							icon={<DocumentTextIcon className="w-8 h-8" />}
 							title="Writing"
 							color="badge-info"
 							description="Essays, fiction, devlogs, tutorials, and journals from writers and game developers."
-							highlights={[
-								"Read on the platform",
-								"Development journals",
-								"Tutorials and guides",
-							]}
+							highlights={["Read on the platform", "Development journals", "Tutorials and guides"]}
 						/>
 					</div>
 				</div>
@@ -169,9 +153,7 @@ export default function ForUsersPage() {
 			{/* ───────────── Discovery ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Find your next favorite thing
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Find your next favorite thing</h2>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
 						<DiscoveryFeature
@@ -211,33 +193,22 @@ export default function ForUsersPage() {
 			{/* ───────────── Fair Pricing for Users ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Transparent pricing you can trust
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Transparent pricing you can trust</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						When you buy something on Anthers, you see exactly where your
-						money goes. No hidden fees, no surprise charges. The creator's
-						price is what the creator gets.
+						When you buy something on Anthers, you see exactly where your money goes. No hidden
+						fees, no surprise charges. The creator's price is what the creator gets.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 						{/* Example receipt */}
 						<div className="card bg-base-200">
 							<div className="card-body">
-								<h3 className="font-bold text-lg mb-3">
-									Example: Buying a $10 game
-								</h3>
+								<h3 className="font-bold text-lg mb-3">Example: Buying a $10 game</h3>
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
 									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine
-										label="Anthers Foundation Fee (3%)"
-										amount="$0.30"
-									/>
-									<ReceiptLine
-										label="Payment processing (2.9% + $0.30)"
-										amount="$0.59"
-									/>
+									<ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
+									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
 									<ReceiptLine label="You pay" amount="$10.90" bold />
 								</div>
@@ -255,9 +226,8 @@ export default function ForUsersPage() {
 								<div>
 									<h4 className="font-semibold text-sm">Your money reaches the creator</h4>
 									<p className="text-sm text-base-content/60">
-										On other platforms, 10-30% of what you pay disappears
-										into the platform's pocket. Here, the creator's listed
-										price is exactly what they receive.
+										On other platforms, 10-30% of what you pay disappears into the platform's
+										pocket. Here, the creator's listed price is exactly what they receive.
 									</p>
 								</div>
 							</div>
@@ -268,8 +238,8 @@ export default function ForUsersPage() {
 								<div>
 									<h4 className="font-semibold text-sm">No hidden costs</h4>
 									<p className="text-sm text-base-content/60">
-										Every fee is listed and explained before you pay. You
-										always know exactly what you're paying for and why.
+										Every fee is listed and explained before you pay. You always know exactly what
+										you're paying for and why.
 									</p>
 								</div>
 							</div>
@@ -280,9 +250,9 @@ export default function ForUsersPage() {
 								<div>
 									<h4 className="font-semibold text-sm">Anthers Foundation</h4>
 									<p className="text-sm text-base-content/60">
-										A small 3% contribution funds the Anthers Foundation, which
-										allocates between charitable programs and organizational
-										operations to keep the ecosystem healthy for everyone.
+										A small 3% contribution funds the Anthers Foundation, which allocates between
+										charitable programs and organizational operations to keep the ecosystem healthy
+										for everyone.
 									</p>
 								</div>
 							</div>
@@ -317,9 +287,9 @@ export default function ForUsersPage() {
 						Support creators with a subscription
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Optional subscriptions let you support the creators you love. Your
-						subscription funds are distributed based on what you actually watch,
-						play, read, and listen to—plus optional boosts to your favorites.
+						Optional subscriptions let you support the creators you love. Your subscription funds
+						are distributed based on what you actually watch, play, read, and listen to—plus
+						optional boosts to your favorites.
 					</p>
 					<div className="overflow-x-auto">
 						<table className="table table-sm max-w-3xl mx-auto">
@@ -366,11 +336,10 @@ export default function ForUsersPage() {
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4">
-						Tiers are threshold prices — you can adjust your support level in $1
-						increments. Any funding level above $3 generates Boost Pool funds to
-						direct to favorite creators and unlock boost-gated content.
-						*Platform tier gates (e.g. "Sprout required") need the corresponding
-						threshold. Subscriptions coming soon.
+						Tiers are threshold prices — you can adjust your support level in $1 increments. Any
+						funding level above $3 generates Boost Pool funds to direct to favorite creators and
+						unlock boost-gated content. *Platform tier gates (e.g. "Sprout required") need the
+						corresponding threshold. Subscriptions coming soon.
 					</p>
 				</div>
 			</section>
@@ -378,14 +347,11 @@ export default function ForUsersPage() {
 			{/* ───────────── Your Data Is Yours ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Your account, your data
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Your account, your data</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers is built on the AT Protocol (the tech behind Bluesky).
-						Sign in with your existing Bluesky identity, or create a new one.
-						Your follows, library, and activity are yours—portable and not
-						locked in.
+						Anthers is built on the AT Protocol (the tech behind Bluesky). Sign in with your
+						existing Bluesky identity, or create a new one. Your follows, library, and activity are
+						yours—portable and not locked in.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -395,9 +361,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Portable identity</h3>
 							<p className="text-sm text-base-content/60">
-								Your account is a decentralized identifier (DID) you control.
-								If you already have a Bluesky account, you can use the same
-								identity here.
+								Your account is a decentralized identifier (DID) you control. If you already have a
+								Bluesky account, you can use the same identity here.
 							</p>
 						</div>
 						<div className="text-center">
@@ -406,9 +371,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-semibold mb-1">No lock-in</h3>
 							<p className="text-sm text-base-content/60">
-								Your follows, ratings, library, and activity are stored in a
-								way that's portable. If you ever want to leave, your data
-								goes with you.
+								Your follows, ratings, library, and activity are stored in a way that's portable. If
+								you ever want to leave, your data goes with you.
 							</p>
 						</div>
 						<div className="text-center">
@@ -417,9 +381,8 @@ export default function ForUsersPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Privacy first</h3>
 							<p className="text-sm text-base-content/60">
-								No tracking cookies, no ad-driven surveillance, no selling
-								your browsing history. The platform works for you and the
-								creators you support.
+								No tracking cookies, no ad-driven surveillance, no selling your browsing history.
+								The platform works for you and the creators you support.
 							</p>
 						</div>
 					</div>
@@ -429,12 +392,10 @@ export default function ForUsersPage() {
 			{/* ───────────── What You Get ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Free account, real benefits
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Free account, real benefits</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						You can do a lot without an account. But a free account unlocks
-						the full experience—and it takes 30 seconds.
+						You can do a lot without an account. But a free account unlocks the full experience—and
+						it takes 30 seconds.
 					</p>
 
 					<div className="overflow-x-auto">
@@ -447,16 +408,56 @@ export default function ForUsersPage() {
 								</tr>
 							</thead>
 							<tbody>
-								<AccountComparisonRow feature="Browse all projects" noAccount={true} freeAccount={true} />
-								<AccountComparisonRow feature="Play web games" noAccount={true} freeAccount={true} />
-								<AccountComparisonRow feature="Download free content" noAccount={true} freeAccount={true} />
-								<AccountComparisonRow feature="Read devlogs and posts" noAccount={true} freeAccount={true} />
-								<AccountComparisonRow feature="Follow creators" noAccount={false} freeAccount={true} />
-								<AccountComparisonRow feature="Personal feed" noAccount={false} freeAccount={true} />
-								<AccountComparisonRow feature="Rate and comment" noAccount={false} freeAccount={true} />
-								<AccountComparisonRow feature="Purchase paid content" noAccount={false} freeAccount={true} />
-								<AccountComparisonRow feature="Save to library" noAccount={false} freeAccount={true} />
-								<AccountComparisonRow feature="Join game jams" noAccount={false} freeAccount={true} />
+								<AccountComparisonRow
+									feature="Browse all projects"
+									noAccount={true}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Play web games"
+									noAccount={true}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Download free content"
+									noAccount={true}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Read devlogs and posts"
+									noAccount={true}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Follow creators"
+									noAccount={false}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Personal feed"
+									noAccount={false}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Rate and comment"
+									noAccount={false}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Purchase paid content"
+									noAccount={false}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Save to library"
+									noAccount={false}
+									freeAccount={true}
+								/>
+								<AccountComparisonRow
+									feature="Join game jams"
+									noAccount={false}
+									freeAccount={true}
+								/>
 							</tbody>
 						</table>
 					</div>
@@ -466,13 +467,10 @@ export default function ForUsersPage() {
 			{/* ───────────── CTA ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 text-center max-w-2xl">
-					<h2 className="text-3xl font-bold mb-4">
-						Start exploring
-					</h2>
+					<h2 className="text-3xl font-bold mb-4">Start exploring</h2>
 					<p className="text-base-content/60 mb-8 leading-relaxed">
-						Thousands of games, videos, music, and writing from independent
-						creators—many of them free. No account required to start
-						browsing.
+						Thousands of games, videos, music, and writing from independent creators—many of them
+						free. No account required to start browsing.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link to="/discover" className="btn btn-secondary btn-lg">
@@ -541,27 +539,15 @@ function DiscoveryFeature({
 			</div>
 			<div>
 				<h3 className="font-semibold mb-1">{title}</h3>
-				<p className="text-sm text-base-content/60 leading-relaxed">
-					{description}
-				</p>
+				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
 	);
 }
 
-function ReceiptLine({
-	label,
-	amount,
-	bold,
-}: {
-	label: string;
-	amount: string;
-	bold?: boolean;
-}) {
+function ReceiptLine({ label, amount, bold }: { label: string; amount: string; bold?: boolean }) {
 	return (
-		<div
-			className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}
-		>
+		<div className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}>
 			<span>{label}</span>
 			<span>{amount}</span>
 		</div>

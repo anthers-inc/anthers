@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
@@ -49,7 +49,10 @@ type ViewMode = "month" | "preorders";
 /* ------------------------------------------------------------------ */
 
 function MonthSelector({
-	month, onChange, onPreorders, mode,
+	month,
+	onChange,
+	onPreorders,
+	mode,
 }: {
 	month: string;
 	onChange: (m: string) => void;
@@ -62,10 +65,7 @@ function MonthSelector({
 		<div className="flex items-center gap-3">
 			{mode === "month" ? (
 				<>
-					<button
-						className="btn btn-ghost btn-xs"
-						onClick={() => onChange(offsetMonth(month, -1))}
-					>
+					<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetMonth(month, -1))}>
 						&larr;
 					</button>
 					<span className="text-sm font-medium min-w-[140px] text-center">
@@ -82,20 +82,14 @@ function MonthSelector({
 							&rarr;
 						</button>
 					) : (
-						<button
-							className="btn btn-ghost btn-xs text-primary"
-							onClick={onPreorders}
-						>
+						<button className="btn btn-ghost btn-xs text-primary" onClick={onPreorders}>
 							Pre-Orders &rarr;
 						</button>
 					)}
 				</>
 			) : (
 				<>
-					<button
-						className="btn btn-ghost btn-xs"
-						onClick={() => onChange(current)}
-					>
+					<button className="btn btn-ghost btn-xs" onClick={() => onChange(current)}>
 						&larr; {monthLabel(current)}
 					</button>
 					<span className="text-sm font-medium text-primary">Pre-Orders</span>
@@ -154,18 +148,9 @@ export default function PurchasesPage() {
 	};
 
 	// Compute totals
-	const totalSpent = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.amount),
-		0,
-	);
-	const totalFees = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.processingFee),
-		0,
-	);
-	const totalCreator = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.creatorEarnings),
-		0,
-	);
+	const totalSpent = purchases.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+	const totalFees = purchases.reduce((sum, p) => sum + parseFloat(p.processingFee), 0);
+	const totalCreator = purchases.reduce((sum, p) => sum + parseFloat(p.creatorEarnings), 0);
 
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
@@ -189,8 +174,8 @@ export default function PurchasesPage() {
 					<div className="card-body text-center text-base-content/50">
 						<p className="font-medium">Pre-Orders</p>
 						<p className="text-sm mt-1">
-							No pre-orders yet. When you pre-order content, it will
-							appear here regardless of its release date.
+							No pre-orders yet. When you pre-order content, it will appear here regardless of its
+							release date.
 						</p>
 						{/* TODO: Implement pre-order system. Pre-orders are one-time
 						    purchases for content that hasn't been released yet. Unlike
@@ -278,8 +263,8 @@ export default function PurchasesPage() {
 										<span>{fmt(totalCreator)}</span>
 									</div>
 									<p className="text-[11px] text-base-content/30 mt-1">
-										Purchase fees are pass-through processing costs. Creators
-										receive the full purchase price — fees are added on top.
+										Purchase fees are pass-through processing costs. Creators receive the full
+										purchase price — fees are added on top.
 									</p>
 								</div>
 							)}
@@ -289,8 +274,8 @@ export default function PurchasesPage() {
 							<div className="card-body text-center text-base-content/50">
 								<p>No purchases in {monthLabel(selectedMonth)}.</p>
 								<p className="text-sm mt-1">
-									Direct purchases show up here — games, music downloads,
-									digital goods, and other one-time items.
+									Direct purchases show up here — games, music downloads, digital goods, and other
+									one-time items.
 								</p>
 							</div>
 						</div>

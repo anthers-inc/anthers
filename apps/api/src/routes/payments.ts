@@ -5,29 +5,31 @@
  * Stripe SDK will be integrated when payment processing is fully wired up.
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import {
-	users,
-	projects,
-	stripeAccounts,
-	purchases,
 	crfLedger,
 	crfSubsidies,
+	projects,
+	purchases,
+	stripeAccounts,
+	users,
 } from "@anthers/db/schema";
+import { zValidator } from "@hono/zod-validator";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FOUNDATION_FEE_PERCENTAGE = 0.03; // Anthers Foundation Fee: 3%
 const PROCESSING_FEE_PERCENTAGE = 0.029; // 2.9%
-const PROCESSING_FEE_FIXED = 0.30; // $0.30
+const PROCESSING_FEE_FIXED = 0.3; // $0.30
 
 function calculateFees(amount: number) {
-	const processingFee = Number((amount * PROCESSING_FEE_PERCENTAGE + PROCESSING_FEE_FIXED).toFixed(2));
+	const processingFee = Number(
+		(amount * PROCESSING_FEE_PERCENTAGE + PROCESSING_FEE_FIXED).toFixed(2),
+	);
 	const foundationFee = Number((amount * FOUNDATION_FEE_PERCENTAGE).toFixed(2));
 	const creatorEarnings = Number((amount - processingFee - foundationFee).toFixed(2));
 	// crfFee: legacy field name for Anthers Foundation Fee
@@ -96,11 +98,7 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const [project] = await db
-			.select()
-			.from(projects)
-			.where(eq(projects.slug, slug))
-			.limit(1);
+		const [project] = await db.select().from(projects).where(eq(projects.slug, slug)).limit(1);
 
 		if (!project) return c.json({ error: "Project not found" }, 404);
 
@@ -195,10 +193,7 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const month = c.req.query("month"); // optional YYYY-MM filter
 
-		const conditions = [
-			eq(purchases.buyerId, user.id),
-			eq(purchases.status, "completed"),
-		];
+		const conditions = [eq(purchases.buyerId, user.id), eq(purchases.status, "completed")];
 
 		if (month) {
 			const start = new Date(`${month}-01T00:00:00`);

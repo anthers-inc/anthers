@@ -1,17 +1,17 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
 import {
-	ShieldCheckIcon,
 	AcademicCapIcon,
-	HeartIcon,
-	GlobeAltIcon,
-	ScaleIcon,
-	DocumentTextIcon,
 	BuildingLibraryIcon,
-	LockClosedIcon,
+	DocumentTextIcon,
 	EyeIcon,
+	GlobeAltIcon,
+	HeartIcon,
+	LockClosedIcon,
+	ScaleIcon,
+	ShieldCheckIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -139,9 +139,7 @@ function FlipCard({
 					<h3 className={`font-semibold mb-3 ${placeholder ? "text-base-content/40" : ""}`}>
 						{name}
 					</h3>
-					<p className="text-sm text-base-content/60 leading-relaxed">
-						{bio}
-					</p>
+					<p className="text-sm text-base-content/60 leading-relaxed">{bio}</p>
 					{placeholder && (
 						<span className="mt-3 text-xs text-base-content/30 uppercase tracking-wider">
 							Seeking candidates
@@ -171,10 +169,9 @@ export default function AboutPage() {
 							The creative internet can work differently.
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							Anthers is a federated, open content network for video, audio,
-							text, games, and interactive experiences—built and operated as a
-							501(c)(3) non-profit so that it is structurally incapable of
-							prioritizing profit over people.
+							Anthers is a federated, open content network for video, audio, text, games, and
+							interactive experiences—built and operated as a 501(c)(3) non-profit so that it is
+							structurally incapable of prioritizing profit over people.
 						</p>
 					</div>
 				</div>
@@ -185,13 +182,10 @@ export default function AboutPage() {
 			{/* ═══════════════════════════════════════════════════════════ */}
 			<section className="bg-base-200/50 py-20">
 				<div className="max-w-7xl mx-auto px-4">
-					<h2 className="text-3xl font-bold text-center mb-3">
-						Why We're Here
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-3">Why We're Here</h2>
 					<p className="text-base-content/70 text-center max-w-3xl mx-auto mb-14">
-						The creative internet is broken—not by accident, but by design.
-						Commercial platforms are structurally incentivized to extract value
-						from creators rather than serve them.
+						The creative internet is broken—not by accident, but by design. Commercial platforms are
+						structurally incentivized to extract value from creators rather than serve them.
 					</p>
 
 					{/* Alternating left/right blocks instead of card grid */}
@@ -201,14 +195,11 @@ export default function AboutPage() {
 								<span className="text-2xl">%</span>
 							</div>
 							<div>
-								<h3 className="font-semibold text-lg mb-1">
-									Escalating Cuts
-								</h3>
+								<h3 className="font-semibold text-lg mb-1">Escalating Cuts</h3>
 								<p className="text-base-content/60 leading-relaxed">
-									Platforms take increasing percentages of creator revenue. They
-									treat the people who make the platform valuable as a cost
-									center—and every funding round, every IPO, every acquisition
-									shifts incentives further toward extraction.
+									Platforms take increasing percentages of creator revenue. They treat the people
+									who make the platform valuable as a cost center—and every funding round, every
+									IPO, every acquisition shifts incentives further toward extraction.
 								</p>
 							</div>
 						</div>
@@ -218,15 +209,12 @@ export default function AboutPage() {
 								<span className="text-2xl">~</span>
 							</div>
 							<div>
-								<h3 className="font-semibold text-lg mb-1">
-									Algorithmic Manipulation
-								</h3>
+								<h3 className="font-semibold text-lg mb-1">Algorithmic Manipulation</h3>
 								<p className="text-base-content/60 leading-relaxed">
-									What audiences see is optimized for engagement metrics that
-									serve advertisers—not for the content people actually asked
-									for. Discovery algorithms systematically privilege outrage and
-									lowest-common-denominator content because those things generate
-									clicks and ad impressions.
+									What audiences see is optimized for engagement metrics that serve advertisers—not
+									for the content people actually asked for. Discovery algorithms systematically
+									privilege outrage and lowest-common-denominator content because those things
+									generate clicks and ad impressions.
 								</p>
 							</div>
 						</div>
@@ -236,24 +224,20 @@ export default function AboutPage() {
 								<span className="text-2xl">&times;</span>
 							</div>
 							<div>
-								<h3 className="font-semibold text-lg mb-1">
-									Platform Lock-In
-								</h3>
+								<h3 className="font-semibold text-lg mb-1">Platform Lock-In</h3>
 								<p className="text-base-content/60 leading-relaxed">
-									Creator identities, audiences, and livelihoods are held
-									hostage behind proprietary walls. Leave, and you lose
-									everything you built. No algorithm change should be able to
-									bury a creator's work overnight, and no policy shift should
-									demonetize them without recourse.
+									Creator identities, audiences, and livelihoods are held hostage behind proprietary
+									walls. Leave, and you lose everything you built. No algorithm change should be
+									able to bury a creator's work overnight, and no policy shift should demonetize
+									them without recourse.
 								</p>
 							</div>
 						</div>
 					</div>
 
 					<p className="text-center mt-14 text-base-content/50 max-w-xl mx-auto text-sm italic">
-						The only way to guarantee a creator-first platform is to remove the
-						profit motive entirely—not as a promise, but as a legal and
-						structural constraint.
+						The only way to guarantee a creator-first platform is to remove the profit motive
+						entirely—not as a promise, but as a legal and structural constraint.
 					</p>
 				</div>
 			</section>
@@ -265,23 +249,20 @@ export default function AboutPage() {
 				<div className="max-w-7xl mx-auto px-4">
 					<h2 className="text-3xl font-bold text-center mb-3">What We Do</h2>
 					<p className="text-base-content/70 text-center max-w-3xl mx-auto mb-6">
-						Anthers advances equity in creative and educational content spaces
-						by providing platform infrastructure that is structurally incapable
-						of prioritizing profit over the people it serves.
+						Anthers advances equity in creative and educational content spaces by providing platform
+						infrastructure that is structurally incapable of prioritizing profit over the people it
+						serves.
 					</p>
 
 					{/* Mission summary—two-column prose */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto mb-16">
 						<div className="border-l-2 border-primary/30 pl-6">
-							<h3 className="text-sm uppercase tracking-wider text-primary mb-3">
-								For Creators
-							</h3>
+							<h3 className="text-sm uppercase tracking-wider text-primary mb-3">For Creators</h3>
 							<p className="text-base-content/60 leading-relaxed">
-								The vast majority of subscription and purchase revenue flows
-								directly to creators. Infrastructure costs are transparent and
-								passed through at cost. The organization's operating expenses
-								are fixed to reasonable staff and infrastructure, and all
-								surplus is directed to the Anthers Foundation's charitable programs.
+								The vast majority of subscription and purchase revenue flows directly to creators.
+								Infrastructure costs are transparent and passed through at cost. The organization's
+								operating expenses are fixed to reasonable staff and infrastructure, and all surplus
+								is directed to the Anthers Foundation's charitable programs.
 							</p>
 						</div>
 						<div className="border-l-2 border-secondary/30 pl-6">
@@ -289,25 +270,20 @@ export default function AboutPage() {
 								For Audiences
 							</h3>
 							<p className="text-base-content/60 leading-relaxed">
-								Consumers see what they asked to see. Feeds are chronological
-								and subscriber-driven by default. There are no ads, no data
-								monetization, and no engagement-maximization algorithms.
-								Subscribers know exactly where every dollar goes—and can see
-								it.
+								Consumers see what they asked to see. Feeds are chronological and subscriber-driven
+								by default. There are no ads, no data monetization, and no engagement-maximization
+								algorithms. Subscribers know exactly where every dollar goes—and can see it.
 							</p>
 						</div>
 					</div>
 
 					{/* CRF—the heart of the mission */}
 					<div className="max-w-7xl mx-auto">
-						<h3 className="text-2xl font-bold text-center mb-2">
-							The Anthers Foundation
-						</h3>
+						<h3 className="text-2xl font-bold text-center mb-2">The Anthers Foundation</h3>
 						<p className="text-base-content/70 text-center max-w-3xl mx-auto mb-10">
-							The Foundation is the operational heart of Anthers's mission,
-							allocating at least 50% of the 8% Foundation Fee to charitable
-							programs: infrastructure equity, education, creation grants,
-							and emergency assistance.
+							The Foundation is the operational heart of Anthers's mission, allocating at least 50%
+							of the 8% Foundation Fee to charitable programs: infrastructure equity, education,
+							creation grants, and emergency assistance.
 						</p>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 							{FOUNDATION_PILLARS.map((pillar) => (
@@ -319,12 +295,8 @@ export default function AboutPage() {
 										<pillar.icon className="w-8 h-8 text-secondary" />
 									</div>
 									<div>
-										<h3 className="font-semibold text-lg mb-1">
-											{pillar.title}
-										</h3>
-										<p className="text-sm text-base-content/60">
-											{pillar.description}
-										</p>
+										<h3 className="font-semibold text-lg mb-1">{pillar.title}</h3>
+										<p className="text-sm text-base-content/60">{pillar.description}</p>
 									</div>
 								</div>
 							))}
@@ -345,8 +317,8 @@ export default function AboutPage() {
 				<div className="max-w-7xl mx-auto px-4">
 					<h2 className="text-3xl font-bold text-center mb-3">How We Do It</h2>
 					<p className="text-base-content/70 text-center max-w-2xl mx-auto mb-14">
-						These aren't aspirations. They are structural properties of how
-						Anthers is built, incorporated, and governed.
+						These aren't aspirations. They are structural properties of how Anthers is built,
+						incorporated, and governed.
 					</p>
 
 					{/* Numbered principles—vertical timeline-style layout */}
@@ -382,22 +354,13 @@ export default function AboutPage() {
 									text: "Federation makes the network resilient to external pressure. Non-profit incorporation makes the organization resilient to internal corruption. Both are necessary. Neither is sufficient alone.",
 								},
 							].map((item) => (
-								<div
-									key={item.num}
-									className="flex gap-6 items-start relative"
-								>
+								<div key={item.num} className="flex gap-6 items-start relative">
 									<div className="shrink-0 w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center z-10">
-										<span className="text-sm font-bold text-primary">
-											{item.num}
-										</span>
+										<span className="text-sm font-bold text-primary">{item.num}</span>
 									</div>
 									<div className="pt-1">
-										<h3 className="font-semibold text-lg mb-1">
-											{item.title}
-										</h3>
-										<p className="text-sm text-base-content/60 leading-relaxed">
-											{item.text}
-										</p>
+										<h3 className="font-semibold text-lg mb-1">{item.title}</h3>
+										<p className="text-sm text-base-content/60 leading-relaxed">{item.text}</p>
 									</div>
 								</div>
 							))}
@@ -413,9 +376,8 @@ export default function AboutPage() {
 				<div className="max-w-7xl mx-auto px-4">
 					<h2 className="text-3xl font-bold text-center mb-3">Who We Are</h2>
 					<p className="text-base-content/70 text-center max-w-2xl mx-auto mb-12">
-						Anthers is in its founding phase. The team is small, building in
-						public, and actively seeking board members who believe the creative
-						internet deserves better.
+						Anthers is in its founding phase. The team is small, building in public, and actively
+						seeking board members who believe the creative internet deserves better.
 					</p>
 
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -425,9 +387,8 @@ export default function AboutPage() {
 					</div>
 
 					<p className="text-xs text-base-content/40 text-center mt-8 max-w-lg mx-auto">
-						Board seats carry three-year staggered terms with regular rotation.
-						The Executive Director serves ex officio and is recused from votes
-						on their own compensation.
+						Board seats carry three-year staggered terms with regular rotation. The Executive
+						Director serves ex officio and is recused from votes on their own compensation.
 					</p>
 				</div>
 			</section>
@@ -442,13 +403,11 @@ export default function AboutPage() {
 						<h2 className="text-3xl font-bold">The Anthers Foundation</h2>
 					</div>
 					<p className="text-base-content/70 text-center max-w-3xl mx-auto mb-14">
-							Anthers is a non-profit because the only way to guarantee
-							that our platform always serves creators is to make it legally
-							impossible for it to act otherwise. Anthers cannot distribute
-							profits to insiders, cannot be acquired, and cannot have its
-							mission diluted by investors. If it ever ceases to operate,
-							its assets go to another exempt organization, not to founders
-							or shareholders.
+						Anthers is a non-profit because the only way to guarantee that our platform always
+						serves creators is to make it legally impossible for it to act otherwise. Anthers cannot
+						distribute profits to insiders, cannot be acquired, and cannot have its mission diluted
+						by investors. If it ever ceases to operate, its assets go to another exempt
+						organization, not to founders or shareholders.
 					</p>
 
 					{/* Governance—horizontal icon row, not cards */}
@@ -519,9 +478,7 @@ export default function AboutPage() {
 									<div className="md:w-40 shrink-0">
 										<h4 className="font-semibold text-sm">{doc.title}</h4>
 									</div>
-									<p className="text-sm text-base-content/60 flex-1">
-										{doc.description}
-									</p>
+									<p className="text-sm text-base-content/60 flex-1">{doc.description}</p>
 									<span className="text-xs text-base-content/40 uppercase tracking-wider shrink-0">
 										{doc.cadence}
 									</span>
@@ -539,9 +496,8 @@ export default function AboutPage() {
 						Built to serve creators. Structurally incapable of doing otherwise.
 					</h2>
 					<p className="text-base-content/70 mb-8 max-w-xl mx-auto">
-						Whether you create games, videos, music, writing, or interactive
-						experiences—Anthers is designed so that every dollar flows to the
-						people who make the platform valuable.
+						Whether you create games, videos, music, writing, or interactive experiences—Anthers is
+						designed so that every dollar flows to the people who make the platform valuable.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link to="/subscribe" className="btn btn-primary">

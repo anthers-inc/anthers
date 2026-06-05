@@ -1,21 +1,21 @@
-import { Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
 import {
+	ArrowPathIcon,
+	CodeBracketIcon,
 	CurrencyDollarIcon,
-	GlobeAltIcon,
+	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
-	MusicalNoteIcon,
-	DocumentTextIcon,
-	PuzzlePieceIcon,
-	ArrowPathIcon,
-	UserGroupIcon,
+	GlobeAltIcon,
 	LockOpenIcon,
-	CodeBracketIcon,
+	MusicalNoteIcon,
 	NewspaperIcon,
-	TrophyIcon,
 	PlayIcon,
+	PuzzlePieceIcon,
+	TrophyIcon,
+	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 export default function CompareGhostPage() {
 	const { isAuthenticated } = useAuth();
@@ -33,10 +33,9 @@ export default function CompareGhostPage() {
 							Different missions, different strengths
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							Ghost is a beautifully crafted publishing platform for writers
-							and newsletter creators. Anthers is a creator economy platform
-							for games, video, audio, and writing. Here's how they compare
-							and where each one shines.
+							Ghost is a beautifully crafted publishing platform for writers and newsletter
+							creators. Anthers is a creator economy platform for games, video, audio, and writing.
+							Here's how they compare and where each one shines.
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link
@@ -56,13 +55,10 @@ export default function CompareGhostPage() {
 			{/* ───────────── Positioning ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Two platforms, two philosophies
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Two platforms, two philosophies</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Ghost and Anthers share some values—independence, creator
-						ownership, transparent economics—but they're built for different
-						creative workflows.
+						Ghost and Anthers share some values—independence, creator ownership, transparent
+						economics—but they're built for different creative workflows.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -73,9 +69,8 @@ export default function CompareGhostPage() {
 									Ghost
 								</h3>
 								<p className="text-sm text-base-content/60 leading-relaxed mb-4">
-									A professional publishing platform built for writers,
-									journalists, and newsletter creators. Ghost excels at
-									long-form content, email newsletters, paid memberships,
+									A professional publishing platform built for writers, journalists, and newsletter
+									creators. Ghost excels at long-form content, email newsletters, paid memberships,
 									and SEO-optimized websites.
 								</p>
 								<ul className="text-sm text-base-content/60 flex flex-col gap-2">
@@ -110,10 +105,9 @@ export default function CompareGhostPage() {
 									Anthers
 								</h3>
 								<p className="text-sm text-base-content/60 leading-relaxed mb-4">
-									A creator economy platform built for multi-media indie
-									creators. Anthers is designed for people who make games,
-									videos, music, and written content—and want one home for
-									all of it.
+									A creator economy platform built for multi-media indie creators. Anthers is
+									designed for people who make games, videos, music, and written content—and want
+									one home for all of it.
 								</p>
 								<ul className="text-sm text-base-content/60 flex flex-col gap-2">
 									<li className="flex gap-2">
@@ -146,13 +140,10 @@ export default function CompareGhostPage() {
 			{/* ───────────── Media Support ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Content types at a glance
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Content types at a glance</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Ghost is laser-focused on written publishing and newsletters.
-						Anthers covers a wider range of creative media—ideal for indie
-						creators who work across multiple formats.
+						Ghost is laser-focused on written publishing and newsletters. Anthers covers a wider
+						range of creative media—ideal for indie creators who work across multiple formats.
 					</p>
 
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -188,9 +179,7 @@ export default function CompareGhostPage() {
 			{/* ───────────── Key Differences ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Where they differ
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Where they differ</h2>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
 						<DiffCard
 							icon={<CurrencyDollarIcon className="w-6 h-6" />}
@@ -229,9 +218,7 @@ export default function CompareGhostPage() {
 			{/* ───────────── Feature Comparison Table ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Feature by feature
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Feature by feature</h2>
 
 					<div className="overflow-x-auto">
 						<table className="table max-w-3xl mx-auto">
@@ -273,9 +260,7 @@ export default function CompareGhostPage() {
 			{/* ───────────── When to Use Which ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">
-						Which one is right for you?
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-12">Which one is right for you?</h2>
 
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 						<div className="card bg-base-100">
@@ -340,13 +325,10 @@ export default function CompareGhostPage() {
 			{/* ───────────── Data Portability ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Both believe in creator ownership
-					</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">Both believe in creator ownership</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Ghost and Anthers share a core belief: creators should own their
-						work, their audience, and their data. They just approach it
-						differently.
+						Ghost and Anthers share a core belief: creators should own their work, their audience,
+						and their data. They just approach it differently.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -356,9 +338,8 @@ export default function CompareGhostPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Ghost: open source</h3>
 							<p className="text-sm text-base-content/60">
-								Ghost publishes its entire codebase under the MIT license. You
-								can self-host, modify, and run your own instance. Your data
-								lives on your server.
+								Ghost publishes its entire codebase under the MIT license. You can self-host,
+								modify, and run your own instance. Your data lives on your server.
 							</p>
 						</div>
 						<div className="text-center">
@@ -367,9 +348,8 @@ export default function CompareGhostPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Anthers: open protocol</h3>
 							<p className="text-sm text-base-content/60">
-								Anthers builds on the AT Protocol. Your identity is a
-								portable DID. Your content is interoperable. Federation means
-								no single point of control.
+								Anthers builds on the AT Protocol. Your identity is a portable DID. Your content is
+								interoperable. Federation means no single point of control.
 							</p>
 						</div>
 						<div className="text-center">
@@ -378,9 +358,8 @@ export default function CompareGhostPage() {
 							</div>
 							<h3 className="font-semibold mb-1">Same goal</h3>
 							<p className="text-sm text-base-content/60">
-								Both reject the model where platforms own your audience and
-								take a cut of your revenue. Different architectures, same
-								creator-first mission.
+								Both reject the model where platforms own your audience and take a cut of your
+								revenue. Different architectures, same creator-first mission.
 							</p>
 						</div>
 					</div>
@@ -390,13 +369,11 @@ export default function CompareGhostPage() {
 			{/* ───────────── CTA ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 text-center max-w-2xl">
-					<h2 className="text-3xl font-bold mb-4">
-						Ready to publish your creative work?
-					</h2>
+					<h2 className="text-3xl font-bold mb-4">Ready to publish your creative work?</h2>
 					<p className="text-base-content/60 mb-8 leading-relaxed">
-						If you're a writer or journalist, Ghost is an excellent choice.
-						If you make games, videos, music, or multimedia creative work —
-						Anthers was built for you. Free to use, 100% to creators.
+						If you're a writer or journalist, Ghost is an excellent choice. If you make games,
+						videos, music, or multimedia creative work — Anthers was built for you. Free to use,
+						100% to creators.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link
@@ -433,9 +410,7 @@ function DiffCard({
 			</div>
 			<div>
 				<h3 className="font-semibold mb-1">{title}</h3>
-				<p className="text-sm text-base-content/60 leading-relaxed">
-					{description}
-				</p>
+				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
 	);

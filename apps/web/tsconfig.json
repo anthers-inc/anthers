@@ -1,17 +1,17 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "rootDir": ".",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    // Bun types are pulled in for typecheck only — apps/web bundles to a
-    // browser SPA, but the type-only `import type { AppType }` from apps/api
-    // transitively reaches Bun-only files (bun:sqlite, process, import.meta.dir),
-    // and without these types every transitive global surfaces as a TS error.
-    "types": ["bun"]
-  },
-  "include": ["src"]
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"jsx": "react-jsx",
+		"rootDir": ".",
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		// Bun types are pulled in for typecheck only — apps/web bundles to a
+		// browser SPA, but the type-only `import type { AppType }` from apps/api
+		// transitively reaches Bun-only files (bun:sqlite, process, import.meta.dir),
+		// and without these types every transitive global surfaces as a TS error.
+		"types": ["bun"]
+	},
+	"include": ["src"]
 }

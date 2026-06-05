@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
-import type { StripeAccountStatus, PlatformConnection } from "../lib/types";
+import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -83,13 +82,9 @@ function BlueskySection() {
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center gap-2">
 							<div className="badge badge-success">Linked</div>
-							<span className="text-sm font-medium">
-                @{user.atprotoHandle}
-              </span>
+							<span className="text-sm font-medium">@{user.atprotoHandle}</span>
 						</div>
-						<p className="text-xs text-base-content/50">
-							DID: {user.atprotoDid}
-						</p>
+						<p className="text-xs text-base-content/50">DID: {user.atprotoDid}</p>
 						<button
 							className="btn btn-outline btn-error btn-sm w-fit"
 							onClick={handleUnlink}
@@ -101,8 +96,7 @@ function BlueskySection() {
 				) : (
 					<form onSubmit={handleLink} className="flex flex-col gap-3">
 						<p className="text-sm text-base-content/60">
-							Link your Bluesky account for portable identity and future
-							federation features.
+							Link your Bluesky account for portable identity and future federation features.
 						</p>
 						<div className="flex gap-2">
 							<input
@@ -128,9 +122,7 @@ function BlueskySection() {
 }
 
 function StripeOnboardingSection() {
-	const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(
-		null,
-	);
+	const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [connecting, setConnecting] = useState(false);
 	const [searchParams] = useSearchParams();
@@ -168,10 +160,8 @@ function StripeOnboardingSection() {
 		);
 	}
 
-	const isConnected =
-		stripeStatus?.chargesEnabled && stripeStatus?.onboardingComplete;
-	const isIncomplete =
-		stripeStatus && !stripeStatus.chargesEnabled;
+	const isConnected = stripeStatus?.chargesEnabled && stripeStatus?.onboardingComplete;
+	const isIncomplete = stripeStatus && !stripeStatus.chargesEnabled;
 
 	return (
 		<div className="card bg-base-200">
@@ -180,18 +170,16 @@ function StripeOnboardingSection() {
 
 				{stripeResult === "complete" && !isConnected && (
 					<div className="alert alert-info text-sm">
-            <span>
-              Stripe onboarding submitted. It may take a moment for your account
-              to be fully activated.
-            </span>
+						<span>
+							Stripe onboarding submitted. It may take a moment for your account to be fully
+							activated.
+						</span>
 					</div>
 				)}
 
 				{stripeResult === "refresh" && (
 					<div className="alert alert-warning text-sm">
-            <span>
-              Stripe onboarding link expired. Click below to continue.
-            </span>
+						<span>Stripe onboarding link expired. Click below to continue.</span>
 					</div>
 				)}
 
@@ -199,14 +187,14 @@ function StripeOnboardingSection() {
 					<div className="flex items-center gap-2">
 						<div className="badge badge-success">Connected</div>
 						<span className="text-sm text-base-content/60">
-              Your Stripe account is active and ready to receive payments.
-            </span>
+							Your Stripe account is active and ready to receive payments.
+						</span>
 					</div>
 				) : isIncomplete ? (
 					<div className="flex flex-col gap-2">
 						<p className="text-sm text-base-content/60">
-							Your Stripe account setup is incomplete. Complete onboarding to
-							start receiving payments.
+							Your Stripe account setup is incomplete. Complete onboarding to start receiving
+							payments.
 						</p>
 						<button
 							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
@@ -219,9 +207,8 @@ function StripeOnboardingSection() {
 				) : (
 					<div className="flex flex-col gap-2">
 						<p className="text-sm text-base-content/60">
-							Connect a Stripe account to receive payments for your paid
-							projects. Anthers uses Stripe Connect—you keep 100% of
-							earnings, only real costs are passed through.
+							Connect a Stripe account to receive payments for your paid projects. Anthers uses
+							Stripe Connect—you keep 100% of earnings, only real costs are passed through.
 						</p>
 						<button
 							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
@@ -267,9 +254,7 @@ function PlatformConnectionsSection() {
 	const [searchParams] = useSearchParams();
 	const [connections, setConnections] = useState<PlatformConnection[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [connectingPlatform, setConnectingPlatform] = useState<string | null>(
-		null,
-	);
+	const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
 	const [apiKeyInput, setApiKeyInput] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -280,9 +265,7 @@ function PlatformConnectionsSection() {
 		client.api.integrations.platforms
 			.$get()
 			.then((res) => res.json())
-			.then((data) =>
-				setConnections((data as { platforms: PlatformConnection[] }).platforms),
-			)
+			.then((data) => setConnections((data as { platforms: PlatformConnection[] }).platforms))
 			.catch(() => {})
 			.finally(() => setLoading(false));
 	};
@@ -337,13 +320,10 @@ function PlatformConnectionsSection() {
 		setDisconnecting(platform);
 		setError(null);
 		try {
-			const res = await fetch(
-				`${apiBase}/api/integrations/platforms/${platform}/disconnect`,
-				{
-					method: "DELETE",
-					credentials: "include",
-				},
-			);
+			const res = await fetch(`${apiBase}/api/integrations/platforms/${platform}/disconnect`, {
+				method: "DELETE",
+				credentials: "include",
+			});
 			if (!res.ok) {
 				const data = (await res.json()) as { detail?: string };
 				throw new Error(data?.detail ?? "Failed to disconnect platform.");
@@ -397,20 +377,14 @@ function PlatformConnectionsSection() {
 										<div className="flex items-center gap-2">
 											<span className="font-medium text-sm">{info.name}</span>
 											{isConnected && (
-												<span className="badge badge-success badge-xs">
-                          Connected
-                        </span>
+												<span className="badge badge-success badge-xs">Connected</span>
 											)}
 										</div>
 										{isConnected && conn?.platformUsername && (
-											<p className="text-xs text-base-content/50">
-												{conn.platformUsername}
-											</p>
+											<p className="text-xs text-base-content/50">{conn.platformUsername}</p>
 										)}
 										{!isConnected && (
-											<p className="text-xs text-base-content/40">
-												{info.description}
-											</p>
+											<p className="text-xs text-base-content/40">{info.description}</p>
 										)}
 									</div>
 
@@ -421,12 +395,9 @@ function PlatformConnectionsSection() {
 												onClick={() => handleDisconnect(platform)}
 												disabled={disconnecting === platform}
 											>
-												{disconnecting === platform
-													? "..."
-													: "Disconnect"}
+												{disconnecting === platform ? "..." : "Disconnect"}
 											</button>
-										) : connectingPlatform === platform &&
-										info.authType === "api_key" ? (
+										) : connectingPlatform === platform && info.authType === "api_key" ? (
 											<div className="flex gap-1">
 												<input
 													type="password"
@@ -435,8 +406,7 @@ function PlatformConnectionsSection() {
 													onChange={(e) => setApiKeyInput(e.target.value)}
 													placeholder="API key"
 													onKeyDown={(e) => {
-														if (e.key === "Enter")
-															handleAPIKeyConnect(platform);
+														if (e.key === "Enter") handleAPIKeyConnect(platform);
 													}}
 												/>
 												<button
@@ -546,9 +516,7 @@ export default function SettingsPage() {
 								disabled={saving}
 							/>
 							<div>
-                <span className="label-text font-medium">
-                  Enable creator mode
-                </span>
+								<span className="label-text font-medium">Enable creator mode</span>
 								<p className="text-xs text-base-content/50 mt-0.5">
 									Allows you to publish projects and posts
 								</p>
