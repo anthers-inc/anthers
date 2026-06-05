@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { PostListItem } from "../lib/types";
 import ContentCard from "../components/cards/ContentCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import type { PostListItem } from "../lib/types";
 
 const FILTERS = [
 	{ key: "", label: "All" },
@@ -56,6 +57,7 @@ export default function PostFeedPage() {
 			<div className="flex gap-2 mb-6">
 				{FILTERS.map(({ key, label }) => (
 					<button
+						type="button"
 						key={key}
 						className={`btn btn-sm ${contentTypeFilter === key ? "btn-primary" : "btn-outline"}`}
 						onClick={() => setFilter(key)}

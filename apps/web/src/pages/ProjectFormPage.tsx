@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { XMarkIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import FileUpload from "../components/ui/FileUpload";
+import FormField from "../components/ui/FormField";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Project, Screenshot } from "../lib/types";
-import FormField from "../components/ui/FormField";
-import FileUpload from "../components/ui/FileUpload";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { XMarkIcon } from "@heroicons/react/24/outline";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -92,14 +92,11 @@ export default function ProjectFormPage() {
 			const formData = new FormData();
 			formData.append("image", file);
 			try {
-				const res = await fetch(
-					`${apiBase}/api/content/projects/${slug}/screenshots`,
-					{
-						method: "POST",
-						credentials: "include",
-						body: formData,
-					},
-				);
+				const res = await fetch(`${apiBase}/api/content/projects/${slug}/screenshots`, {
+					method: "POST",
+					credentials: "include",
+					body: formData,
+				});
 				if (!res.ok) throw new Error("Upload failed");
 				const screenshot = (await res.json()) as { screenshot: Screenshot };
 				setScreenshots((prev) => [...prev, screenshot.screenshot]);
@@ -114,13 +111,10 @@ export default function ProjectFormPage() {
 		async (id: number) => {
 			if (!slug) return;
 			try {
-				const res = await fetch(
-					`${apiBase}/api/content/projects/${slug}/screenshots/${id}`,
-					{
-						method: "DELETE",
-						credentials: "include",
-					},
-				);
+				const res = await fetch(`${apiBase}/api/content/projects/${slug}/screenshots/${id}`, {
+					method: "DELETE",
+					credentials: "include",
+				});
 				if (!res.ok) throw new Error("Delete failed");
 				setScreenshots((prev) => prev.filter((s) => s.id !== id));
 			} catch {
@@ -157,14 +151,11 @@ export default function ProjectFormPage() {
 				formData.append("isPublished", String(isPublished));
 				if (coverFile) formData.append("coverImage", coverFile);
 
-				const res = await fetch(
-					`${apiBase}/api/content/projects/${slug}`,
-					{
-						method: "PATCH",
-						credentials: "include",
-						body: formData,
-					},
-				);
+				const res = await fetch(`${apiBase}/api/content/projects/${slug}`, {
+					method: "PATCH",
+					credentials: "include",
+					body: formData,
+				});
 				if (!res.ok) throw res;
 			} else {
 				// Create with JSON first (no file upload), then patch with cover
@@ -195,14 +186,11 @@ export default function ProjectFormPage() {
 				if (coverFile) {
 					const formData = new FormData();
 					formData.append("coverImage", coverFile);
-					await fetch(
-						`${apiBase}/api/content/projects/${created.project.slug}`,
-						{
-							method: "PATCH",
-							credentials: "include",
-							body: formData,
-						},
-					);
+					await fetch(`${apiBase}/api/content/projects/${created.project.slug}`, {
+						method: "PATCH",
+						credentials: "include",
+						body: formData,
+					});
 				}
 			}
 			navigate("/dashboard");
@@ -212,9 +200,7 @@ export default function ProjectFormPage() {
 					const data = await err.json();
 					if (data && typeof data === "object") {
 						const fieldErrors: Record<string, string> = {};
-						for (const [key, val] of Object.entries(
-							data as Record<string, string[]>,
-						)) {
+						for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
 							fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
 						}
 						setErrors(fieldErrors);
@@ -240,9 +226,7 @@ export default function ProjectFormPage() {
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">
-				{isEdit ? "Edit Project" : "New Project"}
-			</h1>
+			<h1 className="text-2xl font-bold mb-6">{isEdit ? "Edit Project" : "New Project"}</h1>
 
 			{error && (
 				<div className="alert alert-error mb-4">
@@ -280,10 +264,7 @@ export default function ProjectFormPage() {
 					</FormField>
 				)}
 
-				<FormField
-					label="Short Description"
-					error={errors.shortDescription}
-				>
+				<FormField label="Short Description" error={errors.shortDescription}>
 					<input
 						type="text"
 						className="input input-bordered w-full"
@@ -295,12 +276,12 @@ export default function ProjectFormPage() {
 				</FormField>
 
 				<FormField label="Description" error={errors.description}>
-          <textarea
-			  className="textarea textarea-bordered w-full min-h-[150px]"
-			  value={description}
-			  onChange={(e) => setDescription(e.target.value)}
-			  placeholder="Full description of your project (Markdown supported)"
-		  />
+					<textarea
+						className="textarea textarea-bordered w-full min-h-[150px]"
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+						placeholder="Full description of your project (Markdown supported)"
+					/>
 				</FormField>
 
 				{/* Metadata */}
@@ -326,9 +307,7 @@ export default function ProjectFormPage() {
 							onChange={(e) => setTagsInput(e.target.value)}
 							placeholder="rpg, pixel-art, roguelike"
 						/>
-						<p className="text-xs text-base-content/50 mt-1">
-							Comma-separated
-						</p>
+						<p className="text-xs text-base-content/50 mt-1">Comma-separated</p>
 					</FormField>
 				</div>
 
@@ -470,17 +449,9 @@ export default function ProjectFormPage() {
 						className={`btn btn-primary ${saving ? "btn-disabled" : ""}`}
 						disabled={saving}
 					>
-						{saving
-							? "Saving..."
-							: isEdit
-								? "Update Project"
-								: "Create Project"}
+						{saving ? "Saving..." : isEdit ? "Update Project" : "Create Project"}
 					</button>
-					<button
-						type="button"
-						className="btn btn-ghost"
-						onClick={() => navigate("/dashboard")}
-					>
+					<button type="button" className="btn btn-ghost" onClick={() => navigate("/dashboard")}>
 						Cancel
 					</button>
 				</div>

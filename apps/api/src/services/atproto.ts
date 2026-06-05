@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * ATProto OAuth service — handle resolution, DPoP proof creation,
  * OAuth flow (PAR, token exchange), and PDS interaction helpers.
@@ -5,10 +6,10 @@
  * Ported from legacy Django: accounts/atproto_oauth.py
  */
 
-import * as jose from "jose";
-import { eq } from "drizzle-orm";
 import { db } from "@anthers/db/client";
-import { users, atprotoSessions } from "@anthers/db/schema";
+import { atprotoSessions, users } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
+import * as jose from "jose";
 
 // ─── Handle & DID Resolution ────────────────────────────────────────────────
 
@@ -319,8 +320,7 @@ export async function initiateOAuth(opts: OAuthInitOptions): Promise<OAuthInitRe
 		}
 
 		const parData = (await parRes.json()) as { request_uri: string };
-		authorizationUrl =
-			`${asMetadata.authorization_endpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}`;
+		authorizationUrl = `${asMetadata.authorization_endpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}`;
 	} else {
 		// Fallback: direct authorization endpoint
 		const params = new URLSearchParams({
@@ -462,11 +462,7 @@ export async function findOrCreateAtprotoUser(
 	displayName?: string,
 ): Promise<typeof users.$inferSelect> {
 	// Check for existing user with this DID
-	const [existing] = await db
-		.select()
-		.from(users)
-		.where(eq(users.atprotoDid, did))
-		.limit(1);
+	const [existing] = await db.select().from(users).where(eq(users.atprotoDid, did)).limit(1);
 
 	if (existing) {
 		// Update handle/PDS if changed
@@ -564,9 +560,7 @@ export async function linkAtprotoToUser(
 }
 
 /** Unlink ATProto from a user. Refuses if user has no password (would lock them out). */
-export async function unlinkAtprotoFromUser(
-	userId: number,
-): Promise<{ error?: string }> {
+export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: string }> {
 	const [user] = await db
 		.select({ passwordHash: users.passwordHash })
 		.from(users)

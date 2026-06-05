@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Storage factory — returns the singleton StorageService based on STORAGE_BACKEND env var.
  *
@@ -8,9 +9,9 @@
 
 export type { StorageService } from "./types.js";
 
-import type { StorageService } from "./types.js";
 import { LocalStorageService } from "./local.js";
 import { S3StorageService } from "./s3.js";
+import type { StorageService } from "./types.js";
 
 function createStorage(): StorageService {
 	const backend = process.env.STORAGE_BACKEND ?? "local";
@@ -24,5 +25,4 @@ function createStorage(): StorageService {
 export const storage = createStorage();
 
 /** Whether we're running in local storage mode */
-export const isLocalStorage =
-	(process.env.STORAGE_BACKEND ?? "local") !== "s3";
+export const isLocalStorage = (process.env.STORAGE_BACKEND ?? "local") !== "s3";

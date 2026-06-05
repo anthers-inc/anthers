@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Link } from "react-router-dom";
 import type { Project } from "../../lib/types";
 import MediaTypeBadge from "../ui/MediaTypeBadge";
@@ -21,7 +22,13 @@ export default function ProjectCard({ project }: { project: Project }) {
 			) : (
 				<figure className="h-40 bg-base-300 flex items-center justify-center">
 					<span className="text-4xl text-base-content/20">
-						{project.mediaType === "game" ? "🎮" : project.mediaType === "video" ? "🎬" : project.mediaType === "audio" ? "🎵" : "📝"}
+						{project.mediaType === "game"
+							? "🎮"
+							: project.mediaType === "video"
+								? "🎬"
+								: project.mediaType === "audio"
+									? "🎵"
+									: "📝"}
 					</span>
 				</figure>
 			)}
@@ -34,20 +41,14 @@ export default function ProjectCard({ project }: { project: Project }) {
 					</span>
 				</p>
 				{project.shortDescription && (
-					<p className="text-sm text-base-content/70 line-clamp-2">
-						{project.shortDescription}
-					</p>
+					<p className="text-sm text-base-content/70 line-clamp-2">{project.shortDescription}</p>
 				)}
 				<div className="flex items-center justify-between mt-auto pt-2">
 					<div className="flex gap-1">
 						<MediaTypeBadge type={project.mediaType} />
 						<PricingBadge pricingType={project.pricingType} price={project.price} />
 					</div>
-					<StarRating
-						rating={project.ratingAverage}
-						count={project.ratingCount}
-						size="sm"
-					/>
+					<StarRating rating={project.ratingAverage} count={project.ratingCount} size="sm" />
 				</div>
 			</div>
 		</Link>

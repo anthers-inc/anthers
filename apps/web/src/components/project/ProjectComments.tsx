@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
+import { useAuth } from "../../lib/auth";
 import { client } from "../../lib/rpc";
 import type { Comment } from "../../lib/types";
-import { useAuth } from "../../lib/auth";
 import LoadingSpinner from "../ui/LoadingSpinner";
 
 export default function ProjectComments({ slug }: { slug: string }) {
@@ -61,11 +62,7 @@ export default function ProjectComments({ slug }: { slug: string }) {
 						className="btn btn-primary btn-sm mt-2"
 						disabled={submitting || !body.trim()}
 					>
-						{submitting ? (
-							<span className="loading loading-spinner loading-sm" />
-						) : (
-							"Post comment"
-						)}
+						{submitting ? <span className="loading loading-spinner loading-sm" /> : "Post comment"}
 					</button>
 				</form>
 			)}

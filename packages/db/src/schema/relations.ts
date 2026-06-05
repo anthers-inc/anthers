@@ -1,30 +1,31 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { relations } from "drizzle-orm";
-import { users, sessions, verificationTokens, atprotoSessions, follows } from "./auth.js";
+import { atprotoSessions, follows, sessions, users, verificationTokens } from "./auth.js";
 import {
-	projects,
-	screenshots,
 	assets,
-	posts,
-	transcodingJobs,
-	inlineImages,
-	comments,
-	ratings,
 	bookmarks,
+	comments,
+	inlineImages,
+	posts,
+	projects,
+	ratings,
+	screenshots,
+	transcodingJobs,
 } from "./content.js";
-import { stripeAccounts, purchases, crfLedger, crfSubsidies } from "./payments.js";
 import {
-	subscriptions,
-	attentionEvents,
-	boostAllocations,
-	poolDistributions,
-	creatorGates,
-} from "./subscriptions.js";
-import {
-	platformConnections,
 	crossPublishResults,
 	externalMetricSnapshots,
+	platformConnections,
 } from "./integrations.js";
 import { gameJams, jamEntries, jamVotes } from "./jams.js";
+import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
+import {
+	attentionEvents,
+	boostAllocations,
+	creatorGates,
+	poolDistributions,
+	subscriptions,
+} from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Video transcoding job: converts uploaded video to adaptive HLS.
  *
@@ -13,13 +14,13 @@
  * 7. Update TranscodingJob status throughout
  */
 
-import { eq } from "drizzle-orm";
-import { db } from "@anthers/db";
-import { transcodingJobs, posts } from "@anthers/db/schema";
-import { mkdir, rm, readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { db } from "@anthers/db";
+import { posts, transcodingJobs } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 
 export interface TranscodeVideoData {
@@ -37,16 +38,7 @@ interface Variant {
 /** Run ffprobe and return parsed JSON metadata */
 async function ffprobe(filePath: string) {
 	const proc = Bun.spawn(
-		[
-			"ffprobe",
-			"-v",
-			"quiet",
-			"-print_format",
-			"json",
-			"-show_format",
-			"-show_streams",
-			filePath,
-		],
+		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 	const exitCode = await proc.exited;
@@ -109,18 +101,13 @@ async function ffmpegHls(
 }
 
 /** Generate an HLS master playlist */
-async function generateMasterPlaylist(
-	outputDir: string,
-	variants: Variant[],
-) {
+async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
 	const lines = ["#EXTM3U"];
 	for (const v of variants) {
-		lines.push(
-			`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}`,
-		);
+		lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}`);
 		lines.push(`${v.name}.m3u8`);
 	}
-	await Bun.write(join(outputDir, "master.m3u8"), lines.join("\n") + "\n");
+	await Bun.write(join(outputDir, "master.m3u8"), `${lines.join("\n")}\n`);
 }
 
 /** Generate a thumbnail from a video at the given position */
@@ -156,10 +143,7 @@ async function generateThumbnail(
 }
 
 async function updateJobProgress(jobId: number, progress: number) {
-	await db
-		.update(transcodingJobs)
-		.set({ progress })
-		.where(eq(transcodingJobs.id, jobId));
+	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
 }
 
 export async function transcodeVideo(data: TranscodeVideoData) {
@@ -178,11 +162,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
-	const [post] = await db
-		.select()
-		.from(posts)
-		.where(eq(posts.id, job.postId))
-		.limit(1);
+	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
 	const storageKey = post.videoFile ?? "";
@@ -274,17 +254,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		for (const filename of hlsFiles) {
 			const filePath = join(outputDir, filename);
 			const fileBuffer = await readFile(filePath);
-			const ct = filename.endsWith(".m3u8")
-				? "application/vnd.apple.mpegurl"
-				: "video/mp2t";
+			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
 			// HLS segments for gated content are private; playlists need to be accessible
 			const acl = filename.endsWith(".m3u8") ? "public" : "private";
-			await storage.upload(
-				`${storagePrefix}/${filename}`,
-				fileBuffer,
-				ct,
-				acl,
-			);
+			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
 		}
 		await updateJobProgress(jobId, 90);
 
@@ -296,25 +269,15 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			if (thumbPath) {
 				const thumbBuffer = await readFile(thumbPath);
 				thumbnailKey = `thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
-				await storage.upload(
-					thumbnailKey,
-					thumbBuffer,
-					"image/jpeg",
-					"public",
-				);
+				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				// Update post thumbnail
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
-				await db
-					.update(posts)
-					.set({ thumbnail: thumbnailUrl })
-					.where(eq(posts.id, post.id));
+				await db.update(posts).set({ thumbnail: thumbnailUrl }).where(eq(posts.id, post.id));
 			}
 		}
 
 		// 7. Complete
-		const manifestUrl = await storage.getUrl(
-			`${storagePrefix}/master.m3u8`,
-		);
+		const manifestUrl = await storage.getUrl(`${storagePrefix}/master.m3u8`);
 		await db
 			.update(transcodingJobs)
 			.set({
@@ -324,8 +287,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			})
 			.where(eq(transcodingJobs.id, jobId));
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : String(error);
+		const message = error instanceof Error ? error.message : String(error);
 		await db
 			.update(transcodingJobs)
 			.set({

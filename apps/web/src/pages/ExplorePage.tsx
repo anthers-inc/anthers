@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Project } from "../lib/types";
 import ProjectCard from "../components/cards/ProjectCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import EmptyState from "../components/ui/EmptyState";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import type { Project } from "../lib/types";
 
 const MEDIA_TYPES = [
 	{ value: "", label: "All" },
@@ -40,8 +41,7 @@ export default function ExplorePage() {
 		if (sort && sort !== "newest") params.set("sort", sort);
 
 		const apiBase =
-			window.location.hostname === "localhost" ||
-			window.location.hostname === "127.0.0.1"
+			window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 				? "http://localhost:8000"
 				: "";
 
@@ -109,6 +109,7 @@ export default function ExplorePage() {
 			<div className="tabs tabs-boxed mb-6 w-fit">
 				{MEDIA_TYPES.map((type) => (
 					<button
+						type="button"
 						key={type.value}
 						className={`tab ${mediaType === type.value ? "tab-active" : ""}`}
 						onClick={() => updateParams({ media_type: type.value })}
@@ -133,13 +134,11 @@ export default function ExplorePage() {
 					}
 				/>
 			) : (
-				<>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-						{data.map((project) => (
-							<ProjectCard key={project.id} project={project} />
-						))}
-					</div>
-				</>
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+					{data.map((project) => (
+						<ProjectCard key={project.id} project={project} />
+					))}
+				</div>
 			)}
 		</div>
 	);

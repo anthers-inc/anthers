@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 
 interface FAQItem {
@@ -10,33 +11,29 @@ interface FAQItem {
 const FAQ_ITEMS: FAQItem[] = [
 	{
 		category: "Feed & Discovery",
-		question:
-			"How does the feed work? Is there an algorithm like other social/media sites?",
+		question: "How does the feed work? Is there an algorithm like other social/media sites?",
 		answer: (
 			<div className="space-y-2">
 				<p>
-					The Anthers feed is not driven by a traditional engagement-maximizing
-					algorithm. By default, you see content in three layers:
+					The Anthers feed is not driven by a traditional engagement-maximizing algorithm. By
+					default, you see content in three layers:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Primary:</strong> Content from creators you follow and
-						support
+						<strong>Primary:</strong> Content from creators you follow and support
 					</li>
 					<li>
-						<strong>Network:</strong> Things your follows have liked, shared, or
-						purchased
+						<strong>Network:</strong> Things your follows have liked, shared, or purchased
 					</li>
 					<li>
-						<strong>Ambient:</strong> Content matching your stated interests
-						(tags, jams) -- never paid promotion
+						<strong>Ambient:</strong> Content matching your stated interests (tags, jams) -- never
+						paid promotion
 					</li>
 				</ul>
 				<p>
-					Everything in your feed is attributed so you know exactly why it's
-					there. You can also subscribe to Custom Feeds and Custom Algorithms
-					created by other users, giving you full control over what you see.
-					Anthers never uses paid promotion or engagement optimization to
+					Everything in your feed is attributed so you know exactly why it's there. You can also
+					subscribe to Custom Feeds and Custom Algorithms created by other users, giving you full
+					control over what you see. Anthers never uses paid promotion or engagement optimization to
 					influence your feed.
 				</p>
 			</div>
@@ -60,27 +57,23 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					Anthers uses a subscription pool model with four paid tiers — Root
-					(starting at $3), Sprout ($7), Petal ($15), and Bloom ($30). These
-					tiers are thresholds, not fixed prices: you pick a starting tier and
-					can adjust your support level in $1 increments. At every funding
-					level, the same 8%/92% split applies:
+					Anthers uses a subscription pool model with four paid tiers — Root (starting at $3),
+					Sprout ($7), Petal ($15), and Bloom ($30). These tiers are thresholds, not fixed prices:
+					you pick a starting tier and can adjust your support level in $1 increments. At every
+					funding level, the same 8%/92% split applies:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>92%</strong> goes to creators (via the Time Pool and your
-						Boost allocations)
+						<strong>92%</strong> goes to creators (via the Time Pool and your Boost allocations)
 					</li>
 					<li>
-						<strong>8%</strong> funds the Anthers Foundation (charitable programs
-						and operations)
+						<strong>8%</strong> funds the Anthers Foundation (charitable programs and operations)
 					</li>
 				</ul>
 				<p>
-					Your 92% creator share is split between the Time Pool (distributed
-					automatically based on the time you spend with creators) and the
-					Boost Pool (which you direct to specific creators to unlock gated
-					content). Both pools scale with your funding level.
+					Your 92% creator share is split between the Time Pool (distributed automatically based on
+					the time you spend with creators) and the Boost Pool (which you direct to specific
+					creators to unlock gated content). Both pools scale with your funding level.
 				</p>
 			</div>
 		),
@@ -103,25 +96,23 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					There are two types of gates on Anthers, and creators can combine them
-					with AND/OR logic:
+					There are two types of gates on Anthers, and creators can combine them with AND/OR logic:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Boost gates</strong> — per-creator gates based on how much
-						of your Boost Pool you allocate to that creator. Any funding level
-						above $3 generates Boost Pool funds, so boost gates are available
-						starting at Root.
+						<strong>Boost gates</strong> — per-creator gates based on how much of your Boost Pool
+						you allocate to that creator. Any funding level above $3 generates Boost Pool funds, so
+						boost gates are available starting at Root.
 					</li>
 					<li>
-						<strong>Platform tier gates</strong> — based on your overall funding
-						level clearing a tier threshold (e.g. Sprout at $7, Petal at $15).
-						These are the same regardless of which creator you're viewing.
+						<strong>Platform tier gates</strong> — based on your overall funding level clearing a
+						tier threshold (e.g. Sprout at $7, Petal at $15). These are the same regardless of which
+						creator you're viewing.
 					</li>
 				</ul>
 				<p>
-					This means a creator could gate content behind "Sprout tier OR $2/mo
-					boost to me," giving users multiple paths to access.
+					This means a creator could gate content behind "Sprout tier OR $2/mo boost to me," giving
+					users multiple paths to access.
 				</p>
 			</div>
 		),
@@ -165,14 +156,8 @@ function FAQAccordion({ item }: { item: FAQItem }) {
 
 	return (
 		<div className="collapse collapse-arrow bg-base-200">
-			<input
-				type="checkbox"
-				checked={open}
-				onChange={() => setOpen(!open)}
-			/>
-			<div className="collapse-title font-medium text-sm">
-				{item.question}
-			</div>
+			<input type="checkbox" checked={open} onChange={() => setOpen(!open)} />
+			<div className="collapse-title font-medium text-sm">{item.question}</div>
 			<div className="collapse-content text-sm text-base-content/70">
 				{typeof item.answer === "string" ? <p>{item.answer}</p> : item.answer}
 			</div>
@@ -190,23 +175,17 @@ export default function FAQPage() {
 
 			{CATEGORIES.map((category) => (
 				<section key={category} className="mb-8">
-					<h2 className="text-lg font-semibold mb-3 text-base-content/80">
-						{category}
-					</h2>
+					<h2 className="text-lg font-semibold mb-3 text-base-content/80">{category}</h2>
 					<div className="flex flex-col gap-2">
-						{FAQ_ITEMS.filter((item) => item.category === category).map(
-							(item) => (
-								<FAQAccordion key={item.question} item={item} />
-							),
-						)}
+						{FAQ_ITEMS.filter((item) => item.category === category).map((item) => (
+							<FAQAccordion key={item.question} item={item} />
+						))}
 					</div>
 				</section>
 			))}
 
 			<div className="text-center py-8 border-t border-base-300/50 mt-8">
-				<p className="text-sm text-base-content/50 mb-3">
-					Still have questions?
-				</p>
+				<p className="text-sm text-base-content/50 mb-3">Still have questions?</p>
 				<div className="flex gap-3 justify-center">
 					<Link to="/about" className="btn btn-ghost btn-sm">
 						About Anthers

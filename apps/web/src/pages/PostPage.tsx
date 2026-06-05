@@ -1,21 +1,18 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { ClockIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
 import Markdown from "react-markdown";
+import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
-import { client } from "../lib/rpc";
-import type { Post, Comment } from "../lib/types";
-import { useAuth } from "../lib/auth";
-import { useMediaPlayer } from "../lib/media-player";
-import { useAttentionTracker } from "../lib/attention";
-import VideoPlayer from "../components/media/VideoPlayer";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
+import VideoPlayer from "../components/media/VideoPlayer";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import {
-	ClockIcon,
-	FilmIcon,
-	MusicalNoteIcon,
-} from "@heroicons/react/24/outline";
+import { useAttentionTracker } from "../lib/attention";
+import { useAuth } from "../lib/auth";
+import { useMediaPlayer } from "../lib/media-player";
+import { client } from "../lib/rpc";
+import type { Comment, Post } from "../lib/types";
 
 function formatDuration(seconds: number): string {
 	const h = Math.floor(seconds / 3600);
@@ -58,11 +55,7 @@ export default function PostPage() {
 
 	// Attention tracking—map contentType to event_type
 	const eventType =
-		post?.contentType === "video"
-			? "watch"
-			: post?.contentType === "audio"
-				? "listen"
-				: "read";
+		post?.contentType === "video" ? "watch" : post?.contentType === "audio" ? "listen" : "read";
 
 	useAttentionTracker({
 		creatorId: post?.creatorId ?? null,
@@ -150,10 +143,7 @@ export default function PostPage() {
 						</div>
 					)}
 					<div>
-						<Link
-							to={`/${post.creator?.username}`}
-							className="font-medium link link-hover"
-						>
+						<Link to={`/${post.creator?.username}`} className="font-medium link link-hover">
 							{post.creator?.displayName || post.creator?.username}
 						</Link>
 						<p className="text-base-content/50 text-xs">{date}</p>
@@ -161,25 +151,23 @@ export default function PostPage() {
 					<div className="flex items-center gap-2 ml-auto">
 						{post.contentType === "text" && post.estimatedReadMinutes && (
 							<span className="flex items-center gap-1 text-xs text-base-content/50">
-                <ClockIcon className="w-3 h-3" />
+								<ClockIcon className="w-3 h-3" />
 								{post.estimatedReadMinutes} min read
-              </span>
+							</span>
 						)}
 						{post.contentType === "video" && post.durationSeconds && (
 							<span className="flex items-center gap-1 text-xs text-base-content/50">
-                <FilmIcon className="w-3 h-3" />
+								<FilmIcon className="w-3 h-3" />
 								{formatDuration(post.durationSeconds)}
-              </span>
+							</span>
 						)}
 						{post.contentType === "audio" && post.durationSeconds && (
 							<span className="flex items-center gap-1 text-xs text-base-content/50">
-                <MusicalNoteIcon className="w-3 h-3" />
+								<MusicalNoteIcon className="w-3 h-3" />
 								{formatDuration(post.durationSeconds)}
-              </span>
+							</span>
 						)}
-						{post.isPremium && (
-							<span className="badge badge-secondary badge-sm">Premium</span>
-						)}
+						{post.isPremium && <span className="badge badge-secondary badge-sm">Premium</span>}
 					</div>
 				</div>
 
@@ -191,9 +179,7 @@ export default function PostPage() {
 								{post.visibility === "subscribers_only" ? "🔒" : "⭐"}
 							</div>
 							<h3 className="font-bold text-lg">
-								{post.visibility === "subscribers_only"
-									? "Subscribers Only"
-									: "Gated Content"}
+								{post.visibility === "subscribers_only" ? "Subscribers Only" : "Gated Content"}
 							</h3>
 							<p className="text-sm text-base-content/60 mb-3">
 								{post.visibility === "subscribers_only"
@@ -201,9 +187,7 @@ export default function PostPage() {
 									: "Boost this creator to unlock their gated content."}
 							</p>
 							<Link to="/subscribe" className="btn btn-primary btn-sm w-fit mx-auto">
-								{post.visibility === "subscribers_only"
-									? "Subscribe"
-									: "Upgrade & Boost"}
+								{post.visibility === "subscribers_only" ? "Subscribe" : "Upgrade & Boost"}
 							</Link>
 						</div>
 					</div>
@@ -219,10 +203,7 @@ export default function PostPage() {
 								errorMessage={latestJob.errorMessage ?? undefined}
 							/>
 						) : videoSrc ? (
-							<VideoPlayer
-								src={videoSrc}
-								poster={post.thumbnail ?? undefined}
-							/>
+							<VideoPlayer src={videoSrc} poster={post.thumbnail ?? undefined} />
 						) : (
 							<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
 								<FilmIcon className="w-16 h-16" />
@@ -258,6 +239,7 @@ export default function PostPage() {
 				{post.accessGranted !== false && (
 					<div className="prose prose-sm max-w-none mb-8">
 						{post.bodyHtml ? (
+							// biome-ignore lint/security/noDangerouslySetInnerHtml: bodyHtml is sanitized server-side at write time (apps/api/src/services/sanitize.ts)
 							<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
 						) : post.body ? (
 							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
@@ -268,19 +250,17 @@ export default function PostPage() {
 
 			{/* Comments */}
 			<div className="border-t border-base-300 pt-6">
-				<h2 className="text-xl font-bold mb-4">
-					Comments ({comments.length})
-				</h2>
+				<h2 className="text-xl font-bold mb-4">Comments ({comments.length})</h2>
 
 				{isAuthenticated && (
 					<form onSubmit={handleComment} className="mb-6">
-            <textarea
-				className="textarea textarea-bordered w-full"
-				placeholder="Write a comment..."
-				rows={3}
-				value={commentBody}
-				onChange={(e) => setCommentBody(e.target.value)}
-			/>
+						<textarea
+							className="textarea textarea-bordered w-full"
+							placeholder="Write a comment..."
+							rows={3}
+							value={commentBody}
+							onChange={(e) => setCommentBody(e.target.value)}
+						/>
 						<button
 							type="submit"
 							className="btn btn-primary btn-sm mt-2"
@@ -297,8 +277,7 @@ export default function PostPage() {
 
 				{comments.length === 0 ? (
 					<p className="text-base-content/50 text-sm">
-						No comments yet.{" "}
-						{isAuthenticated ? "Be the first!" : "Log in to comment."}
+						No comments yet. {isAuthenticated ? "Be the first!" : "Log in to comment."}
 					</p>
 				) : (
 					<div className="flex flex-col gap-4">
@@ -319,8 +298,8 @@ export default function PostPage() {
 									<div className="flex items-center gap-2 text-sm">
 										<span className="font-medium">{comment.username}</span>
 										<span className="text-base-content/40 text-xs">
-                      {new Date(comment.createdAt).toLocaleDateString()}
-                    </span>
+											{new Date(comment.createdAt).toLocaleDateString()}
+										</span>
 									</div>
 									<p className="text-sm mt-1">{comment.body}</p>
 								</div>

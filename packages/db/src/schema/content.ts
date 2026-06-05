@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { users } from "./auth.js";
@@ -177,9 +178,7 @@ export const bookmarks = sqliteTable(
 			.default(sql`(unixepoch() * 1000)`)
 			.notNull(),
 	},
-	(table) => [
-		index("idx_bookmarks_user").on(table.userId, table.sortOrder),
-	],
+	(table) => [index("idx_bookmarks_user").on(table.userId, table.sortOrder)],
 );
 
 export const ratings = sqliteTable(

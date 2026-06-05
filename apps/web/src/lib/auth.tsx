@@ -1,11 +1,5 @@
-import {
-	createContext,
-	useContext,
-	useEffect,
-	useState,
-	useCallback,
-	type ReactNode,
-} from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { client } from "./rpc";
 
 /**

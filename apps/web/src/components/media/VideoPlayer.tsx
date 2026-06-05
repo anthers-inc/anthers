@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useRef } from "react";
 
 interface VideoPlayerProps {
@@ -18,30 +19,32 @@ export default function VideoPlayer({ src, poster, autoPlay = false }: VideoPlay
 
 		if (isHls) {
 			// Try HLS.js first (most browsers)
-			import("hls.js").then(({ default: Hls }) => {
-				if (Hls.isSupported()) {
-					const hls = new Hls({
-						maxBufferLength: 30,
-						maxMaxBufferLength: 60,
-					});
-					hls.loadSource(src);
-					hls.attachMedia(video);
-					hlsRef.current = hls;
-
-					if (autoPlay) {
-						hls.on(Hls.Events.MANIFEST_PARSED, () => {
-							video.play().catch(() => {});
+			import("hls.js")
+				.then(({ default: Hls }) => {
+					if (Hls.isSupported()) {
+						const hls = new Hls({
+							maxBufferLength: 30,
+							maxMaxBufferLength: 60,
 						});
+						hls.loadSource(src);
+						hls.attachMedia(video);
+						hlsRef.current = hls;
+
+						if (autoPlay) {
+							hls.on(Hls.Events.MANIFEST_PARSED, () => {
+								video.play().catch(() => {});
+							});
+						}
+					} else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+						// Safari native HLS
+						video.src = src;
+						if (autoPlay) video.play().catch(() => {});
 					}
-				} else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-					// Safari native HLS
+				})
+				.catch(() => {
+					// hls.js not available, try native
 					video.src = src;
-					if (autoPlay) video.play().catch(() => {});
-				}
-			}).catch(() => {
-				// hls.js not available, try native
-				video.src = src;
-			});
+				});
 		} else {
 			// Direct file playback
 			video.src = src;

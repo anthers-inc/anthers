@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useState } from "react";
 import { client } from "../lib/rpc";
 
@@ -168,6 +169,7 @@ export default function VerticalSlicePage() {
 								/>
 								<div className="flex gap-2">
 									<button
+										type="button"
 										className="btn btn-primary"
 										onClick={handleSignUp}
 										disabled={loading}
@@ -175,13 +177,14 @@ export default function VerticalSlicePage() {
 										Sign Up
 									</button>
 									<button
+										type="button"
 										className="btn btn-secondary"
 										onClick={handleSignIn}
 										disabled={loading}
 									>
 										Sign In
 									</button>
-									<button className="btn btn-ghost" onClick={checkMe}>
+									<button type="button" className="btn btn-ghost" onClick={checkMe}>
 										Check Session
 									</button>
 								</div>
@@ -194,12 +197,10 @@ export default function VerticalSlicePage() {
 							<div className="card-body">
 								<div className="flex justify-between items-center">
 									<div>
-										<h2 className="card-title">
-											Signed in as {user.username}
-										</h2>
+										<h2 className="card-title">Signed in as {user.username}</h2>
 										<p className="text-sm text-base-content/70">{user.email}</p>
 									</div>
-									<button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
+									<button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
 										Sign Out
 									</button>
 								</div>
@@ -232,11 +233,7 @@ export default function VerticalSlicePage() {
 										value={description}
 										onChange={(e) => setDescription(e.target.value)}
 									/>
-									<button
-										type="submit"
-										className="btn btn-primary"
-										disabled={loading}
-									>
+									<button type="submit" className="btn btn-primary" disabled={loading}>
 										Create Project
 									</button>
 								</form>
@@ -254,9 +251,7 @@ export default function VerticalSlicePage() {
 												<div className="text-sm text-base-content/70">
 													/{p.slug} &middot; {p.pricingModel}
 												</div>
-												{p.description && (
-													<div className="text-sm mt-1">{p.description}</div>
-												)}
+												{p.description && <div className="text-sm mt-1">{p.description}</div>}
 											</div>
 										))}
 									</div>

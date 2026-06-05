@@ -1,19 +1,20 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
-import { serveStatic } from "hono/bun";
+import { ensureQueueReady } from "./jobs/queue.js";
 import { csrfProtection } from "./middleware/csrf.js";
-import { authRoutes } from "./routes/auth.js";
-import { atprotoRoutes } from "./routes/atproto.js";
 import { accountRoutes } from "./routes/accounts.js";
+import { atprotoRoutes } from "./routes/atproto.js";
+import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
-import { paymentRoutes } from "./routes/payments.js";
-import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
+import { paymentRoutes } from "./routes/payments.js";
+import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
-import { ensureQueueReady } from "./jobs/queue.js";
 import { isLocalStorage } from "./services/storage/index.js";
 
 const app = new Hono()
@@ -53,9 +54,7 @@ const app = new Hono()
 // Start the job queue when running as the server (not when imported by tests).
 // import.meta.main is true only when this file is the entry point.
 if (import.meta.main) {
-	ensureQueueReady().catch((err) =>
-		console.error("Job queue failed to start:", err),
-	);
+	ensureQueueReady().catch((err) => console.error("Job queue failed to start:", err));
 }
 
 export default {

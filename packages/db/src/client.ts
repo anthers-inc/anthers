@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Database as SqliteDatabase } from "bun:sqlite";
 import { resolve } from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";

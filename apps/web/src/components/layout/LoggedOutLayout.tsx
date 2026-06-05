@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
-import { Bars3Icon } from "@heroicons/react/24/outline";
 
 export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
@@ -19,21 +20,37 @@ export default function LoggedOutLayout() {
 							tabIndex={0}
 							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
 						>
-							<li><Link to="/discover">Discover</Link></li>
-							<li><Link to="/for-creators">For Creators</Link></li>
-							<li><Link to="/for-users">For Users</Link></li>
-							<li><Link to="/subscribe">Subscribe</Link></li>
+							<li>
+								<Link to="/discover">Discover</Link>
+							</li>
+							<li>
+								<Link to="/for-creators">For Creators</Link>
+							</li>
+							<li>
+								<Link to="/for-users">For Users</Link>
+							</li>
+							<li>
+								<Link to="/subscribe">Subscribe</Link>
+							</li>
 							<li>
 								<details>
 									<summary>Compare</summary>
 									<ul className="bg-base-200 z-50">
-										<li><Link to="/compare/itch-io">vs itch.io</Link></li>
-										<li><Link to="/compare/ghost">vs Ghost</Link></li>
+										<li>
+											<Link to="/compare/itch-io">vs itch.io</Link>
+										</li>
+										<li>
+											<Link to="/compare/ghost">vs Ghost</Link>
+										</li>
 									</ul>
 								</details>
 							</li>
-							<li><Link to="/about">About</Link></li>
-							<li><Link to="/roadmap">Roadmap</Link></li>
+							<li>
+								<Link to="/about">About</Link>
+							</li>
+							<li>
+								<Link to="/roadmap">Roadmap</Link>
+							</li>
 						</ul>
 					</div>
 				</div>
@@ -41,21 +58,37 @@ export default function LoggedOutLayout() {
 				{/* Desktop nav */}
 				<div className="navbar-center hidden lg:flex">
 					<ul className="menu menu-horizontal px-1 gap-1">
-						<li><Link to="/discover">Discover</Link></li>
-						<li><Link to="/for-creators">For Creators</Link></li>
-						<li><Link to="/for-users">For Users</Link></li>
-						<li><Link to="/subscribe">Subscribe</Link></li>
+						<li>
+							<Link to="/discover">Discover</Link>
+						</li>
+						<li>
+							<Link to="/for-creators">For Creators</Link>
+						</li>
+						<li>
+							<Link to="/for-users">For Users</Link>
+						</li>
+						<li>
+							<Link to="/subscribe">Subscribe</Link>
+						</li>
 						<li>
 							<details>
 								<summary>Compare</summary>
 								<ul className="bg-base-200 z-50">
-									<li><Link to="/compare/itch-io">vs itch.io</Link></li>
-									<li><Link to="/compare/ghost">vs Ghost</Link></li>
+									<li>
+										<Link to="/compare/itch-io">vs itch.io</Link>
+									</li>
+									<li>
+										<Link to="/compare/ghost">vs Ghost</Link>
+									</li>
 								</ul>
 							</details>
 						</li>
-						<li><Link to="/about">About</Link></li>
-						<li><Link to="/roadmap">Roadmap</Link></li>
+						<li>
+							<Link to="/about">About</Link>
+						</li>
+						<li>
+							<Link to="/roadmap">Roadmap</Link>
+						</li>
 					</ul>
 				</div>
 
@@ -77,36 +110,64 @@ export default function LoggedOutLayout() {
 
 			<MiniPlayer />
 
-			<footer className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}>
+			<footer
+				className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+			>
 				<div className="max-w-7xl mx-auto">
 					<div className="join join-horizontal w-full">
 						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 							<h6 className="footer-title text-xs">Discover</h6>
-							<Link to="/discover" className="link link-hover">Browse Projects</Link>
-							<Link to="/jams" className="link link-hover">Jams</Link>
+							<Link to="/discover" className="link link-hover">
+								Browse Projects
+							</Link>
+							<Link to="/jams" className="link link-hover">
+								Jams
+							</Link>
 						</nav>
 						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 							<h6 className="footer-title text-xs">Creators</h6>
-							<Link to="/for-creators" className="link link-hover">For Creators</Link>
-							<Link to="/demo-creator-page" className="link link-hover">Creator Hubs</Link>
-							<Link to="/demo-creator-breakdown" className="link link-hover">Creator Economics</Link>
+							<Link to="/for-creators" className="link link-hover">
+								For Creators
+							</Link>
+							<Link to="/demo-creator-page" className="link link-hover">
+								Creator Hubs
+							</Link>
+							<Link to="/demo-creator-breakdown" className="link link-hover">
+								Creator Economics
+							</Link>
 						</nav>
 						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 							<h6 className="footer-title text-xs">Users</h6>
-							<Link to="/for-users" className="link link-hover">For Users</Link>
-							<Link to="/subscribe" className="link link-hover">Subscribe</Link>
+							<Link to="/for-users" className="link link-hover">
+								For Users
+							</Link>
+							<Link to="/subscribe" className="link link-hover">
+								Subscribe
+							</Link>
 						</nav>
 						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 							<h6 className="footer-title text-xs">Compare</h6>
-							<Link to="/compare/itch-io" className="link link-hover">Anthers vs itch.io</Link>
-							<Link to="/compare/ghost" className="link link-hover">Anthers vs Ghost</Link>
+							<Link to="/compare/itch-io" className="link link-hover">
+								Anthers vs itch.io
+							</Link>
+							<Link to="/compare/ghost" className="link link-hover">
+								Anthers vs Ghost
+							</Link>
 						</nav>
 						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 							<h6 className="footer-title text-xs">About</h6>
-							<Link to="/about" className="link link-hover">About Us</Link>
-							<Link to="/faq" className="link link-hover">FAQ</Link>
-							<Link to="/roadmap" className="link link-hover">Roadmap</Link>
-							<Link to="/wiki" className="link link-hover">Wiki</Link>
+							<Link to="/about" className="link link-hover">
+								About Us
+							</Link>
+							<Link to="/faq" className="link link-hover">
+								FAQ
+							</Link>
+							<Link to="/roadmap" className="link link-hover">
+								Roadmap
+							</Link>
+							<Link to="/wiki" className="link link-hover">
+								Wiki
+							</Link>
 						</nav>
 					</div>
 				</div>

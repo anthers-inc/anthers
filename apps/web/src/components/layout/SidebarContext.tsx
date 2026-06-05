@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
 
 interface SidebarContextValue {
 	/** Whether the sidebar drawer is open */
@@ -24,12 +25,14 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 	);
 
 	return (
-		<SidebarContext value={{
-			sidebarOpen,
-			toggleSidebar,
-			pageContent,
-			setPageContent,
-		}}>
+		<SidebarContext
+			value={{
+				sidebarOpen,
+				toggleSidebar,
+				pageContent,
+				setPageContent,
+			}}
+		>
 			{children}
 		</SidebarContext>
 	);

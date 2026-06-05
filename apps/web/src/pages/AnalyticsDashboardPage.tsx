@@ -1,32 +1,32 @@
-import { useState, useEffect } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import {
+	ArrowTrendingUpIcon,
+	ChartBarIcon,
+	ClockIcon,
+	DocumentTextIcon,
+	EyeIcon,
+	FilmIcon,
+	MusicalNoteIcon,
+	PlayIcon,
+	UsersIcon,
+} from "@heroicons/react/24/outline";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { client } from "../lib/rpc";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
+import { client } from "../lib/rpc";
 import type {
 	AnalyticsOverview,
 	ContentAnalyticsItem,
-	TimeseriesEntry,
-	CrossPublishResult,
 	CreatorEarnings,
 	CrfSubsidy,
+	CrossPublishResult,
+	TimeseriesEntry,
 } from "../lib/types";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
-import {
-	ChartBarIcon,
-	EyeIcon,
-	ClockIcon,
-	UsersIcon,
-	PlayIcon,
-	FilmIcon,
-	MusicalNoteIcon,
-	DocumentTextIcon,
-	ArrowTrendingUpIcon,
-} from "@heroicons/react/24/outline";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -109,27 +109,21 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
 					<ClockIcon className="w-6 h-6" />
 				</div>
 				<div className="stat-title text-xs">Watch Time</div>
-				<div className="stat-value text-lg">
-					{overview.totalDurationHours.toFixed(1)}h
-				</div>
+				<div className="stat-value text-lg">{overview.totalDurationHours.toFixed(1)}h</div>
 			</div>
 			<div className="stat bg-base-200 rounded-lg p-4">
 				<div className="stat-figure text-accent">
 					<UsersIcon className="w-6 h-6" />
 				</div>
 				<div className="stat-title text-xs">Unique Viewers</div>
-				<div className="stat-value text-lg">
-					{formatNumber(overview.uniqueViewers)}
-				</div>
+				<div className="stat-value text-lg">{formatNumber(overview.uniqueViewers)}</div>
 			</div>
 			<div className="stat bg-base-200 rounded-lg p-4">
 				<div className="stat-figure text-info">
 					<ArrowTrendingUpIcon className="w-6 h-6" />
 				</div>
 				<div className="stat-title text-xs">Total Events</div>
-				<div className="stat-value text-lg">
-					{formatNumber(e.total)}
-				</div>
+				<div className="stat-value text-lg">{formatNumber(e.total)}</div>
 			</div>
 		</div>
 	);
@@ -170,8 +164,7 @@ function EventBreakdown({ overview }: { overview: AnalyticsOverview }) {
 						<div key={item.label} className="flex items-center gap-1.5">
 							<div className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
 							<span className="text-xs">
-								{item.label}: {formatNumber(item.value)} (
-								{Math.round((item.value / total) * 100)}%)
+								{item.label}: {formatNumber(item.value)} ({Math.round((item.value / total) * 100)}%)
 							</span>
 						</div>
 					))}
@@ -183,11 +176,7 @@ function EventBreakdown({ overview }: { overview: AnalyticsOverview }) {
 
 // ─── Timeseries Charts ───
 
-function TimeseriesCharts({
-	timeseries,
-}: {
-	timeseries: TimeseriesEntry[];
-}) {
+function TimeseriesCharts({ timeseries }: { timeseries: TimeseriesEntry[] }) {
 	if (timeseries.length === 0) return null;
 
 	return (
@@ -200,11 +189,7 @@ function TimeseriesCharts({
 						label="Events"
 						color="bg-primary"
 					/>
-					<SparkBar
-						data={timeseries.map((d) => d.views)}
-						label="Views"
-						color="bg-accent"
-					/>
+					<SparkBar data={timeseries.map((d) => d.views)} label="Views" color="bg-accent" />
 					<SparkBar
 						data={timeseries.map((d) => d.watches + d.listens)}
 						label="Media Engagement"
@@ -222,11 +207,7 @@ function TimeseriesCharts({
 
 // ─── Content Performance Table ───
 
-function ContentPerformanceTable({
-	content,
-}: {
-	content: ContentAnalyticsItem[];
-}) {
+function ContentPerformanceTable({ content }: { content: ContentAnalyticsItem[] }) {
 	const { user } = useAuth();
 
 	if (content.length === 0) {
@@ -273,22 +254,14 @@ function ContentPerformanceTable({
 														{item.title}
 													</Link>
 												) : (
-													<span className="text-sm font-medium">
-														{item.title}
-													</span>
+													<span className="text-sm font-medium">{item.title}</span>
 												)}
-												<div className="text-xs text-base-content/40">
-													{item.type}
-												</div>
+												<div className="text-xs text-base-content/40">{item.type}</div>
 											</div>
 										</div>
 									</td>
-									<td className="text-right text-sm">
-										{formatNumber(item.eventCount)}
-									</td>
-									<td className="text-right text-sm">
-										{formatDuration(item.totalDuration)}
-									</td>
+									<td className="text-right text-sm">{formatNumber(item.eventCount)}</td>
+									<td className="text-right text-sm">{formatDuration(item.totalDuration)}</td>
 								</tr>
 							))}
 						</tbody>
@@ -301,11 +274,7 @@ function ContentPerformanceTable({
 
 // ─── Revenue Analytics ───
 
-function RevenueSection({
-	earnings,
-}: {
-	earnings: CreatorEarnings | null;
-}) {
+function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 	if (!earnings) return null;
 	const total = parseFloat(earnings.total);
 	if (total === 0 && earnings.subscriberCount === 0) return null;
@@ -317,15 +286,11 @@ function RevenueSection({
 				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 					<div>
 						<div className="text-xs text-base-content/50">Pool Income</div>
-						<div className="text-lg font-bold text-success">
-							${earnings.poolTotal}
-						</div>
+						<div className="text-lg font-bold text-success">${earnings.poolTotal}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Boost Income</div>
-						<div className="text-lg font-bold text-success">
-							${earnings.boostTotal}
-						</div>
+						<div className="text-lg font-bold text-success">${earnings.boostTotal}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Total</div>
@@ -333,9 +298,7 @@ function RevenueSection({
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Subscribers</div>
-						<div className="text-lg font-bold">
-							{earnings.subscriberCount}
-						</div>
+						<div className="text-lg font-bold">{earnings.subscriberCount}</div>
 					</div>
 				</div>
 				{earnings.cycle && (
@@ -362,9 +325,7 @@ function CrossPublishHistory() {
 		client.api.integrations["cross-publish"]
 			.$get()
 			.then((res) => res.json())
-			.then((data) =>
-				setResults((data as { results: CrossPublishResult[] }).results),
-			)
+			.then((data) => setResults((data as { results: CrossPublishResult[] }).results))
 			.catch(() => {})
 			.finally(() => setLoading(false));
 	}, []);
@@ -403,9 +364,7 @@ function CrossPublishHistory() {
 								<tr key={r.id}>
 									<td className="text-sm">{r.platform}</td>
 									<td>
-										<span className={`badge badge-xs ${statusBadge(r.status)}`}>
-											{r.status}
-										</span>
+										<span className={`badge badge-xs ${statusBadge(r.status)}`}>{r.status}</span>
 									</td>
 									<td className="text-xs text-base-content/50">
 										{new Date(r.createdAt).toLocaleDateString()}
@@ -449,43 +408,32 @@ function FoundationSubsidySection({
 	function formatBytes(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024)
-			return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 	}
 
 	return (
 		<div className="card bg-base-200 mb-8">
 			<div className="card-body p-4">
-				<h3 className="font-semibold text-sm mb-3">
-					Hosting Costs & Foundation Subsidy
-				</h3>
+				<h3 className="font-semibold text-sm mb-3">Hosting Costs & Foundation Subsidy</h3>
 				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
 					<div>
 						<div className="text-xs text-base-content/50">Hosting Cost</div>
-						<div className="text-lg font-bold">
-							${latest.estimatedHostingCost}
-						</div>
+						<div className="text-lg font-bold">${latest.estimatedHostingCost}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Your Earnings</div>
-						<div className="text-lg font-bold">
-							${latest.creatorEarnings}
-						</div>
+						<div className="text-lg font-bold">${latest.creatorEarnings}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Foundation Subsidy</div>
-						<div
-							className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}
-						>
+						<div className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}>
 							${latest.subsidyAmount}
 						</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Storage Used</div>
-						<div className="text-lg font-bold">
-							{formatBytes(latest.storageBytes ?? 0)}
-						</div>
+						<div className="text-lg font-bold">{formatBytes(latest.storageBytes ?? 0)}</div>
 					</div>
 				</div>
 				<p className="text-xs text-base-content/40">
@@ -530,19 +478,14 @@ export default function AnalyticsDashboardPage() {
 			fetch(`${apiBase}/api/integrations/analytics/content?period=${period}`, {
 				credentials: "include",
 			}).then((res) => res.json()),
-			fetch(
-				`${apiBase}/api/integrations/analytics/timeseries?period=${period}`,
-				{ credentials: "include" },
-			).then((res) => res.json()),
+			fetch(`${apiBase}/api/integrations/analytics/timeseries?period=${period}`, {
+				credentials: "include",
+			}).then((res) => res.json()),
 		])
 			.then(([overviewData, contentData, timeseriesData]) => {
 				setOverview(overviewData as AnalyticsOverview);
-				setContent(
-					(contentData as { content: ContentAnalyticsItem[] }).content,
-				);
-				setTimeseries(
-					(timeseriesData as { timeseries: TimeseriesEntry[] }).timeseries,
-				);
+				setContent((contentData as { content: ContentAnalyticsItem[] }).content);
+				setTimeseries((timeseriesData as { timeseries: TimeseriesEntry[] }).timeseries);
 			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
@@ -557,9 +500,7 @@ export default function AnalyticsDashboardPage() {
 		client.api.payments.crf.status
 			.$get()
 			.then((res) => res.json())
-			.then((data) =>
-				setCrfStatus(data as { balance: string; subsidies: CrfSubsidy[] }),
-			)
+			.then((data) => setCrfStatus(data as { balance: string; subsidies: CrfSubsidy[] }))
 			.catch(() => {});
 	}, [period]);
 

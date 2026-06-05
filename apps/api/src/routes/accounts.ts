@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Account routes — profiles, follows, feed, creator list.
  *
@@ -12,15 +13,15 @@
  *   POST   /users/:username/unfollow — unfollow a creator
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and, sql, desc, inArray, count, exists } from "drizzle-orm";
 import { db } from "@anthers/db/client";
-import { users, follows, projects, posts } from "@anthers/db/schema";
+import { follows, posts, users } from "@anthers/db/schema";
+import { zValidator } from "@hono/zod-validator";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { getCookie } from "hono/cookie";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { validateSession } from "../services/auth.js";
-import { getCookie } from "hono/cookie";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -135,22 +136,29 @@ const accountRoutes = new Hono()
 		const followedUsers = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+						"project_count",
+					),
 			})
 			.from(users)
-			.innerJoin(follows, and(eq(follows.creatorId, users.id), eq(follows.followerId, sessionUser.id)));
+			.innerJoin(
+				follows,
+				and(eq(follows.creatorId, users.id), eq(follows.followerId, sessionUser.id)),
+			);
 
 		return c.json({
-			users: followedUsers.map((row) => serializePublicUser(row.user, {
-				followerCount: Number(row.followerCount),
-				projectCount: Number(row.projectCount),
-				isFollowing: true, // by definition, you follow everyone in this list
-			})),
+			users: followedUsers.map((row) =>
+				serializePublicUser(row.user, {
+					followerCount: Number(row.followerCount),
+					projectCount: Number(row.projectCount),
+					isFollowing: true, // by definition, you follow everyone in this list
+				}),
+			),
 		});
 	})
 
@@ -179,9 +187,7 @@ const accountRoutes = new Hono()
 			})
 			.from(posts)
 			.innerJoin(users, eq(posts.creatorId, users.id))
-			.where(
-				and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)),
-			)
+			.where(and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)))
 			.orderBy(desc(posts.createdAt))
 			.limit(50);
 
@@ -204,12 +210,14 @@ const accountRoutes = new Hono()
 		const creatorList = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+						"project_count",
+					),
 				...(currentUserId
 					? {
 							isFollowing:
@@ -241,12 +249,14 @@ const accountRoutes = new Hono()
 		const result = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+						"project_count",
+					),
 				...(currentUserId
 					? {
 							isFollowing:

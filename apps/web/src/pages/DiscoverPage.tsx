@@ -1,19 +1,20 @@
-import { useEffect, useState, useCallback } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import {
+	BoltIcon,
+	GlobeAltIcon,
+	InboxIcon,
+	MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import CreatorCard from "../components/cards/CreatorCard";
+import ProjectCard from "../components/cards/ProjectCard";
+import ContentFilterSections from "../components/layout/ContentFilterSections";
+import { useSidebar } from "../components/layout/SidebarContext";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Project, PublicUser } from "../lib/types";
-import { useSidebar } from "../components/layout/SidebarContext";
-import ContentFilterSections from "../components/layout/ContentFilterSections";
-import ProjectCard from "../components/cards/ProjectCard";
-import CreatorCard from "../components/cards/CreatorCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
-import {
-	MagnifyingGlassIcon,
-	InboxIcon,
-	GlobeAltIcon,
-	BoltIcon,
-} from "@heroicons/react/24/outline";
 
 // Exploration modes
 const EXPLORE_MODES = [
@@ -125,9 +126,7 @@ export default function DiscoverPage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [searchInput, setSearchInput] = useState(
-		searchParams.get("search") ?? "",
-	);
+	const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
 
 	const exploreMode = searchParams.get("mode") ?? "browse";
 	const contentType = searchParams.get("media_type") ?? "";
@@ -142,17 +141,20 @@ export default function DiscoverPage() {
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
-			setSearchParams((prev) => {
-				const next = new URLSearchParams(prev);
-				for (const [key, value] of Object.entries(updates)) {
-					if (value) {
-						next.set(key, value);
-					} else {
-						next.delete(key);
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					for (const [key, value] of Object.entries(updates)) {
+						if (value) {
+							next.set(key, value);
+						} else {
+							next.delete(key);
+						}
 					}
-				}
-				return next;
-			}, { replace: true });
+					return next;
+				},
+				{ replace: true },
+			);
 		},
 		[setSearchParams],
 	);
@@ -173,7 +175,18 @@ export default function DiscoverPage() {
 			/>,
 		);
 		return () => setPageContent(null);
-	}, [setPageContent, exploreMode, contentType, pricing, showLocked, minPrice, maxPrice, onSale, tag, updateParams]);
+	}, [
+		setPageContent,
+		exploreMode,
+		contentType,
+		pricing,
+		showLocked,
+		minPrice,
+		maxPrice,
+		onSale,
+		tag,
+		updateParams,
+	]);
 
 	useEffect(() => {
 		if (exploreMode !== "browse") return;
@@ -187,8 +200,7 @@ export default function DiscoverPage() {
 		if (tag) params.set("tag", tag);
 
 		const apiBase =
-			window.location.hostname === "localhost" ||
-			window.location.hostname === "127.0.0.1"
+			window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 				? "http://localhost:8000"
 				: "";
 
@@ -299,10 +311,9 @@ export default function DiscoverPage() {
 				<GlobeAltIcon className="w-16 h-16 mx-auto text-base-content/20 mb-4" />
 				<h3 className="text-lg font-semibold mb-2">Creator Network Map</h3>
 				<p className="text-sm text-base-content/60 mb-4">
-					An interactive network visualization showing creators connected to the
-					people you already follow. Creators followed by many of your follows
-					are highlighted -- discover new favorites through your existing
-					relationships.
+					An interactive network visualization showing creators connected to the people you already
+					follow. Creators followed by many of your follows are highlighted -- discover new
+					favorites through your existing relationships.
 				</p>
 				<div className="bg-base-200 rounded-xl p-12 mb-4">
 					<div className="flex items-center justify-center gap-2 text-base-content/30">
@@ -311,8 +322,7 @@ export default function DiscoverPage() {
 					</div>
 				</div>
 				<p className="text-xs text-base-content/40">
-					Powered by force-directed graph layout. Follow more creators to make
-					the network richer.
+					Powered by force-directed graph layout. Follow more creators to make the network richer.
 				</p>
 			</div>
 		</div>
@@ -324,9 +334,8 @@ export default function DiscoverPage() {
 				<BoltIcon className="w-16 h-16 mx-auto text-base-content/20 mb-4" />
 				<h3 className="text-lg font-semibold mb-2">Live Ticker</h3>
 				<p className="text-sm text-base-content/60 mb-4">
-					A real-time feed of content as it arrives on the platform. No
-					filters, no rankings -- just the raw stream of new projects, posts,
-					and updates from every creator on Anthers.
+					A real-time feed of content as it arrives on the platform. No filters, no rankings -- just
+					the raw stream of new projects, posts, and updates from every creator on Anthers.
 				</p>
 				<div className="bg-base-200 rounded-xl p-12">
 					<div className="flex items-center justify-center gap-2 text-base-content/30">

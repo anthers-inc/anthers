@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Shared sidebar filter sections used by both Discover and Feed pages.
  * Includes: Content Type, Price, Filters (type-specific), and Tags.
  */
 
 import {
-	MusicalNoteIcon,
-	VideoCameraIcon,
-	PencilSquareIcon,
-	PuzzlePieceIcon,
 	CubeTransparentIcon,
 	CurrencyDollarIcon,
 	FunnelIcon,
+	MusicalNoteIcon,
+	PencilSquareIcon,
+	PuzzlePieceIcon,
 	TagIcon,
+	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 
 // ---------------------------------------------------------------------------
@@ -35,28 +36,75 @@ const PRICING_MODES = [
 
 export const TAGS_BY_TYPE: Record<string, string[]> = {
 	"": [
-		"indie", "open-source", "pixel-art", "narrative", "relaxing",
-		"horror", "puzzle", "chiptune", "lo-fi", "podcast",
-		"essay", "tutorial", "devlog", "creative-tools",
+		"indie",
+		"open-source",
+		"pixel-art",
+		"narrative",
+		"relaxing",
+		"horror",
+		"puzzle",
+		"chiptune",
+		"lo-fi",
+		"podcast",
+		"essay",
+		"tutorial",
+		"devlog",
+		"creative-tools",
 	],
 	game: [
-		"rpg", "platformer", "puzzle", "horror", "narrative",
-		"roguelike", "farming-sim", "visual-novel", "point-and-click",
-		"casual", "speedrun", "pixel-art", "jam-game", "atmospheric",
-		"replayable", "relaxing", "level-editor", "indie",
+		"rpg",
+		"platformer",
+		"puzzle",
+		"horror",
+		"narrative",
+		"roguelike",
+		"farming-sim",
+		"visual-novel",
+		"point-and-click",
+		"casual",
+		"speedrun",
+		"pixel-art",
+		"jam-game",
+		"atmospheric",
+		"replayable",
+		"relaxing",
+		"level-editor",
+		"indie",
 	],
 	audio: [
-		"chiptune", "lo-fi", "ost", "game-music", "podcast",
-		"interviews", "synthwave", "electronic", "ambient",
-		"soundtrack", "remix",
+		"chiptune",
+		"lo-fi",
+		"ost",
+		"game-music",
+		"podcast",
+		"interviews",
+		"synthwave",
+		"electronic",
+		"ambient",
+		"soundtrack",
+		"remix",
 	],
 	video: [
-		"devlog", "behind-the-scenes", "game-design", "tutorial",
-		"live-performance", "essay", "documentary", "review",
+		"devlog",
+		"behind-the-scenes",
+		"game-design",
+		"tutorial",
+		"live-performance",
+		"essay",
+		"documentary",
+		"review",
 	],
 	text: [
-		"essay", "tutorial", "devlog", "zine", "illustration",
-		"art", "sketchbook", "technology", "culture", "guide",
+		"essay",
+		"tutorial",
+		"devlog",
+		"zine",
+		"illustration",
+		"art",
+		"sketchbook",
+		"technology",
+		"culture",
+		"guide",
 		"postmortem",
 	],
 };
@@ -140,7 +188,15 @@ export default function ContentFilterSections({
 									? "bg-base-100 text-base-content shadow-sm"
 									: "text-base-content/50 hover:text-base-content/70"
 							}`}
-							onClick={() => onUpdateParams({ pricing: mode.id, show_locked: "", min_price: "", max_price: "", on_sale: "" })}
+							onClick={() =>
+								onUpdateParams({
+									pricing: mode.id,
+									show_locked: "",
+									min_price: "",
+									max_price: "",
+									on_sale: "",
+								})
+							}
 						>
 							{mode.label}
 						</button>
@@ -211,9 +267,7 @@ export default function ContentFilterSections({
 
 					{contentType === "game" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">
-								Platform
-							</label>
+							<label className="text-xs text-base-content/50 mb-1 block">Platform</label>
 							<select className="select select-bordered select-xs w-full">
 								<option value="">Any platform</option>
 								<option value="web">Browser</option>
@@ -226,9 +280,7 @@ export default function ContentFilterSections({
 
 					{contentType === "audio" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">
-								Duration
-							</label>
+							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
 							<select className="select select-bordered select-xs w-full">
 								<option value="">Any length</option>
 								<option value="short">Under 5 min</option>
@@ -240,9 +292,7 @@ export default function ContentFilterSections({
 
 					{contentType === "video" && (
 						<div className="mb-3">
-							<label className="text-xs text-base-content/50 mb-1 block">
-								Duration
-							</label>
+							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
 							<select className="select select-bordered select-xs w-full">
 								<option value="">Any length</option>
 								<option value="short">Under 10 min</option>
@@ -266,9 +316,7 @@ export default function ContentFilterSections({
 							key={t}
 							type="button"
 							className={`badge badge-sm cursor-pointer transition-colors ${
-								tag === t
-									? "badge-secondary"
-									: "badge-ghost hover:badge-outline"
+								tag === t ? "badge-secondary" : "badge-ghost hover:badge-outline"
 							}`}
 							onClick={() => onUpdateParams({ tag: tag === t ? "" : t })}
 						>

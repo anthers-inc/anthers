@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import type { ReactNode } from "react";
 
 interface EmptyStateProps {
@@ -12,9 +13,7 @@ export default function EmptyState({ icon, title, description, action }: EmptySt
 		<div className="flex flex-col items-center justify-center py-16 text-center">
 			{icon && <div className="text-base-content/30 mb-4">{icon}</div>}
 			<h3 className="text-lg font-semibold text-base-content/70">{title}</h3>
-			{description && (
-				<p className="mt-1 text-sm text-base-content/50 max-w-md">{description}</p>
-			)}
+			{description && <p className="mt-1 text-sm text-base-content/50 max-w-md">{description}</p>}
 			{action && <div className="mt-4">{action}</div>}
 		</div>
 	);

@@ -1,23 +1,24 @@
-import { useEffect, useState, useCallback } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type { Project, PostListItem, PublicUser } from "../lib/types";
-import { useSidebar } from "../components/layout/SidebarContext";
-import ContentFilterSections from "../components/layout/ContentFilterSections";
-import ProjectCard from "../components/cards/ProjectCard";
-import ContentCard from "../components/cards/ContentCard";
-import CreatorCard from "../components/cards/CreatorCard";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import {
-	RssIcon,
-	RocketLaunchIcon,
-	UserGroupIcon,
-	BookmarkIcon,
 	BellIcon,
+	BookmarkIcon,
 	InformationCircleIcon,
+	RocketLaunchIcon,
+	RssIcon,
+	UserGroupIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import ContentCard from "../components/cards/ContentCard";
+import CreatorCard from "../components/cards/CreatorCard";
+import ProjectCard from "../components/cards/ProjectCard";
+import ContentFilterSections from "../components/layout/ContentFilterSections";
+import { useSidebar } from "../components/layout/SidebarContext";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { client } from "../lib/rpc";
+import type { PostListItem, Project, PublicUser } from "../lib/types";
 
 function FeedSidebarContent({
 	contentType,
@@ -66,16 +67,16 @@ function FeedSidebarContent({
 						</p>
 						<ul className="text-base-content/60 space-y-1 text-xs">
 							<li>
-								<strong className="text-base-content/80">Primary:</strong>{" "}
-								Posts from creators you follow
+								<strong className="text-base-content/80">Primary:</strong> Posts from creators you
+								follow
 							</li>
 							<li>
-								<strong className="text-base-content/80">Network:</strong>{" "}
-								Things your follows liked, shared, or purchased
+								<strong className="text-base-content/80">Network:</strong> Things your follows
+								liked, shared, or purchased
 							</li>
 							<li>
-								<strong className="text-base-content/80">Ambient:</strong>{" "}
-								Content matching your interests -- never paid promotion
+								<strong className="text-base-content/80">Ambient:</strong> Content matching your
+								interests -- never paid promotion
 							</li>
 						</ul>
 						<p className="text-base-content/40 text-xs mt-2">
@@ -96,9 +97,7 @@ function FeedSidebarContent({
 				</h3>
 				<ul className="menu menu-sm p-0 gap-0.5">
 					<li>
-						<span className="text-base-content/40 text-xs italic">
-							No bookmarks yet
-						</span>
+						<span className="text-base-content/40 text-xs italic">No bookmarks yet</span>
 					</li>
 				</ul>
 				<p className="text-xs text-base-content/30 mt-1">
@@ -114,15 +113,10 @@ function FeedSidebarContent({
 				</h3>
 				<ul className="menu menu-sm p-0 gap-0.5">
 					<li>
-						<span className="text-base-content/40 text-xs italic">
-							Not following anyone yet
-						</span>
+						<span className="text-base-content/40 text-xs italic">Not following anyone yet</span>
 					</li>
 				</ul>
-				<Link
-					to="/discover"
-					className="text-xs link link-primary mt-1 block"
-				>
+				<Link to="/discover" className="text-xs link link-primary mt-1 block">
 					Discover creators
 				</Link>
 			</section>
@@ -135,9 +129,7 @@ function FeedSidebarContent({
 				</h3>
 				<ul className="menu menu-sm p-0 gap-0.5">
 					<li>
-						<span className="text-base-content/40 text-xs italic">
-							Nothing new right now
-						</span>
+						<span className="text-base-content/40 text-xs italic">Nothing new right now</span>
 					</li>
 				</ul>
 				<p className="text-xs text-base-content/30 mt-1">
@@ -180,17 +172,20 @@ export default function AuthenticatedHomePage() {
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
-			setSearchParams((prev) => {
-				const next = new URLSearchParams(prev);
-				for (const [key, value] of Object.entries(updates)) {
-					if (value) {
-						next.set(key, value);
-					} else {
-						next.delete(key);
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					for (const [key, value] of Object.entries(updates)) {
+						if (value) {
+							next.set(key, value);
+						} else {
+							next.delete(key);
+						}
 					}
-				}
-				return next;
-			}, { replace: true });
+					return next;
+				},
+				{ replace: true },
+			);
 		},
 		[setSearchParams],
 	);
@@ -210,16 +205,24 @@ export default function AuthenticatedHomePage() {
 			/>,
 		);
 		return () => setPageContent(null);
-	}, [setPageContent, contentType, pricing, showLocked, minPrice, maxPrice, onSale, tag, updateParams]);
+	}, [
+		setPageContent,
+		contentType,
+		pricing,
+		showLocked,
+		minPrice,
+		maxPrice,
+		onSale,
+		tag,
+		updateParams,
+	]);
 
 	useEffect(() => {
 		// Fetch the user's feed
 		client.api.accounts.me.feed
 			.$get()
 			.then((res) => res.json())
-			.then((data) =>
-				setFeedPosts((data as { posts: PostListItem[] }).posts),
-			)
+			.then((data) => setFeedPosts((data as { posts: PostListItem[] }).posts))
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
 

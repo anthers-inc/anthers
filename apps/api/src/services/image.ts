@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Image processing service — replaces Pillow for avatar/cover/thumbnail processing.
  *
@@ -28,13 +29,7 @@ export async function processImage(
 	input: Buffer | Uint8Array,
 	opts: ImageProcessOptions = {},
 ): Promise<Buffer> {
-	const {
-		width,
-		height,
-		crop = false,
-		format = "webp",
-		quality = 80,
-	} = opts;
+	const { width, height, crop = false, format = "webp", quality = 80 } = opts;
 
 	let pipeline = sharp(input);
 
@@ -61,9 +56,7 @@ export async function processImage(
 }
 
 /** Process an avatar: square crop to 256x256, output as WebP. */
-export async function processAvatar(
-	input: Buffer | Uint8Array,
-): Promise<Buffer> {
+export async function processAvatar(input: Buffer | Uint8Array): Promise<Buffer> {
 	return processImage(input, {
 		width: 256,
 		height: 256,
@@ -74,9 +67,7 @@ export async function processAvatar(
 }
 
 /** Process a cover/header image: fit within 1920px wide, output as WebP. */
-export async function processCover(
-	input: Buffer | Uint8Array,
-): Promise<Buffer> {
+export async function processCover(input: Buffer | Uint8Array): Promise<Buffer> {
 	return processImage(input, {
 		width: 1920,
 		format: "webp",
@@ -85,9 +76,7 @@ export async function processCover(
 }
 
 /** Process a screenshot: fit within 1920px wide, output as WebP. */
-export async function processScreenshot(
-	input: Buffer | Uint8Array,
-): Promise<Buffer> {
+export async function processScreenshot(input: Buffer | Uint8Array): Promise<Buffer> {
 	return processImage(input, {
 		width: 1920,
 		format: "webp",
@@ -96,9 +85,7 @@ export async function processScreenshot(
 }
 
 /** Generate a thumbnail from an image: fit within 400px wide, output as WebP. */
-export async function processImageThumbnail(
-	input: Buffer | Uint8Array,
-): Promise<Buffer> {
+export async function processImageThumbnail(input: Buffer | Uint8Array): Promise<Buffer> {
 	return processImage(input, {
 		width: 400,
 		format: "webp",

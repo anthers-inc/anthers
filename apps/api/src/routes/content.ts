@@ -1,42 +1,32 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Content routes — projects, posts, comments, ratings, assets, screenshots,
  * transcoding status, media upload, inline images.
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import {
-	eq,
-	and,
-	or,
-	desc,
-	asc,
-	sql,
-	like,
-	avg,
-	count,
-	inArray,
-} from "drizzle-orm";
-import { queue, QUEUES, JOB_OPTIONS } from "../jobs/queue.js";
 import { db } from "@anthers/db/client";
 import {
-	users,
-	projects,
-	screenshots,
 	assets,
-	posts,
-	transcodingJobs,
-	inlineImages,
-	comments,
-	ratings,
 	bookmarks,
+	comments,
+	inlineImages,
+	posts,
+	projects,
+	ratings,
+	screenshots,
+	transcodingJobs,
+	users,
 } from "@anthers/db/schema";
-import { requireAuth } from "../middleware/auth.js";
-import { requireCreator } from "../middleware/auth.js";
-import { storage, isLocalStorage } from "../services/storage/index.js";
-import { validateSession } from "../services/auth.js";
+import { zValidator } from "@hono/zod-validator";
+import { and, asc, avg, count, desc, eq, inArray, like, or, type SQL, sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
+import { z } from "zod";
+import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { requireAuth } from "../middleware/auth.js";
+import { validateSession } from "../services/auth.js";
+import { sanitizePostHtml } from "../services/sanitize.js";
+import { isLocalStorage, storage } from "../services/storage/index.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,7 +46,11 @@ function estimateReadMinutes(text: string): number {
 
 const createProjectSchema = z.object({
 	title: z.string().min(1).max(255),
-	slug: z.string().min(1).max(255).regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
+	slug: z
+		.string()
+		.min(1)
+		.max(255)
+		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
 	shortDescription: z.string().max(300).optional().default(""),
 	mediaType: z.enum(["game", "video", "audio", "text"]).default("game"),
@@ -158,9 +152,7 @@ const contentRoutes = new Hono()
 		if (tag) {
 			// SQLite JSON: project.tags is stored as a JSON text array; check
 			// containment via json_each.
-			conditions.push(
-				sql`EXISTS (SELECT 1 FROM json_each(${projects.tags}) WHERE value = ${tag})`,
-			);
+			conditions.push(sql`EXISTS (SELECT 1 FROM json_each(${projects.tags}) WHERE value = ${tag})`);
 		}
 
 		if (search) {
@@ -174,7 +166,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Build order
-		let orderClause;
+		let orderClause: SQL[];
 		switch (sort) {
 			case "popular":
 				orderClause = [desc(projects.viewCount), desc(projects.createdAt)];
@@ -323,7 +315,11 @@ const contentRoutes = new Hono()
 		// Fetch assets and screenshots
 		const [projectAssets, projectScreenshots] = await Promise.all([
 			db.select().from(assets).where(eq(assets.projectId, row.project.id)),
-			db.select().from(screenshots).where(eq(screenshots.projectId, row.project.id)).orderBy(asc(screenshots.sortOrder)),
+			db
+				.select()
+				.from(screenshots)
+				.where(eq(screenshots.projectId, row.project.id))
+				.orderBy(asc(screenshots.sortOrder)),
 		]);
 
 		return c.json({
@@ -417,15 +413,18 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug, id } = c.req.param();
 
-		const deleted = await db.delete(assets).where(
-			and(
-				eq(assets.id, Number(id)),
-				eq(
-					assets.projectId,
-					sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+		const deleted = await db
+			.delete(assets)
+			.where(
+				and(
+					eq(assets.id, Number(id)),
+					eq(
+						assets.projectId,
+						sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+					),
 				),
-			),
-		).returning({ id: assets.id });
+			)
+			.returning({ id: assets.id });
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
@@ -484,15 +483,18 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug, id } = c.req.param();
 
-		const deleted = await db.delete(screenshots).where(
-			and(
-				eq(screenshots.id, Number(id)),
-				eq(
-					screenshots.projectId,
-					sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+		const deleted = await db
+			.delete(screenshots)
+			.where(
+				and(
+					eq(screenshots.id, Number(id)),
+					eq(
+						screenshots.projectId,
+						sql`(SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+					),
 				),
-			),
-		).returning({ id: screenshots.id });
+			)
+			.returning({ id: screenshots.id });
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
@@ -553,9 +555,12 @@ const contentRoutes = new Hono()
 				.values({ userId: user.id, projectId: project.id, body })
 				.returning();
 
-			return c.json({
-				comment: { ...comment, username: user.username },
-			}, 201);
+			return c.json(
+				{
+					comment: { ...comment, username: user.username },
+				},
+				201,
+			);
 		},
 	)
 
@@ -698,7 +703,7 @@ const contentRoutes = new Hono()
 
 		// Get latest transcoding status for each post
 		const postIds = result.map((r) => r.post.id);
-		let transcodingMap = new Map<number, { status: string; progress: number }>();
+		const transcodingMap = new Map<number, { status: string; progress: number }>();
 		if (postIds.length > 0) {
 			const jobs = await db
 				.select({
@@ -750,6 +755,10 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
+		// Sanitize creator-supplied HTML at the trust boundary — bodyHtml is
+		// rendered to other users via dangerouslySetInnerHTML.
+		data.bodyHtml = sanitizePostHtml(data.bodyHtml);
+
 		// Calculate read time for text posts
 		let estimatedReadMinutes: number | undefined;
 		if (data.contentType === "text" && (data.bodyHtml || data.body)) {
@@ -786,11 +795,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			queue.send(
-				QUEUES.TRANSCODE_VIDEO,
-				{ jobId: job.id },
-				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
-			);
+			queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
 		} else if (data.contentType === "audio" && data.audioFile) {
 			const [job] = await db
 				.insert(transcodingJobs)
@@ -800,11 +805,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			queue.send(
-				QUEUES.PROCESS_AUDIO,
-				{ jobId: job.id },
-				JOB_OPTIONS[QUEUES.PROCESS_AUDIO],
-			);
+			queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
 		}
 
 		// TODO: ATProto sync
@@ -889,6 +890,12 @@ const contentRoutes = new Hono()
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
+		// Sanitize creator-supplied HTML at the trust boundary — bodyHtml is
+		// rendered to other users via dangerouslySetInnerHTML.
+		if (data.bodyHtml !== undefined) {
+			data.bodyHtml = sanitizePostHtml(data.bodyHtml);
+		}
+
 		// Recalculate read time if text content changed
 		if (data.contentType === "text" || (!data.contentType && (data.bodyHtml || data.body))) {
 			const text = data.bodyHtml || data.body;
@@ -944,33 +951,31 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post(
-		"/posts/:id/comments",
-		requireAuth,
-		zValidator("json", createCommentSchema),
-		async (c) => {
-			const user = c.get("user");
-			const { id } = c.req.param();
+	.post("/posts/:id/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.param();
 
-			const [post] = await db
-				.select({ id: posts.id })
-				.from(posts)
-				.where(eq(posts.id, Number(id)))
-				.limit(1);
+		const [post] = await db
+			.select({ id: posts.id })
+			.from(posts)
+			.where(eq(posts.id, Number(id)))
+			.limit(1);
 
-			if (!post) return c.json({ error: "Post not found" }, 404);
+		if (!post) return c.json({ error: "Post not found" }, 404);
 
-			const { body } = c.req.valid("json");
-			const [comment] = await db
-				.insert(comments)
-				.values({ userId: user.id, postId: post.id, body })
-				.returning();
+		const { body } = c.req.valid("json");
+		const [comment] = await db
+			.insert(comments)
+			.values({ userId: user.id, postId: post.id, body })
+			.returning();
 
-			return c.json({
+		return c.json(
+			{
 				comment: { ...comment, username: user.username },
-			}, 201);
-		},
-	)
+			},
+			201,
+		);
+	})
 
 	// ── Transcoding Status ───────────────────────────────────────────────────
 
@@ -1010,9 +1015,7 @@ const contentRoutes = new Hono()
 			const { filename, contentType, mediaType } = c.req.valid("json");
 
 			// Generate a storage key following legacy conventions
-			const ext = filename.includes(".")
-				? filename.split(".").pop()
-				: "";
+			const ext = filename.includes(".") ? filename.split(".").pop() : "";
 			const uuid = crypto.randomUUID().replace(/-/g, "");
 			const keyMap = {
 				video: `videos/originals/${uuid}.${ext}`,
@@ -1030,11 +1033,7 @@ const contentRoutes = new Hono()
 				});
 			}
 
-			const uploadUrl = await storage.getPresignedUploadUrl(
-				key,
-				contentType,
-				3600,
-			);
+			const uploadUrl = await storage.getPresignedUploadUrl(key, contentType, 3600);
 			return c.json({ method: "presigned" as const, uploadUrl, key });
 		},
 	)
@@ -1067,9 +1066,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Generate storage key based on media type
-		const ext = file.name.includes(".")
-			? file.name.split(".").pop()
-			: "";
+		const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
 		const uuid = crypto.randomUUID().replace(/-/g, "");
 		let key: string;
 
@@ -1170,21 +1167,27 @@ const contentRoutes = new Hono()
 		return c.json({
 			bookmarks: result.map((r) => ({
 				...r.bookmark,
-				project: r.bookmark.projectId ? {
-					title: r.projectTitle,
-					slug: r.projectSlug,
-					coverImage: r.projectCoverImage,
-					mediaType: r.projectMediaType,
-				} : null,
-				post: r.bookmark.postId ? {
-					title: r.postTitle,
-					contentType: r.postContentType,
-				} : null,
-				creator: r.bookmark.creatorId ? {
-					username: r.creatorUsername,
-					displayName: r.creatorDisplayName,
-					avatar: r.creatorAvatar,
-				} : null,
+				project: r.bookmark.projectId
+					? {
+							title: r.projectTitle,
+							slug: r.projectSlug,
+							coverImage: r.projectCoverImage,
+							mediaType: r.projectMediaType,
+						}
+					: null,
+				post: r.bookmark.postId
+					? {
+							title: r.postTitle,
+							contentType: r.postContentType,
+						}
+					: null,
+				creator: r.bookmark.creatorId
+					? {
+							username: r.creatorUsername,
+							displayName: r.creatorDisplayName,
+							avatar: r.creatorAvatar,
+						}
+					: null,
 			})),
 		});
 	})
@@ -1192,14 +1195,19 @@ const contentRoutes = new Hono()
 	.post(
 		"/bookmarks",
 		requireAuth,
-		zValidator("json", z.object({
-			projectId: z.number().int().optional(),
-			postId: z.number().int().optional(),
-			creatorId: z.number().int().optional(),
-		}).refine(
-			(d) => [d.projectId, d.postId, d.creatorId].filter(Boolean).length === 1,
-			"Exactly one of projectId, postId, or creatorId must be provided",
-		)),
+		zValidator(
+			"json",
+			z
+				.object({
+					projectId: z.number().int().optional(),
+					postId: z.number().int().optional(),
+					creatorId: z.number().int().optional(),
+				})
+				.refine(
+					(d) => [d.projectId, d.postId, d.creatorId].filter(Boolean).length === 1,
+					"Exactly one of projectId, postId, or creatorId must be provided",
+				),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const data = c.req.valid("json");
@@ -1228,10 +1236,13 @@ const contentRoutes = new Hono()
 	.patch(
 		"/bookmarks/reorder",
 		requireAuth,
-		zValidator("json", z.object({
-			/** Ordered array of bookmark IDs, from top to bottom */
-			ids: z.array(z.number().int()),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				/** Ordered array of bookmark IDs, from top to bottom */
+				ids: z.array(z.number().int()),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const { ids } = c.req.valid("json");

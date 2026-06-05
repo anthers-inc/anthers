@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { hc } from "hono/client";
 import type { AppType } from "../../../api/src/index.js";
 

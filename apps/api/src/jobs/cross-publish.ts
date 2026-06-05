@@ -1,15 +1,13 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Cross-publish job: publish content to external platforms.
  *
  * Ported from _legacy/backend/integrations/tasks.py cross_publish_to_platform()
  */
 
-import { eq, and } from "drizzle-orm";
 import { db } from "@anthers/db";
-import {
-	crossPublishResults,
-	platformConnections,
-} from "@anthers/db/schema";
+import { crossPublishResults, platformConnections } from "@anthers/db/schema";
+import { and, eq } from "drizzle-orm";
 
 export interface CrossPublishData {
 	crossPublishId: number;
@@ -62,9 +60,7 @@ export async function crossPublish(data: CrossPublishData) {
 		.limit(1);
 
 	if (!crossPub) {
-		console.error(
-			`CrossPublishResult ${data.crossPublishId} not found`,
-		);
+		console.error(`CrossPublishResult ${data.crossPublishId} not found`);
 		return;
 	}
 
@@ -117,12 +113,9 @@ export async function crossPublish(data: CrossPublishData) {
 			})
 			.where(eq(crossPublishResults.id, crossPub.id));
 
-		console.log(
-			`Cross-published to ${crossPub.platform}: ${externalUrl}`,
-		);
+		console.log(`Cross-published to ${crossPub.platform}: ${externalUrl}`);
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : String(error);
+		const message = error instanceof Error ? error.message : String(error);
 		await db
 			.update(crossPublishResults)
 			.set({

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll } from "bun:test";
-import { eq } from "drizzle-orm";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users, verificationTokens } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import app from "../index";
 
 const testFetch = app.fetch;

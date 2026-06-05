@@ -1,17 +1,18 @@
-import { useState, useMemo } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useMemo, useState } from "react";
 import {
-	BarChart,
+	Area,
+	AreaChart,
 	Bar,
-	XAxis,
-	YAxis,
-	Tooltip,
-	ResponsiveContainer,
+	BarChart,
+	CartesianGrid,
 	Cell,
 	LabelList,
-	AreaChart,
-	Area,
-	CartesianGrid,
 	Legend,
+	ResponsiveContainer,
+	Tooltip,
+	XAxis,
+	YAxis,
 } from "recharts";
 
 // ---------------------------------------------------------------------------
@@ -93,14 +94,126 @@ interface ReferenceCreator {
 }
 
 const REFERENCE_CREATORS: ReferenceCreator[] = [
-	{ name: "Amaiguri", subs: "3.85K", videos: "270", storageLabel: "2.6 TB", storageCost: 52.65, deliveryCost: 12.80, totalInfra: 65, viewMinutes: "155K", infraPerViewMin: 0.000419, infraPctGross: "Foundation", ytGross: 11, ytNet: 6, anthersNet: 11 },
-	{ name: "LittleDuck", subs: "17.2K", videos: "1.1K", storageLabel: "9.4 TB", storageCost: 188.76, deliveryCost: 10.92, totalInfra: 200, viewMinutes: "440K", infraPerViewMin: 0.000455, infraPctGross: "Foundation", ytGross: 30, ytNet: 16, anthersNet: 30 },
-	{ name: "Race Day Cafe", subs: "35.1K", videos: "58", storageLabel: "396 GB", storageCost: 7.92, deliveryCost: 66.56, totalInfra: 75, viewMinutes: "4.7M", infraPerViewMin: 0.000016, infraPctGross: "11.1%", ytGross: 678, ytNet: 373, anthersNet: 603 },
-	{ name: "Life Of Riza", subs: "991K", videos: "77", storageLabel: "225 GB", storageCost: 4.50, deliveryCost: 67.62, totalInfra: 72, viewMinutes: "5.3M", infraPerViewMin: 0.000014, infraPctGross: "4.6%", ytGross: 1575, ytNet: 866, anthersNet: 1503 },
-	{ name: "bugfishhhh", subs: "147K", videos: "22", storageLabel: "558 GB", storageCost: 11.16, deliveryCost: 1396.56, totalInfra: 1408, viewMinutes: "62M", infraPerViewMin: 0.000023, infraPctGross: "49.2%", ytGross: 2859, ytNet: 1572, anthersNet: 1451 },
-	{ name: "MAPHRA", subs: "166K", videos: "6", storageLabel: "8.2 GB", storageCost: 0.16, deliveryCost: 399.95, totalInfra: 400, viewMinutes: "16.5M", infraPerViewMin: 0.000024, infraPctGross: "6.8%", ytGross: 5875, ytNet: 3231, anthersNet: 5475 },
-	{ name: "Memoria", subs: "281K", videos: "288", storageLabel: "5.1 TB", storageCost: 101.09, deliveryCost: 1168.90, totalInfra: 1270, viewMinutes: "49M", infraPerViewMin: 0.000026, infraPctGross: "36.3%", ytGross: 3500, ytNet: 1925, anthersNet: 2230 },
-	{ name: "gabi belle", subs: "1.42M", videos: "179", storageLabel: "2.1 TB", storageCost: 41.88, deliveryCost: 1187.12, totalInfra: 1229, viewMinutes: "51M", infraPerViewMin: 0.000024, infraPctGross: "28.9%", ytGross: 4250, ytNet: 2338, anthersNet: 3021 },
+	{
+		name: "Amaiguri",
+		subs: "3.85K",
+		videos: "270",
+		storageLabel: "2.6 TB",
+		storageCost: 52.65,
+		deliveryCost: 12.8,
+		totalInfra: 65,
+		viewMinutes: "155K",
+		infraPerViewMin: 0.000419,
+		infraPctGross: "Foundation",
+		ytGross: 11,
+		ytNet: 6,
+		anthersNet: 11,
+	},
+	{
+		name: "LittleDuck",
+		subs: "17.2K",
+		videos: "1.1K",
+		storageLabel: "9.4 TB",
+		storageCost: 188.76,
+		deliveryCost: 10.92,
+		totalInfra: 200,
+		viewMinutes: "440K",
+		infraPerViewMin: 0.000455,
+		infraPctGross: "Foundation",
+		ytGross: 30,
+		ytNet: 16,
+		anthersNet: 30,
+	},
+	{
+		name: "Race Day Cafe",
+		subs: "35.1K",
+		videos: "58",
+		storageLabel: "396 GB",
+		storageCost: 7.92,
+		deliveryCost: 66.56,
+		totalInfra: 75,
+		viewMinutes: "4.7M",
+		infraPerViewMin: 0.000016,
+		infraPctGross: "11.1%",
+		ytGross: 678,
+		ytNet: 373,
+		anthersNet: 603,
+	},
+	{
+		name: "Life Of Riza",
+		subs: "991K",
+		videos: "77",
+		storageLabel: "225 GB",
+		storageCost: 4.5,
+		deliveryCost: 67.62,
+		totalInfra: 72,
+		viewMinutes: "5.3M",
+		infraPerViewMin: 0.000014,
+		infraPctGross: "4.6%",
+		ytGross: 1575,
+		ytNet: 866,
+		anthersNet: 1503,
+	},
+	{
+		name: "bugfishhhh",
+		subs: "147K",
+		videos: "22",
+		storageLabel: "558 GB",
+		storageCost: 11.16,
+		deliveryCost: 1396.56,
+		totalInfra: 1408,
+		viewMinutes: "62M",
+		infraPerViewMin: 0.000023,
+		infraPctGross: "49.2%",
+		ytGross: 2859,
+		ytNet: 1572,
+		anthersNet: 1451,
+	},
+	{
+		name: "MAPHRA",
+		subs: "166K",
+		videos: "6",
+		storageLabel: "8.2 GB",
+		storageCost: 0.16,
+		deliveryCost: 399.95,
+		totalInfra: 400,
+		viewMinutes: "16.5M",
+		infraPerViewMin: 0.000024,
+		infraPctGross: "6.8%",
+		ytGross: 5875,
+		ytNet: 3231,
+		anthersNet: 5475,
+	},
+	{
+		name: "Memoria",
+		subs: "281K",
+		videos: "288",
+		storageLabel: "5.1 TB",
+		storageCost: 101.09,
+		deliveryCost: 1168.9,
+		totalInfra: 1270,
+		viewMinutes: "49M",
+		infraPerViewMin: 0.000026,
+		infraPctGross: "36.3%",
+		ytGross: 3500,
+		ytNet: 1925,
+		anthersNet: 2230,
+	},
+	{
+		name: "gabi belle",
+		subs: "1.42M",
+		videos: "179",
+		storageLabel: "2.1 TB",
+		storageCost: 41.88,
+		deliveryCost: 1187.12,
+		totalInfra: 1229,
+		viewMinutes: "51M",
+		infraPerViewMin: 0.000024,
+		infraPctGross: "28.9%",
+		ytGross: 4250,
+		ytNet: 2338,
+		anthersNet: 3021,
+	},
 ];
 
 // ---------------------------------------------------------------------------
@@ -144,17 +257,29 @@ function UnitCostCalculator() {
 			const q = VIDEO_QUALITIES[videoQualityIdx];
 			const storageGb = (contentMinutes * q.mbPerMin * 1.8) / 1024;
 			const storageCostMo = storageGb * BASE_COSTS.storageCostPerGb;
-			const deliveryPerPlay = (contentMinutes * q.mbPerMin) / 1024 * BASE_COSTS.deliveryCostPerGb;
+			const deliveryPerPlay = ((contentMinutes * q.mbPerMin) / 1024) * BASE_COSTS.deliveryCostPerGb;
 			const deliveryTotal = deliveryPerPlay * monthlyPlays;
-			return { storageGb, storageCostMo, deliveryPerPlay, deliveryTotal, mediaLabel: `${q.label} video` };
+			return {
+				storageGb,
+				storageCostMo,
+				deliveryPerPlay,
+				deliveryTotal,
+				mediaLabel: `${q.label} video`,
+			};
 		}
 		if (mediaType === "audio") {
 			const f = AUDIO_FORMATS[audioFormatIdx];
 			const storageGb = (contentMinutes * f.mbPerMin * 2) / 1024;
 			const storageCostMo = storageGb * BASE_COSTS.storageCostPerGb;
-			const deliveryPerPlay = (contentMinutes * f.mbPerMin) / 1024 * BASE_COSTS.deliveryCostPerGb;
+			const deliveryPerPlay = ((contentMinutes * f.mbPerMin) / 1024) * BASE_COSTS.deliveryCostPerGb;
 			const deliveryTotal = deliveryPerPlay * monthlyPlays;
-			return { storageGb, storageCostMo, deliveryPerPlay, deliveryTotal, mediaLabel: `${f.label} audio` };
+			return {
+				storageGb,
+				storageCostMo,
+				deliveryPerPlay,
+				deliveryTotal,
+				mediaLabel: `${f.label} audio`,
+			};
 		}
 		if (mediaType === "text") {
 			const storageGb = textSizeKb / (1024 * 1024);
@@ -168,8 +293,22 @@ function UnitCostCalculator() {
 		const storageCostMo = storageGb * BASE_COSTS.storageCostPerGb;
 		const deliveryPerPlay = (gameSizeMb / 1024) * BASE_COSTS.deliveryCostPerGb;
 		const deliveryTotal = deliveryPerPlay * monthlyPlays;
-		return { storageGb, storageCostMo, deliveryPerPlay, deliveryTotal, mediaLabel: "game download" };
-	}, [mediaType, videoQualityIdx, audioFormatIdx, contentMinutes, monthlyPlays, gameSizeMb, textSizeKb]);
+		return {
+			storageGb,
+			storageCostMo,
+			deliveryPerPlay,
+			deliveryTotal,
+			mediaLabel: "game download",
+		};
+	}, [
+		mediaType,
+		videoQualityIdx,
+		audioFormatIdx,
+		contentMinutes,
+		monthlyPlays,
+		gameSizeMb,
+		textSizeKb,
+	]);
 
 	const totalMonthlyCost = costs.storageCostMo + costs.deliveryTotal;
 
@@ -179,6 +318,7 @@ function UnitCostCalculator() {
 			<div className="flex flex-wrap gap-2">
 				{(["video", "audio", "text", "game"] as MediaType[]).map((t) => (
 					<button
+						type="button"
 						key={t}
 						onClick={() => setMediaType(t)}
 						className={`btn btn-sm ${mediaType === t ? "btn-primary" : "btn-ghost"}`}
@@ -200,7 +340,9 @@ function UnitCostCalculator() {
 								onChange={(e) => setVideoQualityIdx(Number(e.target.value))}
 							>
 								{VIDEO_QUALITIES.map((q, i) => (
-									<option key={q.label} value={i}>{q.label} (~{q.bitrateMbps} Mbps)</option>
+									<option key={q.label} value={i}>
+										{q.label} (~{q.bitrateMbps} Mbps)
+									</option>
 								))}
 							</select>
 						</div>
@@ -214,7 +356,9 @@ function UnitCostCalculator() {
 								onChange={(e) => setContentMinutes(Number(e.target.value))}
 								className="range range-sm range-primary"
 							/>
-							<div className="text-sm text-base-content/60 mt-1 tabular-nums">{contentMinutes} min</div>
+							<div className="text-sm text-base-content/60 mt-1 tabular-nums">
+								{contentMinutes} min
+							</div>
 						</div>
 					</>
 				)}
@@ -228,7 +372,9 @@ function UnitCostCalculator() {
 								onChange={(e) => setAudioFormatIdx(Number(e.target.value))}
 							>
 								{AUDIO_FORMATS.map((f, i) => (
-									<option key={f.label} value={i}>{f.label} ({f.bitrateKbps} kbps)</option>
+									<option key={f.label} value={i}>
+										{f.label} ({f.bitrateKbps} kbps)
+									</option>
 								))}
 							</select>
 						</div>
@@ -242,7 +388,9 @@ function UnitCostCalculator() {
 								onChange={(e) => setContentMinutes(Number(e.target.value))}
 								className="range range-sm range-primary"
 							/>
-							<div className="text-sm text-base-content/60 mt-1 tabular-nums">{contentMinutes} min</div>
+							<div className="text-sm text-base-content/60 mt-1 tabular-nums">
+								{contentMinutes} min
+							</div>
 						</div>
 					</>
 				)}
@@ -276,14 +424,21 @@ function UnitCostCalculator() {
 							className="range range-sm range-primary"
 						/>
 						<div className="text-sm text-base-content/60 mt-1 tabular-nums">
-							{gameSizeMb >= 1024 ? `${(gameSizeMb / 1024).toFixed(1)} GB` : `${gameSizeMb} MB`}
-							{" "} ({fmtSize((gameSizeMb * 3) / 1024)} across 3 platforms)
+							{gameSizeMb >= 1024 ? `${(gameSizeMb / 1024).toFixed(1)} GB` : `${gameSizeMb} MB`} (
+							{fmtSize((gameSizeMb * 3) / 1024)} across 3 platforms)
 						</div>
 					</div>
 				)}
 				<div>
 					<label className="label text-sm">
-						Monthly {mediaType === "video" ? "views" : mediaType === "audio" ? "listens" : mediaType === "text" ? "reads" : "downloads"}
+						Monthly{" "}
+						{mediaType === "video"
+							? "views"
+							: mediaType === "audio"
+								? "listens"
+								: mediaType === "text"
+									? "reads"
+									: "downloads"}
 					</label>
 					<input
 						type="range"
@@ -294,20 +449,35 @@ function UnitCostCalculator() {
 						onChange={(e) => setMonthlyPlays(Number(e.target.value))}
 						className="range range-sm range-primary"
 					/>
-					<div className="text-sm text-base-content/60 mt-1 tabular-nums">{fmtNum(monthlyPlays)}</div>
+					<div className="text-sm text-base-content/60 mt-1 tabular-nums">
+						{fmtNum(monthlyPlays)}
+					</div>
 				</div>
 			</div>
 
 			{/* Results */}
 			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<ResultCard label="Storage" value={fmtSize(costs.storageGb)} sub={`${fmtCost(costs.storageCostMo)}/mo`} />
+				<ResultCard
+					label="Storage"
+					value={fmtSize(costs.storageGb)}
+					sub={`${fmtCost(costs.storageCostMo)}/mo`}
+				/>
 				<ResultCard
 					label={`Per ${mediaType === "video" ? "view" : mediaType === "audio" ? "listen" : mediaType === "text" ? "read" : "download"}`}
 					value={fmtCost(costs.deliveryPerPlay)}
 					sub="delivery cost"
 				/>
-				<ResultCard label="Monthly delivery" value={fmtCost(costs.deliveryTotal)} sub={`${fmtNum(monthlyPlays)} plays`} />
-				<ResultCard label="Total monthly" value={fmtCost(totalMonthlyCost)} sub="storage + delivery" accent="text-warning" />
+				<ResultCard
+					label="Monthly delivery"
+					value={fmtCost(costs.deliveryTotal)}
+					sub={`${fmtNum(monthlyPlays)} plays`}
+				/>
+				<ResultCard
+					label="Total monthly"
+					value={fmtCost(totalMonthlyCost)}
+					sub="storage + delivery"
+					accent="text-warning"
+				/>
 			</div>
 
 			{/* Context: infra vs pool rate */}
@@ -316,10 +486,24 @@ function UnitCostCalculator() {
 					<div className="card-body p-4">
 						<p className="text-sm text-base-content/60">
 							At {VIDEO_QUALITIES[videoQualityIdx].label}, delivery costs{" "}
-							<span className="font-semibold text-base-content">{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min</span>.
-							The pool payout rate is <span className="font-semibold text-success">{fmtCost(POOL_RATE_PER_VIEW_MIN)}/min</span> — infrastructure
-							is {(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN * 100).toFixed(1)}% of payout,
-							leaving {(100 - VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN * 100).toFixed(1)}% as creator income.
+							<span className="font-semibold text-base-content">
+								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
+							</span>
+							. The pool payout rate is{" "}
+							<span className="font-semibold text-success">
+								{fmtCost(POOL_RATE_PER_VIEW_MIN)}/min
+							</span>{" "}
+							— infrastructure is{" "}
+							{(
+								(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN) *
+								100
+							).toFixed(1)}
+							% of payout, leaving{" "}
+							{(
+								100 -
+								(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN) * 100
+							).toFixed(1)}
+							% as creator income.
 						</p>
 					</div>
 				</div>
@@ -328,7 +512,17 @@ function UnitCostCalculator() {
 	);
 }
 
-function ResultCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function ResultCard({
+	label,
+	value,
+	sub,
+	accent,
+}: {
+	label: string;
+	value: string;
+	sub?: string;
+	accent?: string;
+}) {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body p-4">
@@ -348,9 +542,9 @@ function CrossMediaComparison() {
 	const [logScale, setLogScale] = useState(true);
 
 	// Filter to items with cost > 0, sort largest to smallest
-	const sortedData = CROSS_MEDIA_DATA
-		.filter((d) => d.costPerMin > 0)
-		.sort((a, b) => b.costPerMin - a.costPerMin);
+	const sortedData = CROSS_MEDIA_DATA.filter((d) => d.costPerMin > 0).sort(
+		(a, b) => b.costPerMin - a.costPerMin,
+	);
 
 	// For log scale: normalize so the smallest value = 1 and everything else is
 	// a positive multiple. This way taller bars = more expensive (intuitive).
@@ -370,8 +564,16 @@ function CrossMediaComparison() {
 	const creatorProfiles = [
 		{ type: "Game dev (5 games, 5K DL/mo)", volume: "5 GB stored, 2.5 TB delivered", cost: "$25" },
 		{ type: "Game dev (1 jam, 500 DL/mo)", volume: "200 MB stored, 100 GB delivered", cost: "$1" },
-		{ type: "Musician (10 albums, 10K streams)", volume: "7 GB stored, 18 GB delivered", cost: "$0.32" },
-		{ type: "Writer (weekly essays, 10K reads)", volume: "400 MB stored, 5 GB delivered", cost: "$0.06" },
+		{
+			type: "Musician (10 albums, 10K streams)",
+			volume: "7 GB stored, 18 GB delivered",
+			cost: "$0.32",
+		},
+		{
+			type: "Writer (weekly essays, 10K reads)",
+			volume: "400 MB stored, 5 GB delivered",
+			cost: "$0.06",
+		},
 		{ type: "Video (4 vids/mo, 100K views)", volume: "40 GB stored, 6 TB delivered", cost: "$61" },
 		{ type: "Video (4 vids/mo, 1M views)", volume: "40 GB stored, 60 TB delivered", cost: "$601" },
 	];
@@ -379,8 +581,12 @@ function CrossMediaComparison() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				The metric that matters most for the subscription pool model is <span className="font-semibold text-base-content">cost per minute of audience attention</span>,
-				since revenue is distributed proportionally to attention time. Video is by far the most expensive medium — audio, text, and games are 30-500x cheaper per attention-minute.
+				The metric that matters most for the subscription pool model is{" "}
+				<span className="font-semibold text-base-content">
+					cost per minute of audience attention
+				</span>
+				, since revenue is distributed proportionally to attention time. Video is by far the most
+				expensive medium — audio, text, and games are 30-500x cheaper per attention-minute.
 			</p>
 
 			{/* Chart */}
@@ -390,7 +596,12 @@ function CrossMediaComparison() {
 						<h4 className="text-sm font-semibold">Delivery Cost per Attention-Minute</h4>
 						<label className="label cursor-pointer gap-2">
 							<span className="text-xs text-base-content/50">Log scale</span>
-							<input type="checkbox" checked={logScale} onChange={() => setLogScale(!logScale)} className="toggle toggle-xs toggle-primary" />
+							<input
+								type="checkbox"
+								checked={logScale}
+								onChange={() => setLogScale(!logScale)}
+								className="toggle toggle-xs toggle-primary"
+							/>
 						</label>
 					</div>
 					<ResponsiveContainer width="100%" height={280}>
@@ -399,7 +610,7 @@ function CrossMediaComparison() {
 							{logScale ? (
 								<YAxis
 									tick={{ fontSize: 10 }}
-									tickFormatter={(v: number) => v === 0 ? "1x" : `${Math.round(Math.pow(10, v))}x`}
+									tickFormatter={(v: number) => (v === 0 ? "1x" : `${Math.round(10 ** v)}x`)}
 									domain={[0, "auto"]}
 								/>
 							) : (
@@ -420,17 +631,14 @@ function CrossMediaComparison() {
 								{chartData.map((d, i) => (
 									<Cell key={i} fill={d.color} />
 								))}
-								<LabelList
-									dataKey="label"
-									position="top"
-									style={{ fontSize: 10, fill: "#888" }}
-								/>
+								<LabelList dataKey="label" position="top" style={{ fontSize: 10, fill: "#888" }} />
 							</Bar>
 						</BarChart>
 					</ResponsiveContainer>
 					{logScale && (
 						<p className="text-xs text-base-content/40 mt-1">
-							Log scale — taller bars = more expensive. Y-axis shows relative cost vs. the cheapest media type. Actual dollar values shown above each bar.
+							Log scale — taller bars = more expensive. Y-axis shows relative cost vs. the cheapest
+							media type. Actual dollar values shown above each bar.
 						</p>
 					)}
 				</div>
@@ -459,7 +667,9 @@ function CrossMediaComparison() {
 			</div>
 
 			{/* Creator profile cost table */}
-			<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider">Monthly Infrastructure by Creator Type</h4>
+			<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider">
+				Monthly Infrastructure by Creator Type
+			</h4>
 			<div className="overflow-x-auto">
 				<table className="table table-sm w-full">
 					<thead>
@@ -508,9 +718,10 @@ function ReferenceCreatorProfiles() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform fee.
-				Anthers takes 0% — only real infrastructure costs are deducted. Creators whose infrastructure exceeds
-				their pool earnings are covered by the <span className="font-semibold text-base-content">Anthers Foundation</span>.
+				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
+				fee. Anthers takes 0% — only real infrastructure costs are deducted. Creators whose
+				infrastructure exceeds their pool earnings are covered by the{" "}
+				<span className="font-semibold text-base-content">Anthers Foundation</span>.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -521,8 +732,14 @@ function ReferenceCreatorProfiles() {
 						<BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 32, left: 8 }}>
 							<CartesianGrid strokeDasharray="3 3" opacity={0.15} />
 							<XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" />
-							<YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}K`} />
-							<Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+							<YAxis
+								tick={{ fontSize: 10 }}
+								tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}K`}
+							/>
+							<Tooltip
+								formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
+								contentStyle={{ fontSize: 12, borderRadius: 8 }}
+							/>
 							<Legend wrapperStyle={{ fontSize: 12 }} />
 							<Bar dataKey="ytNet" name="YouTube net" fill="#6b7280" radius={[2, 2, 0, 0]} />
 							<Bar dataKey="anthersNet" name="Anthers net" fill="#22c55e" radius={[2, 2, 0, 0]} />
@@ -534,8 +751,15 @@ function ReferenceCreatorProfiles() {
 			{/* Sort controls */}
 			<div className="flex gap-2 items-center">
 				<span className="text-xs text-base-content/50">Sort by:</span>
-				{([["name", "Name"], ["totalInfra", "Infra cost"], ["anthersNet", "Anthers net"]] as const).map(([key, label]) => (
+				{(
+					[
+						["name", "Name"],
+						["totalInfra", "Infra cost"],
+						["anthersNet", "Anthers net"],
+					] as const
+				).map(([key, label]) => (
 					<button
+						type="button"
 						key={key}
 						onClick={() => setSortKey(key)}
 						className={`btn btn-xs ${sortKey === key ? "btn-primary" : "btn-ghost"}`}
@@ -567,15 +791,26 @@ function ReferenceCreatorProfiles() {
 								<tr key={c.name}>
 									<td className="text-sm font-medium">{c.name}</td>
 									<td className="text-sm text-right tabular-nums text-base-content/60">{c.subs}</td>
-									<td className="text-sm text-right tabular-nums text-base-content/60">{c.storageLabel}</td>
-									<td className="text-sm text-right tabular-nums">${c.totalInfra.toLocaleString()}</td>
-									<td className={`text-sm text-right tabular-nums ${c.infraPctGross === "Foundation" ? "text-info" : ""}`}>
+									<td className="text-sm text-right tabular-nums text-base-content/60">
+										{c.storageLabel}
+									</td>
+									<td className="text-sm text-right tabular-nums">
+										${c.totalInfra.toLocaleString()}
+									</td>
+									<td
+										className={`text-sm text-right tabular-nums ${c.infraPctGross === "Foundation" ? "text-info" : ""}`}
+									>
 										{c.infraPctGross}
 									</td>
 									<td className="text-sm text-right tabular-nums">${c.ytNet.toLocaleString()}</td>
-									<td className="text-sm text-right tabular-nums font-semibold">${c.anthersNet.toLocaleString()}</td>
-									<td className={`text-sm text-right tabular-nums font-semibold ${advantage >= 0 ? "text-success" : "text-error"}`}>
-										{advantage >= 0 ? "+" : ""}{advantage.toLocaleString()}
+									<td className="text-sm text-right tabular-nums font-semibold">
+										${c.anthersNet.toLocaleString()}
+									</td>
+									<td
+										className={`text-sm text-right tabular-nums font-semibold ${advantage >= 0 ? "text-success" : "text-error"}`}
+									>
+										{advantage >= 0 ? "+" : ""}
+										{advantage.toLocaleString()}
 									</td>
 								</tr>
 							);
@@ -588,7 +823,10 @@ function ReferenceCreatorProfiles() {
 			<details className="collapse collapse-arrow bg-base-200/50">
 				<summary className="collapse-title text-sm font-medium">Assumptions</summary>
 				<div className="collapse-content text-xs text-base-content/60 space-y-1">
-					<p>YouTube CPM estimated by content type (range: $2.50-$7). Applied to ~50% monetized playback rate.</p>
+					<p>
+						YouTube CPM estimated by content type (range: $2.50-$7). Applied to ~50% monetized
+						playback rate.
+					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>Anthers subscription: $7/mo. 8% Foundation Fee. Pool payout ~$0.0065/view-minute.</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
@@ -620,17 +858,50 @@ function OptimizationVisualizer() {
 	const [baseCompute, setBaseCompute] = useState(42);
 
 	const [optimizations, setOptimizations] = useState<OptimizationToggle[]>([
-		{ id: "webrtc", label: "WebRTC Peer-Assisted Delivery", description: "30-60% delivery reduction for content with concurrent viewers", deliveryReductionPct: 40, storageReductionPct: 0, enabled: false },
-		{ id: "abr", label: "Adaptive Bitrate Intelligence", description: "15-25% delivery reduction by serving lowest viable quality", deliveryReductionPct: 20, storageReductionPct: 0, enabled: false },
-		{ id: "av1", label: "AV1 Codec", description: "25-35% compression improvement over H.264", deliveryReductionPct: 30, storageReductionPct: 30, enabled: false },
-		{ id: "cdn", label: "CDN Pre-warming & Cache Optimization", description: "10-20% delivery reduction via aggressive caching", deliveryReductionPct: 15, storageReductionPct: 0, enabled: false },
-		{ id: "audio", label: "Audio-Only Mode", description: "5-15% delivery reduction for talk-heavy content", deliveryReductionPct: 10, storageReductionPct: 0, enabled: false },
+		{
+			id: "webrtc",
+			label: "WebRTC Peer-Assisted Delivery",
+			description: "30-60% delivery reduction for content with concurrent viewers",
+			deliveryReductionPct: 40,
+			storageReductionPct: 0,
+			enabled: false,
+		},
+		{
+			id: "abr",
+			label: "Adaptive Bitrate Intelligence",
+			description: "15-25% delivery reduction by serving lowest viable quality",
+			deliveryReductionPct: 20,
+			storageReductionPct: 0,
+			enabled: false,
+		},
+		{
+			id: "av1",
+			label: "AV1 Codec",
+			description: "25-35% compression improvement over H.264",
+			deliveryReductionPct: 30,
+			storageReductionPct: 30,
+			enabled: false,
+		},
+		{
+			id: "cdn",
+			label: "CDN Pre-warming & Cache Optimization",
+			description: "10-20% delivery reduction via aggressive caching",
+			deliveryReductionPct: 15,
+			storageReductionPct: 0,
+			enabled: false,
+		},
+		{
+			id: "audio",
+			label: "Audio-Only Mode",
+			description: "5-15% delivery reduction for talk-heavy content",
+			deliveryReductionPct: 10,
+			storageReductionPct: 0,
+			enabled: false,
+		},
 	]);
 
 	const toggle = (id: string) => {
-		setOptimizations((prev) =>
-			prev.map((o) => (o.id === id ? { ...o, enabled: !o.enabled } : o))
-		);
+		setOptimizations((prev) => prev.map((o) => (o.id === id ? { ...o, enabled: !o.enabled } : o)));
 	};
 
 	// Calculate cascading reductions (each applies to the remainder)
@@ -646,7 +917,7 @@ function OptimizationVisualizer() {
 			if (!opt.enabled) continue;
 			const deliveryReduction = delivery * (opt.deliveryReductionPct / 100);
 			delivery -= deliveryReduction;
-			storage *= (1 - opt.storageReductionPct / 100);
+			storage *= 1 - opt.storageReductionPct / 100;
 			steps.push({
 				label: opt.label.split(" ")[0], // short label
 				delivery: Math.round(delivery),
@@ -654,11 +925,17 @@ function OptimizationVisualizer() {
 			});
 		}
 
-		return { delivery, storage, compute: baseCompute, total: delivery + storage + baseCompute, steps };
+		return {
+			delivery,
+			storage,
+			compute: baseCompute,
+			total: delivery + storage + baseCompute,
+			steps,
+		};
 	}, [optimizations, baseDelivery, baseStorage, baseCompute]);
 
 	const totalSavings = baseDelivery + baseStorage + baseCompute - result.total;
-	const savingsPct = ((totalSavings) / (baseDelivery + baseStorage + baseCompute) * 100);
+	const savingsPct = (totalSavings / (baseDelivery + baseStorage + baseCompute)) * 100;
 
 	// Chart data for the waterfall
 	const chartData = result.steps.map((s) => ({
@@ -669,9 +946,9 @@ function OptimizationVisualizer() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				Toggle optimization techniques to see their cascading impact on infrastructure costs.
-				Each optimization applies to the remaining delivery cost after previous optimizations.
-				Default baseline uses <span className="font-semibold text-base-content">bugfishhhh</span> — the
+				Toggle optimization techniques to see their cascading impact on infrastructure costs. Each
+				optimization applies to the remaining delivery cost after previous optimizations. Default
+				baseline uses <span className="font-semibold text-base-content">bugfishhhh</span> — the
 				hardest case in our model (high-bandwidth long-form video essays).
 			</p>
 
@@ -723,7 +1000,9 @@ function OptimizationVisualizer() {
 								className="checkbox checkbox-sm checkbox-primary"
 							/>
 							<div className="flex-1 min-w-0">
-								<p className={`text-sm font-medium ${opt.enabled ? "text-primary" : ""}`}>{opt.label}</p>
+								<p className={`text-sm font-medium ${opt.enabled ? "text-primary" : ""}`}>
+									{opt.label}
+								</p>
 								<p className="text-xs text-base-content/50">{opt.description}</p>
 							</div>
 							<div className="text-right flex-shrink-0">
@@ -747,8 +1026,17 @@ function OptimizationVisualizer() {
 								<CartesianGrid strokeDasharray="3 3" opacity={0.15} />
 								<XAxis dataKey="name" tick={{ fontSize: 10 }} />
 								<YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v}`} />
-								<Tooltip formatter={(v) => [`$${v}`, "Delivery"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-								<Area type="stepAfter" dataKey="delivery" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} />
+								<Tooltip
+									formatter={(v) => [`$${v}`, "Delivery"]}
+									contentStyle={{ fontSize: 12, borderRadius: 8 }}
+								/>
+								<Area
+									type="stepAfter"
+									dataKey="delivery"
+									stroke="#6366f1"
+									fill="#6366f1"
+									fillOpacity={0.2}
+								/>
 							</AreaChart>
 						</ResponsiveContainer>
 					</div>
@@ -757,10 +1045,28 @@ function OptimizationVisualizer() {
 
 			{/* Result summary */}
 			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				<ResultCard label="Optimized delivery" value={`$${Math.round(result.delivery)}`} sub={`was $${baseDelivery}`} />
-				<ResultCard label="Storage" value={`$${result.storage.toFixed(2)}`} sub={`was $${baseStorage}`} />
-				<ResultCard label="Total infra" value={`$${Math.round(result.total)}`} accent="text-warning" sub="storage + delivery + compute" />
-				<ResultCard label="Total savings" value={`$${Math.round(totalSavings)}`} sub={`${savingsPct.toFixed(0)}% reduction`} accent="text-success" />
+				<ResultCard
+					label="Optimized delivery"
+					value={`$${Math.round(result.delivery)}`}
+					sub={`was $${baseDelivery}`}
+				/>
+				<ResultCard
+					label="Storage"
+					value={`$${result.storage.toFixed(2)}`}
+					sub={`was $${baseStorage}`}
+				/>
+				<ResultCard
+					label="Total infra"
+					value={`$${Math.round(result.total)}`}
+					accent="text-warning"
+					sub="storage + delivery + compute"
+				/>
+				<ResultCard
+					label="Total savings"
+					value={`$${Math.round(totalSavings)}`}
+					sub={`${savingsPct.toFixed(0)}% reduction`}
+					accent="text-success"
+				/>
 			</div>
 
 			{/* Pool rate comparison */}
@@ -768,9 +1074,11 @@ function OptimizationVisualizer() {
 				<div className="card-body p-4 text-sm text-base-content/60">
 					<p>
 						At $2,859 gross with ${Math.round(result.total)} infrastructure, the creator keeps{" "}
-						<span className="font-bold text-success">${Math.round(2859 - result.total).toLocaleString()}</span>{" "}
-						({((2859 - result.total) / 2859 * 100).toFixed(1)}% of gross). Compare to YouTube:
-						{" "}<span className="font-bold text-base-content">$1,572</span> (55% of gross).
+						<span className="font-bold text-success">
+							${Math.round(2859 - result.total).toLocaleString()}
+						</span>{" "}
+						({(((2859 - result.total) / 2859) * 100).toFixed(1)}% of gross). Compare to YouTube:{" "}
+						<span className="font-bold text-base-content">$1,572</span> (55% of gross).
 					</p>
 				</div>
 			</div>
@@ -863,19 +1171,26 @@ function QuickReference() {
 					<div className="grid grid-cols-3 gap-4">
 						<div>
 							<p className="text-xs text-base-content/50 uppercase">Object storage</p>
-							<p className="text-lg font-bold tabular-nums">$0.02<span className="text-sm font-normal text-base-content/50">/GB/mo</span></p>
+							<p className="text-lg font-bold tabular-nums">
+								$0.02<span className="text-sm font-normal text-base-content/50">/GB/mo</span>
+							</p>
 						</div>
 						<div>
 							<p className="text-xs text-base-content/50 uppercase">CDN delivery</p>
-							<p className="text-lg font-bold tabular-nums">$0.01<span className="text-sm font-normal text-base-content/50">/GB</span></p>
+							<p className="text-lg font-bold tabular-nums">
+								$0.01<span className="text-sm font-normal text-base-content/50">/GB</span>
+							</p>
 						</div>
 						<div>
 							<p className="text-xs text-base-content/50 uppercase">Compute</p>
-							<p className="text-lg font-bold tabular-nums">$0.005<span className="text-sm font-normal text-base-content/50">/GB proc</span></p>
+							<p className="text-lg font-bold tabular-nums">
+								$0.005<span className="text-sm font-normal text-base-content/50">/GB proc</span>
+							</p>
 						</div>
 					</div>
 					<p className="text-xs text-base-content/40 mt-2">
-						Approximate volume rates at moderate scale (tens of TB/month) using DigitalOcean retail pricing. Actual costs vary by provider, region, and contract.
+						Approximate volume rates at moderate scale (tens of TB/month) using DigitalOcean retail
+						pricing. Actual costs vary by provider, region, and contract.
 					</p>
 				</div>
 			</div>
@@ -888,10 +1203,26 @@ function QuickReference() {
 // ---------------------------------------------------------------------------
 
 const TABS: { id: Tab; label: string; description: string }[] = [
-	{ id: "calculator", label: "Cost Calculator", description: "Calculate storage and delivery costs for any content type and volume" },
-	{ id: "comparison", label: "Cross-Media", description: "Compare delivery costs across video, audio, text, and games" },
-	{ id: "profiles", label: "Creator Profiles", description: "Real YouTube creators mapped onto Anthers's infrastructure model" },
-	{ id: "optimizations", label: "Optimizations", description: "Toggle optimization techniques and see cascading cost reductions" },
+	{
+		id: "calculator",
+		label: "Cost Calculator",
+		description: "Calculate storage and delivery costs for any content type and volume",
+	},
+	{
+		id: "comparison",
+		label: "Cross-Media",
+		description: "Compare delivery costs across video, audio, text, and games",
+	},
+	{
+		id: "profiles",
+		label: "Creator Profiles",
+		description: "Real YouTube creators mapped onto Anthers's infrastructure model",
+	},
+	{
+		id: "optimizations",
+		label: "Optimizations",
+		description: "Toggle optimization techniques and see cascading cost reductions",
+	},
 ];
 
 export default function InfrastructureDemoPage() {
@@ -908,8 +1239,9 @@ export default function InfrastructureDemoPage() {
 					What it actually costs to host content.
 				</h1>
 				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Anthers passes infrastructure costs through at cost with zero markup. Storage at $0.02/GB/month.
-					Delivery at $0.01/GB. No percentage cut, no hidden fees. Explore the real numbers below.
+					Anthers passes infrastructure costs through at cost with zero markup. Storage at
+					$0.02/GB/month. Delivery at $0.01/GB. No percentage cut, no hidden fees. Explore the real
+					numbers below.
 				</p>
 			</section>
 
@@ -927,6 +1259,7 @@ export default function InfrastructureDemoPage() {
 				<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
 					{TABS.map((tab) => (
 						<button
+							type="button"
 							key={tab.id}
 							onClick={() => setActiveTab(tab.id)}
 							className={`flex-1 text-left px-4 py-3 rounded-lg border transition-all ${
@@ -957,8 +1290,8 @@ export default function InfrastructureDemoPage() {
 				<div className="mt-8 text-center">
 					<p className="text-xs text-base-content/40 max-w-xl mx-auto leading-relaxed">
 						Cost estimates are approximate and based on volume CDN/storage pricing as of early 2026.
-						Actual costs will vary with provider, scale, and optimization techniques.
-						These figures are intended for planning and modeling, not invoicing.
+						Actual costs will vary with provider, scale, and optimization techniques. These figures
+						are intended for planning and modeling, not invoicing.
 					</p>
 				</div>
 			</div>

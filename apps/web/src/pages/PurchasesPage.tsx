@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
@@ -49,7 +50,10 @@ type ViewMode = "month" | "preorders";
 /* ------------------------------------------------------------------ */
 
 function MonthSelector({
-	month, onChange, onPreorders, mode,
+	month,
+	onChange,
+	onPreorders,
+	mode,
 }: {
 	month: string;
 	onChange: (m: string) => void;
@@ -63,6 +67,7 @@ function MonthSelector({
 			{mode === "month" ? (
 				<>
 					<button
+						type="button"
 						className="btn btn-ghost btn-xs"
 						onClick={() => onChange(offsetMonth(month, -1))}
 					>
@@ -76,6 +81,7 @@ function MonthSelector({
 					</span>
 					{month < current ? (
 						<button
+							type="button"
 							className="btn btn-ghost btn-xs"
 							onClick={() => onChange(offsetMonth(month, 1))}
 						>
@@ -83,6 +89,7 @@ function MonthSelector({
 						</button>
 					) : (
 						<button
+							type="button"
 							className="btn btn-ghost btn-xs text-primary"
 							onClick={onPreorders}
 						>
@@ -92,10 +99,7 @@ function MonthSelector({
 				</>
 			) : (
 				<>
-					<button
-						className="btn btn-ghost btn-xs"
-						onClick={() => onChange(current)}
-					>
+					<button type="button" className="btn btn-ghost btn-xs" onClick={() => onChange(current)}>
 						&larr; {monthLabel(current)}
 					</button>
 					<span className="text-sm font-medium text-primary">Pre-Orders</span>
@@ -154,18 +158,9 @@ export default function PurchasesPage() {
 	};
 
 	// Compute totals
-	const totalSpent = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.amount),
-		0,
-	);
-	const totalFees = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.processingFee),
-		0,
-	);
-	const totalCreator = purchases.reduce(
-		(sum, p) => sum + parseFloat(p.creatorEarnings),
-		0,
-	);
+	const totalSpent = purchases.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+	const totalFees = purchases.reduce((sum, p) => sum + parseFloat(p.processingFee), 0);
+	const totalCreator = purchases.reduce((sum, p) => sum + parseFloat(p.creatorEarnings), 0);
 
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
@@ -189,8 +184,8 @@ export default function PurchasesPage() {
 					<div className="card-body text-center text-base-content/50">
 						<p className="font-medium">Pre-Orders</p>
 						<p className="text-sm mt-1">
-							No pre-orders yet. When you pre-order content, it will
-							appear here regardless of its release date.
+							No pre-orders yet. When you pre-order content, it will appear here regardless of its
+							release date.
 						</p>
 						{/* TODO: Implement pre-order system. Pre-orders are one-time
 						    purchases for content that hasn't been released yet. Unlike
@@ -202,101 +197,98 @@ export default function PurchasesPage() {
 			)}
 
 			{/* Purchase list */}
-			{viewMode === "month" && (
-				<>
-					{loading ? (
-						<div className="flex justify-center py-8">
-							<span className="loading loading-spinner loading-md" />
-						</div>
-					) : purchases.length > 0 ? (
-						<>
-							<div className="space-y-3">
-								{purchases.map((p) => (
-									<div key={p.id} className="card bg-base-200">
-										<div className="card-body p-4">
-											<div className="flex items-start justify-between gap-3">
-												<div className="flex items-center gap-3 min-w-0">
-													{/* Cover image */}
-													{p.project?.coverImage ? (
-														<Link to={`/${p.creator?.username}/${p.project.slug}`}>
-															<img
-																src={p.project.coverImage}
-																alt=""
-																className="w-12 h-12 rounded object-cover flex-shrink-0"
-															/>
-														</Link>
-													) : (
-														<div className="w-12 h-12 rounded bg-base-300 flex-shrink-0" />
-													)}
+			{viewMode === "month" &&
+				(loading ? (
+					<div className="flex justify-center py-8">
+						<span className="loading loading-spinner loading-md" />
+					</div>
+				) : purchases.length > 0 ? (
+					<>
+						<div className="space-y-3">
+							{purchases.map((p) => (
+								<div key={p.id} className="card bg-base-200">
+									<div className="card-body p-4">
+										<div className="flex items-start justify-between gap-3">
+											<div className="flex items-center gap-3 min-w-0">
+												{/* Cover image */}
+												{p.project?.coverImage ? (
+													<Link to={`/${p.creator?.username}/${p.project.slug}`}>
+														<img
+															src={p.project.coverImage}
+															alt=""
+															className="w-12 h-12 rounded object-cover flex-shrink-0"
+														/>
+													</Link>
+												) : (
+													<div className="w-12 h-12 rounded bg-base-300 flex-shrink-0" />
+												)}
 
-													<div className="min-w-0">
-														{/* Project title → library link */}
+												<div className="min-w-0">
+													{/* Project title → library link */}
+													<Link
+														to={`/${p.creator?.username}/${p.project?.slug}`}
+														className="font-medium link link-hover block truncate"
+													>
+														{p.project?.title ?? "Unknown"}
+													</Link>
+
+													{/* Creator → profile link */}
+													{p.creator && (
 														<Link
-															to={`/${p.creator?.username}/${p.project?.slug}`}
-															className="font-medium link link-hover block truncate"
+															to={`/${p.creator.username}`}
+															className="text-sm text-base-content/50 link link-hover"
 														>
-															{p.project?.title ?? "Unknown"}
+															@{p.creator.username}
 														</Link>
-
-														{/* Creator → profile link */}
-														{p.creator && (
-															<Link
-																to={`/${p.creator.username}`}
-																className="text-sm text-base-content/50 link link-hover"
-															>
-																@{p.creator.username}
-															</Link>
-														)}
-													</div>
+													)}
 												</div>
+											</div>
 
-												<div className="text-right flex-shrink-0">
-													<div className="font-medium">{fmt(parseFloat(p.amount))}</div>
-													<div className="text-xs text-base-content/40">
-														{new Date(p.createdAt).toLocaleDateString()}
-													</div>
+											<div className="text-right flex-shrink-0">
+												<div className="font-medium">{fmt(parseFloat(p.amount))}</div>
+												<div className="text-xs text-base-content/40">
+													{new Date(p.createdAt).toLocaleDateString()}
 												</div>
 											</div>
 										</div>
 									</div>
-								))}
-							</div>
-
-							{/* Summary */}
-							{purchases.length > 0 && (
-								<div className="border-t-2 border-base-content/20 pt-4 mt-6 space-y-2 text-sm">
-									<div className="flex justify-between">
-										<span>Purchases ({purchases.length})</span>
-										<span className="font-medium">{fmt(totalSpent)}</span>
-									</div>
-									<div className="flex justify-between text-base-content/50">
-										<span>Processing fees</span>
-										<span>{fmt(totalFees)}</span>
-									</div>
-									<div className="flex justify-between text-base-content/50">
-										<span>To creators</span>
-										<span>{fmt(totalCreator)}</span>
-									</div>
-									<p className="text-[11px] text-base-content/30 mt-1">
-										Purchase fees are pass-through processing costs. Creators
-										receive the full purchase price — fees are added on top.
-									</p>
 								</div>
-							)}
-						</>
-					) : (
-						<div className="card bg-base-200">
-							<div className="card-body text-center text-base-content/50">
-								<p>No purchases in {monthLabel(selectedMonth)}.</p>
-								<p className="text-sm mt-1">
-									Direct purchases show up here — games, music downloads,
-									digital goods, and other one-time items.
+							))}
+						</div>
+
+						{/* Summary */}
+						{purchases.length > 0 && (
+							<div className="border-t-2 border-base-content/20 pt-4 mt-6 space-y-2 text-sm">
+								<div className="flex justify-between">
+									<span>Purchases ({purchases.length})</span>
+									<span className="font-medium">{fmt(totalSpent)}</span>
+								</div>
+								<div className="flex justify-between text-base-content/50">
+									<span>Processing fees</span>
+									<span>{fmt(totalFees)}</span>
+								</div>
+								<div className="flex justify-between text-base-content/50">
+									<span>To creators</span>
+									<span>{fmt(totalCreator)}</span>
+								</div>
+								<p className="text-[11px] text-base-content/30 mt-1">
+									Purchase fees are pass-through processing costs. Creators receive the full
+									purchase price — fees are added on top.
 								</p>
 							</div>
+						)}
+					</>
+				) : (
+					<div className="card bg-base-200">
+						<div className="card-body text-center text-base-content/50">
+							<p>No purchases in {monthLabel(selectedMonth)}.</p>
+							<p className="text-sm mt-1">
+								Direct purchases show up here — games, music downloads, digital goods, and other
+								one-time items.
+							</p>
 						</div>
-					)}
-				</>
-			)}
+					</div>
+				))}
 		</div>
 	);
 }

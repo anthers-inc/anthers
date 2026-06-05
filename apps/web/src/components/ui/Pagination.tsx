@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface PaginationProps {
 	count: number;
 	next: string | null;
@@ -22,6 +23,7 @@ export default function Pagination({
 	return (
 		<div className="flex items-center justify-center gap-4 mt-8">
 			<button
+				type="button"
 				className="btn btn-sm btn-outline"
 				disabled={!previous}
 				onClick={() => onPageChange(currentPage - 1)}
@@ -32,6 +34,7 @@ export default function Pagination({
 				Page {currentPage} of {totalPages}
 			</span>
 			<button
+				type="button"
 				className="btn btn-sm btn-outline"
 				disabled={!next}
 				onClick={() => onPageChange(currentPage + 1)}

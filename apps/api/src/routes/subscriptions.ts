@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Subscription routes — tiers, subscribe, cancel, attention tracking,
  * pool distributions, boosts, creator gates, content access.
@@ -9,33 +10,74 @@
  * Note: Stripe subscription management is stubbed with TODO markers.
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import {
-	users,
-	posts,
-	projects,
-	subscriptions,
 	attentionEvents,
 	boostAllocations,
-	poolDistributions,
 	creatorGates,
+	poolDistributions,
+	posts,
+	subscriptions,
+	users,
 } from "@anthers/db/schema";
+import { zValidator } from "@hono/zod-validator";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { getCookie } from "hono/cookie";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { validateSession } from "../services/auth.js";
-import { getCookie } from "hono/cookie";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TIERS = [
-	{ id: "free", name: "Free", price: 0, features: ["Browse and discover content", "Rate and comment", "Follow creators"] },
-	{ id: "root", name: "Root", price: 3, features: ["Support the platform", "Access subscriber-only content", "Pool distribution to creators", "Boost pool available at funding levels above $3"] },
-	{ id: "sprout", name: "Sprout", price: 7, features: ["Everything in Root", "Boost allocation (varies by funding level, $3.68+ at threshold)", "Gate access for boosted creators"] },
-	{ id: "petal", name: "Petal", price: 15, features: ["Everything in Sprout", "Boost allocation (varies by funding level, $11.04+ at threshold)", "Priority support"] },
-	{ id: "bloom", name: "Bloom", price: 30, features: ["Everything in Petal", "Boost allocation (varies by funding level, $24.84+ at threshold)", "Creator analytics insights"] },
+	{
+		id: "free",
+		name: "Free",
+		price: 0,
+		features: ["Browse and discover content", "Rate and comment", "Follow creators"],
+	},
+	{
+		id: "root",
+		name: "Root",
+		price: 3,
+		features: [
+			"Support the platform",
+			"Access subscriber-only content",
+			"Pool distribution to creators",
+			"Boost pool available at funding levels above $3",
+		],
+	},
+	{
+		id: "sprout",
+		name: "Sprout",
+		price: 7,
+		features: [
+			"Everything in Root",
+			"Boost allocation (varies by funding level, $3.68+ at threshold)",
+			"Gate access for boosted creators",
+		],
+	},
+	{
+		id: "petal",
+		name: "Petal",
+		price: 15,
+		features: [
+			"Everything in Sprout",
+			"Boost allocation (varies by funding level, $11.04+ at threshold)",
+			"Priority support",
+		],
+	},
+	{
+		id: "bloom",
+		name: "Bloom",
+		price: 30,
+		features: [
+			"Everything in Petal",
+			"Boost allocation (varies by funding level, $24.84+ at threshold)",
+			"Creator analytics insights",
+		],
+	},
 ];
 
 /**
@@ -137,10 +179,7 @@ const subscriptionRoutes = new Hono()
 			.set({ canceledAt: new Date() })
 			.where(eq(subscriptions.id, sub.id));
 
-		const [updated] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.id, sub.id));
+		const [updated] = await db.select().from(subscriptions).where(eq(subscriptions.id, sub.id));
 
 		return c.json({ subscription: updated });
 	})
@@ -155,20 +194,14 @@ const subscriptionRoutes = new Hono()
 			.where(eq(subscriptions.userId, user.id))
 			.limit(1);
 
-		if (!sub || !sub.canceledAt) {
+		if (!sub?.canceledAt) {
 			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
 
 		// TODO: Undo cancellation via Stripe
-		await db
-			.update(subscriptions)
-			.set({ canceledAt: null })
-			.where(eq(subscriptions.id, sub.id));
+		await db.update(subscriptions).set({ canceledAt: null }).where(eq(subscriptions.id, sub.id));
 
-		const [updated] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.id, sub.id));
+		const [updated] = await db.select().from(subscriptions).where(eq(subscriptions.id, sub.id));
 
 		return c.json({ subscription: updated });
 	})
@@ -231,7 +264,7 @@ const subscriptionRoutes = new Hono()
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
 
 		// Compute cycle end (first day of next month)
-		const cycleDate = new Date(cycle + "T00:00:00");
+		const cycleDate = new Date(`${cycle}T00:00:00`);
 		const cycleEnd = new Date(cycleDate.getFullYear(), cycleDate.getMonth() + 1, 1);
 
 		const [summary] = await db
@@ -270,12 +303,13 @@ const subscriptionRoutes = new Hono()
 			.from(poolDistributions)
 			.innerJoin(users, eq(poolDistributions.creatorId, users.id))
 			.where(
-				and(
-					eq(poolDistributions.subscriberId, user.id),
-					eq(poolDistributions.billingCycle, cycle),
-				),
+				and(eq(poolDistributions.subscriberId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			)
-			.orderBy(desc(sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.boostAmount} AS numeric)`));
+			.orderBy(
+				desc(
+					sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.boostAmount} AS numeric)`,
+				),
+			);
 
 		return c.json({
 			distributions: result.map((r) => ({
@@ -302,10 +336,7 @@ const subscriptionRoutes = new Hono()
 			})
 			.from(poolDistributions)
 			.where(
-				and(
-					eq(poolDistributions.creatorId, user.id),
-					eq(poolDistributions.billingCycle, cycle),
-				),
+				and(eq(poolDistributions.creatorId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			);
 
 		const total = (Number(earnings.poolTotal) + Number(earnings.boostTotal)).toFixed(2);
@@ -332,12 +363,7 @@ const subscriptionRoutes = new Hono()
 			})
 			.from(boostAllocations)
 			.innerJoin(users, eq(boostAllocations.creatorId, users.id))
-			.where(
-				and(
-					eq(boostAllocations.userId, user.id),
-					eq(boostAllocations.billingCycle, cycle),
-				),
-			);
+			.where(and(eq(boostAllocations.userId, user.id), eq(boostAllocations.billingCycle, cycle)));
 
 		const [sub] = await db
 			.select({ fundingLevel: subscriptions.fundingLevel })
@@ -366,11 +392,17 @@ const subscriptionRoutes = new Hono()
 	.post(
 		"/boosts",
 		requireAuth,
-		zValidator("json", z.object({
-			creatorId: z.number().int(),
-			amount: z.string().regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format"),
-			cycle: z.string().regex(/^\d{4}-\d{2}-01$/).optional(),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				creatorId: z.number().int(),
+				amount: z.string().regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format"),
+				cycle: z
+					.string()
+					.regex(/^\d{4}-\d{2}-01$/)
+					.optional(),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const { creatorId, amount, cycle: requestedCycle } = c.req.valid("json");
@@ -379,8 +411,8 @@ const subscriptionRoutes = new Hono()
 			const cycle = requestedCycle ?? currentCycle;
 
 			// Only allow editing current or next month
-			const cycleDate = new Date(cycle + "T00:00:00");
-			const currentDate = new Date(currentCycle + "T00:00:00");
+			const cycleDate = new Date(`${cycle}T00:00:00`);
+			const currentDate = new Date(`${currentCycle}T00:00:00`);
 			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
 			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
@@ -466,7 +498,11 @@ const subscriptionRoutes = new Hono()
 					billingCycle: cycle,
 				})
 				.onConflictDoUpdate({
-					target: [boostAllocations.userId, boostAllocations.creatorId, boostAllocations.billingCycle],
+					target: [
+						boostAllocations.userId,
+						boostAllocations.creatorId,
+						boostAllocations.billingCycle,
+					],
 					set: { amount, updatedAt: new Date() },
 				});
 
@@ -511,11 +547,14 @@ const subscriptionRoutes = new Hono()
 	.post(
 		"/gates",
 		requireAuth,
-		zValidator("json", z.object({
-			threshold: z.string().regex(/^\d+\.\d{2}$/),
-			label: z.string().min(1).max(100),
-			description: z.string().max(1000).optional().default(""),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				threshold: z.string().regex(/^\d+\.\d{2}$/),
+				label: z.string().min(1).max(100),
+				description: z.string().max(1000).optional().default(""),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const data = c.req.valid("json");
@@ -532,11 +571,17 @@ const subscriptionRoutes = new Hono()
 	.patch(
 		"/gates/:id",
 		requireAuth,
-		zValidator("json", z.object({
-			threshold: z.string().regex(/^\d+\.\d{2}$/).optional(),
-			label: z.string().min(1).max(100).optional(),
-			description: z.string().max(1000).optional(),
-		})),
+		zValidator(
+			"json",
+			z.object({
+				threshold: z
+					.string()
+					.regex(/^\d+\.\d{2}$/)
+					.optional(),
+				label: z.string().min(1).max(100).optional(),
+				description: z.string().max(1000).optional(),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
 			const { id } = c.req.param();
@@ -630,9 +675,7 @@ const subscriptionRoutes = new Hono()
 			const fundingLevel = sub?.fundingLevel ?? 0;
 
 			// Check if any Anthers Tier gate is cleared
-			const clearedTierGate = anthersTierGates.some(
-				(g) => fundingLevel >= Number(g.threshold),
-			);
+			const clearedTierGate = anthersTierGates.some((g) => fundingLevel >= Number(g.threshold));
 
 			// Check if any Boost gate is cleared
 			const [boost] = await db

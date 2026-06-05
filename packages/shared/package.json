@@ -1,18 +1,19 @@
 {
-  "name": "@anthers/shared",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./types": "./src/types.ts",
-    "./validators": "./src/validators.ts",
-    "./fees": "./src/fees.ts",
-    "./tiers": "./src/tiers.ts",
-    "./constants": "./src/constants.ts"
-  },
-  "dependencies": {
-    "decimal.js": "10.6.0",
-    "zod": "^3.25.0"
-  }
+	"name": "@anthers/shared",
+	"private": true,
+	"version": "0.1.0",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./types": "./src/types.ts",
+		"./validators": "./src/validators.ts",
+		"./fees": "./src/fees.ts",
+		"./tiers": "./src/tiers.ts",
+		"./constants": "./src/constants.ts"
+	},
+	"dependencies": {
+		"decimal.js": "10.6.0",
+		"zod": "^3.25.0"
+	}
 }

@@ -1,13 +1,13 @@
-import { useState, useEffect } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import FileUpload from "../components/ui/FileUpload";
+import FormField from "../components/ui/FormField";
 import { client } from "../lib/rpc";
 import type { GameJam } from "../lib/types";
-import FormField from "../components/ui/FormField";
-import FileUpload from "../components/ui/FileUpload";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -121,9 +121,7 @@ export default function JamFormPage() {
 					const data = await err.json();
 					if (data && typeof data === "object") {
 						const fieldErrors: Record<string, string> = {};
-						for (const [key, val] of Object.entries(
-							data as Record<string, string[]>,
-						)) {
+						for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
 							fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
 						}
 						setErrors(fieldErrors);
@@ -149,9 +147,7 @@ export default function JamFormPage() {
 
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">
-				{isEditing ? "Edit Jam" : "Host a Game Jam"}
-			</h1>
+			<h1 className="text-2xl font-bold mb-6">{isEditing ? "Edit Jam" : "Host a Game Jam"}</h1>
 
 			{error && (
 				<div className="alert alert-error mb-4">
@@ -257,12 +253,10 @@ export default function JamFormPage() {
 						type="number"
 						className="input input-bordered w-full"
 						value={maxTeamSize}
-						onChange={(e) => setMaxTeamSize(parseInt(e.target.value) || 0)}
+						onChange={(e) => setMaxTeamSize(parseInt(e.target.value, 10) || 0)}
 						min={0}
 					/>
-					<p className="text-xs text-base-content/40 mt-1">
-						0 = unlimited
-					</p>
+					<p className="text-xs text-base-content/40 mt-1">0 = unlimited</p>
 				</FormField>
 
 				<div className="form-control">
@@ -274,9 +268,7 @@ export default function JamFormPage() {
 							onChange={(e) => setAllowLate(e.target.checked)}
 						/>
 						<div>
-							<span className="label-text font-medium">
-								Allow late submissions
-							</span>
+							<span className="label-text font-medium">Allow late submissions</span>
 							<p className="text-xs text-base-content/50 mt-0.5">
 								Allow entries after the jam end date
 							</p>
@@ -290,11 +282,7 @@ export default function JamFormPage() {
 						className={`btn btn-primary ${saving ? "btn-disabled" : ""}`}
 						disabled={saving}
 					>
-						{saving
-							? "Saving..."
-							: isEditing
-								? "Update Jam"
-								: "Create Jam"}
+						{saving ? "Saving..." : isEditing ? "Update Jam" : "Create Jam"}
 					</button>
 				</div>
 			</form>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { createMiddleware } from "hono/factory";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

@@ -1,14 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { PaintBrushIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { client } from "../lib/rpc";
-import type { Project, Post, PublicUser } from "../lib/types";
-import ProjectCard from "../components/cards/ProjectCard";
-import PostCard from "../components/cards/PostCard";
 import CreatorCard from "../components/cards/CreatorCard";
-import {
-	PaintBrushIcon,
-	SparklesIcon,
-} from "@heroicons/react/24/outline";
+import PostCard from "../components/cards/PostCard";
+import ProjectCard from "../components/cards/ProjectCard";
+import { client } from "../lib/rpc";
+import type { Post, Project, PublicUser } from "../lib/types";
 
 export default function HomePage() {
 	const [projects, setProjects] = useState<Project[]>([]);
@@ -41,9 +39,8 @@ export default function HomePage() {
 					<div className="max-w-3xl">
 						<h1 className="text-6xl font-bold tracking-tight">Anthers</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							A home for creators and the people who love their work. Publish
-							games, videos, music, and writing—or discover your next
-							favorite thing.
+							A home for creators and the people who love their work. Publish games, videos, music,
+							and writing—or discover your next favorite thing.
 						</p>
 
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-xl mx-auto mt-8">
@@ -57,12 +54,9 @@ export default function HomePage() {
 									</div>
 									<h2 className="card-title text-lg">For Creators</h2>
 									<p className="text-sm text-base-content/60">
-										Publish your work. Keep 100% of your earnings. Build your
-										audience in one place.
+										Publish your work. Keep 100% of your earnings. Build your audience in one place.
 									</p>
-									<span className="btn btn-primary btn-sm mt-2">
-										Learn more
-									</span>
+									<span className="btn btn-primary btn-sm mt-2">Learn more</span>
 								</div>
 							</Link>
 
@@ -76,12 +70,10 @@ export default function HomePage() {
 									</div>
 									<h2 className="card-title text-lg">For Users</h2>
 									<p className="text-sm text-base-content/60">
-										Discover games, music, videos, and writing. Play in your
-										browser. Support creators directly.
+										Discover games, music, videos, and writing. Play in your browser. Support
+										creators directly.
 									</p>
-									<span className="btn btn-secondary btn-sm mt-2">
-										Learn more
-									</span>
+									<span className="btn btn-secondary btn-sm mt-2">Learn more</span>
 								</div>
 							</Link>
 						</div>

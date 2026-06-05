@@ -1,12 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { client } from "../../lib/rpc";
 import type { Asset } from "../../lib/types";
-import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024)
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
@@ -42,9 +42,7 @@ export default function ProjectDownloads({
 				<div className="card bg-base-200">
 					<div className="card-body items-center text-center py-8">
 						<LockClosedIcon className="w-8 h-8 text-base-content/40" />
-						<p className="text-base-content/60">
-							Purchase this project to access downloads.
-						</p>
+						<p className="text-base-content/60">Purchase this project to access downloads.</p>
 					</div>
 				</div>
 			</div>
@@ -81,26 +79,25 @@ export default function ProjectDownloads({
 							platformAssets.map((asset) => (
 								<tr key={asset.id}>
 									{mediaType === "game" && (
-										<td className="font-medium">
-											{PLATFORM_LABELS[platform] ?? platform}
-										</td>
+										<td className="font-medium">{PLATFORM_LABELS[platform] ?? platform}</td>
 									)}
 									<td>{asset.filename}</td>
-									<td className="text-base-content/60">
-										{formatSize(asset.fileSize ?? 0)}
-									</td>
+									<td className="text-base-content/60">{formatSize(asset.fileSize ?? 0)}</td>
 									{assets.some((a) => a.version) && (
 										<td className="text-base-content/60">{asset.version}</td>
 									)}
 									<td>
 										<button
+											type="button"
 											className="btn btn-sm btn-primary"
 											onClick={async () => {
 												try {
-													const res = await client.api.content.projects[":slug"].assets[":id"].download.$post({
+													const res = await client.api.content.projects[":slug"].assets[
+														":id"
+													].download.$post({
 														param: { slug: projectSlug, id: String(asset.id) },
 													});
-													const data = await res.json() as { url: string };
+													const data = (await res.json()) as { url: string };
 													window.location.href = data.url;
 												} catch {
 													// Fallback to direct link
@@ -113,7 +110,7 @@ export default function ProjectDownloads({
 										</button>
 									</td>
 								</tr>
-							))
+							)),
 						)}
 					</tbody>
 				</table>

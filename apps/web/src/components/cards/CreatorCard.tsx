@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../lib/auth";
 import { client } from "../../lib/rpc";
 import type { PublicUser } from "../../lib/types";
-import { useAuth } from "../../lib/auth";
-import { useState } from "react";
 
 export default function CreatorCard({ creator }: { creator: PublicUser }) {
 	const { isAuthenticated, user } = useAuth();
@@ -49,21 +50,16 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 						{(creator.displayName || creator.username).charAt(0).toUpperCase()}
 					</div>
 				)}
-				<h3 className="font-semibold">
-					{creator.displayName || creator.username}
-				</h3>
+				<h3 className="font-semibold">{creator.displayName || creator.username}</h3>
 				<p className="text-xs text-base-content/50">@{creator.username}</p>
-				{creator.bio && (
-					<p className="text-sm text-base-content/70 line-clamp-2">
-						{creator.bio}
-					</p>
-				)}
+				{creator.bio && <p className="text-sm text-base-content/70 line-clamp-2">{creator.bio}</p>}
 				<div className="flex gap-4 text-xs text-base-content/60 mt-1">
 					<span>{followerCount} followers</span>
 					<span>{creator.projectCount} projects</span>
 				</div>
 				{isAuthenticated && !isOwnProfile && (
 					<button
+						type="button"
 						className={`btn btn-sm mt-2 ${isFollowing ? "btn-outline" : "btn-primary"}`}
 						onClick={handleFollow}
 					>

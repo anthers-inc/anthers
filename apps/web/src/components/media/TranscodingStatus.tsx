@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface TranscodingStatusProps {
 	status: string;
 	progress: number;
@@ -29,22 +30,14 @@ export default function TranscodingStatus({
 						</span>
 						<span className="font-mono">{progress}%</span>
 					</div>
-					<progress
-						className="progress progress-primary w-full"
-						value={progress}
-						max="100"
-					/>
+					<progress className="progress progress-primary w-full" value={progress} max="100" />
 				</div>
 			)}
 
 			{status === "failed" && (
 				<div className="flex flex-col gap-1">
-					<span className="text-error text-sm font-medium">
-						Processing failed
-					</span>
-					{errorMessage && (
-						<span className="text-xs text-base-content/50">{errorMessage}</span>
-					)}
+					<span className="text-error text-sm font-medium">Processing failed</span>
+					{errorMessage && <span className="text-xs text-base-content/50">{errorMessage}</span>}
 				</div>
 			)}
 		</div>

@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import {
-	DocumentTextIcon,
+	BookOpenIcon,
 	ChevronRightIcon,
+	DocumentTextIcon,
 	HomeIcon,
 	MagnifyingGlassIcon,
-	BookOpenIcon,
 } from "@heroicons/react/24/outline";
-import { client } from "../lib/rpc";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import MDXRenderer from "../components/wiki/MDXRenderer";
 import WikiRightSidebar from "../components/wiki/WikiRightSidebar";
 
@@ -260,7 +260,7 @@ export default function WikiPage() {
 
 		// Find current page index
 		const currentIndex = allPages.findIndex(
-			(page) => page.section === currentSection && page.file === currentFile
+			(page) => page.section === currentSection && page.file === currentFile,
 		);
 
 		return {
@@ -273,7 +273,10 @@ export default function WikiPage() {
 	const filteredAreas = useMemo(() => {
 		if (!searchQuery) return wikiAreas;
 
-		const terms = searchQuery.toLowerCase().split(/[\s*]+/).filter(Boolean);
+		const terms = searchQuery
+			.toLowerCase()
+			.split(/[\s*]+/)
+			.filter(Boolean);
 		return wikiAreas
 			.map((area) => ({
 				...area,
@@ -301,8 +304,7 @@ export default function WikiPage() {
 
 	const handleSectionClick = (section: WikiSection) => {
 		if (section.items && section.items.length > 0) {
-			const firstItem =
-				section.items.find((item) => item.file === "README.md") || section.items[0];
+			const firstItem = section.items.find((item) => item.file === "README.md") || section.items[0];
 			handleNavigate(section.path, firstItem.file);
 		}
 	};
@@ -311,7 +313,7 @@ export default function WikiPage() {
 	if (!currentSection) {
 		const totalPages = wikiAreas.reduce(
 			(acc, area) => acc + area.sections.reduce((sacc, s) => sacc + (s.items?.length || 0), 0),
-			0
+			0,
 		);
 
 		return (
@@ -322,9 +324,7 @@ export default function WikiPage() {
 							<BookOpenIcon className="h-7 w-7 text-primary" />
 						</div>
 						<div>
-							<h1 className="text-4xl font-bold text-base-content">
-								Anthers Wiki
-							</h1>
+							<h1 className="text-4xl font-bold text-base-content">Anthers Wiki</h1>
 							<p className="text-lg text-base-content/70">
 								Guides and documentation for users and creators
 							</p>
@@ -374,9 +374,8 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">1</span>
 								<div>
 									<button
-										onClick={() =>
-											handleNavigate("10-Getting-Started", "01-WhatIsAnthers.md")
-										}
+										type="button"
+										onClick={() => handleNavigate("10-Getting-Started", "01-WhatIsAnthers.md")}
 										className="link link-primary font-semibold"
 									>
 										What is Anthers?
@@ -390,9 +389,8 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">2</span>
 								<div>
 									<button
-										onClick={() =>
-											handleNavigate("11-The-Anthers-Model", "README.md")
-										}
+										type="button"
+										onClick={() => handleNavigate("11-The-Anthers-Model", "README.md")}
 										className="link link-primary font-semibold"
 									>
 										The Anthers Model
@@ -406,9 +404,8 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">3</span>
 								<div>
 									<button
-										onClick={() =>
-											handleNavigate("20-Account-And-Subscription", "README.md")
-										}
+										type="button"
+										onClick={() => handleNavigate("20-Account-And-Subscription", "README.md")}
 										className="link link-primary font-semibold"
 									>
 										Get Started as a User
@@ -422,9 +419,8 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">4</span>
 								<div>
 									<button
-										onClick={() =>
-											handleNavigate("30-Creator-Setup", "README.md")
-										}
+										type="button"
+										onClick={() => handleNavigate("30-Creator-Setup", "README.md")}
 										className="link link-primary font-semibold"
 									>
 										Get Started as a Creator
@@ -452,29 +448,29 @@ export default function WikiPage() {
 							{area.sections.map((section) => (
 								<div key={section.path} className="border-l-2 border-primary/30 pl-4">
 									<button
+										type="button"
 										onClick={() => handleSectionClick(section)}
 										className="flex items-center gap-3 group mb-2"
 									>
-                                        <span className="text-primary font-bold text-lg w-8">
-                                            {section.path.split("-")[0]}.
-                                        </span>
+										<span className="text-primary font-bold text-lg w-8">
+											{section.path.split("-")[0]}.
+										</span>
 										<h3 className="font-semibold text-lg text-base-content group-hover:text-primary transition-colors">
 											{section.name}
 										</h3>
 										<span className="badge badge-sm badge-ghost">
-                                            {section.items?.length || 0} pages
-                                        </span>
+											{section.items?.length || 0} pages
+										</span>
 									</button>
 									{section.description && (
-										<p className="text-sm text-base-content/60 ml-11 mb-2">
-											{section.description}
-										</p>
+										<p className="text-sm text-base-content/60 ml-11 mb-2">{section.description}</p>
 									)}
 									{section.items && section.items.length > 0 && (
 										<ul className="ml-11 space-y-1">
 											{section.items.map((item) => (
 												<li key={item.file}>
 													<button
+														type="button"
 														onClick={() => handleNavigate(section.path, item.file)}
 														className="flex items-center gap-2 text-sm text-base-content/70 hover:text-primary transition-colors py-0.5"
 													>
@@ -510,7 +506,7 @@ export default function WikiPage() {
 				<div className="breadcrumbs text-sm mb-6">
 					<ul>
 						<li>
-							<button onClick={() => navigate("/wiki")} className="link">
+							<button type="button" onClick={() => navigate("/wiki")} className="link">
 								<HomeIcon className="h-4 w-4" />
 								Wiki
 							</button>
@@ -527,6 +523,7 @@ export default function WikiPage() {
 				<div className="space-y-2">
 					{section.items?.map((item) => (
 						<button
+							type="button"
 							key={item.file}
 							onClick={() => handleNavigate(section.path, item.file)}
 							className="card bg-base-100 border border-base-300 hover:border-primary transition-all text-left p-4 w-full flex items-center gap-3"
@@ -535,9 +532,7 @@ export default function WikiPage() {
 							<div className="flex-1">
 								<h3 className="font-medium text-base-content">{item.name}</h3>
 								{item.description && (
-									<p className="text-sm text-base-content/60">
-										{item.description}
-									</p>
+									<p className="text-sm text-base-content/60">{item.description}</p>
 								)}
 							</div>
 							<ChevronRightIcon className="h-5 w-5 text-base-content/40" />
@@ -552,15 +547,12 @@ export default function WikiPage() {
 	return (
 		<div className="flex h-full">
 			{/* Main content area */}
-			<div
-				className="flex-1 px-8 pt-8 min-w-0"
-				style={{ fontSize: `${zoomLevel}rem` }}
-			>
+			<div className="flex-1 px-8 pt-8 min-w-0" style={{ fontSize: `${zoomLevel}rem` }}>
 				<div className="max-w-[1100px] mx-auto">
 					<div className="breadcrumbs text-sm mb-6">
 						<ul>
 							<li>
-								<button onClick={() => navigate("/wiki")} className="link">
+								<button type="button" onClick={() => navigate("/wiki")} className="link">
 									<HomeIcon className="h-4 w-4" />
 									Wiki
 								</button>
@@ -568,6 +560,7 @@ export default function WikiPage() {
 							{section && (
 								<li>
 									<button
+										type="button"
 										onClick={() => navigate(`/wiki/${section.path}`)}
 										className="link"
 									>

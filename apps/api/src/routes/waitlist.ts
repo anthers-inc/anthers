@@ -1,7 +1,8 @@
-import { Hono } from "hono";
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
+import { Hono } from "hono";
 import { Resend } from "resend";
+import { z } from "zod";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -25,11 +26,7 @@ export const waitlistRoutes = new Hono().post(
 		}
 
 		const interestLabel =
-			interest === "both"
-				? "Both (User & Creator)"
-				: interest === "creator"
-					? "Creator"
-					: "User";
+			interest === "both" ? "Both (User & Creator)" : interest === "creator" ? "Creator" : "User";
 
 		const resend = new Resend(apiKey);
 

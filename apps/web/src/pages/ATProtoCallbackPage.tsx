@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
 
 const ERROR_MESSAGES: Record<string, string> = {
 	missing_params: "Missing authorization parameters.",
@@ -53,12 +54,11 @@ export default function ATProtoCallbackPage() {
 			<div className="container mx-auto px-4 py-16 text-center max-w-md">
 				<div className="card bg-base-200">
 					<div className="card-body">
-						<h2 className="card-title justify-center text-lg">
-							Bluesky Authentication Failed
-						</h2>
+						<h2 className="card-title justify-center text-lg">Bluesky Authentication Failed</h2>
 						<p className="text-sm text-base-content/60">{error}</p>
 						<div className="card-actions justify-center mt-4">
 							<button
+								type="button"
 								className="btn btn-primary btn-sm"
 								onClick={() => navigate("/login", { replace: true })}
 							>
@@ -75,9 +75,7 @@ export default function ATProtoCallbackPage() {
 		<div className="flex justify-center items-center min-h-[60vh]">
 			<div className="text-center">
 				<LoadingSpinner size="lg" />
-				<p className="mt-4 text-sm text-base-content/60">
-					Completing Bluesky authentication...
-				</p>
+				<p className="mt-4 text-sm text-base-content/60">Completing Bluesky authentication...</p>
 			</div>
 		</div>
 	);

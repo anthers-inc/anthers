@@ -1,26 +1,25 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Game Jam routes — CRUD, entries, votes, results.
  */
 
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { eq, and, desc, sql, gte, lte, gt, lt } from "drizzle-orm";
 import { db } from "@anthers/db/client";
-import {
-	users,
-	projects,
-	gameJams,
-	jamEntries,
-	jamVotes,
-} from "@anthers/db/schema";
+import { gameJams, jamEntries, jamVotes, projects, users } from "@anthers/db/schema";
+import { zValidator } from "@hono/zod-validator";
+import { and, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { z } from "zod";
 import { requireAuth, requireCreator } from "../middleware/auth.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const createJamSchema = z.object({
 	title: z.string().min(1).max(255),
-	slug: z.string().min(1).max(255).regex(/^[a-z0-9-]+$/),
+	slug: z
+		.string()
+		.min(1)
+		.max(255)
+		.regex(/^[a-z0-9-]+$/),
 	description: z.string().max(50000).optional().default(""),
 	theme: z.string().max(255).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
@@ -224,11 +223,7 @@ const jamRoutes = new Hono()
 			const { slug } = c.req.param();
 			const { projectId } = c.req.valid("json");
 
-			const [jam] = await db
-				.select()
-				.from(gameJams)
-				.where(eq(gameJams.slug, slug))
-				.limit(1);
+			const [jam] = await db.select().from(gameJams).where(eq(gameJams.slug, slug)).limit(1);
 
 			if (!jam) return c.json({ error: "Jam not found" }, 404);
 
@@ -273,11 +268,7 @@ const jamRoutes = new Hono()
 			const { slug, entryId } = c.req.param();
 			const { score } = c.req.valid("json");
 
-			const [jam] = await db
-				.select()
-				.from(gameJams)
-				.where(eq(gameJams.slug, slug))
-				.limit(1);
+			const [jam] = await db.select().from(gameJams).where(eq(gameJams.slug, slug)).limit(1);
 
 			if (!jam) return c.json({ error: "Jam not found" }, 404);
 
@@ -318,11 +309,7 @@ const jamRoutes = new Hono()
 	.get("/:slug/results", async (c) => {
 		const { slug } = c.req.param();
 
-		const [jam] = await db
-			.select()
-			.from(gameJams)
-			.where(eq(gameJams.slug, slug))
-			.limit(1);
+		const [jam] = await db.select().from(gameJams).where(eq(gameJams.slug, slug)).limit(1);
 
 		if (!jam) return c.json({ error: "Jam not found" }, 404);
 

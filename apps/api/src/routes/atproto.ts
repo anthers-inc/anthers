@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * ATProto OAuth routes.
  *
@@ -8,22 +9,22 @@
  *   POST /unlink               — Unlink ATProto identity from account
  */
 
-import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { z } from "zod";
-import {
-	initiateOAuth,
-	exchangeCode,
-	getBlueskyProfile,
-	findOrCreateAtprotoUser,
-	linkAtprotoToUser,
-	unlinkAtprotoFromUser,
-	saveAtprotoSession,
-} from "../services/atproto.js";
-import { createSession, validateSession } from "../services/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import type { OAuthInitResult } from "../services/atproto.js";
+import {
+	exchangeCode,
+	findOrCreateAtprotoUser,
+	getBlueskyProfile,
+	initiateOAuth,
+	linkAtprotoToUser,
+	saveAtprotoSession,
+	unlinkAtprotoFromUser,
+} from "../services/atproto.js";
+import { createSession, validateSession } from "../services/auth.js";
 
 // ─── OAuth State Store ───────────────────────────────────────────────────────
 // In-memory store for OAuth state between init and callback.
@@ -206,9 +207,7 @@ const atprotoRoutes = new Hono()
 				);
 
 				if (linkResult.error) {
-					return c.redirect(
-						`${callbackUrl}?error=${encodeURIComponent(linkResult.error)}`,
-					);
+					return c.redirect(`${callbackUrl}?error=${encodeURIComponent(linkResult.error)}`);
 				}
 
 				// Save ATProto session tokens

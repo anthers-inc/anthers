@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
 import type { Post } from "../../lib/types";
 import PostCard from "../cards/PostCard";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -13,7 +13,7 @@ export default function ProjectDevlog({ slug }: { slug: string }) {
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		fetch(apiBase + "/api/content/posts?project=" + slug, {
+		fetch(`${apiBase}/api/content/posts?project=${slug}`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())

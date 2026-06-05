@@ -1,16 +1,16 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import RichTextEditor from "../components/editor/RichTextEditor";
+import FileUpload from "../components/ui/FileUpload";
+import FormField from "../components/ui/FormField";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Post, Project } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
-import FormField from "../components/ui/FormField";
-import FileUpload from "../components/ui/FileUpload";
-import RichTextEditor from "../components/editor/RichTextEditor";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 const apiBase =
-	window.location.hostname === "localhost" ||
-	window.location.hostname === "127.0.0.1"
+	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
 		? "http://localhost:8000"
 		: "";
 
@@ -48,7 +48,7 @@ export default function PostFormPage() {
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
-		fetch(apiBase + "/api/content/projects?mine=true", {
+		fetch(`${apiBase}/api/content/projects?mine=true`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())
@@ -82,11 +82,7 @@ export default function PostFormPage() {
 		setUploading(true);
 		setError(null);
 		try {
-			const key = await uploadMediaFile(
-				file,
-				contentType as "video" | "audio",
-				setUploadProgress,
-			);
+			const key = await uploadMediaFile(file, contentType as "video" | "audio", setUploadProgress);
 			setUploadedStorageKey(key);
 		} catch (err) {
 			setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -163,9 +159,7 @@ export default function PostFormPage() {
 					const data = await err.json();
 					if (data && typeof data === "object") {
 						const fieldErrors: Record<string, string> = {};
-						for (const [key, val] of Object.entries(
-							data as Record<string, string[]>,
-						)) {
+						for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
 							fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
 						}
 						setErrors(fieldErrors);
@@ -191,9 +185,7 @@ export default function PostFormPage() {
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">
-				{isEdit ? "Edit Post" : "New Post"}
-			</h1>
+			<h1 className="text-2xl font-bold mb-6">{isEdit ? "Edit Post" : "New Post"}</h1>
 
 			{error && (
 				<div className="alert alert-error mb-4">
@@ -421,17 +413,9 @@ export default function PostFormPage() {
 						className={`btn btn-primary ${saving || uploading ? "btn-disabled" : ""}`}
 						disabled={saving || uploading}
 					>
-						{saving
-							? "Saving..."
-							: isEdit
-								? "Update Post"
-								: "Create Post"}
+						{saving ? "Saving..." : isEdit ? "Update Post" : "Create Post"}
 					</button>
-					<button
-						type="button"
-						className="btn btn-ghost"
-						onClick={() => navigate("/dashboard")}
-					>
+					<button type="button" className="btn btn-ghost" onClick={() => navigate("/dashboard")}>
 						Cancel
 					</button>
 				</div>

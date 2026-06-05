@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Local filesystem storage implementation for development.
  *
@@ -5,10 +6,10 @@
  * Served via Hono's serveStatic middleware mounted at /content/*.
  */
 
-import { mkdir, unlink, copyFile, access } from "node:fs/promises";
-import { join, dirname } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { access, copyFile, mkdir, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { StorageService } from "./types.js";
 
 /** Root directory for local content files (repo root /content/) */
@@ -41,10 +42,7 @@ export class LocalStorageService implements StorageService {
 		return tempPath;
 	}
 
-	async getUrl(
-		key: string,
-		_opts?: { signed?: boolean; expiresIn?: number },
-	): Promise<string> {
+	async getUrl(key: string, _opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		// Local dev — no signing, just return a URL the static middleware serves
 		return `${getBaseUrl()}/content/${key}`;
 	}
@@ -64,7 +62,8 @@ export class LocalStorageService implements StorageService {
 			await unlink(join(CONTENT_ROOT, key));
 		} catch (err: unknown) {
 			// Ignore "file not found" — delete is idempotent
-			if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") return;
+			if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT")
+				return;
 			throw err;
 		}
 	}

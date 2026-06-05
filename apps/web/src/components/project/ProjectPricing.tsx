@@ -1,13 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useState } from "react";
-import {
-	Elements,
-	CardElement,
-	useStripe,
-	useElements,
-} from "@stripe/react-stripe-js";
 import { client } from "../../lib/rpc";
-import type { CheckoutResponse } from "../../lib/types";
 import { stripePromise } from "../../lib/stripe";
+import type { CheckoutResponse } from "../../lib/types";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {
@@ -71,10 +67,9 @@ function CheckoutForm({
 				return;
 			}
 
-			const { error: stripeError } = await stripe.confirmCardPayment(
-				checkout.clientSecret,
-				{ payment_method: { card: cardElement } },
-			);
+			const { error: stripeError } = await stripe.confirmCardPayment(checkout.clientSecret, {
+				payment_method: { card: cardElement },
+			});
 
 			if (stripeError) {
 				setError(stripeError.message || "Payment failed.");
@@ -162,17 +157,11 @@ export default function ProjectPricing({
 				</div>
 			) : !stripePromise ? (
 				<div className="p-3 bg-base-200 rounded-lg">
-					<p className="text-sm text-base-content/60">
-						Payments are not configured.
-					</p>
+					<p className="text-sm text-base-content/60">Payments are not configured.</p>
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
-					<CheckoutForm
-						slug={slug}
-						price={displayPrice}
-						onPurchaseComplete={onPurchaseComplete}
-					/>
+					<CheckoutForm slug={slug} price={displayPrice} onPurchaseComplete={onPurchaseComplete} />
 				</Elements>
 			)}
 		</div>

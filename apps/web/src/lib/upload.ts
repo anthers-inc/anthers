@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { client } from "./rpc";
 
 /**
@@ -77,8 +78,7 @@ function xhrUploadFormData<T>(
 		// Handle relative URLs — use the same base as the RPC client
 		const baseUrl =
 			typeof location !== "undefined" &&
-			(location.hostname === "localhost" ||
-				location.hostname === "127.0.0.1")
+			(location.hostname === "localhost" || location.hostname === "127.0.0.1")
 				? "http://localhost:8000"
 				: "";
 		const fullUrl = url.startsWith("/") ? `${baseUrl}${url}` : url;

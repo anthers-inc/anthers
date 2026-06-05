@@ -1,19 +1,20 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import {
+	Bars3Icon,
+	ChartBarIcon,
+	MagnifyingGlassIcon,
+	RectangleStackIcon,
+	RssIcon,
+	Squares2X2Icon,
+	TrophyIcon,
+	UserCircleIcon,
+} from "@heroicons/react/24/outline";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { useMediaPlayer } from "../../lib/media-player";
-import { SidebarProvider, useSidebar } from "./SidebarContext";
-import SearchBar from "./SearchBar";
 import MiniPlayer from "../media/MiniPlayer";
-import {
-	Bars3Icon,
-	UserCircleIcon,
-	RssIcon,
-	RectangleStackIcon,
-	MagnifyingGlassIcon,
-	TrophyIcon,
-	ChartBarIcon,
-	Squares2X2Icon,
-} from "@heroicons/react/24/outline";
+import SearchBar from "./SearchBar";
+import { SidebarProvider, useSidebar } from "./SidebarContext";
 
 /** Primary nav links that appear in the sidebar for all logged-in pages */
 const NAV_LINKS = [
@@ -86,18 +87,26 @@ function LoggedInLayoutInner() {
 							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
 						>
 							<li className="menu-title px-4 py-1">
-								<span className="text-xs text-base-content/50">
-									@{user?.username}
-								</span>
+								<span className="text-xs text-base-content/50">@{user?.username}</span>
 							</li>
 							<div className="divider my-0 px-2" />
-							<li><Link to="/subscription">Subscription</Link></li>
-							<li><Link to="/purchases">Purchases</Link></li>
-							<li><Link to={`/${user?.username}`}>Profile</Link></li>
-							<li><Link to="/settings">Settings</Link></li>
+							<li>
+								<Link to="/subscription">Subscription</Link>
+							</li>
+							<li>
+								<Link to="/purchases">Purchases</Link>
+							</li>
+							<li>
+								<Link to={`/${user?.username}`}>Profile</Link>
+							</li>
+							<li>
+								<Link to="/settings">Settings</Link>
+							</li>
 							<div className="divider my-0 px-2" />
 							<li>
-								<button onClick={handleLogout}>Log out</button>
+								<button type="button" onClick={handleLogout}>
+									Log out
+								</button>
 							</li>
 						</ul>
 					</div>
@@ -138,9 +147,7 @@ function LoggedInLayoutInner() {
 						{pageContent && (
 							<>
 								<div className="divider my-0 mx-3" />
-								<div className="flex-1 p-3 overflow-y-auto">
-									{pageContent}
-								</div>
+								<div className="flex-1 p-3 overflow-y-auto">{pageContent}</div>
 							</>
 						)}
 					</div>
@@ -151,26 +158,46 @@ function LoggedInLayoutInner() {
 					<Outlet />
 
 					{/* Footer */}
-					<footer className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}>
+					<footer
+						className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+					>
 						<div className="max-w-7xl mx-auto">
 							<div className="join join-horizontal w-full">
 								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 									<h6 className="footer-title text-xs">Discover</h6>
-									<Link to="/discover" className="link link-hover">Browse Projects</Link>
-									<Link to="/jams" className="link link-hover">Jams</Link>
+									<Link to="/discover" className="link link-hover">
+										Browse Projects
+									</Link>
+									<Link to="/jams" className="link link-hover">
+										Jams
+									</Link>
 								</nav>
 								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 									<h6 className="footer-title text-xs">Your Stuff</h6>
-									<Link to="/feed" className="link link-hover">Feed</Link>
-									<Link to="/library" className="link link-hover">Library</Link>
-									<Link to="/subscription" className="link link-hover">Subscription</Link>
+									<Link to="/feed" className="link link-hover">
+										Feed
+									</Link>
+									<Link to="/library" className="link link-hover">
+										Library
+									</Link>
+									<Link to="/subscription" className="link link-hover">
+										Subscription
+									</Link>
 								</nav>
 								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 									<h6 className="footer-title text-xs">About</h6>
-									<Link to="/about" className="link link-hover">About Us</Link>
-									<Link to="/faq" className="link link-hover">FAQ</Link>
-									<Link to="/roadmap" className="link link-hover">Roadmap</Link>
-									<Link to="/wiki" className="link link-hover">Wiki</Link>
+									<Link to="/about" className="link link-hover">
+										About Us
+									</Link>
+									<Link to="/faq" className="link link-hover">
+										FAQ
+									</Link>
+									<Link to="/roadmap" className="link link-hover">
+										Roadmap
+									</Link>
+									<Link to="/wiki" className="link link-hover">
+										Wiki
+									</Link>
 								</nav>
 							</div>
 						</div>

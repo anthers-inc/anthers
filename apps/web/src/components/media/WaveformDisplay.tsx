@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface WaveformDisplayProps {
 	peaks: number[];
 	progress: number; // 0 to 1
@@ -25,12 +26,14 @@ export default function WaveformDisplay({
 
 	return (
 		<svg
+			role="img"
 			viewBox={`0 0 ${totalWidth} ${height}`}
 			className={`w-full ${onSeek ? "cursor-pointer" : ""}`}
 			style={{ height }}
 			onClick={handleClick}
 			preserveAspectRatio="none"
 		>
+			<title>Audio waveform</title>
 			{peaks.map((peak, i) => {
 				const barHeight = Math.max(2, peak * height * 0.9);
 				const x = i * (barWidth + gap);

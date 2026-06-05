@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import {
+	MusicalNoteIcon,
+	PencilSquareIcon,
+	PlayIcon,
+	PuzzlePieceIcon,
+	RectangleStackIcon,
+	VideoCameraIcon,
+} from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import EmptyState from "../components/ui/EmptyState";
-import {
-	PuzzlePieceIcon,
-	MusicalNoteIcon,
-	VideoCameraIcon,
-	PencilSquareIcon,
-	RectangleStackIcon,
-	PlayIcon,
-} from "@heroicons/react/24/outline";
 
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },
@@ -32,9 +33,7 @@ export default function LibraryPage() {
 		client.api.payments.purchases
 			.$get()
 			.then((res) => res.json())
-			.then((data) =>
-				setPurchases((data as { purchases: Purchase[] }).purchases),
-			)
+			.then((data) => setPurchases((data as { purchases: Purchase[] }).purchases))
 			.catch(() => {})
 			.finally(() => setLoading(false));
 	}, []);
@@ -49,9 +48,7 @@ export default function LibraryPage() {
 
 	// Filter purchases by media type (when project data includes mediaType)
 	const filteredPurchases = activeTab
-		? purchases.filter(
-				(p) => (p.project as { mediaType?: string })?.mediaType === activeTab,
-			)
+		? purchases.filter((p) => (p.project as { mediaType?: string })?.mediaType === activeTab)
 		: purchases;
 
 	if (loading) {
@@ -92,8 +89,8 @@ export default function LibraryPage() {
 				<div className="bg-base-200/50 rounded-lg p-4 mb-6 flex items-center gap-3">
 					<PlayIcon className="w-5 h-5 text-primary" />
 					<p className="text-sm text-base-content/60">
-						Music player integration coming soon. You'll be able to queue and
-						play your music library directly from here.
+						Music player integration coming soon. You'll be able to queue and play your music
+						library directly from here.
 					</p>
 				</div>
 			)}
@@ -144,18 +141,13 @@ export default function LibraryPage() {
 								</figure>
 							) : (
 								<div className="w-full h-40 bg-base-300 flex items-center justify-center">
-									<span className="text-base-content/30 text-sm">
-										No cover
-									</span>
+									<span className="text-base-content/30 text-sm">No cover</span>
 								</div>
 							)}
 							<div className="card-body p-4">
-								<h2 className="card-title text-sm">
-									{purchase.project?.title}
-								</h2>
+								<h2 className="card-title text-sm">{purchase.project?.title}</h2>
 								<p className="text-xs text-base-content/60">
-									Purchased{" "}
-									{new Date(purchase.createdAt).toLocaleDateString()}
+									Purchased {new Date(purchase.createdAt).toLocaleDateString()}
 								</p>
 							</div>
 						</Link>

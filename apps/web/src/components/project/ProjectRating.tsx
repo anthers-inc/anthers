@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
+import { useAuth } from "../../lib/auth";
 import { client } from "../../lib/rpc";
 import type { RatingAggregate } from "../../lib/types";
-import { useAuth } from "../../lib/auth";
 import StarRating from "../ui/StarRating";
 
 export default function ProjectRating({ slug }: { slug: string }) {
@@ -46,9 +47,7 @@ export default function ProjectRating({ slug }: { slug: string }) {
 					onRate={handleRate}
 				/>
 				{rating.userRating !== null && (
-					<span className="text-sm text-base-content/60">
-						Your rating: {rating.userRating}/5
-					</span>
+					<span className="text-sm text-base-content/60">Your rating: {rating.userRating}/5</span>
 				)}
 			</div>
 		</div>

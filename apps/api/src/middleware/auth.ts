@@ -1,5 +1,6 @@
-import { createMiddleware } from "hono/factory";
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { getCookie } from "hono/cookie";
+import { createMiddleware } from "hono/factory";
 import { validateSession } from "../services/auth.js";
 
 type SessionUser = {

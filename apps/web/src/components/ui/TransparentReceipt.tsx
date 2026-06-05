@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface ReceiptLine {
 	label: string;
 	amount: number;
@@ -32,9 +33,7 @@ export default function TransparentReceipt({
 					<div key={i} className="flex justify-between text-base-content/60">
 						<span>
 							{line.label}
-							{line.note && (
-								<span className="text-xs ml-1">({line.note})</span>
-							)}
+							{line.note && <span className="text-xs ml-1">({line.note})</span>}
 						</span>
 						<span>-{fmt(line.amount)}</span>
 					</div>

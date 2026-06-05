@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+// SPDX-License-Identifier: AGPL-3.0-or-later
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -243,8 +244,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "c-itch-import",
 							title: "itch.io Import",
-							description:
-								"One-click import of games, metadata, and assets from itch.io.",
+							description: "One-click import of games, metadata, and assets from itch.io.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
@@ -292,8 +292,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "u-hls-playback",
 							title: "Adaptive Video Playback",
-							description:
-								"HLS-based adaptive streaming for video content with quality selection.",
+							description: "HLS-based adaptive streaming for video content with quality selection.",
 							status: "active",
 							startQ: 0,
 							endQ: 0,
@@ -310,8 +309,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "u-web-games",
 							title: "Web Game Embedding",
-							description:
-								"Play HTML5/WebGL games directly in the browser from project pages.",
+							description: "Play HTML5/WebGL games directly in the browser from project pages.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
@@ -328,8 +326,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "u-notifications",
 							title: "Notifications",
-							description:
-								"Get notified when creators you follow publish new content or go live.",
+							description: "Get notified when creators you follow publish new content or go live.",
 							status: "planned",
 							startQ: 3,
 							endQ: 4,
@@ -387,8 +384,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "u-comments",
 							title: "Comments & Ratings",
-							description:
-								"Rate and review projects. Comment on posts and game pages.",
+							description: "Rate and review projects. Comment on posts and game pages.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
@@ -595,10 +591,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 	],
 };
 
-const ROADMAPS: RoadmapDef[] = [
-	PLATFORM_ROADMAP,
-	FOUNDATION_ROADMAP,
-];
+const ROADMAPS: RoadmapDef[] = [PLATFORM_ROADMAP, FOUNDATION_ROADMAP];
 
 /* ------------------------------------------------------------------ */
 /*  Layout helper: assign rows within each lane to avoid overlaps     */
@@ -670,9 +663,10 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 
 	// Compute Q_WIDTH: fill container, but never go below MIN_Q_WIDTH
 	const numQuarters = roadmap.quarters.length;
-	const Q_WIDTH = containerWidth > 0
-		? Math.max(MIN_Q_WIDTH, (containerWidth - LEFT_GUTTER) / numQuarters)
-		: MIN_Q_WIDTH;
+	const Q_WIDTH =
+		containerWidth > 0
+			? Math.max(MIN_Q_WIDTH, (containerWidth - LEFT_GUTTER) / numQuarters)
+			: MIN_Q_WIDTH;
 
 	// Layout all sections → lanes
 	const layoutSections = useMemo(() => {
@@ -681,10 +675,7 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 			.map((section) => {
 				const lanes = section.lanes.map((lane) => {
 					const laidOut = assignRows(lane.items);
-					const maxRow = laidOut.reduce(
-						(max, item) => Math.max(max, (item.row ?? 0) + 1),
-						0,
-					);
+					const maxRow = laidOut.reduce((max, item) => Math.max(max, (item.row ?? 0) + 1), 0);
 					return { ...lane, items: laidOut, rowCount: maxRow };
 				});
 				return { ...section, lanes };
@@ -724,12 +715,14 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 	return (
 		<div ref={containerRef} className="overflow-x-auto rounded-xl border border-base-300/50">
 			<svg
+				role="img"
 				ref={svgRef}
 				width={totalWidth}
 				height={totalHeight}
 				className="select-none"
 				style={{ minWidth: numQuarters * MIN_Q_WIDTH }}
 			>
+				<title>Roadmap timeline</title>
 				{/* Quarter columns */}
 				{roadmap.quarters.map((q, i) => {
 					const x = LEFT_GUTTER + i * Q_WIDTH;
@@ -873,10 +866,8 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 										{lane.items.map((item) => {
 											const row = item.row ?? 0;
 											const x = LEFT_GUTTER + item.startQ * Q_WIDTH + 4;
-											const w =
-												(item.endQ - item.startQ + 1) * Q_WIDTH - 8;
-											const y =
-												currentLaneY + LANE_HEADER + row * ROW_HEIGHT + BAR_PAD_Y;
+											const w = (item.endQ - item.startQ + 1) * Q_WIDTH - 8;
+											const y = currentLaneY + LANE_HEADER + row * ROW_HEIGHT + BAR_PAD_Y;
 											const h = ROW_HEIGHT - BAR_PAD_Y * 2;
 											const isHovered = hoveredItem === item.id;
 											const isSelected = selectedItem === item.id;
@@ -898,21 +889,14 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 														height={h}
 														rx={BAR_RADIUS}
 														fill={lane.color}
-														fillOpacity={
-															isSelected ? 0.35 : isHovered ? 0.25 : 0.15
-														}
+														fillOpacity={isSelected ? 0.35 : isHovered ? 0.25 : 0.15}
 														stroke={lane.color}
 														strokeWidth={isSelected ? 2 : isHovered ? 1.5 : 0}
 														strokeOpacity={0.6}
 														style={{ transition: "fill-opacity 150ms, stroke-width 150ms" }}
 													/>
 													{/* Status dot */}
-													<circle
-														cx={x + 14}
-														cy={y + h / 2}
-														r={4}
-														fill={status.dot}
-													/>
+													<circle cx={x + 14} cy={y + h / 2} r={4} fill={status.dot} />
 													{/* Title */}
 													<text
 														x={x + 26}
@@ -933,7 +917,10 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 							})}
 
 							{/* Section gap spacer (advance laneY) */}
-							{(() => { laneY += SECTION_GAP; return null; })()}
+							{(() => {
+								laneY += SECTION_GAP;
+								return null;
+							})()}
 						</g>
 					);
 				})}
@@ -947,11 +934,11 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 /* ------------------------------------------------------------------ */
 
 function DetailPanel({
-						 item,
-						 lane,
-						 quarters,
-						 onClose,
-					 }: {
+	item,
+	lane,
+	quarters,
+	onClose,
+}: {
 	item: RoadmapItem;
 	lane: RoadmapLane;
 	quarters: string[];
@@ -969,37 +956,33 @@ function DetailPanel({
 				<div className="flex items-start justify-between gap-4">
 					<div>
 						<div className="flex items-center gap-2 mb-1">
-              <span
-				  className="inline-block w-3 h-3 rounded-full"
-				  style={{ backgroundColor: status.dot }}
-			  />
-							<span className={`text-xs font-semibold uppercase tracking-wide ${status.text}`}>
-                {status.label}
-              </span>
-							<span className="text-xs text-base-content/30 mx-1">|</span>
 							<span
-								className="text-xs font-medium"
-								style={{ color: lane.color }}
-							>
-                {lane.label}
-              </span>
+								className="inline-block w-3 h-3 rounded-full"
+								style={{ backgroundColor: status.dot }}
+							/>
+							<span className={`text-xs font-semibold uppercase tracking-wide ${status.text}`}>
+								{status.label}
+							</span>
+							<span className="text-xs text-base-content/30 mx-1">|</span>
+							<span className="text-xs font-medium" style={{ color: lane.color }}>
+								{lane.label}
+							</span>
 						</div>
 						<h3 className="text-lg font-bold">{item.title}</h3>
 						<p className="text-xs text-base-content/50 mt-0.5">{span}</p>
 					</div>
 					<button
+						type="button"
 						className="btn btn-ghost btn-xs btn-square"
 						onClick={onClose}
 						aria-label="Close detail"
 					>
-						<svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+						<svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
 							<path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
 						</svg>
 					</button>
 				</div>
-				<p className="text-sm text-base-content/70 mt-2 leading-relaxed">
-					{item.description}
-				</p>
+				<p className="text-sm text-base-content/70 mt-2 leading-relaxed">{item.description}</p>
 			</div>
 		</div>
 	);
@@ -1012,13 +995,13 @@ function DetailPanel({
 function StatusLegend() {
 	return (
 		<div className="flex flex-wrap gap-4 text-xs">
-			{(Object.entries(STATUS_META) as [ItemStatus, typeof STATUS_META[ItemStatus]][]).map(
+			{(Object.entries(STATUS_META) as [ItemStatus, (typeof STATUS_META)[ItemStatus]][]).map(
 				([key, meta]) => (
 					<div key={key} className="flex items-center gap-1.5">
-            <span
-				className="inline-block w-2.5 h-2.5 rounded-full"
-				style={{ backgroundColor: meta.dot }}
-			/>
+						<span
+							className="inline-block w-2.5 h-2.5 rounded-full"
+							style={{ backgroundColor: meta.dot }}
+						/>
 						<span className="text-base-content/60">{meta.label}</span>
 					</div>
 				),
@@ -1064,9 +1047,8 @@ export default function RoadmapPage() {
 				</p>
 				<h1 className="text-3xl font-bold mb-2">Roadmap</h1>
 				<p className="text-base-content/70 max-w-xl mx-auto">
-					See what we're building, what's next, and where we're headed.
-					Anthers is built in the open — everything here reflects our
-					actual plans and priorities.
+					See what we're building, what's next, and where we're headed. Anthers is built in the open
+					— everything here reflects our actual plans and priorities.
 				</p>
 			</div>
 
@@ -1075,6 +1057,7 @@ export default function RoadmapPage() {
 				<div className="tabs tabs-boxed bg-base-200/60">
 					{ROADMAPS.map((rm, i) => (
 						<button
+							type="button"
 							key={rm.id}
 							className={`tab ${activeTab === i ? "tab-active" : ""}`}
 							onClick={() => handleTabChange(i)}
@@ -1087,25 +1070,17 @@ export default function RoadmapPage() {
 
 			{/* Roadmap description */}
 			<div className="max-w-3xl mx-auto mb-6">
-				<p className="text-sm text-base-content/60 text-center">
-					{roadmap.description}
-				</p>
+				<p className="text-sm text-base-content/60 text-center">{roadmap.description}</p>
 			</div>
 
 			{/* Legend + hint */}
 			<div className="flex items-center justify-between mb-4 flex-wrap gap-2">
 				<StatusLegend />
-				<p className="text-xs text-base-content/30">
-					Click any item for details.
-				</p>
+				<p className="text-xs text-base-content/30">Click any item for details.</p>
 			</div>
 
 			{/* Timeline chart */}
-			<Timeline
-				roadmap={roadmap}
-				selectedItem={selectedItem}
-				onSelect={setSelectedItem}
-			/>
+			<Timeline roadmap={roadmap} selectedItem={selectedItem} onSelect={setSelectedItem} />
 
 			{/* Detail panel */}
 			{selectedData && (
@@ -1123,10 +1098,9 @@ export default function RoadmapPage() {
 			<div className="mt-16 max-w-3xl mx-auto text-center pb-4">
 				<h2 className="text-xl font-bold mb-3">Built in the Open</h2>
 				<p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
-					Anthers is a non-profit, and our roadmap reflects our commitment to
-					transparency. Priorities are shaped by creator and user feedback,
-					not investor demands. Have a feature request or want to get involved?
-					Join our community or reach out directly.
+					Anthers is a non-profit, and our roadmap reflects our commitment to transparency.
+					Priorities are shaped by creator and user feedback, not investor demands. Have a feature
+					request or want to get involved? Join our community or reach out directly.
 				</p>
 			</div>
 		</div>

@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Link } from "react-router-dom";
 import type { Post } from "../../lib/types";
 
 export default function PostCard({ post }: { post: Post }) {
 	const body = post.body ?? "";
-	const excerpt = body.length > 150 ? body.slice(0, 150) + "..." : body;
+	const excerpt = body.length > 150 ? `${body.slice(0, 150)}...` : body;
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
 		month: "short",
 		day: "numeric",
@@ -33,15 +34,11 @@ export default function PostCard({ post }: { post: Post }) {
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>
-				{post.title && (
-					<h3 className="font-semibold line-clamp-1">{post.title}</h3>
-				)}
+				{post.title && <h3 className="font-semibold line-clamp-1">{post.title}</h3>}
 				<p className="text-sm text-base-content/70 line-clamp-3">{excerpt}</p>
 				{post.projectId && (
 					<div className="mt-auto pt-2">
-						<span className="badge badge-sm badge-outline">
-							Project #{post.projectId}
-						</span>
+						<span className="badge badge-sm badge-outline">Project #{post.projectId}</span>
 					</div>
 				)}
 			</div>
