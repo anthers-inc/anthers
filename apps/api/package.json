@@ -22,11 +22,13 @@
 		"hono": "^4.7.0",
 		"jose": "6.2.1",
 		"resend": "6.9.4",
+		"sanitize-html": "2.17.4",
 		"sharp": "0.34.5",
 		"zod": "^3.25.0"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
+		"@types/sanitize-html": "2.16.1",
 		"typescript": "^5.8.0"
 	}
 }

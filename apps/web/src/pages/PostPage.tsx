@@ -239,6 +239,7 @@ export default function PostPage() {
 				{post.accessGranted !== false && (
 					<div className="prose prose-sm max-w-none mb-8">
 						{post.bodyHtml ? (
+							// biome-ignore lint/security/noDangerouslySetInnerHtml: bodyHtml is sanitized server-side at write time (apps/api/src/services/sanitize.ts)
 							<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
 						) : post.body ? (
 							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>

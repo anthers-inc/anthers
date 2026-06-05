@@ -25,6 +25,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateSession } from "../services/auth.js";
+import { sanitizePostHtml } from "../services/sanitize.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -754,6 +755,10 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
+		// Sanitize creator-supplied HTML at the trust boundary — bodyHtml is
+		// rendered to other users via dangerouslySetInnerHTML.
+		data.bodyHtml = sanitizePostHtml(data.bodyHtml);
+
 		// Calculate read time for text posts
 		let estimatedReadMinutes: number | undefined;
 		if (data.contentType === "text" && (data.bodyHtml || data.body)) {
@@ -884,6 +889,12 @@ const contentRoutes = new Hono()
 
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+
+		// Sanitize creator-supplied HTML at the trust boundary — bodyHtml is
+		// rendered to other users via dangerouslySetInnerHTML.
+		if (data.bodyHtml !== undefined) {
+			data.bodyHtml = sanitizePostHtml(data.bodyHtml);
+		}
 
 		// Recalculate read time if text content changed
 		if (data.contentType === "text" || (!data.contentType && (data.bodyHtml || data.body))) {

@@ -23,9 +23,6 @@
 				"noUnusedVariables": "warn",
 				"useExhaustiveDependencies": "warn"
 			},
-			"security": {
-				"noDangerouslySetInnerHtml": "warn"
-			},
 			"style": {
 				"noNonNullAssertion": "off"
 			},
