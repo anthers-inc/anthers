@@ -19,7 +19,7 @@ data/*
 .deployment-state
 
 # ─── Dev Runtime ───
-.dev.pid
+.dev*.pid
 
 # ─── IDE ───
 .vscode/

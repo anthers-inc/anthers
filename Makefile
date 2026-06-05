@@ -2,7 +2,7 @@
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed db-reset \
-        typecheck test lint format
+        typecheck test lint lint-fix format
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
@@ -42,18 +42,18 @@ dev-api: ## Start API dev server only
 		sleep 1; \
 	fi
 	@setsid bun run dev:api & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
+	echo $$DEV_PID > .dev-api.pid; \
+	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-api.pid" EXIT; \
 	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev.pid
+	rm -f .dev-api.pid
 
 dev-worker: ## Start background job worker only
 	@mkdir -p data
 	@setsid bun run dev:worker & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
+	echo $$DEV_PID > .dev-worker.pid; \
+	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-worker.pid" EXIT; \
 	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev.pid
+	rm -f .dev-worker.pid
 
 dev-web: ## Start web dev server only
 	@EXISTING_PID=$$(lsof -ti :$(WEB_PORT) 2>/dev/null); \
@@ -63,21 +63,25 @@ dev-web: ## Start web dev server only
 		sleep 1; \
 	fi
 	@setsid bun run dev:web & DEV_PID=$$!; \
-	echo $$DEV_PID > .dev.pid; \
-	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
+	echo $$DEV_PID > .dev-web.pid; \
+	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev-web.pid" EXIT; \
 	wait $$DEV_PID 2>/dev/null; \
-	rm -f .dev.pid
+	rm -f .dev-web.pid
 
 down: ## Stop everything
 	@echo "Stopping dev servers..."
-	@DEV_PID=$$(cat .dev.pid 2>/dev/null); \
-	if [ -n "$$DEV_PID" ]; then \
-		kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; \
-		rm -f .dev.pid; \
-		echo "  -> Killed dev server process group (pid $$DEV_PID)"; \
-	else \
-		echo "  -> No .dev.pid found, checking ports..."; \
-		FOUND=0; \
+	@FOUND=0; \
+	for PIDFILE in .dev.pid .dev-api.pid .dev-worker.pid .dev-web.pid; do \
+		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
+		if [ -n "$$DEV_PID" ]; then \
+			kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; \
+			rm -f $$PIDFILE; \
+			echo "  -> Killed dev server process group (pid $$DEV_PID, $$PIDFILE)"; \
+			FOUND=1; \
+		fi; \
+	done; \
+	if [ "$$FOUND" = "0" ]; then \
+		echo "  -> No pid files found, checking ports..."; \
 		for PORT in $(API_PORT) $(WEB_PORT); do \
 			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
 			if [ -n "$$PORT_PID" ]; then \
@@ -86,9 +90,9 @@ down: ## Stop everything
 				FOUND=1; \
 			fi; \
 		done; \
-		if [ "$$FOUND" = "0" ]; then \
-			echo "  -> No dev servers running"; \
-		fi; \
+	fi; \
+	if [ "$$FOUND" = "0" ]; then \
+		echo "  -> No dev servers running"; \
 	fi
 
 # ─── Database ───
@@ -111,9 +115,11 @@ db-seed: ## Seed dev database with fake creators/projects/posts
 	@mkdir -p data
 	bun run db:seed
 
-db-reset: ## Drop the dev SQLite files (forces recreate on next start)
-	rm -f data/anthers.sqlite data/anthers.sqlite-wal data/anthers.sqlite-shm
-	rm -f data/anthers-queue.sqlite data/anthers-queue.sqlite-wal data/anthers-queue.sqlite-shm
+db-reset: ## Wipe the dev SQLite files and reapply the schema
+	@rm -f data/anthers.sqlite data/anthers.sqlite-wal data/anthers.sqlite-shm
+	@rm -f data/anthers-queue.sqlite data/anthers-queue.sqlite-wal data/anthers-queue.sqlite-shm
+	@mkdir -p data
+	$(MAKE) db-push
 
 # ─── Quality ───
 
@@ -125,6 +131,9 @@ test: ## Run all tests
 
 lint: ## Check linting with Biome
 	bun run lint
+
+lint-fix: ## Lint + apply safe fixes with Biome
+	bun run lint:fix
 
 format: ## Format code with Biome
 	bun run format
