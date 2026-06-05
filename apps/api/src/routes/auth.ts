@@ -137,7 +137,7 @@ const authRoutes = new Hono()
 			.where(or(eq(users.username, login), eq(users.email, login)))
 			.limit(1);
 
-		if (!user || !user.passwordHash) {
+		if (!user?.passwordHash) {
 			return c.json({ error: "Invalid credentials" }, 401);
 		}
 

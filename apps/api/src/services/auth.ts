@@ -1,6 +1,6 @@
 import { db } from "@anthers/db/client";
 import { sessions, users, verificationTokens } from "@anthers/db/schema";
-import { and, eq, gt, lt, or } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours

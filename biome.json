@@ -10,12 +10,28 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"a11y": {
+				"noAutofocus": "warn",
+				"noLabelWithoutControl": "warn",
+				"noNoninteractiveTabindex": "warn",
+				"noStaticElementInteractions": "warn",
+				"useKeyWithClickEvents": "warn",
+				"useMediaCaption": "warn"
+			},
 			"correctness": {
 				"noUnusedImports": "warn",
-				"noUnusedVariables": "warn"
+				"noUnusedVariables": "warn",
+				"useExhaustiveDependencies": "warn"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "warn"
 			},
 			"style": {
 				"noNonNullAssertion": "off"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "warn",
+				"noExplicitAny": "warn"
 			}
 		}
 	},

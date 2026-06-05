@@ -57,6 +57,7 @@ export default function ATProtoCallbackPage() {
 						<p className="text-sm text-base-content/60">{error}</p>
 						<div className="card-actions justify-center mt-4">
 							<button
+								type="button"
 								className="btn btn-primary btn-sm"
 								onClick={() => navigate("/login", { replace: true })}
 							>

@@ -467,9 +467,15 @@ export default function ForCreatorsPage() {
 								Previously shipped Lumina and Glass Garden.
 							</p>
 							<div className="tabs tabs-bordered text-sm">
-								<button className="tab tab-active">Projects (12)</button>
-								<button className="tab">Posts (34)</button>
-								<button className="tab">About</button>
+								<button type="button" className="tab tab-active">
+									Projects (12)
+								</button>
+								<button type="button" className="tab">
+									Posts (34)
+								</button>
+								<button type="button" className="tab">
+									About
+								</button>
 							</div>
 							<div className="grid grid-cols-2 gap-3 mt-4">
 								{[

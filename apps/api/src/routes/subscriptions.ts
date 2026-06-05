@@ -16,7 +16,6 @@ import {
 	creatorGates,
 	poolDistributions,
 	posts,
-	projects,
 	subscriptions,
 	users,
 } from "@anthers/db/schema";
@@ -194,7 +193,7 @@ const subscriptionRoutes = new Hono()
 			.where(eq(subscriptions.userId, user.id))
 			.limit(1);
 
-		if (!sub || !sub.canceledAt) {
+		if (!sub?.canceledAt) {
 			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
 
@@ -264,7 +263,7 @@ const subscriptionRoutes = new Hono()
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
 
 		// Compute cycle end (first day of next month)
-		const cycleDate = new Date(cycle + "T00:00:00");
+		const cycleDate = new Date(`${cycle}T00:00:00`);
 		const cycleEnd = new Date(cycleDate.getFullYear(), cycleDate.getMonth() + 1, 1);
 
 		const [summary] = await db
@@ -411,8 +410,8 @@ const subscriptionRoutes = new Hono()
 			const cycle = requestedCycle ?? currentCycle;
 
 			// Only allow editing current or next month
-			const cycleDate = new Date(cycle + "T00:00:00");
-			const currentDate = new Date(currentCycle + "T00:00:00");
+			const cycleDate = new Date(`${cycle}T00:00:00`);
+			const currentDate = new Date(`${currentCycle}T00:00:00`);
 			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
 			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
 

@@ -103,7 +103,9 @@ function LoggedInLayoutInner() {
 							</li>
 							<div className="divider my-0 px-2" />
 							<li>
-								<button onClick={handleLogout}>Log out</button>
+								<button type="button" onClick={handleLogout}>
+									Log out
+								</button>
 							</li>
 						</ul>
 					</div>

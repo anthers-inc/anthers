@@ -29,10 +29,10 @@ export default function DashboardPage() {
 
 	useEffect(() => {
 		Promise.all([
-			fetch(apiBase + "/api/content/projects?mine=true", {
+			fetch(`${apiBase}/api/content/projects?mine=true`, {
 				credentials: "include",
 			}).then((res) => res.json()),
-			fetch(apiBase + "/api/content/posts?mine=true", {
+			fetch(`${apiBase}/api/content/posts?mine=true`, {
 				credentials: "include",
 			}).then((res) => res.json()),
 		])

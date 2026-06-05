@@ -47,7 +47,7 @@ export default function PostFormPage() {
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
-		fetch(apiBase + "/api/content/projects?mine=true", {
+		fetch(`${apiBase}/api/content/projects?mine=true`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())

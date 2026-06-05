@@ -56,6 +56,7 @@ export default function PostFeedPage() {
 			<div className="flex gap-2 mb-6">
 				{FILTERS.map(({ key, label }) => (
 					<button
+						type="button"
 						key={key}
 						className={`btn btn-sm ${contentTypeFilter === key ? "btn-primary" : "btn-outline"}`}
 						onClick={() => setFilter(key)}

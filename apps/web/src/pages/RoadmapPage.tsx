@@ -714,12 +714,14 @@ function Timeline({ roadmap, selectedItem, onSelect }: TimelineProps) {
 	return (
 		<div ref={containerRef} className="overflow-x-auto rounded-xl border border-base-300/50">
 			<svg
+				role="img"
 				ref={svgRef}
 				width={totalWidth}
 				height={totalHeight}
 				className="select-none"
 				style={{ minWidth: numQuarters * MIN_Q_WIDTH }}
 			>
+				<title>Roadmap timeline</title>
 				{/* Quarter columns */}
 				{roadmap.quarters.map((q, i) => {
 					const x = LEFT_GUTTER + i * Q_WIDTH;
@@ -969,11 +971,12 @@ function DetailPanel({
 						<p className="text-xs text-base-content/50 mt-0.5">{span}</p>
 					</div>
 					<button
+						type="button"
 						className="btn btn-ghost btn-xs btn-square"
 						onClick={onClose}
 						aria-label="Close detail"
 					>
-						<svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+						<svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
 							<path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
 						</svg>
 					</button>
@@ -1053,6 +1056,7 @@ export default function RoadmapPage() {
 				<div className="tabs tabs-boxed bg-base-200/60">
 					{ROADMAPS.map((rm, i) => (
 						<button
+							type="button"
 							key={rm.id}
 							className={`tab ${activeTab === i ? "tab-active" : ""}`}
 							onClick={() => handleTabChange(i)}

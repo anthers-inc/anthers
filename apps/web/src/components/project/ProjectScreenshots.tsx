@@ -41,6 +41,7 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 			<div className="grid grid-cols-2 md:grid-cols-3 gap-2">
 				{screenshots.map((ss, i) => (
 					<button
+						type="button"
 						key={ss.id}
 						onClick={() => setLightboxIndex(i)}
 						className="overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
@@ -61,6 +62,7 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 					onClick={close}
 				>
 					<button
+						type="button"
 						className="absolute top-4 right-4 btn btn-circle btn-ghost text-white"
 						onClick={close}
 					>
@@ -70,6 +72,7 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 					{screenshots.length > 1 && (
 						<>
 							<button
+								type="button"
 								className="absolute left-4 btn btn-circle btn-ghost text-white"
 								onClick={(e) => {
 									e.stopPropagation();
@@ -79,6 +82,7 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 								<ChevronLeftIcon className="w-6 h-6" />
 							</button>
 							<button
+								type="button"
 								className="absolute right-4 btn btn-circle btn-ghost text-white"
 								onClick={(e) => {
 									e.stopPropagation();

@@ -53,7 +53,11 @@ export default function MiniPlayer() {
 				</span>
 
 				{/* Play/Pause */}
-				<button onClick={isPlaying ? pause : resume} className="btn btn-circle btn-sm btn-ghost">
+				<button
+					type="button"
+					onClick={isPlaying ? pause : resume}
+					className="btn btn-circle btn-sm btn-ghost"
+				>
 					{isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
 				</button>
 
@@ -68,7 +72,7 @@ export default function MiniPlayer() {
 				/>
 
 				{/* Close */}
-				<button onClick={close} className="btn btn-circle btn-xs btn-ghost">
+				<button type="button" onClick={close} className="btn btn-circle btn-xs btn-ghost">
 					<XMarkIcon className="w-4 h-4" />
 				</button>
 			</div>

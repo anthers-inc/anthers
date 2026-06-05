@@ -928,6 +928,7 @@ export default function CreatorBreakdownDemoPage() {
 				<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
 					{DEMO_CREATORS.map((c) => (
 						<button
+							type="button"
 							key={c.id}
 							onClick={() => setActiveId(c.id)}
 							className={`

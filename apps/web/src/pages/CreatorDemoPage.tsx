@@ -1,12 +1,4 @@
-import {
-	HeartIcon,
-	LinkIcon,
-	MapPinIcon,
-	MusicalNoteIcon,
-	PlayIcon,
-	SparklesIcon,
-	StarIcon,
-} from "@heroicons/react/24/outline";
+import { LinkIcon, MapPinIcon, MusicalNoteIcon, StarIcon } from "@heroicons/react/24/outline";
 import { PlayIcon as PlaySolid, StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -578,7 +570,7 @@ function DemoProfileHeader({ creator }: { creator: DemoCreator }) {
 							</span>
 						</div>
 					</div>
-					<button className="btn btn-primary btn-sm mt-2 sm:mt-8 pointer-events-none">
+					<button type="button" className="btn btn-primary btn-sm mt-2 sm:mt-8 pointer-events-none">
 						Follow
 					</button>
 				</div>
@@ -616,6 +608,7 @@ export default function CreatorDemoPage() {
 				<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
 					{DEMO_CREATORS.map((c) => (
 						<button
+							type="button"
 							key={c.id}
 							onClick={() => setActiveId(c.id)}
 							className={`

@@ -13,7 +13,11 @@ export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
 		return (
 			<div className="relative bg-base-300 rounded-lg overflow-hidden">
 				<div className="flex flex-col items-center justify-center py-16 gap-4">
-					<button className="btn btn-primary btn-lg gap-2" onClick={() => setActive(true)}>
+					<button
+						type="button"
+						className="btn btn-primary btn-lg gap-2"
+						onClick={() => setActive(true)}
+					>
 						<PlayIcon className="w-6 h-6" />
 						Play in Browser
 					</button>
@@ -26,7 +30,7 @@ export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
 	return (
 		<div className="relative bg-black rounded-lg overflow-hidden">
 			<div className="flex justify-end p-1 bg-base-300">
-				<button className="btn btn-ghost btn-xs" onClick={() => setActive(false)}>
+				<button type="button" className="btn btn-ghost btn-xs" onClick={() => setActive(false)}>
 					<XMarkIcon className="w-4 h-4" />
 					Close
 				</button>

@@ -71,9 +71,8 @@ export default function WikiRightSidebar({
 	useEffect(() => {
 		const headingRegex = /^(#{2,3})\s+(.+)$/gm;
 		const extractedHeadings: Heading[] = [];
-		let match;
 
-		while ((match = headingRegex.exec(content)) !== null) {
+		for (const match of content.matchAll(headingRegex)) {
 			const level = match[1].length;
 			const text = match[2].trim();
 			const id = text
@@ -132,6 +131,7 @@ export default function WikiRightSidebar({
 					<div className="flex gap-1">
 						{previousPage ? (
 							<button
+								type="button"
 								onClick={() => onNavigate(previousPage.section, previousPage.file)}
 								className="btn btn-ghost btn-sm flex-1 justify-start gap-1"
 								title={previousPage.name}
@@ -141,6 +141,7 @@ export default function WikiRightSidebar({
 							</button>
 						) : (
 							<button
+								type="button"
 								className="btn btn-ghost btn-sm flex-1 justify-start gap-1 opacity-30 cursor-not-allowed"
 								disabled
 							>
@@ -151,6 +152,7 @@ export default function WikiRightSidebar({
 
 						{nextPage ? (
 							<button
+								type="button"
 								onClick={() => onNavigate(nextPage.section, nextPage.file)}
 								className="btn btn-ghost btn-sm flex-1 justify-start gap-1"
 								title={nextPage.name}
@@ -160,6 +162,7 @@ export default function WikiRightSidebar({
 							</button>
 						) : (
 							<button
+								type="button"
 								className="btn btn-ghost btn-sm flex-1 justify-start gap-1 opacity-30 cursor-not-allowed"
 								disabled
 							>
@@ -176,6 +179,7 @@ export default function WikiRightSidebar({
 
 					<div className="flex items-center gap-1">
 						<button
+							type="button"
 							onClick={handleZoomOut}
 							className="btn btn-ghost btn-xs btn-square"
 							disabled={zoomLevel <= ZOOM_MIN}
@@ -185,6 +189,7 @@ export default function WikiRightSidebar({
 						</button>
 
 						<button
+							type="button"
 							onClick={handleZoomReset}
 							className="btn btn-ghost btn-xs flex-1 text-xs"
 							title="Reset zoom to 100%"
@@ -193,6 +198,7 @@ export default function WikiRightSidebar({
 						</button>
 
 						<button
+							type="button"
 							onClick={handleZoomIn}
 							className="btn btn-ghost btn-xs btn-square"
 							disabled={zoomLevel >= ZOOM_MAX}
@@ -224,6 +230,7 @@ export default function WikiRightSidebar({
 					<nav className="space-y-1">
 						{headings.map((heading) => (
 							<button
+								type="button"
 								key={heading.id}
 								onClick={() => scrollToHeading(heading.id)}
 								className={`block w-full text-left text-sm py-1.5 px-2 rounded transition-colors ${

@@ -25,12 +25,14 @@ export default function WaveformDisplay({
 
 	return (
 		<svg
+			role="img"
 			viewBox={`0 0 ${totalWidth} ${height}`}
 			className={`w-full ${onSeek ? "cursor-pointer" : ""}`}
 			style={{ height }}
 			onClick={handleClick}
 			preserveAspectRatio="none"
 		>
+			<title>Audio waveform</title>
 			{peaks.map((peak, i) => {
 				const barHeight = Math.max(2, peak * height * 0.9);
 				const x = i * (barWidth + gap);

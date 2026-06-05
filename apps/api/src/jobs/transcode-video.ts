@@ -106,7 +106,7 @@ async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
 		lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}`);
 		lines.push(`${v.name}.m3u8`);
 	}
-	await Bun.write(join(outputDir, "master.m3u8"), lines.join("\n") + "\n");
+	await Bun.write(join(outputDir, "master.m3u8"), `${lines.join("\n")}\n`);
 }
 
 /** Generate a thumbnail from a video at the given position */

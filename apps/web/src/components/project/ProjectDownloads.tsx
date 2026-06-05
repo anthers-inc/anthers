@@ -87,6 +87,7 @@ export default function ProjectDownloads({
 									)}
 									<td>
 										<button
+											type="button"
 											className="btn btn-sm btn-primary"
 											onClick={async () => {
 												try {

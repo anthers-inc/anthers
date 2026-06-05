@@ -72,6 +72,7 @@ const createDefaultComponents = (onNavigate?: (section: string, file: string) =>
 				const targetFile = parts[parts.length - 1];
 				return (
 					<button
+						type="button"
 						onClick={() => onNavigate(targetSection, targetFile)}
 						className="link link-primary"
 					>

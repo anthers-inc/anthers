@@ -598,15 +598,16 @@ function TierCard({
 				</div>
 				<div className="card-actions mt-2">
 					{isCurrentTier ? (
-						<button className="btn btn-success btn-sm w-full" disabled>
+						<button type="button" className="btn btn-success btn-sm w-full" disabled>
 							Current Plan
 						</button>
 					) : isFree ? (
-						<button className="btn btn-ghost btn-sm w-full" disabled>
+						<button type="button" className="btn btn-ghost btn-sm w-full" disabled>
 							Default Tier
 						</button>
 					) : (
 						<button
+							type="button"
 							className={`btn btn-sm w-full btn-outline btn-primary ${subscribing === tier.id ? "btn-disabled" : ""}`}
 							onClick={() => onSelect(tier.id)}
 							disabled={!!subscribing}
@@ -1312,7 +1313,7 @@ export default function SubscribePage() {
 							<div className="flex flex-col items-center justify-center py-16 px-8 max-w-2xl mx-auto text-center">
 								<div
 									className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-									style={{ backgroundColor: COLORS.programs + "20" }}
+									style={{ backgroundColor: `${COLORS.programs}20` }}
 								>
 									<div
 										className="w-8 h-8 rounded-full"

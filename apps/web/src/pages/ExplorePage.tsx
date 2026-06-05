@@ -108,6 +108,7 @@ export default function ExplorePage() {
 			<div className="tabs tabs-boxed mb-6 w-fit">
 				{MEDIA_TYPES.map((type) => (
 					<button
+						type="button"
 						key={type.value}
 						className={`tab ${mediaType === type.value ? "tab-active" : ""}`}
 						onClick={() => updateParams({ media_type: type.value })}
@@ -132,13 +133,11 @@ export default function ExplorePage() {
 					}
 				/>
 			) : (
-				<>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-						{data.map((project) => (
-							<ProjectCard key={project.id} project={project} />
-						))}
-					</div>
-				</>
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+					{data.map((project) => (
+						<ProjectCard key={project.id} project={project} />
+					))}
+				</div>
 			)}
 		</div>
 	);

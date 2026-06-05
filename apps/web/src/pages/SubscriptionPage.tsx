@@ -70,13 +70,13 @@ function getCurrentCycle(): string {
 }
 
 function offsetCycle(cycle: string, offset: number): string {
-	const d = new Date(cycle + "T00:00:00");
+	const d = new Date(`${cycle}T00:00:00`);
 	d.setMonth(d.getMonth() + offset);
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 function cycleLabel(cycle: string): string {
-	return new Date(cycle + "T00:00:00").toLocaleString("default", {
+	return new Date(`${cycle}T00:00:00`).toLocaleString("default", {
 		month: "long",
 		year: "numeric",
 	});
@@ -296,7 +296,11 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 	const mode = viewModeFor(cycle);
 	return (
 		<div className="flex items-center justify-center gap-3">
-			<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, -1))}>
+			<button
+				type="button"
+				className="btn btn-ghost btn-xs"
+				onClick={() => onChange(offsetCycle(cycle, -1))}
+			>
 				&larr;
 			</button>
 			<span className="text-sm font-medium min-w-[140px] text-center">
@@ -305,7 +309,11 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 				{mode === "next" && <span className="text-xs text-primary ml-1">(preview)</span>}
 			</span>
 			{cycle < nextCycle ? (
-				<button className="btn btn-ghost btn-xs" onClick={() => onChange(offsetCycle(cycle, 1))}>
+				<button
+					type="button"
+					className="btn btn-ghost btn-xs"
+					onClick={() => onChange(offsetCycle(cycle, 1))}
+				>
 					&rarr;
 				</button>
 			) : (
@@ -344,10 +352,14 @@ function ConfirmDialog({
 					<h3 className="card-title text-lg">{title}</h3>
 					<div className="text-sm space-y-2">{children}</div>
 					<div className="card-actions justify-end mt-4">
-						<button className="btn btn-ghost btn-sm" onClick={onCancel}>
+						<button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
 							Cancel
 						</button>
-						<button className={`btn btn-sm ${confirmClass ?? "btn-primary"}`} onClick={onConfirm}>
+						<button
+							type="button"
+							className={`btn btn-sm ${confirmClass ?? "btn-primary"}`}
+							onClick={onConfirm}
+						>
 							{confirmLabel ?? "Confirm"}
 						</button>
 					</div>
@@ -465,7 +477,8 @@ function TimePoolPie({
 
 	return (
 		<div className="flex items-center justify-center">
-			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+			<svg role="img" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+				<title>Time distribution by creator</title>
 				{slices}
 				{/* Center label */}
 				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
@@ -1109,6 +1122,7 @@ export default function SubscriptionPage() {
 					{viewMode === "current" ? (
 						<div className="flex flex-col gap-2 flex-shrink-0">
 							<button
+								type="button"
 								className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`}
 								onClick={handleBillingPortal}
 								disabled={!!actionLoading}
@@ -1117,6 +1131,7 @@ export default function SubscriptionPage() {
 							</button>
 							{isCanceling ? (
 								<button
+									type="button"
 									className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
 									onClick={handleResume}
 									disabled={!!actionLoading}
@@ -1125,6 +1140,7 @@ export default function SubscriptionPage() {
 								</button>
 							) : (
 								<button
+									type="button"
 									className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
 									onClick={handleCancel}
 									disabled={!!actionLoading}
@@ -1155,6 +1171,7 @@ export default function SubscriptionPage() {
 					{canEdit ? (
 						<div className="flex flex-col gap-2 items-end flex-shrink-0">
 							<button
+								type="button"
 								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
 								onClick={() => setShowConfirm(true)}
 								disabled={!hasPendingChanges || !!actionLoading}
@@ -1162,6 +1179,7 @@ export default function SubscriptionPage() {
 								{actionLoading === "save" ? "Saving..." : "Save Changes"}
 							</button>
 							<button
+								type="button"
 								className="btn btn-outline btn-warning btn-sm"
 								disabled={!hasPendingChanges}
 								onClick={() => {
@@ -1172,7 +1190,11 @@ export default function SubscriptionPage() {
 								Discard Changes
 							</button>
 							{viewMode === "next" && (
-								<button className="btn btn-ghost btn-xs" onClick={() => setShowRevertConfirm(true)}>
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs"
+									onClick={() => setShowRevertConfirm(true)}
+								>
 									Revert to Current Month
 								</button>
 							)}

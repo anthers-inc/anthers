@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { users, verificationTokens } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";

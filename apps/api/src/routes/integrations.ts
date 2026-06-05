@@ -7,11 +7,9 @@ import { db } from "@anthers/db/client";
 import {
 	attentionEvents,
 	crossPublishResults,
-	externalMetricSnapshots,
 	platformConnections,
 	posts,
 	projects,
-	users,
 } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, sql } from "drizzle-orm";

@@ -7,12 +7,11 @@ import {
 	MapPinIcon,
 	PencilIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import EmptyState from "../components/ui/EmptyState";
-import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
@@ -446,13 +445,13 @@ export default function CreatorProfilePage() {
 			client.api.accounts.users[":username"]
 				.$get({ param: { username } })
 				.then((res) => res.json()),
-			fetch(apiBase + "/api/content/projects?creator=" + username, {
+			fetch(`${apiBase}/api/content/projects?creator=${username}`, {
 				credentials: "include",
 			}).then((res) => res.json()),
-			fetch(apiBase + "/api/content/posts?creator=" + username, {
+			fetch(`${apiBase}/api/content/posts?creator=${username}`, {
 				credentials: "include",
 			}).then((res) => res.json()),
-			fetch(apiBase + "/api/subscriptions/creator-status/" + username, {
+			fetch(`${apiBase}/api/subscriptions/creator-status/${username}`, {
 				credentials: "include",
 			})
 				.then((res) => (res.ok ? res.json() : null))
@@ -516,8 +515,12 @@ export default function CreatorProfilePage() {
 
 	// All tab: interleave projects and posts by date
 	const allItems: { type: "project" | "post"; item: Project | PostListItem; date: string }[] = [];
-	projects.forEach((p) => allItems.push({ type: "project", item: p, date: p.createdAt }));
-	posts.forEach((p) => allItems.push({ type: "post", item: p, date: p.createdAt }));
+	projects.forEach((p) => {
+		allItems.push({ type: "project", item: p, date: p.createdAt });
+	});
+	posts.forEach((p) => {
+		allItems.push({ type: "post", item: p, date: p.createdAt });
+	});
 	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 	return (
@@ -708,7 +711,11 @@ export default function CreatorProfilePage() {
 							</div>
 						</div>
 						{isAuthenticated && isOwnProfile && (
-							<button className="btn btn-ghost btn-sm mt-4 sm:mt-12" onClick={startEditing}>
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm mt-4 sm:mt-12"
+								onClick={startEditing}
+							>
 								<PencilIcon className="w-4 h-4" />
 								Edit Profile
 							</button>
@@ -716,6 +723,7 @@ export default function CreatorProfilePage() {
 						{isAuthenticated && !isOwnProfile && (
 							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
 								<button
+									type="button"
 									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
 									onClick={handleFollow}
 								>
@@ -753,6 +761,7 @@ export default function CreatorProfilePage() {
 						] as const
 					).map(([key, label]) => (
 						<button
+							type="button"
 							key={key}
 							className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
 							onClick={() => setTab(key)}

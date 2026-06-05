@@ -17,12 +17,12 @@ import {
 	users,
 } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, avg, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, avg, count, desc, eq, inArray, like, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
-import { requireAuth, requireCreator } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import { validateSession } from "../services/auth.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 
@@ -164,7 +164,7 @@ const contentRoutes = new Hono()
 		}
 
 		// Build order
-		let orderClause;
+		let orderClause: SQL[];
 		switch (sort) {
 			case "popular":
 				orderClause = [desc(projects.viewCount), desc(projects.createdAt)];

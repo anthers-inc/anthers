@@ -317,6 +317,7 @@ function UnitCostCalculator() {
 			<div className="flex flex-wrap gap-2">
 				{(["video", "audio", "text", "game"] as MediaType[]).map((t) => (
 					<button
+						type="button"
 						key={t}
 						onClick={() => setMediaType(t)}
 						className={`btn btn-sm ${mediaType === t ? "btn-primary" : "btn-ghost"}`}
@@ -757,6 +758,7 @@ function ReferenceCreatorProfiles() {
 					] as const
 				).map(([key, label]) => (
 					<button
+						type="button"
 						key={key}
 						onClick={() => setSortKey(key)}
 						className={`btn btn-xs ${sortKey === key ? "btn-primary" : "btn-ghost"}`}
@@ -1256,6 +1258,7 @@ export default function InfrastructureDemoPage() {
 				<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
 					{TABS.map((tab) => (
 						<button
+							type="button"
 							key={tab.id}
 							onClick={() => setActiveTab(tab.id)}
 							className={`flex-1 text-left px-4 py-3 rounded-lg border transition-all ${

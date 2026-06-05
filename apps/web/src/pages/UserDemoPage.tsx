@@ -677,18 +677,21 @@ export default function UserDemoPage() {
 				{/* Tab bar */}
 				<div className="flex gap-2 mb-6">
 					<button
+						type="button"
 						onClick={() => setActiveTab("feed")}
 						className={`btn btn-sm ${activeTab === "feed" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Feed
 					</button>
 					<button
+						type="button"
 						onClick={() => setActiveTab("dashboard")}
 						className={`btn btn-sm ${activeTab === "dashboard" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Subscription Dashboard
 					</button>
 					<button
+						type="button"
 						onClick={() => setActiveTab("purchases")}
 						className={`btn btn-sm ${activeTab === "purchases" ? "btn-primary" : "btn-ghost"}`}
 					>
@@ -723,6 +726,7 @@ export default function UserDemoPage() {
 							<div className="flex flex-col items-center justify-center h-96 text-center">
 								<div className="text-5xl mb-4 opacity-20">
 									<svg
+										aria-hidden="true"
 										className="w-16 h-16 mx-auto"
 										fill="none"
 										viewBox="0 0 24 24"

@@ -53,7 +53,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			formData.append("image", file);
 
 			try {
-				const res = await fetch(apiBase + "/api/content/inline-images", {
+				const res = await fetch(`${apiBase}/api/content/inline-images`, {
 					method: "POST",
 					body: formData,
 					credentials: "include",

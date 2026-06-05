@@ -17,7 +17,7 @@ import {
 	subscriptions,
 } from "@anthers/db/schema";
 import Decimal from "decimal.js";
-import { and, eq, gte, lt, ne, sql, sum } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sum } from "drizzle-orm";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single subscriber. Otherwise all active paid. */

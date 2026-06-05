@@ -17,8 +17,11 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 	const [isFollowing, setIsFollowing] = useState(false);
 
 	useEffect(() => {
+		const username = project.creator?.username;
+		if (!username) return;
+
 		client.api.accounts.users[":username"]
-			.$get({ param: { username: project.creator?.username! } })
+			.$get({ param: { username } })
 			.then((res) => res.json())
 			.then((data) => {
 				const u = (data as any).user;
@@ -27,7 +30,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 			})
 			.catch(console.error);
 
-		fetch(apiBase + "/api/content/projects?creator=" + project.creator?.username, {
+		fetch(`${apiBase}/api/content/projects?creator=${username}`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())
@@ -85,6 +88,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 						<span className="text-xs text-base-content/50">{creator.followerCount} followers</span>
 						{isAuthenticated && !isOwnProject && (
 							<button
+								type="button"
 								className={`btn btn-sm w-full ${isFollowing ? "btn-outline" : "btn-primary"}`}
 								onClick={handleFollow}
 							>

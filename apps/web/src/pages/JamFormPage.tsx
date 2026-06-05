@@ -252,7 +252,7 @@ export default function JamFormPage() {
 						type="number"
 						className="input input-bordered w-full"
 						value={maxTeamSize}
-						onChange={(e) => setMaxTeamSize(parseInt(e.target.value) || 0)}
+						onChange={(e) => setMaxTeamSize(parseInt(e.target.value, 10) || 0)}
 						min={0}
 					/>
 					<p className="text-xs text-base-content/40 mt-1">0 = unlimited</p>

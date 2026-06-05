@@ -58,6 +58,7 @@ export default function CreatorCard({ creator }: { creator: PublicUser }) {
 				</div>
 				{isAuthenticated && !isOwnProfile && (
 					<button
+						type="button"
 						className={`btn btn-sm mt-2 ${isFollowing ? "btn-outline" : "btn-primary"}`}
 						onClick={handleFollow}
 					>

@@ -57,6 +57,7 @@ function BlueskySection() {
 			<div className="card-body">
 				<h3 className="card-title text-lg">
 					<svg
+						aria-hidden="true"
 						viewBox="0 0 568 501"
 						className="w-5 h-5 fill-current"
 						xmlns="http://www.w3.org/2000/svg"
@@ -86,6 +87,7 @@ function BlueskySection() {
 						</div>
 						<p className="text-xs text-base-content/50">DID: {user.atprotoDid}</p>
 						<button
+							type="button"
 							className="btn btn-outline btn-error btn-sm w-fit"
 							onClick={handleUnlink}
 							disabled={unlinking}
@@ -197,6 +199,7 @@ function StripeOnboardingSection() {
 							payments.
 						</p>
 						<button
+							type="button"
 							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
 							onClick={handleConnect}
 							disabled={connecting}
@@ -211,6 +214,7 @@ function StripeOnboardingSection() {
 							Stripe Connect—you keep 100% of earnings, only real costs are passed through.
 						</p>
 						<button
+							type="button"
 							className={`btn btn-primary btn-sm w-fit ${connecting ? "btn-disabled" : ""}`}
 							onClick={handleConnect}
 							disabled={connecting}
@@ -277,7 +281,7 @@ function PlatformConnectionsSection() {
 	const handleYouTubeConnect = async () => {
 		setError(null);
 		try {
-			const res = await fetch(apiBase + "/api/integrations/platforms/youtube/auth", {
+			const res = await fetch(`${apiBase}/api/integrations/platforms/youtube/auth`, {
 				method: "POST",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
@@ -391,6 +395,7 @@ function PlatformConnectionsSection() {
 									<div className="flex items-center gap-2">
 										{isConnected ? (
 											<button
+												type="button"
 												className="btn btn-outline btn-error btn-xs"
 												onClick={() => handleDisconnect(platform)}
 												disabled={disconnecting === platform}
@@ -410,6 +415,7 @@ function PlatformConnectionsSection() {
 													}}
 												/>
 												<button
+													type="button"
 													className="btn btn-primary btn-xs"
 													onClick={() => handleAPIKeyConnect(platform)}
 													disabled={!apiKeyInput.trim()}
@@ -417,6 +423,7 @@ function PlatformConnectionsSection() {
 													Save
 												</button>
 												<button
+													type="button"
 													className="btn btn-ghost btn-xs"
 													onClick={() => {
 														setConnectingPlatform(null);
@@ -428,6 +435,7 @@ function PlatformConnectionsSection() {
 											</div>
 										) : (
 											<button
+												type="button"
 												className="btn btn-primary btn-xs"
 												onClick={() => {
 													if (info.authType === "oauth") {

@@ -5,7 +5,7 @@ import {
 	MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import CreatorCard from "../components/cards/CreatorCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";

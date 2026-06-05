@@ -79,6 +79,7 @@ export default function LoginPage() {
 							) : (
 								<>
 									<svg
+										aria-hidden="true"
 										viewBox="0 0 568 501"
 										className="w-4 h-4 fill-current"
 										xmlns="http://www.w3.org/2000/svg"

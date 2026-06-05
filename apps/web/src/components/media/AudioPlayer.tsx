@@ -66,7 +66,7 @@ export default function AudioPlayer({ src, waveform, onPlayInMiniPlayer }: Audio
 			<audio ref={audioRef} src={src} preload="metadata" />
 
 			<div className="flex items-center gap-3">
-				<button onClick={togglePlay} className="btn btn-circle btn-primary btn-sm">
+				<button type="button" onClick={togglePlay} className="btn btn-circle btn-primary btn-sm">
 					{isPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4 ml-0.5" />}
 				</button>
 
@@ -85,7 +85,7 @@ export default function AudioPlayer({ src, waveform, onPlayInMiniPlayer }: Audio
 			</div>
 
 			{onPlayInMiniPlayer && (
-				<button onClick={onPlayInMiniPlayer} className="btn btn-ghost btn-xs mt-2">
+				<button type="button" onClick={onPlayInMiniPlayer} className="btn btn-ghost btn-xs mt-2">
 					Play in mini-player
 				</button>
 			)}

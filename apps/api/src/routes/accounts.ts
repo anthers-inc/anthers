@@ -13,9 +13,9 @@
  */
 
 import { db } from "@anthers/db/client";
-import { follows, posts, projects, users } from "@anthers/db/schema";
+import { follows, posts, users } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
-import { and, count, desc, eq, exists, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";

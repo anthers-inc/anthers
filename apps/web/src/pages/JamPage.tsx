@@ -158,7 +158,7 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 				<select
 					className="select select-bordered select-sm flex-1"
 					value={selectedProject ?? ""}
-					onChange={(e) => setSelectedProject(e.target.value ? parseInt(e.target.value) : null)}
+					onChange={(e) => setSelectedProject(e.target.value ? parseInt(e.target.value, 10) : null)}
 				>
 					<option value="">Select a project...</option>
 					{projects.map((p) => (
@@ -168,6 +168,7 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 					))}
 				</select>
 				<button
+					type="button"
 					className="btn btn-primary btn-sm"
 					onClick={handleSubmit}
 					disabled={!selectedProject || submitting}

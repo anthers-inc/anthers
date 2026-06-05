@@ -219,6 +219,7 @@ export default function ImportPage() {
 								<span className="label-text text-sm">Select all</span>
 							</label>
 							<button
+								type="button"
 								className="btn btn-primary btn-sm"
 								disabled={selected.size === 0 || importing}
 								onClick={handleImport}

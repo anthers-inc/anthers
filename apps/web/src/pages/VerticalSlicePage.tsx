@@ -167,13 +167,23 @@ export default function VerticalSlicePage() {
 									onChange={(e) => setPassword(e.target.value)}
 								/>
 								<div className="flex gap-2">
-									<button className="btn btn-primary" onClick={handleSignUp} disabled={loading}>
+									<button
+										type="button"
+										className="btn btn-primary"
+										onClick={handleSignUp}
+										disabled={loading}
+									>
 										Sign Up
 									</button>
-									<button className="btn btn-secondary" onClick={handleSignIn} disabled={loading}>
+									<button
+										type="button"
+										className="btn btn-secondary"
+										onClick={handleSignIn}
+										disabled={loading}
+									>
 										Sign In
 									</button>
-									<button className="btn btn-ghost" onClick={checkMe}>
+									<button type="button" className="btn btn-ghost" onClick={checkMe}>
 										Check Session
 									</button>
 								</div>
@@ -189,7 +199,7 @@ export default function VerticalSlicePage() {
 										<h2 className="card-title">Signed in as {user.username}</h2>
 										<p className="text-sm text-base-content/70">{user.email}</p>
 									</div>
-									<button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
+									<button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
 										Sign Out
 									</button>
 								</div>

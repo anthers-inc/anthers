@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import MDXRenderer from "../components/wiki/MDXRenderer";
 import WikiRightSidebar from "../components/wiki/WikiRightSidebar";
-import { client } from "../lib/rpc";
 
 /**
  * Wiki structure representing the documentation hierarchy.
@@ -374,6 +373,7 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">1</span>
 								<div>
 									<button
+										type="button"
 										onClick={() => handleNavigate("10-Getting-Started", "01-WhatIsAnthers.md")}
 										className="link link-primary font-semibold"
 									>
@@ -388,6 +388,7 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">2</span>
 								<div>
 									<button
+										type="button"
 										onClick={() => handleNavigate("11-The-Anthers-Model", "README.md")}
 										className="link link-primary font-semibold"
 									>
@@ -402,6 +403,7 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">3</span>
 								<div>
 									<button
+										type="button"
 										onClick={() => handleNavigate("20-Account-And-Subscription", "README.md")}
 										className="link link-primary font-semibold"
 									>
@@ -416,6 +418,7 @@ export default function WikiPage() {
 								<span className="badge badge-primary badge-lg">4</span>
 								<div>
 									<button
+										type="button"
 										onClick={() => handleNavigate("30-Creator-Setup", "README.md")}
 										className="link link-primary font-semibold"
 									>
@@ -444,6 +447,7 @@ export default function WikiPage() {
 							{area.sections.map((section) => (
 								<div key={section.path} className="border-l-2 border-primary/30 pl-4">
 									<button
+										type="button"
 										onClick={() => handleSectionClick(section)}
 										className="flex items-center gap-3 group mb-2"
 									>
@@ -465,6 +469,7 @@ export default function WikiPage() {
 											{section.items.map((item) => (
 												<li key={item.file}>
 													<button
+														type="button"
 														onClick={() => handleNavigate(section.path, item.file)}
 														className="flex items-center gap-2 text-sm text-base-content/70 hover:text-primary transition-colors py-0.5"
 													>
@@ -500,7 +505,7 @@ export default function WikiPage() {
 				<div className="breadcrumbs text-sm mb-6">
 					<ul>
 						<li>
-							<button onClick={() => navigate("/wiki")} className="link">
+							<button type="button" onClick={() => navigate("/wiki")} className="link">
 								<HomeIcon className="h-4 w-4" />
 								Wiki
 							</button>
@@ -517,6 +522,7 @@ export default function WikiPage() {
 				<div className="space-y-2">
 					{section.items?.map((item) => (
 						<button
+							type="button"
 							key={item.file}
 							onClick={() => handleNavigate(section.path, item.file)}
 							className="card bg-base-100 border border-base-300 hover:border-primary transition-all text-left p-4 w-full flex items-center gap-3"
@@ -545,14 +551,18 @@ export default function WikiPage() {
 					<div className="breadcrumbs text-sm mb-6">
 						<ul>
 							<li>
-								<button onClick={() => navigate("/wiki")} className="link">
+								<button type="button" onClick={() => navigate("/wiki")} className="link">
 									<HomeIcon className="h-4 w-4" />
 									Wiki
 								</button>
 							</li>
 							{section && (
 								<li>
-									<button onClick={() => navigate(`/wiki/${section.path}`)} className="link">
+									<button
+										type="button"
+										onClick={() => navigate(`/wiki/${section.path}`)}
+										className="link"
+									>
 										{section.name}
 									</button>
 								</li>

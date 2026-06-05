@@ -40,6 +40,7 @@ export default function CodeBlock({ children, className, inline }: CodeBlockProp
 	return (
 		<div className="relative group not-prose my-4">
 			<button
+				type="button"
 				onClick={handleCopy}
 				className="absolute right-2 top-2 p-2 rounded bg-base-100/80 hover:bg-base-100 border border-base-300 opacity-0 group-hover:opacity-100 transition-opacity z-10"
 				title="Copy code"

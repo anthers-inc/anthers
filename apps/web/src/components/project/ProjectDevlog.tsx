@@ -12,7 +12,7 @@ export default function ProjectDevlog({ slug }: { slug: string }) {
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		fetch(apiBase + "/api/content/posts?project=" + slug, {
+		fetch(`${apiBase}/api/content/posts?project=${slug}`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())

@@ -219,6 +219,7 @@ export default function BuildsPage() {
 									</td>
 									<td>
 										<button
+											type="button"
 											className="btn btn-ghost btn-xs text-error"
 											onClick={() => handleDelete(asset.id)}
 										>
