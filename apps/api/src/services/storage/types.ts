@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * StorageService interface — abstracts file storage for local dev and S3/Spaces production.
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { Resend } from "resend";

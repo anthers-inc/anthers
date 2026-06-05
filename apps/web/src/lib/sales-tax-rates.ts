@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Combined state & local sales tax rates by US state (2026 estimates).
  * Source: Tax Foundation, "State and Local Sales Tax Rates, 2026."

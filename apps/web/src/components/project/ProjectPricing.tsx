@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useState } from "react";
 import { client } from "../../lib/rpc";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Pool distribution job: distribute Time Pool based on attention time.
  *

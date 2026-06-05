@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Video transcoding job: converts uploaded video to adaptive HLS.
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * ATProto OAuth service — handle resolution, DPoP proof creation,
  * OAuth flow (PAR, token exchange), and PDS interaction helpers.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface WaveformDisplayProps {
 	peaks: number[];
 	progress: number; // 0 to 1

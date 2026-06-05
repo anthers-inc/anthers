@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Game Jam routes — CRUD, entries, votes, results.
  */

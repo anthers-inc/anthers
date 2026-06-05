@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";

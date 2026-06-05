@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Account routes — profiles, follows, feed, creator list.
  *

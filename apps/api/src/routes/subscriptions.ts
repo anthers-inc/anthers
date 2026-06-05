@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Subscription routes — tiers, subscribe, cancel, attention tracking,
  * pool distributions, boosts, creator gates, content access.

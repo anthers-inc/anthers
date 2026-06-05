@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { relations } from "drizzle-orm";
 import { atprotoSessions, follows, sessions, users, verificationTokens } from "./auth.js";
 import {

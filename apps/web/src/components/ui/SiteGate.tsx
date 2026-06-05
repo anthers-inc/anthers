@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { type ReactNode, useState } from "react";
 
 const STORAGE_KEY = "anthers_site_access";

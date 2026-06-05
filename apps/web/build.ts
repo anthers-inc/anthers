@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import tailwind from "bun-plugin-tailwind";
 
 const result = await Bun.build({

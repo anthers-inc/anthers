@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";

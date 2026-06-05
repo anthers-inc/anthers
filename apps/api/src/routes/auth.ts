@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";

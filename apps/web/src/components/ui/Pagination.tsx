@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 interface PaginationProps {
 	count: number;
 	next: string | null;

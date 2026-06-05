@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 const MEDIA_TYPE_STYLES: Record<string, string> = {
 	game: "badge-secondary",
 	video: "badge-error",

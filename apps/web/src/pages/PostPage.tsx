@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { ClockIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { db } from "@anthers/db/client";
 import { sessions, users, verificationTokens } from "@anthers/db/schema";
 import { and, eq, gt, lt } from "drizzle-orm";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { PauseIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
 import WaveformDisplay from "./WaveformDisplay";

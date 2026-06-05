@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import HomePage from "../../pages/HomePage";

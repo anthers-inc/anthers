@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";

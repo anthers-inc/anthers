@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { client } from "../../lib/rpc";
 import type { Asset } from "../../lib/types";

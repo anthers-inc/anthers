@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { LinkIcon, MapPinIcon, MusicalNoteIcon, StarIcon } from "@heroicons/react/24/outline";
 import { PlayIcon as PlaySolid, StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { useState } from "react";

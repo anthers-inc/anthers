@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
 import EmptyState from "../components/ui/EmptyState";
