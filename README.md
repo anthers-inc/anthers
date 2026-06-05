@@ -3,18 +3,16 @@
 
 ---
 
-A federated, creator-first media platform built on the AT Protocol. Creators host games, videos, audio, and writing — keeping 85% of subscription revenue, with 10% funding the Community Resilience Fund and 5% covering platform operations.
+A federated, creator-first media platform built on the AT Protocol. Creators host games, videos, audio, and writing — keeping 92% of subscription revenue, with 8% funding the Anthers Foundation, which allocates internally between Creator Resilience Fund charitable programs and organizational operations.
 
 Anthers is operated as a non-profit organization that is structurally incapable of prioritizing profit over the people it serves. It cannot be acquired, cannot take corrupting investment, and directs every dollar of surplus into charitable and educational programs for creators through the Creator Resilience Fund.
 
 ## Prerequisites
---
 
 - [Bun](https://bun.sh) (runtime, package manager, bundler, test runner)
 - [FFmpeg](https://ffmpeg.org/) (media transcoding — HLS, audio normalization, waveform generation)
 
 ## Getting Started
---
 
 ```sh
 # Clone the repository
@@ -39,7 +37,6 @@ bun run dev
 The API runs on `http://localhost:8000` and the frontend on `http://localhost:3000`.
 
 ## Development Commands
---
 
 ### Services
 
@@ -72,7 +69,6 @@ The API runs on `http://localhost:8000` and the frontend on `http://localhost:30
 | `bun test` | Run tests |
 
 ## Project Structure
---
 
 ```
 apps/
@@ -104,7 +100,6 @@ packages/
 ```
 
 ## Tech Stack
---
 
 | Layer | Technology |
 |---|---|
@@ -121,7 +116,6 @@ packages/
 | Deployment | DigitalOcean App Platform |
 
 ## Architecture
---
 
 ### Backend
 
@@ -140,16 +134,14 @@ A React SPA built with Bun's built-in bundler (no Vite, no PostCSS). TailwindCSS
 Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables include `atprotoUri` columns in preparation for federation.
 
 ## Key Concepts
---
 
-- **Community Resilience Fund (CRF):** 10% of subscription revenue funds infrastructure equity, education, creation grants, and emergency assistance.
-- **Subscription Tiers:** Free / Root ($5) / Sprout ($10) / Petal ($20) / Bloom ($40).
-- **Creator Pool:** $4.25/mo per Root subscriber, distributed proportionally by attention time (play/watch/read/listen).
-- **Boost Pool:** Additional subscriber funds above the Creator Pool, allocated to specific creators and determining access to gated content.
+- **Anthers Foundation Fee:** 8% of subscription revenue, allocated internally between Creator Resilience Fund charitable programs (infrastructure equity, education, creation grants, emergency assistance — minimum 50%) and organizational operations.
+- **Subscription Tiers:** Free / Root ($3) / Sprout ($7) / Petal ($15) / Bloom ($30) — named thresholds on a continuous funding level that users can adjust in $1 increments.
+- **Time Pool:** (funding level × 0.92) − Boost Pool, distributed proportionally by time spent across all media types (play/watch/read/listen) — a minute is a minute regardless of format.
+- **Boost Pool:** ceil(funding level × 0.5) in $1 increments, allocated to specific creators (manually or automatically); determines access to boost-gated content. Unallocated boost flows back to the Time Pool.
 - **Transparent Pass-Through:** On direct purchases, fees are added on top — creators receive the full listed price.
 
 ## Environment Variables
---
 
 See [`.env.example`](.env.example) for the full list. Key variables:
 
@@ -163,6 +155,9 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | `ATPROTO_CLIENT_ID` | ATProto OAuth client ID |
 
 ## Deployment
---
 
 Deployment will be handled by DigitalOcean App Platform via `.do/app.yaml`. The current spec is a documentation placeholder — see the deferred-decision note at the top of `.do/app.yaml` for the open question about how SQLite + the worker process interact with App Platform's volume constraints. This needs a decision before the first non-test deploy.
+
+## License
+
+Anthers is free software, licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See [`LICENSE.md`](./LICENSE.md) for the full text.
