@@ -7,10 +7,10 @@
 node_modules/
 dist/
 *.tsbuildinfo
-bun.lock
 
 # ─── SQLite ───
-data/
+data/*
+!data/README.md
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

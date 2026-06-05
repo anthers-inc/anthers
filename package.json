@@ -11,9 +11,9 @@
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
-    "lint": "bunx biome check .",
-    "lint:fix": "bunx biome check --write .",
-    "format": "bunx biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bun run packages/db/src/migrate.ts",
     "db:push": "bunx drizzle-kit push",
@@ -22,6 +22,7 @@
     "db:seed:reset": "bun run packages/db/src/seed.ts --reset"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.16",
     "@libsql/client": "0.17.3",
     "drizzle-kit": "0.31.9"
   },
