@@ -176,7 +176,7 @@ const wikiStructure: WikiSection[] = wikiAreas.flatMap((area) => area.sections);
 /**
  * GitHub repository base URL for edit links.
  */
-const GITHUB_REPO_URL = "https://github.com/parkerhdavis/Anthers";
+const GITHUB_REPO_URL = "https://github.com/anthers-org/Anthers";
 
 /**
  * Wiki page component that displays documentation from the repo /wiki directory.
