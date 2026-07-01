@@ -16,9 +16,10 @@
 # `doctl apps update` — never commit their values.
 #
 # Interim postures for the gated skeleton, to tighten before public launch:
-#   - databases: dev-tier Postgres (provisioned with the app). Upgrade to a
-#     dedicated production cluster (production: true + cluster_name) before real
-#     users — there is no real data yet, so it's just re-migrate + re-seed.
+#   - databases: a dedicated Managed Postgres cluster (anthers-pg), bound as the
+#     cluster admin (doadmin) so the migrate job can create schema/tables — a DO
+#     *dev* database's user lacks CREATE and blocks migrations. Tighten to a
+#     least-privilege app user before public launch.
 #   - STORAGE_BACKEND=local (ephemeral, unused while gated). Switch to s3 +
 #     provision DO Spaces (bucket + CORS + scoped keys) when media features go live.
 #   - Stripe / ATProto envs are omitted (read lazily; features stubbed/gated) —
@@ -32,6 +33,14 @@ databases:
   - name: anthers-db
     engine: PG
     version: "16"
+    production: true
+    cluster_name: anthers-pg
+    # Bind as the cluster admin so migrations can CREATE schema/tables. A DO dev
+    # database's user lacks CREATE, which blocks the migrate job; a managed
+    # cluster's doadmin has full privileges. Tighten to a least-privilege app
+    # user before public launch.
+    db_name: defaultdb
+    db_user: doadmin
 
 # Shared across api, worker, and the migrate job (inherited by all components).
 envs:

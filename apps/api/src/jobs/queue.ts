@@ -21,6 +21,13 @@ import { PgBoss } from "pg-boss";
 
 const CONNECTION = process.env.DATABASE_URL ?? "postgres://anthers:anthers@localhost:5432/anthers";
 
+// pg-boss connects via node-postgres, which — unlike the app's postgres-js
+// client — rejects DigitalOcean Managed Postgres's self-signed CA cert
+// (SELF_SIGNED_CERT_IN_CHAIN). When the connection requires SSL, encrypt
+// without CA verification (same posture as postgres-js under sslmode=require).
+// Local dev has no sslmode, so it connects plaintext with the bare string.
+const DB_REQUIRES_SSL = /[?&]sslmode=require/.test(CONNECTION);
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface SendOptions {
@@ -58,7 +65,9 @@ class JobQueue {
 	private started = false;
 
 	constructor() {
-		this.boss = new PgBoss(CONNECTION);
+		this.boss = DB_REQUIRES_SSL
+			? new PgBoss({ connectionString: CONNECTION, ssl: { rejectUnauthorized: false } })
+			: new PgBoss(CONNECTION);
 		// pg-boss surfaces background failures via the error event; without a
 		// listener these would become unhandled 'error' emissions.
 		this.boss.on("error", (err) => console.error("[queue] pg-boss error:", err));
