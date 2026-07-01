@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useState } from "react";
 import { client } from "../../lib/rpc";
@@ -12,31 +13,43 @@ interface ProjectPricingProps {
 	slug: string;
 	creatorHasStripe: boolean;
 	userOwns: boolean | null; // null = loading/unknown
+	downloadBytes: number; // total size of downloadable assets, for the delivery line
 	onPurchaseComplete: () => void;
 }
 
-function buildReceipt(price: number) {
+function buildReceipt(price: number, downloadBytes: number) {
 	const processing = Math.round(price * 0.029 * 100) / 100 + 0.3;
-	const crf = Math.round(price * 0.03 * 100) / 100;
-	const creatorTotal = Math.round((price - processing - crf) * 100) / 100;
+	const foundation = Math.round(price * (FOUNDATION_FEE_PERCENTAGE / 100) * 100) / 100;
+	let delivery = Math.round((downloadBytes / 1_000_000_000) * 0.01 * 100) / 100;
+	// Any real download costs at least a cent to deliver — we can't bill sub-cent.
+	if (downloadBytes > 0 && delivery <= 0) delivery = 0.01;
+	// Pass-through: the creator receives the full price; fees are added on top.
+	const buyerTotal = Math.round((price + delivery + foundation + processing) * 100) / 100;
 
 	return {
 		price,
+		buyerTotal,
 		lines: [
+			{ label: "Delivery", amount: delivery, note: "download bandwidth" },
+			{
+				label: "Anthers Foundation Fee",
+				amount: foundation,
+				note: `${FOUNDATION_FEE_PERCENTAGE}%`,
+			},
 			{ label: "Payment processing", amount: processing, note: "Stripe" },
-			{ label: "Anthers Foundation Fee", amount: crf, note: "3%" },
 		],
-		creatorTotal: Math.max(creatorTotal, 0),
 	};
 }
 
 function CheckoutForm({
 	slug,
 	price,
+	downloadBytes,
 	onPurchaseComplete,
 }: {
 	slug: string;
 	price: number;
+	downloadBytes: number;
 	onPurchaseComplete: () => void;
 }) {
 	const stripe = useStripe();
@@ -45,7 +58,7 @@ function CheckoutForm({
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
 
-	const receipt = buildReceipt(price);
+	const receipt = buildReceipt(price, downloadBytes);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -123,7 +136,7 @@ function CheckoutForm({
 				className={`btn btn-primary ${processing ? "btn-disabled" : ""}`}
 				disabled={!stripe || processing}
 			>
-				{processing ? "Processing..." : `Buy for $${price.toFixed(2)}`}
+				{processing ? "Processing..." : `Buy for $${receipt.buyerTotal.toFixed(2)}`}
 			</button>
 		</form>
 	);
@@ -135,6 +148,7 @@ export default function ProjectPricing({
 	slug,
 	creatorHasStripe,
 	userOwns,
+	downloadBytes,
 	onPurchaseComplete,
 }: ProjectPricingProps) {
 	if (pricingType === "free") return null;
@@ -161,7 +175,12 @@ export default function ProjectPricing({
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
-					<CheckoutForm slug={slug} price={displayPrice} onPurchaseComplete={onPurchaseComplete} />
+					<CheckoutForm
+						slug={slug}
+						price={displayPrice}
+						downloadBytes={downloadBytes}
+						onPurchaseComplete={onPurchaseComplete}
+					/>
 				</Elements>
 			)}
 		</div>

@@ -117,6 +117,7 @@ export default function ProjectPage() {
 						slug={project.slug}
 						creatorHasStripe={false}
 						userOwns={userOwns}
+						downloadBytes={(project.assets ?? []).reduce((sum, a) => sum + (a.fileSize ?? 0), 0)}
 						onPurchaseComplete={handlePurchaseComplete}
 					/>
 

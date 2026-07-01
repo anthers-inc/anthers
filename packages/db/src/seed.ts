@@ -966,8 +966,9 @@ async function seed() {
 			if (amount <= 0) continue;
 
 			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
-			const crfFee = Math.round(amount * 0.08 * 100) / 100;
-			const creatorEarnings = Math.round((amount - crfFee) * 100) / 100;
+			const crfFee = Math.round(amount * 0.08 * 100) / 100; // 8% Anthers Foundation Fee
+			// Pass-through: the creator keeps the full listed price; fees ride on top.
+			const creatorEarnings = amount;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
 
 			try {

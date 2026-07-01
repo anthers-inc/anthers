@@ -6,42 +6,44 @@ interface ReceiptLine {
 }
 
 interface TransparentReceiptProps {
+	/** Listed price — what the creator receives in full (pass-through). */
 	price: number;
+	/** Price + fees — what the buyer is charged. */
+	buyerTotal: number;
+	/** Fees added on top of the price (processing, Foundation Fee). */
 	lines: ReceiptLine[];
-	creatorTotal: number;
 }
 
 function fmt(n: number): string {
 	return `$${n.toFixed(2)}`;
 }
 
-export default function TransparentReceipt({
-	price,
-	lines,
-	creatorTotal,
-}: TransparentReceiptProps) {
+export default function TransparentReceipt({ price, buyerTotal, lines }: TransparentReceiptProps) {
 	return (
 		<div className="card bg-base-200 text-sm">
 			<div className="card-body p-4 gap-0">
 				<h3 className="font-semibold mb-2">Transparent Receipt</h3>
 				<div className="flex justify-between mb-1">
-					<span>Purchase price</span>
+					<span>Item price (to creator)</span>
 					<span className="font-medium">{fmt(price)}</span>
 				</div>
-				<div className="divider my-1" />
 				{lines.map((line, i) => (
 					<div key={i} className="flex justify-between text-base-content/60">
 						<span>
 							{line.label}
 							{line.note && <span className="text-xs ml-1">({line.note})</span>}
 						</span>
-						<span>-{fmt(line.amount)}</span>
+						<span>+{fmt(line.amount)}</span>
 					</div>
 				))}
 				<div className="divider my-1" />
-				<div className="flex justify-between font-semibold text-success">
+				<div className="flex justify-between font-semibold">
+					<span>You pay</span>
+					<span>{fmt(buyerTotal)}</span>
+				</div>
+				<div className="flex justify-between text-success text-xs mt-1">
 					<span>Creator receives</span>
-					<span>{fmt(creatorTotal)}</span>
+					<span>{fmt(price)}</span>
 				</div>
 			</div>
 		</div>

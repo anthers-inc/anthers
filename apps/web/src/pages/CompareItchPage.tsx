@@ -153,10 +153,10 @@ export default function CompareItchPage() {
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
 									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
+									<ReceiptLine label="Anthers Foundation Fee (8%)" amount="$0.80" />
 									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
-									<ReceiptLine label="Buyer pays" amount="$10.90" />
+									<ReceiptLine label="Buyer pays" amount="$11.40" />
 									<div className="text-success font-semibold text-right">
 										Creator receives $10.00
 									</div>
