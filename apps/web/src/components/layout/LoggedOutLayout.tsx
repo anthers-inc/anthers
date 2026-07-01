@@ -10,7 +10,7 @@ export default function LoggedOutLayout() {
 	return (
 		<div className="min-h-screen flex flex-col">
 			<header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
-				<div className="navbar-start">
+				<div className="navbar-start gap-1">
 					{/* Mobile menu */}
 					<div className="dropdown lg:hidden">
 						<label tabIndex={0} className="btn btn-ghost">
@@ -53,6 +53,11 @@ export default function LoggedOutLayout() {
 							</li>
 						</ul>
 					</div>
+
+					{/* Brand — links to the homepage */}
+					<Link to="/" className="btn btn-ghost text-lg font-bold px-2">
+						Anthers
+					</Link>
 				</div>
 
 				{/* Desktop nav */}
