@@ -8,10 +8,10 @@
  * Requires: DATABASE_URL environment variable (Postgres connection string).
  */
 
-import { SQL } from "bun";
 import { resolve } from "node:path";
-import { drizzle } from "drizzle-orm/bun-sql";
-import { migrate } from "drizzle-orm/bun-sql/migrator";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import postgres from "postgres";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -19,13 +19,15 @@ if (!url) {
 	process.exit(1);
 }
 
-const client = new SQL(url);
+// max: 1 — migrations run serially on a single connection.
+// onnotice off — silence "already exists, skipping" NOTICEs in deploy logs.
+const client = postgres(url, { max: 1, onnotice: () => {} });
 
 // Resolve migrations dir relative to this script so it works regardless of cwd.
 const migrationsFolder = resolve(import.meta.dir, "../drizzle");
 
 try {
-	const db = drizzle({ client });
+	const db = drizzle(client);
 	console.log("Running migrations...");
 	await migrate(db, { migrationsFolder });
 	console.log("Migrations applied successfully.");
