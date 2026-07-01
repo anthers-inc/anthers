@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
 import {
+	AdjustmentsHorizontalIcon,
 	ArrowDownTrayIcon,
+	BanknotesIcon,
+	BoltIcon,
+	ChartBarIcon,
+	CheckCircleIcon,
+	ClockIcon,
 	CurrencyDollarIcon,
-	DocumentTextIcon,
-	FilmIcon,
+	EyeSlashIcon,
 	GlobeAltIcon,
 	HeartIcon,
 	LockOpenIcon,
-	MagnifyingGlassIcon,
 	MusicalNoteIcon,
-	PlayIcon,
-	PuzzlePieceIcon,
 	ShieldCheckIcon,
-	SparklesIcon,
-	StarIcon,
-	TrophyIcon,
+	SignalIcon,
+	Squares2X2Icon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
@@ -33,12 +36,12 @@ export default function ForUsersPage() {
 							For Users
 						</p>
 						<h1 className="text-5xl font-bold tracking-tight">
-							Discover, play, and support creators
+							Know exactly where your money goes
 						</h1>
 						<p className="py-6 text-xl text-base-content/70 leading-relaxed max-w-2xl mx-auto">
-							Browse games, music, videos, and writing from independent creators. Play in your
-							browser, download for free, or pay what you want—with every penny going to the person
-							who made it.
+							Anthers is funded by you, not advertisers—so it's built to work for you. You pay
+							creators directly, pay only for what you actually use, and own the relationships you
+							build. No ads, no algorithms, no hidden cut. Here's how it works.
 						</p>
 						<div className="flex gap-4 justify-center flex-wrap">
 							<Link to="/discover" className="btn btn-secondary btn-lg">
@@ -57,410 +60,408 @@ export default function ForUsersPage() {
 				</div>
 			</section>
 
-			{/* ───────────── Zero Friction ───────────── */}
+			{/* ───────────── How it's different (frame) ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">No barriers, no tricks</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">What makes Anthers different</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Other platforms make you create an account, verify your email, and agree to terms before
-						you can do anything. Anthers gets out of your way.
+						Most platforms make their money from ads and take a large cut of what you pay. Anthers
+						is funded directly by the people who use it—which changes everything about how it works.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-						<div className="text-center">
-							<div className="w-14 h-14 rounded-full bg-secondary/15 flex items-center justify-center mx-auto mb-4">
-								<PlayIcon className="w-7 h-7 text-secondary" />
-							</div>
-							<h3 className="font-bold text-lg mb-2">Play instantly</h3>
-							<p className="text-sm text-base-content/60 leading-relaxed">
-								HTML5 games run in your browser with one click. No downloads, no installs, no
-								account. See a game, click play, you're in.
-							</p>
-						</div>
-						<div className="text-center">
-							<div className="w-14 h-14 rounded-full bg-success/15 flex items-center justify-center mx-auto mb-4">
-								<ArrowDownTrayIcon className="w-7 h-7 text-success" />
-							</div>
-							<h3 className="font-bold text-lg mb-2">Download freely</h3>
-							<p className="text-sm text-base-content/60 leading-relaxed">
-								Free content is genuinely free—no login wall, no email gate, no "subscribe to
-								download" tricks. If a creator made it free, you get it free.
-							</p>
-						</div>
-						<div className="text-center">
-							<div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mx-auto mb-4">
-								<MagnifyingGlassIcon className="w-7 h-7 text-primary" />
-							</div>
-							<h3 className="font-bold text-lg mb-2">Browse everything</h3>
-							<p className="text-sm text-base-content/60 leading-relaxed">
-								The full catalog is open. Search, filter by media type, explore tags, check
-								ratings—all without signing in. The platform works for you before you commit to it.
-							</p>
-						</div>
+						<Pillar
+							icon={<CurrencyDollarIcon className="w-7 h-7 text-success" />}
+							tone="bg-success/15"
+							title="Your money reaches creators"
+							description="92% of every subscription and 100% of every direct purchase goes to creators. Fees are shown as itemized line items—never a silent percentage skimmed off the top."
+						/>
+						<Pillar
+							icon={<SignalIcon className="w-7 h-7 text-secondary" />}
+							tone="bg-secondary/15"
+							title="You pay for what you use"
+							description="No ads paying for infrastructure by harvesting your attention. Delivery costs are small, transparent, and—uniquely—something you can actually see and control."
+						/>
+						<Pillar
+							icon={<GlobeAltIcon className="w-7 h-7 text-primary" />}
+							tone="bg-primary/15"
+							title="You own your relationships"
+							description="Your identity, follows, and library live on an open network (the one behind Bluesky). You follow creators, not mediums—and you can leave anytime with your data intact."
+						/>
 					</div>
 				</div>
 			</section>
 
-			{/* ───────────── What You'll Find ───────────── */}
+			{/* ───────────── Direct purchases ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">All kinds of creative work</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">
+						Buy directly—the price is what the creator gets
+					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers isn't just games. Creators publish across media—and you can discover all of it
-						in one place, from one search bar.
+						Games, albums, and one-time content can be bought outright. The creator's listed price
+						is exactly what they receive; real costs are added on top and itemized, so you see every
+						penny before you pay—and you can lower them by paying from your bank.
 					</p>
 
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-						<ContentCard
-							icon={<PuzzlePieceIcon className="w-8 h-8" />}
-							title="Games"
-							color="badge-secondary"
-							description="Indie games, game jam entries, browser games, and downloadable builds for every platform."
-							highlights={[
-								"Play web games instantly",
-								"Download for Windows, Mac, Linux",
-								"Game jam entries and experiments",
-							]}
-						/>
-						<ContentCard
-							icon={<FilmIcon className="w-8 h-8" />}
-							title="Video"
-							color="badge-error"
-							description="Devlogs, tutorials, short films, and creative content from independent video creators."
-							highlights={[
-								"Watch without ads",
-								"Creator-first experience",
-								"Alongside related projects",
-							]}
-						/>
-						<ContentCard
-							icon={<MusicalNoteIcon className="w-8 h-8" />}
-							title="Audio"
-							color="badge-success"
-							description="Music, soundtracks, podcasts, and audio experiments from artists and composers."
-							highlights={["Stream directly", "Game soundtracks bundled", "Albums and singles"]}
-						/>
-						<ContentCard
-							icon={<DocumentTextIcon className="w-8 h-8" />}
-							title="Writing"
-							color="badge-info"
-							description="Essays, fiction, devlogs, tutorials, and journals from writers and game developers."
-							highlights={["Read on the platform", "Development journals", "Tutorials and guides"]}
-						/>
-					</div>
-				</div>
-			</section>
+					<PurchaseCalculator />
 
-			{/* ───────────── Discovery ───────────── */}
-			<section className="bg-base-200/50 py-20">
-				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-12">Find your next favorite thing</h2>
-
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-						<DiscoveryFeature
-							icon={<MagnifyingGlassIcon className="w-6 h-6" />}
-							title="Search and filter"
-							description="Find projects by name, tag, media type, or creator. Filter by pricing (free, pay what you want, paid) and sort by rating, recency, or popularity."
-						/>
-						<DiscoveryFeature
-							icon={<TrophyIcon className="w-6 h-6" />}
-							title="Game jams"
-							description="Browse game jam entries, play submissions, vote on your favorites, and discover new creators through community events. Jams are where hidden gems surface."
-						/>
-						<DiscoveryFeature
-							icon={<StarIcon className="w-6 h-6" />}
-							title="Ratings and reviews"
-							description="Community ratings help the best work rise to the top. Read what other users think before you download or buy. Leave your own ratings to help others discover great projects."
-						/>
-						<DiscoveryFeature
-							icon={<UserGroupIcon className="w-6 h-6" />}
-							title="Follow creators"
-							description="Found someone whose work you love? Follow them and get every new project, devlog, and update in your personal feed. One follow covers everything they create."
-						/>
-						<DiscoveryFeature
-							icon={<SparklesIcon className="w-6 h-6" />}
-							title="Personalized feed"
-							description="Your feed shows updates from creators you follow—new releases, devlog posts, jam entries. A single timeline for everything you care about."
-						/>
-						<DiscoveryFeature
-							icon={<GlobeAltIcon className="w-6 h-6" />}
-							title="Explore by media"
-							description="Browse games, videos, audio, and writing separately or together. Discover a game and find the creator also makes music? Their whole catalog is one click away."
-						/>
-					</div>
-				</div>
-			</section>
-
-			{/* ───────────── Fair Pricing for Users ───────────── */}
-			<section className="py-20">
-				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">Transparent pricing you can trust</h2>
-					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						When you buy something on Anthers, you see exactly where your money goes. No hidden
-						fees, no surprise charges. The creator's price is what the creator gets.
-					</p>
-
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-						{/* Example receipt */}
-						<div className="card bg-base-200">
-							<div className="card-body">
-								<h3 className="font-bold text-lg mb-3">Example: Buying a $10 game</h3>
-								<div className="flex flex-col gap-2 text-sm">
-									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
-									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
-									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
-									<div className="divider my-1" />
-									<ReceiptLine label="You pay" amount="$10.90" bold />
-								</div>
-								<p className="text-xs text-base-content/40 mt-3">
-									100% of the game price goes to the creator. Always.
-								</p>
-							</div>
-						</div>
-
-						<div className="flex flex-col gap-6 justify-center">
-							<div className="flex gap-3">
-								<div className="flex-shrink-0 mt-1">
-									<CurrencyDollarIcon className="w-5 h-5 text-success" />
-								</div>
-								<div>
-									<h4 className="font-semibold text-sm">Your money reaches the creator</h4>
-									<p className="text-sm text-base-content/60">
-										On other platforms, 10-30% of what you pay disappears into the platform's
-										pocket. Here, the creator's listed price is exactly what they receive.
-									</p>
-								</div>
-							</div>
-							<div className="flex gap-3">
-								<div className="flex-shrink-0 mt-1">
-									<ShieldCheckIcon className="w-5 h-5 text-primary" />
-								</div>
-								<div>
-									<h4 className="font-semibold text-sm">No hidden costs</h4>
-									<p className="text-sm text-base-content/60">
-										Every fee is listed and explained before you pay. You always know exactly what
-										you're paying for and why.
-									</p>
-								</div>
-							</div>
-							<div className="flex gap-3">
-								<div className="flex-shrink-0 mt-1">
-									<HeartIcon className="w-5 h-5 text-error" />
-								</div>
-								<div>
-									<h4 className="font-semibold text-sm">Anthers Foundation</h4>
-									<p className="text-sm text-base-content/60">
-										A small 3% contribution funds the Anthers Foundation, which allocates between
-										charitable programs and organizational operations to keep the ecosystem healthy
-										for everyone.
-									</p>
-								</div>
-							</div>
-						</div>
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+						<IconFeature
+							icon={<CheckCircleIcon className="w-5 h-5 text-success" />}
+							title="100% of the price reaches the creator"
+						>
+							On other platforms, 10–30% of what you pay disappears into the platform's pocket.
+							Here, the creator's listed price is exactly what they take home.
+						</IconFeature>
+						<IconFeature
+							icon={<ShieldCheckIcon className="w-5 h-5 text-primary" />}
+							title="Every fee is named and explained"
+						>
+							No surprise charges, no vague "service fee." You always know what each line is for
+							before you confirm the purchase.
+						</IconFeature>
+						<IconFeature
+							icon={<HeartIcon className="w-5 h-5 text-error" />}
+							title="An 8% Foundation Fee, not a platform tax"
+						>
+							The same 8% that funds the Anthers Foundation on subscriptions—supporting charitable
+							programs and keeping the platform running, instead of enriching shareholders.
+						</IconFeature>
 					</div>
 
 					{/* Pricing models */}
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
 						<PricingCard
 							title="Free"
-							description="Tons of content is completely free—games, demos, jam entries, devlogs. Download or play with no account required."
 							badge="badge-success"
+							description="Lots of content is genuinely free—no account, no login wall, no 'subscribe to download' trick. If a creator made it free, you get it free."
 						/>
 						<PricingCard
 							title="Pay What You Want"
-							description="Some creators let you choose what to pay. Give what you can—even $1 helps. Or pay nothing if that's what works."
 							badge="badge-warning"
+							description="Some creators let you choose the price. Give what you can—even $1 helps—or pay nothing if that's what works right now."
 						/>
 						<PricingCard
 							title="Fixed Price"
-							description="The price you see is the price the creator set. What they list is what they get. Your purchase directly funds their work."
 							badge="badge-neutral"
+							description="The price you see is the price the creator set—and receives. Your purchase directly funds the person who made it."
 						/>
 					</div>
 				</div>
 			</section>
 
-			{/* ───────────── Subscription Tiers ───────────── */}
+			{/* ───────────── Subscriptions: the pool ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">
-						Support creators with a subscription
+						One subscription, split transparently
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Optional subscriptions let you support the creators you love. Your subscription funds
-						are distributed based on what you actually watch, play, read, and listen to—plus
-						optional boosts to your favorites.
+						Instead of a separate pledge to every creator, you fund Anthers at whatever level you
+						choose—starting at $3/month, adjustable a dollar at a time. That single subscription is
+						split the same way at every amount: 8% funds the Foundation, and 92% flows to creators
+						through two pools.
 					</p>
-					<div className="overflow-x-auto">
+
+					{/* Breakdown visual */}
+					<div className="max-w-3xl mx-auto card bg-base-100 shadow-sm mb-12">
+						<div className="card-body">
+							<div className="flex items-baseline justify-between mb-1">
+								<h3 className="font-bold text-lg">Where a $7 Sprout subscription goes</h3>
+								<span className="text-sm text-base-content/50">per month</span>
+							</div>
+							<div className="flex flex-col gap-3 text-sm mt-2">
+								<SplitRow
+									label="Anthers Foundation Fee (8%)"
+									amount="$0.56"
+									barClass="bg-base-300"
+									widthClass="w-[8%]"
+								/>
+								<SplitRow
+									label="Time Pool — auto, by time spent"
+									amount="$2.44"
+									barClass="bg-secondary"
+									widthClass="w-[35%]"
+								/>
+								<SplitRow
+									label="Boost Pool — you direct it (or leave on auto)"
+									amount="$4.00"
+									barClass="bg-primary"
+									widthClass="w-[57%]"
+								/>
+							</div>
+							<div className="divider my-2" />
+							<div className="flex justify-between text-sm font-semibold">
+								<span>To creators (92%)</span>
+								<span className="text-success">$6.44</span>
+							</div>
+							<p className="text-xs text-base-content/40 mt-2">
+								Delivery is billed separately, on top—see below. The creator share is never reduced
+								by infrastructure costs.
+							</p>
+						</div>
+					</div>
+
+					{/* Two pools */}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+						<ConceptCard
+							icon={<ClockIcon className="w-6 h-6 text-secondary" />}
+							tone="bg-secondary/15"
+							eyebrow="Automatic"
+							title="The Time Pool"
+							description="Distributed automatically based on the time you spend—and a minute is a minute. Watching a video, reading an essay, listening to an album, and playing a game all count exactly the same. Every creator you spend time with gets funded, with no effort from you."
+						/>
+						<ConceptCard
+							icon={<BoltIcon className="w-6 h-6 text-primary" />}
+							tone="bg-primary/15"
+							eyebrow="Your call"
+							title="The Boost Pool"
+							description="Point your support wherever you want, in $1 steps—or leave it on auto and it mirrors your time. Boost is how you champion the creators who matter most to you, and it's what unlocks their premium content. Anything you don't allocate flows back into the Time Pool, so nothing is wasted."
+						/>
+					</div>
+
+					{/* Tier table */}
+					<div className="overflow-x-auto mt-14">
 						<table className="table table-sm max-w-3xl mx-auto">
 							<thead>
 								<tr>
 									<th>Tier</th>
-									<th className="text-right">Starting at</th>
-									<th className="text-right">Content Cap</th>
-									<th className="text-right">Gate Access</th>
+									<th className="text-right">Starts at</th>
+									<th className="text-right">Foundation (8%)</th>
+									<th className="text-right">Time Pool</th>
+									<th className="text-right">Boost Pool</th>
+									<th className="text-right">Watch time</th>
 								</tr>
 							</thead>
 							<tbody>
-								<tr>
-									<td>Free</td>
-									<td className="text-right">Free</td>
-									<td className="text-right">10 hrs/mo</td>
-									<td className="text-right text-base-content/40">No</td>
-								</tr>
-								<tr>
-									<td>Root</td>
-									<td className="text-right">$3/mo</td>
-									<td className="text-right">25 hrs/mo</td>
-									<td className="text-right text-base-content/60">Boost gates*</td>
-								</tr>
-								<tr>
-									<td>Sprout</td>
-									<td className="text-right">$7/mo</td>
-									<td className="text-right">Unlimited</td>
-									<td className="text-right text-success">Both</td>
-								</tr>
-								<tr>
-									<td>Petal</td>
-									<td className="text-right">$15/mo</td>
-									<td className="text-right">Unlimited</td>
-									<td className="text-right text-success">Both</td>
-								</tr>
-								<tr>
-									<td>Bloom</td>
-									<td className="text-right">$30/mo</td>
-									<td className="text-right">Unlimited</td>
-									<td className="text-right text-success">Both</td>
-								</tr>
+								<TierRow tier="Free" price="$0" foundation="—" time="—" boost="—" cap="10 hrs/mo" />
+								<TierRow
+									tier="Root"
+									price="$3/mo"
+									foundation="$0.24"
+									time="$0.76"
+									boost="$2.00"
+									cap="25 hrs/mo"
+								/>
+								<TierRow
+									tier="Sprout"
+									price="$7/mo"
+									foundation="$0.56"
+									time="$2.44"
+									boost="$4.00"
+									cap="Unlimited"
+								/>
+								<TierRow
+									tier="Petal"
+									price="$15/mo"
+									foundation="$1.20"
+									time="$5.80"
+									boost="$8.00"
+									cap="Unlimited"
+								/>
+								<TierRow
+									tier="Bloom"
+									price="$30/mo"
+									foundation="$2.40"
+									time="$12.60"
+									boost="$15.00"
+									cap="Unlimited"
+								/>
 							</tbody>
 						</table>
 					</div>
-					<p className="text-center text-xs text-base-content/40 mt-4">
-						Tiers are threshold prices — you can adjust your support level in $1 increments. Any
-						funding level above $3 generates Boost Pool funds to direct to favorite creators and
-						unlock boost-gated content. *Platform tier gates (e.g. "Sprout required") need the
-						corresponding threshold. Subscriptions coming soon.
+					<p className="text-center text-xs text-base-content/40 mt-4 max-w-2xl mx-auto">
+						Tiers are just named starting points on a continuous scale—you can fund at any dollar
+						amount, and the 8% / 92% split holds at every level. Both pools grow as you fund more.
+						Subscriptions coming soon.
 					</p>
 				</div>
 			</section>
 
-			{/* ───────────── Your Data Is Yours ───────────── */}
+			{/* ───────────── Gates ───────────── */}
+			<section className="py-20">
+				<div className="container mx-auto px-4 max-w-7xl">
+					<h2 className="text-3xl font-bold text-center mb-4">Two clear ways to unlock more</h2>
+					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+						Some creators put premium content behind a gate. There are exactly two kinds—one based
+						on your support for that specific creator, the other on your overall support for the
+						platform—and you always know what unlocks what.
+					</p>
+
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+						{/* Boost gates */}
+						<div className="card bg-base-200">
+							<div className="card-body">
+								<div className="flex items-center gap-3 mb-1">
+									<div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center">
+										<BoltIcon className="w-6 h-6 text-primary" />
+									</div>
+									<div>
+										<p className="text-xs uppercase tracking-wide text-primary/80 font-medium">
+											Based on your support for one creator
+										</p>
+										<h3 className="font-bold text-lg">Boost Gates</h3>
+									</div>
+								</div>
+								<p className="text-sm text-base-content/60 mb-4">
+									Direct more of your boost to a creator to unlock their tiers. Creators set the
+									thresholds in $1 steps and name the tiers themselves—and unlocking a higher tier
+									includes everything below it.
+								</p>
+								<div className="flex flex-col gap-1.5 text-sm">
+									<GateThreshold amount="$1" name="Follow+" perk="Chat access, community polls" />
+									<GateThreshold
+										amount="$1.50"
+										name="Insider"
+										perk="Early access, community posts"
+									/>
+									<GateThreshold
+										amount="$3"
+										name="Supporter"
+										perk="Behind-the-scenes, extended cuts"
+									/>
+									<GateThreshold amount="$5" name="Champion" perk="Monthly Q&A, name in credits" />
+								</div>
+							</div>
+						</div>
+
+						{/* Tier gates */}
+						<div className="card bg-base-200">
+							<div className="card-body">
+								<div className="flex items-center gap-3 mb-1">
+									<div className="w-11 h-11 rounded-full bg-secondary/15 flex items-center justify-center">
+										<Squares2X2Icon className="w-6 h-6 text-secondary" />
+									</div>
+									<div>
+										<p className="text-xs uppercase tracking-wide text-secondary/80 font-medium">
+											Based on your total support across the platform
+										</p>
+										<h3 className="font-bold text-lg">Anthers Tier Gates</h3>
+									</div>
+								</div>
+								<p className="text-sm text-base-content/60 mb-4">
+									Clear a funding threshold and unlock that tier's content across <em>every</em>{" "}
+									creator—even ones you don't boost. Upgrading to reach one creator lifts your
+									support for all of them, so advocacy becomes a rising tide.
+								</p>
+								<div className="flex flex-col gap-1.5 text-sm">
+									<GateThreshold
+										amount="$3+"
+										name="Root"
+										perk="Root-level content, platform-wide"
+									/>
+									<GateThreshold
+										amount="$7+"
+										name="Sprout"
+										perk="Sprout-level content, platform-wide"
+									/>
+									<GateThreshold
+										amount="$15+"
+										name="Petal"
+										perk="Petal-level content, platform-wide"
+									/>
+									<GateThreshold
+										amount="$30+"
+										name="Bloom"
+										perk="Bloom-level content, platform-wide"
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<p className="text-center text-sm text-base-content/50 mt-8 max-w-2xl mx-auto">
+						Creators can combine both—for example,{" "}
+						<span className="text-base-content/70">
+							"Petal subscribers <em>or</em> anyone boosting $3+ to me"
+						</span>
+						—so there's usually more than one way in.
+					</p>
+				</div>
+			</section>
+
+			{/* ───────────── Delivery ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">Your account, your data</h2>
+					<h2 className="text-3xl font-bold text-center mb-4">
+						Pay for the bandwidth you use—and control it
+					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Anthers is built on the AT Protocol (the tech behind Bluesky). Sign in with your
-						existing Bluesky identity, or create a new one. Your follows, library, and activity are
-						yours—portable and not locked in.
+						Streaming and downloads cost bandwidth. Every other platform hides that cost inside ad
+						revenue or a giant platform cut. Anthers shows it: a small delivery charge on top of
+						your subscription, separate from the creator's share. Because it's visible, you get real
+						tools to keep it low—something no ad-funded platform can offer.
+					</p>
+
+					<div className="max-w-3xl mx-auto mb-12 rounded-xl bg-base-100 p-6 text-center shadow-sm">
+						<p className="text-base-content/70">
+							<span className="font-bold text-success">
+								Your first $1 of delivery each month is free
+							</span>
+							, covered by the Foundation—roughly 15 hours of HD video, or far more audio and
+							reading. Go beyond that and you pay only for the bandwidth you actually used, at cost.
+						</p>
+					</div>
+
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+						<ControlCard
+							icon={<AdjustmentsHorizontalIcon className="w-6 h-6 text-secondary" />}
+							title="Smart quality scaling"
+							description="Video playing in a small window doesn't stream in 4K. Resolution matches the space it's shown in, so you don't pay for pixels you can't see."
+						/>
+						<ControlCard
+							icon={<MusicalNoteIcon className="w-6 h-6 text-secondary" />}
+							title="Audio-only mode"
+							description="Listening to a video essay with the screen off? Drop to audio and cut bandwidth by 95%+—ideal for longform you don't need to watch."
+						/>
+						<ControlCard
+							icon={<ArrowDownTrayIcon className="w-6 h-6 text-secondary" />}
+							title="Download & cache"
+							description="Rewatching a favorite doesn't cost delivery twice. Cached and downloaded replays are free—and the creator still gets credited for your time."
+						/>
+						<ControlCard
+							icon={<ChartBarIcon className="w-6 h-6 text-secondary" />}
+							title="Live usage dashboard"
+							description="See your delivery cost as it happens, with a projection for the month. No surprises at billing time—ever."
+						/>
+					</div>
+
+					<p className="text-center text-sm text-base-content/40 mt-10 max-w-2xl mx-auto">
+						Creators cover their own storage costs; you cover delivery. Neither is ever skimmed from
+						the other's share—the split simply reflects who causes which cost.
+					</p>
+				</div>
+			</section>
+
+			{/* ───────────── Identity & relationships ───────────── */}
+			<section className="py-20">
+				<div className="container mx-auto px-4 max-w-7xl">
+					<h2 className="text-3xl font-bold text-center mb-4">Your identity, your relationships</h2>
+					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+						Anthers is built on the AT Protocol—the open network behind Bluesky. Your account,
+						follows, and library aren't locked inside one company's walls. They're yours.
 					</p>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-						<div className="text-center">
-							<div className="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center mx-auto mb-3">
-								<LockOpenIcon className="w-6 h-6 text-info" />
-							</div>
-							<h3 className="font-semibold mb-1">Portable identity</h3>
-							<p className="text-sm text-base-content/60">
-								Your account is a decentralized identifier (DID) you control. If you already have a
-								Bluesky account, you can use the same identity here.
-							</p>
-						</div>
-						<div className="text-center">
-							<div className="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center mx-auto mb-3">
-								<GlobeAltIcon className="w-6 h-6 text-info" />
-							</div>
-							<h3 className="font-semibold mb-1">No lock-in</h3>
-							<p className="text-sm text-base-content/60">
-								Your follows, ratings, library, and activity are stored in a way that's portable. If
-								you ever want to leave, your data goes with you.
-							</p>
-						</div>
-						<div className="text-center">
-							<div className="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center mx-auto mb-3">
-								<ShieldCheckIcon className="w-6 h-6 text-info" />
-							</div>
-							<h3 className="font-semibold mb-1">Privacy first</h3>
-							<p className="text-sm text-base-content/60">
-								No tracking cookies, no ad-driven surveillance, no selling your browsing history.
-								The platform works for you and the creators you support.
-							</p>
-						</div>
-					</div>
-				</div>
-			</section>
-
-			{/* ───────────── What You Get ───────────── */}
-			<section className="py-20">
-				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">Free account, real benefits</h2>
-					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						You can do a lot without an account. But a free account unlocks the full experience—and
-						it takes 30 seconds.
-					</p>
-
-					<div className="overflow-x-auto">
-						<table className="table table-sm max-w-2xl mx-auto">
-							<thead>
-								<tr>
-									<th>Feature</th>
-									<th className="text-center">No account</th>
-									<th className="text-center">Free account</th>
-								</tr>
-							</thead>
-							<tbody>
-								<AccountComparisonRow
-									feature="Browse all projects"
-									noAccount={true}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Play web games"
-									noAccount={true}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Download free content"
-									noAccount={true}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Read devlogs and posts"
-									noAccount={true}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Follow creators"
-									noAccount={false}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Personal feed"
-									noAccount={false}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Rate and comment"
-									noAccount={false}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Purchase paid content"
-									noAccount={false}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Save to library"
-									noAccount={false}
-									freeAccount={true}
-								/>
-								<AccountComparisonRow
-									feature="Join game jams"
-									noAccount={false}
-									freeAccount={true}
-								/>
-							</tbody>
-						</table>
+						<Pillar
+							icon={<UserGroupIcon className="w-7 h-7 text-info" />}
+							tone="bg-info/15"
+							title="Follow the creator, not the medium"
+							description="One follow covers everything a creator makes—their game, its soundtrack, the devlog, the essay. You build a relationship with the person, and their whole body of work comes with it."
+						/>
+						<Pillar
+							icon={<GlobeAltIcon className="w-7 h-7 text-info" />}
+							tone="bg-info/15"
+							title="Portable, no lock-in"
+							description="Your account is a decentralized identifier (DID) you control. Sign in with your existing Bluesky identity or make a new one—and if you ever leave, your follows and data go with you."
+						/>
+						<Pillar
+							icon={<EyeSlashIcon className="w-7 h-7 text-info" />}
+							tone="bg-info/15"
+							title="No surveillance"
+							description="No tracking cookies, no ad targeting, no selling your history. There's no algorithm optimizing to keep you scrolling—because the platform answers to you, not advertisers."
+						/>
 					</div>
 				</div>
 			</section>
@@ -468,10 +469,10 @@ export default function ForUsersPage() {
 			{/* ───────────── CTA ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 text-center max-w-2xl">
-					<h2 className="text-3xl font-bold mb-4">Start exploring</h2>
+					<h2 className="text-3xl font-bold mb-4">A platform that works for you</h2>
 					<p className="text-base-content/60 mb-8 leading-relaxed">
-						Thousands of games, videos, music, and writing from independent creators—many of them
-						free. No account required to start browsing.
+						Support the creators you love, on terms you can see and trust. Browse the whole catalog
+						free—no account required to start.
 					</p>
 					<div className="flex gap-4 justify-center flex-wrap">
 						<Link to="/discover" className="btn btn-secondary btn-lg">
@@ -491,66 +492,142 @@ export default function ForUsersPage() {
 
 // ─── Sub-components ───
 
-function ContentCard({
+function Pillar({
+	icon,
+	tone,
+	title,
+	description,
+}: {
+	icon: React.ReactNode;
+	tone: string;
+	title: string;
+	description: string;
+}) {
+	return (
+		<div className="text-center">
+			<div
+				className={`w-14 h-14 rounded-full ${tone} flex items-center justify-center mx-auto mb-4`}
+			>
+				{icon}
+			</div>
+			<h3 className="font-bold text-lg mb-2">{title}</h3>
+			<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
+		</div>
+	);
+}
+
+function IconFeature({
 	icon,
 	title,
-	color,
-	description,
-	highlights,
+	children,
 }: {
 	icon: React.ReactNode;
 	title: string;
-	color: string;
-	description: string;
-	highlights: string[];
+	children: React.ReactNode;
 }) {
 	return (
-		<div className="card bg-base-200 shadow-sm">
-			<div className="card-body p-5">
-				<div className="flex items-center gap-2 mb-2">
-					<span className="text-base-content/40">{icon}</span>
-					<span className={`badge badge-sm ${color}`}>{title}</span>
-				</div>
-				<p className="text-sm text-base-content/60 mb-3">{description}</p>
-				<ul className="text-xs text-base-content/50 flex flex-col gap-1">
-					{highlights.map((h) => (
-						<li key={h} className="flex items-center gap-1">
-							<span className="text-success">✓</span> {h}
-						</li>
-					))}
-				</ul>
+		<div className="flex gap-3">
+			<div className="flex-shrink-0 mt-1">{icon}</div>
+			<div>
+				<h4 className="font-semibold text-sm">{title}</h4>
+				<p className="text-sm text-base-content/60">{children}</p>
 			</div>
 		</div>
 	);
 }
 
-function DiscoveryFeature({
+function SplitRow({
+	label,
+	amount,
+	barClass,
+	widthClass,
+}: {
+	label: string;
+	amount: string;
+	barClass: string;
+	widthClass: string;
+}) {
+	return (
+		<div>
+			<div className="flex justify-between mb-1">
+				<span className="text-base-content/70">{label}</span>
+				<span className="font-medium">{amount}</span>
+			</div>
+			<div className="h-2 w-full rounded-full bg-base-300/40">
+				<div className={`h-2 rounded-full ${barClass} ${widthClass}`} />
+			</div>
+		</div>
+	);
+}
+
+function ConceptCard({
 	icon,
+	tone,
+	eyebrow,
 	title,
 	description,
 }: {
 	icon: React.ReactNode;
+	tone: string;
+	eyebrow: string;
 	title: string;
 	description: string;
 }) {
 	return (
-		<div className="flex gap-4">
-			<div className="flex-shrink-0 w-10 h-10 rounded-lg bg-base-100 flex items-center justify-center text-secondary">
-				{icon}
-			</div>
-			<div>
-				<h3 className="font-semibold mb-1">{title}</h3>
+		<div className="card bg-base-100 shadow-sm h-full">
+			<div className="card-body">
+				<div className="flex items-center gap-3 mb-1">
+					<div className={`w-11 h-11 rounded-full ${tone} flex items-center justify-center`}>
+						{icon}
+					</div>
+					<div>
+						<p className="text-xs uppercase tracking-wide text-base-content/40 font-medium">
+							{eyebrow}
+						</p>
+						<h3 className="font-bold text-lg">{title}</h3>
+					</div>
+				</div>
 				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
 	);
 }
 
-function ReceiptLine({ label, amount, bold }: { label: string; amount: string; bold?: boolean }) {
+function TierRow({
+	tier,
+	price,
+	foundation,
+	time,
+	boost,
+	cap,
+}: {
+	tier: string;
+	price: string;
+	foundation: string;
+	time: string;
+	boost: string;
+	cap: string;
+}) {
+	const muted = (v: string) => (v === "—" ? "text-base-content/30" : "");
 	return (
-		<div className={`flex justify-between ${bold ? "font-semibold" : "text-base-content/70"}`}>
-			<span>{label}</span>
-			<span>{amount}</span>
+		<tr>
+			<td className="font-medium">{tier}</td>
+			<td className="text-right">{price}</td>
+			<td className={`text-right ${muted(foundation)}`}>{foundation}</td>
+			<td className={`text-right ${muted(time)}`}>{time}</td>
+			<td className={`text-right ${muted(boost)}`}>{boost}</td>
+			<td className="text-right text-base-content/60">{cap}</td>
+		</tr>
+	);
+}
+
+function GateThreshold({ amount, name, perk }: { amount: string; name: string; perk: string }) {
+	return (
+		<div className="flex items-center gap-3 rounded-lg bg-base-100 px-3 py-2">
+			<LockOpenIcon className="w-4 h-4 text-success shrink-0" />
+			<span className="font-mono text-xs w-12 shrink-0 text-base-content/70">{amount}</span>
+			<span className="font-semibold text-sm w-24 shrink-0">{name}</span>
+			<span className="text-xs text-base-content/50">{perk}</span>
 		</div>
 	);
 }
@@ -574,22 +651,255 @@ function PricingCard({
 	);
 }
 
-function AccountComparisonRow({
-	feature,
-	noAccount,
-	freeAccount,
+function ControlCard({
+	icon,
+	title,
+	description,
 }: {
-	feature: string;
-	noAccount: boolean;
-	freeAccount: boolean;
+	icon: React.ReactNode;
+	title: string;
+	description: string;
 }) {
-	const check = <span className="text-success font-bold">✓</span>;
-	const dash = <span className="text-base-content/20">—</span>;
+	return (
+		<div className="card bg-base-100 shadow-sm">
+			<div className="card-body p-5">
+				<div className="mb-2">{icon}</div>
+				<h3 className="font-semibold text-sm mb-1">{title}</h3>
+				<p className="text-xs text-base-content/60 leading-relaxed">{description}</p>
+			</div>
+		</div>
+	);
+}
+
+type PurchaseScenario = {
+	key: string;
+	label: string;
+	noun: string;
+	blurb: string;
+	price: number;
+	sizeGb: number;
+};
+
+type PurchaseCategory = { key: string; label: string; scenarios: PurchaseScenario[] };
+
+/** ~$0.01 per GB of egress (DigitalOcean Spaces-class bandwidth). */
+const DELIVERY_PER_GB = 0.01;
+
+/** Scenario sizes/prices; game tiers per the Kei/Midi/AA/AAA taxonomy. */
+const PURCHASE_CATEGORIES: PurchaseCategory[] = [
+	{
+		key: "games",
+		label: "Games",
+		scenarios: [
+			{
+				key: "kei",
+				label: "Kei",
+				noun: "game",
+				blurb: "Solo-dev gems like Undertale or Papers Please",
+				price: 5,
+				sizeGb: 0.3,
+			},
+			{
+				key: "midi",
+				label: "Midi",
+				noun: "game",
+				blurb: "Small-studio hits like Hades or Valheim",
+				price: 17,
+				sizeGb: 6,
+			},
+			{
+				key: "aa",
+				label: "AA",
+				noun: "game",
+				blurb: "Multi-million-dollar productions",
+				price: 40,
+				sizeGb: 25,
+			},
+			{
+				key: "aaa",
+				label: "AAA",
+				noun: "game",
+				blurb: "So big you'll want a new SSD to install it",
+				price: 60,
+				sizeGb: 90,
+			},
+		],
+	},
+	{
+		key: "music",
+		label: "Music",
+		scenarios: [
+			{
+				key: "single",
+				label: "Single",
+				noun: "single",
+				blurb: "One lossless track",
+				price: 1,
+				sizeGb: 0.04,
+			},
+			{ key: "ep", label: "EP", noun: "EP", blurb: "A handful of tracks", price: 6, sizeGb: 0.2 },
+			{
+				key: "album",
+				label: "Album",
+				noun: "album",
+				blurb: "A full lossless album",
+				price: 10,
+				sizeGb: 0.5,
+			},
+		],
+	},
+	{
+		key: "ebooks",
+		label: "eBooks",
+		scenarios: [
+			{
+				key: "novel",
+				label: "Novel",
+				noun: "novel",
+				blurb: "Pure text, tiny file",
+				price: 8,
+				sizeGb: 0.001,
+			},
+			{
+				key: "graphic",
+				label: "Graphic novel",
+				noun: "graphic novel",
+				blurb: "Full-page illustrations",
+				price: 15,
+				sizeGb: 0.12,
+			},
+		],
+	},
+];
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const money = (n: number) => `$${n.toFixed(2)}`;
+
+function PurchaseCalculator() {
+	const [catKey, setCatKey] = useState("games");
+	const [scenKey, setScenKey] = useState("midi");
+
+	const category = PURCHASE_CATEGORIES.find((c) => c.key === catKey) ?? PURCHASE_CATEGORIES[0];
+	const scenario = category.scenarios.find((s) => s.key === scenKey) ?? category.scenarios[0];
+
+	const rawDelivery = scenario.sizeGb * DELIVERY_PER_GB;
+	const delivery = round2(rawDelivery);
+	const foundation = round2(scenario.price * (FOUNDATION_FEE_PERCENTAGE / 100));
+	const processing = round2(scenario.price * 0.029 + 0.3);
+	const total = round2(scenario.price + delivery + foundation + processing);
+	const platformPortion = round2(delivery + foundation + processing);
+
+	const deliveryDisplay = rawDelivery > 0 && delivery === 0 ? "<$0.01" : money(delivery);
+	const nounCap = scenario.noun.charAt(0).toUpperCase() + scenario.noun.slice(1);
+	const article = /^[aeiou]/i.test(scenario.noun) ? "an" : "a";
+
+	return (
+		<div className="max-w-3xl mx-auto card bg-base-100 shadow-sm">
+			<div className="card-body">
+				<div className="flex flex-col gap-3 mb-2">
+					<div className="join self-center">
+						{PURCHASE_CATEGORIES.map((c) => (
+							<button
+								key={c.key}
+								type="button"
+								onClick={() => {
+									setCatKey(c.key);
+									setScenKey(c.scenarios[0].key);
+								}}
+								className={`btn join-item btn-sm ${c.key === catKey ? "btn-secondary" : "btn-ghost"}`}
+							>
+								{c.label}
+							</button>
+						))}
+					</div>
+					<div className="join self-center flex-wrap justify-center">
+						{category.scenarios.map((s) => (
+							<button
+								key={s.key}
+								type="button"
+								onClick={() => setScenKey(s.key)}
+								className={`btn join-item btn-sm ${s.key === scenario.key ? "btn-primary" : "btn-outline btn-primary"}`}
+							>
+								{s.label}
+							</button>
+						))}
+					</div>
+					<p className="text-center text-xs text-base-content/50">{scenario.blurb}</p>
+				</div>
+
+				<table className="table table-sm">
+					<tbody>
+						<CalcRow
+							label={`${nounCap} price`}
+							desc="Listed purchase price, goes directly to the creator"
+							amount={money(scenario.price)}
+							strong
+						/>
+						<CalcRow
+							label="Delivery"
+							desc="Actual bandwidth cost of the content download"
+							amount={deliveryDisplay}
+						/>
+						<CalcRow
+							label="Anthers Foundation"
+							desc={`${FOUNDATION_FEE_PERCENTAGE}% goes back to the community and charitable work`}
+							amount={money(foundation)}
+						/>
+						<CalcRow
+							label="Card processing"
+							desc="2.9% + $0.30 with a card—less if you pay from your bank"
+							amount={money(processing)}
+						/>
+					</tbody>
+					<tfoot>
+						<tr className="border-t border-base-300 text-base-content">
+							<td className="font-bold">You pay</td>
+							<td className="hidden sm:table-cell text-xs text-base-content/50">
+								In total, for {article} {scenario.noun} with no strings attached
+							</td>
+							<td className="text-right font-mono font-bold">{money(total)}</td>
+						</tr>
+					</tfoot>
+				</table>
+
+				<p className="mt-4 text-sm text-base-content/70">
+					In short: <span className="font-semibold text-base-content">{money(scenario.price)}</span>{" "}
+					for your {scenario.noun}, straight to the creator—and just{" "}
+					<span className="font-semibold text-base-content">{money(platformPortion)}</span> for an
+					ad-free, charitable platform that keeps a healthier, freer creative community running
+					forever, for every creator and for users like you.
+				</p>
+
+				<div className="mt-3 flex items-start gap-2 text-xs text-base-content/50">
+					<BanknotesIcon className="w-4 h-4 text-success shrink-0 mt-0.5" />
+					<span>
+						Pay from your bank (ACH) instead of a card and processing shrinks to about 0.8%—on
+						Anthers, you always get the cheaper rail.
+					</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function CalcRow({
+	label,
+	desc,
+	amount,
+	strong,
+}: {
+	label: string;
+	desc: string;
+	amount: string;
+	strong?: boolean;
+}) {
 	return (
 		<tr>
-			<td>{feature}</td>
-			<td className="text-center">{noAccount ? check : dash}</td>
-			<td className="text-center">{freeAccount ? check : dash}</td>
+			<td className={`align-top whitespace-nowrap ${strong ? "font-semibold" : ""}`}>{label}</td>
+			<td className="align-top text-xs text-base-content/50 hidden sm:table-cell">{desc}</td>
+			<td className={`align-top text-right font-mono ${strong ? "font-semibold" : ""}`}>
+				{amount}
+			</td>
 		</tr>
 	);
 }
