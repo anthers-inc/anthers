@@ -59,7 +59,7 @@ const jamRoutes = new Hono()
 				jam: gameJams,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
-				entryCount: sql<number>`(SELECT count(*) FROM jam_entries WHERE jam_id = ${gameJams.id})`,
+				entryCount: sql<number>`(SELECT count(*)::int FROM jam_entries WHERE jam_id = ${gameJams.id})`,
 			})
 			.from(gameJams)
 			.innerJoin(users, eq(gameJams.creatorId, users.id))
@@ -325,8 +325,8 @@ const jamRoutes = new Hono()
 				projectSlug: projects.slug,
 				projectCoverImage: projects.coverImage,
 				submitterUsername: users.username,
-				avgScore: sql<number>`COALESCE(AVG(${jamVotes.score}), 0)`,
-				voteCount: sql<number>`COUNT(${jamVotes.id})`,
+				avgScore: sql<number>`COALESCE(AVG(${jamVotes.score}), 0)::float`,
+				voteCount: sql<number>`COUNT(${jamVotes.id})::int`,
 			})
 			.from(jamEntries)
 			.innerJoin(projects, eq(jamEntries.projectId, projects.id))

@@ -137,11 +137,11 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
 						"project_count",
 					),
 			})
@@ -211,11 +211,11 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
 						"project_count",
 					),
 				...(currentUserId
@@ -250,11 +250,11 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
 						"project_count",
 					),
 				...(currentUserId

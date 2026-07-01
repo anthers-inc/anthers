@@ -150,10 +150,8 @@ const contentRoutes = new Hono()
 		}
 
 		if (tag) {
-			// tags is a jsonb text array; check membership via jsonb_array_elements_text.
-			conditions.push(
-				sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${projects.tags}) AS elem WHERE elem = ${tag})`,
-			);
+			// tags is a jsonb string array; containment (@>) is null/scalar-safe.
+			conditions.push(sql`${projects.tags} @> ${JSON.stringify([tag])}::jsonb`);
 		}
 
 		if (search) {
@@ -293,8 +291,8 @@ const contentRoutes = new Hono()
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
-				ratingAverage: sql<number>`(SELECT AVG(score) FROM ratings WHERE project_id = ${projects.id})`,
-				ratingCount: sql<number>`(SELECT COUNT(*) FROM ratings WHERE project_id = ${projects.id})`,
+				ratingAverage: sql<number>`(SELECT AVG(score)::float FROM ratings WHERE project_id = ${projects.id})`,
+				ratingCount: sql<number>`(SELECT COUNT(*)::int FROM ratings WHERE project_id = ${projects.id})`,
 			})
 			.from(projects)
 			.innerJoin(users, eq(projects.creatorId, users.id))
