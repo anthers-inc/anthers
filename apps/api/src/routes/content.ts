@@ -794,7 +794,11 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			await queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
+			await queue.send(
+				QUEUES.TRANSCODE_VIDEO,
+				{ jobId: job.id },
+				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
+			);
 		} else if (data.contentType === "audio" && data.audioFile) {
 			const [job] = await db
 				.insert(transcodingJobs)

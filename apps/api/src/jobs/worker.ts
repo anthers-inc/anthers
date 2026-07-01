@@ -21,26 +21,38 @@ async function start() {
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
-	await queue.work<TranscodeVideoData>(QUEUES.TRANSCODE_VIDEO, { localConcurrency: 2 }, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[transcode-video] Processing job ${job.id}`);
-			await transcodeVideo(job.data);
-		}
-	});
+	await queue.work<TranscodeVideoData>(
+		QUEUES.TRANSCODE_VIDEO,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[transcode-video] Processing job ${job.id}`);
+				await transcodeVideo(job.data);
+			}
+		},
+	);
 
-	await queue.work<ProcessAudioData>(QUEUES.PROCESS_AUDIO, { localConcurrency: 2 }, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[process-audio] Processing job ${job.id}`);
-			await processAudio(job.data);
-		}
-	});
+	await queue.work<ProcessAudioData>(
+		QUEUES.PROCESS_AUDIO,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[process-audio] Processing job ${job.id}`);
+				await processAudio(job.data);
+			}
+		},
+	);
 
-	await queue.work<CrossPublishData>(QUEUES.CROSS_PUBLISH, { localConcurrency: 2 }, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[cross-publish] Processing job ${job.id}`);
-			await crossPublish(job.data);
-		}
-	});
+	await queue.work<CrossPublishData>(
+		QUEUES.CROSS_PUBLISH,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[cross-publish] Processing job ${job.id}`);
+				await crossPublish(job.data);
+			}
+		},
+	);
 
 	// ── Scheduled jobs ────────────────────────────────────────────────
 
