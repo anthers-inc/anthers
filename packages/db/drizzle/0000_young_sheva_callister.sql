@@ -1,0 +1,440 @@
+CREATE TABLE "crf_ledger" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"amount" numeric NOT NULL,
+	"purchase_id" integer,
+	"description" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "crf_subsidies" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"estimated_hosting_cost" numeric NOT NULL,
+	"creator_earnings" numeric NOT NULL,
+	"subsidy_amount" numeric NOT NULL,
+	"storage_bytes" bigint DEFAULT 0,
+	"project_count" integer DEFAULT 0,
+	"post_count" integer DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "purchases" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"buyer_id" integer NOT NULL,
+	"project_id" integer NOT NULL,
+	"amount" numeric NOT NULL,
+	"processing_fee" numeric NOT NULL,
+	"crf_fee" numeric NOT NULL,
+	"creator_earnings" numeric NOT NULL,
+	"stripe_payment_intent_id" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "purchases_stripe_payment_intent_id_unique" UNIQUE("stripe_payment_intent_id")
+);
+--> statement-breakpoint
+CREATE TABLE "stripe_accounts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"stripe_account_id" text NOT NULL,
+	"charges_enabled" boolean DEFAULT false,
+	"payouts_enabled" boolean DEFAULT false,
+	"onboarding_complete" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "stripe_accounts_user_id_unique" UNIQUE("user_id"),
+	CONSTRAINT "stripe_accounts_stripe_account_id_unique" UNIQUE("stripe_account_id")
+);
+--> statement-breakpoint
+CREATE TABLE "game_jams" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"title" text NOT NULL,
+	"slug" text NOT NULL,
+	"description" text DEFAULT '',
+	"theme" text DEFAULT '',
+	"cover_image" text DEFAULT '',
+	"start_at" timestamp with time zone NOT NULL,
+	"end_at" timestamp with time zone NOT NULL,
+	"voting_end_at" timestamp with time zone NOT NULL,
+	"max_team_size" integer DEFAULT 0,
+	"allow_late_submissions" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "game_jams_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
+CREATE TABLE "jam_entries" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"jam_id" integer NOT NULL,
+	"project_id" integer NOT NULL,
+	"submitted_by_id" integer NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "jam_votes" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"entry_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"score" integer NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "atproto_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"access_token" text DEFAULT '',
+	"refresh_token" text DEFAULT '',
+	"dpop_private_pem" text DEFAULT '',
+	"dpop_jwk" jsonb DEFAULT '{}'::jsonb,
+	"token_endpoint" text DEFAULT '',
+	"dpop_nonce" text DEFAULT '',
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "atproto_sessions_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "follows" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"follower_id" integer NOT NULL,
+	"creator_id" integer NOT NULL,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "follows_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"token" text NOT NULL,
+	"user_id" integer NOT NULL,
+	"ip_address" text,
+	"user_agent" text,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "sessions_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"username" text NOT NULL,
+	"email" text NOT NULL,
+	"password_hash" text,
+	"display_name" text DEFAULT '',
+	"bio" text DEFAULT '',
+	"is_creator" boolean DEFAULT false,
+	"avatar" text DEFAULT '',
+	"header_image" text DEFAULT '',
+	"website_url" text DEFAULT '',
+	"location" text DEFAULT '',
+	"email_verified" boolean DEFAULT false,
+	"atproto_did" text,
+	"atproto_handle" text DEFAULT '',
+	"atproto_pds_url" text DEFAULT '',
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "users_username_unique" UNIQUE("username"),
+	CONSTRAINT "users_email_unique" UNIQUE("email"),
+	CONSTRAINT "users_atproto_did_unique" UNIQUE("atproto_did")
+);
+--> statement-breakpoint
+CREATE TABLE "verification_tokens" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"token" text NOT NULL,
+	"type" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "verification_tokens_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "attention_events" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"creator_id" integer NOT NULL,
+	"project_id" integer,
+	"post_id" integer,
+	"event_type" text NOT NULL,
+	"duration_seconds" integer DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "boost_allocations" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"creator_id" integer NOT NULL,
+	"amount" numeric NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"is_locked" boolean DEFAULT false,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "boost_allocations_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "creator_gates" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"gate_type" text DEFAULT 'boost' NOT NULL,
+	"threshold" numeric NOT NULL,
+	"label" text NOT NULL,
+	"description" text DEFAULT '',
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "pool_distributions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"subscriber_id" integer NOT NULL,
+	"creator_id" integer NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"pool_amount" numeric DEFAULT '0.00' NOT NULL,
+	"boost_amount" numeric DEFAULT '0.00' NOT NULL,
+	"attention_seconds" integer DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "subscriptions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"tier" text DEFAULT 'free' NOT NULL,
+	"funding_level" integer DEFAULT 0 NOT NULL,
+	"stripe_customer_id" text DEFAULT '',
+	"stripe_subscription_id" text DEFAULT '',
+	"is_active" boolean DEFAULT true,
+	"current_period_start" timestamp with time zone,
+	"current_period_end" timestamp with time zone,
+	"canceled_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "subscriptions_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "assets" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"file" text NOT NULL,
+	"filename" text NOT NULL,
+	"file_size" integer DEFAULT 0,
+	"mime_type" text DEFAULT '',
+	"platform" text DEFAULT '',
+	"version" text DEFAULT '',
+	"is_primary" boolean DEFAULT false,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "bookmarks" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"project_id" integer,
+	"post_id" integer,
+	"creator_id" integer,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "comments" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"project_id" integer,
+	"post_id" integer,
+	"body" text NOT NULL,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "comments_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "cross_publish_results" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"platform" text NOT NULL,
+	"project_id" integer,
+	"post_id" integer,
+	"external_id" text DEFAULT '',
+	"external_url" text DEFAULT '',
+	"status" text DEFAULT 'pending' NOT NULL,
+	"error_message" text DEFAULT '',
+	"published_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "external_metric_snapshots" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"cross_publish_id" integer NOT NULL,
+	"views" bigint DEFAULT 0,
+	"likes" integer DEFAULT 0,
+	"comments" integer DEFAULT 0,
+	"shares" integer DEFAULT 0,
+	"watch_time_seconds" bigint DEFAULT 0,
+	"revenue_cents" bigint DEFAULT 0,
+	"snapshot_date" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "inline_images" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"image" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "platform_connections" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"platform" text NOT NULL,
+	"access_token" text DEFAULT '',
+	"refresh_token" text DEFAULT '',
+	"token_expires_at" timestamp with time zone,
+	"api_key" text DEFAULT '',
+	"platform_user_id" text DEFAULT '',
+	"platform_username" text DEFAULT '',
+	"is_active" boolean DEFAULT true,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "posts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"project_id" integer,
+	"title" text DEFAULT '',
+	"body" text DEFAULT '',
+	"body_html" text DEFAULT '',
+	"content_type" text DEFAULT 'text' NOT NULL,
+	"video_file" text DEFAULT '',
+	"audio_file" text DEFAULT '',
+	"thumbnail" text DEFAULT '',
+	"duration_seconds" integer,
+	"is_premium" boolean DEFAULT false,
+	"visibility" text DEFAULT 'public' NOT NULL,
+	"is_published" boolean DEFAULT false,
+	"estimated_read_minutes" integer,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "posts_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "projects" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"creator_id" integer NOT NULL,
+	"title" text NOT NULL,
+	"slug" text NOT NULL,
+	"description" text DEFAULT '',
+	"short_description" text DEFAULT '',
+	"media_type" text DEFAULT 'game' NOT NULL,
+	"tags" jsonb DEFAULT '[]'::jsonb,
+	"is_published" boolean DEFAULT false,
+	"pricing_type" text DEFAULT 'free' NOT NULL,
+	"price" numeric,
+	"min_price" numeric,
+	"suggested_price" numeric,
+	"cover_image" text DEFAULT '',
+	"embed_url" text DEFAULT '',
+	"website_url" text DEFAULT '',
+	"source_url" text DEFAULT '',
+	"view_count" integer DEFAULT 0,
+	"download_count" integer DEFAULT 0,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "projects_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "projects_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "ratings" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"project_id" integer NOT NULL,
+	"score" integer NOT NULL,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ratings_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "screenshots" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"image" text NOT NULL,
+	"caption" text DEFAULT '',
+	"sort_order" integer DEFAULT 0,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "transcoding_jobs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"post_id" integer NOT NULL,
+	"media_type" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"progress" integer DEFAULT 0,
+	"error_message" text DEFAULT '',
+	"hls_manifest_url" text DEFAULT '',
+	"output_file_url" text DEFAULT '',
+	"waveform_data" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "crf_ledger" ADD CONSTRAINT "crf_ledger_purchase_id_purchases_id_fk" FOREIGN KEY ("purchase_id") REFERENCES "public"."purchases"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "crf_subsidies" ADD CONSTRAINT "crf_subsidies_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_buyer_id_users_id_fk" FOREIGN KEY ("buyer_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stripe_accounts" ADD CONSTRAINT "stripe_accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "game_jams" ADD CONSTRAINT "game_jams_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_jam_id_game_jams_id_fk" FOREIGN KEY ("jam_id") REFERENCES "public"."game_jams"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_submitted_by_id_users_id_fk" FOREIGN KEY ("submitted_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_votes" ADD CONSTRAINT "jam_votes_entry_id_jam_entries_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."jam_entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_votes" ADD CONSTRAINT "jam_votes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "atproto_sessions" ADD CONSTRAINT "atproto_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "follows" ADD CONSTRAINT "follows_follower_id_users_id_fk" FOREIGN KEY ("follower_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "follows" ADD CONSTRAINT "follows_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "verification_tokens" ADD CONSTRAINT "verification_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "creator_gates" ADD CONSTRAINT "creator_gates_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_subscriber_id_users_id_fk" FOREIGN KEY ("subscriber_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "assets" ADD CONSTRAINT "assets_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "external_metric_snapshots" ADD CONSTRAINT "external_metric_snapshots_cross_publish_id_cross_publish_results_id_fk" FOREIGN KEY ("cross_publish_id") REFERENCES "public"."cross_publish_results"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "inline_images" ADD CONSTRAINT "inline_images_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "platform_connections" ADD CONSTRAINT "platform_connections_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "projects" ADD CONSTRAINT "projects_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ratings" ADD CONSTRAINT "ratings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ratings" ADD CONSTRAINT "ratings_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "screenshots" ADD CONSTRAINT "screenshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "transcoding_jobs" ADD CONSTRAINT "transcoding_jobs_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_crf_subsidies_creator_cycle" ON "crf_subsidies" USING btree ("creator_id","billing_cycle");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_jam_entries_jam_project" ON "jam_entries" USING btree ("jam_id","project_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_jam_votes_entry_user" ON "jam_votes" USING btree ("entry_id","user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_follows_follower_creator" ON "follows" USING btree ("follower_id","creator_id");--> statement-breakpoint
+CREATE INDEX "idx_attention_user_date" ON "attention_events" USING btree ("user_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_attention_creator_date" ON "attention_events" USING btree ("creator_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_boost_user_creator_cycle" ON "boost_allocations" USING btree ("user_id","creator_id","billing_cycle");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_pool_dist_sub_creator_cycle" ON "pool_distributions" USING btree ("subscriber_id","creator_id","billing_cycle");--> statement-breakpoint
+CREATE INDEX "idx_bookmarks_user" ON "bookmarks" USING btree ("user_id","sort_order");--> statement-breakpoint
+CREATE INDEX "idx_cross_publish_user_platform" ON "cross_publish_results" USING btree ("user_id","platform");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_ext_metric_publish_date" ON "external_metric_snapshots" USING btree ("cross_publish_id","snapshot_date");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_platform_conn_user_platform" ON "platform_connections" USING btree ("user_id","platform");--> statement-breakpoint
+CREATE INDEX "idx_project_views" ON "projects" USING btree ("view_count");--> statement-breakpoint
+CREATE INDEX "idx_project_downloads" ON "projects" USING btree ("download_count");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_ratings_user_project" ON "ratings" USING btree ("user_id","project_id");

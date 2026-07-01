@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+	boolean,
+	index,
+	integer,
+	jsonb,
+	numeric,
+	pgTable,
+	serial,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 
-export const projects = sqliteTable(
+export const projects = pgTable(
 	"projects",
 	{
-		id: integer("id").primaryKey({ autoIncrement: true }),
+		id: serial("id").primaryKey(),
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
@@ -15,14 +25,14 @@ export const projects = sqliteTable(
 		description: text("description").default(""),
 		shortDescription: text("short_description").default(""),
 		mediaType: text("media_type").notNull().default("game"), // game | video | audio | text
-		tags: text("tags", { mode: "json" }).$type<string[]>().default([]),
-		isPublished: integer("is_published", { mode: "boolean" }).default(false),
+		tags: jsonb("tags").$type<string[]>().default([]),
+		isPublished: boolean("is_published").default(false),
 
-		// Pricing — stored as text for decimal.js precision.
+		// Pricing — stored as numeric for decimal.js precision (app owns rounding).
 		pricingType: text("pricing_type").notNull().default("free"), // free | pwyw | paid
-		price: text("price"),
-		minPrice: text("min_price"),
-		suggestedPrice: text("suggested_price"),
+		price: numeric("price"),
+		minPrice: numeric("min_price"),
+		suggestedPrice: numeric("suggested_price"),
 
 		// Display
 		coverImage: text("cover_image").default(""),
@@ -39,12 +49,8 @@ export const projects = sqliteTable(
 		// ATProto
 		atprotoUri: text("atproto_uri").unique(),
 
-		createdAt: integer("created_at", { mode: "timestamp_ms" })
-			.default(sql`(unixepoch() * 1000)`)
-			.notNull(),
-		updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-			.default(sql`(unixepoch() * 1000)`)
-			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
 		index("idx_project_views").on(table.viewCount),
@@ -52,21 +58,19 @@ export const projects = sqliteTable(
 	],
 );
 
-export const screenshots = sqliteTable("screenshots", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const screenshots = pgTable("screenshots", {
+	id: serial("id").primaryKey(),
 	projectId: integer("project_id")
 		.notNull()
 		.references(() => projects.id, { onDelete: "cascade" }),
 	image: text("image").notNull(),
 	caption: text("caption").default(""),
 	sortOrder: integer("sort_order").default(0),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const assets = sqliteTable("assets", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const assets = pgTable("assets", {
+	id: serial("id").primaryKey(),
 	projectId: integer("project_id")
 		.notNull()
 		.references(() => projects.id, { onDelete: "cascade" }),
@@ -76,14 +80,12 @@ export const assets = sqliteTable("assets", {
 	mimeType: text("mime_type").default(""),
 	platform: text("platform").default(""), // windows | mac | linux
 	version: text("version").default(""),
-	isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	isPrimary: boolean("is_primary").default(false),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const posts = sqliteTable("posts", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const posts = pgTable("posts", {
+	id: serial("id").primaryKey(),
 	creatorId: integer("creator_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
@@ -100,9 +102,9 @@ export const posts = sqliteTable("posts", {
 	durationSeconds: integer("duration_seconds"),
 
 	// Access control
-	isPremium: integer("is_premium", { mode: "boolean" }).default(false),
+	isPremium: boolean("is_premium").default(false),
 	visibility: text("visibility").notNull().default("public"), // public | subscribers_only | gated
-	isPublished: integer("is_published", { mode: "boolean" }).default(false),
+	isPublished: boolean("is_published").default(false),
 
 	// Text post metadata
 	estimatedReadMinutes: integer("estimated_read_minutes"),
@@ -110,16 +112,12 @@ export const posts = sqliteTable("posts", {
 	// ATProto
 	atprotoUri: text("atproto_uri").unique(),
 
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const transcodingJobs = sqliteTable("transcoding_jobs", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const transcodingJobs = pgTable("transcoding_jobs", {
+	id: serial("id").primaryKey(),
 	postId: integer("post_id")
 		.notNull()
 		.references(() => posts.id, { onDelete: "cascade" }),
@@ -129,28 +127,22 @@ export const transcodingJobs = sqliteTable("transcoding_jobs", {
 	errorMessage: text("error_message").default(""),
 	hlsManifestUrl: text("hls_manifest_url").default(""),
 	outputFileUrl: text("output_file_url").default(""),
-	waveformData: text("waveform_data", { mode: "json" }),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	waveformData: jsonb("waveform_data"),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const inlineImages = sqliteTable("inline_images", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const inlineImages = pgTable("inline_images", {
+	id: serial("id").primaryKey(),
 	creatorId: integer("creator_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
 	image: text("image").notNull(),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const comments = sqliteTable("comments", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const comments = pgTable("comments", {
+	id: serial("id").primaryKey(),
 	userId: integer("user_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
@@ -158,15 +150,13 @@ export const comments = sqliteTable("comments", {
 	postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
 	body: text("body").notNull(),
 	atprotoUri: text("atproto_uri").unique(),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const bookmarks = sqliteTable(
+export const bookmarks = pgTable(
 	"bookmarks",
 	{
-		id: integer("id").primaryKey({ autoIncrement: true }),
+		id: serial("id").primaryKey(),
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
@@ -174,17 +164,15 @@ export const bookmarks = sqliteTable(
 		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "cascade" }),
 		sortOrder: integer("sort_order").notNull().default(0),
-		createdAt: integer("created_at", { mode: "timestamp_ms" })
-			.default(sql`(unixepoch() * 1000)`)
-			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [index("idx_bookmarks_user").on(table.userId, table.sortOrder)],
 );
 
-export const ratings = sqliteTable(
+export const ratings = pgTable(
 	"ratings",
 	{
-		id: integer("id").primaryKey({ autoIncrement: true }),
+		id: serial("id").primaryKey(),
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
@@ -193,9 +181,7 @@ export const ratings = sqliteTable(
 			.references(() => projects.id, { onDelete: "cascade" }),
 		score: integer("score").notNull(), // 1-5, validated at application layer
 		atprotoUri: text("atproto_uri").unique(),
-		createdAt: integer("created_at", { mode: "timestamp_ms" })
-			.default(sql`(unixepoch() * 1000)`)
-			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [uniqueIndex("uq_ratings_user_project").on(table.userId, table.projectId)],
 );
