@@ -21,6 +21,7 @@
 		"decimal.js": "10.6.0",
 		"hono": "^4.7.0",
 		"jose": "6.2.1",
+		"pg-boss": "12.24.1",
 		"resend": "6.9.4",
 		"sanitize-html": "2.17.4",
 		"sharp": "0.34.5",

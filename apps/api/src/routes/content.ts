@@ -150,9 +150,10 @@ const contentRoutes = new Hono()
 		}
 
 		if (tag) {
-			// SQLite JSON: project.tags is stored as a JSON text array; check
-			// containment via json_each.
-			conditions.push(sql`EXISTS (SELECT 1 FROM json_each(${projects.tags}) WHERE value = ${tag})`);
+			// tags is a jsonb text array; check membership via jsonb_array_elements_text.
+			conditions.push(
+				sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${projects.tags}) AS elem WHERE elem = ${tag})`,
+			);
 		}
 
 		if (search) {
@@ -179,10 +180,10 @@ const contentRoutes = new Hono()
 				];
 				break;
 			case "trending": {
-				const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+				const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 				orderClause = [
 					desc(
-						sql`COALESCE((SELECT count(*) FROM attention_events WHERE project_id = ${projects.id} AND created_at >= ${sevenDaysAgoMs}), 0)`,
+						sql`COALESCE((SELECT count(*) FROM attention_events WHERE project_id = ${projects.id} AND created_at >= ${sevenDaysAgo}), 0)`,
 					),
 					desc(projects.viewCount),
 					desc(projects.createdAt),
@@ -795,7 +796,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
+			await queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
 		} else if (data.contentType === "audio" && data.audioFile) {
 			const [job] = await db
 				.insert(transcodingJobs)
@@ -805,7 +806,7 @@ const contentRoutes = new Hono()
 					status: "pending",
 				})
 				.returning();
-			queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
+			await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
 		}
 
 		// TODO: ATProto sync

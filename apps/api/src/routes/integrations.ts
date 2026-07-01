@@ -164,8 +164,8 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		// createdAt is stored as ms-epoch INTEGER; convert to ISO date for grouping.
-		const dateExpr = sql<string>`DATE(${attentionEvents.createdAt} / 1000, 'unixepoch')`;
+		// Group attention events by UTC calendar day of their timestamp.
+		const dateExpr = sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 		const timeseries = await db
 			.select({
 				date: dateExpr,
@@ -334,7 +334,7 @@ const integrationRoutes = new Hono()
 				})
 				.returning();
 
-			queue.send(
+			await queue.send(
 				QUEUES.CROSS_PUBLISH,
 				{ crossPublishId: result.id },
 				JOB_OPTIONS[QUEUES.CROSS_PUBLISH],
