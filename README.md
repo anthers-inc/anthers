@@ -24,7 +24,10 @@ cp .env.example .env
 # Install dependencies
 bun install
 
-# Run database migrations (creates ./data/anthers.sqlite)
+# Start the local Postgres (Docker; see compose.yaml)
+make db-up
+
+# Run database migrations
 bun run db:migrate
 
 # (Optional) Seed the database
@@ -33,6 +36,8 @@ bun run db:seed
 # Start all services
 bun run dev
 ```
+
+Dev requires a local Postgres — `make db-up` starts one in Docker (the hub left SQLite behind; production uses DigitalOcean Managed Postgres).
 
 The API runs on `http://localhost:8000` and the frontend on `http://localhost:3000`.
 
@@ -51,6 +56,9 @@ The API runs on `http://localhost:8000` and the frontend on `http://localhost:30
 
 | Command | Description |
 |---|---|
+| `make db-up` | Start the local dev Postgres (Docker, detached) |
+| `make db-down` | Stop the local dev Postgres (keeps data) |
+| `make db-reset` | Recreate the dev Postgres from scratch (wipes data) |
 | `bun run db:generate` | Generate migrations from schema changes |
 | `bun run db:migrate` | Run migrations |
 | `bun run db:push` | Push schema directly (dev only) |
@@ -106,8 +114,8 @@ packages/
 | Runtime | Bun |
 | Backend | Hono + Drizzle ORM |
 | Frontend | React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5 |
-| Database | SQLite today → **managed Postgres** for the hub (migration in progress) |
-| Async Jobs | Custom SQLite-backed queue (in-process; cron via croner) |
+| Database | **Managed Postgres** for the hub (SQLite remains for future creator nodes) |
+| Async Jobs | pg-boss (Postgres-backed queue + cron), separate worker process |
 | Media | FFmpeg (HLS, audio normalization, waveforms) |
 | Image Processing | sharp |
 | Payments | Stripe Connect |
@@ -119,9 +127,9 @@ packages/
 
 ### Backend
 
-The API is a Hono application on Bun with session-based authentication (argon2id password hashing, SQLite session store, CSRF via Origin header checking). No JWT or token auth.
+The API is a Hono application on Bun with session-based authentication (argon2id password hashing, Postgres session store, CSRF via Origin header checking). No JWT or token auth.
 
-Async jobs run on a small SQLite-backed queue (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. The queue uses its own SQLite file (`./data/anthers-queue.sqlite`) to keep claim transactions isolated from app writes.
+Async jobs run on pg-boss (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. pg-boss keeps its own tables in the app database's `pgboss` schema and provides cron scheduling with multi-instance dedup.
 
 Storage is abstracted behind a `StorageService` interface with local (dev) and S3 (prod) implementations.
 
@@ -147,9 +155,9 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLite connection (default `file:./data/anthers.sqlite`) |
-| `QUEUE_DATABASE_URL` | Queue SQLite connection (default `file:./data/anthers-queue.sqlite`) |
+| `DATABASE_URL` | Postgres connection (default `postgres://anthers:anthers@localhost:5432/anthers`) |
 | `SESSION_SECRET` | Secret for session signing |
+| `SITE_PASSWORD` | Pre-launch gate password (empty disables the gate) |
 | `STORAGE_BACKEND` | `local` or `s3` |
 | `STRIPE_SECRET_KEY` | Stripe API key |
 | `ATPROTO_CLIENT_ID` | ATProto OAuth client ID |
