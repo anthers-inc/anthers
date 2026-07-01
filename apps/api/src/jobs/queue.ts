@@ -1,78 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Lightweight SQLite-backed job queue with cron scheduling.
+ * pg-boss-backed job queue with cron scheduling.
  *
- * Provides a small subset of the pg-boss API the app uses: send / work /
- * schedule / start / stop.
+ * Exposes the small subset the app uses — send / work / schedule / start /
+ * stop — behind the same interface the previous SQLite queue presented, so
+ * call sites are unchanged. pg-boss manages its own tables in the `pgboss`
+ * schema of the app's Postgres database (created/migrated on start), and
+ * handles cron firing + multi-instance dedup natively, retiring the old
+ * croner + cron_locks machinery.
  *
- * The queue lives in its own SQLite file (default ./data/anthers-queue.sqlite)
- * separate from the app DB. SQLite serializes writers per-database-file, so
- * keeping the queue separate means BEGIN IMMEDIATE on a job claim doesn't
- * stall application writes, and vice versa.
+ * Hub-only: the future creator-node role keeps an in-process SQLite queue.
  *
- * Schema is bootstrapped imperatively (CREATE TABLE IF NOT EXISTS) on start.
- * If a future change needs to alter the queue schema, version it via
- * PRAGMA user_version and a small migration block here — drizzle migrations
- * are reserved for app domain schema only.
+ * pg-boss's own `localConcurrency` work option maps exactly to the prior
+ * queue's semantics: N independent per-node workers, each fetching one job
+ * at a time (batchSize defaults to 1), so a thrown handler fails only that
+ * one job — the "no batch-failure footgun" property is preserved.
  */
 
-import { Database } from "bun:sqlite";
-import { resolve } from "node:path";
-import { Cron } from "croner";
+import { PgBoss } from "pg-boss";
 
-// Resolve the queue DB path relative to the project root (this file lives at
-// apps/api/src/jobs/queue.ts; root is four ../). Keeps the default working
-// regardless of cwd — bun --filter changes cwd to the workspace dir.
-// bun:sqlite takes a bare path, so the file: URL scheme is stripped first.
-const projectRoot = resolve(import.meta.dir, "..", "..", "..", "..");
-const rawQueueUrl = (process.env.QUEUE_DATABASE_URL ?? "file:./data/anthers-queue.sqlite").replace(
-	/^file:/,
-	"",
-);
-const QUEUE_DATABASE_URL = rawQueueUrl.startsWith("/")
-	? rawQueueUrl
-	: resolve(projectRoot, rawQueueUrl);
-
-// ── Queue schema (imperative bootstrap) ──────────────────────────────────────
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS queue_jobs (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	queue TEXT NOT NULL,
-	data TEXT NOT NULL DEFAULT '{}',
-	state TEXT NOT NULL DEFAULT 'created',
-	retry_count INTEGER NOT NULL DEFAULT 0,
-	retry_limit INTEGER NOT NULL DEFAULT 0,
-	retry_delay_seconds INTEGER NOT NULL DEFAULT 0,
-	expire_in_ms INTEGER,
-	start_after_ms INTEGER NOT NULL,
-	started_at_ms INTEGER,
-	completed_at_ms INTEGER,
-	error TEXT,
-	created_at_ms INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_queue_jobs_pickup
-	ON queue_jobs(queue, state, start_after_ms);
-CREATE INDEX IF NOT EXISTS idx_queue_jobs_reaper
-	ON queue_jobs(state, started_at_ms);
-
--- Cron dedupe: one row per (queue, minute-bucketed fire time).
--- Lets queue.schedule() be safely called from any process — only the
--- writer that wins the unique-insert race actually enqueues.
-CREATE TABLE IF NOT EXISTS cron_locks (
-	queue TEXT NOT NULL,
-	fire_at_minute INTEGER NOT NULL,
-	PRIMARY KEY (queue, fire_at_minute)
-);
-`;
-
-const REAPER_INTERVAL_MS = 30_000;
+const CONNECTION = process.env.DATABASE_URL ?? "postgres://anthers:anthers@localhost:5432/anthers";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface SendOptions {
 	retryLimit?: number;
-	retryDelay?: number; // seconds, flat — exponential backoff would derive from retry_count
+	retryDelay?: number; // seconds, flat
 	expireInMinutes?: number;
 	startAfter?: number; // ms epoch
 }
@@ -83,284 +36,77 @@ export interface WorkOptions {
 }
 
 export interface Job<T> {
-	id: number;
+	id: string;
 	data: T;
 }
 
 export type Handler<T> = (jobs: Job<T>[]) => Promise<void> | void;
 
-interface JobRow {
-	id: number;
-	queue: string;
-	data: string;
-	state: string;
-	retry_count: number;
-	retry_limit: number;
-	retry_delay_seconds: number;
-	expire_in_ms: number | null;
-	start_after_ms: number;
-	started_at_ms: number | null;
-	completed_at_ms: number | null;
-	error: string | null;
-	created_at_ms: number;
+function toBossSendOptions(options?: SendOptions): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	if (options?.retryLimit !== undefined) out.retryLimit = options.retryLimit;
+	if (options?.retryDelay !== undefined) out.retryDelay = options.retryDelay;
+	if (options?.expireInMinutes !== undefined) out.expireInSeconds = options.expireInMinutes * 60;
+	if (options?.startAfter !== undefined) out.startAfter = new Date(options.startAfter);
+	return out;
 }
 
 // ── Queue implementation ─────────────────────────────────────────────────────
 
 class JobQueue {
-	private db: Database;
-	private workers: Array<{ stop: () => void }> = [];
-	private crons: Cron[] = [];
-	private reaperTimer: ReturnType<typeof setInterval> | null = null;
+	private boss: PgBoss;
 	private started = false;
-	private shuttingDown = false;
-	private activeHandlers = new Set<Promise<unknown>>();
 
 	constructor() {
-		this.db = new Database(QUEUE_DATABASE_URL, { create: true });
-		// busy_timeout is essential: SQLite serializes writers across processes
-		// (WAL helps reads, not writes). 5s gives the API and worker plenty of
-		// runway to retry transparently before SQLITE_BUSY surfaces.
-		this.db.exec("PRAGMA busy_timeout = 5000;");
-		this.db.exec("PRAGMA journal_mode = WAL;");
-		this.db.exec(SCHEMA);
+		this.boss = new PgBoss(CONNECTION);
+		// pg-boss surfaces background failures via the error event; without a
+		// listener these would become unhandled 'error' emissions.
+		this.boss.on("error", (err) => console.error("[queue] pg-boss error:", err));
 	}
-
-	/** No-op; kept for API compatibility with pg-boss usage sites. */
-	createQueue(_name: string): void {}
 
 	async start(): Promise<void> {
+		await this.boss.start();
+		// createQueue is idempotent (INSERT ... ON CONFLICT DO NOTHING); a queue
+		// must exist before send/work/schedule can target it.
+		for (const name of Object.values(QUEUES)) {
+			await this.boss.createQueue(name);
+		}
 		this.started = true;
-		this.reapStaleJobs();
-		this.reaperTimer = setInterval(() => this.reapStaleJobs(), REAPER_INTERVAL_MS);
 	}
 
-	send<T>(queue: string, data: T, options?: SendOptions): number {
-		const now = Date.now();
-		const startAfter = options?.startAfter ?? now;
-		const expireInMs = options?.expireInMinutes ? options.expireInMinutes * 60 * 1000 : null;
-		const result = this.db
-			.query<{ id: number }, [string, string, number, number, number | null, number, number]>(
-				`INSERT INTO queue_jobs
-					(queue, data, retry_limit, retry_delay_seconds, expire_in_ms, start_after_ms, created_at_ms)
-					VALUES (?, ?, ?, ?, ?, ?, ?)
-					RETURNING id`,
-			)
-			.get(
-				queue,
-				JSON.stringify(data ?? {}),
-				options?.retryLimit ?? 0,
-				options?.retryDelay ?? 0,
-				expireInMs,
-				startAfter,
-				now,
-			);
-		return result?.id ?? -1;
+	send<T>(queue: string, data: T, options?: SendOptions): Promise<string | null> {
+		return this.boss.send(queue, (data ?? {}) as object, toBossSendOptions(options));
 	}
 
-	work<T>(
+	async work<T>(
 		queue: string,
 		optionsOrHandler: WorkOptions | Handler<T>,
 		maybeHandler?: Handler<T>,
-	): void {
+	): Promise<void> {
 		const options = typeof optionsOrHandler === "function" ? {} : optionsOrHandler;
 		const handler = typeof optionsOrHandler === "function" ? optionsOrHandler : maybeHandler;
 		if (!handler) throw new Error(`work(${queue}): missing handler`);
 
-		const concurrency = options.localConcurrency ?? 1;
-		const pollMs = options.pollIntervalMs ?? 1000;
-
-		let inFlight = 0;
-		let stopped = false;
-
-		const tick = async () => {
-			if (stopped || this.shuttingDown) return;
-			while (inFlight < concurrency) {
-				const claimed = this.claimOne(queue);
-				if (!claimed) return;
-				inFlight++;
-				const job: Job<T> = { id: claimed.id, data: JSON.parse(claimed.data) as T };
-				const work = (async () => {
-					// One job per handler invocation: a thrown handler only fails the
-					// one job, not a whole batch. The Job[] argument is preserved for
-					// API parity but is always length 1.
-					try {
-						await handler([job]);
-						this.markCompleted(job.id);
-					} catch (err) {
-						const message = err instanceof Error ? err.message : String(err);
-						this.markFailed(job.id, message);
-					} finally {
-						inFlight--;
-					}
-				})();
-				this.activeHandlers.add(work);
-				work.finally(() => this.activeHandlers.delete(work));
-			}
-		};
-
-		const interval = setInterval(tick, pollMs);
-		this.workers.push({
-			stop: () => {
-				stopped = true;
-				clearInterval(interval);
+		await this.boss.work<T>(
+			queue,
+			{
+				// batchSize defaults to 1 — one job per handler invocation.
+				localConcurrency: options.localConcurrency ?? 1,
+				pollingIntervalSeconds: options.pollIntervalMs ? options.pollIntervalMs / 1000 : 2,
 			},
-		});
+			async (jobs) => {
+				await handler(jobs.map((j) => ({ id: j.id, data: j.data })));
+			},
+		);
 	}
 
-	schedule(queue: string, cronExpr: string, data: unknown = {}): void {
-		const cron = new Cron(cronExpr, () => {
-			if (this.shuttingDown) return;
-			// Bucket fires to minute granularity (every queue.schedule cron we use
-			// has minute-level resolution). Insert OR IGNORE on the lock table:
-			// if another process already enqueued this firing, ours is dropped.
-			const minuteBucket = Math.floor(Date.now() / 60_000);
-			const lock = this.db
-				.query<unknown, [string, number]>(
-					"INSERT OR IGNORE INTO cron_locks (queue, fire_at_minute) VALUES (?, ?)",
-				)
-				.run(queue, minuteBucket);
-			if (lock.changes === 0) return; // another process won the race
-			this.send(queue, data);
-		});
-		this.crons.push(cron);
+	async schedule(queue: string, cronExpr: string, data: object = {}): Promise<void> {
+		await this.boss.schedule(queue, cronExpr, data);
 	}
 
 	async stop(opts?: { graceful?: boolean; timeout?: number }): Promise<void> {
-		this.shuttingDown = true;
-		for (const w of this.workers) w.stop();
-		for (const c of this.crons) c.stop();
-		if (this.reaperTimer) clearInterval(this.reaperTimer);
-		this.workers = [];
-		this.crons = [];
-		this.reaperTimer = null;
-
-		if (opts?.graceful !== false) {
-			const timeout = opts?.timeout ?? 30_000;
-			const deadline = Date.now() + timeout;
-			while (this.activeHandlers.size > 0 && Date.now() < deadline) {
-				await Promise.race([
-					Promise.allSettled([...this.activeHandlers]),
-					new Promise((r) => setTimeout(r, 250)),
-				]);
-			}
-		}
-		this.db.close();
+		await this.boss.stop({ graceful: opts?.graceful ?? true, timeout: opts?.timeout });
 		this.started = false;
-		this.shuttingDown = false;
-	}
-
-	// ── Internal ──────────────────────────────────────────────────────────────
-
-	/**
-	 * Atomically claim one job. Wrapped in BEGIN IMMEDIATE so the write lock
-	 * is held before the candidate SELECT runs — without this, two workers
-	 * could read the same candidate set and only one's UPDATE would actually
-	 * change rows, wasting a poll cycle on the loser.
-	 */
-	private claimOne(queue: string): JobRow | null {
-		const now = Date.now();
-		this.db.exec("BEGIN IMMEDIATE");
-		try {
-			const row = this.db
-				.query<JobRow, [number, string, number]>(
-					`UPDATE queue_jobs
-						SET state = 'active', started_at_ms = ?
-						WHERE id = (
-							SELECT id FROM queue_jobs
-							WHERE queue = ?
-								AND state = 'created'
-								AND start_after_ms <= ?
-							ORDER BY id
-							LIMIT 1
-						)
-						RETURNING *`,
-				)
-				.get(now, queue, now);
-			this.db.exec("COMMIT");
-			return row ?? null;
-		} catch (err) {
-			this.db.exec("ROLLBACK");
-			throw err;
-		}
-	}
-
-	private markCompleted(id: number): void {
-		this.db
-			.query<unknown, [number, number]>(
-				"UPDATE queue_jobs SET state = 'completed', completed_at_ms = ? WHERE id = ?",
-			)
-			.run(Date.now(), id);
-	}
-
-	private markFailed(id: number, error: string): void {
-		const row = this.db.query<JobRow, [number]>("SELECT * FROM queue_jobs WHERE id = ?").get(id);
-		if (!row) return;
-
-		const now = Date.now();
-		if (row.retry_count < row.retry_limit) {
-			this.db
-				.query<unknown, [string, number, number]>(
-					`UPDATE queue_jobs
-						SET state = 'created',
-							retry_count = retry_count + 1,
-							error = ?,
-							started_at_ms = NULL,
-							start_after_ms = ?
-						WHERE id = ?`,
-				)
-				.run(error, now + row.retry_delay_seconds * 1000, id);
-		} else {
-			this.db
-				.query<unknown, [string, number]>(
-					"UPDATE queue_jobs SET state = 'failed', error = ? WHERE id = ?",
-				)
-				.run(error, id);
-		}
-	}
-
-	/**
-	 * Reaper: handles two cases for active jobs whose handler has hung past
-	 * expire_in_ms — (1) retries available → back to created with a delay,
-	 * (2) retry budget exhausted → straight to failed (no more doomed attempts).
-	 * Runs on start and on a periodic timer.
-	 */
-	private reapStaleJobs(): void {
-		const now = Date.now();
-		// Failure path first: stale jobs at retry limit go straight to failed.
-		this.db
-			.query<unknown, [number]>(
-				`UPDATE queue_jobs
-					SET state = 'failed',
-						error = COALESCE(error, 'reaper: handler exceeded expire_in_ms')
-					WHERE state = 'active'
-						AND expire_in_ms IS NOT NULL
-						AND (started_at_ms + expire_in_ms) < ?
-						AND retry_count >= retry_limit`,
-			)
-			.run(now);
-		// Retry path: requeue with delay.
-		this.db
-			.query<unknown, [number, number]>(
-				`UPDATE queue_jobs
-					SET state = 'created',
-						retry_count = retry_count + 1,
-						started_at_ms = NULL,
-						start_after_ms = ?,
-						error = COALESCE(error, 'reaper: handler exceeded expire_in_ms')
-					WHERE state = 'active'
-						AND expire_in_ms IS NOT NULL
-						AND (started_at_ms + expire_in_ms) < ?
-						AND retry_count < retry_limit`,
-			)
-			.run(now, now);
-
-		// Garbage-collect old cron locks (older than 1 day) so the table
-		// doesn't grow unbounded.
-		const dayAgoMinute = Math.floor((now - 24 * 60 * 60 * 1000) / 60_000);
-		this.db
-			.query<unknown, [number]>("DELETE FROM cron_locks WHERE fire_at_minute < ?")
-			.run(dayAgoMinute);
 	}
 
 	get isStarted(): boolean {

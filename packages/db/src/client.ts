@@ -1,28 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { Database as SqliteDatabase } from "bun:sqlite";
-import { resolve } from "node:path";
-import { drizzle } from "drizzle-orm/bun-sqlite";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema/index.js";
 
-// Resolve relative DATABASE_URLs against the project root (import.meta.dir
-// is packages/db/src). This keeps the default working regardless of which
-// workspace the command was launched from — bun --filter changes cwd.
-// bun:sqlite's Database constructor takes a bare path, so the file: URL
-// scheme is stripped before resolution.
-const projectRoot = resolve(import.meta.dir, "..", "..", "..");
-const raw = (process.env.DATABASE_URL ?? "file:./data/anthers.sqlite").replace(/^file:/, "");
-const url = raw.startsWith("/") ? raw : resolve(projectRoot, raw);
+// The hub runs on Postgres (DigitalOcean Managed Postgres in prod, a local
+// containerized Postgres in dev — see docker-compose.yml). SQLite remains the
+// engine for the future creator-node role, not this client.
+//
+// postgres.js (not Bun's built-in SQL): drizzle's bun-sql driver double-encodes
+// jsonb (stores '["a"]' as a jsonb *string* rather than an array), which breaks
+// the jsonb columns (tags, dpopJwk, waveformData). postgres.js stores jsonb
+// correctly and still returns numeric/bigint as strings (preserving decimal.js
+// precision) and timestamptz as Date.
+//
+// DATABASE_URL is required; the dev default targets the local compose Postgres.
+const url = process.env.DATABASE_URL ?? "postgres://anthers:anthers@localhost:5432/anthers";
 
-const sqlite = new SqliteDatabase(url, { create: true });
+const client = postgres(url);
 
-// foreign_keys: required for ON DELETE CASCADE / SET NULL.
-// busy_timeout: SQLite serializes writers per-file; this gives concurrent
-//   writers (API + worker, even though the queue lives in its own file)
-//   transparent retry headroom before SQLITE_BUSY surfaces.
-// journal_mode WAL: lets readers run alongside the active writer.
-sqlite.exec("PRAGMA foreign_keys = ON;");
-sqlite.exec("PRAGMA busy_timeout = 5000;");
-sqlite.exec("PRAGMA journal_mode = WAL;");
-
-export const db = drizzle(sqlite, { schema });
+export const db = drizzle(client, { schema });
 export type Database = typeof db;

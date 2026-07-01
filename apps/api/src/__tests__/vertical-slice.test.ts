@@ -21,7 +21,7 @@ describe("Vertical Slice", () => {
 
 	beforeAll(async () => {
 		// Clean up any leftover test data from previous runs
-		await db.run(sql`DELETE FROM projects WHERE slug = 'test-game-${sql.raw(testId)}'`);
+		await db.execute(sql`DELETE FROM projects WHERE slug = 'test-game-${sql.raw(testId)}'`);
 	});
 
 	it("health check returns ok", async () => {

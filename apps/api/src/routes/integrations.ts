@@ -33,32 +33,32 @@ const integrationRoutes = new Hono()
 
 		const [overview] = await db
 			.select({
-				totalEvents: sql<number>`COUNT(*)`,
-				totalDuration: sql<number>`COALESCE(SUM(duration_seconds), 0)`,
-				uniqueViewers: sql<number>`COUNT(DISTINCT user_id)`,
-				views: sql<number>`COUNT(*) FILTER (WHERE event_type = 'page_view')`,
-				plays: sql<number>`COUNT(*) FILTER (WHERE event_type = 'play')`,
-				watches: sql<number>`COUNT(*) FILTER (WHERE event_type = 'watch')`,
-				reads: sql<number>`COUNT(*) FILTER (WHERE event_type = 'read')`,
-				listens: sql<number>`COUNT(*) FILTER (WHERE event_type = 'listen')`,
+				totalEvents: sql<number>`COUNT(*)::int`,
+				totalDuration: sql<number>`COALESCE(SUM(duration_seconds), 0)::float`,
+				uniqueViewers: sql<number>`COUNT(DISTINCT user_id)::int`,
+				views: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'page_view'))::int`,
+				plays: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'play'))::int`,
+				watches: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'watch'))::int`,
+				reads: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'read'))::int`,
+				listens: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'listen'))::int`,
 			})
 			.from(attentionEvents)
 			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)));
 
 		// Content counts
 		const [projectCount] = await db
-			.select({ count: sql<number>`COUNT(*)` })
+			.select({ count: sql<number>`COUNT(*)::int` })
 			.from(projects)
 			.where(eq(projects.creatorId, user.id));
 
 		const [postCount] = await db
-			.select({ count: sql<number>`COUNT(*)` })
+			.select({ count: sql<number>`COUNT(*)::int` })
 			.from(posts)
 			.where(eq(posts.creatorId, user.id));
 
 		// Cross-publish stats
 		const [publishCount] = await db
-			.select({ count: sql<number>`COUNT(*)` })
+			.select({ count: sql<number>`COUNT(*)::int` })
 			.from(crossPublishResults)
 			.where(eq(crossPublishResults.userId, user.id));
 
@@ -96,8 +96,8 @@ const integrationRoutes = new Hono()
 					projectId: attentionEvents.projectId,
 					projectTitle: projects.title,
 					projectSlug: projects.slug,
-					eventCount: sql<number>`COUNT(*)`,
-					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)`,
+					eventCount: sql<number>`COUNT(*)::int`,
+					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
 				})
 				.from(attentionEvents)
 				.innerJoin(projects, eq(attentionEvents.projectId, projects.id))
@@ -129,8 +129,8 @@ const integrationRoutes = new Hono()
 				.select({
 					postId: attentionEvents.postId,
 					postTitle: posts.title,
-					eventCount: sql<number>`COUNT(*)`,
-					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)`,
+					eventCount: sql<number>`COUNT(*)::int`,
+					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
 				})
 				.from(attentionEvents)
 				.innerJoin(posts, eq(attentionEvents.postId, posts.id))
@@ -164,16 +164,16 @@ const integrationRoutes = new Hono()
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-		// createdAt is stored as ms-epoch INTEGER; convert to ISO date for grouping.
-		const dateExpr = sql<string>`DATE(${attentionEvents.createdAt} / 1000, 'unixepoch')`;
+		// Group attention events by UTC calendar day of their timestamp.
+		const dateExpr = sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 		const timeseries = await db
 			.select({
 				date: dateExpr,
-				views: sql<number>`COUNT(*) FILTER (WHERE event_type = 'page_view')`,
-				plays: sql<number>`COUNT(*) FILTER (WHERE event_type = 'play')`,
-				watches: sql<number>`COUNT(*) FILTER (WHERE event_type = 'watch')`,
-				reads: sql<number>`COUNT(*) FILTER (WHERE event_type = 'read')`,
-				listens: sql<number>`COUNT(*) FILTER (WHERE event_type = 'listen')`,
+				views: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'page_view'))::int`,
+				plays: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'play'))::int`,
+				watches: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'watch'))::int`,
+				reads: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'read'))::int`,
+				listens: sql<number>`(COUNT(*) FILTER (WHERE event_type = 'listen'))::int`,
 			})
 			.from(attentionEvents)
 			.where(and(eq(attentionEvents.creatorId, user.id), gte(attentionEvents.createdAt, since)))
@@ -334,7 +334,7 @@ const integrationRoutes = new Hono()
 				})
 				.returning();
 
-			queue.send(
+			await queue.send(
 				QUEUES.CROSS_PUBLISH,
 				{ crossPublishId: result.id },
 				JOB_OPTIONS[QUEUES.CROSS_PUBLISH],

@@ -136,14 +136,12 @@ const accountRoutes = new Hono()
 		const followedUsers = await db
 			.select({
 				user: users,
-				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-						"follower_count",
-					),
-				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-						"project_count",
-					),
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+					"follower_count",
+				),
+				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+					"project_count",
+				),
 			})
 			.from(users)
 			.innerJoin(
@@ -210,14 +208,12 @@ const accountRoutes = new Hono()
 		const creatorList = await db
 			.select({
 				user: users,
-				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-						"follower_count",
-					),
-				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-						"project_count",
-					),
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+					"follower_count",
+				),
+				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+					"project_count",
+				),
 				...(currentUserId
 					? {
 							isFollowing:
@@ -249,14 +245,12 @@ const accountRoutes = new Hono()
 		const result = await db
 			.select({
 				user: users,
-				followerCount:
-					sql<number>`(SELECT count(*) FROM follows WHERE creator_id = ${users.id})`.as(
-						"follower_count",
-					),
-				projectCount:
-					sql<number>`(SELECT count(*) FROM projects WHERE creator_id = ${users.id})`.as(
-						"project_count",
-					),
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+					"follower_count",
+				),
+				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+					"project_count",
+				),
 				...(currentUserId
 					? {
 							isFollowing:

@@ -1,136 +1,130 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# DigitalOcean App Platform spec
+# DigitalOcean App Platform spec for the Anthers hub.
 #
-# DECIDED 2026-07-01 (production database hosting strategy): MANAGED POSTGRES.
-#   The centralized hub deploys to App Platform with a DO Managed Postgres
-#   database — NOT SQLite on a volume. This dissolves the old blocker: SQLite
-#   needed one shared disk, but App Platform volumes mount to a single
-#   instance_count:1 service and can't be shared across the API, worker, and
-#   migrate job. Rather than the earlier options (A collapse-worker /
-#   B leave-App-Platform / C external-queue-only), the hub moves its DB off
-#   the volume to managed Postgres, and the worker returns as its own
-#   component. SQLite remains the engine for the future creator-node role.
-#   Rationale: 40-49 Architecture / 36 Key Technical Decisions + 31.1
-#   Federation Topology in the Obsidian vault.
+# Shape (decided 2026-07-01, hub on Managed Postgres):
+#   - databases: a managed Postgres, bound to the app as ${anthers-db.DATABASE_URL}
+#   - api        service   — Hono API (Dockerfile + FFmpeg), serves /api and /health
+#   - worker     worker    — pg-boss job worker (transcode/audio/cross-publish + crons)
+#   - migrate    PRE_DEPLOY job — runs Drizzle migrations before each release
+#   - web        static site — the React SPA on the CDN
+# The whole site sits behind SiteGate (SITE_PASSWORD) until public launch.
 #
-#   SPEC RESHAPE PENDING (tracked in the deployment epic): add a `databases:`
-#   block (engine PG) and bind DATABASE_URL to it; restore a `worker`
-#   component; point the migrate job at Postgres; drop the SQLite/volume
-#   framing below. The service/env scaffolding below is retained for
-#   reference until that reshape lands — `doctl apps create` against this
-#   would still fail as-is.
+# Deploys from the `release` branch on push. Apply with:
+#   doctl apps create --spec .do/app.yaml         (first time)
+#   doctl apps update <app-id> --spec .do/app.yaml (thereafter)
+# Secrets (type: SECRET, no value here) are set in the DO dashboard or via
+# `doctl apps update` — never commit their values.
+#
+# Interim postures for the gated skeleton, to tighten before public launch:
+#   - databases: dev-tier Postgres (provisioned with the app). Upgrade to a
+#     dedicated production cluster (production: true + cluster_name) before real
+#     users — there is no real data yet, so it's just re-migrate + re-seed.
+#   - STORAGE_BACKEND=local (ephemeral, unused while gated). Switch to s3 +
+#     provision DO Spaces (bucket + CORS + scoped keys) when media features go live.
+#   - Stripe / ATProto envs are omitted (read lazily; features stubbed/gated) —
+#     add them when those features come online.
 # ──────────────────────────────────────────────────────────────────────────────
 
-spec:
-  name: anthers
-  region: nyc
+name: anthers
+region: nyc
 
-  # Managed Postgres decided 2026-07-01 (see header). A `databases:` block
-  # (engine PG) + a DATABASE_URL binding land in the pending spec reshape;
-  # SQLite-on-a-volume is no longer the plan for the hub.
+databases:
+  - name: anthers-db
+    engine: PG
+    version: "16"
 
-  services:
-    - name: api
-      dockerfile_path: apps/api/Dockerfile
-      source_dir: /
-      http_port: 8000
-      instance_size_slug: professional-xs
-      instance_count: 1
-      routes:
-        - path: /api
-        - path: /health
-      health_check:
-        http_path: /health
-      envs:
-        - key: DATABASE_URL
-          scope: RUN_TIME
-          # Will point at a file on the mounted volume once option (A) or (B)
-          # is chosen above. Example: file:/var/lib/anthers/anthers.sqlite
-          value: PLACEHOLDER
-        - key: QUEUE_DATABASE_URL
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: PORT
-          scope: RUN_TIME
-          value: "8000"
-        - key: FRONTEND_URL
-          scope: RUN_TIME
-          value: ${APP_URL}
-        - key: SESSION_SECRET
-          scope: RUN_TIME
-          type: SECRET
-        - key: SITE_PASSWORD
-          scope: RUN_TIME
-          type: SECRET
-        - key: STORAGE_BACKEND
-          scope: RUN_TIME
-          value: s3
-        - key: SPACES_KEY
-          scope: RUN_TIME
-          type: SECRET
-        - key: SPACES_SECRET
-          scope: RUN_TIME
-          type: SECRET
-        - key: SPACES_BUCKET
-          scope: RUN_TIME
-          value: anthers-media
-        - key: SPACES_REGION
-          scope: RUN_TIME
-          value: nyc3
-        - key: STRIPE_SECRET_KEY
-          scope: RUN_TIME
-          type: SECRET
-        - key: STRIPE_PUBLISHABLE_KEY
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: STRIPE_WEBHOOK_SECRET
-          scope: RUN_TIME
-          type: SECRET
-        - key: STRIPE_SUBSCRIPTION_WEBHOOK_SECRET
-          scope: RUN_TIME
-          type: SECRET
-        - key: STRIPE_PRICE_ROOT
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: STRIPE_PRICE_SPROUT
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: STRIPE_PRICE_PETAL
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: STRIPE_PRICE_BLOOM
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: ATPROTO_CLIENT_ID
-          scope: RUN_TIME
-          value: PLACEHOLDER
-        - key: ATPROTO_REDIRECT_URI
-          scope: RUN_TIME
-          value: PLACEHOLDER
+# Shared across api, worker, and the migrate job (inherited by all components).
+envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: ${anthers-db.DATABASE_URL}
+  - key: STORAGE_BACKEND
+    scope: RUN_TIME
+    value: local
 
-  # Worker service intentionally omitted until the volume-sharing question
-  # above is resolved. Under option (A), the queue boots inside the API
-  # service via ensureQueueReady() (already wired up). Under option (B),
-  # restore a separate worker service that mounts the same persistent disk.
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /health
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
 
-  jobs:
-    - name: migrate
-      dockerfile_path: apps/api/Dockerfile
-      source_dir: /
-      kind: PRE_DEPLOY
-      instance_size_slug: basic-xxs
-      instance_count: 1
-      run_command: bun run packages/db/src/migrate.ts
-      envs:
-        - key: DATABASE_URL
-          scope: RUN_TIME
-          value: PLACEHOLDER
+services:
+  - name: api
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    github:
+      repo: anthers-org/Anthers
+      branch: release
+      deploy_on_push: true
+    run_command: bun run apps/api/src/index.ts
+    http_port: 8000
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    health_check:
+      http_path: /health
+    envs:
+      - key: PORT
+        scope: RUN_TIME
+        value: "8000"
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: SESSION_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: SITE_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
 
-  static_sites:
-    - name: web
-      source_dir: /
-      build_command: bun install && bun run --cwd apps/web build
-      output_dir: apps/web/dist
-      catchall_document: index.html
-      routes:
-        - path: /
+workers:
+  - name: worker
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    github:
+      repo: anthers-org/Anthers
+      branch: release
+      deploy_on_push: true
+    run_command: bun run apps/api/src/jobs/worker.ts
+    instance_size_slug: basic-xxs
+    instance_count: 1
+
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    github:
+      repo: anthers-org/Anthers
+      branch: release
+      deploy_on_push: true
+    run_command: bun run packages/db/src/migrate.ts
+    instance_size_slug: basic-xxs
+    instance_count: 1
+
+static_sites:
+  - name: web
+    source_dir: /
+    github:
+      repo: anthers-org/Anthers
+      branch: release
+      deploy_on_push: true
+    build_command: bun install && bun run --cwd apps/web build
+    output_dir: apps/web/dist
+    catchall_document: index.html

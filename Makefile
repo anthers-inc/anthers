@@ -1,7 +1,7 @@
 # ─── Anthers Makefile ───
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
-        db-generate db-migrate db-push db-studio db-seed db-reset \
+        db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         typecheck test lint lint-fix format
 
 API_PORT ?= 8000
@@ -95,30 +95,36 @@ down: ## Stop everything
 		echo "  -> No dev servers running"; \
 	fi
 
-# ─── Database ───
+# ─── Database (Postgres via compose.yaml) ───
+# Dev now runs on a local containerized Postgres (the hub left SQLite). Bring it
+# up once with `make db-up` before `make dev`. Prod uses DO Managed Postgres.
+
+db-up: ## Start the local dev Postgres (detached)
+	docker compose up -d
+
+db-down: ## Stop the local dev Postgres (keeps data)
+	docker compose down
 
 db-generate: ## Generate Drizzle migration from schema changes
 	bun run db:generate
 
 db-migrate: ## Apply pending migrations
-	@mkdir -p data
 	bun run db:migrate
 
 db-push: ## Push schema directly (dev only, no migration files)
-	@mkdir -p data
 	bun run db:push
 
 db-studio: ## Open Drizzle Studio (database GUI)
 	bun run db:studio
 
 db-seed: ## Seed dev database with fake creators/projects/posts
-	@mkdir -p data
 	bun run db:seed
 
-db-reset: ## Wipe the dev SQLite files and reapply the schema
-	@rm -f data/anthers.sqlite data/anthers.sqlite-wal data/anthers.sqlite-shm
-	@rm -f data/anthers-queue.sqlite data/anthers-queue.sqlite-wal data/anthers-queue.sqlite-shm
-	@mkdir -p data
+db-reset: ## Recreate the dev Postgres from scratch and reapply the schema (wipes data)
+	docker compose down -v
+	docker compose up -d
+	@echo "  -> waiting for Postgres to accept connections..."
+	@until docker compose exec -T postgres pg_isready -U anthers -d anthers >/dev/null 2>&1; do sleep 1; done
 	$(MAKE) db-push
 
 # ─── Quality ───

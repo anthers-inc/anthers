@@ -1,78 +1,76 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+	bigint,
+	boolean,
+	integer,
+	numeric,
+	pgTable,
+	serial,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 import { projects } from "./content.js";
 
-export const stripeAccounts = sqliteTable("stripe_accounts", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+export const stripeAccounts = pgTable("stripe_accounts", {
+	id: serial("id").primaryKey(),
 	userId: integer("user_id")
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
 	stripeAccountId: text("stripe_account_id").notNull().unique(),
-	chargesEnabled: integer("charges_enabled", { mode: "boolean" }).default(false),
-	payoutsEnabled: integer("payouts_enabled", { mode: "boolean" }).default(false),
-	onboardingComplete: integer("onboarding_complete", { mode: "boolean" }).default(false),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	chargesEnabled: boolean("charges_enabled").default(false),
+	payoutsEnabled: boolean("payouts_enabled").default(false),
+	onboardingComplete: boolean("onboarding_complete").default(false),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Decimal columns are stored as text to preserve decimal.js precision.
-export const purchases = sqliteTable("purchases", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
+// Decimal columns are stored as numeric to preserve decimal.js precision (app owns rounding).
+export const purchases = pgTable("purchases", {
+	id: serial("id").primaryKey(),
 	buyerId: integer("buyer_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
 	projectId: integer("project_id")
 		.notNull()
 		.references(() => projects.id, { onDelete: "cascade" }),
-	amount: text("amount").notNull(),
-	processingFee: text("processing_fee").notNull(),
-	crfFee: text("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee amount
-	creatorEarnings: text("creator_earnings").notNull(),
+	amount: numeric("amount").notNull(),
+	processingFee: numeric("processing_fee").notNull(),
+	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee amount
+	creatorEarnings: numeric("creator_earnings").notNull(),
 	stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
 	status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
-	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const crfLedger = sqliteTable("crf_ledger", {
-	id: integer("id").primaryKey({ autoIncrement: true }),
-	amount: text("amount").notNull(),
+export const crfLedger = pgTable("crf_ledger", {
+	id: serial("id").primaryKey(),
+	amount: numeric("amount").notNull(),
 	purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
 	description: text("description").notNull(),
-	createdAt: integer("created_at", { mode: "timestamp_ms" })
-		.default(sql`(unixepoch() * 1000)`)
-		.notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
-export const crfSubsidies = sqliteTable(
+export const crfSubsidies = pgTable(
 	"crf_subsidies",
 	{
-		id: integer("id").primaryKey({ autoIncrement: true }),
+		id: serial("id").primaryKey(),
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(),
-		estimatedHostingCost: text("estimated_hosting_cost").notNull(),
-		creatorEarnings: text("creator_earnings").notNull(),
-		subsidyAmount: text("subsidy_amount").notNull(),
-		storageBytes: integer("storage_bytes").default(0),
+		estimatedHostingCost: numeric("estimated_hosting_cost").notNull(),
+		creatorEarnings: numeric("creator_earnings").notNull(),
+		subsidyAmount: numeric("subsidy_amount").notNull(),
+		// Byte counts can exceed 2^31 — bigint, not integer.
+		storageBytes: bigint("storage_bytes", { mode: "number" }).default(0),
 		projectCount: integer("project_count").default(0),
 		postCount: integer("post_count").default(0),
-		createdAt: integer("created_at", { mode: "timestamp_ms" })
-			.default(sql`(unixepoch() * 1000)`)
-			.notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
 		uniqueIndex("uq_crf_subsidies_creator_cycle").on(table.creatorId, table.billingCycle),

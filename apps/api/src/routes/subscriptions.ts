@@ -269,8 +269,8 @@ const subscriptionRoutes = new Hono()
 
 		const [summary] = await db
 			.select({
-				totalSeconds: sql<number>`COALESCE(SUM(duration_seconds), 0)`,
-				eventCount: sql<number>`COUNT(*)`,
+				totalSeconds: sql<number>`COALESCE(SUM(duration_seconds), 0)::float`,
+				eventCount: sql<number>`COUNT(*)::int`,
 			})
 			.from(attentionEvents)
 			.where(
@@ -332,7 +332,7 @@ const subscriptionRoutes = new Hono()
 			.select({
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
 				boostTotal: sql<string>`COALESCE(SUM(CAST(boost_amount AS numeric)), 0)`,
-				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)`,
+				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
 			})
 			.from(poolDistributions)
 			.where(
