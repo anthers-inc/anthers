@@ -1,34 +1,33 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # DigitalOcean App Platform spec
 #
-# DEFERRED DECISION (production database hosting strategy):
-#   This config is currently shaped for the Postgres deployment model and is
-#   NOT a working SQLite production deploy. SQLite needs a persistent disk
-#   that the API service, the worker service, and the migrate job can all
-#   read/write. App Platform supports volumes, but with constraints:
-#     - A volume can only be mounted on a service with instance_count: 1.
-#     - Two services cannot mount the same volume.
-#   That means before this app is deployed for real to App Platform, we
-#   need to pick one of:
-#     (A) Collapse the worker into the API process (single service mounts
-#         the volume; ensureQueueReady() boots the worker in the API). Loses
-#         independent scaling/restart of the worker.
-#     (B) Move off App Platform — droplet w/ disk, fly.io w/ volume, or
-#         fly.io + LiteFS for replication. More ops work, more flexibility.
-#     (C) Switch the queue to a separate hosted service (Redis + BullMQ)
-#         and keep SQLite for app data only — but that adds back the
-#         dependency we just removed.
-#   Trigger point: before we send the first non-test traffic to a deployed
-#   environment. Until then this stays as a documentation placeholder, not a
-#   live spec — `doctl apps create` against this would fail.
+# DECIDED 2026-07-01 (production database hosting strategy): MANAGED POSTGRES.
+#   The centralized hub deploys to App Platform with a DO Managed Postgres
+#   database — NOT SQLite on a volume. This dissolves the old blocker: SQLite
+#   needed one shared disk, but App Platform volumes mount to a single
+#   instance_count:1 service and can't be shared across the API, worker, and
+#   migrate job. Rather than the earlier options (A collapse-worker /
+#   B leave-App-Platform / C external-queue-only), the hub moves its DB off
+#   the volume to managed Postgres, and the worker returns as its own
+#   component. SQLite remains the engine for the future creator-node role.
+#   Rationale: 40-49 Architecture / 36 Key Technical Decisions + 31.1
+#   Federation Topology in the Obsidian vault.
+#
+#   SPEC RESHAPE PENDING (tracked in the deployment epic): add a `databases:`
+#   block (engine PG) and bind DATABASE_URL to it; restore a `worker`
+#   component; point the migrate job at Postgres; drop the SQLite/volume
+#   framing below. The service/env scaffolding below is retained for
+#   reference until that reshape lands — `doctl apps create` against this
+#   would still fail as-is.
 # ──────────────────────────────────────────────────────────────────────────────
 
 spec:
   name: anthers
   region: nyc
 
-  # No managed database — SQLite lives on a volume mounted into the service.
-  # See deferred-decision note above for why this isn't wired up yet.
+  # Managed Postgres decided 2026-07-01 (see header). A `databases:` block
+  # (engine PG) + a DATABASE_URL binding land in the pending spec reshape;
+  # SQLite-on-a-volume is no longer the plan for the hub.
 
   services:
     - name: api

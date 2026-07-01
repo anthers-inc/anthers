@@ -3,7 +3,7 @@
 
 ---
 
-A federated, creator-first media platform built on the AT Protocol. Creators host games, videos, audio, and writing — keeping 92% of subscription revenue, with 8% funding the Anthers Foundation, which allocates internally between Creator Resilience Fund charitable programs and organizational operations.
+A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing — keeping 92% of subscription revenue, with 8% funding the Anthers Foundation, which allocates internally between Creator Resilience Fund charitable programs and organizational operations.
 
 Anthers is operated as a non-profit organization that is structurally incapable of prioritizing profit over the people it serves. It cannot be acquired, cannot take corrupting investment, and directs every dollar of surplus into charitable and educational programs for creators through the Creator Resilience Fund.
 
@@ -106,14 +106,14 @@ packages/
 | Runtime | Bun |
 | Backend | Hono + Drizzle ORM |
 | Frontend | React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5 |
-| Database | SQLite (via Bun's built-in driver) |
+| Database | SQLite today → **managed Postgres** for the hub (migration in progress) |
 | Async Jobs | Custom SQLite-backed queue (in-process; cron via croner) |
 | Media | FFmpeg (HLS, audio normalization, waveforms) |
 | Image Processing | sharp |
 | Payments | Stripe Connect |
 | Storage | S3-compatible (DigitalOcean Spaces; local filesystem in dev) |
 | Linting/Formatting | Biome 2 |
-| Deployment | DigitalOcean App Platform |
+| Deployment | DigitalOcean App Platform + Managed Postgres (centralized hub) |
 
 ## Architecture
 
@@ -131,7 +131,7 @@ A React SPA built with Bun's built-in bundler (no Vite, no PostCSS). TailwindCSS
 
 ### ATProto Integration
 
-Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables include `atprotoUri` columns in preparation for federation.
+Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables include `atprotoUri` columns as a cheap hook for future federation. Note: ATProto adoption is currently **deferred** — Anthers is centralized-first and, when federation is built, it's bespoke-first; ATProto is a re-openable choice for the eventual protocol layer, not a current dependency.
 
 ## Key Concepts
 
@@ -156,7 +156,7 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 ## Deployment
 
-Deployment will be handled by DigitalOcean App Platform via `.do/app.yaml`. The current spec is a documentation placeholder — see the deferred-decision note at the top of `.do/app.yaml` for the open question about how SQLite + the worker process interact with App Platform's volume constraints. This needs a decision before the first non-test deploy.
+The centralized **hub** deploys to DigitalOcean App Platform with a managed Postgres database (decided 2026-07-01, superseding the earlier single-droplet direction). Moving the hub's DB from SQLite to managed Postgres dissolves the App Platform volume constraint; the worker runs as its own component, a pre-deploy job runs migrations, and the SPA is served as a static site. `.do/app.yaml` is being reshaped from placeholder into the live spec — see its header. SQLite remains the engine for the future self-hostable creator-node role.
 
 ## License
 
