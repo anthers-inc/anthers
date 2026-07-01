@@ -213,10 +213,10 @@ export default function ForCreatorsPage() {
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
 									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine label="Anthers Foundation Fee (3%)" amount="$0.30" />
+									<ReceiptLine label="Anthers Foundation Fee (8%)" amount="$0.80" />
 									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
-									<ReceiptLine label="You pay" amount="$10.90" bold />
+									<ReceiptLine label="You pay" amount="$11.40" bold />
 								</div>
 								<p className="text-xs text-base-content/40 mt-3">
 									Creator receives $10.00—every time.
@@ -255,7 +255,7 @@ export default function ForCreatorsPage() {
 								<div>
 									<h4 className="font-semibold text-sm">Anthers Foundation</h4>
 									<p className="text-sm text-base-content/60">
-										3% of transactions funds the Anthers Foundation, which allocates between
+										8% of transactions funds the Anthers Foundation, which allocates between
 										charitable programs and organizational operations. It's a community investment,
 										not a platform tax.
 									</p>

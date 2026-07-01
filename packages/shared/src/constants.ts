@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export const APP_NAME = "Anthers";
-export const CRF_PERCENTAGE = 3; // Legacy constant; use FOUNDATION_FEE_PERCENTAGE instead
-export const FOUNDATION_FEE_PERCENTAGE = 3; // Anthers Foundation Fee: 3% of direct purchase transactions
-export const SUBSCRIPTION_FOUNDATION_RATE = 8; // Anthers Foundation Fee: 8% of subscription revenue
+/**
+ * Anthers Foundation Fee — a single unified 8% rate applied to BOTH subscription
+ * revenue and direct-purchase transactions. This is the one source of truth for
+ * the Foundation Fee percentage; import it wherever the fee is computed rather
+ * than hardcoding a literal, so the rate can never drift between call sites.
+ */
+export const FOUNDATION_FEE_PERCENTAGE = 8;

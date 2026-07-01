@@ -188,10 +188,12 @@ export interface StripeAccountStatus {
 }
 
 export interface CheckoutResponse {
-	amount: string;
+	amount: string; // listed price — what the creator receives (pass-through)
 	processingFee: string;
+	deliveryFee: string; // download bandwidth
 	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
 	creatorEarnings: string;
+	buyerTotal: string; // price + fees — what the buyer is charged
 	clientSecret: string;
 	message: string;
 }

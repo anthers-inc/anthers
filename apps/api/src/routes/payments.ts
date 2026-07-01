@@ -8,6 +8,7 @@
 
 import { db } from "@anthers/db/client";
 import {
+	assets,
 	crfLedger,
 	crfSubsidies,
 	projects,
@@ -15,25 +16,11 @@ import {
 	stripeAccounts,
 	users,
 } from "@anthers/db/schema";
+import { calculateFees } from "@anthers/shared/fees";
+import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth.js";
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const FOUNDATION_FEE_PERCENTAGE = 0.03; // Anthers Foundation Fee: 3%
-const PROCESSING_FEE_PERCENTAGE = 0.029; // 2.9%
-const PROCESSING_FEE_FIXED = 0.3; // $0.30
-
-function calculateFees(amount: number) {
-	const processingFee = Number(
-		(amount * PROCESSING_FEE_PERCENTAGE + PROCESSING_FEE_FIXED).toFixed(2),
-	);
-	const foundationFee = Number((amount * FOUNDATION_FEE_PERCENTAGE).toFixed(2));
-	const creatorEarnings = Number((amount - processingFee - foundationFee).toFixed(2));
-	// crfFee: legacy field name for Anthers Foundation Fee
-	return { processingFee, crfFee: foundationFee, creatorEarnings };
-}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -122,27 +109,37 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "Already purchased" }, 400);
 		}
 
-		const amount = Number(project.price ?? project.minPrice ?? "0");
-		if (amount <= 0) {
+		const amount = new Decimal(project.price ?? project.minPrice ?? "0");
+		if (amount.lte(0)) {
 			return c.json({ error: "Invalid price" }, 400);
 		}
 
-		const fees = calculateFees(amount);
+		// Delivery (bandwidth) scales with the total size of the downloadable assets.
+		const [assetSize] = await db
+			.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
+			.from(assets)
+			.where(eq(assets.projectId, project.id));
+
+		// Pass-through model: the creator receives the full listed price; processing,
+		// the Foundation Fee, and delivery are added on top and paid by the buyer.
+		const fees = calculateFees(amount, assetSize?.bytes ?? 0);
 
 		// TODO: Create Stripe PaymentIntent
 		// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 		// const paymentIntent = await stripe.paymentIntents.create({
-		//   amount: Math.round(amount * 100),
+		//   amount: Math.round(fees.buyerTotal.toNumber() * 100), // buyer pays price + fees
 		//   currency: "usd",
-		//   application_fee_amount: Math.round((fees.processingFee + fees.crfFee) * 100), // crfFee = Foundation Fee
+		//   application_fee_amount: Math.round(fees.processingFee.plus(fees.crfFee).toNumber() * 100), // fees only; creator keeps 100%
 		//   transfer_data: { destination: creatorStripeAccountId },
 		// });
 
 		return c.json({
-			amount: amount.toFixed(2),
+			amount: amount.toFixed(2), // listed price — what the creator receives
 			processingFee: fees.processingFee.toFixed(2),
+			deliveryFee: fees.deliveryFee.toFixed(2), // download bandwidth
 			crfFee: fees.crfFee.toFixed(2), // Legacy field name for Foundation Fee
-			creatorEarnings: fees.creatorEarnings.toFixed(2),
+			creatorEarnings: fees.creatorEarnings.toFixed(2), // == amount (pass-through)
+			buyerTotal: fees.buyerTotal.toFixed(2), // price + fees — what the buyer is charged
 			clientSecret: "placeholder_client_secret",
 			message: "Stripe checkout not yet fully implemented",
 		});
