@@ -7,12 +7,8 @@ const config = {
 	audio: { label: "Audio", Icon: MusicalNoteIcon, color: "badge-secondary" },
 } as const;
 
-export default function ContentTypeBadge({
-	contentType,
-}: {
-	contentType: "text" | "video" | "audio";
-}) {
-	const { label, Icon, color } = config[contentType];
+export default function ContentTypeBadge({ contentType }: { contentType: string }) {
+	const { label, Icon, color } = config[contentType as keyof typeof config] ?? config.text;
 
 	return (
 		<span className={`badge badge-sm gap-1 ${color}`}>

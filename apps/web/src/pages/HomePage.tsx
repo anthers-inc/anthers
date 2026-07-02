@@ -6,11 +6,11 @@ import CreatorCard from "../components/cards/CreatorCard";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import { client } from "../lib/rpc";
-import type { Post, Project, PublicUser } from "../lib/types";
+import type { PostListItem, Project, PublicUser } from "../lib/types";
 
 export default function HomePage() {
 	const [projects, setProjects] = useState<Project[]>([]);
-	const [posts, setPosts] = useState<Post[]>([]);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 
 	useEffect(() => {

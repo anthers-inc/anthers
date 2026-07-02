@@ -23,11 +23,11 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 
 		client.api.accounts.users[":username"]
 			.$get({ param: { username } })
-			.then((res) => res.json())
-			.then((data) => {
-				const u = (data as any).user;
-				setCreator(u);
-				setIsFollowing(u.isFollowing);
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = await res.json();
+				setCreator(data.user);
+				setIsFollowing(data.user.isFollowing);
 			})
 			.catch(console.error);
 
@@ -169,12 +169,12 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 			<div className="flex gap-4 text-sm text-base-content/60">
 				<span className="flex items-center gap-1">
 					<EyeIcon className="w-4 h-4" />
-					{project.viewCount.toLocaleString()}
+					{(project.viewCount ?? 0).toLocaleString()}
 				</span>
-				{project.downloadCount > 0 && (
+				{(project.downloadCount ?? 0) > 0 && (
 					<span className="flex items-center gap-1">
 						<ArrowDownTrayIcon className="w-4 h-4" />
-						{project.downloadCount.toLocaleString()}
+						{(project.downloadCount ?? 0).toLocaleString()}
 					</span>
 				)}
 			</div>

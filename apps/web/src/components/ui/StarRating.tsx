@@ -3,8 +3,8 @@ import { StarIcon as StarOutline } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolid } from "@heroicons/react/24/solid";
 
 interface StarRatingProps {
-	rating: number | null;
-	count?: number;
+	rating?: number | null;
+	count?: number | null;
 	interactive?: boolean;
 	onRate?: (score: number) => void;
 	size?: "sm" | "md";
@@ -39,7 +39,7 @@ export default function StarRating({
 					);
 				})}
 			</div>
-			{count !== undefined && (
+			{count != null && (
 				<span className="text-xs text-base-content/50 ml-1">
 					{rating !== null ? displayRating.toFixed(1) : "—"} ({count})
 				</span>

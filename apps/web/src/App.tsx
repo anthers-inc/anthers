@@ -44,7 +44,6 @@ import SignupPage from "./pages/SignupPage";
 import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import UserDemoPage from "./pages/UserDemoPage";
-import VerticalSlicePage from "./pages/VerticalSlicePage";
 import WikiPage from "./pages/WikiPage";
 
 export default function App() {
@@ -67,7 +66,6 @@ export default function App() {
 				<Route path="/demo-user" element={<UserDemoPage />} />
 				<Route path="/wiki/*" element={<WikiPage />} />
 				<Route path="/about" element={<AboutPage />} />
-				<Route path="/vertical-slice" element={<VerticalSlicePage />} />
 				<Route path="/login" element={<LoginPage />} />
 				<Route path="/signup" element={<SignupPage />} />
 				<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />

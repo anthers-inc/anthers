@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { client } from "../../lib/rpc";
-import type { Project } from "../../lib/types";
 import LoadingSpinner from "./LoadingSpinner";
 
 /**
@@ -20,9 +19,12 @@ export default function ProjectRedirect() {
 		if (!slug) return;
 		client.api.content.projects[":slug"]
 			.$get({ param: { slug } })
-			.then((res) => res.json())
-			.then((data) => {
-				const project = (data as { project: Project }).project;
+			.then(async (res) => {
+				if (!res.ok) {
+					setNotFound(true);
+					return;
+				}
+				const { project } = await res.json();
 				if (project.creator?.username) {
 					setTarget(`/${project.creator.username}/${project.slug}`);
 				} else {

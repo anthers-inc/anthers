@@ -423,11 +423,13 @@ export default function CreatorProfilePage() {
 			await refreshUser();
 
 			// Re-fetch the profile data to reflect changes
-			const creatorRes = await client.api.accounts.users[":username"]
-				.$get({ param: { username: username! } })
-				.then((r) => r.json());
-			const userData = (creatorRes as { user: PublicUser }).user;
-			setCreator(userData);
+			const creatorRes = await client.api.accounts.users[":username"].$get({
+				param: { username: username! },
+			});
+			if (creatorRes.ok) {
+				const { user } = await creatorRes.json();
+				setCreator(user);
+			}
 			setEditing(false);
 		} catch (err) {
 			if (Object.keys(editErrors).length === 0) {
@@ -443,9 +445,10 @@ export default function CreatorProfilePage() {
 		setLoading(true);
 
 		Promise.all([
-			client.api.accounts.users[":username"]
-				.$get({ param: { username } })
-				.then((res) => res.json()),
+			client.api.accounts.users[":username"].$get({ param: { username } }).then(async (res) => {
+				if (!res.ok) throw new Error("Failed to load creator profile.");
+				return res.json();
+			}),
 			fetch(`${apiBase}/api/content/projects?creator=${username}`, {
 				credentials: "include",
 			}).then((res) => res.json()),
@@ -459,7 +462,7 @@ export default function CreatorProfilePage() {
 				.catch(() => null),
 		])
 			.then(([creatorData, projectData, postData, statusData]) => {
-				const userData = (creatorData as { user: PublicUser }).user;
+				const userData = creatorData.user;
 				setCreator(userData);
 				setIsFollowing(userData.isFollowing);
 				setFollowerCount(userData.followerCount);

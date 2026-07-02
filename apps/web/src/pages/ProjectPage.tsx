@@ -31,8 +31,14 @@ export default function ProjectPage() {
 		setLoading(true);
 		client.api.content.projects[":slug"]
 			.$get({ param: { slug } })
-			.then((res) => res.json())
-			.then((data) => setProject((data as { project: Project }).project))
+			.then(async (res) => {
+				if (!res.ok) {
+					setError("Project not found.");
+					return;
+				}
+				const data = await res.json();
+				setProject(data.project);
+			})
 			.catch(() => setError("Project not found."))
 			.finally(() => setLoading(false));
 	}, [slug]);

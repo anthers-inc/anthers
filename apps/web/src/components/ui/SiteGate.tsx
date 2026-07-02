@@ -82,7 +82,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 				</p>
 
 				<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-					Games, videos, music, writing, and more — on an open, distributed network. No intrusive
+					Games, videos, music, writing, and more, on an open, distributed network. No intrusive
 					ads, no manipulative algorithms, just your direct line to a creative internet worth loving
 					again.
 				</p>
@@ -96,7 +96,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 
 				<p className="text-lg text-base-content/65 leading-relaxed mb-10 text-justify">
 					It's not a crazy idea. We've done this before. All it takes is for someone to put people
-					first, and keep profit out of their the equation. All it takes is Anthers.
+					first, and keep profit out of their the equation.
 				</p>
 
 				{/* Waitlist form */}
@@ -147,7 +147,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 												key={value}
 												type="button"
 												className={`join-item btn flex-1 ${
-													interest === value ? "btn-primary" : "btn-ghost border-base-content/20"
+													interest === value ? "btn-secondary" : "btn-ghost border-base-content/20"
 												}`}
 												onClick={() => setInterest(value)}
 											>
@@ -163,7 +163,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 
 								<button
 									type="submit"
-									className="btn btn-primary w-full"
+									className="btn btn-primary w-2/3 self-center"
 									disabled={submitState === "submitting"}
 								>
 									{submitState === "submitting" ? "Submitting..." : "Keep Me Posted"}
