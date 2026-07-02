@@ -43,6 +43,9 @@ databases:
     db_user: doadmin
 
 # Shared across api, worker, and the migrate job (inherited by all components).
+# Keep gate/email secrets at APP level, not on the api component: declaring them
+# in both places lets the (empty) component-level copy shadow a dashboard-set
+# app-level value. Set their VALUES once in the DO dashboard (encrypted).
 envs:
   - key: DATABASE_URL
     scope: RUN_TIME
@@ -50,6 +53,12 @@ envs:
   - key: STORAGE_BACKEND
     scope: RUN_TIME
     value: local
+  - key: SITE_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
+  - key: RESEND_API_KEY
+    scope: RUN_TIME
+    type: SECRET
 
 ingress:
   rules:
@@ -92,13 +101,10 @@ services:
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: ${APP_URL}
+      # SITE_PASSWORD + RESEND_API_KEY live at app level (see the envs: block
+      # above) to avoid component-level shadowing. SESSION_SECRET is currently
+      # unused by the code.
       - key: SESSION_SECRET
-        scope: RUN_TIME
-        type: SECRET
-      - key: SITE_PASSWORD
-        scope: RUN_TIME
-        type: SECRET
-      - key: RESEND_API_KEY
         scope: RUN_TIME
         type: SECRET
 
