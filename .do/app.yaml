@@ -102,11 +102,7 @@ services:
         scope: RUN_TIME
         value: ${APP_URL}
       # SITE_PASSWORD + RESEND_API_KEY live at app level (see the envs: block
-      # above) to avoid component-level shadowing. SESSION_SECRET is currently
-      # unused by the code.
-      - key: SESSION_SECRET
-        scope: RUN_TIME
-        type: SECRET
+      # above) to avoid component-level shadowing.
 
 workers:
   - name: worker
