@@ -55,16 +55,19 @@ export default function ProjectFormPage() {
 		if (isEdit && slug) {
 			client.api.content.projects[":slug"]
 				.$get({ param: { slug } })
-				.then((res) => res.json())
-				.then((data) => {
-					const project = (data as { project: Project }).project;
+				.then(async (res) => {
+					if (!res.ok) {
+						setError("Failed to load project.");
+						return;
+					}
+					const { project } = await res.json();
 					setTitle(project.title);
 					setProjectSlug(project.slug);
 					setSlugManual(true);
 					setDescription(project.description || "");
 					setShortDescription(project.shortDescription || "");
 					setMediaType(project.mediaType);
-					setTagsInput(project.tags.join(", "));
+					setTagsInput((project.tags ?? []).join(", "));
 					setPricingType(project.pricingType);
 					setPrice(project.price || "");
 					setEmbedUrl(project.embedUrl || "");

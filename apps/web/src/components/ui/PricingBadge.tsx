@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 interface PricingBadgeProps {
-	pricingType: "free" | "pwyw" | "paid";
+	pricingType: string;
 	price?: string | null;
 }
 

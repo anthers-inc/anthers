@@ -6,7 +6,7 @@ import type { Comment } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
 
 export default function ProjectComments({ slug }: { slug: string }) {
-	const { isAuthenticated } = useAuth();
+	const { isAuthenticated, user } = useAuth();
 	const [comments, setComments] = useState<Comment[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [body, setBody] = useState("");
@@ -15,8 +15,11 @@ export default function ProjectComments({ slug }: { slug: string }) {
 	const fetchComments = () => {
 		client.api.content.projects[":slug"].comments
 			.$get({ param: { slug } })
-			.then((res) => res.json())
-			.then((data) => setComments(data.comments))
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = await res.json();
+				setComments(data.comments);
+			})
 			.catch((err) => console.error("Failed to load comments:", err))
 			.finally(() => setLoading(false));
 	};
@@ -34,8 +37,11 @@ export default function ProjectComments({ slug }: { slug: string }) {
 				param: { slug },
 				json: { body },
 			});
+			if (!res.ok) throw new Error("Failed to post comment");
 			const data = await res.json();
-			setComments([data.comment, ...comments]);
+			// The insert response omits the author avatar (no user join); the comment
+			// is by the current user, so merge it in for the optimistic prepend.
+			setComments([{ ...data.comment, avatar: user?.avatar ?? null }, ...comments]);
 			setBody("");
 		} catch (err) {
 			console.error("Failed to post comment:", err);

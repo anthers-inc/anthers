@@ -12,8 +12,10 @@ export default function ProjectRating({ slug }: { slug: string }) {
 	const fetchRating = () => {
 		client.api.content.projects[":slug"].ratings
 			.$get({ param: { slug } })
-			.then((res) => res.json())
-			.then(setRating)
+			.then(async (res) => {
+				if (!res.ok) return;
+				setRating(await res.json());
+			})
 			.catch(console.error);
 	};
 

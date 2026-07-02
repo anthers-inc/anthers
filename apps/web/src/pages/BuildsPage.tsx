@@ -37,8 +37,14 @@ export default function BuildsPage() {
 		if (!slug) return;
 		client.api.content.projects[":slug"]
 			.$get({ param: { slug } })
-			.then((res) => res.json())
-			.then((data) => setProject((data as { project: Project }).project))
+			.then(async (res) => {
+				if (!res.ok) {
+					setError("Failed to load project.");
+					return;
+				}
+				const data = await res.json();
+				setProject(data.project);
+			})
 			.catch(() => setError("Failed to load project."))
 			.finally(() => setLoading(false));
 	}, [slug]);

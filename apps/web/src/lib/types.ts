@@ -69,7 +69,7 @@ export interface Project {
 	description: string | null;
 	shortDescription: string | null;
 	mediaType: string;
-	tags: string[];
+	tags: string[] | null;
 	isPublished: boolean | null;
 	pricingType: string;
 	price: string | null;
