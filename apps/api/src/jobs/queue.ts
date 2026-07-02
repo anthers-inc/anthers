@@ -29,8 +29,7 @@ const CONNECTION = process.env.DATABASE_URL ?? "postgres://anthers:anthers@local
 // params (no connectionString → no sslmode parsing) with an explicit ssl config
 // that skips CA verification (same posture as postgres-js under sslmode=require).
 // Local dev has no sslmode, so it connects plaintext with the bare string.
-const DB_REQUIRES_SSL =
-	/[?&]sslmode=/.test(CONNECTION) || /\.ondigitalocean\.com/.test(CONNECTION);
+const DB_REQUIRES_SSL = /[?&]sslmode=/.test(CONNECTION) || /\.ondigitalocean\.com/.test(CONNECTION);
 
 function sslBossOptions(dsn: string) {
 	const u = new URL(dsn);
