@@ -136,10 +136,10 @@ const accountRoutes = new Hono()
 		const followedUsers = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
 					"follower_count",
 				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
 					"project_count",
 				),
 			})
@@ -208,10 +208,10 @@ const accountRoutes = new Hono()
 		const creatorList = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
 					"follower_count",
 				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
 					"project_count",
 				),
 				...(currentUserId
@@ -245,10 +245,10 @@ const accountRoutes = new Hono()
 		const result = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = )`.as(
+				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
 					"follower_count",
 				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM projects WHERE creator_id = )`.as(
+				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
 					"project_count",
 				),
 				...(currentUserId

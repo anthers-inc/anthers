@@ -165,6 +165,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
+	// A post is publicly served when it's free and ungated (no price, no entitlement).
+	// Priced/gated posts keep their media private (served later via signed URLs).
+	const isPublicPost = post.basePrice == null && post.entitlementKind == null;
+
 	const storageKey = post.videoFile ?? "";
 	if (!storageKey) throw new Error("No video file on post");
 
@@ -256,12 +260,12 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			const fileBuffer = await readFile(filePath);
 			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
 			// Playlists (.m3u8) are always public so the player can bootstrap. Segments
-			// follow the post's visibility: a public post gets public segments the CDN
-			// serves directly to hls.js; gated/subscriber posts keep segments private
-			// (to be served via signed URLs once gated playback lands). Without this,
-			// public videos won't play — hls.js fetches segments straight from the CDN.
+			// follow access: a free/ungated post gets public segments the CDN serves
+			// directly to hls.js; priced/gated posts keep segments private (to be served
+			// via signed URLs once gated playback lands). Without this, public videos
+			// won't play — hls.js fetches segments straight from the CDN.
 			const isPlaylist = filename.endsWith(".m3u8");
-			const acl = isPlaylist || post.visibility === "public" ? "public" : "private";
+			const acl = isPlaylist || isPublicPost ? "public" : "private";
 			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
 		}
 		await updateJobProgress(jobId, 90);

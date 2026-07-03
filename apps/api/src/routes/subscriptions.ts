@@ -26,6 +26,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { resolveAccess } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -228,7 +229,6 @@ const subscriptionRoutes = new Hono()
 							creatorId: z.number().int(),
 							eventType: z.enum(["page_view", "play", "watch", "read", "listen"]),
 							durationSeconds: z.number().int().min(0).max(300).default(0),
-							projectId: z.number().int().optional(),
 							postId: z.number().int().optional(),
 						}),
 					)
@@ -248,7 +248,6 @@ const subscriptionRoutes = new Hono()
 				creatorId: e.creatorId,
 				eventType: e.eventType,
 				durationSeconds: e.durationSeconds,
-				projectId: e.projectId ?? null,
 				postId: e.postId ?? null,
 			}));
 
@@ -612,101 +611,25 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Content Access Check ─────────────────────────────────────────────────
+	// Access now lives on the post itself (price + entitlement columns); resolveAccess
+	// is the single source of truth, shared with the content and payment routes.
 	.get("/access/:postId", async (c) => {
 		const { postId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
 
-		const [post] = await db
-			.select({ visibility: posts.visibility, creatorId: posts.creatorId })
-			.from(posts)
-			.where(eq(posts.id, Number(postId)))
-			.limit(1);
-
+		const [post] = await db.select().from(posts).where(eq(posts.id, Number(postId))).limit(1);
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		if (post.visibility === "public") {
-			return c.json({ access: true, reason: "public" });
-		}
-
-		if (!currentUserId) {
-			return c.json({ access: false, reason: "unauthenticated" });
-		}
-
-		if (currentUserId === post.creatorId) {
-			return c.json({ access: true, reason: "creator" });
-		}
-
-		// Check subscription
-		const [sub] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, currentUserId))
-			.limit(1);
-
-		if (!sub || sub.tier === "free") {
-			return c.json({ access: false, reason: "no_subscription" });
-		}
-
-		if (post.visibility === "subscribers_only") {
-			return c.json({ access: true, reason: "subscriber" });
-		}
-
-		// Gated: check both Anthers Tier gates and Boost gates
-		if (post.visibility === "gated") {
-			const cycle = getCurrentBillingCycle();
-
-			// Load all gates for this creator
-			const gates = await db
-				.select()
-				.from(creatorGates)
-				.where(eq(creatorGates.creatorId, post.creatorId))
-				.orderBy(creatorGates.threshold);
-
-			if (gates.length === 0) {
-				// No gates defined — treat as subscriber-accessible
-				return c.json({ access: true, reason: "subscriber" });
-			}
-
-			// Check Anthers Tier gates: compare user's funding level against tier thresholds
-			const anthersTierGates = gates.filter((g) => g.gateType === "anthers_tier");
-			const boostGates = gates.filter((g) => g.gateType === "boost");
-
-			// Get user funding level
-			const fundingLevel = sub?.fundingLevel ?? 0;
-
-			// Check if any Anthers Tier gate is cleared
-			const clearedTierGate = anthersTierGates.some((g) => fundingLevel >= Number(g.threshold));
-
-			// Check if any Boost gate is cleared
-			const [boost] = await db
-				.select({ amount: boostAllocations.amount })
-				.from(boostAllocations)
-				.where(
-					and(
-						eq(boostAllocations.userId, currentUserId),
-						eq(boostAllocations.creatorId, post.creatorId),
-						eq(boostAllocations.billingCycle, cycle),
-					),
-				)
-				.limit(1);
-
-			const boostAmount = Number(boost?.amount ?? 0);
-			const lowestBoostGate = boostGates[0];
-			const clearedBoostGate = lowestBoostGate && boostAmount >= Number(lowestBoostGate.threshold);
-
-			if (clearedTierGate || clearedBoostGate) {
-				return c.json({ access: true, reason: "gate_unlocked" });
-			}
-
-			return c.json({
-				access: false,
-				reason: "gate_locked",
-				lowestThreshold: lowestBoostGate?.threshold ?? anthersTierGates[0]?.threshold ?? null,
-				currentBoost: boost?.amount ?? "0.00",
-			});
-		}
-
-		return c.json({ access: true, reason: "unknown" });
+		const result = await resolveAccess(post, currentUserId);
+		return c.json({
+			access: result.canAccess,
+			reason: result.reason,
+			requiresPurchase: result.requiresPurchase,
+			price: result.price,
+			isEntitled: result.isEntitled,
+			entitlementKind: result.entitlementKind,
+			entitlementDiscountPct: result.entitlementDiscountPct,
+		});
 	})
 
 	// ── Creator Status (for creator page tier/boost display) ────────────────

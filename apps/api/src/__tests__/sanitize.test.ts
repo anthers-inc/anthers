@@ -134,7 +134,7 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		expect(created.post.bodyHtml).not.toContain("onerror");
 
 		// Read back — stored value must be clean too
-		const getRes = await makeRequest(`/api/content/posts/${created.post.id}`, {
+		const getRes = await makeRequest(`/api/content/posts/${created.post.slug}`, {
 			headers: { Cookie: cookie },
 		});
 		expect(getRes.status).toBe(200);
@@ -143,7 +143,7 @@ describe("post routes sanitize bodyHtml end to end", () => {
 		expect(fetched.post.bodyHtml).not.toContain("onerror");
 
 		// Update with another hostile payload
-		const patchRes = await makeRequest(`/api/content/posts/${created.post.id}`, {
+		const patchRes = await makeRequest(`/api/content/posts/${created.post.slug}`, {
 			method: "PATCH",
 			headers: {
 				"Content-Type": "application/json",

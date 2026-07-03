@@ -1,5 +1,5 @@
 {
-  "id": "0d76a896-3db4-45ea-9370-bbd3d0dc393b",
+  "id": "af458191-13c5-494e-8c9c-c1c0361303a0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -191,8 +191,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -264,12 +264,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "purchases_project_id_projects_id_fk": {
-          "name": "purchases_project_id_projects_id_fk",
+        "purchases_post_id_posts_id_fk": {
+          "name": "purchases_post_id_posts_id_fk",
           "tableFrom": "purchases",
-          "tableTo": "projects",
+          "tableTo": "posts",
           "columnsFrom": [
-            "project_id"
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -529,8 +529,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -550,8 +550,8 @@
         }
       },
       "indexes": {
-        "uq_jam_entries_jam_project": {
-          "name": "uq_jam_entries_jam_project",
+        "uq_jam_entries_jam_post": {
+          "name": "uq_jam_entries_jam_post",
           "columns": [
             {
               "expression": "jam_id",
@@ -560,7 +560,7 @@
               "nulls": "last"
             },
             {
-              "expression": "project_id",
+              "expression": "post_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -586,12 +586,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "jam_entries_project_id_projects_id_fk": {
-          "name": "jam_entries_project_id_projects_id_fk",
+        "jam_entries_post_id_posts_id_fk": {
+          "name": "jam_entries_post_id_posts_id_fk",
           "tableFrom": "jam_entries",
-          "tableTo": "projects",
+          "tableTo": "posts",
           "columnsFrom": [
-            "project_id"
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -1230,12 +1230,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "post_id": {
           "name": "post_id",
           "type": "integer",
@@ -1332,19 +1326,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "attention_events_project_id_projects_id_fk": {
-          "name": "attention_events_project_id_projects_id_fk",
-          "tableFrom": "attention_events",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "attention_events_post_id_posts_id_fk": {
@@ -1830,8 +1811,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -1850,7 +1831,7 @@
         },
         "file_size": {
           "name": "file_size",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false,
           "default": 0
@@ -1893,12 +1874,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "assets_project_id_projects_id_fk": {
-          "name": "assets_project_id_projects_id_fk",
+        "assets_post_id_posts_id_fk": {
+          "name": "assets_post_id_posts_id_fk",
           "tableFrom": "assets",
-          "tableTo": "projects",
+          "tableTo": "posts",
           "columnsFrom": [
-            "project_id"
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -1929,14 +1910,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "post_id": {
-          "name": "post_id",
+        "project_id": {
+          "name": "project_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -1999,12 +1980,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "bookmarks_project_id_projects_id_fk": {
-          "name": "bookmarks_project_id_projects_id_fk",
+        "bookmarks_post_id_posts_id_fk": {
+          "name": "bookmarks_post_id_posts_id_fk",
           "tableFrom": "bookmarks",
-          "tableTo": "projects",
+          "tableTo": "posts",
           "columnsFrom": [
-            "project_id"
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -2012,12 +1993,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "bookmarks_post_id_posts_id_fk": {
-          "name": "bookmarks_post_id_posts_id_fk",
+        "bookmarks_project_id_projects_id_fk": {
+          "name": "bookmarks_project_id_projects_id_fk",
           "tableFrom": "bookmarks",
-          "tableTo": "posts",
+          "tableTo": "projects",
           "columnsFrom": [
-            "post_id"
+            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -2061,17 +2042,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "post_id": {
           "name": "post_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "body": {
           "name": "body",
@@ -2101,19 +2076,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "comments_project_id_projects_id_fk": {
-          "name": "comments_project_id_projects_id_fk",
-          "tableFrom": "comments",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -2170,12 +2132,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         },
         "post_id": {
           "name": "post_id",
@@ -2262,19 +2218,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "cross_publish_results_project_id_projects_id_fk": {
-          "name": "cross_publish_results_project_id_projects_id_fk",
-          "tableFrom": "cross_publish_results",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -2404,6 +2347,72 @@
           "tableTo": "cross_publish_results",
           "columnsFrom": [
             "cross_publish_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.gallery_images": {
+      "name": "gallery_images",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "gallery_images_post_id_posts_id_fk": {
+          "name": "gallery_images_post_id_posts_id_fk",
+          "tableFrom": "gallery_images",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -2615,11 +2624,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
+        "slug": {
+          "name": "slug",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "title": {
           "name": "title",
@@ -2649,6 +2658,20 @@
           "notNull": true,
           "default": "'text'"
         },
+        "stream_enabled": {
+          "name": "stream_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "download_enabled": {
+          "name": "download_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "video_file": {
           "name": "video_file",
           "type": "text",
@@ -2663,8 +2686,22 @@
           "notNull": false,
           "default": "''"
         },
+        "cover_image": {
+          "name": "cover_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
         "thumbnail": {
           "name": "thumbnail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "embed_url": {
+          "name": "embed_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2676,172 +2713,18 @@
           "primaryKey": false,
           "notNull": false
         },
-        "is_premium": {
-          "name": "is_premium",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "visibility": {
-          "name": "visibility",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'public'"
-        },
-        "is_published": {
-          "name": "is_published",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "estimated_read_minutes": {
-          "name": "estimated_read_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "atproto_uri": {
-          "name": "atproto_uri",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "posts_creator_id_users_id_fk": {
-          "name": "posts_creator_id_users_id_fk",
-          "tableFrom": "posts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "posts_project_id_projects_id_fk": {
-          "name": "posts_project_id_projects_id_fk",
-          "tableFrom": "posts",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "posts_atproto_uri_unique": {
-          "name": "posts_atproto_uri_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "atproto_uri"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.projects": {
-      "name": "projects",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "creator_id": {
-          "name": "creator_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "short_description": {
-          "name": "short_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "media_type": {
-          "name": "media_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'game'"
-        },
-        "tags": {
-          "name": "tags",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
-        },
-        "is_published": {
-          "name": "is_published",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "pricing_type": {
-          "name": "pricing_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'free'"
-        },
-        "price": {
-          "name": "price",
+        "base_price": {
+          "name": "base_price",
           "type": "numeric",
           "primaryKey": false,
           "notNull": false
+        },
+        "pricing_mode": {
+          "name": "pricing_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
         },
         "min_price": {
           "name": "min_price",
@@ -2855,19 +2738,57 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cover_image": {
-          "name": "cover_image",
+        "entitlement_kind": {
+          "name": "entitlement_kind",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "default": "''"
+          "notNull": false
         },
-        "embed_url": {
-          "name": "embed_url",
+        "entitlement_tier": {
+          "name": "entitlement_tier",
           "type": "text",
           "primaryKey": false,
+          "notNull": false
+        },
+        "entitlement_boost_threshold": {
+          "name": "entitlement_boost_threshold",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entitlement_discount_pct": {
+          "name": "entitlement_discount_pct",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purchasable_without_entitlement": {
+          "name": "purchasable_without_entitlement",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "is_pinned": {
+          "name": "is_pinned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "listing": {
+          "name": "listing",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'timeline'"
+        },
+        "tags": {
+          "name": "tags",
+          "type": "jsonb",
+          "primaryKey": false,
           "notNull": false,
-          "default": "''"
+          "default": "'[]'::jsonb"
         },
         "website_url": {
           "name": "website_url",
@@ -2883,18 +2804,31 @@
           "notNull": false,
           "default": "''"
         },
-        "view_count": {
-          "name": "view_count",
+        "estimated_read_minutes": {
+          "name": "estimated_read_minutes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": false
+        },
+        "is_published": {
+          "name": "is_published",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "view_count": {
+          "name": "view_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
           "default": 0
         },
         "download_count": {
           "name": "download_count",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 0
         },
         "atproto_uri": {
@@ -2919,11 +2853,11 @@
         }
       },
       "indexes": {
-        "idx_project_views": {
-          "name": "idx_project_views",
+        "idx_posts_creator": {
+          "name": "idx_posts_creator",
           "columns": [
             {
-              "expression": "view_count",
+              "expression": "creator_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2934,11 +2868,26 @@
           "method": "btree",
           "with": {}
         },
-        "idx_project_downloads": {
-          "name": "idx_project_downloads",
+        "idx_posts_content_type": {
+          "name": "idx_posts_content_type",
           "columns": [
             {
-              "expression": "download_count",
+              "expression": "content_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_posts_created": {
+          "name": "idx_posts_created",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2950,6 +2899,257 @@
           "with": {}
         }
       },
+      "foreignKeys": {
+        "posts_creator_id_users_id_fk": {
+          "name": "posts_creator_id_users_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "posts_slug_unique": {
+          "name": "posts_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        },
+        "posts_atproto_uri_unique": {
+          "name": "posts_atproto_uri_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "atproto_uri"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.project_posts": {
+      "name": "project_posts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_project_posts": {
+          "name": "uq_project_posts",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_project_posts_project": {
+          "name": "idx_project_posts_project",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_project_posts_post": {
+          "name": "idx_project_posts_post",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "project_posts_project_id_projects_id_fk": {
+          "name": "project_posts_project_id_projects_id_fk",
+          "tableFrom": "project_posts",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "project_posts_post_id_posts_id_fk": {
+          "name": "project_posts_post_id_posts_id_fk",
+          "tableFrom": "project_posts",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.projects": {
+      "name": "projects",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "creator_id": {
+          "name": "creator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "short_description": {
+          "name": "short_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "cover_image": {
+          "name": "cover_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "page_config": {
+          "name": "page_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "is_published": {
+          "name": "is_published",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "atproto_uri": {
+          "name": "atproto_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
       "foreignKeys": {
         "projects_creator_id_users_id_fk": {
           "name": "projects_creator_id_users_id_fk",
@@ -3002,8 +3202,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -3029,8 +3229,8 @@
         }
       },
       "indexes": {
-        "uq_ratings_user_project": {
-          "name": "uq_ratings_user_project",
+        "uq_ratings_user_post": {
+          "name": "uq_ratings_user_post",
           "columns": [
             {
               "expression": "user_id",
@@ -3039,7 +3239,7 @@
               "nulls": "last"
             },
             {
-              "expression": "project_id",
+              "expression": "post_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3065,12 +3265,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "ratings_project_id_projects_id_fk": {
-          "name": "ratings_project_id_projects_id_fk",
+        "ratings_post_id_posts_id_fk": {
+          "name": "ratings_post_id_posts_id_fk",
           "tableFrom": "ratings",
-          "tableTo": "projects",
+          "tableTo": "posts",
           "columnsFrom": [
-            "project_id"
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -3089,72 +3289,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.screenshots": {
-      "name": "screenshots",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "image": {
-          "name": "image",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "screenshots_project_id_projects_id_fk": {
-          "name": "screenshots_project_id_projects_id_fk",
-          "tableFrom": "screenshots",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

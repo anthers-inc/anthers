@@ -4,7 +4,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { gameJams, jamEntries, jamVotes, projects, users } from "@anthers/db/schema";
+import { gameJams, jamEntries, jamVotes, posts, users } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -190,13 +190,14 @@ const jamRoutes = new Hono()
 		const entries = await db
 			.select({
 				entry: jamEntries,
-				projectTitle: projects.title,
-				projectSlug: projects.slug,
-				projectCoverImage: projects.coverImage,
+				postTitle: posts.title,
+				postSlug: posts.slug,
+				postCoverImage: posts.coverImage,
+				postContentType: posts.contentType,
 				submitterUsername: users.username,
 			})
 			.from(jamEntries)
-			.innerJoin(projects, eq(jamEntries.projectId, projects.id))
+			.innerJoin(posts, eq(jamEntries.postId, posts.id))
 			.innerJoin(users, eq(jamEntries.submittedById, users.id))
 			.where(eq(jamEntries.jamId, jam.id))
 			.orderBy(desc(jamEntries.createdAt));
@@ -204,10 +205,11 @@ const jamRoutes = new Hono()
 		return c.json({
 			entries: entries.map((r) => ({
 				...r.entry,
-				project: {
-					title: r.projectTitle,
-					slug: r.projectSlug,
-					coverImage: r.projectCoverImage,
+				post: {
+					title: r.postTitle,
+					slug: r.postSlug,
+					coverImage: r.postCoverImage,
+					contentType: r.postContentType,
 				},
 				submitter: { username: r.submitterUsername },
 			})),
@@ -217,11 +219,11 @@ const jamRoutes = new Hono()
 	.post(
 		"/:slug/entries",
 		requireAuth,
-		zValidator("json", z.object({ projectId: z.number().int() })),
+		zValidator("json", z.object({ postId: z.number().int() })),
 		async (c) => {
 			const user = c.get("user");
 			const { slug } = c.req.param();
-			const { projectId } = c.req.valid("json");
+			const { postId } = c.req.valid("json");
 
 			const [jam] = await db.select().from(gameJams).where(eq(gameJams.slug, slug)).limit(1);
 
@@ -234,26 +236,26 @@ const jamRoutes = new Hono()
 				return c.json({ error: "Jam submission period has ended" }, 400);
 			}
 
-			// Verify project ownership and published status
-			const [project] = await db
-				.select({ id: projects.id, isPublished: projects.isPublished })
-				.from(projects)
-				.where(and(eq(projects.id, projectId), eq(projects.creatorId, user.id)))
+			// Verify post ownership and published status
+			const [post] = await db
+				.select({ id: posts.id, isPublished: posts.isPublished })
+				.from(posts)
+				.where(and(eq(posts.id, postId), eq(posts.creatorId, user.id)))
 				.limit(1);
 
-			if (!project) return c.json({ error: "Project not found or not owned by you" }, 404);
-			if (!project.isPublished) return c.json({ error: "Project must be published" }, 400);
+			if (!post) return c.json({ error: "Post not found or not owned by you" }, 404);
+			if (!post.isPublished) return c.json({ error: "Post must be published" }, 400);
 
 			// Submit entry (unique constraint handles duplicates)
 			try {
 				const [entry] = await db
 					.insert(jamEntries)
-					.values({ jamId: jam.id, projectId, submittedById: user.id })
+					.values({ jamId: jam.id, postId, submittedById: user.id })
 					.returning();
 
 				return c.json({ entry }, 201);
 			} catch {
-				return c.json({ error: "Project already submitted to this jam" }, 409);
+				return c.json({ error: "Post already submitted to this jam" }, 409);
 			}
 		},
 	)
@@ -321,19 +323,20 @@ const jamRoutes = new Hono()
 		const entries = await db
 			.select({
 				entry: jamEntries,
-				projectTitle: projects.title,
-				projectSlug: projects.slug,
-				projectCoverImage: projects.coverImage,
+				postTitle: posts.title,
+				postSlug: posts.slug,
+				postCoverImage: posts.coverImage,
+				postContentType: posts.contentType,
 				submitterUsername: users.username,
 				avgScore: sql<number>`COALESCE(AVG(${jamVotes.score}), 0)::float`,
 				voteCount: sql<number>`COUNT(${jamVotes.id})::int`,
 			})
 			.from(jamEntries)
-			.innerJoin(projects, eq(jamEntries.projectId, projects.id))
+			.innerJoin(posts, eq(jamEntries.postId, posts.id))
 			.innerJoin(users, eq(jamEntries.submittedById, users.id))
 			.leftJoin(jamVotes, eq(jamVotes.entryId, jamEntries.id))
 			.where(eq(jamEntries.jamId, jam.id))
-			.groupBy(jamEntries.id, projects.title, projects.slug, projects.coverImage, users.username)
+			.groupBy(jamEntries.id, posts.title, posts.slug, posts.coverImage, posts.contentType, users.username)
 			.orderBy(desc(sql`COALESCE(AVG(${jamVotes.score}), 0)`));
 
 		return c.json({
@@ -341,10 +344,11 @@ const jamRoutes = new Hono()
 			results: entries.map((r, index) => ({
 				rank: index + 1,
 				...r.entry,
-				project: {
-					title: r.projectTitle,
-					slug: r.projectSlug,
-					coverImage: r.projectCoverImage,
+				post: {
+					title: r.postTitle,
+					slug: r.postSlug,
+					coverImage: r.postCoverImage,
+					contentType: r.postContentType,
 				},
 				submitter: { username: r.submitterUsername },
 				avgScore: Number(Number(r.avgScore).toFixed(2)),

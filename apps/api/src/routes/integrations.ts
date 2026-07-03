@@ -88,47 +88,16 @@ const integrationRoutes = new Hono()
 		const type = c.req.query("type") ?? "all";
 		const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
+		// Attention is tracked per-post in the unified model, so content analytics
+		// are post-scoped. (`type` is kept for API compatibility; only posts exist.)
 		const result: any[] = [];
-
-		if (type === "all" || type === "projects") {
-			const projectStats = await db
-				.select({
-					projectId: attentionEvents.projectId,
-					projectTitle: projects.title,
-					projectSlug: projects.slug,
-					eventCount: sql<number>`COUNT(*)::int`,
-					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
-				})
-				.from(attentionEvents)
-				.innerJoin(projects, eq(attentionEvents.projectId, projects.id))
-				.where(
-					and(
-						eq(attentionEvents.creatorId, user.id),
-						gte(attentionEvents.createdAt, since),
-						sql`${attentionEvents.projectId} IS NOT NULL`,
-					),
-				)
-				.groupBy(attentionEvents.projectId, projects.title, projects.slug)
-				.orderBy(desc(sql`COUNT(*)`))
-				.limit(50);
-
-			result.push(
-				...projectStats.map((r) => ({
-					type: "project",
-					id: r.projectId,
-					title: r.projectTitle,
-					slug: r.projectSlug,
-					eventCount: Number(r.eventCount),
-					totalDuration: Number(r.totalDuration),
-				})),
-			);
-		}
 
 		if (type === "all" || type === "posts") {
 			const postStats = await db
 				.select({
 					postId: attentionEvents.postId,
 					postTitle: posts.title,
+					postSlug: posts.slug,
 					eventCount: sql<number>`COUNT(*)::int`,
 					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
 				})
@@ -141,7 +110,7 @@ const integrationRoutes = new Hono()
 						sql`${attentionEvents.postId} IS NOT NULL`,
 					),
 				)
-				.groupBy(attentionEvents.postId, posts.title)
+				.groupBy(attentionEvents.postId, posts.title, posts.slug)
 				.orderBy(desc(sql`COUNT(*)`))
 				.limit(50);
 
@@ -150,6 +119,7 @@ const integrationRoutes = new Hono()
 					type: "post",
 					id: r.postId,
 					title: r.postTitle,
+					slug: r.postSlug,
 					eventCount: Number(r.eventCount),
 					totalDuration: Number(r.totalDuration),
 				})),
@@ -294,17 +264,12 @@ const integrationRoutes = new Hono()
 			"json",
 			z.object({
 				platform: z.string().min(1),
-				projectId: z.number().int().optional(),
-				postId: z.number().int().optional(),
+				postId: z.number().int(),
 			}),
 		),
 		async (c) => {
 			const user = c.get("user");
-			const { platform, projectId, postId } = c.req.valid("json");
-
-			if (!projectId && !postId) {
-				return c.json({ error: "Either projectId or postId is required" }, 400);
-			}
+			const { platform, postId } = c.req.valid("json");
 
 			// Check platform connection exists
 			const [conn] = await db
@@ -328,8 +293,7 @@ const integrationRoutes = new Hono()
 				.values({
 					userId: user.id,
 					platform,
-					projectId: projectId ?? null,
-					postId: postId ?? null,
+					postId,
 					status: "pending",
 				})
 				.returning();

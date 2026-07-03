@@ -21,6 +21,7 @@ import {
 	follows,
 	poolDistributions,
 	posts,
+	projectPosts,
 	projects,
 	purchases,
 	ratings,
@@ -561,7 +562,16 @@ async function seed() {
 	});
 
 	const createdUserIds: Record<string, number> = {};
-	const createdProjectIds: { projectId: number; creatorUsername: string }[] = [];
+	// Everything published is a Post now; track them for ratings/comments/collections.
+	const createdPosts: { postId: number; creatorUsername: string }[] = [];
+	const postIdBySlug: Record<string, number> = {};
+	const postIdByTitle: Record<string, number> = {};
+
+	const recordPost = (postId: number, slug: string, title: string, username: string) => {
+		createdPosts.push({ postId, creatorUsername: username });
+		postIdBySlug[slug] = postId;
+		postIdByTitle[title] = postId;
+	};
 
 	// ---- 1. Create users ----
 	console.log("Creating seed creators...");
@@ -598,128 +608,193 @@ async function seed() {
 		console.log(`  Created ${creator.username} (id: ${inserted.id})`);
 	}
 
-	// ---- 2. Create projects ----
-	console.log("Creating seed projects...");
-	for (const [username, creatorProjects] of Object.entries(PROJECTS_BY_CREATOR)) {
+	// ---- 2. Create works (download/priced posts) ----
+	// Former standalone "projects" (downloadable works) are now posts: download-enabled,
+	// carrying the pricing. mediaType → contentType; pricingType → entitlement pricing.
+	console.log("Creating seed works (posts)...");
+	for (const [username, creatorWorks] of Object.entries(PROJECTS_BY_CREATOR)) {
 		const creatorId = createdUserIds[username];
 		if (!creatorId) continue;
 
-		for (const proj of creatorProjects) {
-			const slug = slugify(proj.title);
+		for (const work of creatorWorks) {
+			const slug = slugify(work.title);
 
-			// Check if already exists
-			const existing = await db
-				.select({ id: projects.id })
-				.from(projects)
-				.where(eq(projects.slug, slug))
-				.limit(1);
-
-			if (existing.length > 0) {
-				console.log(`  Skipping project "${proj.title}" (slug exists)`);
-				createdProjectIds.push({
-					projectId: existing[0].id,
-					creatorUsername: username,
-				});
-				continue;
-			}
-
-			const [inserted] = await db
-				.insert(projects)
-				.values({
-					creatorId,
-					title: proj.title,
-					slug,
-					description: proj.description,
-					shortDescription: proj.shortDescription,
-					mediaType: proj.mediaType,
-					tags: proj.tags,
-					isPublished: true,
-					pricingType: proj.pricingType,
-					price: proj.price ?? null,
-					minPrice: proj.minPrice ?? null,
-					suggestedPrice: proj.suggestedPrice ?? null,
-					viewCount: randomInt(50, 5000),
-					downloadCount: randomInt(10, 2000),
-					createdAt: daysAgo(randomInt(30, 180)),
-				})
-				.returning({ id: projects.id });
-
-			createdProjectIds.push({
-				projectId: inserted.id,
-				creatorUsername: username,
-			});
-			console.log(`  Created project "${proj.title}" (id: ${inserted.id})`);
-		}
-	}
-
-	// ---- 3. Create posts ----
-	console.log("Creating seed posts...");
-	for (const [username, creatorPosts] of Object.entries(POSTS_BY_CREATOR)) {
-		const creatorId = createdUserIds[username];
-		if (!creatorId) continue;
-
-		for (let i = 0; i < creatorPosts.length; i++) {
-			const post = creatorPosts[i];
-
-			// Check if already exists (by title + creator)
 			const existing = await db
 				.select({ id: posts.id })
 				.from(posts)
-				.where(and(eq(posts.creatorId, creatorId), eq(posts.title, post.title)))
+				.where(eq(posts.slug, slug))
 				.limit(1);
 
 			if (existing.length > 0) {
-				console.log(`  Skipping post "${post.title}" (already exists)`);
+				console.log(`  Skipping work "${work.title}" (slug exists)`);
+				recordPost(existing[0].id, slug, work.title, username);
 				continue;
 			}
+
+			// Delivery by type: games download-only, video stream-only, audio/text both.
+			const delivery =
+				work.mediaType === "game"
+					? { streamEnabled: false, downloadEnabled: true }
+					: work.mediaType === "video"
+						? { streamEnabled: true, downloadEnabled: false }
+						: { streamEnabled: true, downloadEnabled: true };
+
+			// pricingType → the entitlement pricing columns.
+			const pricing =
+				work.pricingType === "paid"
+					? { basePrice: work.price ?? "0.00", pricingMode: "fixed" }
+					: work.pricingType === "pwyw"
+						? {
+								basePrice: null,
+								pricingMode: "pwyw",
+								minPrice: work.minPrice ?? "0.00",
+								suggestedPrice: work.suggestedPrice ?? null,
+							}
+						: { basePrice: null, pricingMode: "fixed" };
 
 			const [inserted] = await db
 				.insert(posts)
 				.values({
 					creatorId,
+					slug,
+					title: work.title,
+					body: work.description,
+					bodyHtml: `<p>${work.description.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+					contentType: work.mediaType,
+					...delivery,
+					...pricing,
+					tags: work.tags,
+					isPublished: true,
+					viewCount: randomInt(50, 5000),
+					downloadCount: randomInt(10, 2000),
+					createdAt: daysAgo(randomInt(30, 180)),
+				})
+				.returning({ id: posts.id });
+
+			recordPost(inserted.id, slug, work.title, username);
+			console.log(`  Created work "${work.title}" (id: ${inserted.id})`);
+		}
+	}
+
+	// ---- 3. Create text/stream posts ----
+	// Former stream posts stay posts: stream-only, free. A non-"public" seed visibility
+	// becomes a subscriber (tier) gate to exercise the entitlement path.
+	console.log("Creating seed posts...");
+	for (const [username, creatorPosts] of Object.entries(POSTS_BY_CREATOR)) {
+		const creatorId = createdUserIds[username];
+		if (!creatorId) continue;
+
+		for (const post of creatorPosts) {
+			const slug = slugify(post.title);
+
+			const existing = await db
+				.select({ id: posts.id })
+				.from(posts)
+				.where(eq(posts.slug, slug))
+				.limit(1);
+
+			if (existing.length > 0) {
+				console.log(`  Skipping post "${post.title}" (slug exists)`);
+				recordPost(existing[0].id, slug, post.title, username);
+				continue;
+			}
+
+			const gated = post.visibility && post.visibility !== "public";
+
+			const [inserted] = await db
+				.insert(posts)
+				.values({
+					creatorId,
+					slug,
 					title: post.title,
 					body: post.body,
 					bodyHtml: `<p>${post.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
 					contentType: post.contentType,
-					visibility: post.visibility,
+					streamEnabled: true,
+					downloadEnabled: false,
+					...(gated
+						? {
+								entitlementKind: "tier",
+								entitlementTier: "root",
+								purchasableWithoutEntitlement: false,
+							}
+						: {}),
 					isPublished: true,
 					estimatedReadMinutes: post.estimatedReadMinutes ?? null,
 					createdAt: daysAgo(randomInt(1, 60)),
 				})
 				.returning({ id: posts.id });
 
+			recordPost(inserted.id, slug, post.title, username);
 			console.log(`  Created post "${post.title}" (id: ${inserted.id})`);
 		}
 	}
+
+	// ---- 3b. Create collections (projects) grouping each creator's works ----
+	console.log("Creating seed collections...");
+	for (const [username, creatorWorks] of Object.entries(PROJECTS_BY_CREATOR)) {
+		const creatorId = createdUserIds[username];
+		if (!creatorId || creatorWorks.length < 2) continue;
+
+		const displayName = CREATORS.find((c) => c.username === username)?.displayName ?? username;
+		const collSlug = slugify(`${username}-selected-works`);
+
+		const existing = await db
+			.select({ id: projects.id })
+			.from(projects)
+			.where(eq(projects.slug, collSlug))
+			.limit(1);
+
+		let projectId: number;
+		if (existing.length > 0) {
+			projectId = existing[0].id;
+		} else {
+			const [proj] = await db
+				.insert(projects)
+				.values({
+					creatorId,
+					slug: collSlug,
+					title: `${displayName} — Selected Works`,
+					description: `A curated collection of ${displayName}'s works.`,
+					shortDescription: "Selected works",
+					isPublished: true,
+				})
+				.returning({ id: projects.id });
+			projectId = proj.id;
+		}
+
+		let order = 0;
+		for (const work of creatorWorks) {
+			const postId = postIdBySlug[slugify(work.title)];
+			if (!postId) continue;
+			try {
+				await db.insert(projectPosts).values({ projectId, postId, sortOrder: order++ });
+			} catch {
+				// unique (project_id, post_id) — already linked
+			}
+		}
+	}
+	console.log("  Collections created.");
 
 	// ---- 4. Create some ratings ----
 	console.log("Creating seed ratings...");
 	const allUserIds = Object.values(createdUserIds);
 
-	for (const { projectId, creatorUsername } of createdProjectIds) {
-		// Each creator's projects get rated by other seed users
+	for (const { postId, creatorUsername } of createdPosts) {
+		// Each creator's posts get rated by the other seed users.
 		const raters = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
 
 		for (const raterId of raters) {
-			// Check for existing rating
-			const existing = await db
-				.select({ id: ratings.id })
-				.from(ratings)
-				.where(eq(ratings.userId, raterId))
-				.limit(100);
-
-			const alreadyRated = existing.some((e) => false); // simplified
-
 			const score = randomInt(3, 5); // seed data skews positive
 			try {
 				await db.insert(ratings).values({
 					userId: raterId,
-					projectId,
+					postId,
 					score,
 					createdAt: daysAgo(randomInt(1, 90)),
 				});
 			} catch {
-				// Unique constraint violation — already rated
+				// Unique constraint (user_id, post_id) — already rated
 			}
 		}
 	}
@@ -727,16 +802,16 @@ async function seed() {
 
 	// ---- 5. Create some comments ----
 	console.log("Creating seed comments...");
-	for (const { projectId, creatorUsername } of createdProjectIds) {
+	for (const { postId, creatorUsername } of createdPosts) {
 		const commenters = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
 
-		// 1-3 comments per project
+		// 1-3 comments per post
 		const numComments = randomInt(1, 3);
 		for (let i = 0; i < numComments && i < commenters.length; i++) {
 			try {
 				await db.insert(comments).values({
 					userId: commenters[i],
-					projectId,
+					postId,
 					body: pick(COMMENT_BODIES),
 					createdAt: daysAgo(randomInt(1, 60)),
 				});
@@ -948,21 +1023,21 @@ async function seed() {
 		}
 		console.log(`    ${tu.follows.length} follows`);
 
-		// -- Purchases --
+		// -- Purchases -- (purchaseTitles reference former works, now posts)
 		for (const title of tu.purchaseTitles) {
 			const slug = slugify(title);
-			const [proj] = await db
-				.select({ id: projects.id, price: projects.price })
-				.from(projects)
-				.where(eq(projects.slug, slug))
+			const [p] = await db
+				.select({ id: posts.id, basePrice: posts.basePrice })
+				.from(posts)
+				.where(eq(posts.slug, slug))
 				.limit(1);
 
-			if (!proj) {
-				console.log(`    Skipping purchase "${title}" (project not found)`);
+			if (!p) {
+				console.log(`    Skipping purchase "${title}" (post not found)`);
 				continue;
 			}
 
-			const amount = parseFloat(proj.price ?? "0");
+			const amount = parseFloat(p.basePrice ?? "0");
 			if (amount <= 0) continue;
 
 			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
@@ -974,7 +1049,7 @@ async function seed() {
 			try {
 				await db.insert(purchases).values({
 					buyerId: userId,
-					projectId: proj.id,
+					postId: p.id,
 					amount: amount.toFixed(2),
 					processingFee: processingFee.toFixed(2),
 					crfFee: crfFee.toFixed(2),
@@ -1112,22 +1187,14 @@ async function seed() {
 				} = { userId, sortOrder: i };
 
 				if (bm.type === "project") {
-					const slug = slugify(bm.ref);
-					const [proj] = await db
-						.select({ id: projects.id })
-						.from(projects)
-						.where(eq(projects.slug, slug))
-						.limit(1);
-					if (!proj) continue;
-					values.projectId = proj.id;
+					// Former project refs are now posts (bookmarked by post).
+					const postId = postIdBySlug[slugify(bm.ref)];
+					if (!postId) continue;
+					values.postId = postId;
 				} else if (bm.type === "post") {
-					const [p] = await db
-						.select({ id: posts.id })
-						.from(posts)
-						.where(eq(posts.title, bm.ref))
-						.limit(1);
-					if (!p) continue;
-					values.postId = p.id;
+					const postId = postIdByTitle[bm.ref];
+					if (!postId) continue;
+					values.postId = postId;
 				} else if (bm.type === "creator") {
 					const cId = createdUserIds[bm.ref];
 					if (!cId) continue;
@@ -1147,7 +1214,10 @@ async function seed() {
 
 	console.log("\nSeed complete!");
 	console.log(
-		`  ${CREATORS.length} creators, ${Object.values(PROJECTS_BY_CREATOR).flat().length} projects, ${Object.values(POSTS_BY_CREATOR).flat().length} posts`,
+		`  ${CREATORS.length} creators, ${
+			Object.values(PROJECTS_BY_CREATOR).flat().length +
+			Object.values(POSTS_BY_CREATOR).flat().length
+		} posts (works + stream), grouped into collections`,
 	);
 	console.log(
 		`  ${TEST_USERS.length} test users (${TEST_USERS.filter((u) => u.tier !== "free").length} paid, ${TEST_USERS.filter((u) => u.tier === "free").length} free)`,
