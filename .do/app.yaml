@@ -149,6 +149,9 @@ static_sites:
       repo: anthers-org/Anthers
       branch: release
       deploy_on_push: true
-    build_command: bun install && bun run --cwd apps/web build
+    # `bun run typecheck` (whole monorepo) gates the deploy: a type error in api
+    # or web fails the build before anything ships. The static-site build checks
+    # out the full repo, so it can typecheck both workspaces.
+    build_command: bun install && bun run typecheck && bun run --cwd apps/web build
     output_dir: apps/web/dist
     catchall_document: index.html
