@@ -201,10 +201,14 @@ export async function processAudio(data: ProcessAudioData) {
 		}
 		await updateJobProgress(jobId, 60);
 
-		// 3. Upload processed file to storage (creator-first layout — see media-upload route)
+		// 3. Upload processed file to storage (creator-first layout — see media-upload route).
+		// ACL follows post visibility: public posts get a public MP3 the CDN serves
+		// directly (getUrl returns a bare, unsigned URL); gated/subscriber posts keep it
+		// private (future signed-URL playback). Without this, public audio 403s.
 		const outputKey = `creators/${post.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
-		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
+		const acl = post.visibility === "public" ? "public" : "private";
+		await storage.upload(outputKey, outputBuffer, "audio/mpeg", acl);
 		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);
 
