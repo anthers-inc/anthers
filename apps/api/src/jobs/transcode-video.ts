@@ -255,8 +255,13 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			const filePath = join(outputDir, filename);
 			const fileBuffer = await readFile(filePath);
 			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
-			// HLS segments for gated content are private; playlists need to be accessible
-			const acl = filename.endsWith(".m3u8") ? "public" : "private";
+			// Playlists (.m3u8) are always public so the player can bootstrap. Segments
+			// follow the post's visibility: a public post gets public segments the CDN
+			// serves directly to hls.js; gated/subscriber posts keep segments private
+			// (to be served via signed URLs once gated playback lands). Without this,
+			// public videos won't play — hls.js fetches segments straight from the CDN.
+			const isPlaylist = filename.endsWith(".m3u8");
+			const acl = isPlaylist || post.visibility === "public" ? "public" : "private";
 			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
 		}
 		await updateJobProgress(jobId, 90);
