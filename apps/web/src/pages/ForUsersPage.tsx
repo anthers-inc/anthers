@@ -770,6 +770,66 @@ const PURCHASE_CATEGORIES: PurchaseCategory[] = [
 			},
 		],
 	},
+	{
+		key: "films",
+		label: "Films",
+		scenarios: [
+			{
+				key: "short",
+				label: "Short film",
+				noun: "short film",
+				blurb: "A festival-circuit short in HD",
+				price: 3,
+				sizeGb: 1.5,
+			},
+			{
+				key: "feature",
+				label: "Feature",
+				noun: "film",
+				blurb: "A full indie feature, yours to keep",
+				price: 12,
+				sizeGb: 6,
+			},
+			{
+				key: "uhd",
+				label: "4K feature",
+				noun: "film",
+				blurb: "The same feature, in 4K",
+				price: 20,
+				sizeGb: 22,
+			},
+		],
+	},
+	{
+		key: "apps",
+		label: "Apps",
+		scenarios: [
+			{
+				key: "utility",
+				label: "Utility",
+				noun: "app",
+				blurb: "A focused menu-bar tool or CLI",
+				price: 5,
+				sizeGb: 0.05,
+			},
+			{
+				key: "plugin",
+				label: "Plugin",
+				noun: "plugin",
+				blurb: "An add-on for software you already own",
+				price: 15,
+				sizeGb: 0.1,
+			},
+			{
+				key: "pro",
+				label: "Pro app",
+				noun: "app",
+				blurb: "A full desktop application",
+				price: 30,
+				sizeGb: 0.4,
+			},
+		],
+	},
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -797,7 +857,7 @@ function PurchaseCalculator() {
 		<div className="max-w-3xl mx-auto card bg-base-100 shadow-sm">
 			<div className="card-body">
 				<div className="flex flex-col gap-3 mb-2">
-					<div className="join self-center">
+					<div className="join self-center flex-wrap justify-center">
 						{PURCHASE_CATEGORIES.map((c) => (
 							<button
 								key={c.key}
@@ -854,10 +914,10 @@ function PurchaseCalculator() {
 					<tfoot>
 						<tr className="border-t border-base-300 text-base-content">
 							<td className="font-bold">You pay</td>
+							<td className="text-right font-mono font-bold">{money(total)}</td>
 							<td className="hidden sm:table-cell text-xs text-base-content/50">
 								In total, for {article} {scenario.noun} with no strings attached
 							</td>
-							<td className="text-right font-mono font-bold">{money(total)}</td>
 						</tr>
 					</tfoot>
 				</table>
@@ -896,10 +956,10 @@ function CalcRow({
 	return (
 		<tr>
 			<td className={`align-top whitespace-nowrap ${strong ? "font-semibold" : ""}`}>{label}</td>
-			<td className="align-top text-xs text-base-content/50 hidden sm:table-cell">{desc}</td>
 			<td className={`align-top text-right font-mono ${strong ? "font-semibold" : ""}`}>
 				{amount}
 			</td>
+			<td className="align-top text-xs text-base-content/50 hidden sm:table-cell">{desc}</td>
 		</tr>
 	);
 }
