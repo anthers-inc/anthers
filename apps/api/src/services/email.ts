@@ -6,11 +6,14 @@
  * dev), sends become no-ops that log to the console; senders that carry an
  * actionable link also log the link so the flow can still be completed locally.
  *
- * Set EMAIL_FROM to a verified-domain sender for production deliverability.
+ * The default sender is on the Resend-verified anthers.org domain; override with
+ * EMAIL_FROM (must also be on a Resend-verified domain). The onboarding@resend.dev
+ * sandbox sender only delivers to the Resend account owner, so it can't be used
+ * for real user email.
  */
 import { Resend } from "resend";
 
-const FROM = process.env.EMAIL_FROM ?? "Anthers <onboarding@resend.dev>";
+const FROM = process.env.EMAIL_FROM ?? "Anthers <noreply@anthers.org>";
 
 /** Base URL of the web frontend, for links users click (verify email, etc.). */
 function frontendUrl(): string {
