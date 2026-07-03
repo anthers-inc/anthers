@@ -136,12 +136,14 @@ const accountRoutes = new Hono()
 		const followedUsers = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+						"project_count",
+					),
 			})
 			.from(users)
 			.innerJoin(
@@ -208,12 +210,14 @@ const accountRoutes = new Hono()
 		const creatorList = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+						"project_count",
+					),
 				...(currentUserId
 					? {
 							isFollowing:
@@ -245,12 +249,14 @@ const accountRoutes = new Hono()
 		const result = await db
 			.select({
 				user: users,
-				followerCount: sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
-					"follower_count",
-				),
-				projectCount: sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
-					"project_count",
-				),
+				followerCount:
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+						"follower_count",
+					),
+				projectCount:
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+						"project_count",
+					),
 				...(currentUserId
 					? {
 							isFollowing:

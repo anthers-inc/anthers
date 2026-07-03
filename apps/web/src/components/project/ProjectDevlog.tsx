@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
-import type { Post } from "../../lib/types";
+import type { PostListItem } from "../../lib/types";
 import PostCard from "../cards/PostCard";
 
 const apiBase =
@@ -9,11 +9,11 @@ const apiBase =
 		: "";
 
 export default function ProjectDevlog({ slug }: { slug: string }) {
-	const [posts, setPosts] = useState<Post[]>([]);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		fetch(`${apiBase}/api/content/posts?project=${slug}`, {
+		fetch(`${apiBase}/api/content/posts?collection=${slug}`, {
 			credentials: "include",
 		})
 			.then((res) => res.json())

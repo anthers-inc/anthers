@@ -37,27 +37,18 @@ function tierNameFor(id: string): string {
 	return id.charAt(0).toUpperCase() + id.slice(1) || "Free";
 }
 
-/** Check if a post is accessible given the user's creator status */
+/** Resolve display access for a post from its per-viewer AccessResult. */
 function isPostAccessible(
 	post: PostListItem,
-	status: CreatorStatus | null,
 	isOwnProfile: boolean,
 ): { accessible: boolean; reason: string } {
-	if (post.visibility === "public") return { accessible: true, reason: "public" };
 	if (isOwnProfile) return { accessible: true, reason: "creator" };
-	if (!status || status.anthersTier === "free") {
-		return {
-			accessible: false,
-			reason: post.visibility === "gated" ? "gate_locked" : "no_subscription",
-		};
-	}
-	if (post.visibility === "subscribers_only") return { accessible: true, reason: "subscriber" };
-	if (post.visibility === "gated") {
-		// Check if any gate is cleared
-		if (status.unlockedGates.length > 0) return { accessible: true, reason: "gate_unlocked" };
-		return { accessible: false, reason: "gate_locked" };
-	}
-	return { accessible: true, reason: "unknown" };
+	const access = post.access;
+	if (!access || access.canAccess) return { accessible: true, reason: access?.reason ?? "free" };
+	return {
+		accessible: false,
+		reason: access.requiresPurchase ? "payment_required" : "gate_locked",
+	};
 }
 
 /* ------------------------------------------------------------------ */
@@ -68,29 +59,21 @@ function GatedContentWrapper({
 	children,
 	post,
 	access,
-	gates,
 }: {
 	children: React.ReactNode;
 	post: PostListItem;
 	access: { accessible: boolean; reason: string };
-	gates: CreatorGate[];
 }) {
-	if (post.visibility === "public") return <>{children}</>;
-
 	const isLocked = !access.accessible;
-	const lowestBoostGate = gates.find((g) => g.gateType === "boost");
-	const lowestTierGate = gates.find((g) => g.gateType === "anthers_tier");
+	const isFree = post.access?.isFree ?? true;
+
+	// Freely accessible content renders without any lock chrome.
+	if (!isLocked && isFree) return <>{children}</>;
 
 	let lockLabel = "";
-	if (access.reason === "gate_locked") {
-		if (lowestBoostGate) {
-			lockLabel = `$${lowestBoostGate.threshold} boost`;
-		} else if (lowestTierGate) {
-			const t = TIER_THRESHOLDS.find((t) => Number(t.price) === Number(lowestTierGate.threshold));
-			lockLabel = t ? `${t.name}+` : `$${lowestTierGate.threshold}+`;
-		}
-	} else if (access.reason === "no_subscription") {
-		lockLabel = "Subscribers only";
+	if (isLocked) {
+		lockLabel =
+			post.access?.requiresPurchase && post.access.price ? `$${post.access.price}` : "Gated";
 	}
 
 	return (
@@ -108,12 +91,10 @@ function GatedContentWrapper({
 						{lockLabel || "Locked"}
 					</div>
 				) : (
-					post.visibility !== "public" && (
-						<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
-							<LockOpenIcon className="w-3 h-3" />
-							Unlocked
-						</div>
-					)
+					<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
+						<LockOpenIcon className="w-3 h-3" />
+						Unlocked
+					</div>
 				)}
 			</div>
 
@@ -449,12 +430,8 @@ export default function CreatorProfilePage() {
 				if (!res.ok) throw new Error("Failed to load creator profile.");
 				return res.json();
 			}),
-			fetch(`${apiBase}/api/content/projects?creator=${username}`, {
-				credentials: "include",
-			}).then((res) => res.json()),
-			fetch(`${apiBase}/api/content/posts?creator=${username}`, {
-				credentials: "include",
-			}).then((res) => res.json()),
+			client.api.content.projects.$get({ query: { creator: username } }).then((res) => res.json()),
+			client.api.content.posts.$get({ query: { creator: username } }).then((res) => res.json()),
 			fetch(`${apiBase}/api/subscriptions/creator-status/${username}`, {
 				credentials: "include",
 			})
@@ -787,13 +764,12 @@ export default function CreatorProfilePage() {
 										);
 									}
 									const post = entry.item as PostListItem;
-									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									const access = isPostAccessible(post, isOwnProfile);
 									return (
 										<GatedContentWrapper
 											key={`post-${post.id}`}
 											post={post}
 											access={access}
-											gates={creatorStatus?.gates ?? []}
 										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
@@ -825,13 +801,12 @@ export default function CreatorProfilePage() {
 						(videoPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{videoPosts.map((post) => {
-									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									const access = isPostAccessible(post, isOwnProfile);
 									return (
 										<GatedContentWrapper
 											key={post.id}
 											post={post}
 											access={access}
-											gates={creatorStatus?.gates ?? []}
 										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
@@ -849,13 +824,12 @@ export default function CreatorProfilePage() {
 						(audioPosts.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{audioPosts.map((post) => {
-									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									const access = isPostAccessible(post, isOwnProfile);
 									return (
 										<GatedContentWrapper
 											key={post.id}
 											post={post}
 											access={access}
-											gates={creatorStatus?.gates ?? []}
 										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
@@ -873,13 +847,12 @@ export default function CreatorProfilePage() {
 						(textPosts.length > 0 ? (
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
 								{textPosts.map((post) => {
-									const access = isPostAccessible(post, creatorStatus, isOwnProfile);
+									const access = isPostAccessible(post, isOwnProfile);
 									return (
 										<GatedContentWrapper
 											key={post.id}
 											post={post}
 											access={access}
-											gates={creatorStatus?.gates ?? []}
 										>
 											<ContentCard post={post} />
 										</GatedContentWrapper>

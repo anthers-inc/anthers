@@ -252,9 +252,7 @@ const paymentRoutes = new Hono()
 		// TODO: Verify Stripe webhook signature
 		// TODO: Handle payment_intent.succeeded → complete purchase, record Foundation Fee
 		// TODO: Handle account.updated → sync onboarding state
-
-		const body = await c.req.text();
-		const sig = c.req.header("Stripe-Signature");
+		// TODO: read the raw body + Stripe-Signature header to verify the event
 
 		// Placeholder — will be implemented with Stripe SDK
 		return c.json({ received: true });

@@ -125,7 +125,8 @@ function meetsEntitlement(post: AccessiblePost, ctx: AccessContext): boolean {
 
 	if (post.entitlementKind === "tier") {
 		const sub = ctx.subscription;
-		if (!sub || !sub.isActive || sub.tier === "free") return false;
+		if (!sub) return false;
+		if (!sub.isActive || sub.tier === "free") return false;
 		if (post.entitlementTier) {
 			const need = TIER_MIN_FUNDING[post.entitlementTier] ?? 0;
 			return sub.fundingLevel >= need;
@@ -253,9 +254,7 @@ export async function buildAccessContext(
 		db
 			.select({ creatorId: boostAllocations.creatorId, amount: boostAllocations.amount })
 			.from(boostAllocations)
-			.where(
-				and(eq(boostAllocations.userId, userId), eq(boostAllocations.billingCycle, cycle)),
-			),
+			.where(and(eq(boostAllocations.userId, userId), eq(boostAllocations.billingCycle, cycle))),
 		db
 			.select({ postId: purchases.postId })
 			.from(purchases)

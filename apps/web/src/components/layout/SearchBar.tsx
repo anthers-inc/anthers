@@ -2,22 +2,12 @@
 import {
 	ArrowRightIcon,
 	MagnifyingGlassIcon,
-	MusicalNoteIcon,
-	PencilSquareIcon,
-	PuzzlePieceIcon,
-	VideoCameraIcon,
+	RectangleStackIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { Project } from "../../lib/types";
-
-const MEDIA_TYPE_ICONS: Record<string, typeof PuzzlePieceIcon> = {
-	game: PuzzlePieceIcon,
-	audio: MusicalNoteIcon,
-	video: VideoCameraIcon,
-	text: PencilSquareIcon,
-};
 
 const API_BASE =
 	typeof location !== "undefined" &&
@@ -153,7 +143,7 @@ export default function SearchBar() {
 							</div>
 							<ul className="menu menu-sm p-0">
 								{results.map((project) => {
-									const Icon = MEDIA_TYPE_ICONS[project.mediaType] || PuzzlePieceIcon;
+									const Icon = RectangleStackIcon;
 									return (
 										<li key={project.id}>
 											<Link

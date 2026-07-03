@@ -1,26 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import type { Screenshot } from "../../lib/types";
+import type { GalleryImage } from "../../lib/types";
 
 interface ProjectScreenshotsProps {
-	screenshots: Screenshot[];
+	images: GalleryImage[];
 }
 
-export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsProps) {
+export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) {
 	const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
 	const close = useCallback(() => setLightboxIndex(null), []);
 	const prev = useCallback(
-		() =>
-			setLightboxIndex((i) =>
-				i !== null ? (i - 1 + screenshots.length) % screenshots.length : null,
-			),
-		[screenshots.length],
+		() => setLightboxIndex((i) => (i !== null ? (i - 1 + images.length) % images.length : null)),
+		[images.length],
 	);
 	const next = useCallback(
-		() => setLightboxIndex((i) => (i !== null ? (i + 1) % screenshots.length : null)),
-		[screenshots.length],
+		() => setLightboxIndex((i) => (i !== null ? (i + 1) % images.length : null)),
+		[images.length],
 	);
 
 	useEffect(() => {
@@ -34,22 +31,22 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 		return () => window.removeEventListener("keydown", handler);
 	}, [lightboxIndex, close, prev, next]);
 
-	if (screenshots.length === 0) return null;
+	if (images.length === 0) return null;
 
 	return (
 		<div>
-			<h2 className="text-xl font-bold mb-4">Screenshots</h2>
+			<h2 className="text-xl font-bold mb-4">Gallery</h2>
 			<div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-				{screenshots.map((ss, i) => (
+				{images.map((img, i) => (
 					<button
 						type="button"
-						key={ss.id}
+						key={img.id}
 						onClick={() => setLightboxIndex(i)}
 						className="overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
 					>
 						<img
-							src={ss.image}
-							alt={ss.caption || "Screenshot"}
+							src={img.image}
+							alt={img.caption || "Gallery image"}
 							className="w-full h-40 object-cover hover:opacity-80 transition-opacity"
 						/>
 					</button>
@@ -70,7 +67,7 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 						<XMarkIcon className="w-6 h-6" />
 					</button>
 
-					{screenshots.length > 1 && (
+					{images.length > 1 && (
 						<>
 							<button
 								type="button"
@@ -97,17 +94,17 @@ export default function ProjectScreenshots({ screenshots }: ProjectScreenshotsPr
 
 					<div className="max-w-5xl max-h-[85vh] p-4" onClick={(e) => e.stopPropagation()}>
 						<img
-							src={screenshots[lightboxIndex].image}
-							alt={screenshots[lightboxIndex].caption || "Screenshot"}
+							src={images[lightboxIndex].image}
+							alt={images[lightboxIndex].caption || "Gallery image"}
 							className="max-w-full max-h-[80vh] object-contain mx-auto"
 						/>
-						{screenshots[lightboxIndex].caption && (
+						{images[lightboxIndex].caption && (
 							<p className="text-center text-white/70 text-sm mt-2">
-								{screenshots[lightboxIndex].caption}
+								{images[lightboxIndex].caption}
 							</p>
 						)}
 						<p className="text-center text-white/40 text-xs mt-1">
-							{lightboxIndex + 1} / {screenshots.length}
+							{lightboxIndex + 1} / {images.length}
 						</p>
 					</div>
 				</div>

@@ -21,44 +21,42 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 export default function ProjectDownloads({
 	assets,
-	mediaType,
-	pricingType,
-	userOwns,
-	projectSlug,
+	contentType,
+	postSlug,
+	canAccess,
 }: {
 	assets: Asset[];
-	mediaType: string;
-	pricingType: "free" | "pwyw" | "paid";
-	userOwns: boolean | null;
-	projectSlug: string;
+	contentType: string;
+	postSlug: string;
+	canAccess: boolean;
 }) {
 	if (assets.length === 0) return null;
 
-	// If paid and not owned, show gated message
-	if (pricingType === "paid" && userOwns !== true) {
+	// If the viewer can't access this post, show a gated message instead of files.
+	if (!canAccess) {
 		return (
 			<div>
 				<h2 className="text-xl font-bold mb-4">Downloads</h2>
 				<div className="card bg-base-200">
 					<div className="card-body items-center text-center py-8">
 						<LockClosedIcon className="w-8 h-8 text-base-content/40" />
-						<p className="text-base-content/60">Purchase this project to access downloads.</p>
+						<p className="text-base-content/60">Purchase this post to access downloads.</p>
 					</div>
 				</div>
 			</div>
 		);
 	}
 
-	// Group by platform for games
-	const grouped =
-		mediaType === "game"
-			? assets.reduce<Record<string, Asset[]>>((acc, asset) => {
-					const key = asset.platform || "other";
-					if (!acc[key]) acc[key] = [];
-					acc[key].push(asset);
-					return acc;
-				}, {})
-			: { downloads: assets };
+	// Group by platform for multi-platform deliverables (games / software).
+	const showPlatform = contentType === "game" || contentType === "software";
+	const grouped = showPlatform
+		? assets.reduce<Record<string, Asset[]>>((acc, asset) => {
+				const key = asset.platform || "other";
+				if (!acc[key]) acc[key] = [];
+				acc[key].push(asset);
+				return acc;
+			}, {})
+		: { downloads: assets };
 
 	return (
 		<div>
@@ -67,7 +65,7 @@ export default function ProjectDownloads({
 				<table className="table table-sm">
 					<thead>
 						<tr>
-							{mediaType === "game" && <th>Platform</th>}
+							{showPlatform && <th>Platform</th>}
 							<th>File</th>
 							<th>Size</th>
 							{assets.some((a) => a.version) && <th>Version</th>}
@@ -78,7 +76,7 @@ export default function ProjectDownloads({
 						{Object.entries(grouped).map(([platform, platformAssets]) =>
 							platformAssets.map((asset) => (
 								<tr key={asset.id}>
-									{mediaType === "game" && (
+									{showPlatform && (
 										<td className="font-medium">{PLATFORM_LABELS[platform] ?? platform}</td>
 									)}
 									<td>{asset.filename}</td>
@@ -92,12 +90,16 @@ export default function ProjectDownloads({
 											className="btn btn-sm btn-primary"
 											onClick={async () => {
 												try {
-													const res = await client.api.content.projects[":slug"].assets[
+													const res = await client.api.content.posts[":slug"].assets[
 														":id"
 													].download.$post({
-														param: { slug: projectSlug, id: String(asset.id) },
+														param: { slug: postSlug, id: String(asset.id) },
 													});
-													const data = (await res.json()) as { url: string };
+													if (!res.ok) {
+														window.location.href = asset.file;
+														return;
+													}
+													const data = await res.json();
 													window.location.href = data.url;
 												} catch {
 													// Fallback to direct link

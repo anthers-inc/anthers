@@ -4,33 +4,26 @@ import { CardElement, Elements, useElements, useStripe } from "@stripe/react-str
 import { useState } from "react";
 import { client } from "../../lib/rpc";
 import { stripePromise } from "../../lib/stripe";
-import type { CheckoutResponse } from "../../lib/types";
+import type { AccessResult, CheckoutResponse } from "../../lib/types";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {
-	pricingType: "free" | "pwyw" | "paid";
-	price: string | null;
 	slug: string;
-	creatorHasStripe: boolean;
-	userOwns: boolean | null; // null = loading/unknown
-	downloadBytes: number; // total size of downloadable assets, for the delivery line
-	onPurchaseComplete: () => void;
+	access: AccessResult;
+	creatorHasStripe?: boolean;
+	onPurchaseComplete?: () => void;
 }
 
-function buildReceipt(price: number, downloadBytes: number) {
+function buildReceipt(price: number) {
 	const processing = Math.round(price * 0.029 * 100) / 100 + 0.3;
 	const foundation = Math.round(price * (FOUNDATION_FEE_PERCENTAGE / 100) * 100) / 100;
-	let delivery = Math.round((downloadBytes / 1_000_000_000) * 0.01 * 100) / 100;
-	// Any real download costs at least a cent to deliver — we can't bill sub-cent.
-	if (downloadBytes > 0 && delivery <= 0) delivery = 0.01;
 	// Pass-through: the creator receives the full price; fees are added on top.
-	const buyerTotal = Math.round((price + delivery + foundation + processing) * 100) / 100;
+	const buyerTotal = Math.round((price + foundation + processing) * 100) / 100;
 
 	return {
 		price,
 		buyerTotal,
 		lines: [
-			{ label: "Delivery", amount: delivery, note: "download bandwidth" },
 			{
 				label: "Anthers Foundation Fee",
 				amount: foundation,
@@ -44,13 +37,11 @@ function buildReceipt(price: number, downloadBytes: number) {
 function CheckoutForm({
 	slug,
 	price,
-	downloadBytes,
 	onPurchaseComplete,
 }: {
 	slug: string;
 	price: number;
-	downloadBytes: number;
-	onPurchaseComplete: () => void;
+	onPurchaseComplete?: () => void;
 }) {
 	const stripe = useStripe();
 	const elements = useElements();
@@ -58,7 +49,7 @@ function CheckoutForm({
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
 
-	const receipt = buildReceipt(price, downloadBytes);
+	const receipt = buildReceipt(price);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -88,7 +79,7 @@ function CheckoutForm({
 				setError(stripeError.message || "Payment failed.");
 			} else {
 				setSucceeded(true);
-				onPurchaseComplete();
+				onPurchaseComplete?.();
 			}
 		} catch {
 			setError("Failed to process payment. Please try again.");
@@ -143,26 +134,46 @@ function CheckoutForm({
 }
 
 export default function ProjectPricing({
-	pricingType,
-	price,
 	slug,
-	creatorHasStripe,
-	userOwns,
-	downloadBytes,
+	access,
+	creatorHasStripe = false,
 	onPurchaseComplete,
 }: ProjectPricingProps) {
-	if (pricingType === "free") return null;
+	// Free posts have nothing to sell.
+	if (access.isFree) return null;
 
-	const displayPrice = parseFloat(price || "0");
+	const basePrice = parseFloat(access.basePrice ?? "0");
+	// The effective price already reflects any entitlement discount.
+	const effectivePrice = parseFloat(access.price ?? access.basePrice ?? "0");
+	const hasDiscount =
+		access.entitlementDiscountPct != null &&
+		access.entitlementDiscountPct > 0 &&
+		effectivePrice < basePrice;
 
 	return (
 		<div>
 			<h2 className="text-xl font-bold mb-4">Pricing</h2>
 
-			<p className="text-2xl font-bold mb-3">${displayPrice.toFixed(2)}</p>
+			<div className="flex items-baseline gap-2 mb-3">
+				<p className="text-2xl font-bold">${effectivePrice.toFixed(2)}</p>
+				{hasDiscount && (
+					<>
+						<span className="text-lg text-base-content/40 line-through">
+							${basePrice.toFixed(2)}
+						</span>
+						<span className="badge badge-success badge-sm">
+							{access.entitlementDiscountPct}% off
+						</span>
+					</>
+				)}
+			</div>
 
-			{userOwns === true ? (
+			{access.canAccess ? (
 				<div className="badge badge-success badge-lg gap-1">Owned</div>
+			) : !access.requiresPurchase ? (
+				<div className="p-3 bg-base-200 rounded-lg">
+					<p className="text-sm text-base-content/60">Sign in to purchase this post.</p>
+				</div>
 			) : !creatorHasStripe ? (
 				<div className="p-3 bg-base-200 rounded-lg">
 					<p className="text-sm text-base-content/60">
@@ -177,8 +188,7 @@ export default function ProjectPricing({
 				<Elements stripe={stripePromise}>
 					<CheckoutForm
 						slug={slug}
-						price={displayPrice}
-						downloadBytes={downloadBytes}
+						price={effectivePrice}
 						onPurchaseComplete={onPurchaseComplete}
 					/>
 				</Elements>

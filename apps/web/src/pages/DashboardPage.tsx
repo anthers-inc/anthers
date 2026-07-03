@@ -10,32 +10,21 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import MediaTypeBadge from "../components/ui/MediaTypeBadge";
-import PricingBadge from "../components/ui/PricingBadge";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
-import type { CreatorEarnings, Post, Project } from "../lib/types";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
+import type { CreatorEarnings, PostListItem, Project } from "../lib/types";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
 	const [projects, setProjects] = useState<Project[]>([]);
-	const [posts, setPosts] = useState<Post[]>([]);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
 		Promise.all([
-			fetch(`${apiBase}/api/content/projects?mine=true`, {
-				credentials: "include",
-			}).then((res) => res.json()),
-			fetch(`${apiBase}/api/content/posts?mine=true`, {
-				credentials: "include",
-			}).then((res) => res.json()),
+			client.api.content.projects.$get({ query: { mine: "true" } }).then((res) => res.json()),
+			client.api.content.posts.$get({ query: { mine: "true" } }).then((res) => res.json()),
 		])
 			.then(([projData, postData]) => {
 				setProjects(projData.projects);
@@ -150,8 +139,6 @@ export default function DashboardPage() {
 							<thead>
 								<tr>
 									<th>Title</th>
-									<th>Type</th>
-									<th>Pricing</th>
 									<th>Status</th>
 									<th>Actions</th>
 								</tr>
@@ -168,12 +155,6 @@ export default function DashboardPage() {
 											</Link>
 										</td>
 										<td>
-											<MediaTypeBadge type={project.mediaType} />
-										</td>
-										<td>
-											<PricingBadge pricingType={project.pricingType} price={project.price} />
-										</td>
-										<td>
 											<span
 												className={`badge badge-sm ${project.isPublished ? "badge-success" : "badge-warning"}`}
 											>
@@ -187,13 +168,6 @@ export default function DashboardPage() {
 												title="Edit"
 											>
 												<PencilSquareIcon className="w-4 h-4" />
-											</Link>
-											<Link
-												to={`/dashboard/projects/${project.slug}/builds`}
-												className="btn btn-ghost btn-xs"
-												title="Builds"
-											>
-												<WrenchScrewdriverIcon className="w-4 h-4" />
 											</Link>
 										</td>
 									</tr>
@@ -233,7 +207,6 @@ export default function DashboardPage() {
 							<thead>
 								<tr>
 									<th>Title</th>
-									<th>Project</th>
 									<th>Status</th>
 									<th>Date</th>
 									<th>Actions</th>
@@ -244,18 +217,11 @@ export default function DashboardPage() {
 									<tr key={post.id}>
 										<td>
 											<Link
-												to={`/${user?.username}/posts/${post.id}`}
+												to={`/${user?.username}/posts/${post.slug}`}
 												className="link link-hover font-medium"
 											>
 												{post.title || "Untitled"}
 											</Link>
-										</td>
-										<td>
-											{post.projectId ? (
-												<span className="badge badge-sm badge-outline">Project</span>
-											) : (
-												<span className="text-base-content/30">—</span>
-											)}
 										</td>
 										<td>
 											<span
@@ -267,14 +233,23 @@ export default function DashboardPage() {
 										<td className="text-sm text-base-content/50">
 											{new Date(post.createdAt).toLocaleDateString()}
 										</td>
-										<td>
+										<td className="flex gap-1">
 											<Link
-												to={`/dashboard/posts/${post.id}/edit`}
+												to={`/dashboard/posts/${post.slug}/edit`}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
 												<PencilSquareIcon className="w-4 h-4" />
 											</Link>
+											{post.downloadEnabled && (
+												<Link
+													to={`/dashboard/posts/${post.slug}/builds`}
+													className="btn btn-ghost btn-xs"
+													title="Manage downloads"
+												>
+													<WrenchScrewdriverIcon className="w-4 h-4" />
+												</Link>
+											)}
 										</td>
 									</tr>
 								))}

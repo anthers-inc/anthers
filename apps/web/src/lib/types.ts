@@ -2,8 +2,10 @@
 /**
  * Frontend type definitions matching the Hono API response shapes.
  *
- * These replace the legacy snake_case interfaces from lib/api.ts.
- * All property names are camelCase, matching the Drizzle schema and Hono route responses.
+ * All property names are camelCase, matching the Drizzle schema and Hono route
+ * responses. This models the unified Post: everything a creator publishes is a
+ * Post, with delivery (stream/download) and access (free/paid/gated) as
+ * orthogonal switches; Projects are collections that group posts.
  */
 
 // ─── User Types ───
@@ -27,32 +29,9 @@ export interface User {
 
 export interface PublicUser extends User {
 	followerCount: number;
+	/** Size of the creator's public catalog (published posts). */
 	projectCount: number;
 	isFollowing: boolean;
-}
-
-// ─── Content Types ───
-
-export interface Screenshot {
-	id: number;
-	projectId: number;
-	image: string;
-	caption: string | null;
-	sortOrder: number | null;
-	createdAt: string;
-}
-
-export interface Asset {
-	id: number;
-	projectId: number;
-	file: string;
-	filename: string;
-	fileSize: number | null;
-	mimeType: string | null;
-	platform: string | null;
-	version: string | null;
-	isPrimary: boolean | null;
-	createdAt: string;
 }
 
 export interface Creator {
@@ -61,34 +40,55 @@ export interface Creator {
 	avatar?: string | null;
 }
 
-export interface Project {
-	id: number;
-	creatorId: number;
-	title: string;
-	slug: string;
-	description: string | null;
-	shortDescription: string | null;
-	mediaType: string;
-	tags: string[] | null;
-	isPublished: boolean | null;
-	pricingType: string;
+// ─── Access & pricing ───
+
+/** Resolved access for a post + viewer (see api services/access.ts). */
+export interface AccessResult {
+	canAccess: boolean;
+	reason:
+		| "owner"
+		| "free"
+		| "purchased"
+		| "entitled"
+		| "gated"
+		| "payment_required"
+		| "login_required";
+	isFree: boolean;
+	requiresPurchase: boolean;
 	price: string | null;
+	basePrice: string | null;
+	pricingMode: string;
 	minPrice: string | null;
 	suggestedPrice: string | null;
-	coverImage: string | null;
-	embedUrl: string | null;
-	websiteUrl: string | null;
-	sourceUrl: string | null;
-	viewCount: number | null;
-	downloadCount: number | null;
-	atprotoUri: string | null;
+	entitlementKind: string | null;
+	entitlementDiscountPct: number | null;
+	isEntitled: boolean;
+}
+
+// ─── Content Types ───
+
+/** Gallery / screenshot image attached to a post. */
+export interface GalleryImage {
+	id: number;
+	postId: number;
+	image: string;
+	caption: string | null;
+	sortOrder: number | null;
 	createdAt: string;
-	updatedAt: string;
-	creator?: Creator;
-	ratingAverage?: number | null;
-	ratingCount?: number;
-	assets?: Asset[];
-	screenshots?: Screenshot[];
+}
+
+/** Downloadable file (build, track, PDF, installer, …) attached to a post. */
+export interface Asset {
+	id: number;
+	postId: number;
+	file: string;
+	filename: string;
+	fileSize: number | null;
+	mimeType: string | null;
+	platform: string | null;
+	version: string | null;
+	isPrimary: boolean | null;
+	createdAt: string;
 }
 
 export interface TranscodingJob {
@@ -105,54 +105,145 @@ export interface TranscodingJob {
 	updatedAt: string;
 }
 
+/** Content type discriminator. */
+export type ContentType =
+	| "text"
+	| "image"
+	| "audio"
+	| "video"
+	| "game"
+	| "software"
+	| "physical"
+	| "service";
+
+/** Timeline visibility. */
+export type PostListing = "timeline" | "unlisted" | "shop";
+
+/** The universal content unit — full detail shape (GET /posts/:slug). */
 export interface Post {
 	id: number;
 	creatorId: number;
-	projectId: number | null;
+	slug: string;
 	title: string | null;
 	body: string | null;
 	bodyHtml: string | null;
 	contentType: string;
+
+	// Delivery
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+
+	// Stream payload / media
 	videoFile: string | null;
 	audioFile: string | null;
+	coverImage: string | null;
+	thumbnail: string | null;
+	embedUrl: string | null;
+	durationSeconds: number | null;
+
+	// Access & pricing
+	basePrice: string | null;
+	pricingMode: string;
+	minPrice: string | null;
+	suggestedPrice: string | null;
+	entitlementKind: string | null;
+	entitlementTier: string | null;
+	entitlementBoostThreshold: string | null;
+	entitlementDiscountPct: number | null;
+	purchasableWithoutEntitlement: boolean;
+
+	// Presentation
+	isPinned: boolean;
+	listing: string;
+
+	// Metadata
+	tags: string[] | null;
+	websiteUrl: string | null;
+	sourceUrl: string | null;
+	estimatedReadMinutes: number | null;
+	isPublished: boolean | null;
+	viewCount: number;
+	downloadCount: number;
+	atprotoUri: string | null;
+	createdAt: string;
+	updatedAt: string;
+
+	// Joined on detail
+	creator?: Creator;
+	ratingAverage?: number | null;
+	ratingCount?: number;
+	galleryImages?: GalleryImage[];
+	assets?: Asset[];
+	transcodingJobs?: TranscodingJob[];
+	access?: AccessResult;
+}
+
+/** Lighter serialization returned by the timeline endpoint (GET /posts). */
+export interface PostListItem {
+	id: number;
+	slug: string;
+	creatorId: number;
+	title: string | null;
+	contentType: string;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+	coverImage: string | null;
 	thumbnail: string | null;
 	durationSeconds: number | null;
-	isPremium: boolean | null;
-	visibility: string;
+	listing: string;
+	isPinned: boolean;
+	tags: string[] | null;
 	isPublished: boolean | null;
+	viewCount: number;
+	downloadCount: number;
 	estimatedReadMinutes: number | null;
+	createdAt: string;
+	updatedAt: string;
+	creator?: Creator;
+	access?: AccessResult;
+	latestTranscodingStatus?: { status: string; progress: number } | null;
+}
+
+/** A post as it appears inside a collection (GET /projects/:slug). */
+export interface CollectionPost {
+	id: number;
+	slug: string;
+	title: string | null;
+	contentType: string;
+	coverImage: string | null;
+	thumbnail: string | null;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+	sortOrder: number;
+	creator?: Creator;
+	access?: AccessResult;
+}
+
+/** Project — a collection (playlist-like wrapper) that groups posts. */
+export interface Project {
+	id: number;
+	creatorId: number;
+	slug: string;
+	title: string;
+	description: string | null;
+	shortDescription: string | null;
+	coverImage: string | null;
+	pageConfig: Record<string, unknown> | null;
+	isPublished: boolean | null;
 	atprotoUri: string | null;
 	createdAt: string;
 	updatedAt: string;
 	creator?: Creator;
-	transcodingJobs?: TranscodingJob[];
-	accessGranted?: boolean;
-}
-
-/** Lighter serialization returned by list endpoints (no body/bodyHtml/files) */
-export interface PostListItem {
-	id: number;
-	creatorId: number;
-	projectId: number | null;
-	title: string | null;
-	contentType: string;
-	thumbnail: string | null;
-	durationSeconds: number | null;
-	isPremium: boolean | null;
-	visibility: string;
-	isPublished: boolean | null;
-	estimatedReadMinutes: number | null;
-	createdAt: string;
-	updatedAt: string;
-	creator?: Creator;
-	latestTranscodingStatus?: { status: string; progress: number } | null;
+	/** Member count (list endpoint). */
+	postCount?: number;
+	/** Ordered members (detail endpoint). */
+	posts?: CollectionPost[];
 }
 
 export interface Comment {
 	id: number;
 	userId: number;
-	projectId: number | null;
-	postId: number | null;
+	postId: number;
 	body: string;
 	atprotoUri: string | null;
 	createdAt: string;
@@ -201,7 +292,7 @@ export interface CheckoutResponse {
 export interface Purchase {
 	id: number;
 	buyerId: number;
-	projectId: number;
+	postId: number;
 	amount: string;
 	processingFee: string;
 	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
@@ -210,11 +301,13 @@ export interface Purchase {
 	status: string;
 	createdAt: string;
 	updatedAt: string;
-	project?: {
-		title: string;
+	post?: {
+		title: string | null;
 		slug: string;
 		coverImage: string | null;
+		contentType: string;
 	};
+	creator?: Creator;
 }
 
 export interface OwnershipResponse {
@@ -297,11 +390,15 @@ export interface BoostListResponse {
 	remaining: string;
 }
 
+/** Response of GET /subscriptions/access/:postId (post-scoped access check). */
 export interface ContentAccessResponse {
 	access: boolean;
 	reason: string;
-	lowestThreshold?: string | null;
-	currentBoost?: string;
+	requiresPurchase: boolean;
+	price: string | null;
+	isEntitled: boolean;
+	entitlementKind: string | null;
+	entitlementDiscountPct: number | null;
 }
 
 export interface CreatorGate {
@@ -332,14 +429,15 @@ export interface Bookmark {
 	sortOrder: number;
 	createdAt: string;
 	project?: {
-		title: string;
+		title: string | null;
 		slug: string;
 		coverImage: string | null;
-		mediaType: string;
 	} | null;
 	post?: {
-		title: string;
+		title: string | null;
+		slug: string;
 		contentType: string;
+		coverImage: string | null;
 	} | null;
 	creator?: {
 		username: string;
@@ -370,7 +468,7 @@ export interface AnalyticsOverview {
 }
 
 export interface ContentAnalyticsItem {
-	type: "project" | "post";
+	type: "post" | "project";
 	id: number | null;
 	title: string | null;
 	slug?: string;
@@ -400,7 +498,6 @@ export interface CrossPublishResult {
 	id: number;
 	userId: number;
 	platform: string;
-	projectId: number | null;
 	postId: number | null;
 	externalId: string | null;
 	externalUrl: string | null;
@@ -438,13 +535,14 @@ export interface GameJam {
 export interface JamEntry {
 	id: number;
 	jamId: number;
-	projectId: number;
+	postId: number;
 	submittedById: number;
 	createdAt: string;
-	project?: {
-		title: string;
+	post?: {
+		title: string | null;
 		slug: string;
 		coverImage: string | null;
+		contentType: string;
 	};
 	submitter?: {
 		username: string;

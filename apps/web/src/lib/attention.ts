@@ -8,7 +8,6 @@ const TICK_INTERVAL_MS = 1_000; // Accumulate every 1 second
 
 interface AttentionEvent {
 	creatorId: number;
-	projectId?: number | null;
 	postId?: number | null;
 	eventType: "page_view" | "play" | "watch" | "read" | "listen";
 	durationSeconds: number;
@@ -32,7 +31,6 @@ async function flushEvents() {
 					creatorId: e.creatorId,
 					eventType: e.eventType,
 					durationSeconds: e.durationSeconds,
-					...(e.projectId != null ? { projectId: e.projectId } : {}),
 					...(e.postId != null ? { postId: e.postId } : {}),
 				})),
 			},
@@ -67,12 +65,11 @@ function ensureFlushTimer() {
  */
 export function useAttentionTracker(params: {
 	creatorId: number | null;
-	projectId?: number | null;
 	postId?: number | null;
 	eventType: AttentionEvent["eventType"];
 	active?: boolean; // defaults to true; set false to pause tracking
 }) {
-	const { creatorId, projectId, postId, eventType, active = true } = params;
+	const { creatorId, postId, eventType, active = true } = params;
 	const { isAuthenticated: authStatus } = useAuth();
 	const accumulatedRef = useRef(0);
 	const lastCreatorRef = useRef(creatorId);
@@ -87,14 +84,13 @@ export function useAttentionTracker(params: {
 		if (accumulatedRef.current > 0 && lastCreatorRef.current) {
 			pendingEvents.push({
 				creatorId: lastCreatorRef.current,
-				projectId: projectId || null,
 				postId: postId || null,
 				eventType,
 				durationSeconds: accumulatedRef.current,
 			});
 			accumulatedRef.current = 0;
 		}
-	}, [projectId, postId, eventType]);
+	}, [postId, eventType]);
 
 	useEffect(() => {
 		// If creator changed, flush old data
