@@ -7,6 +7,7 @@ import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Asset, Project } from "../lib/types";
+import { uploadMediaFile } from "../lib/upload";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -56,21 +57,22 @@ export default function BuildsPage() {
 			setUploading(true);
 			setError(null);
 
-			const formData = new FormData();
-			formData.append("file", file);
-			formData.append("filename", file.name);
-			formData.append("fileSize", String(file.size));
-			formData.append("mimeType", file.type || "application/octet-stream");
-			formData.append("platform", platform);
-			formData.append("version", version);
-
 			try {
-				const res = await fetch(`${apiBase}/api/content/projects/${slug}/assets`, {
-					method: "POST",
-					credentials: "include",
-					body: formData,
+				// Upload the build to storage (presigned → Spaces in prod, direct in
+				// dev), then create the asset record referencing the returned key.
+				const key = await uploadMediaFile(file, "asset");
+				const res = await client.api.content.projects[":slug"].assets.$post({
+					param: { slug },
+					json: {
+						file: key,
+						filename: file.name,
+						fileSize: file.size,
+						mimeType: file.type || "application/octet-stream",
+						platform,
+						version,
+					},
 				});
-				if (!res.ok) throw new Error("Upload failed");
+				if (!res.ok) throw new Error("Create failed");
 				const data = (await res.json()) as { asset: Asset };
 				setProject((prev) =>
 					prev ? { ...prev, assets: [data.asset, ...(prev.assets || [])] } : prev,
