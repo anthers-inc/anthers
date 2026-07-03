@@ -26,8 +26,10 @@ const s3 = new S3Client({
 	region,
 	endpoint: `https://${region}.digitaloceanspaces.com`,
 	credentials: {
-		accessKeyId: process.env.SPACES_KEY ?? "",
-		secretAccessKey: process.env.SPACES_SECRET ?? "",
+		// Trim: a stray newline/space pasted into a dashboard secret silently
+		// corrupts the SigV4 HMAC and yields a baffling SignatureDoesNotMatch.
+		accessKeyId: (process.env.SPACES_KEY ?? "").trim(),
+		secretAccessKey: (process.env.SPACES_SECRET ?? "").trim(),
 	},
 	forcePathStyle: false, // DO Spaces requires virtual-hosted style
 	// DO Spaces doesn't support the AWS SDK's default flexible-checksum trailers
