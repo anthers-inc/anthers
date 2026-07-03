@@ -248,8 +248,8 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		await generateMasterPlaylist(outputDir, variants);
 		await updateJobProgress(jobId, 80);
 
-		// 5. Upload HLS files to storage
-		const storagePrefix = `videos/hls/${randomUUID().replace(/-/g, "")}`;
+		// 5. Upload HLS files to storage (creator-first layout — see media-upload route)
+		const storagePrefix = `creators/${post.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 		const hlsFiles = await readdir(outputDir);
 		for (const filename of hlsFiles) {
 			const filePath = join(outputDir, filename);
@@ -268,7 +268,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			thumbPath = await generateThumbnail(localPath, thumbPosition);
 			if (thumbPath) {
 				const thumbBuffer = await readFile(thumbPath);
-				thumbnailKey = `thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
+				thumbnailKey = `creators/${post.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				// Update post thumbnail
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
