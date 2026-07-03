@@ -1016,14 +1016,17 @@ const contentRoutes = new Hono()
 		),
 		async (c) => {
 			const { filename, contentType, mediaType } = c.req.valid("json");
+			const user = c.get("user");
 
-			// Generate a storage key following legacy conventions
+			// Creator-first key layout: every object lives under creators/<creatorId>/…
+			// so a creator's storage can later be siloed/migrated per the federation model.
 			const ext = filename.includes(".") ? filename.split(".").pop() : "";
 			const uuid = crypto.randomUUID().replace(/-/g, "");
+			const prefix = `creators/${user.id}`;
 			const keyMap = {
-				video: `videos/originals/${uuid}.${ext}`,
-				audio: `audio/originals/${uuid}.${ext}`,
-				asset: `assets/${uuid}.${ext}`,
+				video: `${prefix}/videos/originals/${uuid}.${ext}`,
+				audio: `${prefix}/audio/originals/${uuid}.${ext}`,
+				asset: `${prefix}/assets/${uuid}.${ext}`,
 			} as const;
 			const key = keyMap[mediaType];
 
@@ -1068,41 +1071,44 @@ const contentRoutes = new Hono()
 			);
 		}
 
-		// Generate storage key based on media type
+		// Generate storage key based on media type. Creator-first layout: every
+		// object lives under creators/<creatorId>/… so a creator's storage can
+		// later be siloed/migrated per the federation model.
 		const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
 		const uuid = crypto.randomUUID().replace(/-/g, "");
+		const prefix = `creators/${user.id}`;
 		let key: string;
 
 		switch (mediaType) {
 			case "video":
-				key = `videos/originals/${uuid}.${ext}`;
+				key = `${prefix}/videos/originals/${uuid}.${ext}`;
 				break;
 			case "audio":
-				key = `audio/originals/${uuid}.${ext}`;
+				key = `${prefix}/audio/originals/${uuid}.${ext}`;
 				break;
 			case "avatar":
-				key = `avatars/${user.id}/${uuid}.${ext}`;
+				key = `${prefix}/avatars/${uuid}.${ext}`;
 				break;
 			case "header":
-				key = `headers/${user.id}/${uuid}.${ext}`;
+				key = `${prefix}/headers/${uuid}.${ext}`;
 				break;
 			case "cover":
-				key = `covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				key = `${prefix}/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			case "screenshot":
-				key = `screenshots/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				key = `${prefix}/screenshots/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			case "asset":
-				key = `assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				key = `${prefix}/assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			case "inline-image":
-				key = `inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				key = `${prefix}/inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			case "jam-cover":
-				key = `jams/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				key = `${prefix}/jams/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			default:
-				key = `uploads/${user.id}/${uuid}.${ext}`;
+				key = `${prefix}/uploads/${uuid}.${ext}`;
 		}
 
 		// Determine ACL: private for gated content, public for everything else

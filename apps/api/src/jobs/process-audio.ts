@@ -201,8 +201,8 @@ export async function processAudio(data: ProcessAudioData) {
 		}
 		await updateJobProgress(jobId, 60);
 
-		// 3. Upload processed file to storage
-		const outputKey = `audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
+		// 3. Upload processed file to storage (creator-first layout — see media-upload route)
+		const outputKey = `creators/${post.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
 		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
 		const outputUrl = await storage.getUrl(outputKey);
