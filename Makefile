@@ -1,7 +1,7 @@
 # ─── Anthers Makefile ───
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
-        db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
+        db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         typecheck test lint lint-fix format
 
 API_PORT ?= 8000
@@ -15,7 +15,7 @@ help: ## Show this help
 install: ## Install all dependencies
 	bun install
 
-dev: ## Start API + worker + web dev servers
+dev: db-ready ## Start API + worker + web dev servers
 	@mkdir -p data
 	@KILLED=0; \
 	for PORT in $(API_PORT) $(WEB_PORT); do \
@@ -33,7 +33,7 @@ dev: ## Start API + worker + web dev servers
 	wait $$DEV_PID 2>/dev/null; \
 	rm -f .dev.pid
 
-dev-api: ## Start API dev server only
+dev-api: db-ready ## Start API dev server only
 	@mkdir -p data
 	@EXISTING_PID=$$(lsof -ti :$(API_PORT) 2>/dev/null); \
 	if [ -n "$$EXISTING_PID" ]; then \
@@ -47,7 +47,7 @@ dev-api: ## Start API dev server only
 	wait $$DEV_PID 2>/dev/null; \
 	rm -f .dev-api.pid
 
-dev-worker: ## Start background job worker only
+dev-worker: db-ready ## Start background job worker only
 	@mkdir -p data
 	@setsid bun run dev:worker & DEV_PID=$$!; \
 	echo $$DEV_PID > .dev-worker.pid; \
@@ -96,8 +96,19 @@ down: ## Stop everything
 	fi
 
 # ─── Database (Postgres via compose.yaml) ───
-# Dev now runs on a local containerized Postgres (the hub left SQLite). Bring it
-# up once with `make db-up` before `make dev`. Prod uses DO Managed Postgres.
+# Dev runs on a local containerized Postgres (the hub left SQLite). `make dev`
+# brings it up and migrates automatically via `db-ready`; the targets below are
+# for running those steps by hand. Prod uses DO Managed Postgres.
+
+db-ready: ## Ensure the dev Postgres is up, accepting connections, and migrated
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "  -> ERROR: Docker isn't running. Start Docker Desktop/daemon, then retry."; \
+		exit 1; \
+	fi
+	@docker compose up -d
+	@echo "  -> waiting for Postgres to accept connections..."
+	@until docker compose exec -T postgres pg_isready -U anthers -d anthers >/dev/null 2>&1; do sleep 1; done
+	@bun run db:migrate
 
 db-up: ## Start the local dev Postgres (detached)
 	docker compose up -d
