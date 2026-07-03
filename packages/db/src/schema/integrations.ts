@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { posts, projects } from "./content.js";
+import { posts } from "./content.js";
 
 export const platformConnections = pgTable(
 	"platform_connections",
@@ -51,7 +51,6 @@ export const crossPublishResults = pgTable(
 		platform: text("platform").notNull(), // youtube | steam | itchio | substack
 
 		// Local content reference
-		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
 		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
 
 		// External identifiers

@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { posts, projects } from "./content.js";
+import { posts } from "./content.js";
 
 export const subscriptions = pgTable("subscriptions", {
 	id: serial("id").primaryKey(),
@@ -41,7 +41,6 @@ export const attentionEvents = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
 		postId: integer("post_id").references(() => posts.id, { onDelete: "set null" }),
 		eventType: text("event_type").notNull(), // page_view | play | watch | read | listen
 		durationSeconds: integer("duration_seconds").default(0),

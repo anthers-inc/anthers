@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { projects } from "./content.js";
+import { posts } from "./content.js";
 
 export const stripeAccounts = pgTable("stripe_accounts", {
 	id: serial("id").primaryKey(),
@@ -33,9 +33,9 @@ export const purchases = pgTable("purchases", {
 	buyerId: integer("buyer_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
-	projectId: integer("project_id")
+	postId: integer("post_id")
 		.notNull()
-		.references(() => projects.id, { onDelete: "cascade" }),
+		.references(() => posts.id, { onDelete: "cascade" }),
 	amount: numeric("amount").notNull(),
 	processingFee: numeric("processing_fee").notNull(),
 	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee amount

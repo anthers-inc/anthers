@@ -5,11 +5,12 @@ import {
 	assets,
 	bookmarks,
 	comments,
+	galleryImages,
 	inlineImages,
 	posts,
+	projectPosts,
 	projects,
 	ratings,
-	screenshots,
 	transcodingJobs,
 } from "./content.js";
 import {
@@ -39,8 +40,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	followers: many(follows, { relationName: "creator" }),
 
 	// Content
-	projects: many(projects),
 	posts: many(posts),
+	projects: many(projects), // collections the creator owns
 	inlineImages: many(inlineImages),
 	comments: many(comments),
 	ratings: many(ratings),
@@ -99,11 +100,13 @@ export const followsRelations = relations(follows, ({ one }) => ({
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
-export const projectsRelations = relations(projects, ({ one, many }) => ({
-	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
-	screenshots: many(screenshots),
+// Posts — the universal content unit.
+export const postsRelations = relations(posts, ({ one, many }) => ({
+	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
+	projectPosts: many(projectPosts), // collections this post belongs to
+	galleryImages: many(galleryImages),
 	assets: many(assets),
-	posts: many(posts),
+	transcodingJobs: many(transcodingJobs),
 	comments: many(comments),
 	ratings: many(ratings),
 	purchases: many(purchases),
@@ -112,21 +115,24 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
 	jamEntries: many(jamEntries),
 }));
 
-export const screenshotsRelations = relations(screenshots, ({ one }) => ({
-	project: one(projects, { fields: [screenshots.projectId], references: [projects.id] }),
+// Projects — collections that group posts.
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
+	projectPosts: many(projectPosts),
+	bookmarks: many(bookmarks),
+}));
+
+export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
+	project: one(projects, { fields: [projectPosts.projectId], references: [projects.id] }),
+	post: one(posts, { fields: [projectPosts.postId], references: [posts.id] }),
+}));
+
+export const galleryImagesRelations = relations(galleryImages, ({ one }) => ({
+	post: one(posts, { fields: [galleryImages.postId], references: [posts.id] }),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({
-	project: one(projects, { fields: [assets.projectId], references: [projects.id] }),
-}));
-
-export const postsRelations = relations(posts, ({ one, many }) => ({
-	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
-	project: one(projects, { fields: [posts.projectId], references: [projects.id] }),
-	transcodingJobs: many(transcodingJobs),
-	comments: many(comments),
-	attentionEvents: many(attentionEvents),
-	crossPublishResults: many(crossPublishResults),
+	post: one(posts, { fields: [assets.postId], references: [posts.id] }),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({
@@ -139,13 +145,12 @@ export const inlineImagesRelations = relations(inlineImages, ({ one }) => ({
 
 export const commentsRelations = relations(comments, ({ one }) => ({
 	user: one(users, { fields: [comments.userId], references: [users.id] }),
-	project: one(projects, { fields: [comments.projectId], references: [projects.id] }),
 	post: one(posts, { fields: [comments.postId], references: [posts.id] }),
 }));
 
 export const ratingsRelations = relations(ratings, ({ one }) => ({
 	user: one(users, { fields: [ratings.userId], references: [users.id] }),
-	project: one(projects, { fields: [ratings.projectId], references: [projects.id] }),
+	post: one(posts, { fields: [ratings.postId], references: [posts.id] }),
 }));
 
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
@@ -154,8 +159,8 @@ export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
 		references: [users.id],
 		relationName: "bookmarkOwner",
 	}),
-	project: one(projects, { fields: [bookmarks.projectId], references: [projects.id] }),
 	post: one(posts, { fields: [bookmarks.postId], references: [posts.id] }),
+	project: one(projects, { fields: [bookmarks.projectId], references: [projects.id] }),
 	creator: one(users, {
 		fields: [bookmarks.creatorId],
 		references: [users.id],
@@ -171,7 +176,7 @@ export const stripeAccountsRelations = relations(stripeAccounts, ({ one }) => ({
 
 export const purchasesRelations = relations(purchases, ({ one, many }) => ({
 	buyer: one(users, { fields: [purchases.buyerId], references: [users.id] }),
-	project: one(projects, { fields: [purchases.projectId], references: [projects.id] }),
+	post: one(posts, { fields: [purchases.postId], references: [posts.id] }),
 	crfLedgerEntries: many(crfLedger),
 }));
 
@@ -199,10 +204,6 @@ export const attentionEventsRelations = relations(attentionEvents, ({ one }) => 
 		fields: [attentionEvents.creatorId],
 		references: [users.id],
 		relationName: "attentionCreator",
-	}),
-	project: one(projects, {
-		fields: [attentionEvents.projectId],
-		references: [projects.id],
 	}),
 	post: one(posts, { fields: [attentionEvents.postId], references: [posts.id] }),
 }));
@@ -245,10 +246,6 @@ export const platformConnectionsRelations = relations(platformConnections, ({ on
 
 export const crossPublishResultsRelations = relations(crossPublishResults, ({ one, many }) => ({
 	user: one(users, { fields: [crossPublishResults.userId], references: [users.id] }),
-	project: one(projects, {
-		fields: [crossPublishResults.projectId],
-		references: [projects.id],
-	}),
 	post: one(posts, { fields: [crossPublishResults.postId], references: [posts.id] }),
 	metricSnapshots: many(externalMetricSnapshots),
 }));
@@ -269,7 +266,7 @@ export const gameJamsRelations = relations(gameJams, ({ one, many }) => ({
 
 export const jamEntriesRelations = relations(jamEntries, ({ one, many }) => ({
 	jam: one(gameJams, { fields: [jamEntries.jamId], references: [gameJams.id] }),
-	project: one(projects, { fields: [jamEntries.projectId], references: [projects.id] }),
+	post: one(posts, { fields: [jamEntries.postId], references: [posts.id] }),
 	submittedBy: one(users, { fields: [jamEntries.submittedById], references: [users.id] }),
 	votes: many(jamVotes),
 }));
