@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { LockClosedIcon } from "@heroicons/react/24/outline";
+import { LockClosedIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { useAttentionTracker } from "@/lib/attention";
+import { useAuth } from "@/lib/auth";
 import { client } from "@/lib/rpc";
 import type { Project } from "@/lib/types";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
@@ -12,6 +13,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export default function ProjectPage() {
 	const { slug } = useParams<{ slug: string }>();
+	const { user } = useAuth();
 	const [project, setProject] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -23,13 +25,13 @@ export default function ProjectPage() {
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (!res.ok) {
-					setError("Collection not found.");
+					setError("Project not found.");
 					return;
 				}
 				const data = await res.json();
 				setProject(data.project as Project);
 			})
-			.catch(() => setError("Collection not found."))
+			.catch(() => setError("Project not found."))
 			.finally(() => setLoading(false));
 	}, [slug]);
 
@@ -52,13 +54,14 @@ export default function ProjectPage() {
 		return (
 			<div className="container mx-auto px-4 py-16 text-center">
 				<h1 className="text-2xl font-bold mb-2">Not Found</h1>
-				<p className="text-base-content/60">{error ?? "Collection not found."}</p>
+				<p className="text-base-content/60">{error ?? "Project not found."}</p>
 			</div>
 		);
 	}
 
 	const posts = project.posts ?? [];
 	const username = project.creator?.username;
+	const isOwner = !!user && user.id === project.creatorId;
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -73,7 +76,18 @@ export default function ProjectPage() {
 						/>
 					</div>
 				)}
-				<h1 className="text-3xl font-bold mb-2">{project.title}</h1>
+				<div className="flex items-start justify-between gap-4 mb-2">
+					<h1 className="text-3xl font-bold">{project.title}</h1>
+					{isOwner && (
+						<Link
+							to={`/dashboard/projects/${project.slug}/edit`}
+							className="btn btn-outline btn-sm shrink-0"
+						>
+							<PencilSquareIcon className="w-4 h-4" />
+							Edit
+						</Link>
+					)}
+				</div>
 				{project.creator && (
 					<p className="text-sm text-base-content/70 mb-3">
 						by{" "}
@@ -96,7 +110,7 @@ export default function ProjectPage() {
 				{posts.length} {posts.length === 1 ? "post" : "posts"}
 			</h2>
 			{posts.length === 0 ? (
-				<p className="text-base-content/50 text-sm">This collection has no posts yet.</p>
+				<p className="text-base-content/50 text-sm">This project has no posts yet.</p>
 			) : (
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 					{posts.map((member) => {

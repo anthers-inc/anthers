@@ -24,6 +24,17 @@
 	--color-base-content: oklch(97.8% 0.015 279);
 }
 
+/* Softer form-control borders — the default bordered inputs/selects read as
+   too intense against the dark base, so halve the border intensity by default.
+   Plain class selectors (not :where) so this wins over DaisyUI's own .input
+   rule on source order; focus/hover states still get the stronger accent. */
+.input,
+.select,
+.textarea,
+.file-input {
+	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
 body {
 	background:
 		radial-gradient(

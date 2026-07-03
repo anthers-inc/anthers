@@ -18,6 +18,7 @@ import {
 	verifyEmailToken,
 	verifyPassword,
 } from "../services/auth.js";
+import { sendVerificationEmail, sendWelcomeEmail } from "../services/email.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -121,8 +122,10 @@ const authRoutes = new Hono()
 		);
 		setSessionCookie(c, token);
 
-		// Create email verification token (would send email in production)
-		await createEmailVerificationToken(user.id);
+		// Send the welcome + email-verification message. Never let a mail hiccup
+		// fail the sign-up itself — the user can always re-request verification.
+		const verifyToken = await createEmailVerificationToken(user.id);
+		await sendWelcomeEmail(user.email, user.username, verifyToken);
 
 		return c.json({ user: serializeUser(user) }, 201);
 	})
@@ -206,8 +209,8 @@ const authRoutes = new Hono()
 			return c.json({ error: "Email already verified" }, 400);
 		}
 
-		await createEmailVerificationToken(user.id);
-		// In production, would send email here
+		const verifyToken = await createEmailVerificationToken(user.id);
+		await sendVerificationEmail(user.email, user.username, verifyToken);
 		return c.json({ success: true });
 	})
 

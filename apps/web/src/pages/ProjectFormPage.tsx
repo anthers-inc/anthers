@@ -50,7 +50,7 @@ export default function ProjectFormPage() {
 	const { user } = useAuth();
 	const isEdit = Boolean(slug);
 
-	// Collection metadata.
+	// Project metadata.
 	const [title, setTitle] = useState("");
 	const [projectSlug, setProjectSlug] = useState("");
 	const [slugManual, setSlugManual] = useState(false);
@@ -72,7 +72,7 @@ export default function ProjectFormPage() {
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (!res.ok) {
-					setError("Failed to load collection.");
+					setError("Failed to load project.");
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
@@ -84,7 +84,7 @@ export default function ProjectFormPage() {
 				setCoverPreview(project.coverImage);
 				setIsPublished(project.isPublished ?? false);
 			})
-			.catch(() => setError("Failed to load collection."))
+			.catch(() => setError("Failed to load project."))
 			.finally(() => setLoading(false));
 	}, [slug, isEdit]);
 
@@ -121,7 +121,7 @@ export default function ProjectFormPage() {
 				});
 				if (!res.ok) {
 					const data: unknown = await res.json();
-					setError(errorMessage(data, "Failed to save collection."));
+					setError(errorMessage(data, "Failed to save project."));
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
@@ -139,14 +139,14 @@ export default function ProjectFormPage() {
 				});
 				if (!res.ok) {
 					const data: unknown = await res.json();
-					setError(errorMessage(data, "Failed to create collection."));
+					setError(errorMessage(data, "Failed to create project."));
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
 				navigate(`/${user?.username ?? "me"}/${project.slug}`);
 			}
 		} catch {
-			setError("Failed to save collection.");
+			setError("Failed to save project.");
 		} finally {
 			setSaving(false);
 		}
@@ -162,9 +162,10 @@ export default function ProjectFormPage() {
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">{isEdit ? "Edit Collection" : "New Collection"}</h1>
+			<h1 className="text-2xl font-bold mb-2">{isEdit ? "Edit Project" : "New Project"}</h1>
 			<p className="text-sm text-base-content/60 mb-6">
-				A collection is a playlist-like grouping of posts. Add and reorder posts after creating it.
+				A project groups related posts — an album, a season, a devlog, a store. Add and reorder
+				posts after creating it.
 			</p>
 
 			{error && (
@@ -180,7 +181,7 @@ export default function ProjectFormPage() {
 						className="input input-bordered w-full"
 						value={title}
 						onChange={(e) => setTitle(e.target.value)}
-						placeholder="My Collection"
+						placeholder="My Project"
 					/>
 				</FormField>
 
@@ -194,7 +195,7 @@ export default function ProjectFormPage() {
 								setProjectSlug(e.target.value);
 								setSlugManual(true);
 							}}
-							placeholder="my-collection"
+							placeholder="my-project"
 						/>
 						<p className="text-xs text-base-content/50 mt-1">
 							URL: /{user?.username ?? "you"}/{projectSlug || "..."}
@@ -209,7 +210,7 @@ export default function ProjectFormPage() {
 						value={shortDescription}
 						onChange={(e) => setShortDescription(e.target.value)}
 						maxLength={300}
-						placeholder="A brief tagline for this collection"
+						placeholder="A brief tagline for this project"
 					/>
 				</FormField>
 
@@ -218,7 +219,7 @@ export default function ProjectFormPage() {
 						className="textarea textarea-bordered w-full min-h-[150px]"
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
-						placeholder="Full description of this collection (Markdown supported)"
+						placeholder="Full description of this project (Markdown supported)"
 					/>
 				</FormField>
 
@@ -247,7 +248,7 @@ export default function ProjectFormPage() {
 						<div>
 							<span className="label-text font-medium">Publish</span>
 							<p className="text-xs text-base-content/50 mt-0.5">
-								Published collections are visible to everyone
+								Published projects are visible to everyone
 							</p>
 						</div>
 					</label>
@@ -259,7 +260,7 @@ export default function ProjectFormPage() {
 						className={`btn btn-primary ${saving || uploading ? "btn-disabled" : ""}`}
 						disabled={saving || uploading}
 					>
-						{saving ? "Saving..." : isEdit ? "Update Collection" : "Create Collection"}
+						{saving ? "Saving..." : isEdit ? "Update Project" : "Create Project"}
 					</button>
 					<button type="button" className="btn btn-ghost" onClick={() => navigate("/dashboard")}>
 						Cancel

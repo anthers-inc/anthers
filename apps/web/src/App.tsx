@@ -44,6 +44,7 @@ import SignupPage from "./pages/SignupPage";
 import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import UserDemoPage from "./pages/UserDemoPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import WikiPage from "./pages/WikiPage";
 
 export default function App() {
@@ -205,6 +206,7 @@ export default function App() {
 				logged-out users see LoggedOutLayout. Content is accessible to everyone.
 			*/}
 			<Route element={<Layout />}>
+				<Route path="/verify-email" element={<VerifyEmailPage />} />
 				<Route path="/discover" element={<DiscoverPage />} />
 				<Route path="/discover/:slug" element={<ProjectRedirect />} />
 				<Route path="/posts/:slug" element={<PostPage />} />
