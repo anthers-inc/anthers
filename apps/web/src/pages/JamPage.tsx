@@ -7,12 +7,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import StarRating from "../components/ui/StarRating";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
-import type { GameJam, JamEntry, JamEntryResult, Project } from "../lib/types";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
+import type { GameJam, JamEntry, JamEntryResult, PostListItem } from "../lib/types";
 
 function formatDate(dateStr: string): string {
 	return new Date(dateStr).toLocaleDateString("en-US", {
@@ -51,11 +46,11 @@ function EntryCard({
 
 	return (
 		<div className="card bg-base-200">
-			{entry.project?.coverImage && (
+			{entry.post?.coverImage && (
 				<figure className="h-32">
 					<img
-						src={entry.project.coverImage}
-						alt={entry.project?.title}
+						src={entry.post.coverImage}
+						alt={entry.post?.title ?? ""}
 						className="w-full h-full object-cover"
 					/>
 				</figure>
@@ -70,10 +65,10 @@ function EntryCard({
 					</div>
 				)}
 				<Link
-					to={`/${entry.submitter?.username ?? "unknown"}/${entry.project?.slug}`}
+					to={`/${entry.submitter?.username ?? "unknown"}/posts/${entry.post?.slug}`}
 					className="link link-hover font-semibold text-sm"
 				>
-					{entry.project?.title}
+					{entry.post?.title}
 				</Link>
 				<p className="text-xs text-base-content/50">by {entry.submitter?.username}</p>
 				<div className="flex items-center justify-between mt-2">
@@ -98,31 +93,28 @@ function EntryCard({
 }
 
 function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitted: () => void }) {
-	const [projects, setProjects] = useState<Project[]>([]);
-	const [selectedProject, setSelectedProject] = useState<number | null>(null);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
+	const [selectedPost, setSelectedPost] = useState<number | null>(null);
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		fetch(`${apiBase}/api/content/projects?mine=true`, {
-			credentials: "include",
-		})
+		client.api.content.posts
+			.$get({ query: { mine: "true" } })
 			.then((res) => res.json())
-			.then((data: { projects: Project[] }) =>
-				setProjects(data.projects.filter((p) => p.isPublished)),
-			)
+			.then((data) => setPosts(data.posts.filter((p) => p.isPublished)))
 			.finally(() => setLoading(false));
 	}, []);
 
 	const handleSubmit = async () => {
-		if (!selectedProject) return;
+		if (!selectedPost) return;
 		setSubmitting(true);
 		setError(null);
 		try {
 			const res = await client.api.jams[":slug"].entries.$post({
 				param: { slug: jamSlug },
-				json: { projectId: selectedProject },
+				json: { postId: selectedPost },
 			});
 			if (!res.ok) {
 				const data = (await res.json()) as { detail?: string };
@@ -137,11 +129,11 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 	};
 
 	if (loading) return <LoadingSpinner size="sm" />;
-	if (projects.length === 0) {
+	if (posts.length === 0) {
 		return (
 			<p className="text-sm text-base-content/50">
-				You need a published project to submit.{" "}
-				<Link to="/dashboard/projects/new" className="link">
+				You need a published post to submit.{" "}
+				<Link to="/dashboard/posts/new" className="link">
 					Create one
 				</Link>
 			</p>
@@ -158,13 +150,13 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 			<div className="flex gap-2">
 				<select
 					className="select select-bordered select-sm flex-1"
-					value={selectedProject ?? ""}
-					onChange={(e) => setSelectedProject(e.target.value ? parseInt(e.target.value, 10) : null)}
+					value={selectedPost ?? ""}
+					onChange={(e) => setSelectedPost(e.target.value ? parseInt(e.target.value, 10) : null)}
 				>
-					<option value="">Select a project...</option>
-					{projects.map((p) => (
+					<option value="">Select a post...</option>
+					{posts.map((p) => (
 						<option key={p.id} value={p.id}>
-							{p.title}
+							{p.title || "Untitled"}
 						</option>
 					))}
 				</select>
@@ -172,7 +164,7 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 					type="button"
 					className="btn btn-primary btn-sm"
 					onClick={handleSubmit}
-					disabled={!selectedProject || submitting}
+					disabled={!selectedPost || submitting}
 				>
 					{submitting ? "Submitting..." : "Submit"}
 				</button>

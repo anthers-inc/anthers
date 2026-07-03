@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
-import type { Project, Screenshot } from "../lib/types";
+import type { Project } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -20,200 +20,133 @@ function slugify(text: string): string {
 		.replace(/^-|-$/g, "");
 }
 
+/** Upload a cover image via the direct endpoint; returns its public URL. */
+async function uploadImage(file: File): Promise<string> {
+	const formData = new FormData();
+	formData.append("file", file);
+	formData.append("mediaType", "cover");
+	const res = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+		method: "POST",
+		credentials: "include",
+		body: formData,
+	});
+	if (!res.ok) throw new Error("Image upload failed");
+	const data = (await res.json()) as { key: string; url: string };
+	return data.url;
+}
+
+/** Best-effort extraction of an { error } message from a non-ok JSON response. */
+function errorMessage(data: unknown, fallback: string): string {
+	if (data && typeof data === "object" && "error" in data) {
+		const err = (data as { error: unknown }).error;
+		if (typeof err === "string") return err;
+	}
+	return fallback;
+}
+
 export default function ProjectFormPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const navigate = useNavigate();
+	const { user } = useAuth();
 	const isEdit = Boolean(slug);
 
-	// Fields
+	// Collection metadata.
 	const [title, setTitle] = useState("");
 	const [projectSlug, setProjectSlug] = useState("");
 	const [slugManual, setSlugManual] = useState(false);
 	const [description, setDescription] = useState("");
 	const [shortDescription, setShortDescription] = useState("");
-	const [mediaType, setMediaType] = useState<string>("game");
-	const [tagsInput, setTagsInput] = useState("");
-	const [pricingType, setPricingType] = useState<string>("free");
-	const [price, setPrice] = useState("");
-	const [embedUrl, setEmbedUrl] = useState("");
-	const [websiteUrl, setWebsiteUrl] = useState("");
-	const [sourceUrl, setSourceUrl] = useState("");
+	const [coverImage, setCoverImage] = useState("");
+	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [isPublished, setIsPublished] = useState(false);
 
-	// Images
-	const [coverFile, setCoverFile] = useState<File | null>(null);
-	const [coverPreview, setCoverPreview] = useState<string | null>(null);
-	const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
-
-	// State
+	// UI state.
 	const [loading, setLoading] = useState(isEdit);
 	const [saving, setSaving] = useState(false);
+	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
-		if (isEdit && slug) {
-			client.api.content.projects[":slug"]
-				.$get({ param: { slug } })
-				.then(async (res) => {
-					if (!res.ok) {
-						setError("Failed to load project.");
-						return;
-					}
-					const { project } = await res.json();
-					setTitle(project.title);
-					setProjectSlug(project.slug);
-					setSlugManual(true);
-					setDescription(project.description || "");
-					setShortDescription(project.shortDescription || "");
-					setMediaType(project.mediaType);
-					setTagsInput((project.tags ?? []).join(", "));
-					setPricingType(project.pricingType);
-					setPrice(project.price || "");
-					setEmbedUrl(project.embedUrl || "");
-					setWebsiteUrl(project.websiteUrl || "");
-					setSourceUrl(project.sourceUrl || "");
-					setIsPublished(project.isPublished ?? false);
-					setCoverPreview(project.coverImage);
-					setScreenshots(project.screenshots || []);
-				})
-				.catch(() => setError("Failed to load project."))
-				.finally(() => setLoading(false));
-		}
+		if (!isEdit || !slug) return;
+		client.api.content.projects[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => {
+				if (!res.ok) {
+					setError("Failed to load collection.");
+					return;
+				}
+				const { project } = (await res.json()) as { project: Project };
+				setTitle(project.title);
+				setProjectSlug(project.slug);
+				setDescription(project.description || "");
+				setShortDescription(project.shortDescription || "");
+				setCoverImage(project.coverImage || "");
+				setCoverPreview(project.coverImage);
+				setIsPublished(project.isPublished ?? false);
+			})
+			.catch(() => setError("Failed to load collection."))
+			.finally(() => setLoading(false));
 	}, [slug, isEdit]);
 
-	// Auto-generate slug from title
+	// Auto-generate slug from the title on create until the user edits it.
 	useEffect(() => {
-		if (!slugManual && !isEdit) {
-			setProjectSlug(slugify(title));
-		}
+		if (!slugManual && !isEdit) setProjectSlug(slugify(title));
 	}, [title, slugManual, isEdit]);
 
-	const handleScreenshotUpload = useCallback(
-		async (file: File) => {
-			if (!isEdit || !slug) return;
-			const formData = new FormData();
-			formData.append("image", file);
-			try {
-				const res = await fetch(`${apiBase}/api/content/projects/${slug}/screenshots`, {
-					method: "POST",
-					credentials: "include",
-					body: formData,
-				});
-				if (!res.ok) throw new Error("Upload failed");
-				const screenshot = (await res.json()) as { screenshot: Screenshot };
-				setScreenshots((prev) => [...prev, screenshot.screenshot]);
-			} catch {
-				setError("Failed to upload screenshot.");
-			}
-		},
-		[isEdit, slug],
-	);
-
-	const handleScreenshotDelete = useCallback(
-		async (id: number) => {
-			if (!slug) return;
-			try {
-				const res = await fetch(`${apiBase}/api/content/projects/${slug}/screenshots/${id}`, {
-					method: "DELETE",
-					credentials: "include",
-				});
-				if (!res.ok) throw new Error("Delete failed");
-				setScreenshots((prev) => prev.filter((s) => s.id !== id));
-			} catch {
-				setError("Failed to delete screenshot.");
-			}
-		},
-		[slug],
-	);
+	const handleCoverSelect = async (file: File) => {
+		setCoverPreview(URL.createObjectURL(file));
+		setUploading(true);
+		setError(null);
+		try {
+			const url = await uploadImage(file);
+			setCoverImage(url);
+			setCoverPreview(url);
+		} catch {
+			setError("Cover image upload failed.");
+		} finally {
+			setUploading(false);
+		}
+	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setSaving(true);
 		setError(null);
-		setErrors({});
-
-		const tags = tagsInput
-			.split(",")
-			.map((t) => t.trim())
-			.filter(Boolean);
 
 		try {
-			if (isEdit) {
-				const formData = new FormData();
-				formData.append("title", title);
-				formData.append("description", description);
-				formData.append("shortDescription", shortDescription);
-				formData.append("mediaType", mediaType);
-				formData.append("tags", JSON.stringify(tags));
-				formData.append("pricingType", pricingType);
-				if (pricingType === "paid" && price) formData.append("price", price);
-				formData.append("embedUrl", embedUrl);
-				formData.append("websiteUrl", websiteUrl);
-				formData.append("sourceUrl", sourceUrl);
-				formData.append("isPublished", String(isPublished));
-				if (coverFile) formData.append("coverImage", coverFile);
-
-				const res = await fetch(`${apiBase}/api/content/projects/${slug}`, {
-					method: "PATCH",
-					credentials: "include",
-					body: formData,
+			if (isEdit && slug) {
+				const res = await client.api.content.projects[":slug"].$patch({
+					param: { slug },
+					json: { title, description, shortDescription, coverImage, isPublished },
 				});
-				if (!res.ok) throw res;
+				if (!res.ok) {
+					const data: unknown = await res.json();
+					setError(errorMessage(data, "Failed to save collection."));
+					return;
+				}
+				const { project } = (await res.json()) as { project: Project };
+				navigate(`/${user?.username ?? "me"}/${project.slug}`);
 			} else {
-				// Create with JSON first (no file upload), then patch with cover
-				const payload: Record<string, unknown> = {
-					title,
-					slug: projectSlug,
-					description,
-					shortDescription,
-					mediaType,
-					tags,
-					pricingType,
-					embedUrl,
-					websiteUrl,
-					sourceUrl,
-					isPublished,
-				};
-				if (pricingType === "paid" && price) payload.price = price;
-
 				const res = await client.api.content.projects.$post({
-					json: payload as Record<string, unknown> & {
-						title: string;
-						slug: string;
+					json: {
+						title,
+						slug: projectSlug,
+						description,
+						shortDescription,
+						coverImage,
+						isPublished,
 					},
 				});
-				const created = (await res.json()) as { project: Project };
-
-				// Upload cover image if provided
-				if (coverFile) {
-					const formData = new FormData();
-					formData.append("coverImage", coverFile);
-					await fetch(`${apiBase}/api/content/projects/${created.project.slug}`, {
-						method: "PATCH",
-						credentials: "include",
-						body: formData,
-					});
+				if (!res.ok) {
+					const data: unknown = await res.json();
+					setError(errorMessage(data, "Failed to create collection."));
+					return;
 				}
+				const { project } = (await res.json()) as { project: Project };
+				navigate(`/${user?.username ?? "me"}/${project.slug}`);
 			}
-			navigate("/dashboard");
-		} catch (err) {
-			if (err instanceof Response) {
-				try {
-					const data = await err.json();
-					if (data && typeof data === "object") {
-						const fieldErrors: Record<string, string> = {};
-						for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
-							fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
-						}
-						setErrors(fieldErrors);
-						return;
-					}
-				} catch {
-					// Fall through
-				}
-			}
-			setError("Failed to save project.");
+		} catch {
+			setError("Failed to save collection.");
 		} finally {
 			setSaving(false);
 		}
@@ -229,7 +162,10 @@ export default function ProjectFormPage() {
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">{isEdit ? "Edit Project" : "New Project"}</h1>
+			<h1 className="text-2xl font-bold mb-2">{isEdit ? "Edit Collection" : "New Collection"}</h1>
+			<p className="text-sm text-base-content/60 mb-6">
+				A collection is a playlist-like grouping of posts. Add and reorder posts after creating it.
+			</p>
 
 			{error && (
 				<div className="alert alert-error mb-4">
@@ -238,19 +174,18 @@ export default function ProjectFormPage() {
 			)}
 
 			<form onSubmit={handleSubmit} className="flex flex-col gap-4">
-				{/* Basic Info */}
-				<FormField label="Title" required error={errors.title}>
+				<FormField label="Title" required>
 					<input
 						type="text"
 						className="input input-bordered w-full"
 						value={title}
 						onChange={(e) => setTitle(e.target.value)}
-						placeholder="My Awesome Game"
+						placeholder="My Collection"
 					/>
 				</FormField>
 
 				{!isEdit && (
-					<FormField label="Slug" required error={errors.slug}>
+					<FormField label="Slug" required>
 						<input
 							type="text"
 							className="input input-bordered w-full"
@@ -259,176 +194,48 @@ export default function ProjectFormPage() {
 								setProjectSlug(e.target.value);
 								setSlugManual(true);
 							}}
-							placeholder="my-awesome-game"
+							placeholder="my-collection"
 						/>
 						<p className="text-xs text-base-content/50 mt-1">
-							URL: /explore/{projectSlug || "..."}
+							URL: /{user?.username ?? "you"}/{projectSlug || "..."}
 						</p>
 					</FormField>
 				)}
 
-				<FormField label="Short Description" error={errors.shortDescription}>
+				<FormField label="Short Description">
 					<input
 						type="text"
 						className="input input-bordered w-full"
 						value={shortDescription}
 						onChange={(e) => setShortDescription(e.target.value)}
 						maxLength={300}
-						placeholder="A brief tagline for your project"
+						placeholder="A brief tagline for this collection"
 					/>
 				</FormField>
 
-				<FormField label="Description" error={errors.description}>
+				<FormField label="Description">
 					<textarea
 						className="textarea textarea-bordered w-full min-h-[150px]"
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
-						placeholder="Full description of your project (Markdown supported)"
+						placeholder="Full description of this collection (Markdown supported)"
 					/>
 				</FormField>
 
-				{/* Metadata */}
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<FormField label="Media Type" error={errors.mediaType}>
-						<select
-							className="select select-bordered w-full"
-							value={mediaType}
-							onChange={(e) => setMediaType(e.target.value)}
-						>
-							<option value="game">Game</option>
-							<option value="video">Video</option>
-							<option value="audio">Audio</option>
-							<option value="text">Text</option>
-						</select>
-					</FormField>
-
-					<FormField label="Tags" error={errors.tags}>
-						<input
-							type="text"
-							className="input input-bordered w-full"
-							value={tagsInput}
-							onChange={(e) => setTagsInput(e.target.value)}
-							placeholder="rpg, pixel-art, roguelike"
-						/>
-						<p className="text-xs text-base-content/50 mt-1">Comma-separated</p>
-					</FormField>
-				</div>
-
-				{/* Pricing */}
-				<FormField label="Pricing" error={errors.pricingType}>
-					<select
-						className="select select-bordered w-full"
-						value={pricingType}
-						onChange={(e) => setPricingType(e.target.value)}
-					>
-						<option value="free">Free</option>
-						<option value="paid">Paid</option>
-					</select>
-				</FormField>
-
-				{pricingType === "paid" && (
-					<FormField label="Price ($)" error={errors.price}>
-						<input
-							type="number"
-							className="input input-bordered w-full"
-							value={price}
-							onChange={(e) => setPrice(e.target.value)}
-							min="0.50"
-							step="0.01"
-							placeholder="9.99"
-						/>
-					</FormField>
-				)}
-
-				{/* Cover Image */}
-				<FormField label="Cover Image" error={errors.coverImage}>
+				<FormField label="Cover Image">
 					<FileUpload
 						accept="image/*"
 						maxSize={10 * 1024 * 1024}
 						preview={coverPreview}
 						label="Upload cover image (recommended 630x500)"
-						onFileSelect={(file) => {
-							setCoverFile(file);
-							setCoverPreview(URL.createObjectURL(file));
-						}}
+						onFileSelect={handleCoverSelect}
 						onClear={() => {
-							setCoverFile(null);
+							setCoverImage("");
 							setCoverPreview(null);
 						}}
 					/>
 				</FormField>
 
-				{/* Screenshots (edit mode only) */}
-				{isEdit && (
-					<div className="form-control w-full">
-						<label className="label">
-							<span className="label-text">Screenshots</span>
-						</label>
-						<div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
-							{screenshots.map((ss) => (
-								<div key={ss.id} className="relative group">
-									<img
-										src={ss.image}
-										alt={ss.caption || "Screenshot"}
-										className="w-full h-24 object-cover rounded"
-									/>
-									<button
-										type="button"
-										className="btn btn-circle btn-xs btn-error absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-										onClick={() => handleScreenshotDelete(ss.id)}
-									>
-										<XMarkIcon className="w-3 h-3" />
-									</button>
-								</div>
-							))}
-						</div>
-						<FileUpload
-							accept="image/*"
-							maxSize={10 * 1024 * 1024}
-							label="Add screenshot"
-							compact
-							onFileSelect={handleScreenshotUpload}
-						/>
-					</div>
-				)}
-
-				{/* Links */}
-				<FormField label="Embed URL" error={errors.embedUrl}>
-					<input
-						type="url"
-						className="input input-bordered w-full"
-						value={embedUrl}
-						onChange={(e) => setEmbedUrl(e.target.value)}
-						placeholder="https://example.com/game/embed"
-					/>
-					<p className="text-xs text-base-content/50 mt-1">
-						URL for HTML5/WebGL game embed (sandboxed iframe)
-					</p>
-				</FormField>
-
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<FormField label="Website URL" error={errors.websiteUrl}>
-						<input
-							type="url"
-							className="input input-bordered w-full"
-							value={websiteUrl}
-							onChange={(e) => setWebsiteUrl(e.target.value)}
-							placeholder="https://mygame.com"
-						/>
-					</FormField>
-
-					<FormField label="Source Code URL" error={errors.sourceUrl}>
-						<input
-							type="url"
-							className="input input-bordered w-full"
-							value={sourceUrl}
-							onChange={(e) => setSourceUrl(e.target.value)}
-							placeholder="https://github.com/..."
-						/>
-					</FormField>
-				</div>
-
-				{/* Publish */}
 				<div className="form-control">
 					<label className="label cursor-pointer justify-start gap-3">
 						<input
@@ -440,7 +247,7 @@ export default function ProjectFormPage() {
 						<div>
 							<span className="label-text font-medium">Publish</span>
 							<p className="text-xs text-base-content/50 mt-0.5">
-								Published projects are visible to everyone
+								Published collections are visible to everyone
 							</p>
 						</div>
 					</label>
@@ -449,10 +256,10 @@ export default function ProjectFormPage() {
 				<div className="flex gap-2 mt-2">
 					<button
 						type="submit"
-						className={`btn btn-primary ${saving ? "btn-disabled" : ""}`}
-						disabled={saving}
+						className={`btn btn-primary ${saving || uploading ? "btn-disabled" : ""}`}
+						disabled={saving || uploading}
 					>
-						{saving ? "Saving..." : isEdit ? "Update Project" : "Create Project"}
+						{saving ? "Saving..." : isEdit ? "Update Collection" : "Create Collection"}
 					</button>
 					<button type="button" className="btn btn-ghost" onClick={() => navigate("/dashboard")}>
 						Cancel

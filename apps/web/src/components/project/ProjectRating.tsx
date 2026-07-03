@@ -10,7 +10,7 @@ export default function ProjectRating({ slug }: { slug: string }) {
 	const [rating, setRating] = useState<RatingAggregate | null>(null);
 
 	const fetchRating = () => {
-		client.api.content.projects[":slug"].ratings
+		client.api.content.posts[":slug"].ratings
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (!res.ok) return;
@@ -26,7 +26,7 @@ export default function ProjectRating({ slug }: { slug: string }) {
 	const handleRate = async (score: number) => {
 		if (!isAuthenticated) return;
 		try {
-			await client.api.content.projects[":slug"].ratings.$post({
+			await client.api.content.posts[":slug"].ratings.$post({
 				param: { slug },
 				json: { score },
 			});

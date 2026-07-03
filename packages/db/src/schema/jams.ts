@@ -9,7 +9,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { projects } from "./content.js";
+import { posts } from "./content.js";
 
 export const gameJams = pgTable("game_jams", {
 	id: serial("id").primaryKey(),
@@ -42,15 +42,15 @@ export const jamEntries = pgTable(
 		jamId: integer("jam_id")
 			.notNull()
 			.references(() => gameJams.id, { onDelete: "cascade" }),
-		projectId: integer("project_id")
+		postId: integer("post_id")
 			.notNull()
-			.references(() => projects.id, { onDelete: "cascade" }),
+			.references(() => posts.id, { onDelete: "cascade" }),
 		submittedById: integer("submitted_by_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_jam_entries_jam_project").on(table.jamId, table.projectId)],
+	(table) => [uniqueIndex("uq_jam_entries_jam_post").on(table.jamId, table.postId)],
 );
 
 export const jamVotes = pgTable(

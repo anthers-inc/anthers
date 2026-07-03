@@ -6,13 +6,8 @@ import EmptyState from "../components/ui/EmptyState";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
-import type { Asset, Project } from "../lib/types";
+import type { Asset, Post } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -24,7 +19,7 @@ function formatFileSize(bytes: number): string {
 export default function BuildsPage() {
 	const { slug } = useParams<{ slug: string }>();
 
-	const [project, setProject] = useState<Project | null>(null);
+	const [post, setPost] = useState<Post | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
@@ -36,17 +31,17 @@ export default function BuildsPage() {
 
 	useEffect(() => {
 		if (!slug) return;
-		client.api.content.projects[":slug"]
+		client.api.content.posts[":slug"]
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (!res.ok) {
-					setError("Failed to load project.");
+					setError("Failed to load post.");
 					return;
 				}
 				const data = await res.json();
-				setProject(data.project);
+				setPost(data.post as Post);
 			})
-			.catch(() => setError("Failed to load project."))
+			.catch(() => setError("Failed to load post."))
 			.finally(() => setLoading(false));
 	}, [slug]);
 
@@ -61,7 +56,7 @@ export default function BuildsPage() {
 				// Upload the build to storage (presigned → Spaces in prod, direct in
 				// dev), then create the asset record referencing the returned key.
 				const key = await uploadMediaFile(file, "asset");
-				const res = await client.api.content.projects[":slug"].assets.$post({
+				const res = await client.api.content.posts[":slug"].assets.$post({
 					param: { slug },
 					json: {
 						file: key,
@@ -74,7 +69,7 @@ export default function BuildsPage() {
 				});
 				if (!res.ok) throw new Error("Create failed");
 				const data = (await res.json()) as { asset: Asset };
-				setProject((prev) =>
+				setPost((prev) =>
 					prev ? { ...prev, assets: [data.asset, ...(prev.assets || [])] } : prev,
 				);
 				setFile(null);
@@ -92,12 +87,11 @@ export default function BuildsPage() {
 		async (assetId: number) => {
 			if (!slug) return;
 			try {
-				const res = await fetch(`${apiBase}/api/content/projects/${slug}/assets/${assetId}`, {
-					method: "DELETE",
-					credentials: "include",
+				const res = await client.api.content.posts[":slug"].assets[":id"].$delete({
+					param: { slug, id: String(assetId) },
 				});
 				if (!res.ok) throw new Error("Delete failed");
-				setProject((prev) =>
+				setPost((prev) =>
 					prev
 						? {
 								...prev,
@@ -120,15 +114,15 @@ export default function BuildsPage() {
 		);
 	}
 
-	if (!project) {
+	if (!post) {
 		return (
 			<div className="max-w-7xl mx-auto px-4 py-8">
-				<p className="text-error">{error || "Project not found."}</p>
+				<p className="text-error">{error || "Post not found."}</p>
 			</div>
 		);
 	}
 
-	const assets = project.assets || [];
+	const assets = post.assets || [];
 
 	return (
 		<div className="max-w-7xl mx-auto px-4 py-8">
@@ -137,7 +131,7 @@ export default function BuildsPage() {
 					Dashboard
 				</Link>
 				<span className="text-base-content/30">/</span>
-				<h1 className="text-2xl font-bold">{project.title}—Builds</h1>
+				<h1 className="text-2xl font-bold">{post.title || "Untitled"}—Builds</h1>
 			</div>
 
 			{error && (

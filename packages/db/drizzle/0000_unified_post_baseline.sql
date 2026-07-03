@@ -22,7 +22,7 @@ CREATE TABLE "crf_subsidies" (
 CREATE TABLE "purchases" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"buyer_id" integer NOT NULL,
-	"project_id" integer NOT NULL,
+	"post_id" integer NOT NULL,
 	"amount" numeric NOT NULL,
 	"processing_fee" numeric NOT NULL,
 	"crf_fee" numeric NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE "game_jams" (
 CREATE TABLE "jam_entries" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"jam_id" integer NOT NULL,
-	"project_id" integer NOT NULL,
+	"post_id" integer NOT NULL,
 	"submitted_by_id" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -151,7 +151,6 @@ CREATE TABLE "attention_events" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"creator_id" integer NOT NULL,
-	"project_id" integer,
 	"post_id" integer,
 	"event_type" text NOT NULL,
 	"duration_seconds" integer DEFAULT 0,
@@ -212,10 +211,10 @@ CREATE TABLE "subscriptions" (
 --> statement-breakpoint
 CREATE TABLE "assets" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
+	"post_id" integer NOT NULL,
 	"file" text NOT NULL,
 	"filename" text NOT NULL,
-	"file_size" integer DEFAULT 0,
+	"file_size" bigint DEFAULT 0,
 	"mime_type" text DEFAULT '',
 	"platform" text DEFAULT '',
 	"version" text DEFAULT '',
@@ -226,8 +225,8 @@ CREATE TABLE "assets" (
 CREATE TABLE "bookmarks" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"project_id" integer,
 	"post_id" integer,
+	"project_id" integer,
 	"creator_id" integer,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -236,8 +235,7 @@ CREATE TABLE "bookmarks" (
 CREATE TABLE "comments" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"project_id" integer,
-	"post_id" integer,
+	"post_id" integer NOT NULL,
 	"body" text NOT NULL,
 	"atproto_uri" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -248,7 +246,6 @@ CREATE TABLE "cross_publish_results" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"platform" text NOT NULL,
-	"project_id" integer,
 	"post_id" integer,
 	"external_id" text DEFAULT '',
 	"external_url" text DEFAULT '',
@@ -269,6 +266,15 @@ CREATE TABLE "external_metric_snapshots" (
 	"watch_time_seconds" bigint DEFAULT 0,
 	"revenue_cents" bigint DEFAULT 0,
 	"snapshot_date" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "gallery_images" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"post_id" integer NOT NULL,
+	"image" text NOT NULL,
+	"caption" text DEFAULT '',
+	"sort_order" integer DEFAULT 0,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -297,45 +303,62 @@ CREATE TABLE "platform_connections" (
 CREATE TABLE "posts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"creator_id" integer NOT NULL,
-	"project_id" integer,
+	"slug" text NOT NULL,
 	"title" text DEFAULT '',
 	"body" text DEFAULT '',
 	"body_html" text DEFAULT '',
 	"content_type" text DEFAULT 'text' NOT NULL,
+	"stream_enabled" boolean DEFAULT true NOT NULL,
+	"download_enabled" boolean DEFAULT false NOT NULL,
 	"video_file" text DEFAULT '',
 	"audio_file" text DEFAULT '',
+	"cover_image" text DEFAULT '',
 	"thumbnail" text DEFAULT '',
+	"embed_url" text DEFAULT '',
 	"duration_seconds" integer,
-	"is_premium" boolean DEFAULT false,
-	"visibility" text DEFAULT 'public' NOT NULL,
-	"is_published" boolean DEFAULT false,
+	"base_price" numeric,
+	"pricing_mode" text DEFAULT 'fixed' NOT NULL,
+	"min_price" numeric,
+	"suggested_price" numeric,
+	"entitlement_kind" text,
+	"entitlement_tier" text,
+	"entitlement_boost_threshold" numeric,
+	"entitlement_discount_pct" integer,
+	"purchasable_without_entitlement" boolean DEFAULT true NOT NULL,
+	"is_pinned" boolean DEFAULT false NOT NULL,
+	"listing" text DEFAULT 'timeline' NOT NULL,
+	"tags" jsonb DEFAULT '[]'::jsonb,
+	"website_url" text DEFAULT '',
+	"source_url" text DEFAULT '',
 	"estimated_read_minutes" integer,
+	"is_published" boolean DEFAULT false NOT NULL,
+	"view_count" bigint DEFAULT 0 NOT NULL,
+	"download_count" bigint DEFAULT 0 NOT NULL,
 	"atproto_uri" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "posts_slug_unique" UNIQUE("slug"),
 	CONSTRAINT "posts_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "project_posts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"post_id" integer NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"creator_id" integer NOT NULL,
-	"title" text NOT NULL,
 	"slug" text NOT NULL,
+	"title" text NOT NULL,
 	"description" text DEFAULT '',
 	"short_description" text DEFAULT '',
-	"media_type" text DEFAULT 'game' NOT NULL,
-	"tags" jsonb DEFAULT '[]'::jsonb,
-	"is_published" boolean DEFAULT false,
-	"pricing_type" text DEFAULT 'free' NOT NULL,
-	"price" numeric,
-	"min_price" numeric,
-	"suggested_price" numeric,
 	"cover_image" text DEFAULT '',
-	"embed_url" text DEFAULT '',
-	"website_url" text DEFAULT '',
-	"source_url" text DEFAULT '',
-	"view_count" integer DEFAULT 0,
-	"download_count" integer DEFAULT 0,
+	"page_config" jsonb DEFAULT '{}'::jsonb,
+	"is_published" boolean DEFAULT false NOT NULL,
 	"atproto_uri" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -346,20 +369,11 @@ CREATE TABLE "projects" (
 CREATE TABLE "ratings" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"project_id" integer NOT NULL,
+	"post_id" integer NOT NULL,
 	"score" integer NOT NULL,
 	"atproto_uri" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "ratings_atproto_uri_unique" UNIQUE("atproto_uri")
-);
---> statement-breakpoint
-CREATE TABLE "screenshots" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"project_id" integer NOT NULL,
-	"image" text NOT NULL,
-	"caption" text DEFAULT '',
-	"sort_order" integer DEFAULT 0,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "transcoding_jobs" (
@@ -379,11 +393,11 @@ CREATE TABLE "transcoding_jobs" (
 ALTER TABLE "crf_ledger" ADD CONSTRAINT "crf_ledger_purchase_id_purchases_id_fk" FOREIGN KEY ("purchase_id") REFERENCES "public"."purchases"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "crf_subsidies" ADD CONSTRAINT "crf_subsidies_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchases" ADD CONSTRAINT "purchases_buyer_id_users_id_fk" FOREIGN KEY ("buyer_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "purchases" ADD CONSTRAINT "purchases_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "purchases" ADD CONSTRAINT "purchases_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "stripe_accounts" ADD CONSTRAINT "stripe_accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "game_jams" ADD CONSTRAINT "game_jams_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_jam_id_game_jams_id_fk" FOREIGN KEY ("jam_id") REFERENCES "public"."game_jams"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "jam_entries" ADD CONSTRAINT "jam_entries_submitted_by_id_users_id_fk" FOREIGN KEY ("submitted_by_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "jam_votes" ADD CONSTRAINT "jam_votes_entry_id_jam_entries_id_fk" FOREIGN KEY ("entry_id") REFERENCES "public"."jam_entries"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "jam_votes" ADD CONSTRAINT "jam_votes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -394,7 +408,6 @@ ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY
 ALTER TABLE "verification_tokens" ADD CONSTRAINT "verification_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -402,29 +415,28 @@ ALTER TABLE "creator_gates" ADD CONSTRAINT "creator_gates_creator_id_users_id_fk
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_subscriber_id_users_id_fk" FOREIGN KEY ("subscriber_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "assets" ADD CONSTRAINT "assets_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "assets" ADD CONSTRAINT "assets_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "comments" ADD CONSTRAINT "comments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "comments" ADD CONSTRAINT "comments_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cross_publish_results" ADD CONSTRAINT "cross_publish_results_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "external_metric_snapshots" ADD CONSTRAINT "external_metric_snapshots_cross_publish_id_cross_publish_results_id_fk" FOREIGN KEY ("cross_publish_id") REFERENCES "public"."cross_publish_results"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "gallery_images" ADD CONSTRAINT "gallery_images_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "inline_images" ADD CONSTRAINT "inline_images_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "platform_connections" ADD CONSTRAINT "platform_connections_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_posts" ADD CONSTRAINT "project_posts_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "project_posts" ADD CONSTRAINT "project_posts_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ratings" ADD CONSTRAINT "ratings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "ratings" ADD CONSTRAINT "ratings_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "screenshots" ADD CONSTRAINT "screenshots_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ratings" ADD CONSTRAINT "ratings_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transcoding_jobs" ADD CONSTRAINT "transcoding_jobs_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_crf_subsidies_creator_cycle" ON "crf_subsidies" USING btree ("creator_id","billing_cycle");--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_jam_entries_jam_project" ON "jam_entries" USING btree ("jam_id","project_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_jam_entries_jam_post" ON "jam_entries" USING btree ("jam_id","post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_jam_votes_entry_user" ON "jam_votes" USING btree ("entry_id","user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_follows_follower_creator" ON "follows" USING btree ("follower_id","creator_id");--> statement-breakpoint
 CREATE INDEX "idx_attention_user_date" ON "attention_events" USING btree ("user_id","created_at");--> statement-breakpoint
@@ -435,6 +447,10 @@ CREATE INDEX "idx_bookmarks_user" ON "bookmarks" USING btree ("user_id","sort_or
 CREATE INDEX "idx_cross_publish_user_platform" ON "cross_publish_results" USING btree ("user_id","platform");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_ext_metric_publish_date" ON "external_metric_snapshots" USING btree ("cross_publish_id","snapshot_date");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_platform_conn_user_platform" ON "platform_connections" USING btree ("user_id","platform");--> statement-breakpoint
-CREATE INDEX "idx_project_views" ON "projects" USING btree ("view_count");--> statement-breakpoint
-CREATE INDEX "idx_project_downloads" ON "projects" USING btree ("download_count");--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_ratings_user_project" ON "ratings" USING btree ("user_id","project_id");
+CREATE INDEX "idx_posts_creator" ON "posts" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_posts_content_type" ON "posts" USING btree ("content_type");--> statement-breakpoint
+CREATE INDEX "idx_posts_created" ON "posts" USING btree ("created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_project_posts" ON "project_posts" USING btree ("project_id","post_id");--> statement-breakpoint
+CREATE INDEX "idx_project_posts_project" ON "project_posts" USING btree ("project_id","sort_order");--> statement-breakpoint
+CREATE INDEX "idx_project_posts_post" ON "project_posts" USING btree ("post_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_ratings_user_post" ON "ratings" USING btree ("user_id","post_id");

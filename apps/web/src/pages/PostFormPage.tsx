@@ -5,8 +5,9 @@ import RichTextEditor from "../components/editor/RichTextEditor";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
-import type { Post, Project } from "../lib/types";
+import type { Post } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
 
 const apiBase =
@@ -14,161 +15,302 @@ const apiBase =
 		? "http://localhost:8000"
 		: "";
 
-type ContentType = "text" | "video" | "audio";
-type Visibility = "public" | "subscribers_only" | "gated";
+/** Content types the creator can pick in the form. */
+type FormContentType = "text" | "image" | "audio" | "video" | "game" | "software";
+type PricingMode = "fixed" | "pwyw";
+type Access = "free" | "paid";
+type EntitlementKind = "none" | "tier" | "boost";
+type EntitlementTier = "root" | "sprout" | "petal" | "bloom";
+type Listing = "timeline" | "unlisted" | "shop";
+
+const CONTENT_TYPE_OPTIONS: { value: FormContentType; label: string }[] = [
+	{ value: "text", label: "Text / Article" },
+	{ value: "image", label: "Image" },
+	{ value: "audio", label: "Audio" },
+	{ value: "video", label: "Video" },
+	{ value: "game", label: "Game" },
+	{ value: "software", label: "Software" },
+];
+
+function slugify(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+/** Upload a display image (cover/thumbnail) via the direct endpoint; returns its public URL. */
+async function uploadImage(file: File): Promise<string> {
+	const formData = new FormData();
+	formData.append("file", file);
+	formData.append("mediaType", "cover");
+	const res = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+		method: "POST",
+		credentials: "include",
+		body: formData,
+	});
+	if (!res.ok) throw new Error("Image upload failed");
+	const data = (await res.json()) as { key: string; url: string };
+	return data.url;
+}
 
 export default function PostFormPage() {
-	const { id } = useParams<{ id: string }>();
+	const { slug } = useParams<{ slug: string }>();
 	const navigate = useNavigate();
-	const isEdit = Boolean(id);
+	const { user } = useAuth();
+	const isEdit = Boolean(slug);
 
-	// Form state
+	// ── Basics ──
 	const [title, setTitle] = useState("");
+	const [postSlug, setPostSlug] = useState("");
+	const [slugManual, setSlugManual] = useState(false);
+	const [contentType, setContentType] = useState<FormContentType>("text");
 	const [body, setBody] = useState("");
 	const [bodyHtml, setBodyHtml] = useState("");
-	const [contentType, setContentType] = useState<ContentType>("text");
-	const [projectId, setProjectId] = useState<string>("");
-	const [isPublished, setIsPublished] = useState(false);
-	const [isPremium, setIsPremium] = useState(false);
-	const [visibility, setVisibility] = useState<Visibility>("public");
-	const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
 
-	// Media upload state
-	const [mediaFile, setMediaFile] = useState<File | null>(null);
+	// ── Delivery ──
+	const [streamEnabled, setStreamEnabled] = useState(true);
+	const [downloadEnabled, setDownloadEnabled] = useState(false);
+
+	// ── Media ──
+	const [videoKey, setVideoKey] = useState("");
+	const [audioKey, setAudioKey] = useState("");
+	const [mediaFileName, setMediaFileName] = useState<string | null>(null);
 	const [uploadProgress, setUploadProgress] = useState(0);
-	const [uploadedStorageKey, setUploadedStorageKey] = useState<string | null>(null);
+	const [coverImage, setCoverImage] = useState("");
+	const [coverPreview, setCoverPreview] = useState<string | null>(null);
+	const [thumbnail, setThumbnail] = useState("");
+	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+	const [embedUrl, setEmbedUrl] = useState("");
+	const [durationSeconds, setDurationSeconds] = useState("");
 
-	// UI state
-	const [myProjects, setMyProjects] = useState<Project[]>([]);
+	// ── Pricing ──
+	const [access, setAccess] = useState<Access>("free");
+	const [pricingMode, setPricingMode] = useState<PricingMode>("fixed");
+	const [basePrice, setBasePrice] = useState("");
+	const [minPrice, setMinPrice] = useState("");
+	const [suggestedPrice, setSuggestedPrice] = useState("");
+
+	// ── Entitlement ──
+	const [entitlementKind, setEntitlementKind] = useState<EntitlementKind>("none");
+	const [entitlementTier, setEntitlementTier] = useState<EntitlementTier>("root");
+	const [entitlementBoostThreshold, setEntitlementBoostThreshold] = useState("");
+	const [entitlementDiscountPct, setEntitlementDiscountPct] = useState("0");
+	const [purchasableWithoutEntitlement, setPurchasableWithoutEntitlement] = useState(true);
+
+	// ── Presentation & metadata ──
+	const [listing, setListing] = useState<Listing>("timeline");
+	const [tagsInput, setTagsInput] = useState("");
+	const [websiteUrl, setWebsiteUrl] = useState("");
+	const [sourceUrl, setSourceUrl] = useState("");
+	const [isPinned, setIsPinned] = useState(false);
+	const [isPublished, setIsPublished] = useState(false);
+
+	// ── UI state ──
 	const [loading, setLoading] = useState(isEdit);
 	const [saving, setSaving] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
-		fetch(`${apiBase}/api/content/projects?mine=true`, {
-			credentials: "include",
-		})
-			.then((res) => res.json())
-			.then((data: { projects: Project[] }) => setMyProjects(data.projects))
-			.catch(() => {});
+		if (!isEdit || !slug) return;
+		client.api.content.posts[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => {
+				if (!res.ok) {
+					setError("Failed to load post.");
+					return;
+				}
+				const { post } = (await res.json()) as { post: Post };
+				setTitle(post.title || "");
+				setPostSlug(post.slug);
+				setContentType((post.contentType as FormContentType) || "text");
+				setBody(post.body || "");
+				setBodyHtml(post.bodyHtml || "");
+				setStreamEnabled(post.streamEnabled);
+				setDownloadEnabled(post.downloadEnabled);
+				setVideoKey(post.videoFile || "");
+				setAudioKey(post.audioFile || "");
+				setCoverImage(post.coverImage || "");
+				setCoverPreview(post.coverImage);
+				setThumbnail(post.thumbnail || "");
+				setThumbnailPreview(post.thumbnail);
+				setEmbedUrl(post.embedUrl || "");
+				setDurationSeconds(post.durationSeconds != null ? String(post.durationSeconds) : "");
+				setAccess(post.basePrice != null || post.pricingMode === "pwyw" ? "paid" : "free");
+				setPricingMode(post.pricingMode === "pwyw" ? "pwyw" : "fixed");
+				setBasePrice(post.basePrice || "");
+				setMinPrice(post.minPrice || "");
+				setSuggestedPrice(post.suggestedPrice || "");
+				setEntitlementKind((post.entitlementKind as EntitlementKind) || "none");
+				setEntitlementTier((post.entitlementTier as EntitlementTier) || "root");
+				setEntitlementBoostThreshold(post.entitlementBoostThreshold || "");
+				setEntitlementDiscountPct(String(post.entitlementDiscountPct ?? 0));
+				setPurchasableWithoutEntitlement(post.purchasableWithoutEntitlement);
+				setListing((post.listing as Listing) || "timeline");
+				setTagsInput((post.tags ?? []).join(", "));
+				setWebsiteUrl(post.websiteUrl || "");
+				setSourceUrl(post.sourceUrl || "");
+				setIsPinned(post.isPinned);
+				setIsPublished(post.isPublished ?? false);
+			})
+			.catch(() => setError("Failed to load post."))
+			.finally(() => setLoading(false));
+	}, [slug, isEdit]);
 
-		if (isEdit && id) {
-			client.api.content.posts[":id"]
-				.$get({ param: { id } })
-				.then((res) => res.json() as Promise<unknown>)
-				.then((data: unknown) => {
-					const post = (data as { post: Post }).post;
-					setTitle(post.title || "");
-					setBody(post.body || "");
-					setBodyHtml(post.bodyHtml || "");
-					setContentType(post.contentType as ContentType);
-					setProjectId(post.projectId ? String(post.projectId) : "");
-					setIsPublished(post.isPublished ?? false);
-					setIsPremium(post.isPremium ?? false);
-					setVisibility(post.visibility as Visibility);
-					if (post.thumbnail) setThumbnailPreview(post.thumbnail);
-				})
-				.catch(() => setError("Failed to load post."))
-				.finally(() => setLoading(false));
-		}
-	}, [id, isEdit]);
+	// Auto-generate slug from the title on create until the user edits it.
+	useEffect(() => {
+		if (!slugManual && !isEdit) setPostSlug(slugify(title));
+	}, [title, slugManual, isEdit]);
 
-	const handleMediaSelect = async (file: File) => {
-		setMediaFile(file);
+	const handleBodyChange = (html: string) => {
+		setBodyHtml(html);
+		const tmp = document.createElement("div");
+		tmp.innerHTML = html;
+		setBody(tmp.textContent || "");
+	};
+
+	const handleMediaSelect = async (file: File, kind: "video" | "audio") => {
+		setMediaFileName(file.name);
 		setUploadProgress(0);
 		setUploading(true);
 		setError(null);
 		try {
-			const key = await uploadMediaFile(file, contentType as "video" | "audio", setUploadProgress);
-			setUploadedStorageKey(key);
+			const key = await uploadMediaFile(file, kind, setUploadProgress);
+			if (kind === "video") setVideoKey(key);
+			else setAudioKey(key);
 		} catch (err) {
 			setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-			setMediaFile(null);
+			setMediaFileName(null);
 		} finally {
 			setUploading(false);
 		}
 	};
 
-	const handleThumbnailSelect = (file: File) => {
-		setThumbnailFile(file);
-		setThumbnailPreview(URL.createObjectURL(file));
+	const handleImageSelect = async (file: File, kind: "cover" | "thumbnail") => {
+		const localPreview = URL.createObjectURL(file);
+		if (kind === "cover") setCoverPreview(localPreview);
+		else setThumbnailPreview(localPreview);
+		setUploading(true);
+		setError(null);
+		try {
+			const url = await uploadImage(file);
+			if (kind === "cover") {
+				setCoverImage(url);
+				setCoverPreview(url);
+			} else {
+				setThumbnail(url);
+				setThumbnailPreview(url);
+			}
+		} catch {
+			setError("Image upload failed.");
+		} finally {
+			setUploading(false);
+		}
 	};
+
+	const deliveryValid = streamEnabled || downloadEnabled;
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		if (!deliveryValid) {
+			setError("A post must enable at least one delivery method (stream or download).");
+			return;
+		}
 		setSaving(true);
 		setError(null);
-		setErrors({});
+
+		const tags = tagsInput
+			.split(",")
+			.map((t) => t.trim())
+			.filter(Boolean);
+
+		// Pricing → basePrice / minPrice / suggestedPrice.
+		let basePriceOut: string | null = null;
+		let minPriceOut: string | null = null;
+		let suggestedPriceOut: string | null = null;
+		let pricingModeOut: PricingMode = "fixed";
+		if (access === "paid") {
+			pricingModeOut = pricingMode;
+			if (pricingMode === "fixed") {
+				basePriceOut = basePrice.trim() || null;
+			} else {
+				minPriceOut = minPrice.trim() || null;
+				suggestedPriceOut = suggestedPrice.trim() || null;
+			}
+		}
+
+		// Entitlement.
+		let entitlementKindOut: "tier" | "boost" | null = null;
+		let entitlementTierOut: EntitlementTier | null = null;
+		let entitlementBoostThresholdOut: string | null = null;
+		let entitlementDiscountPctOut: number | null = null;
+		if (entitlementKind === "tier") {
+			entitlementKindOut = "tier";
+			entitlementTierOut = entitlementTier;
+			entitlementDiscountPctOut = Number(entitlementDiscountPct) || 0;
+		} else if (entitlementKind === "boost") {
+			entitlementKindOut = "boost";
+			entitlementBoostThresholdOut = entitlementBoostThreshold.trim() || null;
+			entitlementDiscountPctOut = Number(entitlementDiscountPct) || 0;
+		}
+
+		const json = {
+			title,
+			body,
+			bodyHtml,
+			contentType,
+			streamEnabled,
+			downloadEnabled,
+			videoFile: videoKey,
+			audioFile: audioKey,
+			coverImage,
+			thumbnail,
+			embedUrl,
+			durationSeconds: durationSeconds.trim() ? Number(durationSeconds) : undefined,
+			basePrice: basePriceOut,
+			pricingMode: pricingModeOut,
+			minPrice: minPriceOut,
+			suggestedPrice: suggestedPriceOut,
+			entitlementKind: entitlementKindOut,
+			entitlementTier: entitlementTierOut,
+			entitlementBoostThreshold: entitlementBoostThresholdOut,
+			entitlementDiscountPct: entitlementDiscountPctOut,
+			purchasableWithoutEntitlement,
+			isPinned,
+			listing,
+			tags,
+			websiteUrl,
+			sourceUrl,
+			isPublished,
+		};
 
 		try {
-			const formData = new FormData();
-			formData.append("title", title);
-			formData.append("contentType", contentType);
-			formData.append("visibility", visibility);
-			formData.append("isPremium", String(isPremium));
-			formData.append("isPublished", String(isPublished));
-			if (projectId) formData.append("project", projectId);
-
-			if (contentType === "text") {
-				formData.append("body", body);
-				formData.append("bodyHtml", bodyHtml);
-			} else {
-				// Optional description for media posts
-				if (body) formData.append("body", body);
-				if (bodyHtml) formData.append("bodyHtml", bodyHtml);
-			}
-
-			if (thumbnailFile) {
-				formData.append("thumbnail", thumbnailFile);
-			}
-
-			// For media posts with uploaded file, set the file field
-			if (contentType === "video" && uploadedStorageKey) {
-				formData.append("videoFile", uploadedStorageKey);
-			}
-			if (contentType === "audio" && uploadedStorageKey) {
-				formData.append("audioFile", uploadedStorageKey);
-			}
-
-			if (isEdit) {
-				await fetch(`${apiBase}/api/content/posts/${id}`, {
-					method: "PATCH",
-					credentials: "include",
-					body: formData,
-				}).then((res) => {
-					if (!res.ok) throw res;
-					return res.json();
+			if (isEdit && slug) {
+				const res = await client.api.content.posts[":slug"].$patch({
+					param: { slug },
+					json,
 				});
-			} else {
-				await fetch(`${apiBase}/api/content/posts`, {
-					method: "POST",
-					credentials: "include",
-					body: formData,
-				}).then((res) => {
-					if (!res.ok) throw res;
-					return res.json();
-				});
-			}
-			navigate("/dashboard");
-		} catch (err) {
-			if (err instanceof Response) {
-				try {
-					const data = await err.json();
-					if (data && typeof data === "object") {
-						const fieldErrors: Record<string, string> = {};
-						for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
-							fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
-						}
-						setErrors(fieldErrors);
-						return;
-					}
-				} catch {
-					// Fall through
+				if (!res.ok) {
+					const data: unknown = await res.json();
+					setError(errorMessage(data, "Failed to save post."));
+					return;
 				}
+				const { post } = (await res.json()) as { post: Post };
+				navigate(`/${user?.username ?? "me"}/posts/${post.slug}`);
+			} else {
+				const res = await client.api.content.posts.$post({
+					json: { ...json, slug: postSlug.trim() || undefined },
+				});
+				if (!res.ok) {
+					const data: unknown = await res.json();
+					setError(errorMessage(data, "Failed to create post."));
+					return;
+				}
+				const { post } = (await res.json()) as { post: Post };
+				navigate(`/${user?.username ?? "me"}/posts/${post.slug}`);
 			}
+		} catch {
 			setError("Failed to save post.");
 		} finally {
 			setSaving(false);
@@ -193,66 +335,77 @@ export default function PostFormPage() {
 				</div>
 			)}
 
-			<form onSubmit={handleSubmit} className="flex flex-col gap-4">
-				{/* Content type selector */}
-				<FormField label="Content Type">
-					<div className="flex gap-2">
-						{(["text", "video", "audio"] as const).map((type) => (
-							<button
-								key={type}
-								type="button"
-								className={`btn btn-sm ${contentType === type ? "btn-primary" : "btn-outline"}`}
-								onClick={() => {
-									setContentType(type);
-									setMediaFile(null);
-									setUploadedStorageKey(null);
-									setUploadProgress(0);
-								}}
-							>
-								{type === "text" ? "Article" : type === "video" ? "Video" : "Audio"}
-							</button>
-						))}
-					</div>
-				</FormField>
+			<form onSubmit={handleSubmit} className="flex flex-col gap-6">
+				{/* ── Basics ── */}
+				<section className="flex flex-col gap-4">
+					<FormField label="Content Type">
+						<select
+							className="select select-bordered w-full"
+							value={contentType}
+							onChange={(e) => setContentType(e.target.value as FormContentType)}
+						>
+							{CONTENT_TYPE_OPTIONS.map((opt) => (
+								<option key={opt.value} value={opt.value}>
+									{opt.label}
+								</option>
+							))}
+						</select>
+					</FormField>
 
-				<FormField label="Title" error={errors.title}>
-					<input
-						type="text"
-						className="input input-bordered w-full"
-						value={title}
-						onChange={(e) => setTitle(e.target.value)}
-						placeholder="Post title"
-					/>
-				</FormField>
-
-				{/* Text content */}
-				{contentType === "text" && (
-					<FormField label="Content" required error={errors.bodyHtml || errors.body}>
-						<RichTextEditor
-							content={bodyHtml || body}
-							onChange={(html) => {
-								setBodyHtml(html);
-								// Strip tags for plain text fallback
-								const tmp = document.createElement("div");
-								tmp.innerHTML = html;
-								setBody(tmp.textContent || "");
-							}}
-							placeholder="Write your article..."
+					<FormField label="Title">
+						<input
+							type="text"
+							className="input input-bordered w-full"
+							value={title}
+							onChange={(e) => setTitle(e.target.value)}
+							placeholder="Post title"
 						/>
 					</FormField>
-				)}
 
-				{/* Video upload */}
-				{contentType === "video" && (
-					<>
-						<FormField label="Video File" required error={errors.videoFile}>
-							{mediaFile ? (
+					{!isEdit && (
+						<FormField label="Slug">
+							<input
+								type="text"
+								className="input input-bordered w-full"
+								value={postSlug}
+								onChange={(e) => {
+									setPostSlug(e.target.value);
+									setSlugManual(true);
+								}}
+								placeholder="my-post (auto-generated if left blank)"
+							/>
+							<p className="text-xs text-base-content/50 mt-1">
+								URL: /posts/{postSlug || "..."}
+							</p>
+						</FormField>
+					)}
+				</section>
+
+				{/* ── Content & media ── */}
+				<section className="flex flex-col gap-4 border-t border-base-300 pt-4">
+					<h2 className="text-lg font-semibold">Content & Media</h2>
+
+					<FormField label={contentType === "text" ? "Content" : "Description"}>
+						<RichTextEditor
+							content={bodyHtml || body}
+							onChange={handleBodyChange}
+							placeholder={
+								contentType === "text" ? "Write your article..." : "Optional description..."
+							}
+						/>
+					</FormField>
+
+					{contentType === "video" && (
+						<FormField label="Video File">
+							{mediaFileName || videoKey ? (
 								<div className="flex flex-col gap-2">
 									<div className="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
-										<span className="text-sm truncate flex-1">{mediaFile.name}</span>
+										<span className="text-sm truncate flex-1">
+											{mediaFileName || "Existing video"}
+										</span>
 										{uploading ? (
 											<span className="text-xs font-mono">{uploadProgress}%</span>
-										) : uploadedStorageKey ? (
+										) : videoKey ? (
 											<span className="badge badge-success badge-sm">Uploaded</span>
 										) : null}
 									</div>
@@ -268,38 +421,24 @@ export default function PostFormPage() {
 								<FileUpload
 									accept="video/*"
 									maxSize={2 * 1024 * 1024 * 1024}
-									onFileSelect={handleMediaSelect}
+									onFileSelect={(file) => handleMediaSelect(file, "video")}
 									label="Drop a video file or click to browse"
 								/>
 							)}
 						</FormField>
+					)}
 
-						<FormField label="Description" error={errors.body}>
-							<RichTextEditor
-								content={bodyHtml || body}
-								onChange={(html) => {
-									setBodyHtml(html);
-									const tmp = document.createElement("div");
-									tmp.innerHTML = html;
-									setBody(tmp.textContent || "");
-								}}
-								placeholder="Optional description..."
-							/>
-						</FormField>
-					</>
-				)}
-
-				{/* Audio upload */}
-				{contentType === "audio" && (
-					<>
-						<FormField label="Audio File" required error={errors.audioFile}>
-							{mediaFile ? (
+					{contentType === "audio" && (
+						<FormField label="Audio File">
+							{mediaFileName || audioKey ? (
 								<div className="flex flex-col gap-2">
 									<div className="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
-										<span className="text-sm truncate flex-1">{mediaFile.name}</span>
+										<span className="text-sm truncate flex-1">
+											{mediaFileName || "Existing audio"}
+										</span>
 										{uploading ? (
 											<span className="text-xs font-mono">{uploadProgress}%</span>
-										) : uploadedStorageKey ? (
+										) : audioKey ? (
 											<span className="badge badge-success badge-sm">Uploaded</span>
 										) : null}
 									</div>
@@ -315,75 +454,313 @@ export default function PostFormPage() {
 								<FileUpload
 									accept="audio/*"
 									maxSize={500 * 1024 * 1024}
-									onFileSelect={handleMediaSelect}
+									onFileSelect={(file) => handleMediaSelect(file, "audio")}
 									label="Drop an audio file or click to browse"
 								/>
 							)}
 						</FormField>
+					)}
 
-						<FormField label="Description" error={errors.body}>
-							<RichTextEditor
-								content={bodyHtml || body}
-								onChange={(html) => {
-									setBodyHtml(html);
-									const tmp = document.createElement("div");
-									tmp.innerHTML = html;
-									setBody(tmp.textContent || "");
-								}}
-								placeholder="Optional description..."
+					{(contentType === "game" || contentType === "software") && (
+						<FormField label="Embed URL">
+							<input
+								type="url"
+								className="input input-bordered w-full"
+								value={embedUrl}
+								onChange={(e) => setEmbedUrl(e.target.value)}
+								placeholder="https://example.com/embed"
+							/>
+							<p className="text-xs text-base-content/50 mt-1">
+								URL for an HTML5/WebGL embed (sandboxed iframe)
+							</p>
+						</FormField>
+					)}
+
+					{(contentType === "audio" || contentType === "video") && (
+						<FormField label="Duration (seconds)">
+							<input
+								type="number"
+								className="input input-bordered w-full"
+								value={durationSeconds}
+								onChange={(e) => setDurationSeconds(e.target.value)}
+								min="0"
+								step="1"
+								placeholder="Optional — usually derived automatically"
 							/>
 						</FormField>
-					</>
-				)}
+					)}
 
-				{/* Thumbnail */}
-				<FormField label="Thumbnail" error={errors.thumbnail}>
-					<FileUpload
-						accept="image/*"
-						maxSize={10 * 1024 * 1024}
-						onFileSelect={handleThumbnailSelect}
-						onClear={() => {
-							setThumbnailFile(null);
-							setThumbnailPreview(null);
-						}}
-						preview={thumbnailPreview}
-						label="Upload a thumbnail image"
-						compact
-					/>
-				</FormField>
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<FormField label="Cover Image">
+							<FileUpload
+								accept="image/*"
+								maxSize={10 * 1024 * 1024}
+								preview={coverPreview}
+								label="Upload a cover image"
+								compact
+								onFileSelect={(file) => handleImageSelect(file, "cover")}
+								onClear={() => {
+									setCoverImage("");
+									setCoverPreview(null);
+								}}
+							/>
+						</FormField>
 
-				{/* Visibility */}
-				<FormField label="Visibility">
-					<select
-						className="select select-bordered w-full"
-						value={visibility}
-						onChange={(e) => setVisibility(e.target.value as Visibility)}
-					>
-						<option value="public">Public</option>
-						<option value="subscribers_only">Subscribers Only</option>
-						<option value="gated">Gated (Boost Pool)</option>
-					</select>
-				</FormField>
+						<FormField label="Thumbnail">
+							<FileUpload
+								accept="image/*"
+								maxSize={10 * 1024 * 1024}
+								preview={thumbnailPreview}
+								label="Upload a thumbnail"
+								compact
+								onFileSelect={(file) => handleImageSelect(file, "thumbnail")}
+								onClear={() => {
+									setThumbnail("");
+									setThumbnailPreview(null);
+								}}
+							/>
+						</FormField>
+					</div>
+				</section>
 
-				{/* Linked Project */}
-				<FormField label="Linked Project" error={errors.project}>
-					<select
-						className="select select-bordered w-full"
-						value={projectId}
-						onChange={(e) => setProjectId(e.target.value)}
-					>
-						<option value="">None</option>
-						{myProjects.map((p) => (
-							<option key={p.id} value={p.id}>
-								{p.title}
-							</option>
-						))}
-					</select>
-				</FormField>
+				{/* ── Delivery ── */}
+				<section className="flex flex-col gap-2 border-t border-base-300 pt-4">
+					<h2 className="text-lg font-semibold">Delivery</h2>
+					<p className="text-xs text-base-content/50 -mt-1">
+						Enable at least one way for people to consume this post.
+					</p>
+					<div className="flex flex-wrap gap-6">
+						<label className="label cursor-pointer justify-start gap-3">
+							<input
+								type="checkbox"
+								className="toggle toggle-primary"
+								checked={streamEnabled}
+								onChange={(e) => setStreamEnabled(e.target.checked)}
+							/>
+							<span className="label-text">Stream / view online</span>
+						</label>
+						<label className="label cursor-pointer justify-start gap-3">
+							<input
+								type="checkbox"
+								className="toggle toggle-primary"
+								checked={downloadEnabled}
+								onChange={(e) => setDownloadEnabled(e.target.checked)}
+							/>
+							<span className="label-text">Downloadable</span>
+						</label>
+					</div>
+					{!deliveryValid && (
+						<p className="text-error text-xs">
+							Enable stream, download, or both.
+						</p>
+					)}
+				</section>
 
-				{/* Toggles */}
-				<div className="flex gap-6">
-					<div className="form-control">
+				{/* ── Pricing ── */}
+				<section className="flex flex-col gap-4 border-t border-base-300 pt-4">
+					<h2 className="text-lg font-semibold">Pricing</h2>
+
+					<FormField label="Access">
+						<select
+							className="select select-bordered w-full"
+							value={access}
+							onChange={(e) => setAccess(e.target.value as Access)}
+						>
+							<option value="free">Free</option>
+							<option value="paid">Paid</option>
+						</select>
+					</FormField>
+
+					{access === "paid" && (
+						<>
+							<FormField label="Pricing Mode">
+								<select
+									className="select select-bordered w-full"
+									value={pricingMode}
+									onChange={(e) => setPricingMode(e.target.value as PricingMode)}
+								>
+									<option value="fixed">Fixed price</option>
+									<option value="pwyw">Pay what you want</option>
+								</select>
+							</FormField>
+
+							{pricingMode === "fixed" ? (
+								<FormField label="Price ($)">
+									<input
+										type="number"
+										className="input input-bordered w-full"
+										value={basePrice}
+										onChange={(e) => setBasePrice(e.target.value)}
+										min="0"
+										step="0.01"
+										placeholder="9.99"
+									/>
+								</FormField>
+							) : (
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<FormField label="Minimum Price ($)">
+										<input
+											type="number"
+											className="input input-bordered w-full"
+											value={minPrice}
+											onChange={(e) => setMinPrice(e.target.value)}
+											min="0"
+											step="0.01"
+											placeholder="0.00"
+										/>
+									</FormField>
+									<FormField label="Suggested Price ($)">
+										<input
+											type="number"
+											className="input input-bordered w-full"
+											value={suggestedPrice}
+											onChange={(e) => setSuggestedPrice(e.target.value)}
+											min="0"
+											step="0.01"
+											placeholder="5.00"
+										/>
+									</FormField>
+								</div>
+							)}
+						</>
+					)}
+				</section>
+
+				{/* ── Entitlement ── */}
+				<section className="flex flex-col gap-4 border-t border-base-300 pt-4">
+					<h2 className="text-lg font-semibold">Entitlement</h2>
+
+					<FormField label="Unlock via">
+						<select
+							className="select select-bordered w-full"
+							value={entitlementKind}
+							onChange={(e) => setEntitlementKind(e.target.value as EntitlementKind)}
+						>
+							<option value="none">None</option>
+							<option value="tier">Anthers Tier</option>
+							<option value="boost">Boost Threshold</option>
+						</select>
+					</FormField>
+
+					{entitlementKind === "tier" && (
+						<FormField label="Required Tier">
+							<select
+								className="select select-bordered w-full"
+								value={entitlementTier}
+								onChange={(e) => setEntitlementTier(e.target.value as EntitlementTier)}
+							>
+								<option value="root">Root</option>
+								<option value="sprout">Sprout</option>
+								<option value="petal">Petal</option>
+								<option value="bloom">Bloom</option>
+							</select>
+						</FormField>
+					)}
+
+					{entitlementKind === "boost" && (
+						<FormField label="Boost Threshold ($)">
+							<input
+								type="number"
+								className="input input-bordered w-full"
+								value={entitlementBoostThreshold}
+								onChange={(e) => setEntitlementBoostThreshold(e.target.value)}
+								min="0"
+								step="0.01"
+								placeholder="5.00"
+							/>
+						</FormField>
+					)}
+
+					{entitlementKind !== "none" && (
+						<>
+							<FormField label="Entitlement Discount (%)">
+								<input
+									type="number"
+									className="input input-bordered w-full"
+									value={entitlementDiscountPct}
+									onChange={(e) => setEntitlementDiscountPct(e.target.value)}
+									min="0"
+									max="100"
+									step="1"
+									placeholder="100 = fully unlocked"
+								/>
+								<p className="text-xs text-base-content/50 mt-1">
+									100 unlocks fully; less than 100 gives entitled viewers a discount.
+								</p>
+							</FormField>
+
+							<label className="label cursor-pointer justify-start gap-3">
+								<input
+									type="checkbox"
+									className="toggle toggle-primary"
+									checked={purchasableWithoutEntitlement}
+									onChange={(e) => setPurchasableWithoutEntitlement(e.target.checked)}
+								/>
+								<span className="label-text">Purchasable without the entitlement</span>
+							</label>
+						</>
+					)}
+				</section>
+
+				{/* ── Presentation & metadata ── */}
+				<section className="flex flex-col gap-4 border-t border-base-300 pt-4">
+					<h2 className="text-lg font-semibold">Presentation & Metadata</h2>
+
+					<FormField label="Listing">
+						<select
+							className="select select-bordered w-full"
+							value={listing}
+							onChange={(e) => setListing(e.target.value as Listing)}
+						>
+							<option value="timeline">Timeline (public feed)</option>
+							<option value="unlisted">Unlisted</option>
+							<option value="shop">Shop</option>
+						</select>
+					</FormField>
+
+					<FormField label="Tags">
+						<input
+							type="text"
+							className="input input-bordered w-full"
+							value={tagsInput}
+							onChange={(e) => setTagsInput(e.target.value)}
+							placeholder="rpg, pixel-art, roguelike"
+						/>
+						<p className="text-xs text-base-content/50 mt-1">Comma-separated</p>
+					</FormField>
+
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<FormField label="Website URL">
+							<input
+								type="url"
+								className="input input-bordered w-full"
+								value={websiteUrl}
+								onChange={(e) => setWebsiteUrl(e.target.value)}
+								placeholder="https://example.com"
+							/>
+						</FormField>
+
+						<FormField label="Source Code URL">
+							<input
+								type="url"
+								className="input input-bordered w-full"
+								value={sourceUrl}
+								onChange={(e) => setSourceUrl(e.target.value)}
+								placeholder="https://github.com/..."
+							/>
+						</FormField>
+					</div>
+
+					<div className="flex flex-wrap gap-6">
+						<label className="label cursor-pointer justify-start gap-3">
+							<input
+								type="checkbox"
+								className="toggle toggle-secondary"
+								checked={isPinned}
+								onChange={(e) => setIsPinned(e.target.checked)}
+							/>
+							<span className="label-text">Pin to profile</span>
+						</label>
 						<label className="label cursor-pointer justify-start gap-3">
 							<input
 								type="checkbox"
@@ -394,24 +771,13 @@ export default function PostFormPage() {
 							<span className="label-text">Publish</span>
 						</label>
 					</div>
-					<div className="form-control">
-						<label className="label cursor-pointer justify-start gap-3">
-							<input
-								type="checkbox"
-								className="toggle toggle-secondary"
-								checked={isPremium}
-								onChange={(e) => setIsPremium(e.target.checked)}
-							/>
-							<span className="label-text">Premium</span>
-						</label>
-					</div>
-				</div>
+				</section>
 
 				<div className="flex gap-2 mt-2">
 					<button
 						type="submit"
-						className={`btn btn-primary ${saving || uploading ? "btn-disabled" : ""}`}
-						disabled={saving || uploading}
+						className={`btn btn-primary ${saving || uploading || !deliveryValid ? "btn-disabled" : ""}`}
+						disabled={saving || uploading || !deliveryValid}
 					>
 						{saving ? "Saving..." : isEdit ? "Update Post" : "Create Post"}
 					</button>
@@ -422,4 +788,13 @@ export default function PostFormPage() {
 			</form>
 		</div>
 	);
+}
+
+/** Best-effort extraction of an { error } message from a non-ok JSON response. */
+function errorMessage(data: unknown, fallback: string): string {
+	if (data && typeof data === "object" && "error" in data) {
+		const err = (data as { error: unknown }).error;
+		if (typeof err === "string") return err;
+	}
+	return fallback;
 }

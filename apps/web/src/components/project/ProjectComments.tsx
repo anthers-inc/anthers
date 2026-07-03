@@ -13,7 +13,7 @@ export default function ProjectComments({ slug }: { slug: string }) {
 	const [submitting, setSubmitting] = useState(false);
 
 	const fetchComments = () => {
-		client.api.content.projects[":slug"].comments
+		client.api.content.posts[":slug"].comments
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (!res.ok) return;
@@ -33,7 +33,7 @@ export default function ProjectComments({ slug }: { slug: string }) {
 		if (!body.trim()) return;
 		setSubmitting(true);
 		try {
-			const res = await client.api.content.projects[":slug"].comments.$post({
+			const res = await client.api.content.posts[":slug"].comments.$post({
 				param: { slug },
 				json: { body },
 			});

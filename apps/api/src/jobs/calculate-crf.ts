@@ -16,7 +16,6 @@ import {
 	crfSubsidies,
 	poolDistributions,
 	posts,
-	projects,
 	purchases,
 	users,
 } from "@anthers/db/schema";
@@ -61,10 +60,10 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 			total: sum(purchases.creatorEarnings),
 		})
 		.from(purchases)
-		.innerJoin(projects, eq(purchases.projectId, projects.id))
+		.innerJoin(posts, eq(purchases.postId, posts.id))
 		.where(
 			and(
-				eq(projects.creatorId, creatorId),
+				eq(posts.creatorId, creatorId),
 				eq(purchases.status, "completed"),
 				sql`${purchases.createdAt} >= ${monthStart}`,
 				sql`${purchases.createdAt} < ${monthEnd}`,
@@ -92,8 +91,8 @@ export async function calculateCrfSubsidies() {
 	const creators = await db
 		.selectDistinct({ id: users.id, username: users.username })
 		.from(users)
-		.innerJoin(projects, eq(projects.creatorId, users.id))
-		.where(and(eq(users.isCreator, true), eq(projects.isPublished, true)));
+		.innerJoin(posts, eq(posts.creatorId, users.id))
+		.where(and(eq(users.isCreator, true), eq(posts.isPublished, true)));
 
 	let subsidized = 0;
 	let totalSubsidy = new Decimal(0);
@@ -107,11 +106,12 @@ export async function calculateCrfSubsidies() {
 			.limit(1);
 		if (existing) continue;
 
-		// Calculate hosting cost
-		const [projectCount] = await db
+		// Calculate hosting cost. Everything is a post now; the hosting model's
+		// "projectCount" maps to the creator's published works (posts).
+		const [publishedPostCount] = await db
 			.select({ count: count() })
-			.from(projects)
-			.where(and(eq(projects.creatorId, creator.id), eq(projects.isPublished, true)));
+			.from(posts)
+			.where(and(eq(posts.creatorId, creator.id), eq(posts.isPublished, true)));
 
 		const [mediaPostCount] = await db
 			.select({ count: count() })
@@ -127,14 +127,14 @@ export async function calculateCrfSubsidies() {
 		const [storageResult] = await db
 			.select({ total: sum(assets.fileSize) })
 			.from(assets)
-			.innerJoin(projects, eq(assets.projectId, projects.id))
-			.where(eq(projects.creatorId, creator.id));
+			.innerJoin(posts, eq(assets.postId, posts.id))
+			.where(eq(posts.creatorId, creator.id));
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 
 		const hostingCost = estimateHostingCost({
 			storageBytes,
-			projectCount: projectCount?.count ?? 0,
+			projectCount: publishedPostCount?.count ?? 0,
 			mediaPostCount: mediaPostCount?.count ?? 0,
 		});
 
@@ -150,15 +150,8 @@ export async function calculateCrfSubsidies() {
 				creatorEarnings: earnings.toString(),
 				subsidyAmount: "0.00",
 				storageBytes,
-				projectCount: projectCount?.count ?? 0,
-				postCount:
-					(mediaPostCount?.count ?? 0) +
-					((
-						await db
-							.select({ count: count() })
-							.from(posts)
-							.where(and(eq(posts.creatorId, creator.id), eq(posts.isPublished, true)))
-					)[0]?.count ?? 0),
+				projectCount: publishedPostCount?.count ?? 0,
+				postCount: publishedPostCount?.count ?? 0,
 			});
 			continue;
 		}
@@ -182,8 +175,8 @@ export async function calculateCrfSubsidies() {
 			creatorEarnings: earnings.toString(),
 			subsidyAmount: subsidy.toString(),
 			storageBytes,
-			projectCount: projectCount?.count ?? 0,
-			postCount: mediaPostCount?.count ?? 0,
+			projectCount: publishedPostCount?.count ?? 0,
+			postCount: publishedPostCount?.count ?? 0,
 		});
 
 		// Record CRF outflow

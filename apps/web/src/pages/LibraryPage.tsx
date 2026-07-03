@@ -46,9 +46,9 @@ export default function LibraryPage() {
 		}
 	};
 
-	// Filter purchases by media type (when project data includes mediaType)
+	// Filter purchases by the purchased post's content type.
 	const filteredPurchases = activeTab
-		? purchases.filter((p) => (p.project as { mediaType?: string })?.mediaType === activeTab)
+		? purchases.filter((p) => p.post?.contentType === activeTab)
 		: purchases;
 
 	if (loading) {
@@ -128,14 +128,14 @@ export default function LibraryPage() {
 					{filteredPurchases.map((purchase) => (
 						<Link
 							key={purchase.id}
-							to={`/discover/${purchase.project?.slug}`}
+							to={`/${purchase.creator?.username}/posts/${purchase.post?.slug}`}
 							className="card bg-base-200 hover:shadow-lg transition-shadow"
 						>
-							{purchase.project?.coverImage ? (
+							{purchase.post?.coverImage ? (
 								<figure>
 									<img
-										src={purchase.project.coverImage}
-										alt={purchase.project?.title}
+										src={purchase.post.coverImage}
+										alt={purchase.post?.title ?? ""}
 										className="w-full h-40 object-cover"
 									/>
 								</figure>
@@ -145,7 +145,7 @@ export default function LibraryPage() {
 								</div>
 							)}
 							<div className="card-body p-4">
-								<h2 className="card-title text-sm">{purchase.project?.title}</h2>
+								<h2 className="card-title text-sm">{purchase.post?.title}</h2>
 								<p className="text-xs text-base-content/60">
 									Purchased {new Date(purchase.createdAt).toLocaleDateString()}
 								</p>

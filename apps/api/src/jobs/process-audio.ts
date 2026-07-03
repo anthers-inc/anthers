@@ -155,6 +155,9 @@ export async function processAudio(data: ProcessAudioData) {
 	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
 	if (!post) throw new Error(`Post ${job.postId} not found`);
 
+	// A post is publicly served when it's free and ungated (no price, no entitlement).
+	const isPublicPost = post.basePrice == null && post.entitlementKind == null;
+
 	const storageKey = post.audioFile ?? "";
 	if (!storageKey) throw new Error("No audio file on post");
 
@@ -202,12 +205,12 @@ export async function processAudio(data: ProcessAudioData) {
 		await updateJobProgress(jobId, 60);
 
 		// 3. Upload processed file to storage (creator-first layout — see media-upload route).
-		// ACL follows post visibility: public posts get a public MP3 the CDN serves
-		// directly (getUrl returns a bare, unsigned URL); gated/subscriber posts keep it
-		// private (future signed-URL playback). Without this, public audio 403s.
+		// ACL follows access: free/ungated posts get a public MP3 the CDN serves directly
+		// (getUrl returns a bare, unsigned URL); priced/gated posts keep it private (future
+		// signed-URL playback). Without this, public audio 403s.
 		const outputKey = `creators/${post.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
-		const acl = post.visibility === "public" ? "public" : "private";
+		const acl = isPublicPost ? "public" : "private";
 		await storage.upload(outputKey, outputBuffer, "audio/mpeg", acl);
 		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);

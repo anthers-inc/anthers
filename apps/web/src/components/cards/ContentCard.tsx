@@ -21,7 +21,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 
 	return (
 		<Link
-			to={`/${post.creator?.username ?? "unknown"}/posts/${post.id}`}
+			to={`/${post.creator?.username ?? "unknown"}/posts/${post.slug}`}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
 		>
 			{/* Thumbnail area */}
@@ -93,10 +93,13 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				{/* Badges row */}
 				<div className="flex items-center gap-2 mt-auto pt-1">
 					<ContentTypeBadge contentType={post.contentType} />
-					{post.isPremium && (
-						<span className="badge badge-sm badge-secondary gap-1">
+					{post.access && !post.access.canAccess && post.access.requiresPurchase && (
+						<span className="badge badge-sm badge-secondary">${post.access.price}</span>
+					)}
+					{post.access && !post.access.canAccess && !post.access.requiresPurchase && (
+						<span className="badge badge-sm badge-ghost gap-1">
 							<LockClosedIcon className="w-3 h-3" />
-							Premium
+							Gated
 						</span>
 					)}
 					{post.estimatedReadMinutes && post.contentType === "text" && (

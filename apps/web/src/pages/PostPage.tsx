@@ -7,6 +7,11 @@ import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
+import ProjectDownloads from "../components/project/ProjectDownloads";
+import ProjectEmbed from "../components/project/ProjectEmbed";
+import ProjectPricing from "../components/project/ProjectPricing";
+import ProjectRating from "../components/project/ProjectRating";
+import ProjectScreenshots from "../components/project/ProjectScreenshots";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAttentionTracker } from "../lib/attention";
 import { useAuth } from "../lib/auth";
@@ -23,8 +28,8 @@ function formatDuration(seconds: number): string {
 }
 
 export default function PostPage() {
-	const { id } = useParams<{ id: string }>();
-	const { isAuthenticated } = useAuth();
+	const { slug } = useParams<{ slug: string }>();
+	const { isAuthenticated, user } = useAuth();
 	const mediaPlayer = useMediaPlayer();
 	const [post, setPost] = useState<Post | null>(null);
 	const [comments, setComments] = useState<Comment[]>([]);
@@ -33,25 +38,29 @@ export default function PostPage() {
 	const [submitting, setSubmitting] = useState(false);
 
 	useEffect(() => {
-		if (!id) return;
+		if (!slug) return;
 		setLoading(true);
 
 		Promise.all([
-			client.api.content.posts[":id"]
-				.$get({ param: { id } })
-				.then((res) => res.json() as Promise<unknown>),
-			client.api.content.posts[":id"].comments
-				.$get({ param: { id } })
-				.then((res) => res.json() as Promise<unknown>)
+			client.api.content.posts[":slug"].$get({ param: { slug } }).then(async (res) => {
+				if (!res.ok) return null;
+				return (await res.json()) as unknown as { post: Post };
+			}),
+			client.api.content.posts[":slug"].comments
+				.$get({ param: { slug } })
+				.then(async (res) => {
+					if (!res.ok) return { comments: [] as Comment[] };
+					return (await res.json()) as unknown as { comments: Comment[] };
+				})
 				.catch(() => ({ comments: [] as Comment[] })),
 		])
 			.then(([postData, commentData]) => {
-				setPost((postData as { post: Post }).post);
-				setComments((commentData as { comments: Comment[] }).comments);
+				setPost(postData?.post ?? null);
+				setComments(commentData.comments);
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
-	}, [id]);
+	}, [slug]);
 
 	// Attention tracking—map contentType to event_type
 	const eventType =
@@ -60,22 +69,24 @@ export default function PostPage() {
 	useAttentionTracker({
 		creatorId: post?.creatorId ?? null,
 		postId: post?.id ?? null,
-		projectId: post?.projectId ?? null,
 		eventType,
-		active: !!post,
+		active: !!post && (post.access?.canAccess ?? true),
 	});
 
 	const handleComment = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!commentBody.trim() || !id) return;
+		if (!commentBody.trim() || !slug) return;
 		setSubmitting(true);
 		try {
-			const res = await client.api.content.posts[":id"].comments.$post({
-				param: { id },
+			const res = await client.api.content.posts[":slug"].comments.$post({
+				param: { slug },
 				json: { body: commentBody },
 			});
-			const data = (await res.json()) as { comment: Comment };
-			setComments([data.comment, ...comments]);
+			if (!res.ok) throw new Error("Failed to post comment");
+			const data = (await res.json()) as unknown as { comment: Comment };
+			// The insert response omits the author avatar (no user join); the comment
+			// is by the current user, so merge it in for the optimistic prepend.
+			setComments([{ ...data.comment, avatar: user?.avatar ?? null }, ...comments]);
 			setCommentBody("");
 		} catch (err) {
 			console.error("Failed to post comment:", err);
@@ -107,13 +118,16 @@ export default function PostPage() {
 		year: "numeric",
 	});
 
+	const access = post.access;
+	const canAccess = !access || access.canAccess;
+
 	// Get latest transcoding job for media posts
 	const latestJob = post.transcodingJobs?.[0];
 	const videoSrc = latestJob?.hlsManifestUrl || (post.videoFile ?? undefined);
 	const audioSrc = latestJob?.outputFileUrl || (post.audioFile ?? undefined);
 
 	const handlePlayInMiniPlayer = () => {
-		if (!audioSrc || !post) return;
+		if (!audioSrc) return;
 		mediaPlayer.playTrack({
 			src: audioSrc,
 			title: post.title || "Untitled",
@@ -167,85 +181,125 @@ export default function PostPage() {
 								{formatDuration(post.durationSeconds)}
 							</span>
 						)}
-						{post.isPremium && <span className="badge badge-secondary badge-sm">Premium</span>}
 					</div>
 				</div>
 
-				{/* Locked content gate */}
-				{post.accessGranted === false && (
-					<div className="card bg-base-200 border border-warning/30 mb-6">
-						<div className="card-body text-center">
-							<div className="text-4xl mb-2">
-								{post.visibility === "subscribers_only" ? "🔒" : "⭐"}
-							</div>
-							<h3 className="font-bold text-lg">
-								{post.visibility === "subscribers_only" ? "Subscribers Only" : "Gated Content"}
-							</h3>
-							<p className="text-sm text-base-content/60 mb-3">
-								{post.visibility === "subscribers_only"
-									? "Subscribe to Anthers to access this content."
-									: "Boost this creator to unlock their gated content."}
-							</p>
-							<Link to="/subscribe" className="btn btn-primary btn-sm w-fit mx-auto">
-								{post.visibility === "subscribers_only" ? "Subscribe" : "Upgrade & Boost"}
-							</Link>
+				{/* Access gate */}
+				{access && !access.canAccess && (
+					access.requiresPurchase ? (
+						<div className="mb-6">
+							<ProjectPricing slug={post.slug} access={access} creatorHasStripe={false} />
 						</div>
-					</div>
+					) : (
+						<div className="card bg-base-200 border border-warning/30 mb-6">
+							<div className="card-body text-center">
+								<div className="text-4xl mb-2">
+									{access.reason === "login_required" ? "🔑" : "🔒"}
+								</div>
+								<h3 className="font-bold text-lg">
+									{access.reason === "login_required" ? "Login Required" : "Subscribers Only"}
+								</h3>
+								<p className="text-sm text-base-content/60 mb-3">
+									{access.reason === "login_required"
+										? "Log in to view this content."
+										: "Subscribe or boost this creator to unlock their gated content."}
+								</p>
+								<Link
+									to={access.reason === "login_required" ? "/login" : "/subscribe"}
+									className="btn btn-primary btn-sm w-fit mx-auto"
+								>
+									{access.reason === "login_required" ? "Log in" : "Subscribe & Boost"}
+								</Link>
+							</div>
+						</div>
+					)
 				)}
 
-				{/* Video content */}
-				{post.accessGranted !== false && post.contentType === "video" && (
-					<div className="mb-6">
-						{latestJob && latestJob.status !== "completed" ? (
-							<TranscodingStatus
-								status={latestJob.status}
-								progress={latestJob.progress ?? 0}
-								errorMessage={latestJob.errorMessage ?? undefined}
-							/>
-						) : videoSrc ? (
-							<VideoPlayer src={videoSrc} poster={post.thumbnail ?? undefined} />
-						) : (
-							<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
-								<FilmIcon className="w-16 h-16" />
+				{/* Content (only when accessible) */}
+				{canAccess && (
+					<>
+						{/* Embedded web game / app */}
+						{post.embedUrl && (
+							<div className="mb-6">
+								<ProjectEmbed embedUrl={post.embedUrl} title={post.title ?? "Embedded content"} />
 							</div>
 						)}
-					</div>
-				)}
 
-				{/* Audio content */}
-				{post.accessGranted !== false && post.contentType === "audio" && (
-					<div className="mb-6">
-						{latestJob && latestJob.status !== "completed" ? (
-							<TranscodingStatus
-								status={latestJob.status}
-								progress={latestJob.progress ?? 0}
-								errorMessage={latestJob.errorMessage ?? undefined}
-							/>
-						) : audioSrc ? (
-							<AudioPlayer
-								src={audioSrc}
-								waveform={latestJob?.waveformData}
-								onPlayInMiniPlayer={handlePlayInMiniPlayer}
-							/>
-						) : (
-							<div className="h-24 bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
-								<MusicalNoteIcon className="w-12 h-12" />
+						{/* Video content */}
+						{post.streamEnabled && post.contentType === "video" && (
+							<div className="mb-6">
+								{latestJob && latestJob.status !== "completed" ? (
+									<TranscodingStatus
+										status={latestJob.status}
+										progress={latestJob.progress ?? 0}
+										errorMessage={latestJob.errorMessage ?? undefined}
+									/>
+								) : videoSrc ? (
+									<VideoPlayer src={videoSrc} poster={post.thumbnail ?? undefined} />
+								) : (
+									<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
+										<FilmIcon className="w-16 h-16" />
+									</div>
+								)}
 							</div>
 						)}
+
+						{/* Audio content */}
+						{post.streamEnabled && post.contentType === "audio" && (
+							<div className="mb-6">
+								{latestJob && latestJob.status !== "completed" ? (
+									<TranscodingStatus
+										status={latestJob.status}
+										progress={latestJob.progress ?? 0}
+										errorMessage={latestJob.errorMessage ?? undefined}
+									/>
+								) : audioSrc ? (
+									<AudioPlayer
+										src={audioSrc}
+										waveform={latestJob?.waveformData}
+										onPlayInMiniPlayer={handlePlayInMiniPlayer}
+									/>
+								) : (
+									<div className="h-24 bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
+										<MusicalNoteIcon className="w-12 h-12" />
+									</div>
+								)}
+							</div>
+						)}
+
+						{/* Gallery */}
+						<ProjectScreenshots images={post.galleryImages ?? []} />
+
+						{/* Post body */}
+						{(post.bodyHtml || post.body) && (
+							<div className="prose prose-sm max-w-none mb-8">
+								{post.bodyHtml ? (
+									// biome-ignore lint/security/noDangerouslySetInnerHtml: bodyHtml is sanitized server-side at write time (apps/api/src/services/sanitize.ts)
+									<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
+								) : (
+									<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
+								)}
+							</div>
+						)}
+					</>
+				)}
+
+				{/* Downloads */}
+				{post.downloadEnabled && (
+					<div className="mb-8">
+						<ProjectDownloads
+							assets={post.assets ?? []}
+							contentType={post.contentType}
+							postSlug={post.slug}
+							canAccess={post.access?.canAccess ?? true}
+						/>
 					</div>
 				)}
 
-				{/* Post body */}
-				{post.accessGranted !== false && (
-					<div className="prose prose-sm max-w-none mb-8">
-						{post.bodyHtml ? (
-							// biome-ignore lint/security/noDangerouslySetInnerHtml: bodyHtml is sanitized server-side at write time (apps/api/src/services/sanitize.ts)
-							<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
-						) : post.body ? (
-							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-						) : null}
-					</div>
-				)}
+				{/* Rating */}
+				<div className="mb-8">
+					<ProjectRating slug={post.slug} />
+				</div>
 			</article>
 
 			{/* Comments */}

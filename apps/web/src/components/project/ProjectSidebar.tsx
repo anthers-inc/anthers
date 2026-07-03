@@ -4,21 +4,15 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { client } from "../../lib/rpc";
-import type { Project, PublicUser } from "../../lib/types";
+import type { Post, PublicUser } from "../../lib/types";
 
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
-
-export default function ProjectSidebar({ project }: { project: Project }) {
+export default function ProjectSidebar({ post }: { post: Post }) {
 	const { isAuthenticated, user } = useAuth();
 	const [creator, setCreator] = useState<PublicUser | null>(null);
-	const [moreProjects, setMoreProjects] = useState<Project[]>([]);
 	const [isFollowing, setIsFollowing] = useState(false);
 
 	useEffect(() => {
-		const username = project.creator?.username;
+		const username = post.creator?.username;
 		if (!username) return;
 
 		client.api.accounts.users[":username"]
@@ -30,18 +24,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 				setIsFollowing(data.user.isFollowing);
 			})
 			.catch(console.error);
-
-		fetch(`${apiBase}/api/content/projects?creator=${username}`, {
-			credentials: "include",
-		})
-			.then((res) => res.json())
-			.then((data) => {
-				setMoreProjects(
-					(data.projects as Project[]).filter((p) => p.slug !== project.slug).slice(0, 3),
-				);
-			})
-			.catch(console.error);
-	}, [project.creator?.username, project.slug]);
+	}, [post.creator?.username]);
 
 	const handleFollow = async () => {
 		if (!isAuthenticated || !creator) return;
@@ -62,7 +45,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 		}
 	};
 
-	const isOwnProject = user?.username === project.creator?.username;
+	const isOwnPost = user?.username === post.creator?.username;
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -87,7 +70,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 							{creator.displayName || creator.username}
 						</Link>
 						<span className="text-xs text-base-content/50">{creator.followerCount} followers</span>
-						{isAuthenticated && !isOwnProject && (
+						{isAuthenticated && !isOwnPost && (
 							<button
 								type="button"
 								className={`btn btn-sm w-full ${isFollowing ? "btn-outline" : "btn-primary"}`}
@@ -100,12 +83,17 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 				</div>
 			)}
 
+			{/* Draft state */}
+			{post.isPublished === false && (
+				<div className="badge badge-warning badge-sm">Draft — not published</div>
+			)}
+
 			{/* Tags */}
-			{Array.isArray(project.tags) && project.tags.length > 0 && (
+			{Array.isArray(post.tags) && post.tags.length > 0 && (
 				<div>
 					<h3 className="font-semibold text-sm mb-2">Tags</h3>
 					<div className="flex flex-wrap gap-1">
-						{project.tags.map((tag) => (
+						{post.tags.map((tag) => (
 							<Link key={tag} to={`/discover?tag=${tag}`} className="badge badge-outline badge-sm">
 								{tag}
 							</Link>
@@ -115,13 +103,13 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 			)}
 
 			{/* Links */}
-			{(project.websiteUrl || project.sourceUrl) && (
+			{(post.websiteUrl || post.sourceUrl) && (
 				<div>
 					<h3 className="font-semibold text-sm mb-2">Links</h3>
 					<div className="flex flex-col gap-1">
-						{project.websiteUrl && (
+						{post.websiteUrl && (
 							<a
-								href={project.websiteUrl}
+								href={post.websiteUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="link link-hover text-sm flex items-center gap-1"
@@ -130,9 +118,9 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 								Website
 							</a>
 						)}
-						{project.sourceUrl && (
+						{post.sourceUrl && (
 							<a
-								href={project.sourceUrl}
+								href={post.sourceUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="link link-hover text-sm flex items-center gap-1"
@@ -145,36 +133,16 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 				</div>
 			)}
 
-			{/* More by creator */}
-			{moreProjects.length > 0 && (
-				<div>
-					<h3 className="font-semibold text-sm mb-2">
-						More by {project.creator?.displayName || project.creator?.username}
-					</h3>
-					<div className="flex flex-col gap-2">
-						{moreProjects.map((p) => (
-							<Link
-								key={p.slug}
-								to={`/${project.creator?.username ?? "unknown"}/${p.slug}`}
-								className="text-sm link link-hover"
-							>
-								{p.title}
-							</Link>
-						))}
-					</div>
-				</div>
-			)}
-
 			{/* Stats */}
 			<div className="flex gap-4 text-sm text-base-content/60">
 				<span className="flex items-center gap-1">
 					<EyeIcon className="w-4 h-4" />
-					{(project.viewCount ?? 0).toLocaleString()}
+					{(post.viewCount ?? 0).toLocaleString()}
 				</span>
-				{(project.downloadCount ?? 0) > 0 && (
+				{(post.downloadCount ?? 0) > 0 && (
 					<span className="flex items-center gap-1">
 						<ArrowDownTrayIcon className="w-4 h-4" />
-						{(project.downloadCount ?? 0).toLocaleString()}
+						{(post.downloadCount ?? 0).toLocaleString()}
 					</span>
 				)}
 			</div>
@@ -182,7 +150,7 @@ export default function ProjectSidebar({ project }: { project: Project }) {
 			{/* Published date */}
 			<div className="text-xs text-base-content/50">
 				Published{" "}
-				{new Date(project.createdAt).toLocaleDateString("en-US", {
+				{new Date(post.createdAt).toLocaleDateString("en-US", {
 					month: "long",
 					day: "numeric",
 					year: "numeric",

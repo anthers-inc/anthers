@@ -5,18 +5,6 @@ import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
 
 /* ------------------------------------------------------------------ */
-/*  Extended purchase type with creator info from updated API          */
-/* ------------------------------------------------------------------ */
-
-interface PurchaseWithCreator extends Purchase {
-	creator?: {
-		username: string;
-		displayName: string | null;
-		avatar: string | null;
-	};
-}
-
-/* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -114,7 +102,7 @@ function MonthSelector({
 /* ------------------------------------------------------------------ */
 
 export default function PurchasesPage() {
-	const [purchases, setPurchases] = useState<PurchaseWithCreator[]>([]);
+	const [purchases, setPurchases] = useState<Purchase[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
 	const [viewMode, setViewMode] = useState<ViewMode>("month");
@@ -126,7 +114,7 @@ export default function PurchasesPage() {
 			if (month) query.month = month;
 
 			const res = await client.api.payments.purchases.$get({ query });
-			const data = (await res.json()) as { purchases: PurchaseWithCreator[] };
+			const data = (await res.json()) as { purchases: Purchase[] };
 			setPurchases(data.purchases);
 		} catch {
 			// Non-critical
@@ -211,10 +199,10 @@ export default function PurchasesPage() {
 										<div className="flex items-start justify-between gap-3">
 											<div className="flex items-center gap-3 min-w-0">
 												{/* Cover image */}
-												{p.project?.coverImage ? (
-													<Link to={`/${p.creator?.username}/${p.project.slug}`}>
+												{p.post?.coverImage ? (
+													<Link to={`/${p.creator?.username}/posts/${p.post.slug}`}>
 														<img
-															src={p.project.coverImage}
+															src={p.post.coverImage}
 															alt=""
 															className="w-12 h-12 rounded object-cover flex-shrink-0"
 														/>
@@ -224,12 +212,12 @@ export default function PurchasesPage() {
 												)}
 
 												<div className="min-w-0">
-													{/* Project title → library link */}
+													{/* Post title → detail link */}
 													<Link
-														to={`/${p.creator?.username}/${p.project?.slug}`}
+														to={`/${p.creator?.username}/posts/${p.post?.slug}`}
 														className="font-medium link link-hover block truncate"
 													>
-														{p.project?.title ?? "Unknown"}
+														{p.post?.title ?? "Unknown"}
 													</Link>
 
 													{/* Creator → profile link */}

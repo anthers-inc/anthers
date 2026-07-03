@@ -11,7 +11,7 @@ import {
 	assets,
 	crfLedger,
 	crfSubsidies,
-	projects,
+	posts,
 	purchases,
 	stripeAccounts,
 	users,
@@ -21,6 +21,21 @@ import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { requireAuth } from "../middleware/auth.js";
+import { resolveAccess } from "../services/access.js";
+
+/** The amount a non-entitled buyer pays for a post (fixed base, or pwyw suggested/min). */
+function postPurchaseAmount(post: {
+	pricingMode: string;
+	basePrice: string | null;
+	minPrice: string | null;
+	suggestedPrice: string | null;
+}): Decimal {
+	const raw =
+		post.pricingMode === "pwyw"
+			? (post.suggestedPrice ?? post.minPrice ?? "0")
+			: (post.basePrice ?? "0");
+	return new Decimal(raw);
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -84,12 +99,17 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const [project] = await db.select().from(projects).where(eq(projects.slug, slug)).limit(1);
+		const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
+		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		if (!project) return c.json({ error: "Project not found" }, 404);
+		// Pure gates (entitlement required, no purchase path) aren't buyable.
+		if (post.entitlementKind && !post.purchasableWithoutEntitlement) {
+			return c.json({ error: "This post is not available for direct purchase" }, 400);
+		}
 
-		if (project.pricingType === "free") {
-			return c.json({ error: "This project is free" }, 400);
+		const amount = postPurchaseAmount(post);
+		if (amount.lte(0)) {
+			return c.json({ error: "This post is free" }, 400);
 		}
 
 		// Check if already purchased
@@ -99,7 +119,7 @@ const paymentRoutes = new Hono()
 			.where(
 				and(
 					eq(purchases.buyerId, user.id),
-					eq(purchases.projectId, project.id),
+					eq(purchases.postId, post.id),
 					eq(purchases.status, "completed"),
 				),
 			)
@@ -109,16 +129,11 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "Already purchased" }, 400);
 		}
 
-		const amount = new Decimal(project.price ?? project.minPrice ?? "0");
-		if (amount.lte(0)) {
-			return c.json({ error: "Invalid price" }, 400);
-		}
-
 		// Delivery (bandwidth) scales with the total size of the downloadable assets.
 		const [assetSize] = await db
 			.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 			.from(assets)
-			.where(eq(assets.projectId, project.id));
+			.where(eq(assets.postId, post.id));
 
 		// Pass-through model: the creator receives the full listed price; processing,
 		// the Foundation Fee, and delivery are added on top and paid by the buyer.
@@ -150,38 +165,13 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const [project] = await db
-			.select({ id: projects.id, creatorId: projects.creatorId, pricingType: projects.pricingType })
-			.from(projects)
-			.where(eq(projects.slug, slug))
-			.limit(1);
+		const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
+		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		if (!project) return c.json({ error: "Project not found" }, 404);
-
-		// Free projects: everyone "owns" them
-		if (project.pricingType === "free") {
-			return c.json({ owns: true });
-		}
-
-		// Creator always owns their own project
-		if (project.creatorId === user.id) {
-			return c.json({ owns: true });
-		}
-
-		// Check purchase
-		const [purchase] = await db
-			.select({ id: purchases.id })
-			.from(purchases)
-			.where(
-				and(
-					eq(purchases.buyerId, user.id),
-					eq(purchases.projectId, project.id),
-					eq(purchases.status, "completed"),
-				),
-			)
-			.limit(1);
-
-		return c.json({ owns: !!purchase });
+		// "Owns" = can consume it now: creator, free, a prior purchase, or an
+		// entitlement grant (subscriber/boost). resolveAccess unifies all four.
+		const access = await resolveAccess(post, user.id);
+		return c.json({ owns: access.canAccess });
 	})
 
 	// ── Purchase History ─────────────────────────────────────────────────────
@@ -201,29 +191,29 @@ const paymentRoutes = new Hono()
 		const result = await db
 			.select({
 				purchase: purchases,
-				projectTitle: projects.title,
-				projectSlug: projects.slug,
-				projectCoverImage: projects.coverImage,
-				projectMediaType: projects.mediaType,
-				creatorId: projects.creatorId,
+				postTitle: posts.title,
+				postSlug: posts.slug,
+				postCoverImage: posts.coverImage,
+				postContentType: posts.contentType,
+				creatorId: posts.creatorId,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
 			.from(purchases)
-			.innerJoin(projects, eq(purchases.projectId, projects.id))
-			.innerJoin(users, eq(projects.creatorId, users.id))
+			.innerJoin(posts, eq(purchases.postId, posts.id))
+			.innerJoin(users, eq(posts.creatorId, users.id))
 			.where(and(...conditions))
 			.orderBy(desc(purchases.createdAt));
 
 		return c.json({
 			purchases: result.map((r) => ({
 				...r.purchase,
-				project: {
-					title: r.projectTitle,
-					slug: r.projectSlug,
-					coverImage: r.projectCoverImage,
-					mediaType: r.projectMediaType,
+				post: {
+					title: r.postTitle,
+					slug: r.postSlug,
+					coverImage: r.postCoverImage,
+					contentType: r.postContentType,
 				},
 				creator: {
 					username: r.creatorUsername,
@@ -262,9 +252,7 @@ const paymentRoutes = new Hono()
 		// TODO: Verify Stripe webhook signature
 		// TODO: Handle payment_intent.succeeded → complete purchase, record Foundation Fee
 		// TODO: Handle account.updated → sync onboarding state
-
-		const body = await c.req.text();
-		const sig = c.req.header("Stripe-Signature");
+		// TODO: read the raw body + Stripe-Signature header to verify the event
 
 		// Placeholder — will be implemented with Stripe SDK
 		return c.json({ received: true });

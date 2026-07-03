@@ -110,7 +110,7 @@ export default function App() {
 					}
 				/>
 				<Route
-					path="/dashboard/projects/:slug/builds"
+					path="/dashboard/posts/:slug/builds"
 					element={
 						<ProtectedRoute>
 							<BuildsPage />
@@ -126,7 +126,7 @@ export default function App() {
 					}
 				/>
 				<Route
-					path="/dashboard/posts/:id/edit"
+					path="/dashboard/posts/:slug/edit"
 					element={
 						<ProtectedRoute>
 							<PostFormPage />
@@ -207,7 +207,7 @@ export default function App() {
 			<Route element={<Layout />}>
 				<Route path="/discover" element={<DiscoverPage />} />
 				<Route path="/discover/:slug" element={<ProjectRedirect />} />
-				<Route path="/posts/:id" element={<PostPage />} />
+				<Route path="/posts/:slug" element={<PostPage />} />
 				<Route path="/subscribe" element={<SubscribePage />} />
 				<Route path="/jams" element={<JamsPage />} />
 				<Route path="/jams/:slug" element={<JamPage />} />
@@ -216,7 +216,7 @@ export default function App() {
 
 				{/* Creator site routes */}
 				<Route path="/:username/:slug" element={<ProjectPage />} />
-				<Route path="/:username/posts/:id" element={<PostPage />} />
+				<Route path="/:username/posts/:slug" element={<PostPage />} />
 
 				{/* Creator profile -- must be last to avoid catching other routes */}
 				<Route path="/:username" element={<CreatorProfilePage />} />
