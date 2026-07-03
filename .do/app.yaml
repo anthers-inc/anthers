@@ -20,8 +20,9 @@
 #     cluster admin (doadmin) so the migrate job can create schema/tables — a DO
 #     *dev* database's user lacks CREATE and blocks migrations. Tighten to a
 #     least-privilege app user before public launch.
-#   - STORAGE_BACKEND=local (ephemeral, unused while gated). Switch to s3 +
-#     provision DO Spaces (bucket + CORS + scoped keys) when media features go live.
+#   - STORAGE_BACKEND=s3 → DO Spaces (bucket `anthers-media`, nyc3). SPACES_KEY /
+#     SPACES_SECRET are dashboard-set secrets; bucket/region are non-secret here.
+#     Objects use a creator-first key layout (creators/<creatorId>/…).
 #   - Stripe / ATProto envs are omitted (read lazily; features stubbed/gated) —
 #     add them when those features come online.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -52,7 +53,19 @@ envs:
     value: ${anthers-db.DATABASE_URL}
   - key: STORAGE_BACKEND
     scope: RUN_TIME
-    value: local
+    value: s3
+  - key: SPACES_BUCKET
+    scope: RUN_TIME
+    value: anthers-media
+  - key: SPACES_REGION
+    scope: RUN_TIME
+    value: nyc3
+  - key: SPACES_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: SPACES_SECRET
+    scope: RUN_TIME
+    type: SECRET
   - key: SITE_PASSWORD
     scope: RUN_TIME
     type: SECRET
