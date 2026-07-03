@@ -447,7 +447,13 @@ const contentRoutes = new Hono()
 			.where(eq(projects.slug, slug))
 			.execute();
 
-		return c.json({ url: asset.assets.file });
+		// Assets are stored private (paid builds must not be publicly fetchable), so
+		// hand back a short-lived signed URL the browser can download directly from
+		// storage. In local mode getUrl ignores signing and serves via /content.
+		// TODO(payments): enforce a server-side ownership check for paid projects
+		// here — today only the UI gates paid downloads.
+		const url = await storage.getUrl(asset.assets.file, { signed: true, expiresIn: 300 });
+		return c.json({ url });
 	})
 
 	// ── Project Screenshots ──────────────────────────────────────────────────

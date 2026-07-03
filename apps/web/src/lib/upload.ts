@@ -2,12 +2,12 @@
 import { client } from "./rpc";
 
 /**
- * Upload a media file (video/audio) using presigned URL (S3) or direct upload (local dev).
+ * Upload a media file (video/audio/asset) using presigned URL (S3) or direct upload (local dev).
  * Returns the storage key for the uploaded file.
  */
 export async function uploadMediaFile(
 	file: File,
-	mediaType: "video" | "audio",
+	mediaType: "video" | "audio" | "asset",
 	onProgress?: (percent: number) => void,
 ): Promise<string> {
 	// Step 1: Get upload URL from API
