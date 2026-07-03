@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { LockClosedIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { Link } from "react-router-dom";
+import { postUrl } from "../../lib/postUrl";
 import type { PostListItem } from "../../lib/types";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
-
-function formatDuration(seconds: number): string {
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = seconds % 60;
-	if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import PricingBadge from "../ui/PricingBadge";
 
 export default function ContentCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
@@ -21,7 +15,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 
 	return (
 		<Link
-			to={`/${post.creator?.username ?? "unknown"}/posts/${post.slug}`}
+			to={postUrl(post)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
 		>
 			{/* Thumbnail area */}
@@ -40,12 +34,6 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 							<PlayIcon className="w-6 h-6 text-black ml-0.5" />
 						</div>
 					</div>
-					{/* Duration badge */}
-					{post.durationSeconds && (
-						<span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
-							{formatDuration(post.durationSeconds)}
-						</span>
-					)}
 				</div>
 			)}
 
@@ -54,11 +42,6 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 					<div className="absolute inset-0 flex items-center justify-center">
 						<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
 					</div>
-					{post.durationSeconds && (
-						<span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
-							{formatDuration(post.durationSeconds)}
-						</span>
-					)}
 				</div>
 			)}
 
@@ -93,15 +76,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				{/* Badges row */}
 				<div className="flex items-center gap-2 mt-auto pt-1">
 					<ContentTypeBadge contentType={post.contentType} />
-					{post.access && !post.access.canAccess && post.access.requiresPurchase && (
-						<span className="badge badge-sm badge-secondary">${post.access.price}</span>
-					)}
-					{post.access && !post.access.canAccess && !post.access.requiresPurchase && (
-						<span className="badge badge-sm badge-ghost gap-1">
-							<LockClosedIcon className="w-3 h-3" />
-							Gated
-						</span>
-					)}
+					<PricingBadge access={post.access} />
 					{post.estimatedReadMinutes && post.contentType === "text" && (
 						<span className="text-xs text-base-content/40">
 							{post.estimatedReadMinutes} min read

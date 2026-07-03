@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import type { GalleryImage } from "../../lib/types";
 
 interface ProjectScreenshotsProps {
-	images: GalleryImage[];
+	/** Image URLs for this content element's gallery. */
+	images: string[];
 }
 
 export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) {
@@ -35,18 +35,18 @@ export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) 
 
 	return (
 		<div>
-			<h2 className="text-xl font-bold mb-4">Gallery</h2>
 			<div className="grid grid-cols-2 md:grid-cols-3 gap-2">
 				{images.map((img, i) => (
 					<button
 						type="button"
-						key={img.id}
+						// biome-ignore lint/suspicious/noArrayIndexKey: gallery images are plain URLs with no stable id
+						key={`${img}-${i}`}
 						onClick={() => setLightboxIndex(i)}
 						className="overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
 					>
 						<img
-							src={img.image}
-							alt={img.caption || "Gallery image"}
+							src={img}
+							alt="Gallery"
 							className="w-full h-40 object-cover hover:opacity-80 transition-opacity"
 						/>
 					</button>
@@ -94,15 +94,10 @@ export default function ProjectScreenshots({ images }: ProjectScreenshotsProps) 
 
 					<div className="max-w-5xl max-h-[85vh] p-4" onClick={(e) => e.stopPropagation()}>
 						<img
-							src={images[lightboxIndex].image}
-							alt={images[lightboxIndex].caption || "Gallery image"}
+							src={images[lightboxIndex]}
+							alt="Gallery"
 							className="max-w-full max-h-[80vh] object-contain mx-auto"
 						/>
-						{images[lightboxIndex].caption && (
-							<p className="text-center text-white/70 text-sm mt-2">
-								{images[lightboxIndex].caption}
-							</p>
-						)}
 						<p className="text-center text-white/40 text-xs mt-1">
 							{lightboxIndex + 1} / {images.length}
 						</p>

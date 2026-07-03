@@ -5,8 +5,8 @@ import {
 	assets,
 	bookmarks,
 	comments,
-	galleryImages,
 	inlineImages,
+	postContents,
 	posts,
 	projectPosts,
 	projects,
@@ -104,9 +104,7 @@ export const followsRelations = relations(follows, ({ one }) => ({
 export const postsRelations = relations(posts, ({ one, many }) => ({
 	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts), // collections this post belongs to
-	galleryImages: many(galleryImages),
-	assets: many(assets),
-	transcodingJobs: many(transcodingJobs),
+	contents: many(postContents),
 	comments: many(comments),
 	ratings: many(ratings),
 	purchases: many(purchases),
@@ -127,16 +125,21 @@ export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
 	post: one(posts, { fields: [projectPosts.postId], references: [posts.id] }),
 }));
 
-export const galleryImagesRelations = relations(galleryImages, ({ one }) => ({
-	post: one(posts, { fields: [galleryImages.postId], references: [posts.id] }),
+export const postContentsRelations = relations(postContents, ({ one, many }) => ({
+	post: one(posts, { fields: [postContents.postId], references: [posts.id] }),
+	assets: many(assets),
+	transcodingJobs: many(transcodingJobs),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({
-	post: one(posts, { fields: [assets.postId], references: [posts.id] }),
+	content: one(postContents, { fields: [assets.contentId], references: [postContents.id] }),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({
-	post: one(posts, { fields: [transcodingJobs.postId], references: [posts.id] }),
+	content: one(postContents, {
+		fields: [transcodingJobs.contentId],
+		references: [postContents.id],
+	}),
 }));
 
 export const inlineImagesRelations = relations(inlineImages, ({ one }) => ({

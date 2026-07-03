@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import BoostLadderEditor from "../components/post/BoostLadderEditor";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
@@ -546,6 +547,13 @@ export default function SettingsPage() {
 
 			{/* Bluesky / ATProto */}
 			<BlueskySection />
+
+			{/* Boost Ladder -- only shown for creators */}
+			{isCreator && (
+				<div className="mt-6">
+					<BoostLadderEditor />
+				</div>
+			)}
 
 			{/* Stripe Onboarding -- only shown for creators */}
 			{isCreator && (

@@ -10,8 +10,9 @@
  * and removed without affecting real data.
  */
 
-import { and, eq, like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import {
+	assets,
 	attentionEvents,
 	bookmarks,
 	boostAllocations,
@@ -20,6 +21,7 @@ import {
 	db,
 	follows,
 	poolDistributions,
+	postContents,
 	posts,
 	projectPosts,
 	projects,
@@ -59,6 +61,39 @@ function daysAgo(n: number): Date {
 	const d = new Date();
 	d.setDate(d.getDate() - n);
 	return d;
+}
+
+const ACCESS_TIERS = ["free", "root", "sprout", "petal", "bloom"] as const;
+
+/** The neutral Anthers table — every tier locked. */
+function lockedAnthers() {
+	return ACCESS_TIERS.map((tier) => ({ tier, allow: false, price: "0" }));
+}
+
+/** Free to everyone: the $0 boost baseline is allowed at price 0. */
+function freeAccess() {
+	return {
+		anthersAccess: lockedAnthers(),
+		boostAccess: [{ threshold: 0, allow: true, price: "0" }],
+	};
+}
+
+/** Purchasable by anyone at `price` (the $0 boost baseline, priced). */
+function paidAccess(price: string) {
+	return { anthersAccess: lockedAnthers(), boostAccess: [{ threshold: 0, allow: true, price }] };
+}
+
+/** Subscriber-gated: any paid Anthers tier streams it free; everyone else is locked out. */
+function subscriberGatedAccess() {
+	return {
+		anthersAccess: ACCESS_TIERS.map((tier) => ({ tier, allow: tier !== "free", price: "0" })),
+		boostAccess: [{ threshold: 0, allow: false, price: "0" }],
+	};
+}
+
+let publicIdSeq = 100_000_001;
+function nextPublicId(): number {
+	return publicIdSeq++;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +601,8 @@ async function seed() {
 	const createdPosts: { postId: number; creatorUsername: string }[] = [];
 	const postIdBySlug: Record<string, number> = {};
 	const postIdByTitle: Record<string, number> = {};
+	// Base purchase price per work title (works now express pricing via access tables).
+	const priceByTitle: Record<string, string> = {};
 
 	const recordPost = (postId: number, slug: string, title: string, username: string) => {
 		createdPosts.push({ postId, creatorUsername: username });
@@ -639,30 +676,28 @@ async function seed() {
 						? { streamEnabled: true, downloadEnabled: false }
 						: { streamEnabled: true, downloadEnabled: true };
 
-			// pricingType → the entitlement pricing columns.
-			const pricing =
+			// pricingType → the two access tables + a recorded base price for purchases.
+			const price =
 				work.pricingType === "paid"
-					? { basePrice: work.price ?? "0.00", pricingMode: "fixed" }
+					? (work.price ?? "0.00")
 					: work.pricingType === "pwyw"
-						? {
-								basePrice: null,
-								pricingMode: "pwyw",
-								minPrice: work.minPrice ?? "0.00",
-								suggestedPrice: work.suggestedPrice ?? null,
-							}
-						: { basePrice: null, pricingMode: "fixed" };
+						? (work.minPrice ?? "0.00")
+						: "0.00";
+			priceByTitle[work.title] = price;
+			const access = work.pricingType === "free" ? freeAccess() : paidAccess(price);
 
 			const [inserted] = await db
 				.insert(posts)
 				.values({
 					creatorId,
+					publicId: nextPublicId(),
 					slug,
 					title: work.title,
 					body: work.description,
 					bodyHtml: `<p>${work.description.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
 					contentType: work.mediaType,
 					...delivery,
-					...pricing,
+					...access,
 					tags: work.tags,
 					isPublished: true,
 					viewCount: randomInt(50, 5000),
@@ -670,6 +705,22 @@ async function seed() {
 					createdAt: daysAgo(randomInt(30, 180)),
 				})
 				.returning({ id: posts.id });
+
+			// One content element carries the deliverable; download works get a build asset.
+			const [element] = await db
+				.insert(postContents)
+				.values({ postId: inserted.id, position: 0, contentType: work.mediaType })
+				.returning({ id: postContents.id });
+			if (delivery.downloadEnabled) {
+				await db.insert(assets).values({
+					contentId: element.id,
+					file: `creators/${creatorId}/assets/seed-${slug}.zip`,
+					filename: `${slug}.zip`,
+					fileSize: randomInt(50, 800) * 1024 * 1024,
+					mimeType: "application/zip",
+					platform: work.mediaType === "game" ? "windows" : "",
+				});
+			}
 
 			recordPost(inserted.id, slug, work.title, username);
 			console.log(`  Created work "${work.title}" (id: ${inserted.id})`);
@@ -710,15 +761,10 @@ async function seed() {
 					body: post.body,
 					bodyHtml: `<p>${post.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
 					contentType: post.contentType,
+					publicId: nextPublicId(),
 					streamEnabled: true,
 					downloadEnabled: false,
-					...(gated
-						? {
-								entitlementKind: "tier",
-								entitlementTier: "root",
-								purchasableWithoutEntitlement: false,
-							}
-						: {}),
+					...(gated ? subscriberGatedAccess() : freeAccess()),
 					isPublished: true,
 					estimatedReadMinutes: post.estimatedReadMinutes ?? null,
 					createdAt: daysAgo(randomInt(1, 60)),
@@ -960,7 +1006,8 @@ async function seed() {
 		const creatorId = createdUserIds[username];
 		if (!creatorId) continue;
 
-		for (const gate of gates) {
+		for (let gi = 0; gi < gates.length; gi++) {
+			const gate = gates[gi];
 			try {
 				await db.insert(creatorGates).values({
 					creatorId,
@@ -968,6 +1015,7 @@ async function seed() {
 					threshold: gate.threshold,
 					label: gate.label,
 					description: gate.description,
+					sortOrder: gi,
 				});
 			} catch {
 				// skip duplicates on re-seed
@@ -1027,7 +1075,7 @@ async function seed() {
 		for (const title of tu.purchaseTitles) {
 			const slug = slugify(title);
 			const [p] = await db
-				.select({ id: posts.id, basePrice: posts.basePrice })
+				.select({ id: posts.id })
 				.from(posts)
 				.where(eq(posts.slug, slug))
 				.limit(1);
@@ -1037,7 +1085,7 @@ async function seed() {
 				continue;
 			}
 
-			const amount = parseFloat(p.basePrice ?? "0");
+			const amount = parseFloat(priceByTitle[title] ?? "0");
 			if (amount <= 0) continue;
 
 			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;

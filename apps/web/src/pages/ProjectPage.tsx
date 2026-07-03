@@ -6,6 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { useAttentionTracker } from "@/lib/attention";
 import { useAuth } from "@/lib/auth";
+import { postUrl } from "@/lib/postUrl";
 import { client } from "@/lib/rpc";
 import type { Project } from "@/lib/types";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
@@ -60,7 +61,6 @@ export default function ProjectPage() {
 	}
 
 	const posts = project.posts ?? [];
-	const username = project.creator?.username;
 	const isOwner = !!user && user.id === project.creatorId;
 
 	return (
@@ -115,11 +115,11 @@ export default function ProjectPage() {
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 					{posts.map((member) => {
 						const locked = !!member.access && !member.access.canAccess;
-						const image = member.coverImage || member.thumbnail;
+						const image = member.thumbnail;
 						return (
 							<Link
 								key={member.id}
-								to={`/${username ?? member.creator?.username ?? "unknown"}/posts/${member.slug}`}
+								to={postUrl(member)}
 								className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
 							>
 								<div className="aspect-video bg-base-300 relative">

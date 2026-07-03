@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { DocumentTextIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
+import {
+	CommandLineIcon,
+	CubeIcon,
+	DocumentTextIcon,
+	FilmIcon,
+	MusicalNoteIcon,
+	PhotoIcon,
+	PuzzlePieceIcon,
+	Squares2X2Icon,
+	WrenchScrewdriverIcon,
+} from "@heroicons/react/24/outline";
 
 const config = {
 	text: { label: "Article", Icon: DocumentTextIcon, color: "badge-info" },
-	video: { label: "Video", Icon: FilmIcon, color: "badge-warning" },
+	image: { label: "Image", Icon: PhotoIcon, color: "badge-accent" },
 	audio: { label: "Audio", Icon: MusicalNoteIcon, color: "badge-secondary" },
+	video: { label: "Video", Icon: FilmIcon, color: "badge-warning" },
+	game: { label: "Game", Icon: PuzzlePieceIcon, color: "badge-primary" },
+	software: { label: "Software", Icon: CommandLineIcon, color: "badge-neutral" },
+	physical: { label: "Physical", Icon: CubeIcon, color: "badge-success" },
+	service: { label: "Service", Icon: WrenchScrewdriverIcon, color: "badge-info" },
+	// A bundled post's contentType can resolve to "mixed" — fall back sensibly.
+	mixed: { label: "Mixed", Icon: Squares2X2Icon, color: "badge-ghost" },
 } as const;
 
 export default function ContentTypeBadge({ contentType }: { contentType: string }) {

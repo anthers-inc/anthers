@@ -12,6 +12,9 @@ interface RichTextEditorProps {
 	placeholder?: string;
 }
 
+/** Matches a single, whitespace-free http(s) URL (a "lone URL" paste). */
+const LONE_URL = /^https?:\/\/\S+$/;
+
 export default function RichTextEditor({
 	content,
 	onChange,
@@ -23,11 +26,29 @@ export default function RichTextEditor({
 			Image.configure({ inline: false }),
 			Link.configure({
 				openOnClick: false,
+				// Linkify URLs as they're typed and when pasting over a text selection.
+				autolink: true,
+				linkOnPaste: true,
 				HTMLAttributes: { class: "link link-primary" },
 			}),
 			Placeholder.configure({ placeholder }),
 		],
 		content,
+		editorProps: {
+			// Pasting a lone URL onto an empty selection inserts it as a link
+			// (linkOnPaste already covers the "URL pasted over a selection" case).
+			handlePaste: (view, event) => {
+				const text = event.clipboardData?.getData("text/plain")?.trim();
+				if (!text || !LONE_URL.test(text)) return false;
+				const { state } = view;
+				if (!state.selection.empty) return false;
+				const linkMark = state.schema.marks.link;
+				if (!linkMark) return false;
+				const node = state.schema.text(text, [linkMark.create({ href: text })]);
+				view.dispatch(state.tr.replaceSelectionWith(node, false).scrollIntoView());
+				return true;
+			},
+		},
 		onUpdate: ({ editor }) => {
 			onChange(editor.getHTML());
 		},

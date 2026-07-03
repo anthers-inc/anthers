@@ -19,8 +19,9 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { posts, transcodingJobs } from "@anthers/db/schema";
+import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { type AccessiblePost, isPubliclyFree } from "../services/access.js";
 import { storage } from "../services/storage/index.js";
 
 export interface TranscodeVideoData {
@@ -162,15 +163,22 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
-	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
-	if (!post) throw new Error(`Post ${job.postId} not found`);
+	const [element] = await db
+		.select()
+		.from(postContents)
+		.where(eq(postContents.id, job.contentId))
+		.limit(1);
+	if (!element) throw new Error(`Content element ${job.contentId} not found`);
 
-	// A post is publicly served when it's free and ungated (no price, no entitlement).
-	// Priced/gated posts keep their media private (served later via signed URLs).
-	const isPublicPost = post.basePrice == null && post.entitlementKind == null;
+	const [post] = await db.select().from(posts).where(eq(posts.id, element.postId)).limit(1);
+	if (!post) throw new Error(`Post ${element.postId} not found`);
 
-	const storageKey = post.videoFile ?? "";
-	if (!storageKey) throw new Error("No video file on post");
+	// A post is publicly served when it's free to everyone. Priced/gated posts keep
+	// their media private (served later via signed URLs).
+	const isPublicPost = isPubliclyFree(post as AccessiblePost);
+
+	const storageKey = element.videoFile ?? "";
+	if (!storageKey) throw new Error("No video file on content element");
 
 	let localPath: string | null = null;
 	let outputDir: string | null = null;
@@ -191,12 +199,12 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		const sourceHeight = Number.parseInt(videoStream.height ?? "0", 10);
 		const sourceWidth = Number.parseInt(videoStream.width ?? "0", 10);
 
-		// Update post duration
+		// Update the content element's duration
 		if (duration > 0) {
 			await db
-				.update(posts)
+				.update(postContents)
 				.set({ durationSeconds: Math.round(duration) })
-				.where(eq(posts.id, post.id));
+				.where(eq(postContents.id, element.id));
 		}
 
 		await updateJobProgress(jobId, 10);
@@ -270,18 +278,24 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		}
 		await updateJobProgress(jobId, 90);
 
-		// 6. Auto-generate thumbnail if none set
+		// 6. Auto-generate a thumbnail for the element (and the post card) if none set
 		let thumbnailKey: string | null = null;
-		if (!post.thumbnail) {
+		if (!element.thumbnail) {
 			const thumbPosition = Math.max(1, Math.round(duration * 0.25));
 			thumbPath = await generateThumbnail(localPath, thumbPosition);
 			if (thumbPath) {
 				const thumbBuffer = await readFile(thumbPath);
 				thumbnailKey = `creators/${post.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
-				// Update post thumbnail
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
-				await db.update(posts).set({ thumbnail: thumbnailUrl }).where(eq(posts.id, post.id));
+				await db
+					.update(postContents)
+					.set({ thumbnail: thumbnailUrl })
+					.where(eq(postContents.id, element.id));
+				// Backfill the post's denormalized card thumbnail if it has none.
+				if (!post.thumbnail) {
+					await db.update(posts).set({ thumbnail: thumbnailUrl }).where(eq(posts.id, post.id));
+				}
 			}
 		}
 

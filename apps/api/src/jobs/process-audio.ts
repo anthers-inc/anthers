@@ -10,8 +10,9 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { posts, transcodingJobs } from "@anthers/db/schema";
+import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { type AccessiblePost, isPubliclyFree } from "../services/access.js";
 import { storage } from "../services/storage/index.js";
 
 export interface ProcessAudioData {
@@ -152,14 +153,21 @@ export async function processAudio(data: ProcessAudioData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
-	const [post] = await db.select().from(posts).where(eq(posts.id, job.postId)).limit(1);
-	if (!post) throw new Error(`Post ${job.postId} not found`);
+	const [element] = await db
+		.select()
+		.from(postContents)
+		.where(eq(postContents.id, job.contentId))
+		.limit(1);
+	if (!element) throw new Error(`Content element ${job.contentId} not found`);
 
-	// A post is publicly served when it's free and ungated (no price, no entitlement).
-	const isPublicPost = post.basePrice == null && post.entitlementKind == null;
+	const [post] = await db.select().from(posts).where(eq(posts.id, element.postId)).limit(1);
+	if (!post) throw new Error(`Post ${element.postId} not found`);
 
-	const storageKey = post.audioFile ?? "";
-	if (!storageKey) throw new Error("No audio file on post");
+	// A post is publicly served when it's free to everyone.
+	const isPublicPost = isPubliclyFree(post as AccessiblePost);
+
+	const storageKey = element.audioFile ?? "";
+	if (!storageKey) throw new Error("No audio file on content element");
 
 	let localPath: string | null = null;
 	let outputPath: string | null = null;
@@ -173,9 +181,9 @@ export async function processAudio(data: ProcessAudioData) {
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		if (duration > 0) {
 			await db
-				.update(posts)
+				.update(postContents)
 				.set({ durationSeconds: Math.round(duration) })
-				.where(eq(posts.id, post.id));
+				.where(eq(postContents.id, element.id));
 		}
 		await updateJobProgress(jobId, 20);
 

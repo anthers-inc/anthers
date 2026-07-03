@@ -2,21 +2,29 @@
 /**
  * Content routes — the unified Post model.
  *
- * Everything a creator publishes is a Post. Delivery (stream and/or download)
- * and access (free / paid / subscriber- or boost-gated) are orthogonal per-post
- * switches. Projects are collections (playlist-like wrappers) that group posts
- * via a many-to-many join and hold a custom showcase page — not a content type.
+ * Everything a creator publishes is a Post. A post BODY (rich text) is shown to
+ * anyone with visibility; the deliverable is an ordered array of typed **content
+ * elements** (`post_contents`), each carrying its own media + optional downloadable
+ * assets. Delivery (stream and/or download) and access (the two OR-gated access
+ * tables) are orthogonal per-post switches. Projects are collections that group
+ * posts via a many-to-many join — not a content type.
+ *
+ * Posts are addressed by a durable numeric `publicId`; the canonical URL is
+ * `/posts/{slug}-{publicId}` and a route param of either the bare publicId or the
+ * slug-publicId form resolves to the same post (slug alone still works too).
  *
  * See Architecture › "30.1 - Unified Post & Content Model".
  */
 
 import { db } from "@anthers/db/client";
 import {
+	type AnthersAccessRow,
 	assets,
+	type BoostAccessRow,
 	bookmarks,
 	comments,
-	galleryImages,
 	inlineImages,
+	postContents,
 	posts,
 	projectPosts,
 	projects,
@@ -34,6 +42,8 @@ import { requireAuth } from "../middleware/auth.js";
 import {
 	type AccessiblePost,
 	buildAccessContext,
+	defaultAnthersAccess,
+	defaultBoostAccess,
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
@@ -80,13 +90,59 @@ async function postSlugExists(slug: string): Promise<boolean> {
 	return !!row;
 }
 
-/** Strip stream media + body from a post the viewer can't access (metadata stays visible). */
-function gateStreamPayload(postData: Record<string, any>): void {
-	postData.body = "";
-	postData.bodyHtml = "";
-	postData.videoFile = "";
-	postData.audioFile = "";
-	postData.embedUrl = "";
+/** Allocate an unused 9-digit public id (Patreon-style durable key). */
+async function makeUniquePublicId(): Promise<number> {
+	for (let i = 0; i < 12; i++) {
+		const id = 100_000_000 + Math.floor(Math.random() * 900_000_000);
+		const [row] = await db
+			.select({ id: posts.id })
+			.from(posts)
+			.where(eq(posts.publicId, id))
+			.limit(1);
+		if (!row) return id;
+	}
+	throw new Error("Could not allocate a unique public id");
+}
+
+/**
+ * Parse a post route param that may be a bare publicId, a `slug-publicId`, or a
+ * plain slug. publicIds are ≥6 digits, so a slug's trailing number rarely misfires
+ * (and a miss just falls back to the slug lookup).
+ */
+function parsePostParam(param: string): { publicId: number | null; slug: string } {
+	if (/^\d+$/.test(param)) return { publicId: Number(param), slug: param };
+	const m = param.match(/-(\d{6,})$/);
+	if (m) return { publicId: Number(m[1]), slug: param };
+	return { publicId: null, slug: param };
+}
+
+/** Resolve the full post row from a route param (publicId preferred, slug fallback). */
+async function findPostRow(param: string): Promise<typeof posts.$inferSelect | null> {
+	const { publicId, slug } = parsePostParam(param);
+	if (publicId != null) {
+		const [byId] = await db.select().from(posts).where(eq(posts.publicId, publicId)).limit(1);
+		if (byId) return byId;
+	}
+	const [bySlug] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
+	return bySlug ?? null;
+}
+
+/** Post primary type for cards/badges/filter — the single element type, or "mixed". */
+function deriveContentType(elements: { contentType: string }[]): string {
+	if (elements.length === 0) return "text";
+	const types = new Set(elements.map((e) => e.contentType));
+	return types.size === 1 ? [...types][0] : "mixed";
+}
+
+/** Denormalized card image: first element's thumbnail, else its first image. */
+function deriveThumbnail(
+	elements: { thumbnail?: string | null; images?: string[] | null }[],
+): string {
+	for (const e of elements) {
+		if (e.thumbnail) return e.thumbnail;
+		if (e.images && e.images.length > 0) return e.images[0];
+	}
+	return "";
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -104,6 +160,32 @@ const CONTENT_TYPES = [
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
+const anthersAccessRowSchema = z.object({
+	tier: z.enum(["free", "root", "sprout", "petal", "bloom"]),
+	allow: z.boolean(),
+	price: z.string().regex(MONEY),
+});
+
+const boostAccessRowSchema = z.object({
+	threshold: z.number().nonnegative(),
+	allow: z.boolean(),
+	price: z.string().regex(MONEY),
+});
+
+const contentElementSchema = z.object({
+	id: z.number().int().optional(), // present = an existing element to keep/update
+	contentType: z.enum(CONTENT_TYPES),
+	title: z.string().max(255).optional().default(""),
+	thumbnail: z.string().max(500).optional().default(""),
+	bodyHtml: z.string().optional().default(""),
+	images: z.array(z.string().max(500)).optional().default([]),
+	videoFile: z.string().max(500).optional().default(""),
+	audioFile: z.string().max(500).optional().default(""),
+	embedUrl: z.string().max(500).optional().default(""),
+	durationSeconds: z.number().int().optional(),
+	metadata: z.record(z.unknown()).optional().default({}),
+});
+
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
 	slug: z
@@ -114,44 +196,34 @@ const postBaseSchema = z.object({
 		.optional(),
 	body: z.string().optional().default(""),
 	bodyHtml: z.string().optional().default(""),
-	contentType: z.enum(CONTENT_TYPES).default("text"),
 
-	// Delivery (≥1 enforced by the refine on create)
+	// Delivery / access type (≥1 enforced by the refine on create)
 	streamEnabled: z.boolean().optional().default(true),
 	downloadEnabled: z.boolean().optional().default(false),
 
-	// Stream payload / media
-	videoFile: z.string().max(500).optional().default(""),
-	audioFile: z.string().max(500).optional().default(""),
-	coverImage: z.string().max(500).optional().default(""),
-	thumbnail: z.string().max(500).optional().default(""),
-	embedUrl: z.string().max(500).optional().default(""),
-	durationSeconds: z.number().int().optional(),
+	// Access tables (default "free but fully locked" applied server-side when omitted)
+	anthersAccess: z.array(anthersAccessRowSchema).optional(),
+	boostAccess: z.array(boostAccessRowSchema).optional(),
 
-	// Access & pricing (one entitlement model — see services/access.ts)
-	basePrice: z.string().regex(MONEY).nullable().optional(),
-	pricingMode: z.enum(["fixed", "pwyw"]).default("fixed"),
-	minPrice: z.string().regex(MONEY).nullable().optional(),
-	suggestedPrice: z.string().regex(MONEY).nullable().optional(),
-	entitlementKind: z.enum(["tier", "boost"]).nullable().optional(),
-	entitlementTier: z.enum(["root", "sprout", "petal", "bloom"]).nullable().optional(),
-	entitlementBoostThreshold: z.string().regex(MONEY).nullable().optional(),
-	entitlementDiscountPct: z.number().int().min(0).max(100).nullable().optional(),
-	purchasableWithoutEntitlement: z.boolean().optional().default(true),
+	// The deliverable: an ordered array of typed content elements.
+	contents: z.array(contentElementSchema).optional().default([]),
 
 	// Presentation
+	showOnTimeline: z.boolean().optional().default(true),
 	isPinned: z.boolean().optional().default(false),
-	listing: z.enum(["timeline", "unlisted", "shop"]).default("timeline"),
 
 	// Metadata
 	tags: z.array(z.string()).optional().default([]),
 	websiteUrl: z.string().max(500).optional().default(""),
 	sourceUrl: z.string().max(500).optional().default(""),
 	isPublished: z.boolean().optional().default(false),
+
+	// Optionally attach to a project (collection) on create.
+	projectId: z.number().int().optional(),
 });
 
 const createPostSchema = postBaseSchema.refine((d) => d.streamEnabled || d.downloadEnabled, {
-	message: "A post must enable at least one delivery method (stream or download)",
+	message: "A post must enable at least one access type (stream or download)",
 	path: ["streamEnabled"],
 });
 
@@ -186,16 +258,176 @@ const createAssetSchema = z.object({
 	isPrimary: z.boolean().optional().default(false),
 });
 
-const createGalleryImageSchema = z.object({
-	image: z.string().min(1).max(500),
-	caption: z.string().max(255).optional().default(""),
-	sortOrder: z.number().int().optional().default(0),
-});
-
 const addToCollectionSchema = z.object({
 	postId: z.number().int(),
 	sortOrder: z.number().int().optional(),
 });
+
+// ─── Content-element persistence ──────────────────────────────────────────────
+
+/** Map a validated element to its post_contents column values. */
+function elementValues(el: z.infer<typeof contentElementSchema>, postId: number, position: number) {
+	return {
+		postId,
+		position,
+		contentType: el.contentType,
+		title: el.title ?? "",
+		thumbnail: el.thumbnail ?? "",
+		bodyHtml: el.bodyHtml ? sanitizePostHtml(el.bodyHtml) : "",
+		images: el.images ?? [],
+		videoFile: el.videoFile ?? "",
+		audioFile: el.audioFile ?? "",
+		embedUrl: el.embedUrl ?? "",
+		durationSeconds: el.durationSeconds ?? null,
+		metadata: el.metadata ?? {},
+	};
+}
+
+/** Queue a transcode/normalize job for a video or audio element that has a source file. */
+async function queueTranscodeFor(content: typeof postContents.$inferSelect): Promise<void> {
+	if (content.contentType === "video" && content.videoFile) {
+		const [job] = await db
+			.insert(transcodingJobs)
+			.values({ contentId: content.id, mediaType: "video", status: "pending" })
+			.returning();
+		await queue.send(
+			QUEUES.TRANSCODE_VIDEO,
+			{ jobId: job.id },
+			JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
+		);
+	} else if (content.contentType === "audio" && content.audioFile) {
+		const [job] = await db
+			.insert(transcodingJobs)
+			.values({ contentId: content.id, mediaType: "audio", status: "pending" })
+			.returning();
+		await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
+	}
+}
+
+/** Insert a fresh set of content elements for a post (create path). */
+async function insertContents(
+	postId: number,
+	elements: z.infer<typeof contentElementSchema>[],
+): Promise<void> {
+	for (let i = 0; i < elements.length; i++) {
+		const [inserted] = await db
+			.insert(postContents)
+			.values(elementValues(elements[i], postId, i))
+			.returning();
+		await queueTranscodeFor(inserted);
+	}
+}
+
+/**
+ * Reconcile a post's content elements against a submitted array (update path):
+ * keep+update elements referenced by id (preserving their assets/transcodes),
+ * insert new ones, and delete those dropped from the array.
+ */
+async function reconcileContents(
+	postId: number,
+	elements: z.infer<typeof contentElementSchema>[],
+): Promise<void> {
+	const existing = await db.select().from(postContents).where(eq(postContents.postId, postId));
+	const existingById = new Map(existing.map((e) => [e.id, e]));
+	const keep = new Set<number>();
+
+	for (let i = 0; i < elements.length; i++) {
+		const el = elements[i];
+		const prev = el.id != null ? existingById.get(el.id) : undefined;
+		if (prev) {
+			keep.add(prev.id);
+			await db
+				.update(postContents)
+				.set({ ...elementValues(el, postId, i), updatedAt: new Date() })
+				.where(eq(postContents.id, prev.id));
+			// Re-queue when a streamed media source changed.
+			if (el.contentType === "video" && el.videoFile && el.videoFile !== prev.videoFile) {
+				await queueTranscodeFor({ ...prev, ...elementValues(el, postId, i) });
+			} else if (el.contentType === "audio" && el.audioFile && el.audioFile !== prev.audioFile) {
+				await queueTranscodeFor({ ...prev, ...elementValues(el, postId, i) });
+			}
+		} else {
+			const [inserted] = await db
+				.insert(postContents)
+				.values(elementValues(el, postId, i))
+				.returning();
+			await queueTranscodeFor(inserted);
+		}
+	}
+
+	const toDelete = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
+	if (toDelete.length > 0) {
+		await db.delete(postContents).where(inArray(postContents.id, toDelete));
+	}
+}
+
+/** Serialize one content element for a response, stripping the payload when gated. */
+function serializeContent(
+	el: typeof postContents.$inferSelect,
+	elAssets: (typeof assets.$inferSelect)[],
+	job: typeof transcodingJobs.$inferSelect | null,
+	canAccess: boolean,
+) {
+	return {
+		id: el.id,
+		postId: el.postId,
+		position: el.position,
+		contentType: el.contentType,
+		title: el.title,
+		thumbnail: el.thumbnail,
+		durationSeconds: el.durationSeconds,
+		metadata: el.metadata,
+		// Payload is the deliverable — only handed out when the viewer has access.
+		bodyHtml: canAccess ? el.bodyHtml : "",
+		images: canAccess ? el.images : [],
+		videoFile: canAccess ? el.videoFile : "",
+		audioFile: canAccess ? el.audioFile : "",
+		embedUrl: canAccess ? el.embedUrl : "",
+		// Download keys are only handed out through the access-checked download route.
+		assets: elAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
+		transcoding: job,
+	};
+}
+
+/** Load a post's content elements with their assets + latest transcode job, gating as needed. */
+async function loadPostContents(postId: number, canAccess: boolean) {
+	const contents = await db
+		.select()
+		.from(postContents)
+		.where(eq(postContents.postId, postId))
+		.orderBy(asc(postContents.position));
+	if (contents.length === 0) return [];
+
+	const contentIds = contents.map((c) => c.id);
+	const [assetRows, jobRows] = await Promise.all([
+		db.select().from(assets).where(inArray(assets.contentId, contentIds)),
+		db
+			.select()
+			.from(transcodingJobs)
+			.where(inArray(transcodingJobs.contentId, contentIds))
+			.orderBy(desc(transcodingJobs.createdAt)),
+	]);
+
+	const assetsByContent = new Map<number, (typeof assets.$inferSelect)[]>();
+	for (const a of assetRows) {
+		const list = assetsByContent.get(a.contentId) ?? [];
+		list.push(a);
+		assetsByContent.set(a.contentId, list);
+	}
+	const jobByContent = new Map<number, typeof transcodingJobs.$inferSelect>();
+	for (const j of jobRows) {
+		if (!jobByContent.has(j.contentId)) jobByContent.set(j.contentId, j);
+	}
+
+	return contents.map((el) =>
+		serializeContent(
+			el,
+			assetsByContent.get(el.id) ?? [],
+			jobByContent.get(el.id) ?? null,
+			canAccess,
+		),
+	);
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -209,14 +441,12 @@ const contentRoutes = new Hono()
 		const creator = c.req.query("creator");
 		const collection = c.req.query("collection"); // project (collection) slug
 		const contentType = c.req.query("content_type");
-		const listing = c.req.query("listing"); // timeline | unlisted | shop
 		const delivery = c.req.query("delivery"); // stream | download
-		const access = c.req.query("access"); // free | paid | gated
 		const tag = c.req.query("tag");
 		const search = c.req.query("search");
 		const sort = c.req.query("sort") ?? "newest";
 
-		const conditions: any[] = [];
+		const conditions: SQL[] = [];
 
 		if (mine === "true") {
 			const userId = await getOptionalUserId(c);
@@ -250,32 +480,19 @@ const contentRoutes = new Hono()
 
 		if (contentType) conditions.push(eq(posts.contentType, contentType));
 
-		// Timeline visibility: default the public feed to timeline-listed posts only,
-		// so operational shop/unlisted posts don't crowd it. An explicit listing filter
-		// or a collection view overrides that default.
-		if (listing) {
-			conditions.push(eq(posts.listing, listing));
-		} else if (mine !== "true" && !collection) {
-			conditions.push(eq(posts.listing, "timeline"));
+		// The public feed shows timeline posts only; a creator's own view or a
+		// collection view shows everything (including off-timeline posts).
+		if (mine !== "true" && !collection) {
+			conditions.push(eq(posts.showOnTimeline, true));
 		}
 
 		if (delivery === "stream") conditions.push(eq(posts.streamEnabled, true));
 		else if (delivery === "download") conditions.push(eq(posts.downloadEnabled, true));
 
-		if (access === "free") {
-			conditions.push(sql`${posts.basePrice} IS NULL AND ${posts.entitlementKind} IS NULL`);
-		} else if (access === "paid") {
-			conditions.push(sql`${posts.basePrice} IS NOT NULL`);
-		} else if (access === "gated") {
-			conditions.push(sql`${posts.entitlementKind} IS NOT NULL`);
-		}
-
 		if (tag) conditions.push(sql`${posts.tags} @> ${JSON.stringify([tag])}::jsonb`);
 
 		if (search) {
-			conditions.push(
-				or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)),
-			);
+			conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
 		}
 
 		let orderClause: SQL[];
@@ -305,17 +522,18 @@ const contentRoutes = new Hono()
 
 		const postIds = result.map((r) => r.post.id);
 
-		// Latest transcoding status per post.
+		// Latest transcoding status per post (across its content elements).
 		const transcodingMap = new Map<number, { status: string; progress: number }>();
 		if (postIds.length > 0) {
 			const jobs = await db
 				.select({
-					postId: transcodingJobs.postId,
+					postId: postContents.postId,
 					status: transcodingJobs.status,
 					progress: transcodingJobs.progress,
 				})
 				.from(transcodingJobs)
-				.where(inArray(transcodingJobs.postId, postIds))
+				.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
+				.where(inArray(postContents.postId, postIds))
 				.orderBy(desc(transcodingJobs.createdAt));
 			for (const job of jobs) {
 				if (!transcodingMap.has(job.postId)) {
@@ -333,16 +551,15 @@ const contentRoutes = new Hono()
 				const p = r.post;
 				return {
 					id: p.id,
+					publicId: p.publicId,
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
 					contentType: p.contentType,
 					streamEnabled: p.streamEnabled,
 					downloadEnabled: p.downloadEnabled,
-					coverImage: p.coverImage,
 					thumbnail: p.thumbnail,
-					durationSeconds: p.durationSeconds,
-					listing: p.listing,
+					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
@@ -378,42 +595,33 @@ const contentRoutes = new Hono()
 			slug = await makeUniqueSlug(data.title || "post", postSlugExists);
 		}
 
-		// Sanitize creator HTML at the trust boundary — bodyHtml renders via dangerouslySetInnerHTML.
 		const bodyHtml = sanitizePostHtml(data.bodyHtml);
+		const contentType = deriveContentType(data.contents);
+		const thumbnail = deriveThumbnail(data.contents);
 
-		let estimatedReadMinutes: number | null = null;
-		if (data.contentType === "text" && (bodyHtml || data.body)) {
-			estimatedReadMinutes = estimateReadMinutes(data.bodyHtml || data.body);
-		}
+		// Read time comes from the post body (the always-visible rich text).
+		const readText = bodyHtml || data.body;
+		const estimatedReadMinutes = readText ? estimateReadMinutes(readText) : null;
+
+		const publicId = await makeUniquePublicId();
 
 		const [post] = await db
 			.insert(posts)
 			.values({
 				creatorId: user.id,
+				publicId,
 				slug,
 				title: data.title,
 				body: data.body,
 				bodyHtml,
-				contentType: data.contentType,
+				contentType,
+				thumbnail,
 				streamEnabled: data.streamEnabled,
 				downloadEnabled: data.downloadEnabled,
-				videoFile: data.videoFile,
-				audioFile: data.audioFile,
-				coverImage: data.coverImage,
-				thumbnail: data.thumbnail,
-				embedUrl: data.embedUrl,
-				durationSeconds: data.durationSeconds ?? null,
-				basePrice: data.basePrice ?? null,
-				pricingMode: data.pricingMode,
-				minPrice: data.minPrice ?? null,
-				suggestedPrice: data.suggestedPrice ?? null,
-				entitlementKind: data.entitlementKind ?? null,
-				entitlementTier: data.entitlementTier ?? null,
-				entitlementBoostThreshold: data.entitlementBoostThreshold ?? null,
-				entitlementDiscountPct: data.entitlementDiscountPct ?? null,
-				purchasableWithoutEntitlement: data.purchasableWithoutEntitlement,
+				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
+				boostAccess: data.boostAccess ?? defaultBoostAccess(),
+				showOnTimeline: data.showOnTimeline,
 				isPinned: data.isPinned,
-				listing: data.listing,
 				tags: data.tags,
 				websiteUrl: data.websiteUrl,
 				sourceUrl: data.sourceUrl,
@@ -422,89 +630,69 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		// Streamed video/audio needs transcoding; download-only media does not.
-		if (data.streamEnabled && data.contentType === "video" && data.videoFile) {
-			const [job] = await db
-				.insert(transcodingJobs)
-				.values({ postId: post.id, mediaType: "video", status: "pending" })
-				.returning();
-			await queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
-		} else if (data.streamEnabled && data.contentType === "audio" && data.audioFile) {
-			const [job] = await db
-				.insert(transcodingJobs)
-				.values({ postId: post.id, mediaType: "audio", status: "pending" })
-				.returning();
-			await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
+		await insertContents(post.id, data.contents);
+
+		// Optionally attach to a project (collection) the creator owns.
+		if (data.projectId != null) {
+			const [project] = await db
+				.select({ id: projects.id })
+				.from(projects)
+				.where(and(eq(projects.id, data.projectId), eq(projects.creatorId, user.id)))
+				.limit(1);
+			if (project) {
+				const [maxRow] = await db
+					.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+					.from(projectPosts)
+					.where(eq(projectPosts.projectId, project.id));
+				await db
+					.insert(projectPosts)
+					.values({ projectId: project.id, postId: post.id, sortOrder: Number(maxRow.max) + 1 })
+					.onConflictDoNothing({ target: [projectPosts.projectId, projectPosts.postId] });
+			}
 		}
 
-		// TODO: ATProto sync
-
-		return c.json({ post }, 201);
+		const contents = await loadPostContents(post.id, true);
+		return c.json({ post: { ...post, contents } }, 201);
 	})
 
 	.get("/posts/:slug", async (c) => {
 		const { slug } = c.req.param();
+		const post = await findPostRow(slug);
+		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		const result = await db
-			.select({
-				post: posts,
-				creatorUsername: users.username,
-				creatorDisplayName: users.displayName,
-				creatorAvatar: users.avatar,
-				ratingAverage: sql<number>`(SELECT AVG(score)::float FROM ratings WHERE post_id = ${posts.id})`,
-				ratingCount: sql<number>`(SELECT COUNT(*)::int FROM ratings WHERE post_id = ${posts.id})`,
-			})
-			.from(posts)
-			.innerJoin(users, eq(posts.creatorId, users.id))
-			.where(eq(posts.slug, slug))
+		const [creator] = await db
+			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
+			.from(users)
+			.where(eq(users.id, post.creatorId))
 			.limit(1);
 
-		if (result.length === 0) return c.json({ error: "Post not found" }, 404);
-		const row = result[0];
+		const [agg] = await db
+			.select({ average: avg(ratings.score), count: count(ratings.id) })
+			.from(ratings)
+			.where(eq(ratings.postId, post.id));
 
 		// Fire-and-forget view count.
 		db.update(posts)
 			.set({ viewCount: sql`${posts.viewCount} + 1` })
-			.where(eq(posts.id, row.post.id))
+			.where(eq(posts.id, post.id))
 			.execute();
 
-		const [postGallery, postAssets, jobs] = await Promise.all([
-			db
-				.select()
-				.from(galleryImages)
-				.where(eq(galleryImages.postId, row.post.id))
-				.orderBy(asc(galleryImages.sortOrder)),
-			db.select().from(assets).where(eq(assets.postId, row.post.id)),
-			db
-				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.postId, row.post.id))
-				.orderBy(desc(transcodingJobs.createdAt)),
-		]);
-
 		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [row.post.id] });
-		const access = resolveAccessSync(row.post as AccessiblePost, ctx);
+		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
+		const access = resolveAccessSync(post as AccessiblePost, ctx);
 
-		const postData: Record<string, any> = {
-			...row.post,
-			creator: {
-				username: row.creatorUsername,
-				displayName: row.creatorDisplayName,
-				avatar: row.creatorAvatar,
+		const contents = await loadPostContents(post.id, access.canAccess);
+
+		return c.json({
+			post: {
+				...post,
+				creator,
+				ratingAverage: agg.average ? Number(agg.average) : null,
+				ratingCount: Number(agg.count),
+				contents,
+				access,
 			},
-			ratingAverage: row.ratingAverage ? Number(row.ratingAverage) : null,
-			ratingCount: Number(row.ratingCount),
-			galleryImages: postGallery,
-			// Download keys are only handed out through the access-checked download route.
-			assets: postAssets.map((a) => ({ ...a, file: access.canAccess ? a.file : "" })),
-			transcodingJobs: jobs,
-			access,
-		};
-
-		if (!access.canAccess) gateStreamPayload(postData);
-
-		return c.json({ post: postData });
+		});
 	})
 
 	.patch("/posts/:slug", requireAuth, zValidator("json", updatePostSchema), async (c) => {
@@ -512,29 +700,52 @@ const contentRoutes = new Hono()
 		const { slug } = c.req.param();
 		const data = c.req.valid("json");
 
-		const [existing] = await db
-			.select()
-			.from(posts)
-			.where(eq(posts.slug, slug))
-			.limit(1);
-
+		const existing = await findPostRow(slug);
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		// Slug change must stay unique.
-		if (data.slug && data.slug !== slug) {
+		if (data.slug && data.slug !== existing.slug) {
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
-		const updates: Record<string, any> = { ...data, updatedAt: new Date() };
-
-		if (data.bodyHtml !== undefined) updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
-
-		const nextContentType = data.contentType ?? existing.contentType;
-		if (nextContentType === "text") {
-			const text = updates.bodyHtml ?? data.body ?? existing.bodyHtml ?? existing.body ?? "";
-			if (text) updates.estimatedReadMinutes = estimateReadMinutes(text);
+		// Reconcile content elements first (if provided), then derive post-level fields.
+		if (data.contents !== undefined) {
+			await reconcileContents(existing.id, data.contents);
 		}
+		const currentContents = await db
+			.select({
+				contentType: postContents.contentType,
+				thumbnail: postContents.thumbnail,
+				images: postContents.images,
+			})
+			.from(postContents)
+			.where(eq(postContents.postId, existing.id))
+			.orderBy(asc(postContents.position));
+
+		const updates: Record<string, unknown> = { updatedAt: new Date() };
+		if (data.slug !== undefined) updates.slug = data.slug;
+		if (data.title !== undefined) updates.title = data.title;
+		if (data.body !== undefined) updates.body = data.body;
+		if (data.bodyHtml !== undefined) updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
+		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
+		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
+		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
+		if (data.boostAccess !== undefined) updates.boostAccess = data.boostAccess;
+		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
+		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
+		if (data.tags !== undefined) updates.tags = data.tags;
+		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
+		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
+		if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
+
+		// Keep the denormalized type/thumbnail + read time in sync.
+		updates.contentType = deriveContentType(currentContents);
+		updates.thumbnail = deriveThumbnail(currentContents);
+		const readText =
+			(data.bodyHtml !== undefined ? updates.bodyHtml : existing.bodyHtml) ||
+			(data.body !== undefined ? data.body : existing.body) ||
+			"";
+		updates.estimatedReadMinutes = readText ? estimateReadMinutes(readText as string) : null;
 
 		const [updated] = await db
 			.update(posts)
@@ -542,42 +753,23 @@ const contentRoutes = new Hono()
 			.where(eq(posts.id, existing.id))
 			.returning();
 
-		// Re-trigger transcoding when a streamed media file was (re)set.
-		const streamOn = updated.streamEnabled;
-		if (streamOn && data.videoFile && data.videoFile !== existing.videoFile) {
-			const [job] = await db
-				.insert(transcodingJobs)
-				.values({ postId: updated.id, mediaType: "video", status: "pending" })
-				.returning();
-			await queue.send(QUEUES.TRANSCODE_VIDEO, { jobId: job.id }, JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO]);
-		} else if (streamOn && data.audioFile && data.audioFile !== existing.audioFile) {
-			const [job] = await db
-				.insert(transcodingJobs)
-				.values({ postId: updated.id, mediaType: "audio", status: "pending" })
-				.returning();
-			await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
-		}
-
-		return c.json({ post: updated });
+		const contents = await loadPostContents(updated.id, true);
+		return c.json({ post: { ...updated, contents } });
 	})
 
 	.delete("/posts/:slug", requireAuth, async (c) => {
 		const user = c.get("user");
 		const { slug } = c.req.param();
+		const existing = await findPostRow(slug);
+		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		const deleted = await db
-			.delete(posts)
-			.where(and(eq(posts.slug, slug), eq(posts.creatorId, user.id)))
-			.returning({ id: posts.id });
-
-		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+		await db.delete(posts).where(eq(posts.id, existing.id));
 		return c.body(null, 204);
 	})
 
 	// ── Post Comments ──────────────────────────────────────────────────────────
 	.get("/posts/:slug/comments", async (c) => {
-		const { slug } = c.req.param();
-		const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
+		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const result = await db
@@ -592,25 +784,28 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post("/posts/:slug/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
-		const user = c.get("user");
-		const { slug } = c.req.param();
-		const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	.post(
+		"/posts/:slug/comments",
+		requireAuth,
+		zValidator("json", createCommentSchema),
+		async (c) => {
+			const user = c.get("user");
+			const post = await findPostRow(c.req.param("slug"));
+			if (!post) return c.json({ error: "Post not found" }, 404);
 
-		const { body } = c.req.valid("json");
-		const [comment] = await db
-			.insert(comments)
-			.values({ userId: user.id, postId: post.id, body })
-			.returning();
+			const { body } = c.req.valid("json");
+			const [comment] = await db
+				.insert(comments)
+				.values({ userId: user.id, postId: post.id, body })
+				.returning();
 
-		return c.json({ comment: { ...comment, username: user.username } }, 201);
-	})
+			return c.json({ comment: { ...comment, username: user.username } }, 201);
+		},
+	)
 
 	// ── Post Ratings ───────────────────────────────────────────────────────────
 	.get("/posts/:slug/ratings", async (c) => {
-		const { slug } = c.req.param();
-		const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
+		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const [agg] = await db
@@ -638,8 +833,7 @@ const contentRoutes = new Hono()
 
 	.post("/posts/:slug/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
 		const user = c.get("user");
-		const { slug } = c.req.param();
-		const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
+		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const { score } = c.req.valid("json");
@@ -652,35 +846,46 @@ const contentRoutes = new Hono()
 		return c.json({ rating }, 201);
 	})
 
-	// ── Post Assets (downloadable files) ─────────────────────────────────────────
-	.post("/posts/:slug/assets", requireAuth, zValidator("json", createAssetSchema), async (c) => {
+	// ── Content-element downloadable assets ──────────────────────────────────────
+	.post(
+		"/posts/:slug/contents/:contentId/assets",
+		requireAuth,
+		zValidator("json", createAssetSchema),
+		async (c) => {
+			const user = c.get("user");
+			const post = await findPostRow(c.req.param("slug"));
+			if (!post || post.creatorId !== user.id) return c.json({ error: "Post not found" }, 404);
+
+			const contentId = Number(c.req.param("contentId"));
+			const [element] = await db
+				.select({ id: postContents.id })
+				.from(postContents)
+				.where(and(eq(postContents.id, contentId), eq(postContents.postId, post.id)))
+				.limit(1);
+			if (!element) return c.json({ error: "Content element not found" }, 404);
+
+			const data = c.req.valid("json");
+			const [asset] = await db
+				.insert(assets)
+				.values({ contentId, ...data })
+				.returning();
+			return c.json({ asset }, 201);
+		},
+	)
+
+	.delete("/posts/:slug/contents/:contentId/assets/:id", requireAuth, async (c) => {
 		const user = c.get("user");
-		const { slug } = c.req.param();
-		const [post] = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(and(eq(posts.slug, slug), eq(posts.creatorId, user.id)))
-			.limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		const post = await findPostRow(c.req.param("slug"));
+		if (!post || post.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		const data = c.req.valid("json");
-		const [asset] = await db.insert(assets).values({ postId: post.id, ...data }).returning();
-		return c.json({ asset }, 201);
-	})
-
-	.delete("/posts/:slug/assets/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const { slug, id } = c.req.param();
-
+		const contentId = Number(c.req.param("contentId"));
 		const deleted = await db
 			.delete(assets)
 			.where(
 				and(
-					eq(assets.id, Number(id)),
-					eq(
-						assets.postId,
-						sql`(SELECT id FROM posts WHERE slug = ${slug} AND creator_id = ${user.id})`,
-					),
+					eq(assets.id, Number(c.req.param("id"))),
+					eq(assets.contentId, contentId),
+					sql`${contentId} IN (SELECT id FROM post_contents WHERE post_id = ${post.id})`,
 				),
 			)
 			.returning({ id: assets.id });
@@ -690,28 +895,29 @@ const contentRoutes = new Hono()
 	})
 
 	.post("/posts/:slug/assets/:id/download", async (c) => {
-		const { slug, id } = c.req.param();
+		const post = await findPostRow(c.req.param("slug"));
+		if (!post) return c.json({ error: "Post not found" }, 404);
 
+		// Resolve the asset via its content element, scoped to this post.
 		const [row] = await db
-			.select({ asset: assets, post: posts })
+			.select({ asset: assets })
 			.from(assets)
-			.innerJoin(posts, eq(assets.postId, posts.id))
-			.where(and(eq(assets.id, Number(id)), eq(posts.slug, slug)))
+			.innerJoin(postContents, eq(assets.contentId, postContents.id))
+			.where(and(eq(assets.id, Number(c.req.param("id"))), eq(postContents.postId, post.id)))
 			.limit(1);
-
 		if (!row) return c.json({ error: "Asset not found" }, 404);
 
 		// Enforce access server-side — the UI gate is not the source of truth.
 		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [row.post.id] });
-		const access = resolveAccessSync(row.post as AccessiblePost, ctx);
+		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
+		const access = resolveAccessSync(post as AccessiblePost, ctx);
 		if (!access.canAccess) {
 			return c.json({ error: "Purchase or subscription required", access }, 403);
 		}
 
 		db.update(posts)
 			.set({ downloadCount: sql`${posts.downloadCount} + 1` })
-			.where(eq(posts.id, row.post.id))
+			.where(eq(posts.id, post.id))
 			.execute();
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
@@ -720,64 +926,19 @@ const contentRoutes = new Hono()
 		return c.json({ url });
 	})
 
-	// ── Post Gallery Images ──────────────────────────────────────────────────────
-	.post(
-		"/posts/:slug/gallery",
-		requireAuth,
-		zValidator("json", createGalleryImageSchema),
-		async (c) => {
-			const user = c.get("user");
-			const { slug } = c.req.param();
-			const [post] = await db
-				.select({ id: posts.id })
-				.from(posts)
-				.where(and(eq(posts.slug, slug), eq(posts.creatorId, user.id)))
-				.limit(1);
-			if (!post) return c.json({ error: "Post not found" }, 404);
-
-			const data = c.req.valid("json");
-			const [image] = await db
-				.insert(galleryImages)
-				.values({ postId: post.id, ...data })
-				.returning();
-			return c.json({ galleryImage: image }, 201);
-		},
-	)
-
-	.delete("/posts/:slug/gallery/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const { slug, id } = c.req.param();
-
-		const deleted = await db
-			.delete(galleryImages)
-			.where(
-				and(
-					eq(galleryImages.id, Number(id)),
-					eq(
-						galleryImages.postId,
-						sql`(SELECT id FROM posts WHERE slug = ${slug} AND creator_id = ${user.id})`,
-					),
-				),
-			)
-			.returning({ id: galleryImages.id });
-
-		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
-		return c.body(null, 204);
-	})
-
-	// ── Transcoding Status ───────────────────────────────────────────────────────
+	// ── Transcoding status (across the post's content elements) ──────────────────
 	.get("/posts/:slug/transcoding", async (c) => {
-		const { slug } = c.req.param();
-		const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
+		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const jobs = await db
-			.select()
+			.select({ job: transcodingJobs, contentId: postContents.id })
 			.from(transcodingJobs)
-			.where(eq(transcodingJobs.postId, post.id))
+			.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
+			.where(eq(postContents.postId, post.id))
 			.orderBy(desc(transcodingJobs.createdAt));
 
-		return c.json({ jobs });
+		return c.json({ jobs: jobs.map((j) => j.job) });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
@@ -789,7 +950,7 @@ const contentRoutes = new Hono()
 		const creator = c.req.query("creator");
 		const search = c.req.query("search");
 
-		const conditions: any[] = [];
+		const conditions: SQL[] = [];
 		if (mine === "true") {
 			const userId = await getOptionalUserId(c);
 			if (!userId) return c.json({ projects: [] });
@@ -810,7 +971,7 @@ const contentRoutes = new Hono()
 
 		if (search) {
 			conditions.push(
-				or(like(projects.title, `%${search}%`), like(projects.description, `%${search}%`)),
+				or(like(projects.title, `%${search}%`), like(projects.description, `%${search}%`)) as SQL,
 			);
 		}
 
@@ -887,7 +1048,6 @@ const contentRoutes = new Hono()
 		if (result.length === 0) return c.json({ error: "Project not found" }, 404);
 		const row = result[0];
 
-		// Ordered member posts.
 		const memberRows = await db
 			.select({
 				post: posts,
@@ -903,10 +1063,7 @@ const contentRoutes = new Hono()
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
 
 		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(
-			viewerId,
-			{ postIds: memberRows.map((m) => m.post.id) },
-		);
+		const ctx = await buildAccessContext(viewerId, { postIds: memberRows.map((m) => m.post.id) });
 
 		return c.json({
 			project: {
@@ -918,10 +1075,10 @@ const contentRoutes = new Hono()
 				},
 				posts: memberRows.map((m) => ({
 					id: m.post.id,
+					publicId: m.post.publicId,
 					slug: m.post.slug,
 					title: m.post.title,
 					contentType: m.post.contentType,
-					coverImage: m.post.coverImage,
 					thumbnail: m.post.thumbnail,
 					streamEnabled: m.post.streamEnabled,
 					downloadEnabled: m.post.downloadEnabled,
@@ -982,44 +1139,48 @@ const contentRoutes = new Hono()
 	})
 
 	// ── Collection membership (project_posts) ────────────────────────────────────
-	.post("/projects/:slug/posts", requireAuth, zValidator("json", addToCollectionSchema), async (c) => {
-		const user = c.get("user");
-		const { slug } = c.req.param();
-		const { postId, sortOrder } = c.req.valid("json");
+	.post(
+		"/projects/:slug/posts",
+		requireAuth,
+		zValidator("json", addToCollectionSchema),
+		async (c) => {
+			const user = c.get("user");
+			const { slug } = c.req.param();
+			const { postId, sortOrder } = c.req.valid("json");
 
-		const [project] = await db
-			.select({ id: projects.id })
-			.from(projects)
-			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
-			.limit(1);
-		if (!project) return c.json({ error: "Project not found" }, 404);
+			const [project] = await db
+				.select({ id: projects.id })
+				.from(projects)
+				.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
+				.limit(1);
+			if (!project) return c.json({ error: "Project not found" }, 404);
 
-		// Only the creator's own posts can be collected.
-		const [post] = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(and(eq(posts.id, postId), eq(posts.creatorId, user.id)))
-			.limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
+			const [post] = await db
+				.select({ id: posts.id })
+				.from(posts)
+				.where(and(eq(posts.id, postId), eq(posts.creatorId, user.id)))
+				.limit(1);
+			if (!post) return c.json({ error: "Post not found" }, 404);
 
-		let order = sortOrder;
-		if (order === undefined) {
-			const [maxRow] = await db
-				.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
-				.from(projectPosts)
-				.where(eq(projectPosts.projectId, project.id));
-			order = Number(maxRow.max) + 1;
-		}
+			let order = sortOrder;
+			if (order === undefined) {
+				const [maxRow] = await db
+					.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+					.from(projectPosts)
+					.where(eq(projectPosts.projectId, project.id));
+				order = Number(maxRow.max) + 1;
+			}
 
-		const [link] = await db
-			.insert(projectPosts)
-			.values({ projectId: project.id, postId: post.id, sortOrder: order })
-			.onConflictDoNothing({ target: [projectPosts.projectId, projectPosts.postId] })
-			.returning();
+			const [link] = await db
+				.insert(projectPosts)
+				.values({ projectId: project.id, postId: post.id, sortOrder: order })
+				.onConflictDoNothing({ target: [projectPosts.projectId, projectPosts.postId] })
+				.returning();
 
-		if (!link) return c.json({ error: "Post is already in this collection" }, 409);
-		return c.json({ projectPost: link }, 201);
-	})
+			if (!link) return c.json({ error: "Post is already in this collection" }, 409);
+			return c.json({ projectPost: link }, 201);
+		},
+	)
 
 	.delete("/projects/:slug/posts/:postId", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -1062,9 +1223,7 @@ const contentRoutes = new Hono()
 				await db
 					.update(projectPosts)
 					.set({ sortOrder: i })
-					.where(
-						and(eq(projectPosts.projectId, project.id), eq(projectPosts.postId, postIds[i])),
-					);
+					.where(and(eq(projectPosts.projectId, project.id), eq(projectPosts.postId, postIds[i])));
 			}
 
 			return c.json({ success: true });
@@ -1095,7 +1254,6 @@ const contentRoutes = new Hono()
 			const { filename, contentType, mediaType } = c.req.valid("json");
 			const user = c.get("user");
 
-			// Creator-first key layout: every object lives under creators/<creatorId>/…
 			const ext = filename.includes(".") ? filename.split(".").pop() : "";
 			const uuid = crypto.randomUUID().replace(/-/g, "");
 			const prefix = `creators/${user.id}`;
@@ -1107,7 +1265,11 @@ const contentRoutes = new Hono()
 			const key = keyMap[mediaType];
 
 			if (isLocalStorage) {
-				return c.json({ method: "direct" as const, uploadUrl: `/api/content/media-upload/direct`, key });
+				return c.json({
+					method: "direct" as const,
+					uploadUrl: `/api/content/media-upload/direct`,
+					key,
+				});
 			}
 
 			const uploadUrl = await storage.getPresignedUploadUrl(key, contentType, 3600);
@@ -1116,7 +1278,7 @@ const contentRoutes = new Hono()
 	)
 
 	/**
-	 * Direct multipart upload — local dev, and small files (avatars, covers, gallery)
+	 * Direct multipart upload — local dev, and small files (avatars, covers, images)
 	 * in all modes.
 	 */
 	.post("/media-upload/direct", requireAuth, async (c) => {
@@ -1128,7 +1290,6 @@ const contentRoutes = new Hono()
 
 		if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
-		// 500MB for video/audio/assets, 10MB for images.
 		const isMedia = mediaType === "video" || mediaType === "audio" || mediaType === "asset";
 		const maxSize = isMedia ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
 		if (file.size > maxSize) {
@@ -1156,7 +1317,11 @@ const contentRoutes = new Hono()
 			case "cover":
 				key = `${prefix}/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
+			case "thumbnail":
+				key = `${prefix}/thumbnails/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
 			case "gallery":
+			case "image":
 			case "screenshot":
 				key = `${prefix}/gallery/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
@@ -1213,8 +1378,9 @@ const contentRoutes = new Hono()
 				projectCoverImage: projects.coverImage,
 				postTitle: posts.title,
 				postSlug: posts.slug,
+				postPublicId: posts.publicId,
 				postContentType: posts.contentType,
-				postCoverImage: posts.coverImage,
+				postThumbnail: posts.thumbnail,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
@@ -1236,8 +1402,9 @@ const contentRoutes = new Hono()
 					? {
 							title: r.postTitle,
 							slug: r.postSlug,
+							publicId: r.postPublicId,
 							contentType: r.postContentType,
-							coverImage: r.postCoverImage,
+							thumbnail: r.postThumbnail,
 						}
 					: null,
 				creator: r.bookmark.creatorId

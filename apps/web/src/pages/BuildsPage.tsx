@@ -6,7 +6,7 @@ import EmptyState from "../components/ui/EmptyState";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
-import type { Asset, Post } from "../lib/types";
+import type { Asset, ContentElement, Post } from "../lib/types";
 import { uploadMediaFile } from "../lib/upload";
 
 function formatFileSize(bytes: number): string {
@@ -14,6 +14,25 @@ function formatFileSize(bytes: number): string {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** Label for a content element in the target picker / builds table. */
+function elementLabel(el: ContentElement): string {
+	return el.title || `${el.contentType} #${el.position + 1}`;
+}
+
+/** Replace the assets of one content element inside a post immutably. */
+function withElementAssets(
+	post: Post,
+	contentId: number,
+	updater: (assets: Asset[]) => Asset[],
+): Post {
+	return {
+		...post,
+		contents: (post.contents ?? []).map((el) =>
+			el.id === contentId ? { ...el, assets: updater(el.assets) } : el,
+		),
+	};
 }
 
 export default function BuildsPage() {
@@ -25,8 +44,10 @@ export default function BuildsPage() {
 
 	// Upload form
 	const [file, setFile] = useState<File | null>(null);
+	const [contentId, setContentId] = useState<number | null>(null);
 	const [platform, setPlatform] = useState("windows");
 	const [version, setVersion] = useState("");
+	const [isPrimary, setIsPrimary] = useState(false);
 	const [uploading, setUploading] = useState(false);
 
 	useEffect(() => {
@@ -38,8 +59,14 @@ export default function BuildsPage() {
 					setError("Failed to load post.");
 					return;
 				}
-				const data = await res.json();
-				setPost(data.post as Post);
+				const data = (await res.json()) as unknown as { post: Post };
+				setPost(data.post);
+				// Default the upload target to a download-capable element (game/software),
+				// otherwise the first content element.
+				const els = data.post.contents ?? [];
+				const preferred =
+					els.find((el) => el.contentType === "game" || el.contentType === "software") ?? els[0];
+				setContentId(preferred ? preferred.id : null);
 			})
 			.catch(() => setError("Failed to load post."))
 			.finally(() => setLoading(false));
@@ -48,16 +75,16 @@ export default function BuildsPage() {
 	const handleUpload = useCallback(
 		async (e: React.FormEvent) => {
 			e.preventDefault();
-			if (!file || !slug) return;
+			if (!file || !slug || contentId == null) return;
 			setUploading(true);
 			setError(null);
 
 			try {
 				// Upload the build to storage (presigned → Spaces in prod, direct in
-				// dev), then create the asset record referencing the returned key.
+				// dev), then create the asset record on the chosen content element.
 				const key = await uploadMediaFile(file, "asset");
-				const res = await client.api.content.posts[":slug"].assets.$post({
-					param: { slug },
+				const res = await client.api.content.posts[":slug"].contents[":contentId"].assets.$post({
+					param: { slug, contentId: String(contentId) },
 					json: {
 						file: key,
 						filename: file.name,
@@ -65,38 +92,41 @@ export default function BuildsPage() {
 						mimeType: file.type || "application/octet-stream",
 						platform,
 						version,
+						isPrimary,
 					},
 				});
 				if (!res.ok) throw new Error("Create failed");
-				const data = (await res.json()) as { asset: Asset };
+				const data = (await res.json()) as unknown as { asset: Asset };
 				setPost((prev) =>
-					prev ? { ...prev, assets: [data.asset, ...(prev.assets || [])] } : prev,
+					prev ? withElementAssets(prev, contentId, (assets) => [data.asset, ...assets]) : prev,
 				);
 				setFile(null);
 				setVersion("");
+				setIsPrimary(false);
 			} catch {
 				setError("Failed to upload build.");
 			} finally {
 				setUploading(false);
 			}
 		},
-		[file, slug, platform, version],
+		[file, slug, contentId, platform, version, isPrimary],
 	);
 
 	const handleDelete = useCallback(
-		async (assetId: number) => {
+		async (targetContentId: number, assetId: number) => {
 			if (!slug) return;
 			try {
-				const res = await client.api.content.posts[":slug"].assets[":id"].$delete({
-					param: { slug, id: String(assetId) },
+				const res = await client.api.content.posts[":slug"].contents[":contentId"].assets[
+					":id"
+				].$delete({
+					param: { slug, contentId: String(targetContentId), id: String(assetId) },
 				});
 				if (!res.ok) throw new Error("Delete failed");
 				setPost((prev) =>
 					prev
-						? {
-								...prev,
-								assets: (prev.assets || []).filter((a) => a.id !== assetId),
-							}
+						? withElementAssets(prev, targetContentId, (assets) =>
+								assets.filter((a) => a.id !== assetId),
+							)
 						: prev,
 				);
 			} catch {
@@ -122,7 +152,10 @@ export default function BuildsPage() {
 		);
 	}
 
-	const assets = post.assets || [];
+	const contents = post.contents ?? [];
+	// Flatten every content element's builds into rows, tagged with their element.
+	const builds = contents.flatMap((el) => el.assets.map((asset) => ({ asset, element: el })));
+	const multipleTargets = contents.length > 1;
 
 	return (
 		<div className="max-w-7xl mx-auto px-4 py-8">
@@ -141,61 +174,94 @@ export default function BuildsPage() {
 			)}
 
 			{/* Upload form */}
-			<div className="card bg-base-200 mb-8">
-				<div className="card-body">
-					<h2 className="card-title text-lg">Upload Build</h2>
-					<form onSubmit={handleUpload} className="flex flex-col sm:flex-row gap-3 items-end">
-						<div className="flex-1">
-							<FormField label="File">
-								<input
-									type="file"
-									className="file-input file-input-bordered w-full"
-									onChange={(e) => setFile(e.target.files?.[0] || null)}
-								/>
-							</FormField>
-						</div>
-						<FormField label="Platform">
-							<select
-								className="select select-bordered"
-								value={platform}
-								onChange={(e) => setPlatform(e.target.value)}
-							>
-								<option value="windows">Windows</option>
-								<option value="mac">macOS</option>
-								<option value="linux">Linux</option>
-								<option value="web">Web</option>
-								<option value="android">Android</option>
-								<option value="ios">iOS</option>
-								<option value="other">Other</option>
-							</select>
-						</FormField>
-						<FormField label="Version">
-							<input
-								type="text"
-								className="input input-bordered w-28"
-								value={version}
-								onChange={(e) => setVersion(e.target.value)}
-								placeholder="1.0.0"
-							/>
-						</FormField>
-						<button
-							type="submit"
-							className={`btn btn-primary ${uploading || !file ? "btn-disabled" : ""}`}
-							disabled={uploading || !file}
-						>
-							{uploading ? <LoadingSpinner size="sm" /> : <ArrowUpTrayIcon className="w-4 h-4" />}
-							Upload
-						</button>
-					</form>
+			{contents.length === 0 ? (
+				<div className="alert alert-warning mb-8">
+					<span>This post has no content elements to attach builds to.</span>
 				</div>
-			</div>
+			) : (
+				<div className="card bg-base-200 mb-8">
+					<div className="card-body">
+						<h2 className="card-title text-lg">Upload Build</h2>
+						<form onSubmit={handleUpload} className="flex flex-col gap-3">
+							<div className="flex flex-col sm:flex-row gap-3 items-end">
+								<div className="flex-1">
+									<FormField label="File">
+										<input
+											type="file"
+											className="file-input file-input-bordered w-full"
+											onChange={(e) => setFile(e.target.files?.[0] || null)}
+										/>
+									</FormField>
+								</div>
+								{multipleTargets && (
+									<FormField label="Attach to">
+										<select
+											className="select select-bordered"
+											value={contentId ?? ""}
+											onChange={(e) => setContentId(e.target.value ? Number(e.target.value) : null)}
+										>
+											{contents.map((el) => (
+												<option key={el.id} value={el.id}>
+													{elementLabel(el)}
+												</option>
+											))}
+										</select>
+									</FormField>
+								)}
+								<FormField label="Platform">
+									<select
+										className="select select-bordered"
+										value={platform}
+										onChange={(e) => setPlatform(e.target.value)}
+									>
+										<option value="windows">Windows</option>
+										<option value="mac">macOS</option>
+										<option value="linux">Linux</option>
+										<option value="web">Web</option>
+										<option value="android">Android</option>
+										<option value="ios">iOS</option>
+										<option value="other">Other</option>
+									</select>
+								</FormField>
+								<FormField label="Version">
+									<input
+										type="text"
+										className="input input-bordered w-28"
+										value={version}
+										onChange={(e) => setVersion(e.target.value)}
+										placeholder="1.0.0"
+									/>
+								</FormField>
+								<button
+									type="submit"
+									className={`btn btn-primary ${uploading || !file ? "btn-disabled" : ""}`}
+									disabled={uploading || !file}
+								>
+									{uploading ? <LoadingSpinner size="sm" /> : <ArrowUpTrayIcon className="w-4 h-4" />}
+									Upload
+								</button>
+							</div>
+							<label className="label cursor-pointer justify-start gap-2 w-fit">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm"
+									checked={isPrimary}
+									onChange={(e) => setIsPrimary(e.target.checked)}
+								/>
+								<span className="label-text">Primary build</span>
+							</label>
+						</form>
+					</div>
+				</div>
+			)}
 
 			{/* Existing builds */}
-			{assets.length > 0 ? (
+			{builds.length > 0 ? (
 				<div className="overflow-x-auto">
 					<table className="table table-sm">
 						<thead>
 							<tr>
+								{multipleTargets && <th>Content</th>}
 								<th>Filename</th>
 								<th>Platform</th>
 								<th>Version</th>
@@ -205,13 +271,19 @@ export default function BuildsPage() {
 							</tr>
 						</thead>
 						<tbody>
-							{assets.map((asset) => (
+							{builds.map(({ asset, element }) => (
 								<tr key={asset.id}>
-									<td className="font-mono text-sm">{asset.filename}</td>
+									{multipleTargets && (
+										<td className="text-sm text-base-content/60">{elementLabel(element)}</td>
+									)}
+									<td className="font-mono text-sm">
+										{asset.filename}
+										{asset.isPrimary && (
+											<span className="badge badge-primary badge-xs ml-2">Primary</span>
+										)}
+									</td>
 									<td>
-										<span className="badge badge-sm badge-outline capitalize">
-											{asset.platform}
-										</span>
+										<span className="badge badge-sm badge-outline capitalize">{asset.platform}</span>
 									</td>
 									<td>{asset.version || "—"}</td>
 									<td className="text-sm text-base-content/60">
@@ -224,7 +296,7 @@ export default function BuildsPage() {
 										<button
 											type="button"
 											className="btn btn-ghost btn-xs text-error"
-											onClick={() => handleDelete(asset.id)}
+											onClick={() => handleDelete(element.id, asset.id)}
 										>
 											<TrashIcon className="w-4 h-4" />
 										</button>
@@ -235,11 +307,13 @@ export default function BuildsPage() {
 					</table>
 				</div>
 			) : (
-				<EmptyState
-					icon={<ArrowUpTrayIcon className="w-12 h-12" />}
-					title="No builds uploaded"
-					description="Upload your first build above."
-				/>
+				contents.length > 0 && (
+					<EmptyState
+						icon={<ArrowUpTrayIcon className="w-12 h-12" />}
+						title="No builds uploaded"
+						description="Upload your first build above."
+					/>
+				)
 			)}
 		</div>
 	);
