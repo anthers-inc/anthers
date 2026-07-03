@@ -192,7 +192,7 @@ const jamRoutes = new Hono()
 				entry: jamEntries,
 				postTitle: posts.title,
 				postSlug: posts.slug,
-				postCoverImage: posts.coverImage,
+				postCoverImage: posts.thumbnail,
 				postContentType: posts.contentType,
 				submitterUsername: users.username,
 			})
@@ -325,7 +325,7 @@ const jamRoutes = new Hono()
 				entry: jamEntries,
 				postTitle: posts.title,
 				postSlug: posts.slug,
-				postCoverImage: posts.coverImage,
+				postCoverImage: posts.thumbnail,
 				postContentType: posts.contentType,
 				submitterUsername: users.username,
 				avgScore: sql<number>`COALESCE(AVG(${jamVotes.score}), 0)::float`,
@@ -336,7 +336,14 @@ const jamRoutes = new Hono()
 			.innerJoin(users, eq(jamEntries.submittedById, users.id))
 			.leftJoin(jamVotes, eq(jamVotes.entryId, jamEntries.id))
 			.where(eq(jamEntries.jamId, jam.id))
-			.groupBy(jamEntries.id, posts.title, posts.slug, posts.coverImage, posts.contentType, users.username)
+			.groupBy(
+				jamEntries.id,
+				posts.title,
+				posts.slug,
+				posts.thumbnail,
+				posts.contentType,
+				users.username,
+			)
 			.orderBy(desc(sql`COALESCE(AVG(${jamVotes.score}), 0)`));
 
 		return c.json({

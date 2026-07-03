@@ -11,6 +11,7 @@ import {
 	assets,
 	crfLedger,
 	crfSubsidies,
+	postContents,
 	posts,
 	purchases,
 	stripeAccounts,
@@ -22,20 +23,6 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
-
-/** The amount a non-entitled buyer pays for a post (fixed base, or pwyw suggested/min). */
-function postPurchaseAmount(post: {
-	pricingMode: string;
-	basePrice: string | null;
-	minPrice: string | null;
-	suggestedPrice: string | null;
-}): Decimal {
-	const raw =
-		post.pricingMode === "pwyw"
-			? (post.suggestedPrice ?? post.minPrice ?? "0")
-			: (post.basePrice ?? "0");
-	return new Decimal(raw);
-}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -102,38 +89,28 @@ const paymentRoutes = new Hono()
 		const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		// Pure gates (entitlement required, no purchase path) aren't buyable.
-		if (post.entitlementKind && !post.purchasableWithoutEntitlement) {
+		// resolveAccess is the source of truth: owner / free / entitled / already-purchased
+		// all mean "nothing to buy"; a hard gate with no price path isn't purchasable.
+		const access = await resolveAccess(post, user.id);
+		if (access.canAccess) {
+			return c.json({ error: "You already have access to this post" }, 400);
+		}
+		if (!access.requiresPurchase || !access.price) {
 			return c.json({ error: "This post is not available for direct purchase" }, 400);
 		}
 
-		const amount = postPurchaseAmount(post);
+		const amount = new Decimal(access.price);
 		if (amount.lte(0)) {
 			return c.json({ error: "This post is free" }, 400);
 		}
 
-		// Check if already purchased
-		const [existingPurchase] = await db
-			.select({ id: purchases.id })
-			.from(purchases)
-			.where(
-				and(
-					eq(purchases.buyerId, user.id),
-					eq(purchases.postId, post.id),
-					eq(purchases.status, "completed"),
-				),
-			)
-			.limit(1);
-
-		if (existingPurchase) {
-			return c.json({ error: "Already purchased" }, 400);
-		}
-
-		// Delivery (bandwidth) scales with the total size of the downloadable assets.
+		// Delivery (bandwidth) scales with the total size of the downloadable assets
+		// across the post's content elements.
 		const [assetSize] = await db
 			.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 			.from(assets)
-			.where(eq(assets.postId, post.id));
+			.innerJoin(postContents, eq(assets.contentId, postContents.id))
+			.where(eq(postContents.postId, post.id));
 
 		// Pass-through model: the creator receives the full listed price; processing,
 		// the Foundation Fee, and delivery are added on top and paid by the buyer.
@@ -193,7 +170,7 @@ const paymentRoutes = new Hono()
 				purchase: purchases,
 				postTitle: posts.title,
 				postSlug: posts.slug,
-				postCoverImage: posts.coverImage,
+				postCoverImage: posts.thumbnail,
 				postContentType: posts.contentType,
 				creatorId: posts.creatorId,
 				creatorUsername: users.username,

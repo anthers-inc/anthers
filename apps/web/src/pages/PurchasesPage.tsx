@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { postUrl } from "../lib/postUrl";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
 
@@ -200,7 +201,13 @@ export default function PurchasesPage() {
 											<div className="flex items-center gap-3 min-w-0">
 												{/* Cover image */}
 												{p.post?.coverImage ? (
-													<Link to={`/${p.creator?.username}/posts/${p.post.slug}`}>
+													<Link
+														to={
+															p.post.publicId != null
+																? postUrl({ slug: p.post.slug, publicId: p.post.publicId })
+																: `/posts/${p.post.slug}`
+														}
+													>
 														<img
 															src={p.post.coverImage}
 															alt=""
@@ -214,7 +221,11 @@ export default function PurchasesPage() {
 												<div className="min-w-0">
 													{/* Post title → detail link */}
 													<Link
-														to={`/${p.creator?.username}/posts/${p.post?.slug}`}
+														to={
+															p.post?.publicId != null
+																? postUrl({ slug: p.post.slug, publicId: p.post.publicId })
+																: `/posts/${p.post?.slug}`
+														}
 														className="font-medium link link-hover block truncate"
 													>
 														{p.post?.title ?? "Unknown"}

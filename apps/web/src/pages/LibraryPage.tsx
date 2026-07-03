@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { postUrl } from "../lib/postUrl";
 import { client } from "../lib/rpc";
 import type { Purchase } from "../lib/types";
 
@@ -128,7 +129,11 @@ export default function LibraryPage() {
 					{filteredPurchases.map((purchase) => (
 						<Link
 							key={purchase.id}
-							to={`/${purchase.creator?.username}/posts/${purchase.post?.slug}`}
+							to={
+								purchase.post?.publicId != null
+									? postUrl({ slug: purchase.post.slug, publicId: purchase.post.publicId })
+									: `/posts/${purchase.post?.slug}`
+							}
 							className="card bg-base-200 hover:shadow-lg transition-shadow"
 						>
 							{purchase.post?.coverImage ? (

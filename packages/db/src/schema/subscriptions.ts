@@ -105,15 +105,24 @@ export const poolDistributions = pgTable(
 	],
 );
 
-export const creatorGates = pgTable("creator_gates", {
-	id: serial("id").primaryKey(),
-	creatorId: integer("creator_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	gateType: text("gate_type").notNull().default("boost"), // "boost" | "anthers_tier"
-	threshold: numeric("threshold").notNull(),
-	label: text("label").notNull(),
-	description: text("description").default(""),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+/**
+ * Creator-defined boost ladder (and, optionally, tier labels). The boost rungs
+ * here populate the Boost Access table on every one of the creator's posts.
+ */
+export const creatorGates = pgTable(
+	"creator_gates",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		gateType: text("gate_type").notNull().default("boost"), // "boost" | "anthers_tier"
+		threshold: numeric("threshold").notNull(),
+		label: text("label").notNull(),
+		description: text("description").default(""),
+		sortOrder: integer("sort_order").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_creator_gates_creator").on(table.creatorId, table.sortOrder)],
+);

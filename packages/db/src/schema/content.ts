@@ -5,7 +5,6 @@ import {
 	index,
 	integer,
 	jsonb,
-	numeric,
 	pgTable,
 	serial,
 	text,
@@ -15,12 +14,33 @@ import {
 import { users } from "./auth.js";
 
 /**
+ * A row in a post's **Anthers Access** table — one per Anthers tier. Access is
+ * granted (possibly at a price) when `allow` is true; `price` "0" = free.
+ */
+export interface AnthersAccessRow {
+	tier: string; // free | root | sprout | petal | bloom
+	allow: boolean;
+	price: string; // money string; "0" = free for this tier when allowed
+}
+
+/**
+ * A row in a post's **Boost Access** table — the $0 "everyone" baseline plus the
+ * creator's boost-ladder rungs. `threshold` is dollars of boost to the creator.
+ */
+export interface BoostAccessRow {
+	threshold: number; // dollars of boost to this creator this cycle; 0 = everyone
+	allow: boolean;
+	price: string;
+}
+
+/**
  * Posts — the universal, content-type-agnostic unit of published content.
  *
- * Everything a creator publishes is a Post. Delivery (stream and/or download)
- * and access (free / paid / subscriber- or boost-gated) are orthogonal, per-post
- * switches. Projects (below) are collections that group posts; they are NOT a
- * content type. See Architecture › "30.1 - Unified Post & Content Model".
+ * Everything a creator publishes is a Post. A post BODY (rich text) is shown to
+ * anyone with visibility; the deliverable itself is an ordered array of typed
+ * **content elements** (`post_contents`). Delivery (stream and/or download) and
+ * access (the two OR-gated access tables) are orthogonal per-post switches.
+ * Projects group posts; they are not a content type.
  */
 export const posts = pgTable(
 	"posts",
@@ -29,45 +49,32 @@ export const posts = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
+		// Stable, non-sequential public id — the durable part of the canonical URL
+		// /posts/{slug}-{publicId}; the slug may change on rename without breaking links.
+		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
 		slug: text("slug").notNull().unique(),
 		title: text("title").default(""),
+		// The post BODY (rich text visible to anyone with visibility) — NOT the deliverable.
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
-		// text | image | audio | video | game | software | physical | service
+		// Denormalized "primary" type for cards/badges/filtering, derived from the first
+		// content element: text|image|audio|video|game|software|physical|service|mixed
 		contentType: text("content_type").notNull().default("text"),
+		// Denormalized card image (first element's thumbnail/image), set on save.
+		thumbnail: text("thumbnail").default(""),
 
-		// ── Delivery (orthogonal; ≥1 enforced at the app layer) ──
+		// ── Access type (orthogonal delivery; ≥1 enforced at the app layer) ──
 		streamEnabled: boolean("stream_enabled").notNull().default(true),
 		downloadEnabled: boolean("download_enabled").notNull().default(false),
 
-		// ── Stream payload / media (type-specific; transcode outputs live in
-		// transcoding_jobs, gallery images in gallery_images, downloads in assets) ──
-		videoFile: text("video_file").default(""),
-		audioFile: text("audio_file").default(""),
-		coverImage: text("cover_image").default(""),
-		thumbnail: text("thumbnail").default(""),
-		embedUrl: text("embed_url").default(""), // web game/app or external embed
-		durationSeconds: integer("duration_seconds"),
-
-		// ── Access & pricing (one entitlement model — see the design doc) ──
-		// Base: null price = free; else a fixed or PWYW price (numeric for decimal.js).
-		basePrice: numeric("base_price"),
-		pricingMode: text("pricing_mode").notNull().default("fixed"), // fixed | pwyw
-		minPrice: numeric("min_price"),
-		suggestedPrice: numeric("suggested_price"),
-		// Optional entitlement that grants access, possibly at a discount.
-		entitlementKind: text("entitlement_kind"), // null | tier | boost
-		entitlementTier: text("entitlement_tier"), // when kind=tier; null = any subscription
-		entitlementBoostThreshold: numeric("entitlement_boost_threshold"), // when kind=boost
-		entitlementDiscountPct: integer("entitlement_discount_pct"), // 0..100 (100 = free for entitled)
-		// If false, only entitled users get it (gated); if true, anyone can buy.
-		purchasableWithoutEntitlement: boolean("purchasable_without_entitlement")
-			.notNull()
-			.default(true),
+		// ── Access tables (OR-gated — see services/access.ts) ──
+		// Default = "free but fully locked": every row allow=false, price "0".
+		anthersAccess: jsonb("anthers_access").$type<AnthersAccessRow[]>().default([]),
+		boostAccess: jsonb("boost_access").$type<BoostAccessRow[]>().default([]),
 
 		// ── Presentation ──
+		showOnTimeline: boolean("show_on_timeline").notNull().default(true),
 		isPinned: boolean("is_pinned").notNull().default(false),
-		listing: text("listing").notNull().default("timeline"), // timeline | unlisted | shop
 
 		// ── Metadata ──
 		tags: jsonb("tags").$type<string[]>().default([]),
@@ -90,7 +97,43 @@ export const posts = pgTable(
 		index("idx_posts_creator").on(table.creatorId),
 		index("idx_posts_content_type").on(table.contentType),
 		index("idx_posts_created").on(table.createdAt),
+		uniqueIndex("uq_posts_public_id").on(table.publicId),
 	],
+);
+
+/**
+ * Content elements — the ordered, typed deliverables that make up a post.
+ * A post can bundle several (a game + its trailer + art). Each element carries
+ * its own type-specific media and an optional custom thumbnail; downloadable
+ * files (`assets`) and transcodes (`transcoding_jobs`) key off the element.
+ */
+export const postContents = pgTable(
+	"post_contents",
+	{
+		id: serial("id").primaryKey(),
+		postId: integer("post_id")
+			.notNull()
+			.references(() => posts.id, { onDelete: "cascade" }),
+		position: integer("position").notNull().default(0),
+		// text | image | audio | video | game | software | physical | service
+		contentType: text("content_type").notNull().default("text"),
+		title: text("title").default(""),
+		thumbnail: text("thumbnail").default(""),
+
+		// ── Type-specific payload (only the relevant fields are populated) ──
+		bodyHtml: text("body_html").default(""), // text element
+		images: jsonb("images").$type<string[]>().default([]), // image element (gallery of keys)
+		videoFile: text("video_file").default(""), // video source key (HLS in transcoding_jobs)
+		audioFile: text("audio_file").default(""), // audio source key
+		embedUrl: text("embed_url").default(""), // game/software web embed
+		durationSeconds: integer("duration_seconds"),
+		// physical/service fulfillment details (sku, shipping, service terms) — stubbed for now
+		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_post_contents_post").on(table.postId, table.position)],
 );
 
 /**
@@ -136,50 +179,46 @@ export const projectPosts = pgTable(
 	],
 );
 
-/** Gallery / screenshot images attached to a post (image posts, game screenshots, …). */
-export const galleryImages = pgTable("gallery_images", {
-	id: serial("id").primaryKey(),
-	postId: integer("post_id")
-		.notNull()
-		.references(() => posts.id, { onDelete: "cascade" }),
-	image: text("image").notNull(),
-	caption: text("caption").default(""),
-	sortOrder: integer("sort_order").default(0),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+/** Downloadable files (builds, tracks, PDFs, installers, …) attached to a content element. */
+export const assets = pgTable(
+	"assets",
+	{
+		id: serial("id").primaryKey(),
+		contentId: integer("content_id")
+			.notNull()
+			.references(() => postContents.id, { onDelete: "cascade" }),
+		file: text("file").notNull(), // storage key
+		filename: text("filename").notNull(),
+		// bigint — a build/installer can exceed int4 (2.1 GB).
+		fileSize: bigint("file_size", { mode: "number" }).default(0),
+		mimeType: text("mime_type").default(""),
+		platform: text("platform").default(""), // windows | mac | linux | web | … (games/software)
+		version: text("version").default(""),
+		isPrimary: boolean("is_primary").default(false),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_assets_content").on(table.contentId)],
+);
 
-/** Downloadable files (builds, tracks, PDFs, installers, …) attached to any post. */
-export const assets = pgTable("assets", {
-	id: serial("id").primaryKey(),
-	postId: integer("post_id")
-		.notNull()
-		.references(() => posts.id, { onDelete: "cascade" }),
-	file: text("file").notNull(), // storage key
-	filename: text("filename").notNull(),
-	// bigint — a build/installer can exceed int4 (2.1 GB).
-	fileSize: bigint("file_size", { mode: "number" }).default(0),
-	mimeType: text("mime_type").default(""),
-	platform: text("platform").default(""), // windows | mac | linux | web | … (games/software)
-	version: text("version").default(""),
-	isPrimary: boolean("is_primary").default(false),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-export const transcodingJobs = pgTable("transcoding_jobs", {
-	id: serial("id").primaryKey(),
-	postId: integer("post_id")
-		.notNull()
-		.references(() => posts.id, { onDelete: "cascade" }),
-	mediaType: text("media_type").notNull(), // video | audio
-	status: text("status").notNull().default("pending"), // pending | processing | completed | failed
-	progress: integer("progress").default(0),
-	errorMessage: text("error_message").default(""),
-	hlsManifestUrl: text("hls_manifest_url").default(""),
-	outputFileUrl: text("output_file_url").default(""),
-	waveformData: jsonb("waveform_data"),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const transcodingJobs = pgTable(
+	"transcoding_jobs",
+	{
+		id: serial("id").primaryKey(),
+		contentId: integer("content_id")
+			.notNull()
+			.references(() => postContents.id, { onDelete: "cascade" }),
+		mediaType: text("media_type").notNull(), // video | audio
+		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
+		progress: integer("progress").default(0),
+		errorMessage: text("error_message").default(""),
+		hlsManifestUrl: text("hls_manifest_url").default(""),
+		outputFileUrl: text("output_file_url").default(""),
+		waveformData: jsonb("waveform_data"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_transcoding_content").on(table.contentId)],
+);
 
 export const inlineImages = pgTable("inline_images", {
 	id: serial("id").primaryKey(),

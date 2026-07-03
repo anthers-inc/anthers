@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
+import { postUrl } from "../../lib/postUrl";
 import type { PostListItem } from "../../lib/types";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
+import PricingBadge from "../ui/PricingBadge";
 
 export default function PostCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
@@ -11,11 +13,9 @@ export default function PostCard({ post }: { post: PostListItem }) {
 		year: "numeric",
 	});
 
-	const access = post.access;
-
 	return (
 		<Link
-			to={`/${post.creator?.username ?? "unknown"}/posts/${post.slug}`}
+			to={postUrl(post)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
 		>
 			<div className="card-body p-4 gap-2">
@@ -44,15 +44,7 @@ export default function PostCard({ post }: { post: PostListItem }) {
 							<ArrowDownTrayIcon className="w-3 h-3" />
 						</span>
 					)}
-					{access && !access.canAccess && access.requiresPurchase && (
-						<span className="badge badge-sm badge-secondary">${access.price}</span>
-					)}
-					{access && !access.canAccess && !access.requiresPurchase && (
-						<span className="badge badge-sm badge-ghost gap-1">
-							<LockClosedIcon className="w-3 h-3" />
-							Gated
-						</span>
-					)}
+					<PricingBadge access={post.access} />
 				</div>
 			</div>
 		</Link>

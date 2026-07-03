@@ -4,8 +4,9 @@
  *
  * All property names are camelCase, matching the Drizzle schema and Hono route
  * responses. This models the unified Post: everything a creator publishes is a
- * Post, with delivery (stream/download) and access (free/paid/gated) as
- * orthogonal switches; Projects are collections that group posts.
+ * Post whose deliverable is an ordered array of typed content elements; access
+ * type (stream/download) and the two access tables are orthogonal switches.
+ * Projects are collections that group posts.
  */
 
 // ─── User Types ───
@@ -42,6 +43,20 @@ export interface Creator {
 
 // ─── Access & pricing ───
 
+/** One row of a post's Anthers Access table (per tier). */
+export interface AnthersAccessRow {
+	tier: string; // free | root | sprout | petal | bloom
+	allow: boolean;
+	price: string; // money string; "0" = free when allowed
+}
+
+/** One row of a post's Boost Access table (per boost threshold; 0 = everyone). */
+export interface BoostAccessRow {
+	threshold: number;
+	allow: boolean;
+	price: string;
+}
+
 /** Resolved access for a post + viewer (see api services/access.ts). */
 export interface AccessResult {
 	canAccess: boolean;
@@ -50,37 +65,23 @@ export interface AccessResult {
 		| "free"
 		| "purchased"
 		| "entitled"
-		| "gated"
 		| "payment_required"
+		| "gated"
 		| "login_required";
 	isFree: boolean;
 	requiresPurchase: boolean;
 	price: string | null;
-	basePrice: string | null;
-	pricingMode: string;
-	minPrice: string | null;
-	suggestedPrice: string | null;
-	entitlementKind: string | null;
-	entitlementDiscountPct: number | null;
 	isEntitled: boolean;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
 }
 
 // ─── Content Types ───
 
-/** Gallery / screenshot image attached to a post. */
-export interface GalleryImage {
-	id: number;
-	postId: number;
-	image: string;
-	caption: string | null;
-	sortOrder: number | null;
-	createdAt: string;
-}
-
-/** Downloadable file (build, track, PDF, installer, …) attached to a post. */
+/** Downloadable file (build, track, PDF, installer, …) attached to a content element. */
 export interface Asset {
 	id: number;
-	postId: number;
+	contentId: number;
 	file: string;
 	filename: string;
 	fileSize: number | null;
@@ -93,7 +94,7 @@ export interface Asset {
 
 export interface TranscodingJob {
 	id: number;
-	postId: number;
+	contentId: number;
 	mediaType: string;
 	status: string;
 	progress: number | null;
@@ -116,45 +117,49 @@ export type ContentType =
 	| "physical"
 	| "service";
 
-/** Timeline visibility. */
-export type PostListing = "timeline" | "unlisted" | "shop";
+/** One element of a post's deliverable content array (GET /posts/:slug). */
+export interface ContentElement {
+	id: number;
+	postId: number;
+	position: number;
+	contentType: ContentType;
+	title: string | null;
+	thumbnail: string | null;
+	durationSeconds: number | null;
+	metadata: Record<string, unknown> | null;
+	// Payload — blanked by the API when the viewer lacks access.
+	bodyHtml: string | null;
+	images: string[] | null;
+	videoFile: string | null;
+	audioFile: string | null;
+	embedUrl: string | null;
+	assets: Asset[];
+	transcoding: TranscodingJob | null;
+}
 
 /** The universal content unit — full detail shape (GET /posts/:slug). */
 export interface Post {
 	id: number;
+	publicId: number;
 	creatorId: number;
 	slug: string;
 	title: string | null;
 	body: string | null;
 	bodyHtml: string | null;
 	contentType: string;
+	thumbnail: string | null;
 
-	// Delivery
+	// Access type
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
 
-	// Stream payload / media
-	videoFile: string | null;
-	audioFile: string | null;
-	coverImage: string | null;
-	thumbnail: string | null;
-	embedUrl: string | null;
-	durationSeconds: number | null;
-
-	// Access & pricing
-	basePrice: string | null;
-	pricingMode: string;
-	minPrice: string | null;
-	suggestedPrice: string | null;
-	entitlementKind: string | null;
-	entitlementTier: string | null;
-	entitlementBoostThreshold: string | null;
-	entitlementDiscountPct: number | null;
-	purchasableWithoutEntitlement: boolean;
+	// Access tables (OR-gated)
+	anthersAccess: AnthersAccessRow[] | null;
+	boostAccess: BoostAccessRow[] | null;
 
 	// Presentation
+	showOnTimeline: boolean;
 	isPinned: boolean;
-	listing: string;
 
 	// Metadata
 	tags: string[] | null;
@@ -172,25 +177,22 @@ export interface Post {
 	creator?: Creator;
 	ratingAverage?: number | null;
 	ratingCount?: number;
-	galleryImages?: GalleryImage[];
-	assets?: Asset[];
-	transcodingJobs?: TranscodingJob[];
+	contents?: ContentElement[];
 	access?: AccessResult;
 }
 
 /** Lighter serialization returned by the timeline endpoint (GET /posts). */
 export interface PostListItem {
 	id: number;
+	publicId: number;
 	slug: string;
 	creatorId: number;
 	title: string | null;
 	contentType: string;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
-	coverImage: string | null;
 	thumbnail: string | null;
-	durationSeconds: number | null;
-	listing: string;
+	showOnTimeline: boolean;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
@@ -207,10 +209,10 @@ export interface PostListItem {
 /** A post as it appears inside a collection (GET /projects/:slug). */
 export interface CollectionPost {
 	id: number;
+	publicId: number;
 	slug: string;
 	title: string | null;
 	contentType: string;
-	coverImage: string | null;
 	thumbnail: string | null;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
@@ -304,6 +306,7 @@ export interface Purchase {
 	post?: {
 		title: string | null;
 		slug: string;
+		publicId?: number;
 		coverImage: string | null;
 		contentType: string;
 	};
@@ -397,8 +400,9 @@ export interface ContentAccessResponse {
 	requiresPurchase: boolean;
 	price: string | null;
 	isEntitled: boolean;
-	entitlementKind: string | null;
-	entitlementDiscountPct: number | null;
+	isFree: boolean;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
 }
 
 export interface CreatorGate {
@@ -408,6 +412,7 @@ export interface CreatorGate {
 	threshold: string;
 	label: string;
 	description: string | null;
+	sortOrder: number;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -436,8 +441,9 @@ export interface Bookmark {
 	post?: {
 		title: string | null;
 		slug: string;
+		publicId?: number;
 		contentType: string;
-		coverImage: string | null;
+		thumbnail: string | null;
 	} | null;
 	creator?: {
 		username: string;

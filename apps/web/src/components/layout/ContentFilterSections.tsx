@@ -5,14 +5,18 @@
  */
 
 import {
+	CommandLineIcon,
+	CubeIcon,
 	CubeTransparentIcon,
 	CurrencyDollarIcon,
 	FunnelIcon,
 	MusicalNoteIcon,
 	PencilSquareIcon,
+	PhotoIcon,
 	PuzzlePieceIcon,
 	TagIcon,
 	VideoCameraIcon,
+	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +29,10 @@ export const CONTENT_TYPES = [
 	{ id: "audio", label: "Music", icon: MusicalNoteIcon },
 	{ id: "video", label: "Video", icon: VideoCameraIcon },
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
+	{ id: "image", label: "Images", icon: PhotoIcon },
+	{ id: "software", label: "Software", icon: CommandLineIcon },
+	{ id: "physical", label: "Physical", icon: CubeIcon },
+	{ id: "service", label: "Services", icon: WrenchScrewdriverIcon },
 ] as const;
 
 const PRICING_MODES = [

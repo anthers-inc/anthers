@@ -2,7 +2,7 @@
 import { ClockIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
@@ -16,19 +16,79 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAttentionTracker } from "../lib/attention";
 import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
+import { postUrl } from "../lib/postUrl";
 import { client } from "../lib/rpc";
-import type { Comment, Post } from "../lib/types";
+import type { Comment, ContentElement, Post } from "../lib/types";
 
-function formatDuration(seconds: number): string {
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = seconds % 60;
-	if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-	return `${m}:${s.toString().padStart(2, "0")}`;
+/** Whether a transcoding job is still in-flight (show a status card, not a player). */
+function isJobPending(status: string): boolean {
+	return status !== "completed";
+}
+
+/** Thumbnail-only preview shown when a media element's payload is gated/blank. */
+function MediaPreview({
+	element,
+	icon,
+}: {
+	element: ContentElement;
+	icon: React.ReactNode;
+}) {
+	if (element.thumbnail) {
+		return (
+			<div className="relative rounded-lg overflow-hidden bg-base-200">
+				<img
+					src={element.thumbnail}
+					alt={element.title ?? "Preview"}
+					className="w-full object-cover"
+				/>
+			</div>
+		);
+	}
+	return (
+		<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
+			{icon}
+		</div>
+	);
+}
+
+/** Card describing a physical good or service (no media payload). */
+function PhysicalServiceCard({ element }: { element: ContentElement }) {
+	const meta = element.metadata ?? {};
+	const scalarEntries = Object.entries(meta).filter(
+		([, v]) => typeof v === "string" || typeof v === "number",
+	);
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body gap-2">
+				<div className="flex items-center gap-2">
+					<h3 className="card-title text-base">
+						{element.title ?? (element.contentType === "service" ? "Service" : "Physical item")}
+					</h3>
+					<span className="badge badge-outline badge-sm capitalize">{element.contentType}</span>
+				</div>
+				{element.bodyHtml && (
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
+					<div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: element.bodyHtml }} />
+				)}
+				{scalarEntries.length > 0 && (
+					<dl className="text-sm">
+						{scalarEntries.map(([k, v]) => (
+							<div key={k} className="flex gap-2">
+								<dt className="text-base-content/50 capitalize">{k}</dt>
+								<dd>{String(v)}</dd>
+							</div>
+						))}
+					</dl>
+				)}
+			</div>
+		</div>
+	);
 }
 
 export default function PostPage() {
 	const { slug } = useParams<{ slug: string }>();
+	const location = useLocation();
+	const navigate = useNavigate();
 	const { isAuthenticated, user } = useAuth();
 	const mediaPlayer = useMediaPlayer();
 	const [post, setPost] = useState<Post | null>(null);
@@ -62,7 +122,18 @@ export default function PostPage() {
 			.finally(() => setLoading(false));
 	}, [slug]);
 
-	// Attention tracking—map contentType to event_type
+	// Canonicalize the URL to /posts/{slug}-{publicId} once the post resolves.
+	// Guard: only navigate when the path differs, so replacing (which re-runs this
+	// effect via the new slug param) settles rather than looping.
+	useEffect(() => {
+		if (!post) return;
+		const canonical = postUrl(post);
+		if (location.pathname !== canonical) {
+			navigate(canonical, { replace: true });
+		}
+	}, [post, location.pathname, navigate]);
+
+	// Attention tracking — map the post's derived contentType to an event type.
 	const eventType =
 		post?.contentType === "video" ? "watch" : post?.contentType === "audio" ? "listen" : "read";
 
@@ -120,23 +191,83 @@ export default function PostPage() {
 
 	const access = post.access;
 	const canAccess = !access || access.canAccess;
+	const contents = post.contents ?? [];
 
-	// Get latest transcoding job for media posts
-	const latestJob = post.transcodingJobs?.[0];
-	const videoSrc = latestJob?.hlsManifestUrl || (post.videoFile ?? undefined);
-	const audioSrc = latestJob?.outputFileUrl || (post.audioFile ?? undefined);
-
-	const handlePlayInMiniPlayer = () => {
-		if (!audioSrc) return;
+	const playAudioInMiniPlayer = (element: ContentElement, src: string) => {
 		mediaPlayer.playTrack({
-			src: audioSrc,
-			title: post.title || "Untitled",
+			src,
+			title: element.title || post.title || "Untitled",
 			creator: post.creator?.username || "",
 			creatorId: post.creatorId,
-			thumbnail: post.thumbnail,
+			thumbnail: element.thumbnail || post.thumbnail,
 			postId: post.id,
-			waveform: latestJob?.waveformData,
+			waveform: element.transcoding?.waveformData,
 		});
+	};
+
+	const renderElementBody = (element: ContentElement) => {
+		switch (element.contentType) {
+			case "video": {
+				const job = element.transcoding;
+				const src = job?.hlsManifestUrl || element.videoFile || "";
+				if (job && isJobPending(job.status)) {
+					return (
+						<TranscodingStatus
+							status={job.status}
+							progress={job.progress ?? 0}
+							errorMessage={job.errorMessage ?? undefined}
+						/>
+					);
+				}
+				if (src) return <VideoPlayer src={src} poster={element.thumbnail ?? undefined} />;
+				return <MediaPreview element={element} icon={<FilmIcon className="w-16 h-16" />} />;
+			}
+			case "audio": {
+				const job = element.transcoding;
+				const src = job?.outputFileUrl || element.audioFile || "";
+				if (job && isJobPending(job.status)) {
+					return (
+						<TranscodingStatus
+							status={job.status}
+							progress={job.progress ?? 0}
+							errorMessage={job.errorMessage ?? undefined}
+						/>
+					);
+				}
+				if (src)
+					return (
+						<AudioPlayer
+							src={src}
+							waveform={element.transcoding?.waveformData}
+							onPlayInMiniPlayer={() => playAudioInMiniPlayer(element, src)}
+						/>
+					);
+				return <MediaPreview element={element} icon={<MusicalNoteIcon className="w-12 h-12" />} />;
+			}
+			case "image": {
+				const images = element.images ?? [];
+				if (images.length > 0) return <ProjectScreenshots images={images} />;
+				return <MediaPreview element={element} icon={<FilmIcon className="w-16 h-16" />} />;
+			}
+			case "game":
+			case "software":
+				return element.embedUrl ? (
+					<ProjectEmbed
+						embedUrl={element.embedUrl}
+						title={element.title || post.title || "Embedded content"}
+					/>
+				) : null;
+			case "text":
+				return element.bodyHtml ? (
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
+					<div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: element.bodyHtml }} />
+				) : null;
+			case "physical":
+			case "service":
+				return <PhysicalServiceCard element={element} />;
+			default:
+				return null;
+		}
 	};
 
 	return (
@@ -162,36 +293,37 @@ export default function PostPage() {
 						</Link>
 						<p className="text-base-content/50 text-xs">{date}</p>
 					</div>
-					<div className="flex items-center gap-2 ml-auto">
-						{post.contentType === "text" && post.estimatedReadMinutes && (
+					{post.estimatedReadMinutes && (
+						<div className="flex items-center gap-2 ml-auto">
 							<span className="flex items-center gap-1 text-xs text-base-content/50">
 								<ClockIcon className="w-3 h-3" />
 								{post.estimatedReadMinutes} min read
 							</span>
-						)}
-						{post.contentType === "video" && post.durationSeconds && (
-							<span className="flex items-center gap-1 text-xs text-base-content/50">
-								<FilmIcon className="w-3 h-3" />
-								{formatDuration(post.durationSeconds)}
-							</span>
-						)}
-						{post.contentType === "audio" && post.durationSeconds && (
-							<span className="flex items-center gap-1 text-xs text-base-content/50">
-								<MusicalNoteIcon className="w-3 h-3" />
-								{formatDuration(post.durationSeconds)}
-							</span>
-						)}
-					</div>
+						</div>
+					)}
 				</div>
 
+				{/* Post body — always visible (sanitized server-side). */}
+				{(post.bodyHtml || post.body) && (
+					<div className="prose prose-sm max-w-none mb-8">
+						{post.bodyHtml ? (
+							// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
+							<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
+						) : (
+							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
+						)}
+					</div>
+				)}
+
 				{/* Access gate */}
-				{access && !access.canAccess && (
-					access.requiresPurchase ? (
-						<div className="mb-6">
+				{access &&
+					!access.canAccess &&
+					(access.requiresPurchase ? (
+						<div className="mb-8">
 							<ProjectPricing slug={post.slug} access={access} creatorHasStripe={false} />
 						</div>
 					) : (
-						<div className="card bg-base-200 border border-warning/30 mb-6">
+						<div className="card bg-base-200 border border-warning/30 mb-8">
 							<div className="card-body text-center">
 								<div className="text-4xl mb-2">
 									{access.reason === "login_required" ? "🔑" : "🔒"}
@@ -212,92 +344,35 @@ export default function PostPage() {
 								</Link>
 							</div>
 						</div>
-					)
-				)}
+					))}
 
-				{/* Content (only when accessible) */}
-				{canAccess && (
-					<>
-						{/* Embedded web game / app */}
-						{post.embedUrl && (
-							<div className="mb-6">
-								<ProjectEmbed embedUrl={post.embedUrl} title={post.title ?? "Embedded content"} />
-							</div>
-						)}
-
-						{/* Video content */}
-						{post.streamEnabled && post.contentType === "video" && (
-							<div className="mb-6">
-								{latestJob && latestJob.status !== "completed" ? (
-									<TranscodingStatus
-										status={latestJob.status}
-										progress={latestJob.progress ?? 0}
-										errorMessage={latestJob.errorMessage ?? undefined}
+				{/* Deliverable — the ordered content elements. */}
+				{contents.map((element) => {
+					const body = renderElementBody(element);
+					const showDownloads = post.downloadEnabled && element.assets.length > 0;
+					if (!body && !showDownloads) return null;
+					return (
+						<div key={element.id} className="mb-6">
+							{element.title && contents.length > 1 && (
+								<h2 className="text-lg font-semibold mb-2">{element.title}</h2>
+							)}
+							{body}
+							{showDownloads && (
+								<div className="mt-4">
+									<ProjectDownloads
+										assets={element.assets}
+										contentType={element.contentType}
+										postSlug={post.slug}
+										canAccess={canAccess}
 									/>
-								) : videoSrc ? (
-									<VideoPlayer src={videoSrc} poster={post.thumbnail ?? undefined} />
-								) : (
-									<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
-										<FilmIcon className="w-16 h-16" />
-									</div>
-								)}
-							</div>
-						)}
-
-						{/* Audio content */}
-						{post.streamEnabled && post.contentType === "audio" && (
-							<div className="mb-6">
-								{latestJob && latestJob.status !== "completed" ? (
-									<TranscodingStatus
-										status={latestJob.status}
-										progress={latestJob.progress ?? 0}
-										errorMessage={latestJob.errorMessage ?? undefined}
-									/>
-								) : audioSrc ? (
-									<AudioPlayer
-										src={audioSrc}
-										waveform={latestJob?.waveformData}
-										onPlayInMiniPlayer={handlePlayInMiniPlayer}
-									/>
-								) : (
-									<div className="h-24 bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
-										<MusicalNoteIcon className="w-12 h-12" />
-									</div>
-								)}
-							</div>
-						)}
-
-						{/* Gallery */}
-						<ProjectScreenshots images={post.galleryImages ?? []} />
-
-						{/* Post body */}
-						{(post.bodyHtml || post.body) && (
-							<div className="prose prose-sm max-w-none mb-8">
-								{post.bodyHtml ? (
-									// biome-ignore lint/security/noDangerouslySetInnerHtml: bodyHtml is sanitized server-side at write time (apps/api/src/services/sanitize.ts)
-									<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
-								) : (
-									<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-								)}
-							</div>
-						)}
-					</>
-				)}
-
-				{/* Downloads */}
-				{post.downloadEnabled && (
-					<div className="mb-8">
-						<ProjectDownloads
-							assets={post.assets ?? []}
-							contentType={post.contentType}
-							postSlug={post.slug}
-							canAccess={post.access?.canAccess ?? true}
-						/>
-					</div>
-				)}
+								</div>
+							)}
+						</div>
+					);
+				})}
 
 				{/* Rating */}
-				<div className="mb-8">
+				<div className="mb-8 mt-8">
 					<ProjectRating slug={post.slug} />
 				</div>
 			</article>
@@ -320,11 +395,7 @@ export default function PostPage() {
 							className="btn btn-primary btn-sm mt-2"
 							disabled={submitting || !commentBody.trim()}
 						>
-							{submitting ? (
-								<span className="loading loading-spinner loading-sm" />
-							) : (
-								"Post comment"
-							)}
+							{submitting ? <span className="loading loading-spinner loading-sm" /> : "Post comment"}
 						</button>
 					</form>
 				)}

@@ -2,7 +2,8 @@
 /**
  * Unified Post vertical slice (E02) — proves the content-type-agnostic model
  * end to end against the real dev database:
- *   free text post + paid download post → unified timeline → access gating →
+ *   free text post + paid download post (with a content element + asset) →
+ *   unified timeline → access gating via the two access tables →
  *   access-checked signed download → collection membership.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
@@ -36,6 +37,7 @@ describe("Unified Post vertical slice", () => {
 	let otherCookie: string;
 	let freeSlug: string;
 	let paidSlug: string;
+	let paidContentId: number;
 	let paidAssetId: number;
 
 	beforeAll(async () => {
@@ -49,48 +51,55 @@ describe("Unified Post vertical slice", () => {
 		expect(otherCookie).toBeTruthy();
 	});
 
-	it("creates a free, stream-only text post", async () => {
+	it("creates a free, stream-only text post (body only, no deliverable)", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
 				title: `Free devlog ${id}`,
 				body: "Hello from the unified model.",
-				contentType: "text",
+				streamEnabled: true,
+				downloadEnabled: false,
+				// Free to everyone: the $0 boost baseline is allowed at price 0.
+				boostAccess: [{ threshold: 0, allow: true, price: "0" }],
 				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
 		const { post } = await res.json();
-		expect(post.contentType).toBe("text");
+		expect(post.contentType).toBe("text"); // derived: no content elements → text
 		expect(post.streamEnabled).toBe(true);
 		expect(post.downloadEnabled).toBe(false);
-		expect(post.basePrice).toBeNull();
+		expect(typeof post.publicId).toBe("number");
 		freeSlug = post.slug;
 	});
 
-	it("creates a paid, download-only post", async () => {
+	it("creates a paid, download-only post with a game content element", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
 				title: `Paid build ${id}`,
-				contentType: "game",
 				streamEnabled: false,
 				downloadEnabled: true,
-				basePrice: "5.00",
+				// Purchasable by anyone at $5 (the $0 boost baseline, priced).
+				boostAccess: [{ threshold: 0, allow: true, price: "5.00" }],
+				contents: [{ contentType: "game", title: "The Game" }],
 				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
 		const { post } = await res.json();
 		expect(post.downloadEnabled).toBe(true);
-		expect(post.basePrice).toBe("5.00");
+		expect(post.contentType).toBe("game"); // derived from the single element
+		expect(post.contents.length).toBe(1);
 		paidSlug = post.slug;
+		paidContentId = post.contents[0].id;
+		expect(paidContentId).toBeGreaterThan(0);
 	});
 
-	it("attaches a downloadable asset to the paid post", async () => {
-		const res = await req(`/api/content/posts/${paidSlug}/assets`, {
+	it("attaches a downloadable asset to the game content element", async () => {
+		const res = await req(`/api/content/posts/${paidSlug}/contents/${paidContentId}/assets`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
@@ -132,7 +141,15 @@ describe("Unified Post vertical slice", () => {
 		const { post } = await res.json();
 		expect(post.access.canAccess).toBe(false);
 		// Download keys are not leaked to viewers without access.
-		expect(post.assets[0].file).toBe("");
+		expect(post.contents[0].assets[0].file).toBe("");
+	});
+
+	it("resolves the paid post by its publicId form too", async () => {
+		const detail = await req(`/api/content/posts/${paidSlug}`);
+		const { post } = await detail.json();
+		const byId = await req(`/api/content/posts/${post.publicId}`);
+		expect(byId.status).toBe(200);
+		expect((await byId.json()).post.slug).toBe(paidSlug);
 	});
 
 	it("refuses the download to a non-owner without access (403)", async () => {
@@ -163,7 +180,6 @@ describe("Unified Post vertical slice", () => {
 		});
 		expect(create.status).toBe(201);
 
-		// Look up the paid post's numeric id to add it to the collection.
 		const detail = await req(`/api/content/posts/${paidSlug}`);
 		const paidId = (await detail.json()).post.id;
 

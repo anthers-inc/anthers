@@ -142,30 +142,14 @@ export default function ProjectPricing({
 	// Free posts have nothing to sell.
 	if (access.isFree) return null;
 
-	const basePrice = parseFloat(access.basePrice ?? "0");
-	// The effective price already reflects any entitlement discount.
-	const effectivePrice = parseFloat(access.price ?? access.basePrice ?? "0");
-	const hasDiscount =
-		access.entitlementDiscountPct != null &&
-		access.entitlementDiscountPct > 0 &&
-		effectivePrice < basePrice;
+	const price = parseFloat(access.price ?? "0");
 
 	return (
 		<div>
 			<h2 className="text-xl font-bold mb-4">Pricing</h2>
 
 			<div className="flex items-baseline gap-2 mb-3">
-				<p className="text-2xl font-bold">${effectivePrice.toFixed(2)}</p>
-				{hasDiscount && (
-					<>
-						<span className="text-lg text-base-content/40 line-through">
-							${basePrice.toFixed(2)}
-						</span>
-						<span className="badge badge-success badge-sm">
-							{access.entitlementDiscountPct}% off
-						</span>
-					</>
-				)}
+				<p className="text-2xl font-bold">${price.toFixed(2)}</p>
 			</div>
 
 			{access.canAccess ? (
@@ -186,11 +170,7 @@ export default function ProjectPricing({
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
-					<CheckoutForm
-						slug={slug}
-						price={effectivePrice}
-						onPurchaseComplete={onPurchaseComplete}
-					/>
+					<CheckoutForm slug={slug} price={price} onPurchaseComplete={onPurchaseComplete} />
 				</Elements>
 			)}
 		</div>

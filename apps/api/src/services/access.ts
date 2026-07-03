@@ -3,28 +3,24 @@
  * Access & entitlement resolution — the one place that answers
  * "may this user consume this post, and if not, what does it cost?"
  *
- * The unified Post model expresses access with a small set of orthogonal
- * columns (see `packages/db/src/schema/content.ts` and the design doc
- * "30.1 - Unified Post & Content Model"):
+ * Access is expressed by two per-post tables (see `packages/db/src/schema/content.ts`):
+ *   - `anthersAccess`: one row per Anthers tier (free/root/sprout/petal/bloom)
+ *   - `boostAccess`:   the $0 "everyone" baseline plus the creator's boost-ladder rungs
  *
- *   - basePrice (null = free) + pricingMode (fixed | pwyw) + minPrice/suggestedPrice
- *   - entitlementKind (null | tier | boost) + entitlementTier/entitlementBoostThreshold
- *   - entitlementDiscountPct (0..100; 100 = free for entitled users)
- *   - purchasableWithoutEntitlement (false = gated; true = anyone can buy)
+ * Each row is `{ allow, price }`. A viewer *qualifies* for a row when they meet its
+ * tier / boost threshold. Access is the **OR** across BOTH tables: among the rows the
+ * viewer qualifies for AND that are allowed, the cheapest price wins. price 0 = free;
+ * a positive price = a one-time purchase that unlocks the post's enabled delivery
+ * (stream and/or download — one price unlocks both). No qualifying allowed row is a
+ * hard gate. Posts ship "free but fully locked" (every row allow=false).
  *
- * The combinations map cleanly onto real cases:
- *   - free:                 basePrice null, entitlementKind null
- *   - simple paid:          basePrice set, entitlementKind null
- *   - subscriber-or-buy:    basePrice set, entitlementKind tier, discount 100, purchasable true
- *   - subscriber discount:  basePrice set, entitlementKind tier, discount <100, purchasable true
- *   - gated (subs-only):    entitlementKind set, purchasable false
- *
- * Resolution reads three viewer facts — subscription, per-creator boost this
- * cycle, and prior purchases — which `buildAccessContext` loads once so a batch
- * (the timeline) resolves without an N+1.
+ * Resolution reads three viewer facts — subscription, per-creator boost this cycle,
+ * and prior purchases — which `buildAccessContext` loads once so a batch (the
+ * timeline) resolves without an N+1.
  */
 
 import { db } from "@anthers/db/client";
+import type { AnthersAccessRow, BoostAccessRow } from "@anthers/db/schema";
 import { boostAllocations, purchases, subscriptions } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -37,19 +33,17 @@ export const TIER_MIN_FUNDING: Record<string, number> = {
 	bloom: 30,
 };
 
+/** Anthers tiers, low → high. */
+export const TIER_ORDER = ["free", "root", "sprout", "petal", "bloom"] as const;
+
 /** The post fields access resolution depends on (structurally satisfied by a full post row). */
 export interface AccessiblePost {
 	id: number;
 	creatorId: number;
-	basePrice: string | null;
-	pricingMode: string;
-	minPrice: string | null;
-	suggestedPrice: string | null;
-	entitlementKind: string | null;
-	entitlementTier: string | null;
-	entitlementBoostThreshold: string | null;
-	entitlementDiscountPct: number | null;
-	purchasableWithoutEntitlement: boolean;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+	anthersAccess: AnthersAccessRow[] | null;
+	boostAccess: BoostAccessRow[] | null;
 }
 
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of posts. */
@@ -67,29 +61,24 @@ export type AccessReason =
 	| "free"
 	| "purchased"
 	| "entitled"
-	| "gated"
 	| "payment_required"
+	| "gated"
 	| "login_required";
 
 export interface AccessResult {
 	/** May the viewer consume the content now? */
 	canAccess: boolean;
 	reason: AccessReason;
-	/** True when there is no gate and nothing to pay. */
+	/** Accessible to everyone at no cost. */
 	isFree: boolean;
-	/** True when a (possibly discounted) purchase is the path to access. */
+	/** A (one-time) purchase is the path to access. */
 	requiresPurchase: boolean;
-	/** Effective amount to unlock via purchase, or the suggested amount for a free-but-supportable post. Null otherwise. */
+	/** Minimum price to unlock via purchase (money string), or null when free/gated. */
 	price: string | null;
-	/** Sticker price (pre-discount), for display. */
-	basePrice: string | null;
-	pricingMode: string;
-	minPrice: string | null;
-	suggestedPrice: string | null;
-	entitlementKind: string | null;
-	entitlementDiscountPct: number | null;
-	/** Does the viewer meet the post's entitlement requirement (subscription tier / boost)? */
+	/** Viewer qualifies via an allowed tier/boost row (a gate), even if a price still applies. */
 	isEntitled: boolean;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
 }
 
 /** First day of the current month, `YYYY-MM-DD` — the billing-cycle key used across the app. */
@@ -98,49 +87,38 @@ export function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-function clampPct(pct: number | null | undefined): number {
-	const n = pct ?? 0;
-	return Math.max(0, Math.min(100, n));
-}
-
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-/** The minimum a non-entitled viewer must pay to access (0 = freely accessible). */
-function priceFloor(post: AccessiblePost): number {
-	if (post.pricingMode === "pwyw") return Number(post.minPrice ?? "0");
-	return Number(post.basePrice ?? "0");
+/** An allowed row the viewer qualifies for: its numeric price and whether it's a baseline (everyone) row. */
+interface Offer {
+	price: number;
+	baseline: boolean;
 }
 
-/** The price to surface for display / an optional support prompt. */
-function stickerPrice(post: AccessiblePost): string | null {
-	if (post.pricingMode === "pwyw") return post.suggestedPrice ?? post.minPrice ?? null;
-	return post.basePrice ?? null;
+/** Anthers-table offers the viewer qualifies for. Free tier always qualifies; paid tiers need an active sub. */
+function anthersOffers(rows: AnthersAccessRow[], viewerFunding: number, active: boolean): Offer[] {
+	const offers: Offer[] = [];
+	for (const row of rows) {
+		if (!row.allow) continue;
+		const need = TIER_MIN_FUNDING[row.tier] ?? 0;
+		const qualifies = need <= 0 ? true : active && viewerFunding >= need;
+		if (!qualifies) continue;
+		offers.push({ price: Number(row.price ?? "0"), baseline: need <= 0 });
+	}
+	return offers;
 }
 
-/** Does the viewer meet the post's entitlement requirement? */
-function meetsEntitlement(post: AccessiblePost, ctx: AccessContext): boolean {
-	if (!post.entitlementKind) return false;
-
-	if (post.entitlementKind === "tier") {
-		const sub = ctx.subscription;
-		if (!sub) return false;
-		if (!sub.isActive || sub.tier === "free") return false;
-		if (post.entitlementTier) {
-			const need = TIER_MIN_FUNDING[post.entitlementTier] ?? 0;
-			return sub.fundingLevel >= need;
-		}
-		return true; // any active paid subscription
+/** Boost-table offers the viewer qualifies for (their boost to this creator ≥ the rung threshold). */
+function boostOffers(rows: BoostAccessRow[], viewerBoost: number): Offer[] {
+	const offers: Offer[] = [];
+	for (const row of rows) {
+		if (!row.allow) continue;
+		if (viewerBoost < row.threshold) continue;
+		offers.push({ price: Number(row.price ?? "0"), baseline: row.threshold <= 0 });
 	}
-
-	if (post.entitlementKind === "boost") {
-		const have = ctx.boostByCreator.get(post.creatorId) ?? 0;
-		const need = Number(post.entitlementBoostThreshold ?? "0");
-		return have >= need;
-	}
-
-	return false;
+	return offers;
 }
 
 /**
@@ -148,24 +126,13 @@ function meetsEntitlement(post: AccessiblePost, ctx: AccessContext): boolean {
  * Pure and synchronous, so the timeline can resolve a batch cheaply.
  */
 export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): AccessResult {
-	const pricingMode = post.pricingMode ?? "fixed";
-	const floor = priceFloor(post);
-	const sticker = stickerPrice(post);
-	const hasEntitlement = !!post.entitlementKind;
-	const isEntitled = meetsEntitlement(post, ctx);
-	const isFree = !hasEntitlement && floor <= 0;
-
 	const base = {
-		isFree,
+		isFree: false,
 		requiresPurchase: false,
 		price: null as string | null,
-		basePrice: post.basePrice ?? null,
-		pricingMode,
-		minPrice: post.minPrice ?? null,
-		suggestedPrice: post.suggestedPrice ?? null,
-		entitlementKind: post.entitlementKind ?? null,
-		entitlementDiscountPct: post.entitlementDiscountPct ?? null,
-		isEntitled,
+		isEntitled: false,
+		streamEnabled: post.streamEnabled,
+		downloadEnabled: post.downloadEnabled,
 	};
 
 	// Creators always see their own content.
@@ -178,46 +145,45 @@ export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "purchased" };
 	}
 
-	// Free for everyone (pwyw with a $0 floor still lands here — accessible, optionally supportable).
-	if (isFree) {
-		return { ...base, canAccess: true, reason: "free", price: sticker };
+	const sub = ctx.subscription;
+	const active = !!sub?.isActive;
+	const viewerFunding = active ? (sub?.fundingLevel ?? 0) : 0;
+	const viewerBoost = ctx.boostByCreator.get(post.creatorId) ?? 0;
+
+	const offers = [
+		...anthersOffers(post.anthersAccess ?? [], viewerFunding, active),
+		...boostOffers(post.boostAccess ?? [], viewerBoost),
+	];
+
+	// No qualifying allowed row → hard gate.
+	if (offers.length === 0) {
+		return { ...base, canAccess: false, reason: ctx.userId != null ? "gated" : "login_required" };
 	}
 
-	if (hasEntitlement) {
-		if (isEntitled) {
-			const discount = clampPct(post.entitlementDiscountPct);
-			// Entitlement grants free access when there's nothing to pay or the discount is total.
-			if (floor <= 0 || discount >= 100) {
-				return { ...base, canAccess: true, reason: "entitled" };
-			}
-			// Entitled, but a discounted purchase is still required to unlock.
-			return {
-				...base,
-				canAccess: false,
-				reason: "payment_required",
-				requiresPurchase: true,
-				price: money((floor * (100 - discount)) / 100),
-			};
-		}
+	// Qualifies via a non-baseline (tier/boost) row → "entitled" for display.
+	const isEntitled = offers.some((o) => !o.baseline);
 
-		// Not entitled and there's no purchase path → hard gate.
-		if (!post.purchasableWithoutEntitlement) {
-			return {
-				...base,
-				canAccess: false,
-				reason: ctx.userId != null ? "gated" : "login_required",
-			};
-		}
-		// Otherwise fall through: a non-entitled viewer may buy at full price.
+	// Free when any qualifying allowed row is priced at/below 0.
+	if (offers.some((o) => o.price <= 0)) {
+		const universallyFree = offers.some((o) => o.baseline && o.price <= 0);
+		return {
+			...base,
+			canAccess: true,
+			reason: universallyFree ? "free" : "entitled",
+			isFree: universallyFree,
+			isEntitled,
+		};
 	}
 
-	// Purchasable paid content.
+	// Purchasable: cheapest qualifying allowed price unlocks the enabled delivery.
+	const min = Math.min(...offers.map((o) => o.price));
 	return {
 		...base,
 		canAccess: false,
 		reason: "payment_required",
 		requiresPurchase: true,
-		price: sticker ?? money(floor),
+		price: money(min),
+		isEntitled,
 	};
 }
 
@@ -283,6 +249,17 @@ export async function buildAccessContext(
 	};
 }
 
+/** Would an anonymous viewer get this post for free? Used for storage-ACL decisions in jobs. */
+export function isPubliclyFree(post: AccessiblePost): boolean {
+	const ctx: AccessContext = {
+		userId: null,
+		subscription: null,
+		boostByCreator: new Map(),
+		purchasedPostIds: new Set(),
+	};
+	return resolveAccessSync(post, ctx).isFree;
+}
+
 /** Convenience: resolve access for a single post (loads its own context). */
 export async function resolveAccess(
 	post: AccessiblePost,
@@ -290,4 +267,17 @@ export async function resolveAccess(
 ): Promise<AccessResult> {
 	const ctx = await buildAccessContext(userId, { postIds: [post.id] });
 	return resolveAccessSync(post, ctx);
+}
+
+/**
+ * Default access tables for a freshly created post: every row present but locked
+ * (allow=false, price "0") — "free but fully locked". The creator opts access in.
+ */
+export function defaultAnthersAccess(): AnthersAccessRow[] {
+	return TIER_ORDER.map((tier) => ({ tier, allow: false, price: "0" }));
+}
+
+/** Default boost table = just the $0 "everyone" baseline row, locked. Ladder rungs are added by the creator. */
+export function defaultBoostAccess(): BoostAccessRow[] {
+	return [{ threshold: 0, allow: false, price: "0" }];
 }

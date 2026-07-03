@@ -15,6 +15,7 @@ import {
 	crfLedger,
 	crfSubsidies,
 	poolDistributions,
+	postContents,
 	posts,
 	purchases,
 	users,
@@ -127,7 +128,8 @@ export async function calculateCrfSubsidies() {
 		const [storageResult] = await db
 			.select({ total: sum(assets.fileSize) })
 			.from(assets)
-			.innerJoin(posts, eq(assets.postId, posts.id))
+			.innerJoin(postContents, eq(assets.contentId, postContents.id))
+			.innerJoin(posts, eq(postContents.postId, posts.id))
 			.where(eq(posts.creatorId, creator.id));
 
 		const storageBytes = Number(storageResult?.total ?? 0);

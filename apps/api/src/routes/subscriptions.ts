@@ -524,7 +524,7 @@ const subscriptionRoutes = new Hono()
 				.select()
 				.from(creatorGates)
 				.where(eq(creatorGates.creatorId, userId))
-				.orderBy(creatorGates.gateType, creatorGates.threshold);
+				.orderBy(creatorGates.sortOrder, creatorGates.threshold);
 
 			return c.json({ gates });
 		}
@@ -551,18 +551,24 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				threshold: z.string().regex(/^\d+\.\d{2}$/),
+				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
+				gateType: z.enum(["boost", "anthers_tier"]).optional().default("boost"),
 			}),
 		),
 		async (c) => {
 			const user = c.get("user");
 			const data = c.req.valid("json");
 
+			const [maxRow] = await db
+				.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+				.from(creatorGates)
+				.where(eq(creatorGates.creatorId, user.id));
+
 			const [gate] = await db
 				.insert(creatorGates)
-				.values({ creatorId: user.id, ...data })
+				.values({ creatorId: user.id, ...data, sortOrder: Number(maxRow.max) + 1 })
 				.returning();
 
 			return c.json({ gate }, 201);
@@ -613,8 +619,8 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Content Access Check ─────────────────────────────────────────────────
-	// Access now lives on the post itself (price + entitlement columns); resolveAccess
-	// is the single source of truth, shared with the content and payment routes.
+	// Access lives on the post itself (the two access tables); resolveAccess is the
+	// single source of truth, shared with the content and payment routes.
 	.get("/access/:postId", async (c) => {
 		const { postId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -633,8 +639,9 @@ const subscriptionRoutes = new Hono()
 			requiresPurchase: result.requiresPurchase,
 			price: result.price,
 			isEntitled: result.isEntitled,
-			entitlementKind: result.entitlementKind,
-			entitlementDiscountPct: result.entitlementDiscountPct,
+			isFree: result.isFree,
+			streamEnabled: result.streamEnabled,
+			downloadEnabled: result.downloadEnabled,
 		});
 	})
 
