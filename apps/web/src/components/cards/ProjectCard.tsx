@@ -37,7 +37,7 @@ export default function ProjectCard({ project }: { project: Project }) {
 				<div className="flex items-center justify-between mt-auto pt-2">
 					<span className="badge badge-sm badge-outline gap-1">
 						<RectangleStackIcon className="w-3 h-3" />
-						Collection
+						Project
 					</span>
 					{project.postCount !== undefined && (
 						<span className="text-xs text-base-content/50">

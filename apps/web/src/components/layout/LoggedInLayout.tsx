@@ -15,6 +15,7 @@ import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
+import VerificationBanner from "./VerificationBanner";
 
 /** Primary nav links that appear in the sidebar for all logged-in pages */
 const NAV_LINKS = [
@@ -112,6 +113,8 @@ function LoggedInLayoutInner() {
 					</div>
 				</div>
 			</header>
+
+			<VerificationBanner />
 
 			{/* Body: sidebar + main content */}
 			<div className="flex flex-1 overflow-hidden">

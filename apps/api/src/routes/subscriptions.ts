@@ -25,7 +25,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
@@ -145,6 +145,7 @@ const subscriptionRoutes = new Hono()
 	.post(
 		"/subscribe",
 		requireAuth,
+		requireVerified,
 		zValidator("json", z.object({ tier: z.enum(["root", "sprout", "petal", "bloom"]) })),
 		async (c) => {
 			const user = c.get("user");
@@ -391,6 +392,7 @@ const subscriptionRoutes = new Hono()
 	.post(
 		"/boosts",
 		requireAuth,
+		requireVerified,
 		zValidator(
 			"json",
 			z.object({
@@ -617,7 +619,11 @@ const subscriptionRoutes = new Hono()
 		const { postId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
 
-		const [post] = await db.select().from(posts).where(eq(posts.id, Number(postId))).limit(1);
+		const [post] = await db
+			.select()
+			.from(posts)
+			.where(eq(posts.id, Number(postId)))
+			.limit(1);
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const result = await resolveAccess(post, currentUserId);

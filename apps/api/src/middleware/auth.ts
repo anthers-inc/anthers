@@ -9,6 +9,7 @@ type SessionUser = {
 	email: string;
 	displayName: string | null;
 	isCreator: boolean | null;
+	emailVerified: boolean | null;
 };
 
 type AuthEnv = {
@@ -42,9 +43,26 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 		email: result.user.email,
 		displayName: result.user.displayName,
 		isCreator: result.user.isCreator,
+		emailVerified: result.user.emailVerified,
 	});
 	c.set("sessionToken", token);
 
+	await next();
+});
+
+/**
+ * Middleware that requires the authenticated user to have a verified email.
+ * Must be used AFTER requireAuth. Gates money-spending and creator activation.
+ * Returns 403 with { code: "email_unverified" } so the frontend can prompt.
+ */
+export const requireVerified = createMiddleware<AuthEnv>(async (c, next) => {
+	const user = c.get("user");
+	if (!user?.emailVerified) {
+		return c.json(
+			{ error: "Please verify your email address to continue.", code: "email_unverified" },
+			403,
+		);
+	}
 	await next();
 });
 

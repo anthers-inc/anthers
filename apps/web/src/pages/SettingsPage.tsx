@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
@@ -484,7 +484,8 @@ export default function SettingsPage() {
 			});
 
 			if (!res.ok) {
-				throw new Error("Failed to save settings.");
+				const data = (await res.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(data?.error ?? "Failed to save settings.");
 			}
 
 			await refreshUser();
@@ -522,7 +523,7 @@ export default function SettingsPage() {
 								className="toggle toggle-primary"
 								checked={isCreator}
 								onChange={(e) => handleCreatorToggle(e.target.checked)}
-								disabled={saving}
+								disabled={saving || !user?.emailVerified}
 							/>
 							<div>
 								<span className="label-text font-medium">Enable creator mode</span>
@@ -531,6 +532,14 @@ export default function SettingsPage() {
 								</p>
 							</div>
 						</label>
+						{!user?.emailVerified && (
+							<p className="text-xs text-warning mt-2">
+								<Link to="/verify-email" className="link">
+									Verify your email
+								</Link>{" "}
+								to enable creator mode.
+							</p>
+						)}
 					</div>
 				</div>
 			</div>

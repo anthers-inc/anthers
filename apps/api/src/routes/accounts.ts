@@ -106,6 +106,18 @@ const accountRoutes = new Hono()
 		const sessionUser = c.get("user");
 		const data = c.req.valid("json");
 
+		// Enabling creator mode requires a verified email — creators can receive
+		// funds, so we hold the same bar as spending money.
+		if (data.isCreator === true && !sessionUser.emailVerified) {
+			return c.json(
+				{
+					error: "Verify your email address before enabling creator mode.",
+					code: "email_unverified",
+				},
+				403,
+			);
+		}
+
 		// Filter out undefined values
 		const updates: Record<string, any> = {};
 		if (data.displayName !== undefined) updates.displayName = data.displayName;

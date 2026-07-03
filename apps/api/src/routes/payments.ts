@@ -20,7 +20,7 @@ import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 
 /** The amount a non-entitled buyer pays for a post (fixed base, or pwyw suggested/min). */
@@ -95,7 +95,7 @@ const paymentRoutes = new Hono()
 	})
 
 	// ── Checkout ─────────────────────────────────────────────────────────────
-	.post("/checkout/:slug", requireAuth, async (c) => {
+	.post("/checkout/:slug", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
