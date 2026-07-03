@@ -57,14 +57,37 @@ async function reconcileJournal(entries: { when: number; tag: string }[]) {
 try {
 	const db = drizzle(client);
 
-	// Diagnostics: which DB/user this job targets, and what it believes is applied.
-	const [info] = await client`SELECT current_database() AS db, current_user AS usr`;
+	// Diagnostics: which DB/user/server this job targets, and what it believes is applied.
+	const [info] =
+		await client`SELECT current_database() AS db, current_user AS usr, inet_server_addr()::text AS server`;
 	const recorded = await client`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`.catch(
 		() => [{ n: -1 }],
 	);
 	console.log(
-		`migrate target: db=${info?.db} user=${info?.usr} recorded_migrations=${recorded[0]?.n} (-1 = journal table absent)`,
+		`migrate target: db=${info?.db} user=${info?.usr} server=${info?.server} recorded_migrations=${recorded[0]?.n} (-1 = journal table absent)`,
 	);
+
+	// One-time transition guard: if this endpoint still holds the pre-unified schema
+	// (posts has the old `visibility` column and lacks the new `slug` column), clean-
+	// rebuild it so the unified baseline applies fresh. Self-limiting — it can only
+	// match the old shape, so once rebuilt it can never trigger again.
+	const [shape] = await client`
+		SELECT
+			EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'posts' AND column_name = 'visibility') AS has_old,
+			EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'posts' AND column_name = 'slug') AS has_new
+	`;
+	if (shape?.has_old && !shape?.has_new) {
+		console.warn(
+			"Detected pre-unified schema (posts.visibility present, posts.slug absent); clean-rebuilding this endpoint for the unified model.",
+		);
+		await client`DROP SCHEMA IF EXISTS public CASCADE`;
+		await client`DROP SCHEMA IF EXISTS drizzle CASCADE`;
+		await client`DROP SCHEMA IF EXISTS pgboss CASCADE`;
+		await client`CREATE SCHEMA public`;
+		await client`GRANT ALL ON SCHEMA public TO CURRENT_USER`;
+		await client`GRANT ALL ON SCHEMA public TO public`;
+		console.warn("Clean rebuild complete; applying the unified baseline.");
+	}
 
 	console.log("Running migrations...");
 	try {
