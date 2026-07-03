@@ -30,6 +30,12 @@ const s3 = new S3Client({
 		secretAccessKey: process.env.SPACES_SECRET ?? "",
 	},
 	forcePathStyle: false, // DO Spaces requires virtual-hosted style
+	// DO Spaces doesn't support the AWS SDK's default flexible-checksum trailers
+	// (they change x-amz-content-sha256 to a STREAMING-…-TRAILER value, which
+	// Spaces rejects with SignatureDoesNotMatch). Only checksum when an operation
+	// actually requires it — restores plain SigV4 that Spaces validates correctly.
+	requestChecksumCalculation: "WHEN_REQUIRED",
+	responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 export class S3StorageService implements StorageService {
