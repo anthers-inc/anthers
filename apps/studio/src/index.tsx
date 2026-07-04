@@ -11,8 +11,9 @@
  *      (`anthers.org/api`) recognizes the session set on `anthers.org`, so a
  *      creator logged into the main site is logged into the Studio.
  */
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { type Progress, type TranscodeResult, transcodeMultiThreaded } from "./lib/transcode-mt";
 
 /** The main API origin (the Studio is a separate origin from the API/consumer site). */
 function apiOrigin(): string {
@@ -49,6 +50,135 @@ function Check({ label, ok, detail }: { label: string; ok: boolean; detail?: str
 				<div style={{ fontWeight: 600 }}>{label}</div>
 				{detail && <div style={{ fontSize: 13, color: "#9a9aa2", marginTop: 2 }}>{detail}</div>}
 			</div>
+		</div>
+	);
+}
+
+/** Phase 2 harness: pick a video, encode the ladder multi-threaded, report timings. */
+function EncodeBench({ isolated }: { isolated: boolean }) {
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [progress, setProgress] = useState<Progress | null>(null);
+	const [result, setResult] = useState<TranscodeResult | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [running, setRunning] = useState(false);
+	const [srcSize, setSrcSize] = useState(0);
+
+	const run = async (file: File) => {
+		setRunning(true);
+		setResult(null);
+		setError(null);
+		setProgress(null);
+		setSrcSize(file.size);
+		try {
+			const res = await transcodeMultiThreaded(file, setProgress);
+			setResult(res);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setRunning(false);
+		}
+	};
+
+	const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+	const sec = (n: number) => `${n.toFixed(1)}s`;
+
+	return (
+		<div
+			style={{
+				marginTop: 28,
+				padding: 18,
+				borderRadius: 10,
+				background: "#1b1b1f",
+				border: "1px solid #2b2b31",
+			}}
+		>
+			<div style={{ fontWeight: 600, marginBottom: 4 }}>Multi-threaded encode test</div>
+			<div style={{ fontSize: 13, color: "#9a9aa2", marginBottom: 14 }}>
+				Encodes the 480/720/1080p ladder with the multi-threaded core (all cores). Nothing is
+				uploaded — this just measures on-device speed.
+			</div>
+
+			<input
+				ref={inputRef}
+				type="file"
+				accept="video/*"
+				style={{ display: "none" }}
+				onChange={(e) => {
+					const f = e.target.files?.[0];
+					if (f) run(f);
+					e.target.value = "";
+				}}
+			/>
+			<button
+				type="button"
+				disabled={running || !isolated}
+				onClick={() => inputRef.current?.click()}
+				style={{
+					padding: "10px 16px",
+					borderRadius: 8,
+					border: "none",
+					background: isolated ? "#f0b400" : "#3a3a41",
+					color: isolated ? "#1a1a1a" : "#8a8a92",
+					fontWeight: 600,
+					cursor: running || !isolated ? "default" : "pointer",
+				}}
+			>
+				{running ? "Encoding…" : isolated ? "Pick a video to encode" : "Requires isolation"}
+			</button>
+
+			{progress && running && (
+				<div style={{ marginTop: 14 }}>
+					<div
+						style={{
+							display: "flex",
+							justifyContent: "space-between",
+							fontSize: 13,
+							color: "#9a9aa2",
+							marginBottom: 6,
+						}}
+					>
+						<span>{progress.stage}</span>
+						<span>
+							{progress.percent}%
+							{progress.etaSeconds != null && progress.etaSeconds > 0
+								? ` · ~${progress.etaSeconds}s left`
+								: ""}
+						</span>
+					</div>
+					<div style={{ height: 8, borderRadius: 4, background: "#2b2b31", overflow: "hidden" }}>
+						<div style={{ height: "100%", width: `${progress.percent}%`, background: "#f0b400" }} />
+					</div>
+				</div>
+			)}
+
+			{error && (
+				<div style={{ marginTop: 14, color: "#ff8a8a", fontSize: 13 }}>Encode failed: {error}</div>
+			)}
+
+			{result && (
+				<div style={{ marginTop: 16, fontSize: 14 }}>
+					<div style={{ fontWeight: 600, marginBottom: 8 }}>
+						✅ {sec(result.totalSeconds)} total · {result.width}×{result.height} ·{" "}
+						{result.durationSeconds}s clip · source {mb(srcSize)}
+					</div>
+					<table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+						<tbody>
+							{result.variants.map((v) => (
+								<tr key={v.name} style={{ borderTop: "1px solid #2b2b31" }}>
+									<td style={{ padding: "6px 0", color: "#c7c7cc" }}>{v.name}</td>
+									<td style={{ padding: "6px 0", color: "#9a9aa2" }}>
+										{v.width}×{v.height}
+									</td>
+									<td style={{ padding: "6px 0", textAlign: "right" }}>{mb(v.data.byteLength)}</td>
+									<td style={{ padding: "6px 0", textAlign: "right", color: "#f0b400" }}>
+										{sec(v.seconds)}
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -149,6 +279,8 @@ function StudioDiagnostics() {
 						}
 					/>
 				</div>
+
+				<EncodeBench isolated={isolated} />
 
 				<p style={{ color: "#6b6b73", fontSize: 12, marginTop: 28 }}>
 					Origin: <code>{typeof location !== "undefined" ? location.origin : "—"}</code> · API:{" "}
