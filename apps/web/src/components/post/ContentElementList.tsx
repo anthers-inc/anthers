@@ -162,24 +162,43 @@ export function serializeElement(d: ContentElementDraft): ContentElementInput {
 
 interface ContentElementListProps {
 	value: ContentElementDraft[];
-	onChange: (next: ContentElementDraft[]) => void;
+	onChange: (
+		next: ContentElementDraft[] | ((prev: ContentElementDraft[]) => ContentElementDraft[]),
+	) => void;
 }
 
 export default function ContentElementList({ value, onChange }: ContentElementListProps) {
-	const patch = (localKey: string, changes: Partial<ContentElementDraft>) => {
-		onChange(value.map((el) => (el.localKey === localKey ? { ...el, ...changes } : el)));
+	// Functional updates — always compute from the CURRENT list, never a captured
+	// `value`. Async upload handlers fire onPatch across await boundaries (progress
+	// events, finally); a stale `value` closure would revert concurrent edits (e.g.
+	// adding/retyping another element) and drop the upload result.
+	const patch = (
+		localKey: string,
+		changes:
+			| Partial<ContentElementDraft>
+			| ((el: ContentElementDraft) => Partial<ContentElementDraft>),
+	) => {
+		onChange((prev) =>
+			prev.map((el) =>
+				el.localKey === localKey
+					? { ...el, ...(typeof changes === "function" ? changes(el) : changes) }
+					: el,
+			),
+		);
 	};
 
-	const add = () => onChange([...value, newElement()]);
-	const remove = (localKey: string) => onChange(value.filter((el) => el.localKey !== localKey));
+	const add = () => onChange((prev) => [...prev, newElement()]);
+	const remove = (localKey: string) =>
+		onChange((prev) => prev.filter((el) => el.localKey !== localKey));
 
-	const move = (index: number, dir: -1 | 1) => {
-		const target = index + dir;
-		if (target < 0 || target >= value.length) return;
-		const next = [...value];
-		[next[index], next[target]] = [next[target], next[index]];
-		onChange(next);
-	};
+	const move = (index: number, dir: -1 | 1) =>
+		onChange((prev) => {
+			const target = index + dir;
+			if (target < 0 || target >= prev.length) return prev;
+			const next = [...prev];
+			[next[index], next[target]] = [next[target], next[index]];
+			return next;
+		});
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -212,7 +231,12 @@ interface ElementCardProps {
 	element: ContentElementDraft;
 	index: number;
 	total: number;
-	onPatch: (localKey: string, changes: Partial<ContentElementDraft>) => void;
+	onPatch: (
+		localKey: string,
+		changes:
+			| Partial<ContentElementDraft>
+			| ((el: ContentElementDraft) => Partial<ContentElementDraft>),
+	) => void;
 	onRemove: (localKey: string) => void;
 	onMove: (index: number, dir: -1 | 1) => void;
 }
@@ -227,9 +251,9 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 			const { key, url } = await uploadImageFile(file, "thumbnail");
 			onPatch(el.localKey, { thumbnailKey: key, thumbnailPreview: url });
 		} catch {
-			onPatch(el.localKey, {
-				thumbnailPreview: el.thumbnailKey ? keyToPreview(el.thumbnailKey) : null,
-			});
+			onPatch(el.localKey, (cur) => ({
+				thumbnailPreview: cur.thumbnailKey ? keyToPreview(cur.thumbnailKey) : null,
+			}));
 		}
 	};
 
@@ -244,7 +268,7 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 				// Skip failed uploads silently; the others still land.
 			}
 		}
-		onPatch(el.localKey, { images: [...el.images, ...added], uploading: false });
+		onPatch(el.localKey, (cur) => ({ images: [...cur.images, ...added], uploading: false }));
 	};
 
 	const handleMedia = async (file: File, kind: "video" | "audio") => {

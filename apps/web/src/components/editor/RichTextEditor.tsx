@@ -57,11 +57,14 @@ export default function RichTextEditor({
 	if (!editor) return null;
 
 	return (
-		<div className="border border-base-300 rounded-lg overflow-hidden">
+		<div className="border border-base-300 rounded-lg overflow-hidden bg-base-100">
 			<EditorToolbar editor={editor} />
+			{/* Padding + min-height live on the editable (.tiptap) itself — not the
+			    wrapper — so clicking anywhere in the area places the cursor, and
+			    cursor:text covers the whole box. */}
 			<EditorContent
 				editor={editor}
-				className="prose prose-sm max-w-none p-4 min-h-[200px] focus-within:outline-none [&_.tiptap]:outline-none [&_.tiptap_p.is-editor-empty:first-child::before]:text-base-content/30 [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none"
+				className="prose prose-sm max-w-none focus-within:outline-none [&_.tiptap]:min-h-[200px] [&_.tiptap]:cursor-text [&_.tiptap]:p-4 [&_.tiptap]:outline-none [&_.tiptap_p.is-editor-empty:first-child::before]:text-base-content/30 [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none"
 			/>
 		</div>
 	);
