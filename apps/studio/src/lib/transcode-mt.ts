@@ -52,14 +52,31 @@ export interface Progress {
 
 let ffmpegPromise: Promise<FFmpeg> | null = null;
 
+/** Reject if `p` doesn't settle within `ms`, naming the stage that stalled. */
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+	return Promise.race([
+		p,
+		new Promise<T>((_, reject) =>
+			setTimeout(
+				() =>
+					reject(
+						new Error(
+							`${what} did not finish within ${ms / 1000}s. Recent ffmpeg logs: ${getRecentLogs().join(" | ") || "(none)"} — check DevTools → Console.`,
+						),
+					),
+				ms,
+			),
+		),
+	]);
+}
+
 /**
- * Load the multi-threaded core once. The MT core spawns its pthread workers as
- * *classic* workers that dynamic-`import()` the core — a path that only works when
- * core/wasm/worker are handed in as **blob URLs** (the documented ffmpeg.wasm core-mt
- * config); direct same-origin URLs hang the pthread pool. So we fetch each into a blob
- * first. A timeout + captured logs turn a silent stall into a surfaced error.
+ * Load the multi-threaded core once. Core/wasm/worker are fetched into blob URLs (the
+ * documented core-mt config), and the vendored core is patched to spawn its pthread
+ * workers as MODULE workers so their dynamic `import()` of the core resolves (classic
+ * workers silently hang on it). `onStage` + a per-step timeout make a stall visible.
  */
-function loadFFmpeg(): Promise<FFmpeg> {
+function loadFFmpeg(onStage?: (stage: string) => void): Promise<FFmpeg> {
 	if (ffmpegPromise) return ffmpegPromise;
 	ffmpegPromise = (async () => {
 		const ffmpeg = new FFmpeg();
@@ -67,29 +84,24 @@ function loadFFmpeg(): Promise<FFmpeg> {
 			recentLogs.push(message);
 			if (recentLogs.length > 40) recentLogs.shift();
 		});
-		const [coreURL, wasmURL, workerURL] = await Promise.all([
-			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.js`, "text/javascript"),
-			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.worker.js`, "text/javascript"),
-		]);
-		const load = ffmpeg.load({
-			classWorkerURL: `${VENDOR_BASE}/worker.js`,
-			coreURL,
-			wasmURL,
-			workerURL,
-		});
-		const timeout = new Promise<never>((_, reject) =>
-			setTimeout(
-				() =>
-					reject(
-						new Error(
-							`Multi-threaded core failed to initialize within 90s (pthread stall). Open DevTools → Console for the red errors. Recent ffmpeg logs: ${getRecentLogs().join(" | ") || "(none)"}`,
-						),
-					),
-				90_000,
-			),
+
+		onStage?.("Fetching encoder core (~32 MB)…");
+		const [coreURL, wasmURL, workerURL] = await withTimeout(
+			Promise.all([
+				toBlobURL(`${VENDOR_BASE}/ffmpeg-core.js`, "text/javascript"),
+				toBlobURL(`${VENDOR_BASE}/ffmpeg-core.wasm`, "application/wasm"),
+				toBlobURL(`${VENDOR_BASE}/ffmpeg-core.worker.js`, "text/javascript"),
+			]),
+			60_000,
+			"Downloading the encoder core",
 		);
-		await Promise.race([load, timeout]);
+
+		onStage?.("Initializing multi-threaded core (spawning threads)…");
+		await withTimeout(
+			ffmpeg.load({ classWorkerURL: `${VENDOR_BASE}/worker.js`, coreURL, wasmURL, workerURL }),
+			90_000,
+			"Initializing the multi-threaded core",
+		);
 		return ffmpeg;
 	})();
 	ffmpegPromise.catch(() => {
@@ -145,12 +157,10 @@ export async function transcodeMultiThreaded(
 	onProgress?: (p: Progress) => void,
 ): Promise<TranscodeResult> {
 	const startedAt = performance.now();
-	onProgress?.({ stage: "Loading multi-threaded encoder", percent: 1, etaSeconds: null });
+	onProgress?.({ stage: "Reading video…", percent: 1, etaSeconds: null });
+	const { duration, width, height } = await probeSource(file);
 
-	const [{ duration, width, height }, ffmpeg] = await Promise.all([
-		probeSource(file),
-		loadFFmpeg(),
-	]);
+	const ffmpeg = await loadFFmpeg((stage) => onProgress?.({ stage, percent: 2, etaSeconds: null }));
 	const variants = ladderFor(width, height);
 	const inputName = `input.${sourceExt(file)}`;
 	await ffmpeg.writeFile(inputName, await fetchFile(file));

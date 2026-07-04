@@ -9,7 +9,7 @@
  * The ~32MB wasm lives in node_modules and is copied here at build/dev time, so it's
  * never committed. `public/vendor/` is gitignored; `build.ts` copies `public/` → `dist/`.
  */
-import { cp, mkdir, readdir } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -34,4 +34,24 @@ for (const name of ["ffmpeg-core.js", "ffmpeg-core.wasm", "ffmpeg-core.worker.js
 	await cp(join(coreDir, name), join(outDir, name));
 }
 
-console.log(`Vendored multi-threaded ffmpeg.wasm runtime → ${outDir}`);
+// 3. Patch the core to spawn its pthread workers as MODULE workers. The stock core
+//    spawns them CLASSIC (`new Worker(url)`), but each pthread worker then does a
+//    dynamic `import()` of the core — which silently HANGS in a classic worker in some
+//    browsers, so the pthread pool never signals ready and `ffmpeg.load()` never
+//    resolves. Module workers support dynamic import reliably.
+const corePath = join(outDir, "ffmpeg-core.js");
+const original = await readFile(corePath, "utf8");
+const patched = original
+	.replaceAll(
+		'new Worker(new URL("ffmpeg-core.worker.js",import.meta.url))',
+		'new Worker(new URL("ffmpeg-core.worker.js",import.meta.url),{type:"module"})',
+	)
+	.replaceAll("new Worker(pthreadMainJs)", 'new Worker(pthreadMainJs,{type:"module"})');
+if (patched === original) {
+	throw new Error(
+		"vendor-ffmpeg: pthread Worker patch matched nothing — core-mt internals changed?",
+	);
+}
+await writeFile(corePath, patched);
+
+console.log(`Vendored + patched multi-threaded ffmpeg.wasm runtime → ${outDir}`);
