@@ -11,6 +11,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/studio/package.json apps/studio/
 RUN bun install --frozen-lockfile
 
 # Copy source (packages + API — no frontend needed here)
