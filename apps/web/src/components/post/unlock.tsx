@@ -5,8 +5,11 @@
  * cover, and a reason-aware "unlock" call to action, mirroring the Patreon lock UX.
  */
 import { LockClosedIcon } from "@heroicons/react/24/solid";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import type { AccessResult } from "../../lib/types";
+import { useAuth } from "../../lib/auth";
+import { postUrl } from "../../lib/postUrl";
+import type { AccessResult, PostListItem } from "../../lib/types";
 
 /** Short call-to-action label for a locked post, by access reason. */
 export function unlockLabel(access: AccessResult): string {
@@ -70,6 +73,106 @@ export function UnlockPanel({
 					{unlockLabel(access)}
 				</Link>
 			</div>
+		</div>
+	);
+}
+
+/**
+ * Quick-unlock modal, opened from a locked timeline card. Adapts to the viewer:
+ * anonymous → log in / sign up (returning to the post after auth); logged-in but
+ * gated → join the creator; priced → go to the post's purchase flow.
+ */
+export function UnlockModal({
+	post,
+	access,
+	onClose,
+}: {
+	post: PostListItem;
+	access: AccessResult;
+	onClose: () => void;
+}) {
+	const { isAuthenticated } = useAuth();
+
+	// Close on Escape.
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
+
+	const path = postUrl(post);
+	const creatorName = post.creator?.displayName || post.creator?.username || "this creator";
+	const avatar = post.creator?.avatar;
+	// Log in / sign up return to the post so it unlocks in place after auth.
+	const returnState = { from: { pathname: path } };
+
+	let body: React.ReactNode;
+	if (!isAuthenticated) {
+		body = (
+			<>
+				<p className="text-sm text-base-content/60">Log in or sign up for access.</p>
+				<Link to="/login" state={returnState} className="btn btn-primary btn-block">
+					Log in
+				</Link>
+				<Link to="/signup" state={returnState} className="btn btn-ghost btn-block">
+					Create an account
+				</Link>
+			</>
+		);
+	} else if (access.reason === "payment_required") {
+		body = (
+			<>
+				<p className="text-sm text-base-content/60">
+					One purchase unlocks everything in this post.
+				</p>
+				<Link to={path} className="btn btn-primary btn-block">
+					{unlockLabel(access)}
+				</Link>
+			</>
+		);
+	} else {
+		body = (
+			<>
+				<p className="text-sm text-base-content/60">
+					Join or boost {creatorName} to unlock this and their members-only work.
+				</p>
+				<Link
+					to={post.creator?.username ? `/${post.creator.username}` : "/subscribe"}
+					className="btn btn-primary btn-block"
+				>
+					Join to unlock
+				</Link>
+			</>
+		);
+	}
+
+	return (
+		<div className="modal modal-open" role="dialog">
+			<div className="modal-box max-w-sm text-center flex flex-col items-center gap-3">
+				<button
+					type="button"
+					className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+					onClick={onClose}
+					aria-label="Close"
+				>
+					✕
+				</button>
+				{avatar ? (
+					<img src={avatar} alt="" className="w-14 h-14 rounded-full object-cover" />
+				) : (
+					<div className="w-14 h-14 rounded-full bg-base-300 flex items-center justify-center">
+						<LockClosedIcon className="w-6 h-6 text-base-content/70" />
+					</div>
+				)}
+				<h3 className="font-bold text-lg leading-tight">Unlock this post from {creatorName}</h3>
+				<div className="flex flex-col gap-2 w-full mt-1">{body}</div>
+			</div>
+			{/* Backdrop click closes. */}
+			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close">
+				close
+			</button>
 		</div>
 	);
 }
