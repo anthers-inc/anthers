@@ -18,7 +18,7 @@ import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
 import { postUrl } from "../lib/postUrl";
 import { client } from "../lib/rpc";
-import type { Comment, ContentElement, Post } from "../lib/types";
+import type { Comment, ContentElement, Post, TranscodingJob } from "../lib/types";
 
 /** Whether a transcoding job is still in-flight (show a status card, not a player). */
 function isJobPending(status: string): boolean {
@@ -132,6 +132,47 @@ export default function PostPage() {
 			navigate(canonical, { replace: true });
 		}
 	}, [post, location.pathname, navigate]);
+
+	// While any element is still transcoding, poll its status so the progress bar
+	// advances live and the player swaps in on completion — no manual refresh.
+	const hasActiveTranscode = (post?.contents ?? []).some(
+		(c) =>
+			c.transcoding != null &&
+			c.transcoding.status !== "completed" &&
+			c.transcoding.status !== "failed",
+	);
+	useEffect(() => {
+		if (!slug || !hasActiveTranscode) return;
+		const tick = async () => {
+			try {
+				const res = await client.api.content.posts[":slug"].transcoding.$get({ param: { slug } });
+				if (!res.ok) return;
+				const { jobs } = (await res.json()) as unknown as { jobs: TranscodingJob[] };
+				const latest = new Map<number, TranscodingJob>();
+				for (const j of jobs) if (!latest.has(j.contentId)) latest.set(j.contentId, j);
+				setPost((prev) => {
+					if (!prev?.contents) return prev;
+					let changed = false;
+					const contents = prev.contents.map((el) => {
+						const job = latest.get(el.id);
+						if (
+							job &&
+							(el.transcoding?.status !== job.status || el.transcoding?.progress !== job.progress)
+						) {
+							changed = true;
+							return { ...el, transcoding: job };
+						}
+						return el;
+					});
+					return changed ? { ...prev, contents } : prev;
+				});
+			} catch {
+				// transient — keep polling
+			}
+		};
+		const interval = setInterval(tick, 2000);
+		return () => clearInterval(interval);
+	}, [slug, hasActiveTranscode]);
 
 	// Attention tracking — map the post's derived contentType to an event type.
 	const eventType =
