@@ -3,6 +3,7 @@ import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { Link } from "react-router-dom";
 import { postUrl } from "../../lib/postUrl";
 import type { PostListItem } from "../../lib/types";
+import { LockedCover, unlockLabel } from "../post/unlock";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
@@ -13,42 +14,52 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 		year: "numeric",
 	});
 
+	// Locked to the viewer → the whole card is a gated preview: blurred cover, visible
+	// title, and an unlock affordance (the card already links through to the post).
+	const locked = post.access ? !post.access.canAccess : false;
+
 	return (
 		<Link
 			to={postUrl(post)}
 			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
 		>
-			{/* Thumbnail area */}
-			{post.contentType === "video" && (
-				<div className="relative aspect-video bg-base-300">
-					{post.thumbnail ? (
-						<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
-					) : (
-						<div className="w-full h-full flex items-center justify-center">
-							<PlayIcon className="w-12 h-12 text-base-content/20" />
+			{/* Thumbnail / cover area */}
+			{locked ? (
+				<LockedCover thumbnail={post.thumbnail} className="aspect-video" />
+			) : (
+				<>
+					{post.contentType === "video" && (
+						<div className="relative aspect-video bg-base-300">
+							{post.thumbnail ? (
+								<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
+							) : (
+								<div className="w-full h-full flex items-center justify-center">
+									<PlayIcon className="w-12 h-12 text-base-content/20" />
+								</div>
+							)}
+							{/* Play icon overlay */}
+							<div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20">
+								<div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+									<PlayIcon className="w-6 h-6 text-black ml-0.5" />
+								</div>
+							</div>
 						</div>
 					)}
-					{/* Play icon overlay */}
-					<div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20">
-						<div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
-							<PlayIcon className="w-6 h-6 text-black ml-0.5" />
+
+					{post.contentType === "audio" && (
+						<div className="relative h-24 bg-gradient-to-br from-secondary/20 to-primary/20">
+							<div className="absolute inset-0 flex items-center justify-center">
+								<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
+							</div>
 						</div>
-					</div>
-				</div>
-			)}
+					)}
 
-			{post.contentType === "audio" && (
-				<div className="relative h-24 bg-gradient-to-br from-secondary/20 to-primary/20">
-					<div className="absolute inset-0 flex items-center justify-center">
-						<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
-					</div>
-				</div>
-			)}
-
-			{post.contentType === "text" && post.thumbnail && (
-				<figure>
-					<img src={post.thumbnail} alt="" className="w-full h-36 object-cover" />
-				</figure>
+					{post.contentType === "text" && post.thumbnail && (
+						<figure>
+							<img src={post.thumbnail} alt="" className="w-full h-36 object-cover" />
+						</figure>
+					)}
+				</>
 			)}
 
 			{/* Card body */}
@@ -73,16 +84,28 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				{/* Title */}
 				{post.title && <h3 className="font-semibold line-clamp-2">{post.title}</h3>}
 
-				{/* Badges row */}
-				<div className="flex items-center gap-2 mt-auto pt-1">
-					<ContentTypeBadge contentType={post.contentType} />
-					<PricingBadge access={post.access} />
-					{post.estimatedReadMinutes && post.contentType === "text" && (
-						<span className="text-xs text-base-content/40">
-							{post.estimatedReadMinutes} min read
+				{locked && post.access ? (
+					<>
+						<p className="text-xs text-base-content/40 italic line-clamp-2">
+							Join to unlock this post and other members-only work.
+						</p>
+						{/* Visual affordance only — the whole card links to the post. */}
+						<span className="btn btn-sm btn-outline btn-block mt-1 pointer-events-none">
+							{unlockLabel(post.access)}
 						</span>
-					)}
-				</div>
+					</>
+				) : (
+					/* Badges row */
+					<div className="flex items-center gap-2 mt-auto pt-1">
+						<ContentTypeBadge contentType={post.contentType} />
+						<PricingBadge access={post.access} />
+						{post.estimatedReadMinutes && post.contentType === "text" && (
+							<span className="text-xs text-base-content/40">
+								{post.estimatedReadMinutes} min read
+							</span>
+						)}
+					</div>
+				)}
 			</div>
 		</Link>
 	);
