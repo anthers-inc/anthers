@@ -5,6 +5,10 @@ const result = await Bun.build({
 	entrypoints: ["./index.html"],
 	outdir: "./dist",
 	minify: true,
+	// Root-absolute asset URLs (/chunk-*.js) so deep SPA routes resolve them from
+	// the site root. Without this, refreshing e.g. /user/project requests the JS
+	// from /user/… → the SPA fallback returns index.html → module MIME error.
+	publicPath: "/",
 	plugins: [tailwind],
 });
 

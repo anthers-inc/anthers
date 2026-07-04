@@ -150,18 +150,24 @@ async function updateJobProgress(jobId: number, progress: number) {
 export async function transcodeVideo(data: TranscodeVideoData) {
 	const { jobId } = data;
 
-	// Mark as processing
-	await db
-		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0 })
-		.where(eq(transcodingJobs.id, jobId));
-
 	const [job] = await db
 		.select()
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
+	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the
+	// worker startup-resume path) is a no-op.
+	if (job.status === "completed") {
+		console.log(`[transcode-video] job ${jobId} already completed; skipping`);
+		return;
+	}
+
+	// Mark as processing.
+	await db
+		.update(transcodingJobs)
+		.set({ status: "processing", progress: 0 })
+		.where(eq(transcodingJobs.id, jobId));
 
 	const [element] = await db
 		.select()

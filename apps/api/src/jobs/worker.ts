@@ -6,13 +6,41 @@
  * Or via: make dev-worker
  */
 
+import { db } from "@anthers/db";
+import { transcodingJobs } from "@anthers/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { fetchExternalMetrics } from "./fetch-metrics.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
-import { ensureQueueReady, QUEUES, queue } from "./queue.js";
+import { ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
+
+/**
+ * Re-queue transcodes orphaned by a previous worker's restart. A deploy bounces
+ * the worker and kills any in-flight ffmpeg, leaving the DB row stuck at
+ * pending/processing (pg-boss would only retry after the job's 45-min expiry).
+ * On boot we reset those rows and re-send them so they resume promptly; the
+ * per-job idempotency guard makes a later pg-boss retry a no-op.
+ */
+async function resumeOrphanedTranscodes(): Promise<void> {
+	const orphans = await db
+		.select({ id: transcodingJobs.id, mediaType: transcodingJobs.mediaType })
+		.from(transcodingJobs)
+		.where(inArray(transcodingJobs.status, ["pending", "processing"]));
+	if (orphans.length === 0) return;
+
+	console.log(`Resuming ${orphans.length} orphaned transcode job(s)...`);
+	for (const job of orphans) {
+		await db
+			.update(transcodingJobs)
+			.set({ status: "pending", progress: 0 })
+			.where(eq(transcodingJobs.id, job.id));
+		const q = job.mediaType === "video" ? QUEUES.TRANSCODE_VIDEO : QUEUES.PROCESS_AUDIO;
+		await queue.send(q, { jobId: job.id }, JOB_OPTIONS[q]);
+	}
+}
 
 async function start() {
 	console.log("Starting job worker...");
@@ -84,6 +112,9 @@ async function start() {
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
 	await queue.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
 	await queue.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
+
+	// Recover any transcodes interrupted by the previous worker's shutdown.
+	await resumeOrphanedTranscodes();
 
 	console.log("Worker ready. Listening for jobs...");
 	console.log("Scheduled: distribute-pool (daily), calculate-crf (daily), fetch-metrics (6h)");
