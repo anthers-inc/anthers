@@ -831,9 +831,15 @@ const contentRoutes = new Hono()
 
 		const contents = await loadPostContents(post.id, access.canAccess, hlsStreamCtxFor(post));
 
+		// When the post is locked to this viewer, the WHOLE post locks: the body (like
+		// the content elements) is gated content, not a teaser. Only the title, cover
+		// thumbnail, and meta remain so the client can render a "locked post" preview.
+		const gatedBody = access.canAccess ? {} : { bodyHtml: "", body: "" };
+
 		return c.json({
 			post: {
 				...post,
+				...gatedBody,
 				creator,
 				ratingAverage: agg.average ? Number(agg.average) : null,
 				ratingCount: Number(agg.count),

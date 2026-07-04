@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
+import { LockedCover, UnlockPanel } from "../components/post/unlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -341,77 +342,69 @@ export default function PostPage() {
 					)}
 				</div>
 
-				{/* Post body — always visible (sanitized server-side). */}
-				{(post.bodyHtml || post.body) && (
-					<div className="prose prose-sm max-w-none mb-8">
-						{post.bodyHtml ? (
-							<SanitizedHtml html={post.bodyHtml} />
-						) : (
-							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-						)}
-					</div>
-				)}
-
-				{/* Access gate */}
-				{access &&
-					!access.canAccess &&
-					(access.requiresPurchase ? (
-						<div className="mb-8">
-							<ProjectPricing slug={post.slug} access={access} creatorHasStripe={false} />
-						</div>
-					) : (
-						<div className="card bg-base-200 border border-warning/30 mb-8">
-							<div className="card-body text-center">
-								<div className="text-4xl mb-2">
-									{access.reason === "login_required" ? "🔑" : "🔒"}
-								</div>
-								<h3 className="font-bold text-lg">
-									{access.reason === "login_required" ? "Login Required" : "Subscribers Only"}
-								</h3>
-								<p className="text-sm text-base-content/60 mb-3">
-									{access.reason === "login_required"
-										? "Log in to view this content."
-										: "Subscribe or boost this creator to unlock their gated content."}
-								</p>
-								<Link
-									to={access.reason === "login_required" ? "/login" : "/subscribe"}
-									className="btn btn-primary btn-sm w-fit mx-auto"
-								>
-									{access.reason === "login_required" ? "Log in" : "Subscribe & Boost"}
-								</Link>
+				{canAccess ? (
+					<>
+						{/* Post body (sanitized server-side; withheld when locked). */}
+						{(post.bodyHtml || post.body) && (
+							<div className="prose prose-sm max-w-none mb-8">
+								{post.bodyHtml ? (
+									<SanitizedHtml html={post.bodyHtml} />
+								) : (
+									<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
+								)}
 							</div>
-						</div>
-					))}
+						)}
 
-				{/* Deliverable — the ordered content elements. */}
-				{contents.map((element) => {
-					const body = renderElementBody(element);
-					const showDownloads = post.downloadEnabled && element.assets.length > 0;
-					if (!body && !showDownloads) return null;
-					return (
-						<div key={element.id} className="mb-6">
-							{element.title && contents.length > 1 && (
-								<h2 className="text-lg font-semibold mb-2">{element.title}</h2>
-							)}
-							{body}
-							{showDownloads && (
-								<div className="mt-4">
-									<ProjectDownloads
-										assets={element.assets}
-										contentType={element.contentType}
-										postSlug={post.slug}
-										canAccess={canAccess}
-									/>
+						{/* Deliverable — the ordered content elements. */}
+						{contents.map((element) => {
+							const body = renderElementBody(element);
+							const showDownloads = post.downloadEnabled && element.assets.length > 0;
+							if (!body && !showDownloads) return null;
+							return (
+								<div key={element.id} className="mb-6">
+									{element.title && contents.length > 1 && (
+										<h2 className="text-lg font-semibold mb-2">{element.title}</h2>
+									)}
+									{body}
+									{showDownloads && (
+										<div className="mt-4">
+											<ProjectDownloads
+												assets={element.assets}
+												contentType={element.contentType}
+												postSlug={post.slug}
+												canAccess={canAccess}
+											/>
+										</div>
+									)}
 								</div>
+							);
+						})}
+
+						{/* Rating */}
+						<div className="mb-8 mt-8">
+							<ProjectRating slug={post.slug} />
+						</div>
+					</>
+				) : (
+					// Locked: the whole post is gated — blurred cover + reason-aware unlock CTA.
+					// The title/creator/date above stay visible; body + media are withheld server-side.
+					access && (
+						<div className="mb-8">
+							<LockedCover thumbnail={post.thumbnail} className="aspect-video rounded-lg mb-6" />
+							{access.requiresPurchase ? (
+								<ProjectPricing slug={post.slug} access={access} creatorHasStripe={false} />
+							) : (
+								<UnlockPanel
+									access={access}
+									creatorName={
+										post.creator?.displayName || post.creator?.username || "this creator"
+									}
+									creatorUsername={post.creator?.username}
+								/>
 							)}
 						</div>
-					);
-				})}
-
-				{/* Rating */}
-				<div className="mb-8 mt-8">
-					<ProjectRating slug={post.slug} />
-				</div>
+					)
+				)}
 			</article>
 
 			{/* Comments */}
