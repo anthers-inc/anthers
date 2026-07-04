@@ -13,7 +13,12 @@
  */
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { type Progress, type TranscodeResult, transcodeMultiThreaded } from "./lib/transcode-mt";
+import {
+	getRecentLogs,
+	type Progress,
+	type TranscodeResult,
+	transcodeMultiThreaded,
+} from "./lib/transcode-mt";
 
 /** The main API origin (the Studio is a separate origin from the API/consumer site). */
 function apiOrigin(): string {
@@ -60,6 +65,7 @@ function EncodeBench({ isolated }: { isolated: boolean }) {
 	const [progress, setProgress] = useState<Progress | null>(null);
 	const [result, setResult] = useState<TranscodeResult | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [logs, setLogs] = useState<string[]>([]);
 	const [running, setRunning] = useState(false);
 	const [srcSize, setSrcSize] = useState(0);
 
@@ -67,6 +73,7 @@ function EncodeBench({ isolated }: { isolated: boolean }) {
 		setRunning(true);
 		setResult(null);
 		setError(null);
+		setLogs([]);
 		setProgress(null);
 		setSrcSize(file.size);
 		try {
@@ -74,6 +81,7 @@ function EncodeBench({ isolated }: { isolated: boolean }) {
 			setResult(res);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
+			setLogs(getRecentLogs());
 		} finally {
 			setRunning(false);
 		}
@@ -152,7 +160,26 @@ function EncodeBench({ isolated }: { isolated: boolean }) {
 			)}
 
 			{error && (
-				<div style={{ marginTop: 14, color: "#ff8a8a", fontSize: 13 }}>Encode failed: {error}</div>
+				<div style={{ marginTop: 14 }}>
+					<div style={{ color: "#ff8a8a", fontSize: 13 }}>Encode failed: {error}</div>
+					{logs.length > 0 && (
+						<pre
+							style={{
+								marginTop: 8,
+								padding: 10,
+								borderRadius: 6,
+								background: "#111114",
+								border: "1px solid #2b2b31",
+								color: "#9a9aa2",
+								fontSize: 11,
+								whiteSpace: "pre-wrap",
+								overflowX: "auto",
+							}}
+						>
+							{logs.join("\n")}
+						</pre>
+					)}
+				</div>
 			)}
 
 			{result && (
