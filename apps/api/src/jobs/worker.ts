@@ -114,7 +114,13 @@ async function start() {
 	await queue.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
 
 	// Recover any transcodes interrupted by the previous worker's shutdown.
-	await resumeOrphanedTranscodes();
+	// Best-effort: recovery must never crash the worker, so failures are logged,
+	// not thrown (a stuck job still self-heals via pg-boss's retry-on-expiry).
+	try {
+		await resumeOrphanedTranscodes();
+	} catch (err) {
+		console.error("Failed to resume orphaned transcodes (non-fatal):", err);
+	}
 
 	console.log("Worker ready. Listening for jobs...");
 	console.log("Scheduled: distribute-pool (daily), calculate-crf (daily), fetch-metrics (6h)");
