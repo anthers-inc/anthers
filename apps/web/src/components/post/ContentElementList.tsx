@@ -13,7 +13,12 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRef } from "react";
 import type { ContentElement, ContentType } from "../../lib/types";
-import { uploadMediaFile } from "../../lib/upload";
+import {
+	canTranscodeInBrowser,
+	type UploadedVariant,
+	uploadClientTranscodedVideo,
+	uploadMediaFile,
+} from "../../lib/upload";
 import RichTextEditor from "../editor/RichTextEditor";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
@@ -41,12 +46,18 @@ export interface ContentElementDraft {
 	images: DraftImage[];
 	videoKey: string;
 	videoName: string | null;
+	/** Browser-encoded MP4 variant ladder (empty ⇒ server will transcode from source). */
+	videoVariants: UploadedVariant[];
+	videoDuration: number | null;
 	audioKey: string;
 	audioName: string | null;
 	embedUrl: string;
 	metadataNote: string;
 	uploading: boolean;
 	progress: number;
+	/** Label for the current encode/upload step (client transcode). */
+	transcodeStage: string;
+	transcodeEta: number | null;
 }
 
 /** Element input shape accepted by the posts create/patch API. */
@@ -93,12 +104,16 @@ export function newElement(): ContentElementDraft {
 		images: [],
 		videoKey: "",
 		videoName: null,
+		videoVariants: [],
+		videoDuration: null,
 		audioKey: "",
 		audioName: null,
 		embedUrl: "",
 		metadataNote: "",
 		uploading: false,
 		progress: 0,
+		transcodeStage: "",
+		transcodeEta: null,
 	};
 }
 
@@ -117,12 +132,16 @@ export function draftFromElement(el: ContentElement): ContentElementDraft {
 		images: (el.images ?? []).map((key) => ({ key, preview: keyToPreview(key) })),
 		videoKey: el.videoFile ?? "",
 		videoName: el.videoFile ? "Existing video" : null,
+		videoVariants: [],
+		videoDuration: el.durationSeconds ?? null,
 		audioKey: el.audioFile ?? "",
 		audioName: el.audioFile ? "Existing audio" : null,
 		embedUrl: el.embedUrl ?? "",
 		metadataNote: note,
 		uploading: false,
 		progress: 0,
+		transcodeStage: "",
+		transcodeEta: null,
 	};
 }
 
@@ -142,6 +161,9 @@ export function serializeElement(d: ContentElementDraft): ContentElementInput {
 			break;
 		case "video":
 			if (d.videoKey) out.videoFile = d.videoKey;
+			if (d.videoDuration) out.durationSeconds = d.videoDuration;
+			// Browser-encoded ladder → server packages HLS via `-c copy` (no re-encode).
+			if (d.videoVariants.length > 0) out.metadata = { clientVariants: d.videoVariants };
 			break;
 		case "audio":
 			if (d.audioKey) out.audioFile = d.audioKey;
@@ -275,15 +297,56 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 		onPatch(el.localKey, {
 			uploading: true,
 			progress: 0,
+			transcodeStage: "",
+			transcodeEta: null,
+			videoVariants: [],
 			...(kind === "video" ? { videoName: file.name } : { audioName: file.name }),
 		});
 		try {
+			// Video: encode in the browser (H.264 MP4 ladder) and upload the outputs; the
+			// server just remuxes them to HLS. Falls back to a plain source upload +
+			// server-side transcode if the browser encode can't run or fails.
+			if (kind === "video" && canTranscodeInBrowser(file)) {
+				try {
+					const res = await uploadClientTranscodedVideo(file, (p) =>
+						onPatch(el.localKey, {
+							progress: p.percent,
+							transcodeStage: p.stage,
+							transcodeEta: p.etaSeconds,
+						}),
+					);
+					onPatch(el.localKey, (cur) => ({
+						videoKey: res.sourceKey,
+						videoVariants: res.variants,
+						videoDuration: res.durationSeconds,
+						// Adopt the auto-poster only if the creator hasn't set their own thumbnail.
+						thumbnailKey: cur.thumbnailKey || res.thumbnailKey,
+						thumbnailPreview: cur.thumbnailKey
+							? cur.thumbnailPreview
+							: res.thumbnailPreview || cur.thumbnailPreview,
+					}));
+					return;
+				} catch {
+					onPatch(el.localKey, {
+						progress: 0,
+						transcodeStage: "Uploading (server will process)",
+						videoVariants: [],
+					});
+					const key = await uploadMediaFile(file, "video", (p) =>
+						onPatch(el.localKey, { progress: p }),
+					);
+					onPatch(el.localKey, { videoKey: key });
+					return;
+				}
+			}
+
+			// Audio, or a video too large / not browser-encodable → plain source upload.
 			const key = await uploadMediaFile(file, kind, (p) => onPatch(el.localKey, { progress: p }));
 			onPatch(el.localKey, kind === "video" ? { videoKey: key } : { audioKey: key });
 		} catch {
 			onPatch(el.localKey, kind === "video" ? { videoName: null } : { audioName: null });
 		} finally {
-			onPatch(el.localKey, { uploading: false });
+			onPatch(el.localKey, { uploading: false, transcodeStage: "", transcodeEta: null });
 		}
 	};
 
@@ -403,6 +466,8 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 					hasKey={Boolean(el.videoKey)}
 					uploading={el.uploading}
 					progress={el.progress}
+					stage={el.transcodeStage}
+					etaSeconds={el.transcodeEta}
 					onSelect={(file) => handleMedia(file, "video")}
 				/>
 			)}
@@ -477,10 +542,28 @@ interface MediaFieldProps {
 	hasKey: boolean;
 	uploading: boolean;
 	progress: number;
+	stage?: string;
+	etaSeconds?: number | null;
 	onSelect: (file: File) => void;
 }
 
-function MediaField({ kind, fileName, hasKey, uploading, progress, onSelect }: MediaFieldProps) {
+/** "2m 5s", "45s" — compact remaining-time label. */
+function formatEta(seconds: number): string {
+	const s = Math.max(0, Math.round(seconds));
+	if (s < 60) return `${s}s`;
+	return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function MediaField({
+	kind,
+	fileName,
+	hasKey,
+	uploading,
+	progress,
+	stage,
+	etaSeconds,
+	onSelect,
+}: MediaFieldProps) {
 	const maxSize = kind === "video" ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024;
 	return (
 		<FormField label={kind === "video" ? "Video File" : "Audio File"}>
@@ -495,7 +578,22 @@ function MediaField({ kind, fileName, hasKey, uploading, progress, onSelect }: M
 						) : null}
 					</div>
 					{uploading && (
-						<progress className="progress progress-primary w-full" value={progress} max="100" />
+						<>
+							{stage && (
+								<div className="flex items-center justify-between text-xs text-base-content/60">
+									<span>{stage}</span>
+									{etaSeconds != null && etaSeconds > 0 && (
+										<span>~{formatEta(etaSeconds)} left</span>
+									)}
+								</div>
+							)}
+							<progress className="progress progress-primary w-full" value={progress} max="100" />
+							{kind === "video" && (
+								<p className="text-xs text-base-content/40">
+									Encoding on your device — this keeps our servers free and is faster to publish.
+								</p>
+							)}
+						</>
 					)}
 				</div>
 			) : (
