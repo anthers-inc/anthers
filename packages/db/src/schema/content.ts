@@ -210,6 +210,7 @@ export const transcodingJobs = pgTable(
 		mediaType: text("media_type").notNull(), // video | audio
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
 		progress: integer("progress").default(0),
+		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)
 		errorMessage: text("error_message").default(""),
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),

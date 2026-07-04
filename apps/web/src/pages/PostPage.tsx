@@ -13,6 +13,7 @@ import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
 import ProjectScreenshots from "../components/project/ProjectScreenshots";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionTracker } from "../lib/attention";
 import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
@@ -26,13 +27,7 @@ function isJobPending(status: string): boolean {
 }
 
 /** Thumbnail-only preview shown when a media element's payload is gated/blank. */
-function MediaPreview({
-	element,
-	icon,
-}: {
-	element: ContentElement;
-	icon: React.ReactNode;
-}) {
+function MediaPreview({ element, icon }: { element: ContentElement; icon: React.ReactNode }) {
 	if (element.thumbnail) {
 		return (
 			<div className="relative rounded-lg overflow-hidden bg-base-200">
@@ -67,8 +62,7 @@ function PhysicalServiceCard({ element }: { element: ContentElement }) {
 					<span className="badge badge-outline badge-sm capitalize">{element.contentType}</span>
 				</div>
 				{element.bodyHtml && (
-					// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
-					<div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: element.bodyHtml }} />
+					<SanitizedHtml className="prose prose-sm max-w-none" html={element.bodyHtml} />
 				)}
 				{scalarEntries.length > 0 && (
 					<dl className="text-sm">
@@ -157,7 +151,9 @@ export default function PostPage() {
 						const job = latest.get(el.id);
 						if (
 							job &&
-							(el.transcoding?.status !== job.status || el.transcoding?.progress !== job.progress)
+							(el.transcoding?.status !== job.status ||
+								el.transcoding?.progress !== job.progress ||
+								el.transcoding?.etaSeconds !== job.etaSeconds)
 						) {
 							changed = true;
 							return { ...el, transcoding: job };
@@ -256,6 +252,7 @@ export default function PostPage() {
 						<TranscodingStatus
 							status={job.status}
 							progress={job.progress ?? 0}
+							etaSeconds={job.etaSeconds}
 							errorMessage={job.errorMessage ?? undefined}
 						/>
 					);
@@ -271,6 +268,7 @@ export default function PostPage() {
 						<TranscodingStatus
 							status={job.status}
 							progress={job.progress ?? 0}
+							etaSeconds={job.etaSeconds}
 							errorMessage={job.errorMessage ?? undefined}
 						/>
 					);
@@ -300,8 +298,7 @@ export default function PostPage() {
 				) : null;
 			case "text":
 				return element.bodyHtml ? (
-					// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
-					<div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: element.bodyHtml }} />
+					<SanitizedHtml className="prose prose-sm max-w-none" html={element.bodyHtml} />
 				) : null;
 			case "physical":
 			case "service":
@@ -348,8 +345,7 @@ export default function PostPage() {
 				{(post.bodyHtml || post.body) && (
 					<div className="prose prose-sm max-w-none mb-8">
 						{post.bodyHtml ? (
-							// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized server-side at write time (apps/api/src/services/sanitize.ts)
-							<div dangerouslySetInnerHTML={{ __html: post.bodyHtml }} />
+							<SanitizedHtml html={post.bodyHtml} />
 						) : (
 							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 						)}
@@ -436,7 +432,11 @@ export default function PostPage() {
 							className="btn btn-primary btn-sm mt-2"
 							disabled={submitting || !commentBody.trim()}
 						>
-							{submitting ? <span className="loading loading-spinner loading-sm" /> : "Post comment"}
+							{submitting ? (
+								<span className="loading loading-spinner loading-sm" />
+							) : (
+								"Post comment"
+							)}
 						</button>
 					</form>
 				)}
