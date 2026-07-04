@@ -44,7 +44,6 @@ import {
 	buildAccessContext,
 	defaultAnthersAccess,
 	defaultBoostAccess,
-	isPubliclyFree,
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
@@ -501,6 +500,16 @@ async function loadPostContents(
 		if (!jobByContent.has(j.contentId)) jobByContent.set(j.contentId, j);
 	}
 
+	// Thumbnails render directly as <img src>; older rows stored a bare storage key
+	// instead of a URL — resolve those to public URLs (new uploads already store URLs).
+	await Promise.all(
+		contents.map(async (el) => {
+			if (el.thumbnail && !/^(https?:)?\/\//.test(el.thumbnail) && !el.thumbnail.startsWith("/")) {
+				el.thumbnail = await storage.getUrl(el.thumbnail);
+			}
+		}),
+	);
+
 	return contents.map((el) =>
 		serializeContent(
 			el,
@@ -522,13 +531,14 @@ function publicOrigin(): string {
 }
 
 /**
- * Decide where a post's HLS should stream from. Gated posts (not publicly free) in S3
- * mode go through the signed-segment endpoint; free posts and local-storage dev serve
- * segments directly (public CDN / local /content route).
+ * Decide where a post's HLS should stream from. In S3 mode ALL video streams through
+ * the access-checked signed-segment endpoint — access is enforced live at request
+ * time, so it doesn't matter whether a segment's stored ACL is public or private (and
+ * a post's access can change after transcode without leaving playback broken). Local
+ * dev serves segments directly (the /content route serves everything).
  */
 function hlsStreamCtxFor(post: typeof posts.$inferSelect): HlsStreamCtx | null {
 	if (isLocalStorage) return null;
-	if (isPubliclyFree(post as AccessiblePost)) return null;
 	return { slug: post.slug, origin: publicOrigin() };
 }
 
