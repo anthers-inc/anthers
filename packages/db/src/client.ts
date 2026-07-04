@@ -16,7 +16,11 @@ import * as schema from "./schema/index.js";
 // DATABASE_URL is required; the dev default targets the local compose Postgres.
 const url = process.env.DATABASE_URL ?? "postgres://anthers:anthers@localhost:5432/anthers";
 
-const client = postgres(url);
+// Small pool: the hub runs several Postgres consumers (api + worker each hold a
+// postgres-js pool AND a pg-boss pool) against a managed cluster with a low
+// max_connections (~25). Cap each pool so a rolling deploy — which briefly
+// doubles every component — can't exhaust the connection budget.
+const client = postgres(url, { max: 3 });
 
 export const db = drizzle(client, { schema });
 export type Database = typeof db;

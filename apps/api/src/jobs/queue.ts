@@ -40,6 +40,10 @@ function sslBossOptions(dsn: string) {
 		user: decodeURIComponent(u.username),
 		password: decodeURIComponent(u.password),
 		ssl: { rejectUnauthorized: false },
+		// Small pool — the managed cluster's max_connections is low (~25) and both
+		// api and worker run a pg-boss pool; a large default would exhaust it on a
+		// rolling deploy (old + new instances overlap).
+		max: 3,
 	};
 }
 
@@ -80,7 +84,9 @@ class JobQueue {
 	private started = false;
 
 	constructor() {
-		this.boss = DB_REQUIRES_SSL ? new PgBoss(sslBossOptions(CONNECTION)) : new PgBoss(CONNECTION);
+		this.boss = DB_REQUIRES_SSL
+			? new PgBoss(sslBossOptions(CONNECTION))
+			: new PgBoss({ connectionString: CONNECTION, max: 3 });
 		// pg-boss surfaces background failures via the error event; without a
 		// listener these would become unhandled 'error' emissions.
 		this.boss.on("error", (err) => console.error("[queue] pg-boss error:", err));
