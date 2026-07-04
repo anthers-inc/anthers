@@ -270,8 +270,9 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 	const handleThumbnail = async (file: File) => {
 		onPatch(el.localKey, { thumbnailPreview: URL.createObjectURL(file) });
 		try {
-			const { key, url } = await uploadImageFile(file, "thumbnail");
-			onPatch(el.localKey, { thumbnailKey: key, thumbnailPreview: url });
+			const { url } = await uploadImageFile(file, "thumbnail");
+			// Store the URL (not the key) — thumbnails render directly as <img src>.
+			onPatch(el.localKey, { thumbnailKey: url, thumbnailPreview: url });
 		} catch {
 			onPatch(el.localKey, (cur) => ({
 				thumbnailPreview: cur.thumbnailKey ? keyToPreview(cur.thumbnailKey) : null,
@@ -320,7 +321,8 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 						videoVariants: res.variants,
 						videoDuration: res.durationSeconds,
 						// Adopt the auto-poster only if the creator hasn't set their own thumbnail.
-						thumbnailKey: cur.thumbnailKey || res.thumbnailKey,
+						// Store the URL (not the storage key) — thumbnails render directly as <img src>.
+						thumbnailKey: cur.thumbnailKey || res.thumbnailPreview,
 						thumbnailPreview: cur.thumbnailKey
 							? cur.thumbnailPreview
 							: res.thumbnailPreview || cur.thumbnailPreview,
