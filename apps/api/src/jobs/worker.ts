@@ -13,6 +13,7 @@ import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { fetchExternalMetrics } from "./fetch-metrics.js";
+import { type PackageVideoData, packageVideo } from "./package-video.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
@@ -56,6 +57,18 @@ async function start() {
 			for (const job of jobs) {
 				console.log(`[transcode-video] Processing job ${job.id}`);
 				await transcodeVideo(job.data);
+			}
+		},
+	);
+
+	// Browser-encoded uploads: remux the client's MP4 variants into HLS (cheap copy).
+	await queue.work<PackageVideoData>(
+		QUEUES.PACKAGE_VIDEO,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[package-video] Processing job ${job.id}`);
+				await packageVideo(job.data);
 			}
 		},
 	);

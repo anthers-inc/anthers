@@ -283,6 +283,32 @@ function elementValues(el: z.infer<typeof contentElementSchema>, postId: number,
 	};
 }
 
+/**
+ * Client-transcode transport: a browser upload may hand us a pre-encoded MP4 variant
+ * ladder in the element's metadata (see apps/web/src/lib/transcode.ts). When present,
+ * the server only remuxes to HLS (`package-video`) instead of re-encoding.
+ */
+interface ClientVariant {
+	name: string;
+	height: number;
+	width: number;
+	bitrate: string;
+	bandwidth: number;
+	key: string;
+}
+
+function readClientVariants(metadata: unknown): ClientVariant[] {
+	const raw = (metadata as Record<string, unknown> | null)?.clientVariants;
+	if (!Array.isArray(raw)) return [];
+	return raw.filter(
+		(v): v is ClientVariant =>
+			!!v &&
+			typeof (v as ClientVariant).key === "string" &&
+			typeof (v as ClientVariant).name === "string" &&
+			typeof (v as ClientVariant).bandwidth === "number",
+	);
+}
+
 /** Queue a transcode/normalize job for a video or audio element that has a source file. */
 async function queueTranscodeFor(content: typeof postContents.$inferSelect): Promise<void> {
 	if (content.contentType === "video" && content.videoFile) {
@@ -290,11 +316,21 @@ async function queueTranscodeFor(content: typeof postContents.$inferSelect): Pro
 			.insert(transcodingJobs)
 			.values({ contentId: content.id, mediaType: "video", status: "pending" })
 			.returning();
-		await queue.send(
-			QUEUES.TRANSCODE_VIDEO,
-			{ jobId: job.id },
-			JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
-		);
+		// Browser-encoded ladder → cheap remux; otherwise the server encodes from source.
+		const variants = readClientVariants(content.metadata);
+		if (variants.length > 0) {
+			await queue.send(
+				QUEUES.PACKAGE_VIDEO,
+				{ jobId: job.id, variants, duration: content.durationSeconds ?? undefined },
+				JOB_OPTIONS[QUEUES.PACKAGE_VIDEO],
+			);
+		} else {
+			await queue.send(
+				QUEUES.TRANSCODE_VIDEO,
+				{ jobId: job.id },
+				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
+			);
+		}
 	} else if (content.contentType === "audio" && content.audioFile) {
 		const [job] = await db
 			.insert(transcodingJobs)
@@ -361,6 +397,14 @@ async function reconcileContents(
 	}
 }
 
+/** Drop internal-only keys (e.g. client-transcode variant storage keys) from metadata. */
+function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
+	if (!metadata || typeof metadata !== "object") return {};
+	const { clientVariants, ...rest } = metadata as Record<string, unknown>;
+	void clientVariants;
+	return rest;
+}
+
 /** Serialize one content element for a response, stripping the payload when gated. */
 function serializeContent(
 	el: typeof postContents.$inferSelect,
@@ -376,7 +420,8 @@ function serializeContent(
 		title: el.title,
 		thumbnail: el.thumbnail,
 		durationSeconds: el.durationSeconds,
-		metadata: el.metadata,
+		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
+		metadata: stripInternalMetadata(el.metadata),
 		// Payload is the deliverable — only handed out when the viewer has access.
 		bodyHtml: canAccess ? el.bodyHtml : "",
 		images: canAccess ? el.images : [],

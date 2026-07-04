@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { cp } from "node:fs/promises";
 import tailwind from "bun-plugin-tailwind";
 
 const result = await Bun.build({
@@ -20,4 +21,9 @@ if (!result.success) {
 	process.exit(1);
 }
 
-console.log(`Build complete: ${result.outputs.length} files`);
+// Copy static assets from public/ into dist/ — notably the vendored ffmpeg.wasm
+// runtime at /vendor/ffmpeg/* (self-hosted, same-origin) that the browser video
+// transcoder loads. `prebuild` populates public/vendor from node_modules first.
+await cp(`${import.meta.dir}/public`, `${import.meta.dir}/dist`, { recursive: true });
+
+console.log(`Build complete: ${result.outputs.length} files (+ public/ assets)`);
