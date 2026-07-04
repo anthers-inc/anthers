@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Vendored ffmpeg.wasm runtime — copied from node_modules by scripts/vendor-ffmpeg.ts
+# at build time. The ~32MB core wasm is a build artifact, never committed.
+public/vendor/

@@ -5,12 +5,16 @@
 	"license": "AGPL-3.0-or-later",
 	"type": "module",
 	"scripts": {
+		"vendor:ffmpeg": "bun run scripts/vendor-ffmpeg.ts",
 		"dev": "bun run serve.ts",
-		"build": "bun run build.ts",
+		"build": "bun run vendor:ffmpeg && bun run build.ts",
 		"preview": "bun run serve.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@ffmpeg/core-mt": "^0.12.6",
+		"@ffmpeg/ffmpeg": "^0.12.10",
+		"@ffmpeg/util": "^0.12.1",
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0"
 	},
