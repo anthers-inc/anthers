@@ -6,6 +6,7 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { ensureQueueReady } from "./jobs/queue.js";
 import { csrfProtection } from "./middleware/csrf.js";
+import { allowedOrigins } from "./origins.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
@@ -22,7 +23,7 @@ const app = new Hono()
 	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
 	.use(
 		cors({
-			origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+			origin: allowedOrigins(),
 			credentials: true,
 		}),
 	)

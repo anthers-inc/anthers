@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createMiddleware } from "hono/factory";
+import { allowedOrigins } from "../origins.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -14,9 +15,8 @@ export const csrfProtection = createMiddleware(async (c, next) => {
 	}
 
 	const origin = c.req.header("Origin");
-	const allowedOrigin = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
-	if (!origin || origin !== allowedOrigin) {
+	if (!origin || !allowedOrigins().includes(origin)) {
 		return c.json({ error: "CSRF validation failed" }, 403);
 	}
 
