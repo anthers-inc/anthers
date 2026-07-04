@@ -13,9 +13,15 @@
  * every 6s) so the server-side HLS packaging (`-c copy`) is unchanged.
  */
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
 const VENDOR_BASE = "/vendor/ffmpeg";
+
+/** Last ffmpeg log lines — surfaced in the UI if a load/encode fails. */
+const recentLogs: string[] = [];
+export function getRecentLogs(): string[] {
+	return recentLogs.slice(-8);
+}
 
 export interface VariantSpec {
 	name: string;
@@ -46,17 +52,44 @@ export interface Progress {
 
 let ffmpegPromise: Promise<FFmpeg> | null = null;
 
-/** Load the multi-threaded core once (workerURL = the pthread worker). */
+/**
+ * Load the multi-threaded core once. The MT core spawns its pthread workers as
+ * *classic* workers that dynamic-`import()` the core — a path that only works when
+ * core/wasm/worker are handed in as **blob URLs** (the documented ffmpeg.wasm core-mt
+ * config); direct same-origin URLs hang the pthread pool. So we fetch each into a blob
+ * first. A timeout + captured logs turn a silent stall into a surfaced error.
+ */
 function loadFFmpeg(): Promise<FFmpeg> {
 	if (ffmpegPromise) return ffmpegPromise;
 	ffmpegPromise = (async () => {
 		const ffmpeg = new FFmpeg();
-		await ffmpeg.load({
-			classWorkerURL: `${VENDOR_BASE}/worker.js`,
-			coreURL: `${VENDOR_BASE}/ffmpeg-core.js`,
-			wasmURL: `${VENDOR_BASE}/ffmpeg-core.wasm`,
-			workerURL: `${VENDOR_BASE}/ffmpeg-core.worker.js`,
+		ffmpeg.on("log", ({ message }) => {
+			recentLogs.push(message);
+			if (recentLogs.length > 40) recentLogs.shift();
 		});
+		const [coreURL, wasmURL, workerURL] = await Promise.all([
+			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.js`, "text/javascript"),
+			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.wasm`, "application/wasm"),
+			toBlobURL(`${VENDOR_BASE}/ffmpeg-core.worker.js`, "text/javascript"),
+		]);
+		const load = ffmpeg.load({
+			classWorkerURL: `${VENDOR_BASE}/worker.js`,
+			coreURL,
+			wasmURL,
+			workerURL,
+		});
+		const timeout = new Promise<never>((_, reject) =>
+			setTimeout(
+				() =>
+					reject(
+						new Error(
+							`Multi-threaded core failed to initialize within 90s (pthread stall). Open DevTools → Console for the red errors. Recent ffmpeg logs: ${getRecentLogs().join(" | ") || "(none)"}`,
+						),
+					),
+				90_000,
+			),
+		);
+		await Promise.race([load, timeout]);
 		return ffmpeg;
 	})();
 	ffmpegPromise.catch(() => {
