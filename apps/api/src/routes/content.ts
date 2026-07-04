@@ -44,6 +44,7 @@ import {
 	buildAccessContext,
 	defaultAnthersAccess,
 	defaultBoostAccess,
+	isPubliclyFree,
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
@@ -405,13 +406,45 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
 	return rest;
 }
 
+/**
+ * Where a gated post's HLS should be streamed from. When set, a completed video
+ * transcode's manifest URL is rewritten to the access-checked, signed-segment
+ * endpoint (`buildHlsManifestUrl`) instead of the raw public CDN URL — so entitled
+ * viewers of a gated post can actually play it (the CDN 403s private segments).
+ */
+interface HlsStreamCtx {
+	slug: string;
+	origin: string;
+}
+
+/** URL of the access-checked HLS master for a gated video element. */
+function buildHlsManifestUrl(ctx: HlsStreamCtx, contentId: number, file = "master.m3u8"): string {
+	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/hls/${contentId}/${file}`;
+}
+
 /** Serialize one content element for a response, stripping the payload when gated. */
 function serializeContent(
 	el: typeof postContents.$inferSelect,
 	elAssets: (typeof assets.$inferSelect)[],
 	job: typeof transcodingJobs.$inferSelect | null,
 	canAccess: boolean,
+	hls: HlsStreamCtx | null,
 ) {
+	// Gated video: hand the player our signed-segment manifest endpoint, not the raw
+	// CDN URL (whose .ts segments are private → 403). Free/public posts keep the
+	// direct public manifest (CDN-served, no per-request signing).
+	let transcoding = job;
+	if (
+		hls &&
+		canAccess &&
+		job &&
+		el.contentType === "video" &&
+		job.status === "completed" &&
+		job.hlsManifestUrl
+	) {
+		transcoding = { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, el.id) };
+	}
+
 	return {
 		id: el.id,
 		postId: el.postId,
@@ -430,12 +463,16 @@ function serializeContent(
 		embedUrl: canAccess ? el.embedUrl : "",
 		// Download keys are only handed out through the access-checked download route.
 		assets: elAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
-		transcoding: job,
+		transcoding,
 	};
 }
 
 /** Load a post's content elements with their assets + latest transcode job, gating as needed. */
-async function loadPostContents(postId: number, canAccess: boolean) {
+async function loadPostContents(
+	postId: number,
+	canAccess: boolean,
+	hls: HlsStreamCtx | null = null,
+) {
 	const contents = await db
 		.select()
 		.from(postContents)
@@ -470,8 +507,64 @@ async function loadPostContents(postId: number, canAccess: boolean) {
 			assetsByContent.get(el.id) ?? [],
 			jobByContent.get(el.id) ?? null,
 			canAccess,
+			hls,
 		),
 	);
+}
+
+/**
+ * Public origin the browser uses to reach us (same host serves the SPA + /api in
+ * prod). Behind DO's ingress `c.req.url` carries an internal host, so absolute URLs
+ * handed to the client must be built from FRONTEND_URL, not the request URL.
+ */
+function publicOrigin(): string {
+	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+}
+
+/**
+ * Decide where a post's HLS should stream from. Gated posts (not publicly free) in S3
+ * mode go through the signed-segment endpoint; free posts and local-storage dev serve
+ * segments directly (public CDN / local /content route).
+ */
+function hlsStreamCtxFor(post: typeof posts.$inferSelect): HlsStreamCtx | null {
+	if (isLocalStorage) return null;
+	if (isPubliclyFree(post as AccessiblePost)) return null;
+	return { slug: post.slug, origin: publicOrigin() };
+}
+
+/** Short-lived signed-segment lifetime — must exceed a viewer's watch time (VOD). */
+const HLS_SEGMENT_TTL_SECONDS = 6 * 60 * 60;
+
+/**
+ * Rewrite an HLS playlist for signed delivery. In the master, child variant playlists
+ * are pointed back through this access-checked endpoint; in a variant playlist, each
+ * segment (.ts) becomes a short-lived signed CDN URL. Comment/tag lines pass through.
+ */
+async function rewriteHlsPlaylist(
+	text: string,
+	opts: { isMaster: boolean; prefixKey: string; ctx: HlsStreamCtx; contentId: number },
+): Promise<string> {
+	const out: string[] = [];
+	for (const raw of text.split("\n")) {
+		const line = raw.trim();
+		if (!line || line.startsWith("#")) {
+			out.push(raw.trimEnd());
+			continue;
+		}
+		if (opts.isMaster) {
+			// A variant playlist (e.g. "720p.m3u8") → back through this endpoint.
+			out.push(buildHlsManifestUrl(opts.ctx, opts.contentId, encodeURIComponent(line)));
+		} else {
+			// A segment (e.g. "720p_000.ts") → a short-lived signed CDN URL.
+			out.push(
+				await storage.getUrl(`${opts.prefixKey}/${line}`, {
+					signed: true,
+					expiresIn: HLS_SEGMENT_TTL_SECONDS,
+				}),
+			);
+		}
+	}
+	return out.join("\n");
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -696,7 +789,7 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		const contents = await loadPostContents(post.id, true);
+		const contents = await loadPostContents(post.id, true, hlsStreamCtxFor(post));
 		return c.json({ post: { ...post, contents } }, 201);
 	})
 
@@ -726,7 +819,7 @@ const contentRoutes = new Hono()
 		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
 		const access = resolveAccessSync(post as AccessiblePost, ctx);
 
-		const contents = await loadPostContents(post.id, access.canAccess);
+		const contents = await loadPostContents(post.id, access.canAccess, hlsStreamCtxFor(post));
 
 		return c.json({
 			post: {
@@ -798,7 +891,7 @@ const contentRoutes = new Hono()
 			.where(eq(posts.id, existing.id))
 			.returning();
 
-		const contents = await loadPostContents(updated.id, true);
+		const contents = await loadPostContents(updated.id, true, hlsStreamCtxFor(updated));
 		return c.json({ post: { ...updated, contents } });
 	})
 
@@ -984,6 +1077,55 @@ const contentRoutes = new Hono()
 			.orderBy(desc(transcodingJobs.createdAt));
 
 		return c.json({ jobs: jobs.map((j) => j.job) });
+	})
+
+	// ── Gated HLS delivery (access-checked, signed segments) ─────────────────────
+	// Serves the master + variant playlists for a gated video, rewriting segment refs
+	// to short-lived signed CDN URLs. Only reached for gated posts (free posts stream
+	// the public CDN manifest directly); the player is pointed here by serializeContent.
+	.get("/posts/:slug/hls/:contentId/:file", async (c) => {
+		const file = c.req.param("file");
+		// Playlists only — segments are fetched straight from the CDN via signed URLs.
+		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);
+
+		const post = await findPostRow(c.req.param("slug"));
+		if (!post) return c.json({ error: "Post not found" }, 404);
+
+		// Enforce access server-side — this is the gate for private segments.
+		const viewerId = await getOptionalUserId(c);
+		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
+		const access = resolveAccessSync(post as AccessiblePost, ctx);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const contentId = Number(c.req.param("contentId"));
+		const [row] = await db
+			.select({ job: transcodingJobs })
+			.from(transcodingJobs)
+			.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
+			.where(and(eq(transcodingJobs.contentId, contentId), eq(postContents.postId, post.id)))
+			.orderBy(desc(transcodingJobs.createdAt))
+			.limit(1);
+		const manifestUrl = row?.job.hlsManifestUrl;
+		if (!manifestUrl) return c.json({ error: "Not found" }, 404);
+
+		// Storage key prefix = the directory of the master.m3u8 key (playlists are public,
+		// so we fetch the requested one directly and rewrite it).
+		const masterKey = decodeURIComponent(new URL(manifestUrl).pathname.replace(/^\/+/, ""));
+		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
+
+		const res = await fetch(await storage.getUrl(`${prefixKey}/${file}`));
+		if (!res.ok) return c.json({ error: "Not found" }, 404);
+
+		const rewritten = await rewriteHlsPlaylist(await res.text(), {
+			isMaster: file === "master.m3u8",
+			prefixKey,
+			ctx: { slug: post.slug, origin: publicOrigin() },
+			contentId,
+		});
+		return c.body(rewritten, 200, {
+			"Content-Type": "application/vnd.apple.mpegurl",
+			"Cache-Control": "no-store",
+		});
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

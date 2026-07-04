@@ -25,6 +25,14 @@ export default function VideoPlayer({ src, poster, autoPlay = false }: VideoPlay
 						const hls = new Hls({
 							maxBufferLength: 30,
 							maxMaxBufferLength: 60,
+							// Gated posts stream through our access-checked manifest endpoint,
+							// which needs the session cookie. Segment requests go to the CDN via
+							// signed URLs and must NOT carry credentials (would fail CORS).
+							xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+								if (/\/api\/content\/posts\/[^/]+\/hls\//.test(url)) {
+									xhr.withCredentials = true;
+								}
+							},
 						});
 						hls.loadSource(src);
 						hls.attachMedia(video);
