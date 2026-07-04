@@ -9,12 +9,18 @@
  * uploads — the encode runs on the creator's hardware — and mirrors what a future
  * desktop "studio" app would do locally.
  *
- * The ffmpeg core is self-hosted and same-origin (`/vendor/ffmpeg/*`, see
- * scripts/vendor-ffmpeg.ts) with the SINGLE-THREADED core, so there's no CDN/CSP
- * dependency and no COOP/COEP requirement — cross-origin Spaces images and embeds
- * keep working. Trade-off: single-threaded wasm is slower and memory-bounded
- * (~2-4GB), so large sources fall back to server-side encoding (see MAX_SOURCE_BYTES
- * and the caller's try/catch).
+ * Parallelism: each quality rung encodes in its OWN ffmpeg worker (own core),
+ * concurrently — so an 8-core machine encodes the whole ladder in about the time of
+ * the single slowest rung instead of the sum. We deliberately use the SINGLE-THREADED
+ * core: multi-threaded ffmpeg needs SharedArrayBuffer → top-level cross-origin
+ * isolation (COOP/COEP), which our single-document SPA can't adopt without breaking
+ * cross-origin game/software embeds. One worker per rung gets most of the multi-core
+ * win with zero isolation and zero embed risk. (The future studio app, an isolated
+ * document, can go fully multi-threaded.)
+ *
+ * The core is self-hosted, same-origin (`/vendor/ffmpeg/*`). Trade-off: parallel
+ * workers each hold a copy of the source, so peak memory scales with concurrency;
+ * large sources fall back to server-side encoding (MAX_SOURCE_BYTES + caller try/catch).
  */
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
@@ -24,7 +30,7 @@ const VENDOR_BASE = "/vendor/ffmpeg";
 
 /**
  * Above this source size we skip the browser encode and let the server transcode
- * (the wasm heap can't hold arbitrarily large decodes). Conservative on purpose.
+ * (each parallel worker holds a copy of the source, so memory multiplies). Conservative.
  */
 export const MAX_SOURCE_BYTES = 300 * 1024 * 1024; // 300MB
 
@@ -63,32 +69,23 @@ export function canTranscodeInBrowser(file: File): boolean {
 	return file.type.startsWith("video/") && file.size <= MAX_SOURCE_BYTES;
 }
 
-// ─── ffmpeg singleton ──────────────────────────────────────────────────────────
-
-let ffmpegPromise: Promise<FFmpeg> | null = null;
+// ─── ffmpeg instances ────────────────────────────────────────────────────────
 
 /**
- * Load the single-threaded ffmpeg core from the vendored, same-origin runtime.
- * `classWorkerURL` points at our copied ESM worker (whose sibling modules live
- * alongside it), so we never rely on the app bundler resolving ffmpeg's internal
+ * Load a fresh single-threaded ffmpeg core from the vendored, same-origin runtime.
+ * Each concurrent encode gets its own instance (own worker/core) and terminates it
+ * when done. `classWorkerURL` points at our copied ESM worker (whose sibling modules
+ * live alongside it), so we don't rely on the app bundler resolving ffmpeg's internal
  * `new Worker(new URL("./worker.js", import.meta.url))`.
  */
-function loadFFmpeg(): Promise<FFmpeg> {
-	if (ffmpegPromise) return ffmpegPromise;
-	ffmpegPromise = (async () => {
-		const ffmpeg = new FFmpeg();
-		await ffmpeg.load({
-			classWorkerURL: `${VENDOR_BASE}/worker.js`,
-			coreURL: `${VENDOR_BASE}/ffmpeg-core.js`,
-			wasmURL: `${VENDOR_BASE}/ffmpeg-core.wasm`,
-		});
-		return ffmpeg;
-	})();
-	// If load fails, don't cache the rejection — allow a later retry.
-	ffmpegPromise.catch(() => {
-		ffmpegPromise = null;
+async function createFFmpeg(): Promise<FFmpeg> {
+	const ffmpeg = new FFmpeg();
+	await ffmpeg.load({
+		classWorkerURL: `${VENDOR_BASE}/worker.js`,
+		coreURL: `${VENDOR_BASE}/ffmpeg-core.js`,
+		wasmURL: `${VENDOR_BASE}/ffmpeg-core.wasm`,
 	});
-	return ffmpegPromise;
+	return ffmpeg;
 }
 
 // ─── Source probing ──────────────────────────────────────────────────────────
@@ -120,6 +117,58 @@ function probeSource(file: File): Promise<{ duration: number; width: number; hei
 	});
 }
 
+/**
+ * Extract a poster frame with a <video> + canvas (no ffmpeg instance needed). Runs
+ * concurrently with the encodes. Best-effort: resolves null if the browser can't
+ * decode/seek the source (the server can still derive a poster during packaging).
+ */
+function extractPoster(file: File, atSeconds: number): Promise<Uint8Array | null> {
+	return new Promise((resolve) => {
+		const url = URL.createObjectURL(file);
+		const video = document.createElement("video");
+		video.muted = true;
+		video.preload = "auto";
+		let settled = false;
+		const finish = (val: Uint8Array | null) => {
+			if (settled) return;
+			settled = true;
+			URL.revokeObjectURL(url);
+			resolve(val);
+		};
+		video.onloadedmetadata = () => {
+			const dur = Number.isFinite(video.duration) ? video.duration : 0;
+			video.currentTime = Math.min(atSeconds, Math.max(0, dur - 0.1));
+		};
+		video.onseeked = () => {
+			try {
+				const canvas = document.createElement("canvas");
+				canvas.width = video.videoWidth;
+				canvas.height = video.videoHeight;
+				const ctx = canvas.getContext("2d");
+				if (!ctx || !canvas.width) return finish(null);
+				ctx.drawImage(video, 0, 0);
+				canvas.toBlob(
+					(blob) => {
+						if (!blob) return finish(null);
+						blob
+							.arrayBuffer()
+							.then((buf) => finish(new Uint8Array(buf)))
+							.catch(() => finish(null));
+					},
+					"image/jpeg",
+					0.85,
+				);
+			} catch {
+				finish(null);
+			}
+		};
+		video.onerror = () => finish(null);
+		// Safety net for sources that never fire seeked.
+		setTimeout(() => finish(null), 15000);
+		video.src = url;
+	});
+}
+
 /** Build the source-gated variant ladder (same rungs as the server encoder). */
 function ladderFor(sourceWidth: number, sourceHeight: number): VariantSpec[] {
 	const rungs: Omit<VariantSpec, "width">[] = [];
@@ -146,9 +195,62 @@ function sourceExt(file: File): string {
 }
 
 /**
+ * Encode one variant in a dedicated ffmpeg worker. Reads a FRESH copy of the source
+ * (writeFile transfers the buffer, so instances can't share one), and terminates the
+ * worker when done to free its memory. `onFraction` reports this variant's 0–1 progress.
+ */
+async function encodeVariant(
+	file: File,
+	inputName: string,
+	v: VariantSpec,
+	onFraction: (f: number) => void,
+): Promise<Uint8Array> {
+	const ffmpeg = await createFFmpeg();
+	const onTick = ({ progress }: { progress: number }) => {
+		onFraction(Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0);
+	};
+	ffmpeg.on("progress", onTick);
+	try {
+		await ffmpeg.writeFile(inputName, await fetchFile(file));
+		const outName = `${v.name}.mp4`;
+		await ffmpeg.exec([
+			"-i",
+			inputName,
+			"-vf",
+			`scale=-2:${v.height}`,
+			"-c:v",
+			"libx264",
+			"-preset",
+			"veryfast",
+			"-b:v",
+			v.bitrate,
+			"-maxrate",
+			v.bitrate,
+			"-bufsize",
+			`${Number.parseInt(v.bitrate, 10) * 2}k`,
+			// Force a keyframe every 6s so the server can segment HLS on copy (no re-encode).
+			"-force_key_frames",
+			"expr:gte(t,n_forced*6)",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"128k",
+			"-movflags",
+			"+faststart",
+			outName,
+		]);
+		return (await ffmpeg.readFile(outName)) as Uint8Array;
+	} finally {
+		ffmpeg.off("progress", onTick);
+		ffmpeg.terminate();
+	}
+}
+
+/**
  * Transcode a video File into an MP4 variant ladder + poster thumbnail, entirely in
- * the browser. Rejects if the wasm encode fails (e.g. OOM) — the caller should fall
- * back to a plain source upload + server-side transcode.
+ * the browser — each rung in its own worker, running concurrently up to the core
+ * count. Rejects if any encode fails (e.g. OOM); the caller should fall back to a
+ * plain source upload + server-side transcode.
  */
 export async function transcodeInBrowser(
 	file: File,
@@ -156,120 +258,66 @@ export async function transcodeInBrowser(
 ): Promise<TranscodeResult> {
 	const startedAt = performance.now();
 
-	// Mutable band the progress handler maps ffmpeg's 0–1 into (set per exec below).
-	let bandBase = 0;
-	let bandSpan = 0;
-	let stage = "Preparing";
+	onProgress?.({ stage: "Preparing", percent: 1, etaSeconds: null });
+	const { duration, width, height } = await probeSource(file);
+	const variants = ladderFor(width, height);
+	const inputName = `input.${sourceExt(file)}`;
 
-	const report = (fraction: number) => {
-		const percent = Math.max(0, Math.min(99, Math.round(bandBase + fraction * bandSpan)));
+	// Poster extraction is independent of the encodes — start it concurrently.
+	const posterPromise = extractPoster(file, Math.max(1, Math.round(duration * 0.25))).catch(
+		() => null,
+	);
+
+	// Overall progress = mean of per-variant fractions, mapped to the 3–95 band.
+	const fractions = new Array(variants.length).fill(0);
+	const ENCODE_START = 3;
+	const ENCODE_END = 95;
+	const report = () => {
+		const done = fractions.filter((f) => f >= 1).length;
+		const mean = fractions.reduce((a, b) => a + b, 0) / fractions.length;
+		const percent = Math.max(
+			1,
+			Math.min(99, Math.round(ENCODE_START + mean * (ENCODE_END - ENCODE_START))),
+		);
 		const elapsed = (performance.now() - startedAt) / 1000;
-		// ETA from overall throughput so far; needs a little progress to be meaningful.
 		const eta =
 			percent >= 5 && percent < 100 ? Math.round((elapsed / percent) * (100 - percent)) : null;
+		const stage =
+			done < variants.length ? `Encoding video (${done}/${variants.length})` : "Finishing up";
 		onProgress?.({ stage, percent, etaSeconds: eta });
 	};
+	report();
 
-	onProgress?.({ stage: "Loading encoder", percent: 1, etaSeconds: null });
-	const [{ duration, width, height }, ffmpeg] = await Promise.all([
-		probeSource(file),
-		loadFFmpeg(),
-	]);
+	// Concurrency: one encode per available core (leaving one for the UI), capped at
+	// the number of rungs. A worker pool pulls rungs off a shared index.
+	const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+	const maxParallel = Math.max(1, Math.min(variants.length, cores - 1));
 
-	const variants = ladderFor(width, height);
-	const ext = sourceExt(file);
-	const inputName = `input.${ext}`;
-
-	// ffmpeg's progress event fires with { progress: 0..1 } during each exec.
-	const onTick = ({ progress }: { progress: number; time: number }) => {
-		report(Number.isFinite(progress) ? progress : 0);
+	const encoded: EncodedVariant[] = new Array(variants.length);
+	let nextIndex = 0;
+	const pump = async () => {
+		while (true) {
+			const i = nextIndex++;
+			if (i >= variants.length) return;
+			const v = variants[i];
+			const data = await encodeVariant(file, inputName, v, (f) => {
+				fractions[i] = f;
+				report();
+			});
+			encoded[i] = { ...v, data };
+			fractions[i] = 1;
+			report();
+		}
 	};
-	ffmpeg.on("progress", onTick);
+	await Promise.all(Array.from({ length: maxParallel }, pump));
 
-	const result: TranscodeResult = {
-		variants: [],
-		thumbnail: null,
+	const thumbnail = await posterPromise;
+	onProgress?.({ stage: "Done", percent: 100, etaSeconds: 0 });
+	return {
+		variants: encoded,
+		thumbnail,
 		durationSeconds: Math.round(duration),
 		width,
 		height,
 	};
-
-	try {
-		await ffmpeg.writeFile(inputName, await fetchFile(file));
-
-		// Encode band: 3%→92%, split evenly across the ladder.
-		const ENCODE_START = 3;
-		const ENCODE_END = 92;
-		const per = (ENCODE_END - ENCODE_START) / variants.length;
-
-		for (let i = 0; i < variants.length; i++) {
-			const v = variants[i];
-			stage = `Encoding ${v.name}`;
-			bandBase = ENCODE_START + i * per;
-			bandSpan = per;
-			report(0);
-
-			const outName = `${v.name}.mp4`;
-			await ffmpeg.exec([
-				"-i",
-				inputName,
-				"-vf",
-				`scale=-2:${v.height}`,
-				"-c:v",
-				"libx264",
-				"-preset",
-				"veryfast",
-				"-b:v",
-				v.bitrate,
-				"-maxrate",
-				v.bitrate,
-				"-bufsize",
-				`${Number.parseInt(v.bitrate, 10) * 2}k`,
-				// Force a keyframe every 6s so the server can segment HLS on copy (no re-encode).
-				"-force_key_frames",
-				"expr:gte(t,n_forced*6)",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"128k",
-				"-movflags",
-				"+faststart",
-				outName,
-			]);
-
-			const data = (await ffmpeg.readFile(outName)) as Uint8Array;
-			result.variants.push({ ...v, data });
-			await ffmpeg.deleteFile(outName).catch(() => {});
-		}
-
-		// Poster thumbnail at ~25% (bounded to ≥1s), best-effort.
-		stage = "Extracting thumbnail";
-		bandBase = ENCODE_END;
-		bandSpan = 99 - ENCODE_END;
-		report(0);
-		try {
-			const at = Math.max(1, Math.round(duration * 0.25));
-			await ffmpeg.exec([
-				"-ss",
-				String(at),
-				"-i",
-				inputName,
-				"-frames:v",
-				"1",
-				"-q:v",
-				"3",
-				"thumb.jpg",
-			]);
-			result.thumbnail = (await ffmpeg.readFile("thumb.jpg")) as Uint8Array;
-			await ffmpeg.deleteFile("thumb.jpg").catch(() => {});
-		} catch {
-			// Thumbnail is optional — the server can still derive one.
-		}
-
-		onProgress?.({ stage: "Done", percent: 100, etaSeconds: 0 });
-		return result;
-	} finally {
-		ffmpeg.off("progress", onTick);
-		await ffmpeg.deleteFile(inputName).catch(() => {});
-	}
 }
