@@ -2,12 +2,24 @@
 interface TranscodingStatusProps {
 	status: string;
 	progress: number;
+	etaSeconds?: number | null;
 	errorMessage?: string;
+}
+
+/** Human ETA, e.g. "~2m 30s remaining". */
+function formatEta(sec: number): string {
+	if (sec < 60) return `~${sec}s remaining`;
+	const m = Math.floor(sec / 60);
+	const s = sec % 60;
+	if (m < 60) return s > 0 ? `~${m}m ${s}s remaining` : `~${m}m remaining`;
+	const h = Math.floor(m / 60);
+	return `~${h}h ${m % 60}m remaining`;
 }
 
 export default function TranscodingStatus({
 	status,
 	progress,
+	etaSeconds,
 	errorMessage,
 }: TranscodingStatusProps) {
 	if (status === "completed") return null;
@@ -31,6 +43,9 @@ export default function TranscodingStatus({
 						<span className="font-mono">{progress}%</span>
 					</div>
 					<progress className="progress progress-primary w-full" value={progress} max="100" />
+					{etaSeconds != null && etaSeconds > 0 && (
+						<span className="text-xs text-base-content/50 self-end">{formatEta(etaSeconds)}</span>
+					)}
 				</div>
 			)}
 

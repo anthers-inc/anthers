@@ -51,13 +51,19 @@ async function ffprobe(filePath: string) {
 	return JSON.parse(stdout);
 }
 
-/** Transcode to a single HLS variant */
+/**
+ * Transcode to a single HLS variant. `onTick(outTimeSec, speed)` fires as ffmpeg
+ * reports progress (encoded position in seconds + speed as a ×realtime factor),
+ * parsed from `-progress pipe:1`. `-nostats` keeps the stderr buffer small so a
+ * long encode can't block on it.
+ */
 async function ffmpegHls(
 	inputPath: string,
 	outputDir: string,
 	height: number,
 	bitrate: string,
 	name: string,
+	onTick?: (outTimeSec: number, speed: number) => void,
 ) {
 	const playlist = join(outputDir, `${name}.m3u8`);
 	const segmentPattern = join(outputDir, `${name}_%03d.ts`);
@@ -88,10 +94,50 @@ async function ffmpegHls(
 			"-f",
 			"hls",
 			playlist,
+			"-progress",
+			"pipe:1",
+			"-nostats",
 			"-y",
 		],
 		{ stdout: "pipe", stderr: "pipe" },
 	);
+
+	// Stream ffmpeg's -progress output (key=value blocks) for live position + speed.
+	if (onTick && proc.stdout) {
+		void (async () => {
+			const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+			const decoder = new TextDecoder();
+			let buf = "";
+			let speed = 0;
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					buf += decoder.decode(value, { stream: true });
+					const lines = buf.split("\n");
+					buf = lines.pop() ?? "";
+					for (const line of lines) {
+						const eq = line.indexOf("=");
+						if (eq < 0) continue;
+						const key = line.slice(0, eq).trim();
+						const val = line.slice(eq + 1).trim();
+						if (key === "speed") {
+							const s = Number.parseFloat(val); // "1.5x" → 1.5
+							if (Number.isFinite(s) && s > 0) speed = s;
+						} else if (key === "out_time") {
+							const m = val.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+							if (m) {
+								const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+								if (Number.isFinite(sec)) onTick(sec, speed);
+							}
+						}
+					}
+				}
+			} catch {
+				// stream closed on process exit
+			}
+		})();
+	}
 
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
@@ -255,11 +301,36 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
 		await mkdir(outputDir, { recursive: true });
 
-		const progressPerVariant = Math.floor(60 / variants.length);
+		// Variants span the 10→80 range; within each, ffmpeg's -progress drives a
+		// smooth sub-percentage and a live ETA (remaining encode-seconds ÷ speed).
+		const spanStart = 10;
+		const spanEnd = 80;
+		const perVariant = (spanEnd - spanStart) / variants.length;
 		for (let i = 0; i < variants.length; i++) {
 			const v = variants[i];
-			await ffmpegHls(localPath, outputDir, v.height, v.bitrate, v.name);
-			await updateJobProgress(jobId, 10 + (i + 1) * progressPerVariant);
+			const variantBase = spanStart + i * perVariant;
+			let lastPct = -1;
+			let lastWriteMs = 0;
+			await ffmpegHls(localPath, outputDir, v.height, v.bitrate, v.name, (outSec, speed) => {
+				if (duration <= 0) return;
+				const frac = Math.min(1, outSec / duration);
+				const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
+				// Remaining = rest of this variant + full duration for each later variant.
+				const remainingSec = Math.max(0, duration - outSec) + (variants.length - 1 - i) * duration;
+				const eta = speed > 0 ? Math.round(remainingSec / speed) : null;
+				const now = Date.now();
+				if (pct !== lastPct && now - lastWriteMs >= 1000) {
+					lastPct = pct;
+					lastWriteMs = now;
+					// Fire-and-forget so the progress stream isn't blocked on the DB write.
+					db.update(transcodingJobs)
+						.set({ progress: pct, etaSeconds: eta })
+						.where(eq(transcodingJobs.id, jobId))
+						.execute()
+						.catch(() => {});
+				}
+			});
+			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 		}
 
 		// 4. Generate master playlist
@@ -312,6 +383,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.set({
 				status: "completed",
 				progress: 100,
+				etaSeconds: null,
 				hlsManifestUrl: manifestUrl,
 			})
 			.where(eq(transcodingJobs.id, jobId));

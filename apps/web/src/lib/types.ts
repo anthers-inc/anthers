@@ -98,6 +98,7 @@ export interface TranscodingJob {
 	mediaType: string;
 	status: string;
 	progress: number | null;
+	etaSeconds: number | null;
 	errorMessage: string | null;
 	hlsManifestUrl: string | null;
 	outputFileUrl: string | null;
