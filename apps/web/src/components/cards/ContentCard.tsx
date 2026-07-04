@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { postUrl } from "../../lib/postUrl";
 import type { PostListItem } from "../../lib/types";
-import { LockedCover, unlockLabel } from "../post/unlock";
+import { LockedCover, UnlockModal, unlockLabel } from "../post/unlock";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
 export default function ContentCard({ post }: { post: PostListItem }) {
+	const [showUnlock, setShowUnlock] = useState(false);
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
 		month: "short",
 		day: "numeric",
 		year: "numeric",
 	});
 
-	// Locked to the viewer → the whole card is a gated preview: blurred cover, visible
-	// title, and an unlock affordance (the card already links through to the post).
+	// Locked to the viewer → the card is a gated preview (blurred cover, visible title)
+	// and clicking opens the unlock modal instead of navigating into the post.
 	const locked = post.access ? !post.access.canAccess : false;
 
-	return (
-		<Link
-			to={postUrl(post)}
-			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
-		>
+	const content = (
+		<>
 			{/* Thumbnail / cover area */}
 			{locked ? (
 				<LockedCover thumbnail={post.thumbnail} className="aspect-video" />
@@ -89,7 +88,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 						<p className="text-xs text-base-content/40 italic line-clamp-2">
 							Join to unlock this post and other members-only work.
 						</p>
-						{/* Visual affordance only — the whole card links to the post. */}
+						{/* Visual affordance only — the whole card opens the unlock modal. */}
 						<span className="btn btn-sm btn-outline btn-block mt-1 pointer-events-none">
 							{unlockLabel(post.access)}
 						</span>
@@ -107,6 +106,28 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 					</div>
 				)}
 			</div>
+		</>
+	);
+
+	const cardClass =
+		"card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left";
+
+	if (locked && post.access) {
+		return (
+			<>
+				<button type="button" className={`${cardClass} w-full`} onClick={() => setShowUnlock(true)}>
+					{content}
+				</button>
+				{showUnlock && (
+					<UnlockModal post={post} access={post.access} onClose={() => setShowUnlock(false)} />
+				)}
+			</>
+		);
+	}
+
+	return (
+		<Link to={postUrl(post)} className={cardClass}>
+			{content}
 		</Link>
 	);
 }
