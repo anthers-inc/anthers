@@ -32,6 +32,13 @@ interface DraftImage {
 	preview: string;
 }
 
+/** How a video slot is filled: encode in the browser, or upload the raw source and let
+ *  the server process it. Video-only — audio always uploads raw + server-normalizes. */
+export type EncodeMode = "device" | "server";
+
+/** Media-slot lifecycle, derived (no new schema) from source presence + transcode status. */
+export type MediaLifecycle = "empty" | "uploading" | "processing" | "ready" | "failed";
+
 /** In-form working copy of one content element. */
 export interface ContentElementDraft {
 	/** Stable local key for React lists (not the DB id). */
@@ -53,11 +60,37 @@ export interface ContentElementDraft {
 	audioName: string | null;
 	embedUrl: string;
 	metadataNote: string;
+	/** Per-slot fill choice for video (see EncodeMode). */
+	encodeMode: EncodeMode;
+	/** Latest server transcode status for an already-saved media element (edit mode) —
+	 *  drives the processing/ready/failed lifecycle badge. Null for fresh slots. */
+	transcodingStatus: string | null;
 	uploading: boolean;
 	progress: number;
 	/** Label for the current encode/upload step (client transcode). */
 	transcodeStage: string;
 	transcodeEta: number | null;
+}
+
+/** Derive a media slot's lifecycle for display. `processing`/`ready`/`failed` come from
+ *  the saved element's transcode status; a freshly uploaded (unsaved) source reads
+ *  `ready` since its transcode job is only queued on save. */
+export function mediaLifecycle(el: ContentElementDraft, kind: "video" | "audio"): MediaLifecycle {
+	if (el.uploading) return "uploading";
+	const hasSource = kind === "video" ? Boolean(el.videoKey) : Boolean(el.audioKey);
+	if (!hasSource) return "empty";
+	if (el.transcodingStatus === "failed") return "failed";
+	if (el.transcodingStatus === "pending" || el.transcodingStatus === "processing")
+		return "processing";
+	return "ready";
+}
+
+/** A media element (video/audio) that still lacks a source. Publish is blocked while any
+ *  such slot exists; drafting/saving is always allowed. */
+export function isUnfilledMediaSlot(el: ContentElementDraft): boolean {
+	return (
+		(el.contentType === "video" && !el.videoKey) || (el.contentType === "audio" && !el.audioKey)
+	);
 }
 
 /** Element input shape accepted by the posts create/patch API. */
@@ -110,6 +143,8 @@ export function newElement(): ContentElementDraft {
 		audioName: null,
 		embedUrl: "",
 		metadataNote: "",
+		encodeMode: "device",
+		transcodingStatus: null,
 		uploading: false,
 		progress: 0,
 		transcodeStage: "",
@@ -138,6 +173,8 @@ export function draftFromElement(el: ContentElement): ContentElementDraft {
 		audioName: el.audioFile ? "Existing audio" : null,
 		embedUrl: el.embedUrl ?? "",
 		metadataNote: note,
+		encodeMode: "device",
+		transcodingStatus: el.transcoding?.status ?? null,
 		uploading: false,
 		progress: 0,
 		transcodeStage: "",
@@ -301,13 +338,15 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 			transcodeStage: "",
 			transcodeEta: null,
 			videoVariants: [],
+			transcodingStatus: null,
 			...(kind === "video" ? { videoName: file.name } : { audioName: file.name }),
 		});
 		try {
-			// Video: encode in the browser (H.264 MP4 ladder) and upload the outputs; the
-			// server just remuxes them to HLS. Falls back to a plain source upload +
-			// server-side transcode if the browser encode can't run or fails.
-			if (kind === "video" && canTranscodeInBrowser(file)) {
+			// Video, "Encode on device": encode in the browser (H.264 MP4 ladder) and upload
+			// the outputs; the server just remuxes them to HLS. Falls back to a plain source
+			// upload + server-side transcode if the browser encode can't run or fails. In
+			// "Upload & we process" mode we skip straight to the raw upload (server encodes).
+			if (kind === "video" && el.encodeMode === "device" && canTranscodeInBrowser(file)) {
 				try {
 					const res = await uploadClientTranscodedVideo(file, (p) =>
 						onPatch(el.localKey, {
@@ -470,6 +509,9 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 					progress={el.progress}
 					stage={el.transcodeStage}
 					etaSeconds={el.transcodeEta}
+					lifecycle={mediaLifecycle(el, "video")}
+					encodeMode={el.encodeMode}
+					onModeChange={(mode) => onPatch(el.localKey, { encodeMode: mode })}
 					onSelect={(file) => handleMedia(file, "video")}
 				/>
 			)}
@@ -481,6 +523,7 @@ function ElementCard({ element, index, total, onPatch, onRemove, onMove }: Eleme
 					hasKey={Boolean(el.audioKey)}
 					uploading={el.uploading}
 					progress={el.progress}
+					lifecycle={mediaLifecycle(el, "audio")}
 					onSelect={(file) => handleMedia(file, "audio")}
 				/>
 			)}
@@ -546,6 +589,9 @@ interface MediaFieldProps {
 	progress: number;
 	stage?: string;
 	etaSeconds?: number | null;
+	lifecycle: MediaLifecycle;
+	encodeMode?: EncodeMode;
+	onModeChange?: (mode: EncodeMode) => void;
 	onSelect: (file: File) => void;
 }
 
@@ -556,6 +602,63 @@ function formatEta(seconds: number): string {
 	return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+/** Per-lifecycle badge shown next to the filename once a slot has a source. */
+function LifecycleBadge({ lifecycle }: { lifecycle: MediaLifecycle }) {
+	switch (lifecycle) {
+		case "processing":
+			return <span className="badge badge-warning badge-sm gap-1">Processing…</span>;
+		case "failed":
+			return <span className="badge badge-error badge-sm">Processing failed</span>;
+		case "ready":
+			return <span className="badge badge-success badge-sm">Ready</span>;
+		default:
+			return null;
+	}
+}
+
+/** Video-only: choose whether the browser encodes the ladder or the server does. Shown
+ *  only for an empty slot (the choice is moot once a source is uploaded). */
+function EncodeModeChooser({
+	encodeMode,
+	onModeChange,
+}: {
+	encodeMode: EncodeMode;
+	onModeChange: (mode: EncodeMode) => void;
+}) {
+	const opts: { mode: EncodeMode; label: string; hint: string }[] = [
+		{
+			mode: "device",
+			label: "Encode on device",
+			hint: "Faster to publish · uses your CPU · stay until it finishes",
+		},
+		{
+			mode: "server",
+			label: "Upload & we process",
+			hint: "Leave anytime · we encode on our servers",
+		},
+	];
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="join">
+				{opts.map((o) => (
+					<button
+						key={o.mode}
+						type="button"
+						className={`btn btn-sm join-item ${encodeMode === o.mode ? "btn-primary" : "btn-outline"}`}
+						aria-pressed={encodeMode === o.mode}
+						onClick={() => onModeChange(o.mode)}
+					>
+						{o.label}
+					</button>
+				))}
+			</div>
+			<p className="text-xs text-base-content/50">
+				{opts.find((o) => o.mode === encodeMode)?.hint}
+			</p>
+		</div>
+	);
+}
+
 function MediaField({
 	kind,
 	fileName,
@@ -564,6 +667,9 @@ function MediaField({
 	progress,
 	stage,
 	etaSeconds,
+	lifecycle,
+	encodeMode,
+	onModeChange,
 	onSelect,
 }: MediaFieldProps) {
 	const maxSize = kind === "video" ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024;
@@ -575,9 +681,9 @@ function MediaField({
 						<span className="text-sm truncate flex-1">{fileName || `Existing ${kind}`}</span>
 						{uploading ? (
 							<span className="text-xs font-mono">{progress}%</span>
-						) : hasKey ? (
-							<span className="badge badge-success badge-sm">Uploaded</span>
-						) : null}
+						) : (
+							<LifecycleBadge lifecycle={lifecycle} />
+						)}
 					</div>
 					{uploading && (
 						<>
@@ -597,14 +703,25 @@ function MediaField({
 							)}
 						</>
 					)}
+					{!uploading && lifecycle === "processing" && (
+						<p className="text-xs text-base-content/40">
+							We're processing this {kind} — you can save, leave, and come back; it'll be ready
+							shortly.
+						</p>
+					)}
 				</div>
 			) : (
-				<FileUpload
-					accept={`${kind}/*`}
-					maxSize={maxSize}
-					onFileSelect={onSelect}
-					label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
-				/>
+				<div className="flex flex-col gap-3">
+					{kind === "video" && encodeMode && onModeChange && (
+						<EncodeModeChooser encodeMode={encodeMode} onModeChange={onModeChange} />
+					)}
+					<FileUpload
+						accept={`${kind}/*`}
+						maxSize={maxSize}
+						onFileSelect={onSelect}
+						label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
+					/>
+				</div>
 			)}
 		</FormField>
 	);

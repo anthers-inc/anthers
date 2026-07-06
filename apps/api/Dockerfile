@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y ffmpeg curl && rm -rf /var/lib/apt/list
 COPY package.json bun.lock ./
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
+COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/studio/package.json apps/studio/
