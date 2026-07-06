@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { client } from "../lib/rpc";
+
+import { client } from "@anthers/web-shared/rpc";
 import type {
 	AttentionSummary,
 	BoostAllocation,
 	CreatorGate,
 	PoolDistribution,
 	Subscription,
-} from "../lib/types";
+} from "@anthers/web-shared/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
 /*  Constants & V2 economics                                           */

@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { PostListItem, Project, PublicUser } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BellIcon,
 	BookmarkIcon,
@@ -16,9 +20,6 @@ import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { client } from "../lib/rpc";
-import type { PostListItem, Project, PublicUser } from "../lib/types";
 
 function FeedSidebarContent({
 	contentType,

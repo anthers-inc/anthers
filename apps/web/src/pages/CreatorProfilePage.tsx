@@ -1,4 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
+import type {
+	CreatorGate,
+	CreatorStatus,
+	PostListItem,
+	Project,
+	PublicUser,
+} from "@anthers/web-shared/types";
+import FormField from "@anthers/web-shared/ui/FormField";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	CameraIcon,
 	CheckCircleIcon,
@@ -13,11 +25,6 @@ import { Link, useParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import EmptyState from "../components/ui/EmptyState";
-import FormField from "../components/ui/FormField";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
-import type { CreatorGate, CreatorStatus, PostListItem, Project, PublicUser } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -766,11 +773,7 @@ export default function CreatorProfilePage() {
 									const post = entry.item as PostListItem;
 									const access = isPostAccessible(post, isOwnProfile);
 									return (
-										<GatedContentWrapper
-											key={`post-${post.id}`}
-											post={post}
-											access={access}
-										>
+										<GatedContentWrapper key={`post-${post.id}`} post={post} access={access}>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -803,11 +806,7 @@ export default function CreatorProfilePage() {
 								{videoPosts.map((post) => {
 									const access = isPostAccessible(post, isOwnProfile);
 									return (
-										<GatedContentWrapper
-											key={post.id}
-											post={post}
-											access={access}
-										>
+										<GatedContentWrapper key={post.id} post={post} access={access}>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -826,11 +825,7 @@ export default function CreatorProfilePage() {
 								{audioPosts.map((post) => {
 									const access = isPostAccessible(post, isOwnProfile);
 									return (
-										<GatedContentWrapper
-											key={post.id}
-											post={post}
-											access={access}
-										>
+										<GatedContentWrapper key={post.id} post={post} access={access}>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);
@@ -849,11 +844,7 @@ export default function CreatorProfilePage() {
 								{textPosts.map((post) => {
 									const access = isPostAccessible(post, isOwnProfile);
 									return (
-										<GatedContentWrapper
-											key={post.id}
-											post={post}
-											access={access}
-										>
+										<GatedContentWrapper key={post.id} post={post} access={access}>
 											<ContentCard post={post} />
 										</GatedContentWrapper>
 									);

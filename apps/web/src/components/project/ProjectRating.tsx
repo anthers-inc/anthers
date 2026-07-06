@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
+import type { RatingAggregate } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
-import { useAuth } from "../../lib/auth";
-import { client } from "../../lib/rpc";
-import type { RatingAggregate } from "../../lib/types";
 import StarRating from "../ui/StarRating";
 
 export default function ProjectRating({ slug }: { slug: string }) {

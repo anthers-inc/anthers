@@ -10,12 +10,17 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
+COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/studio/package.json apps/studio/
 RUN bun install --frozen-lockfile
 
-# Build the Studio SPA, then serve it.
+# Copy source. The Studio SPA imports @anthers/web-shared (the shared authoring stack +
+# theme.css), so the packages/ source must be present for the bundler and Tailwind's
+# @source scan. The type-only `AppType` import from apps/api is erased at build, so the
+# API source isn't needed here.
+COPY packages/ packages/
 COPY apps/studio/ apps/studio/
 RUN cd apps/studio && bun run build
 

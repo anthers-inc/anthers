@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Keep the build context clean — dependencies and build artifacts are (re)generated
+# inside the image (bun install, vendor:ffmpeg, bun run build). Mirrors what DO App
+# Platform builds from a fresh git checkout.
+**/node_modules
+**/dist
+**/.git
+# Vendored ffmpeg.wasm runtime (~32MB) — copied from node_modules at build time.
+apps/*/public/vendor
+target
+*.log
+.env
+.env.*
+data

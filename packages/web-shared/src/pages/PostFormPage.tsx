@@ -23,6 +23,7 @@ import AccessTables, {
 import ContentElementList, {
 	type ContentElementDraft,
 	draftFromElement,
+	isUnfilledMediaSlot,
 	serializeElement,
 } from "../components/post/ContentElementList";
 import FormField from "../components/ui/FormField";
@@ -81,6 +82,13 @@ export default function PostFormPage() {
 	const forceDownloadOnly = elements.some(
 		(e) => e.contentType === "physical" || e.contentType === "service",
 	);
+
+	// Publish gating (mirrored server-side): a post can be saved as a draft at any time,
+	// but publishing is blocked while a media slot still lacks a source or an upload is in
+	// flight. This is what decouples drafting from filling media (E50 Phase 3).
+	const unfilledMediaSlots = elements.filter(isUnfilledMediaSlot);
+	const anyUploading = elements.some((e) => e.uploading);
+	const canPublish = unfilledMediaSlots.length === 0 && !anyUploading;
 
 	useEffect(() => {
 		if (forceDownloadOnly) {
@@ -178,6 +186,9 @@ export default function PostFormPage() {
 			contents: elements.map(serializeElement),
 		};
 
+		// After save: publish → the live post view (a separate origin on the Studio, which
+		// ConsumerRedirect carries the creator to); draft → stay in the Studio editor so
+		// they can keep filling media (E50 Phase 3 — authoring lives in the Studio, v1).
 		try {
 			if (isEdit && slug) {
 				const res = await client.api.content.posts[":slug"].$patch({
@@ -189,7 +200,7 @@ export default function PostFormPage() {
 					return;
 				}
 				const { post } = (await res.json()) as { post: Post };
-				navigate(postUrl(post));
+				navigate(publish ? postUrl(post) : `/posts/${post.slug}/edit`);
 			} else {
 				const json = projectId ? { ...base, projectId: Number(projectId) } : base;
 				const res = await client.api.content.posts.$post({ json });
@@ -198,7 +209,7 @@ export default function PostFormPage() {
 					return;
 				}
 				const { post } = (await res.json()) as { post: Post };
-				navigate(postUrl(post));
+				navigate(publish ? postUrl(post) : `/posts/${post.slug}/edit`);
 			}
 		} catch {
 			setError("Failed to save post.");
@@ -384,11 +395,21 @@ export default function PostFormPage() {
 							type="button"
 							className="btn btn-primary"
 							onClick={() => handleSubmit(true)}
-							disabled={saving}
+							disabled={saving || !canPublish}
+							title={canPublish ? undefined : "Fill every media slot before publishing"}
 						>
 							{saving ? "Saving..." : "Publish Post"}
 						</button>
 					</div>
+					{!canPublish && (
+						<p className="text-xs text-base-content/50">
+							{anyUploading
+								? "An upload is still in progress — you can save a draft now and publish once it finishes."
+								: `Add a source to ${unfilledMediaSlots.length} media ${
+										unfilledMediaSlots.length === 1 ? "slot" : "slots"
+									} to publish. You can save this as a draft and fill them anytime.`}
+						</p>
+					)}
 				</section>
 			</form>
 		</div>

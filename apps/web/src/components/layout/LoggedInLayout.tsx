@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
 import {
 	Bars3Icon,
 	ChartBarIcon,
@@ -10,7 +12,6 @@ import {
 	UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useAuth } from "../../lib/auth";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
 import SearchBar from "./SearchBar";

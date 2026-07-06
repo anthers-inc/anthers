@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import { useAuth } from "../../lib/auth";
-import { client } from "../../lib/rpc";
 
 /** Persistent prompt shown to logged-in users who haven't verified their email. */
 export default function VerificationBanner() {

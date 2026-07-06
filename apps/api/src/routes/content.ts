@@ -284,6 +284,25 @@ function elementValues(el: z.infer<typeof contentElementSchema>, postId: number,
 }
 
 /**
+ * Video/audio elements that still lack a source. Publishing is blocked while any exist
+ * (mirrors the Studio's client-side publish gate — E50 Phase 3); drafts save freely.
+ * Accepts both the validated create/patch input and raw DB rows.
+ */
+function unfilledMediaSlots(
+	elements: readonly {
+		contentType: string;
+		videoFile?: string | null;
+		audioFile?: string | null;
+	}[],
+): number {
+	return elements.filter(
+		(el) =>
+			(el.contentType === "video" && !el.videoFile) ||
+			(el.contentType === "audio" && !el.audioFile),
+	).length;
+}
+
+/**
  * Client-transcode transport: a browser upload may hand us a pre-encoded MP4 variant
  * ladder in the element's metadata (see apps/web/src/lib/transcode.ts). When present,
  * the server only remuxes to HLS (`package-video`) instead of re-encoding.
@@ -732,6 +751,11 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
+		// A post can only be published once every media slot has a source (drafts are free).
+		if (data.isPublished && unfilledMediaSlots(data.contents) > 0) {
+			return c.json({ error: "Add a source to every media element before publishing." }, 400);
+		}
+
 		// Explicit slug must be free; otherwise derive a unique one from the title.
 		let slug: string;
 		if (data.slug) {
@@ -857,6 +881,24 @@ const contentRoutes = new Hono()
 		const existing = await findPostRow(slug);
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+
+		// Publishing requires every media slot filled (drafts stay free). Validate before any
+		// writes — check the incoming elements when provided, else the post's current ones.
+		if (data.isPublished === true) {
+			const elementsForGate =
+				data.contents ??
+				(await db
+					.select({
+						contentType: postContents.contentType,
+						videoFile: postContents.videoFile,
+						audioFile: postContents.audioFile,
+					})
+					.from(postContents)
+					.where(eq(postContents.postId, existing.id)));
+			if (unfilledMediaSlots(elementsForGate) > 0) {
+				return c.json({ error: "Add a source to every media element before publishing." }, 400);
+			}
+		}
 
 		if (data.slug && data.slug !== existing.slug) {
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);

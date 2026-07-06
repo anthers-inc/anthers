@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
+import type { Subscription, SubscriptionTierOption } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -10,9 +14,6 @@ import {
 	type SankeyNodeProps,
 	useChartWidth,
 } from "recharts";
-import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
-import type { Subscription, SubscriptionTierOption } from "../lib/types";
 
 // Sales tax rates file retained for reference; we use the national average here.
 // import { STATE_SALES_TAX_RATES } from "../lib/sales-tax-rates";

@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import type { GameJam } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	CalendarIcon,
 	ClockIcon,
@@ -12,9 +16,6 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import type { GameJam } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

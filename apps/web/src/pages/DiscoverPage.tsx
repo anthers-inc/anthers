@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { Project, PublicUser } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BoltIcon,
 	GlobeAltIcon,
@@ -12,9 +16,6 @@ import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { client } from "../lib/rpc";
-import type { Project, PublicUser } from "../lib/types";
 
 // Exploration modes
 const EXPLORE_MODES = [

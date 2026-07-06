@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"jsx": "react-jsx",
+		"baseUrl": ".",
+		// Bun types are pulled in for typecheck only — the shared client layer bundles
+		// into browser SPAs, but the type-only `import type { AppType }` from apps/api
+		// (in lib/rpc.ts) transitively reaches Bun-only files, and without these types
+		// every transitive global surfaces as a TS error. Mirrors apps/web/tsconfig.
+		"types": ["bun"]
+	},
+	"include": ["src"]
+}

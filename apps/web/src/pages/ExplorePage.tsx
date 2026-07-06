@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { Project } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ProjectCard from "../components/cards/ProjectCard";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import type { Project } from "../lib/types";
 
 const MEDIA_TYPES = [
 	{ value: "", label: "All" },

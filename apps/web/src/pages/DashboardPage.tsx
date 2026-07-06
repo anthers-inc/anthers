@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { postUrl } from "@anthers/web-shared/postUrl";
+import { client } from "@anthers/web-shared/rpc";
+import type { CreatorEarnings, PostListItem, Project } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowDownTrayIcon,
 	ChartBarIcon,
@@ -9,11 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { postUrl } from "../lib/postUrl";
-import { client } from "../lib/rpc";
-import type { CreatorEarnings, PostListItem, Project } from "../lib/types";
+import { studioEditPostUrl, studioNewPostUrl } from "../lib/studio";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
@@ -69,10 +71,10 @@ export default function DashboardPage() {
 							<PlusIcon className="w-4 h-4" />
 							New Project
 						</Link>
-						<Link to="/dashboard/posts/new" className="btn btn-outline btn-sm">
+						<a href={studioNewPostUrl()} className="btn btn-outline btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Post
-						</Link>
+						</a>
 					</div>
 				)}
 			</div>
@@ -217,10 +219,7 @@ export default function DashboardPage() {
 								{posts.map((post) => (
 									<tr key={post.id}>
 										<td>
-											<Link
-												to={postUrl(post)}
-												className="link link-hover font-medium"
-											>
+											<Link to={postUrl(post)} className="link link-hover font-medium">
 												{post.title || "Untitled"}
 											</Link>
 										</td>
@@ -235,13 +234,13 @@ export default function DashboardPage() {
 											{new Date(post.createdAt).toLocaleDateString()}
 										</td>
 										<td className="flex gap-1">
-											<Link
-												to={`/dashboard/posts/${post.slug}/edit`}
+											<a
+												href={studioEditPostUrl(post.slug)}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
 												<PencilSquareIcon className="w-4 h-4" />
-											</Link>
+											</a>
 											{post.downloadEnabled && (
 												<Link
 													to={`/dashboard/posts/${post.slug}/builds`}
@@ -263,9 +262,9 @@ export default function DashboardPage() {
 						description="Write your first devlog or update."
 						action={
 							user?.isCreator ? (
-								<Link to="/dashboard/posts/new" className="btn btn-primary btn-sm">
+								<a href={studioNewPostUrl()} className="btn btn-primary btn-sm">
 									Write a Post
-								</Link>
+								</a>
 							) : undefined
 						}
 					/>

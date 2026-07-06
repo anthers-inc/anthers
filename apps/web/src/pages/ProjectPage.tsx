@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { postUrl } from "@anthers/web-shared/postUrl";
+import { client } from "@anthers/web-shared/rpc";
+import type { Project } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { LockClosedIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { useAttentionTracker } from "@/lib/attention";
-import { useAuth } from "@/lib/auth";
-import { postUrl } from "@/lib/postUrl";
-import { client } from "@/lib/rpc";
-import type { Project } from "@/lib/types";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export default function ProjectPage() {
 	const { slug } = useParams<{ slug: string }>();

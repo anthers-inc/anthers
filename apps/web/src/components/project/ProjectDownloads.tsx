@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { Asset } from "@anthers/web-shared/types";
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
-import { client } from "../../lib/rpc";
-import type { Asset } from "../../lib/types";
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;

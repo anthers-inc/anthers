@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
+import { client } from "@anthers/web-shared/rpc";
+import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useState } from "react";
-import { client } from "../../lib/rpc";
 import { stripePromise } from "../../lib/stripe";
-import type { AccessResult, CheckoutResponse } from "../../lib/types";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {

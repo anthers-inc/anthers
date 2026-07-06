@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { GameJam } from "@anthers/web-shared/types";
+import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import FormField from "@anthers/web-shared/ui/FormField";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import FileUpload from "../components/ui/FileUpload";
-import FormField from "../components/ui/FormField";
-import { client } from "../lib/rpc";
-import type { GameJam } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

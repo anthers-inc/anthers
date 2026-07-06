@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { LockedCover, UnlockPanel } from "@anthers/web-shared/post/unlock";
+import { postUrl } from "@anthers/web-shared/postUrl";
+import { client } from "@anthers/web-shared/rpc";
+import type { Comment, ContentElement, Post, TranscodingJob } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ClockIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
@@ -7,20 +14,14 @@ import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
-import { LockedCover, UnlockPanel } from "../components/post/unlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
 import ProjectScreenshots from "../components/project/ProjectScreenshots";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionTracker } from "../lib/attention";
-import { useAuth } from "../lib/auth";
 import { useMediaPlayer } from "../lib/media-player";
-import { postUrl } from "../lib/postUrl";
-import { client } from "../lib/rpc";
-import type { Comment, ContentElement, Post, TranscodingJob } from "../lib/types";
 
 /** Whether a transcoding job is still in-flight (show a status card, not a player). */
 function isJobPending(status: string): boolean {

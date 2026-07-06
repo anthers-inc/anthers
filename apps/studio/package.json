@@ -6,22 +6,32 @@
 	"type": "module",
 	"scripts": {
 		"vendor:ffmpeg": "bun run scripts/vendor-ffmpeg.ts",
+		"prebuild": "bun run vendor:ffmpeg",
+		"build": "bun run build.ts",
+		"predev": "bun run build",
 		"dev": "bun run serve.ts",
-		"build": "bun run vendor:ffmpeg && bun run build.ts",
 		"preview": "bun run serve.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@anthers/web-shared": "workspace:*",
+		"@ffmpeg/core": "^0.12.6",
 		"@ffmpeg/core-mt": "^0.12.6",
 		"@ffmpeg/ffmpeg": "^0.12.10",
 		"@ffmpeg/util": "^0.12.1",
+		"@heroicons/react": "^2.2.0",
 		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"react-dom": "^19.0.0",
+		"react-router-dom": "^7.0.0"
 	},
 	"devDependencies": {
+		"@tailwindcss/typography": "^0.5.19",
 		"@types/bun": "latest",
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
+		"bun-plugin-tailwind": "latest",
+		"daisyui": "^5.0.0",
+		"tailwindcss": "^4.0.0",
 		"typescript": "^5.8.0"
 	}
 }

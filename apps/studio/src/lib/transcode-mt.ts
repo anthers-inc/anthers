@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
+ * DORMANT — deferred groundwork, not currently imported (E50 Phase 2 deferred).
+ * `@ffmpeg/core-mt` hangs at pthread-pool spawn in-browser (workers-spawning-workers);
+ * kept in place so a future in-browser debug session / newer core / the desktop
+ * Studio can pick up the MT path without rebuilding it. Until then the Studio uses
+ * the parallel single-thread encode from `@anthers/web-shared` (lib/transcode), same
+ * as the main site. See epic E50 - Creator Studio, "MT encoding — DEFERRED".
+ *
  * Multi-threaded on-device video transcoding for the Studio.
  *
  * The Studio is cross-origin isolated, so it runs the MULTI-THREADED ffmpeg core

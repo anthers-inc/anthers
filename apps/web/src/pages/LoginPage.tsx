@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import FormField from "@anthers/web-shared/ui/FormField";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import FormField from "../components/ui/FormField";
-import { useAuth } from "../lib/auth";
 
 export default function LoginPage() {
 	const { signIn, signInWithBluesky } = useAuth();

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { Project } from "@anthers/web-shared/types";
 import { RectangleStackIcon } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
-import type { Project } from "../../lib/types";
 
 /** A collection (project) card — a playlist-like wrapper that groups posts. */
 export default function ProjectCard({ project }: { project: Project }) {

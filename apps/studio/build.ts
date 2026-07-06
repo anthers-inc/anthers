@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { cp } from "node:fs/promises";
+import tailwind from "bun-plugin-tailwind";
 
 const result = await Bun.build({
 	entrypoints: ["./index.html"],
@@ -7,6 +8,7 @@ const result = await Bun.build({
 	minify: true,
 	// Root-absolute asset URLs so deep routes resolve them from the site root.
 	publicPath: "/",
+	plugins: [tailwind],
 });
 
 if (!result.success) {
