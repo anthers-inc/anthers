@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useAuth } from "../../lib/auth";
-import LoadingSpinner from "../ui/LoadingSpinner";
+import { useAuth } from "@anthers/web-shared/auth";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import LoggedInLayout from "./LoggedInLayout";
 import LoggedOutLayout from "./LoggedOutLayout";
 

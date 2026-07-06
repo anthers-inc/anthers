@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
+import type { Project } from "@anthers/web-shared/types";
+import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import FormField from "@anthers/web-shared/ui/FormField";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import FileUpload from "../components/ui/FileUpload";
-import FormField from "../components/ui/FormField";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
-import type { Project } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

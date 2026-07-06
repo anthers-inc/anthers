@@ -59,6 +59,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@anthers/shared": "workspace:*",
+        "@anthers/web-shared": "workspace:*",
         "@ffmpeg/core": "^0.12.6",
         "@ffmpeg/ffmpeg": "^0.12.10",
         "@ffmpeg/util": "^0.12.1",
@@ -118,11 +119,39 @@
         "zod": "^3.25.0",
       },
     },
+    "packages/web-shared": {
+      "name": "@anthers/web-shared",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ffmpeg/ffmpeg": "^0.12.10",
+        "@ffmpeg/util": "^0.12.1",
+        "@heroicons/react": "^2.2.0",
+        "@tiptap/extension-image": "^2.6.0",
+        "@tiptap/extension-link": "^2.6.0",
+        "@tiptap/extension-placeholder": "^2.6.0",
+        "@tiptap/react": "^2.6.0",
+        "@tiptap/starter-kit": "^2.6.0",
+        "hono": "^4.7.0",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "typescript": "^5.8.0",
+      },
+      "peerDependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "react-router-dom": "^7.0.0",
+      },
+    },
   },
   "packages": {
     "@anthers/db": ["@anthers/db@workspace:packages/db"],
 
     "@anthers/shared": ["@anthers/shared@workspace:packages/shared"],
+
+    "@anthers/web-shared": ["@anthers/web-shared@workspace:packages/web-shared"],
 
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 

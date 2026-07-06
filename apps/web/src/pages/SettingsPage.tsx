@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import BoostLadderEditor from "@anthers/web-shared/post/BoostLadderEditor";
+import { client } from "@anthers/web-shared/rpc";
+import type { PlatformConnection, StripeAccountStatus } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import BoostLadderEditor from "../components/post/BoostLadderEditor";
-import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
-import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

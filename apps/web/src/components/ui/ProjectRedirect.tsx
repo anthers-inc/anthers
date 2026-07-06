@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { client } from "../../lib/rpc";
-import LoadingSpinner from "./LoadingSpinner";
 
 /**
  * Legacy /discover/:slug redirect.

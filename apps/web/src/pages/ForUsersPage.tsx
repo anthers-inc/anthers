@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
+import { useAuth } from "@anthers/web-shared/auth";
 import {
 	AdjustmentsHorizontalIcon,
 	ArrowDownTrayIcon,
@@ -21,7 +22,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
 
 export default function ForUsersPage() {
 	const { isAuthenticated } = useAuth();

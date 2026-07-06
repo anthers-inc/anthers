@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowDownTrayIcon,
 	CheckCircleIcon,
@@ -8,8 +11,6 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { client } from "../lib/rpc";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

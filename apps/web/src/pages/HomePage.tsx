@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { PostListItem, Project, PublicUser } from "@anthers/web-shared/types";
 import { PaintBrushIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import CreatorCard from "../components/cards/CreatorCard";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
-import { client } from "../lib/rpc";
-import type { PostListItem, Project, PublicUser } from "../lib/types";
 
 export default function HomePage() {
 	const [projects, setProjects] = useState<Project[]>([]);

@@ -7,6 +7,12 @@
 		light;
 }
 
+/* The shared authoring/client layer (@anthers/web-shared) lives outside apps/web, so
+   Tailwind's automatic content detection (scoped to this app) misses it. Register its
+   source tree explicitly so utility classes in the moved components — the post builder,
+   rich-text editor, and shared UI primitives — get generated. */
+@source "../../../../packages/web-shared/src";
+
 /* Site palette: violet primary, teal secondary */
 :root {
 	--color-primary: oklch(0.524 0.254 278.707);

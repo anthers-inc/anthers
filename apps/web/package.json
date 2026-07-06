@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@anthers/shared": "workspace:*",
+		"@anthers/web-shared": "workspace:*",
 		"@ffmpeg/core": "^0.12.6",
 		"@ffmpeg/ffmpeg": "^0.12.10",
 		"@ffmpeg/util": "^0.12.1",

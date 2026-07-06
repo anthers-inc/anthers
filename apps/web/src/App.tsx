@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import PostFormPage from "@anthers/web-shared/PostFormPage";
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
@@ -33,7 +35,6 @@ import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
 // Auth pages
 import LoginPage from "./pages/LoginPage";
-import PostFormPage from "./pages/PostFormPage";
 import PostPage from "./pages/PostPage";
 import ProjectFormPage from "./pages/ProjectFormPage";
 import ProjectPage from "./pages/ProjectPage";

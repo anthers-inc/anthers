@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { Project } from "@anthers/web-shared/types";
 import {
 	ArrowRightIcon,
 	MagnifyingGlassIcon,
@@ -7,7 +9,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { Project } from "../../lib/types";
 
 const API_BASE =
 	typeof location !== "undefined" &&

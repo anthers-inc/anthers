@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { postUrl } from "@anthers/web-shared/postUrl";
+import { client } from "@anthers/web-shared/rpc";
+import type { CreatorEarnings, PostListItem, Project } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowDownTrayIcon,
 	ChartBarIcon,
@@ -9,11 +15,6 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { postUrl } from "../lib/postUrl";
-import { client } from "../lib/rpc";
-import type { CreatorEarnings, PostListItem, Project } from "../lib/types";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
@@ -217,10 +218,7 @@ export default function DashboardPage() {
 								{posts.map((post) => (
 									<tr key={post.id}>
 										<td>
-											<Link
-												to={postUrl(post)}
-												className="link link-hover font-medium"
-											>
+											<Link to={postUrl(post)} className="link link-hover font-medium">
 												{post.title || "Untitled"}
 											</Link>
 										</td>

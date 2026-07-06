@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
 import {
 	ArrowDownTrayIcon,
 	ArrowPathIcon,
@@ -20,7 +22,6 @@ import {
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();

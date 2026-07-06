@@ -1,0 +1,50 @@
+{
+	"name": "@anthers/web-shared",
+	"private": true,
+	"version": "0.1.0",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"exports": {
+		"./types": "./src/lib/types.ts",
+		"./rpc": "./src/lib/rpc.ts",
+		"./auth": "./src/lib/auth.tsx",
+		"./postUrl": "./src/lib/postUrl.ts",
+		"./upload": "./src/lib/upload.ts",
+		"./transcode": "./src/lib/transcode.ts",
+		"./ui/FormField": "./src/components/ui/FormField.tsx",
+		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
+		"./ui/FileUpload": "./src/components/ui/FileUpload.tsx",
+		"./editor/RichTextEditor": "./src/components/editor/RichTextEditor.tsx",
+		"./post/AccessTables": "./src/components/post/AccessTables.tsx",
+		"./post/BoostLadderEditor": "./src/components/post/BoostLadderEditor.tsx",
+		"./post/ContentElementList": "./src/components/post/ContentElementList.tsx",
+		"./post/mediaUpload": "./src/components/post/mediaUpload.ts",
+		"./post/unlock": "./src/components/post/unlock.tsx",
+		"./PostFormPage": "./src/pages/PostFormPage.tsx"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0",
+		"react-router-dom": "^7.0.0"
+	},
+	"dependencies": {
+		"@ffmpeg/ffmpeg": "^0.12.10",
+		"@ffmpeg/util": "^0.12.1",
+		"@heroicons/react": "^2.2.0",
+		"@tiptap/extension-image": "^2.6.0",
+		"@tiptap/extension-link": "^2.6.0",
+		"@tiptap/extension-placeholder": "^2.6.0",
+		"@tiptap/react": "^2.6.0",
+		"@tiptap/starter-kit": "^2.6.0",
+		"hono": "^4.7.0"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/react": "^19.0.0",
+		"@types/react-dom": "^19.0.0",
+		"typescript": "^5.8.0"
+	}
+}

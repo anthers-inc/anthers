@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useAuth } from "@anthers/web-shared/auth";
+import { client } from "@anthers/web-shared/rpc";
+import type { GameJam, JamEntry, JamEntryResult, PostListItem } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, TrophyIcon, UsersIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
 import StarRating from "../components/ui/StarRating";
-import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
-import type { GameJam, JamEntry, JamEntryResult, PostListItem } from "../lib/types";
 
 function formatDate(dateStr: string): string {
 	return new Date(dateStr).toLocaleDateString("en-US", {
@@ -64,10 +65,7 @@ function EntryCard({
 						<span className="font-bold text-sm">#{rank}</span>
 					</div>
 				)}
-				<Link
-					to={`/posts/${entry.post?.slug}`}
-					className="link link-hover font-semibold text-sm"
-				>
+				<Link to={`/posts/${entry.post?.slug}`} className="link link-hover font-semibold text-sm">
 					{entry.post?.title}
 				</Link>
 				<p className="text-xs text-base-content/50">by {entry.submitter?.username}</p>

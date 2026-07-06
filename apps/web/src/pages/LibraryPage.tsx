@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { postUrl } from "@anthers/web-shared/postUrl";
+import { client } from "@anthers/web-shared/rpc";
+import type { Purchase } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	MusicalNoteIcon,
 	PencilSquareIcon,
@@ -10,10 +15,6 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { postUrl } from "../lib/postUrl";
-import { client } from "../lib/rpc";
-import type { Purchase } from "../lib/types";
 
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },

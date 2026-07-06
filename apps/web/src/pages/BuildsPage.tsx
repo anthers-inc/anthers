@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { Asset, ContentElement, Post } from "@anthers/web-shared/types";
+import FormField from "@anthers/web-shared/ui/FormField";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import FormField from "../components/ui/FormField";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { client } from "../lib/rpc";
-import type { Asset, ContentElement, Post } from "../lib/types";
-import { uploadMediaFile } from "../lib/upload";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -237,7 +238,11 @@ export default function BuildsPage() {
 									className={`btn btn-primary ${uploading || !file ? "btn-disabled" : ""}`}
 									disabled={uploading || !file}
 								>
-									{uploading ? <LoadingSpinner size="sm" /> : <ArrowUpTrayIcon className="w-4 h-4" />}
+									{uploading ? (
+										<LoadingSpinner size="sm" />
+									) : (
+										<ArrowUpTrayIcon className="w-4 h-4" />
+									)}
 									Upload
 								</button>
 							</div>
@@ -283,7 +288,9 @@ export default function BuildsPage() {
 										)}
 									</td>
 									<td>
-										<span className="badge badge-sm badge-outline capitalize">{asset.platform}</span>
+										<span className="badge badge-sm badge-outline capitalize">
+											{asset.platform}
+										</span>
 									</td>
 									<td>{asset.version || "—"}</td>
 									<td className="text-sm text-base-content/60">

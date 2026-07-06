@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { LockedCover, UnlockModal, unlockLabel } from "@anthers/web-shared/post/unlock";
+import { postUrl } from "@anthers/web-shared/postUrl";
+import type { PostListItem } from "@anthers/web-shared/types";
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { postUrl } from "../../lib/postUrl";
-import type { PostListItem } from "../../lib/types";
-import { LockedCover, UnlockModal, unlockLabel } from "../post/unlock";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 

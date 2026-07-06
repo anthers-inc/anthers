@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { client } from "@anthers/web-shared/rpc";
+import type { PublicUser } from "@anthers/web-shared/types";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
 import EmptyState from "../components/ui/EmptyState";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { client } from "../lib/rpc";
-import type { PublicUser } from "../lib/types";
 
 export default function CreatorsPage() {
 	const [creators, setCreators] = useState<PublicUser[] | null>(null);

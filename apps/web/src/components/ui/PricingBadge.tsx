@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon } from "@heroicons/react/24/outline";
-import type { AccessResult } from "../../lib/types";
 
 /**
  * Small access badge derived from a post's resolved AccessResult:
