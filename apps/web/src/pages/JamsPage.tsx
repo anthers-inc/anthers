@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import type { GameJam } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	CalendarIcon,
@@ -15,7 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import EmptyState from "../components/ui/EmptyState";
+import { studioUrl } from "../lib/studio";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -146,10 +147,10 @@ export default function JamsPage() {
 					</button>
 				</div>
 				{user?.isCreator && (
-					<Link to="/dashboard/jams/new" className="btn btn-primary btn-sm">
+					<a href={studioUrl("/jams/new")} className="btn btn-primary btn-sm">
 						<PlusIcon className="w-4 h-4" />
 						Host a Jam
-					</Link>
+					</a>
 				)}
 			</div>
 
@@ -244,9 +245,9 @@ export default function JamsPage() {
 					}
 					action={
 						user?.isCreator ? (
-							<Link to="/dashboard/jams/new" className="btn btn-primary btn-sm">
+							<a href={studioUrl("/jams/new")} className="btn btn-primary btn-sm">
 								Host the First Jam
-							</Link>
+							</a>
 						) : undefined
 					}
 				/>

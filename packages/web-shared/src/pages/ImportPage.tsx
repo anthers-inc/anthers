@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { client } from "@anthers/web-shared/rpc";
-import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowDownTrayIcon,
 	CheckCircleIcon,
@@ -11,6 +9,8 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { client } from "../lib/rpc";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -185,10 +185,7 @@ export default function ImportPage() {
 									{r.error && <p className="text-xs text-error">{r.error}</p>}
 								</div>
 								{r.status === "imported" && r.projectSlug && (
-									<Link
-										to={`/dashboard/projects/${r.projectSlug}/edit`}
-										className="btn btn-sm btn-outline"
-									>
+									<Link to={`/projects/${r.projectSlug}/edit`} className="btn btn-sm btn-outline">
 										Edit Draft
 									</Link>
 								)}
@@ -196,7 +193,7 @@ export default function ImportPage() {
 						))}
 					</div>
 					<div className="mt-4">
-						<Link to="/dashboard" className="btn btn-primary">
+						<Link to="/" className="btn btn-primary">
 							Go to Dashboard
 						</Link>
 					</div>

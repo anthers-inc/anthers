@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import AnalyticsDashboardPage from "@anthers/web-shared/AnalyticsDashboardPage";
+import BuildsPage from "@anthers/web-shared/BuildsPage";
+import DashboardPage from "@anthers/web-shared/DashboardPage";
+import ImportPage from "@anthers/web-shared/ImportPage";
+import JamFormPage from "@anthers/web-shared/JamFormPage";
 import PostFormPage from "@anthers/web-shared/PostFormPage";
-import { Route, Routes } from "react-router-dom";
+import ProjectFormPage from "@anthers/web-shared/ProjectFormPage";
+import StudioSettingsPage from "@anthers/web-shared/StudioSettingsPage";
+import { Outlet, Route, Routes } from "react-router-dom";
 import ConsumerRedirect from "./components/ConsumerRedirect";
 import StudioAuthGate from "./components/StudioAuthGate";
 import StudioShell from "./components/StudioShell";
 
 /**
- * Studio v1 owns exactly the post authoring routes (create a draft + manage its media).
- * Everything else bounces to the consumer site (ConsumerRedirect). Analytics, settings,
- * and the rest of the creator dashboard stay on the main site for now (see epic E50).
+ * The Studio is the all-in-one creator management surface (E50 Phase 4): the creator
+ * dashboard, analytics, post/project/jam authoring, downloadable builds, itch.io import,
+ * and creator settings (payouts, platform connections, boost tiers). Consumer/account
+ * surfaces (profile, account settings, library, viewing) stay on anthers.org — every
+ * non-creator path bounces there via ConsumerRedirect.
  */
-function Authoring() {
+function StudioLayout() {
 	return (
 		<StudioAuthGate>
 			<StudioShell>
-				<PostFormPage />
+				<Outlet />
 			</StudioShell>
 		</StudioAuthGate>
 	);
@@ -23,8 +32,19 @@ function Authoring() {
 export default function App() {
 	return (
 		<Routes>
-			<Route path="/posts/new" element={<Authoring />} />
-			<Route path="/posts/:slug/edit" element={<Authoring />} />
+			<Route element={<StudioLayout />}>
+				<Route path="/" element={<DashboardPage />} />
+				<Route path="/analytics" element={<AnalyticsDashboardPage />} />
+				<Route path="/posts/new" element={<PostFormPage />} />
+				<Route path="/posts/:slug/edit" element={<PostFormPage />} />
+				<Route path="/posts/:slug/builds" element={<BuildsPage />} />
+				<Route path="/projects/new" element={<ProjectFormPage />} />
+				<Route path="/projects/:slug/edit" element={<ProjectFormPage />} />
+				<Route path="/jams/new" element={<JamFormPage />} />
+				<Route path="/jams/:slug/edit" element={<JamFormPage />} />
+				<Route path="/import" element={<ImportPage />} />
+				<Route path="/settings" element={<StudioSettingsPage />} />
+			</Route>
 			<Route path="*" element={<ConsumerRedirect />} />
 		</Routes>
 	);

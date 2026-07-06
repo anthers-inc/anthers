@@ -2,10 +2,10 @@
 
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
-import EmptyState from "../components/ui/EmptyState";
 
 export default function CreatorsPage() {
 	const [creators, setCreators] = useState<PublicUser[] | null>(null);

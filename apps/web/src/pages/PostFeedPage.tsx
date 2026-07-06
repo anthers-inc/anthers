@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { PostListItem } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
-import EmptyState from "../components/ui/EmptyState";
 
 const FILTERS = [
 	{ key: "", label: "All" },

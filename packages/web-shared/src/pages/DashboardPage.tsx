@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useAuth } from "@anthers/web-shared/auth";
-import { postUrl } from "@anthers/web-shared/postUrl";
-import { client } from "@anthers/web-shared/rpc";
-import type { CreatorEarnings, PostListItem, Project } from "@anthers/web-shared/types";
-import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowDownTrayIcon,
 	ChartBarIcon,
@@ -15,7 +10,11 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
-import { studioEditPostUrl, studioNewPostUrl } from "../lib/studio";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
+import { postUrl } from "../lib/postUrl";
+import { client } from "../lib/rpc";
+import type { CreatorEarnings, PostListItem, Project } from "../lib/types";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
@@ -59,22 +58,22 @@ export default function DashboardPage() {
 				<h1 className="text-2xl font-bold">Dashboard</h1>
 				{user?.isCreator && (
 					<div className="flex gap-2">
-						<Link to="/dashboard/import" className="btn btn-ghost btn-sm">
+						<Link to="/import" className="btn btn-ghost btn-sm">
 							<ArrowDownTrayIcon className="w-4 h-4" />
 							Import
 						</Link>
-						<Link to="/dashboard/analytics" className="btn btn-ghost btn-sm">
+						<Link to="/analytics" className="btn btn-ghost btn-sm">
 							<ChartBarIcon className="w-4 h-4" />
 							Analytics
 						</Link>
-						<Link to="/dashboard/projects/new" className="btn btn-primary btn-sm">
+						<Link to="/projects/new" className="btn btn-primary btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Project
 						</Link>
-						<a href={studioNewPostUrl()} className="btn btn-outline btn-sm">
+						<Link to="/posts/new" className="btn btn-outline btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Post
-						</a>
+						</Link>
 					</div>
 				)}
 			</div>
@@ -166,7 +165,7 @@ export default function DashboardPage() {
 										</td>
 										<td className="flex gap-1">
 											<Link
-												to={`/dashboard/projects/${project.slug}/edit`}
+												to={`/projects/${project.slug}/edit`}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
@@ -184,7 +183,7 @@ export default function DashboardPage() {
 						description="Create your first project to get started."
 						action={
 							user?.isCreator ? (
-								<Link to="/dashboard/projects/new" className="btn btn-primary btn-sm">
+								<Link to="/projects/new" className="btn btn-primary btn-sm">
 									Create Project
 								</Link>
 							) : (
@@ -234,16 +233,16 @@ export default function DashboardPage() {
 											{new Date(post.createdAt).toLocaleDateString()}
 										</td>
 										<td className="flex gap-1">
-											<a
-												href={studioEditPostUrl(post.slug)}
+											<Link
+												to={`/posts/${post.slug}/edit`}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
 												<PencilSquareIcon className="w-4 h-4" />
-											</a>
+											</Link>
 											{post.downloadEnabled && (
 												<Link
-													to={`/dashboard/posts/${post.slug}/builds`}
+													to={`/posts/${post.slug}/builds`}
 													className="btn btn-ghost btn-xs"
 													title="Manage downloads"
 												>
@@ -262,9 +261,9 @@ export default function DashboardPage() {
 						description="Write your first devlog or update."
 						action={
 							user?.isCreator ? (
-								<a href={studioNewPostUrl()} className="btn btn-primary btn-sm">
+								<Link to="/posts/new" className="btn btn-primary btn-sm">
 									Write a Post
-								</a>
+								</Link>
 							) : undefined
 						}
 					/>
