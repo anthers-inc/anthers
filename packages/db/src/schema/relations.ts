@@ -5,6 +5,7 @@ import {
 	assets,
 	bookmarks,
 	comments,
+	contentItems,
 	inlineImages,
 	postContents,
 	posts,
@@ -125,20 +126,33 @@ export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
 	post: one(posts, { fields: [projectPosts.postId], references: [posts.id] }),
 }));
 
-export const postContentsRelations = relations(postContents, ({ one, many }) => ({
-	post: one(posts, { fields: [postContents.postId], references: [posts.id] }),
+// Content library items — own their media, downloadable variants, and transcodes.
+export const contentItemsRelations = relations(contentItems, ({ one, many }) => ({
+	creator: one(users, { fields: [contentItems.creatorId], references: [users.id] }),
 	assets: many(assets),
 	transcodingJobs: many(transcodingJobs),
+	postContents: many(postContents),
+}));
+
+export const postContentsRelations = relations(postContents, ({ one }) => ({
+	post: one(posts, { fields: [postContents.postId], references: [posts.id] }),
+	contentItem: one(contentItems, {
+		fields: [postContents.contentItemId],
+		references: [contentItems.id],
+	}),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({
-	content: one(postContents, { fields: [assets.contentId], references: [postContents.id] }),
+	contentItem: one(contentItems, {
+		fields: [assets.contentItemId],
+		references: [contentItems.id],
+	}),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({
-	content: one(postContents, {
-		fields: [transcodingJobs.contentId],
-		references: [postContents.id],
+	contentItem: one(contentItems, {
+		fields: [transcodingJobs.contentItemId],
+		references: [contentItems.id],
 	}),
 }));
 

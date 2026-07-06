@@ -104,12 +104,12 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "This post is free" }, 400);
 		}
 
-		// Delivery (bandwidth) scales with the total size of the downloadable assets
-		// across the post's content elements.
+		// Delivery (bandwidth) scales with the total size of the downloadable assets on the
+		// content items this post references (assets now belong to items, not the post).
 		const [assetSize] = await db
 			.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 			.from(assets)
-			.innerJoin(postContents, eq(assets.contentId, postContents.id))
+			.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
 			.where(eq(postContents.postId, post.id));
 
 		// Pass-through model: the creator receives the full listed price; processing,

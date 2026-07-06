@@ -12,10 +12,10 @@
 import { db } from "@anthers/db";
 import {
 	assets,
+	contentItems,
 	crfLedger,
 	crfSubsidies,
 	poolDistributions,
-	postContents,
 	posts,
 	purchases,
 	users,
@@ -125,12 +125,13 @@ export async function calculateCrfSubsidies() {
 				),
 			);
 
+		// Storage is a library concern now: sum the file sizes of the assets on the
+		// creator's content items (which own their downloadable variants directly).
 		const [storageResult] = await db
 			.select({ total: sum(assets.fileSize) })
 			.from(assets)
-			.innerJoin(postContents, eq(assets.contentId, postContents.id))
-			.innerJoin(posts, eq(postContents.postId, posts.id))
-			.where(eq(posts.creatorId, creator.id));
+			.innerJoin(contentItems, eq(assets.contentItemId, contentItems.id))
+			.where(eq(contentItems.creatorId, creator.id));
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 

@@ -10,9 +10,8 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
+import { contentItems, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { type AccessiblePost, isPubliclyFree } from "../services/access.js";
 import { storage } from "../services/storage/index.js";
 
 export interface ProcessAudioData {
@@ -159,21 +158,15 @@ export async function processAudio(data: ProcessAudioData) {
 		.set({ status: "processing", progress: 0 })
 		.where(eq(transcodingJobs.id, jobId));
 
-	const [element] = await db
+	const [item] = await db
 		.select()
-		.from(postContents)
-		.where(eq(postContents.id, job.contentId))
+		.from(contentItems)
+		.where(eq(contentItems.id, job.contentItemId))
 		.limit(1);
-	if (!element) throw new Error(`Content element ${job.contentId} not found`);
+	if (!item) throw new Error(`Content item ${job.contentItemId} not found`);
 
-	const [post] = await db.select().from(posts).where(eq(posts.id, element.postId)).limit(1);
-	if (!post) throw new Error(`Post ${element.postId} not found`);
-
-	// A post is publicly served when it's free to everyone.
-	const isPublicPost = isPubliclyFree(post as AccessiblePost);
-
-	const storageKey = element.audioFile ?? "";
-	if (!storageKey) throw new Error("No audio file on content element");
+	const storageKey = item.sourceKey ?? "";
+	if (!storageKey) throw new Error("No source file on content item");
 
 	let localPath: string | null = null;
 	let outputPath: string | null = null;
@@ -187,9 +180,9 @@ export async function processAudio(data: ProcessAudioData) {
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		if (duration > 0) {
 			await db
-				.update(postContents)
+				.update(contentItems)
 				.set({ durationSeconds: Math.round(duration) })
-				.where(eq(postContents.id, element.id));
+				.where(eq(contentItems.id, item.id));
 		}
 		await updateJobProgress(jobId, 20);
 
@@ -218,14 +211,13 @@ export async function processAudio(data: ProcessAudioData) {
 		}
 		await updateJobProgress(jobId, 60);
 
-		// 3. Upload processed file to storage (creator-first layout — see media-upload route).
-		// ACL follows access: free/ungated posts get a public MP3 the CDN serves directly
-		// (getUrl returns a bare, unsigned URL); priced/gated posts keep it private (future
-		// signed-URL playback). Without this, public audio 403s.
-		const outputKey = `creators/${post.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
+		// 3. Upload processed file (creator-first layout). Processed in the library before
+		// it's attached to any post, so access isn't known here. The MP3 is public (a bare
+		// CDN URL that plays); gated-audio delivery via signed URLs is a tracked follow-up
+		// (audio has no per-request signing endpoint yet, unlike HLS video).
+		const outputKey = `creators/${item.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
-		const acl = isPublicPost ? "public" : "private";
-		await storage.upload(outputKey, outputBuffer, "audio/mpeg", acl);
+		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "public");
 		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);
 

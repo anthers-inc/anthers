@@ -40,6 +40,9 @@ export interface StorageService {
 	/** Delete a file. */
 	delete(key: string): Promise<void>;
 
+	/** Delete every file under a key prefix (e.g. an HLS output directory). Idempotent. */
+	deletePrefix(prefix: string): Promise<void>;
+
 	/** Check whether a file exists. */
 	exists(key: string): Promise<boolean>;
 }

@@ -16,9 +16,8 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
+import { contentItems, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { type AccessiblePost, isPubliclyFree } from "../services/access.js";
 import { storage } from "../services/storage/index.js";
 
 /** Variant descriptor supplied by the client (its uploaded MP4 + geometry). */
@@ -137,24 +136,19 @@ export async function packageVideo(data: PackageVideoData) {
 		.set({ status: "processing", progress: 0 })
 		.where(eq(transcodingJobs.id, jobId));
 
-	const [element] = await db
+	const [item] = await db
 		.select()
-		.from(postContents)
-		.where(eq(postContents.id, job.contentId))
+		.from(contentItems)
+		.where(eq(contentItems.id, job.contentItemId))
 		.limit(1);
-	if (!element) throw new Error(`Content element ${job.contentId} not found`);
+	if (!item) throw new Error(`Content item ${job.contentItemId} not found`);
 
-	const [post] = await db.select().from(posts).where(eq(posts.id, element.postId)).limit(1);
-	if (!post) throw new Error(`Post ${element.postId} not found`);
-
-	const isPublicPost = isPubliclyFree(post as AccessiblePost);
-
-	// Persist the client-probed duration on the element (thumbnail position + UI).
-	if (duration && duration > 0 && !element.durationSeconds) {
+	// Persist the client-probed duration on the item (thumbnail position + UI).
+	if (duration && duration > 0 && !item.durationSeconds) {
 		await db
-			.update(postContents)
+			.update(contentItems)
 			.set({ durationSeconds: Math.round(duration) })
-			.where(eq(postContents.id, element.id));
+			.where(eq(contentItems.id, item.id));
 	}
 
 	const localPaths: string[] = [];
@@ -183,35 +177,34 @@ export async function packageVideo(data: PackageVideoData) {
 		await generateMasterPlaylist(outputDir, variants);
 		await updateJobProgress(jobId, 88);
 
-		// Upload HLS output — playlists public (player bootstrap), segments per access.
-		const storagePrefix = `creators/${post.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
+		// Upload HLS output — playlists public (player bootstrap), segments always private
+		// (access is enforced at serve time via the signed-HLS endpoint; the item may be
+		// posted with different access, so we can't bake it in here).
+		const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 		const hlsFiles = await readdir(outputDir);
 		for (const filename of hlsFiles) {
 			const fileBuffer = await readFile(join(outputDir, filename));
 			const isPlaylist = filename.endsWith(".m3u8");
 			const ct = isPlaylist ? "application/vnd.apple.mpegurl" : "video/mp2t";
-			const acl = isPlaylist || isPublicPost ? "public" : "private";
+			const acl = isPlaylist ? "public" : "private";
 			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
 		}
 		await updateJobProgress(jobId, 94);
 
-		// Thumbnail: the client usually uploads one (element.thumbnail already set). Only
+		// Thumbnail: the client usually uploads one (item.thumbnail already set). Only
 		// derive a fallback from a variant if none exists.
-		if (!element.thumbnail && firstLocal) {
+		if (!item.thumbnail && firstLocal) {
 			const at = Math.max(1, Math.round((duration && duration > 0 ? duration : 4) * 0.25));
 			thumbPath = await generateThumbnail(firstLocal, at);
 			if (thumbPath) {
 				const thumbBuffer = await readFile(thumbPath);
-				const thumbnailKey = `creators/${post.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
+				const thumbnailKey = `creators/${item.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
 				await db
-					.update(postContents)
+					.update(contentItems)
 					.set({ thumbnail: thumbnailUrl })
-					.where(eq(postContents.id, element.id));
-				if (!post.thumbnail) {
-					await db.update(posts).set({ thumbnail: thumbnailUrl }).where(eq(posts.id, post.id));
-				}
+					.where(eq(contentItems.id, item.id));
 			}
 		}
 

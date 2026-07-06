@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Unified Post vertical slice (E02) — proves the content-type-agnostic model
- * end to end against the real dev database:
- *   free text post + paid download post (with a content element + asset) →
- *   unified timeline → access gating via the two access tables →
- *   access-checked signed download → collection membership.
+ * Unified Post vertical slice (E02) — proves the content-library model end to end
+ * against the real dev database:
+ *   free text post (body only, no refs) + paid download post that REFERENCES a
+ *   creator-owned game content item (with a downloadable asset) → unified timeline →
+ *   access gating via the two access tables → access-checked signed download →
+ *   collection membership.
+ *
+ * Content items are game/text so nothing hits real media processing (no pg-boss).
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -37,7 +40,7 @@ describe("Unified Post vertical slice", () => {
 	let otherCookie: string;
 	let freeSlug: string;
 	let paidSlug: string;
-	let paidContentId: number;
+	let gameItemId: number;
 	let paidAssetId: number;
 
 	beforeAll(async () => {
@@ -51,7 +54,49 @@ describe("Unified Post vertical slice", () => {
 		expect(otherCookie).toBeTruthy();
 	});
 
-	it("creates a free, stream-only text post (body only, no deliverable)", async () => {
+	it("creates a game content item in the creator's library", async () => {
+		const res = await req("/api/content/content-items", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			body: JSON.stringify({ type: "game", title: "The Game" }),
+		});
+		expect(res.status).toBe(201);
+		const { item } = await res.json();
+		expect(item.type).toBe("game");
+		gameItemId = item.id;
+		expect(gameItemId).toBeGreaterThan(0);
+	});
+
+	it("lists the item in the creator's library with a derived transcoding field", async () => {
+		const res = await req("/api/content/content-items?mine=true", {
+			headers: { Cookie: creatorCookie },
+		});
+		expect(res.status).toBe(200);
+		const { items } = await res.json();
+		const mine = items.find((i: any) => i.id === gameItemId);
+		expect(mine).toBeTruthy();
+		// A game item needs no processing → no transcode job yet.
+		expect(mine.transcoding).toBeNull();
+	});
+
+	it("attaches a downloadable asset to the game content item", async () => {
+		const res = await req(`/api/content/content-items/${gameItemId}/assets`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			body: JSON.stringify({
+				file: `creators/x/assets/${id}.zip`,
+				filename: "build.zip",
+				fileSize: 1048576,
+				platform: "windows",
+			}),
+		});
+		expect(res.status).toBe(201);
+		const { asset } = await res.json();
+		paidAssetId = asset.id;
+		expect(paidAssetId).toBeGreaterThan(0);
+	});
+
+	it("creates a free, stream-only text post (body only, no content refs)", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
@@ -67,14 +112,14 @@ describe("Unified Post vertical slice", () => {
 		});
 		expect(res.status).toBe(201);
 		const { post } = await res.json();
-		expect(post.contentType).toBe("text"); // derived: no content elements → text
+		expect(post.contentType).toBe("text"); // derived: no content refs → text
 		expect(post.streamEnabled).toBe(true);
 		expect(post.downloadEnabled).toBe(false);
 		expect(typeof post.publicId).toBe("number");
 		freeSlug = post.slug;
 	});
 
-	it("creates a paid, download-only post with a game content element", async () => {
+	it("creates a paid, download-only post that references the game item", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
@@ -84,35 +129,34 @@ describe("Unified Post vertical slice", () => {
 				downloadEnabled: true,
 				// Purchasable by anyone at $5 (the $0 boost baseline, priced).
 				boostAccess: [{ threshold: 0, allow: true, price: "5.00" }],
-				contents: [{ contentType: "game", title: "The Game" }],
+				contents: [{ kind: "content", contentItemId: gameItemId }],
 				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
 		const { post } = await res.json();
 		expect(post.downloadEnabled).toBe(true);
-		expect(post.contentType).toBe("game"); // derived from the single element
+		expect(post.contentType).toBe("game"); // derived from the first content ref's item
 		expect(post.contents.length).toBe(1);
+		expect(post.contents[0].kind).toBe("content");
+		expect(post.contents[0].contentItem.id).toBe(gameItemId);
 		paidSlug = post.slug;
-		paidContentId = post.contents[0].id;
-		expect(paidContentId).toBeGreaterThan(0);
 	});
 
-	it("attaches a downloadable asset to the game content element", async () => {
-		const res = await req(`/api/content/posts/${paidSlug}/contents/${paidContentId}/assets`, {
+	it("rejects a post that references an item the caller does not own (400)", async () => {
+		const res = await req("/api/content/posts", {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: otherCookie },
 			body: JSON.stringify({
-				file: `creators/x/assets/${id}.zip`,
-				filename: "build.zip",
-				fileSize: 1048576,
-				platform: "windows",
+				title: `Steal ${id}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				boostAccess: [{ threshold: 0, allow: true, price: "0" }],
+				contents: [{ kind: "content", contentItemId: gameItemId }],
+				isPublished: false,
 			}),
 		});
-		expect(res.status).toBe(201);
-		const { asset } = await res.json();
-		paidAssetId = asset.id;
-		expect(paidAssetId).toBeGreaterThan(0);
+		expect(res.status).toBe(400);
 	});
 
 	it("lists both posts on the unified timeline with correct access", async () => {
@@ -140,8 +184,9 @@ describe("Unified Post vertical slice", () => {
 		expect(res.status).toBe(200);
 		const { post } = await res.json();
 		expect(post.access.canAccess).toBe(false);
-		// Download keys are not leaked to viewers without access.
-		expect(post.contents[0].assets[0].file).toBe("");
+		// The item's media/type/title survive for the locked preview, but download keys don't.
+		expect(post.contents[0].contentItem.type).toBe("game");
+		expect(post.contents[0].contentItem.assets[0].file).toBe("");
 	});
 
 	it("resolves the paid post by its publicId form too", async () => {

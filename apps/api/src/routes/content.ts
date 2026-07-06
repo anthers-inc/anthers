@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Content routes — the unified Post model.
+ * Content routes — the unified Post model over a creator-owned content library.
  *
- * Everything a creator publishes is a Post. A post BODY (rich text) is shown to
- * anyone with visibility; the deliverable is an ordered array of typed **content
- * elements** (`post_contents`), each carrying its own media + optional downloadable
- * assets. Delivery (stream and/or download) and access (the two OR-gated access
- * tables) are orthogonal per-post switches. Projects are collections that group
- * posts via a many-to-many join — not a content type.
+ * A **content item** (`content_items`) is a creator's first-class, reusable piece of
+ * media/product — it OWNS its source media, downloadable variants (`assets`), and
+ * transcodes (`transcoding_jobs`); processing runs once on upload to the library.
+ * A **Post** is an ordered list of entries (`post_contents`): each entry is either an
+ * inline TEXT block (post-native prose) or a REFERENCE to a library content item. The
+ * post is the access point — a referenced item inherits the post's access rules — so a
+ * post can be deleted without destroying content. Delivery (stream and/or download) and
+ * access (the two OR-gated access tables) are orthogonal per-post switches. Projects are
+ * collections that group posts via a many-to-many join — not a content type.
  *
  * Posts are addressed by a durable numeric `publicId`; the canonical URL is
  * `/posts/{slug}-{publicId}` and a route param of either the bare publicId or the
@@ -18,11 +21,10 @@
 
 import { db } from "@anthers/db/client";
 import {
-	type AnthersAccessRow,
 	assets,
-	type BoostAccessRow,
 	bookmarks,
 	comments,
+	contentItems,
 	inlineImages,
 	postContents,
 	posts,
@@ -127,31 +129,39 @@ async function findPostRow(param: string): Promise<typeof posts.$inferSelect | n
 	return bySlug ?? null;
 }
 
-/** Post primary type for cards/badges/filter — the single element type, or "mixed". */
-function deriveContentType(elements: { contentType: string }[]): string {
-	if (elements.length === 0) return "text";
-	const types = new Set(elements.map((e) => e.contentType));
-	return types.size === 1 ? [...types][0] : "mixed";
+/** A post entry — either an inline text block or a reference to a library content item. */
+type PostEntryLike = { kind: string; contentItemId?: number | null };
+
+/**
+ * Post primary type for cards/badges/filter — derived from the FIRST content-ref's
+ * item type. A post with only text blocks (no content refs) is "text".
+ */
+function deriveContentType(
+	entries: PostEntryLike[],
+	itemsById: Map<number, { type: string }>,
+): string {
+	const first = entries.find((e) => e.kind === "content" && e.contentItemId != null);
+	if (!first || first.contentItemId == null) return "text";
+	return itemsById.get(first.contentItemId)?.type ?? "text";
 }
 
-/** Denormalized card image: first element's thumbnail, else its first image. */
+/** Denormalized card image: the FIRST content-ref item's thumbnail (text-only → ""). */
 function deriveThumbnail(
-	elements: { thumbnail?: string | null; images?: string[] | null }[],
+	entries: PostEntryLike[],
+	itemsById: Map<number, { thumbnail?: string | null }>,
 ): string {
-	for (const e of elements) {
-		if (e.thumbnail) return e.thumbnail;
-		if (e.images && e.images.length > 0) return e.images[0];
-	}
-	return "";
+	const first = entries.find((e) => e.kind === "content" && e.contentItemId != null);
+	if (!first || first.contentItemId == null) return "";
+	return itemsById.get(first.contentItemId)?.thumbnail ?? "";
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-const CONTENT_TYPES = [
-	"text",
-	"image",
-	"audio",
+/** Library content-item types (rich text/prose is NOT a library item — it stays post-native). */
+const CONTENT_ITEM_TYPES = [
 	"video",
+	"audio",
+	"image",
 	"game",
 	"software",
 	"physical",
@@ -172,18 +182,42 @@ const boostAccessRowSchema = z.object({
 	price: z.string().regex(MONEY),
 });
 
-const contentElementSchema = z.object({
-	id: z.number().int().optional(), // present = an existing element to keep/update
-	contentType: z.enum(CONTENT_TYPES),
+// A post's ordered content list is an array of entries: an inline text block, or a
+// reference to a library content item. Each may carry an `id` for reconcile-by-id on patch.
+const postEntrySchema = z.discriminatedUnion("kind", [
+	z.object({
+		kind: z.literal("text"),
+		id: z.number().int().optional(),
+		bodyHtml: z.string().optional().default(""),
+	}),
+	z.object({
+		kind: z.literal("content"),
+		id: z.number().int().optional(),
+		contentItemId: z.number().int(),
+		caption: z.string().max(1000).optional().default(""),
+	}),
+]);
+
+// ── Content library items ──
+const createContentItemSchema = z.object({
+	type: z.enum(CONTENT_ITEM_TYPES),
 	title: z.string().max(255).optional().default(""),
+	description: z.string().max(50000).optional().default(""),
 	thumbnail: z.string().max(500).optional().default(""),
-	bodyHtml: z.string().optional().default(""),
-	images: z.array(z.string().max(500)).optional().default([]),
-	videoFile: z.string().max(500).optional().default(""),
-	audioFile: z.string().max(500).optional().default(""),
+	sourceKey: z.string().max(500).optional().default(""),
 	embedUrl: z.string().max(500).optional().default(""),
 	durationSeconds: z.number().int().optional(),
 	metadata: z.record(z.unknown()).optional().default({}),
+});
+
+const updateContentItemSchema = z.object({
+	title: z.string().max(255).optional(),
+	description: z.string().max(50000).optional(),
+	thumbnail: z.string().max(500).optional(),
+	sourceKey: z.string().max(500).optional(),
+	embedUrl: z.string().max(500).optional(),
+	durationSeconds: z.number().int().optional(),
+	metadata: z.record(z.unknown()).optional(),
 });
 
 const postBaseSchema = z.object({
@@ -205,8 +239,8 @@ const postBaseSchema = z.object({
 	anthersAccess: z.array(anthersAccessRowSchema).optional(),
 	boostAccess: z.array(boostAccessRowSchema).optional(),
 
-	// The deliverable: an ordered array of typed content elements.
-	contents: z.array(contentElementSchema).optional().default([]),
+	// The post's ordered content list: text blocks and/or references to library items.
+	contents: z.array(postEntrySchema).optional().default([]),
 
 	// Presentation
 	showOnTimeline: z.boolean().optional().default(true),
@@ -263,49 +297,17 @@ const addToCollectionSchema = z.object({
 	sortOrder: z.number().int().optional(),
 });
 
-// ─── Content-element persistence ──────────────────────────────────────────────
+// ─── Content library items ────────────────────────────────────────────────────
 
-/** Map a validated element to its post_contents column values. */
-function elementValues(el: z.infer<typeof contentElementSchema>, postId: number, position: number) {
-	return {
-		postId,
-		position,
-		contentType: el.contentType,
-		title: el.title ?? "",
-		thumbnail: el.thumbnail ?? "",
-		bodyHtml: el.bodyHtml ? sanitizePostHtml(el.bodyHtml) : "",
-		images: el.images ?? [],
-		videoFile: el.videoFile ?? "",
-		audioFile: el.audioFile ?? "",
-		embedUrl: el.embedUrl ?? "",
-		durationSeconds: el.durationSeconds ?? null,
-		metadata: el.metadata ?? {},
-	};
-}
-
-/**
- * Video/audio elements that still lack a source. Publishing is blocked while any exist
- * (mirrors the Studio's client-side publish gate — E50 Phase 3); drafts save freely.
- * Accepts both the validated create/patch input and raw DB rows.
- */
-function unfilledMediaSlots(
-	elements: readonly {
-		contentType: string;
-		videoFile?: string | null;
-		audioFile?: string | null;
-	}[],
-): number {
-	return elements.filter(
-		(el) =>
-			(el.contentType === "video" && !el.videoFile) ||
-			(el.contentType === "audio" && !el.audioFile),
-	).length;
-}
+type ContentItemRow = typeof contentItems.$inferSelect;
+type AssetRow = typeof assets.$inferSelect;
+type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
+type PostEntryInput = z.infer<typeof postEntrySchema>;
 
 /**
  * Client-transcode transport: a browser upload may hand us a pre-encoded MP4 variant
- * ladder in the element's metadata (see apps/web/src/lib/transcode.ts). When present,
- * the server only remuxes to HLS (`package-video`) instead of re-encoding.
+ * ladder in the item's metadata (see apps/web/src/lib/transcode.ts). When present, the
+ * server only remuxes to HLS (`package-video`) instead of re-encoding from source.
  */
 interface ClientVariant {
 	name: string;
@@ -328,19 +330,32 @@ function readClientVariants(metadata: unknown): ClientVariant[] {
 	);
 }
 
-/** Queue a transcode/normalize job for a video or audio element that has a source file. */
-async function queueTranscodeFor(content: typeof postContents.$inferSelect): Promise<void> {
-	if (content.contentType === "video" && content.videoFile) {
+/** Drop internal-only keys (e.g. client-transcode variant storage keys) from metadata. */
+function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
+	if (!metadata || typeof metadata !== "object") return {};
+	const { clientVariants, ...rest } = metadata as Record<string, unknown>;
+	void clientVariants;
+	return rest;
+}
+
+/**
+ * Queue processing for a library content item that has a source needing it. Video →
+ * HLS transcode (or a cheap remux when the browser pre-encoded a variant ladder); audio
+ * → normalize. Fired on library upload (POST /content-items) and when the source changes
+ * (PATCH), NEVER on post save — processing is a library concern, not a post concern.
+ */
+async function queueTranscodeForItem(item: ContentItemRow): Promise<void> {
+	if (item.type === "video" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentId: content.id, mediaType: "video", status: "pending" })
+			.values({ contentItemId: item.id, mediaType: "video", status: "pending" })
 			.returning();
 		// Browser-encoded ladder → cheap remux; otherwise the server encodes from source.
-		const variants = readClientVariants(content.metadata);
+		const variants = readClientVariants(item.metadata);
 		if (variants.length > 0) {
 			await queue.send(
 				QUEUES.PACKAGE_VIDEO,
-				{ jobId: job.id, variants, duration: content.durationSeconds ?? undefined },
+				{ jobId: job.id, variants, duration: item.durationSeconds ?? undefined },
 				JOB_OPTIONS[QUEUES.PACKAGE_VIDEO],
 			);
 		} else {
@@ -350,63 +365,192 @@ async function queueTranscodeFor(content: typeof postContents.$inferSelect): Pro
 				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
 			);
 		}
-	} else if (content.contentType === "audio" && content.audioFile) {
+	} else if (item.type === "audio" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentId: content.id, mediaType: "audio", status: "pending" })
+			.values({ contentItemId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
 		await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
 	}
 }
 
-/** Insert a fresh set of content elements for a post (create path). */
-async function insertContents(
-	postId: number,
-	elements: z.infer<typeof contentElementSchema>[],
+/**
+ * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
+ * of a URL — resolve those to public URLs in place (new uploads already store URLs).
+ */
+async function resolveItemThumbnail(item: ContentItemRow): Promise<void> {
+	if (
+		item.thumbnail &&
+		!/^(https?:)?\/\//.test(item.thumbnail) &&
+		!item.thumbnail.startsWith("/")
+	) {
+		item.thumbnail = await storage.getUrl(item.thumbnail);
+	}
+}
+
+/** Serialize a library content item (owner-facing: full media keys + latest transcode). */
+function serializeItem(
+	item: ContentItemRow,
+	itemAssets: AssetRow[] = [],
+	job: TranscodingJobRow | null = null,
+) {
+	return {
+		id: item.id,
+		creatorId: item.creatorId,
+		type: item.type,
+		title: item.title,
+		description: item.description,
+		thumbnail: item.thumbnail,
+		sourceKey: item.sourceKey,
+		embedUrl: item.embedUrl,
+		durationSeconds: item.durationSeconds,
+		metadata: stripInternalMetadata(item.metadata),
+		createdAt: item.createdAt,
+		updatedAt: item.updatedAt,
+		assets: itemAssets,
+		transcoding: job,
+	};
+}
+
+/**
+ * A storage URL or bare key → the storage key. Playlists/manifests, audio output, and
+ * (sometimes) thumbnails are stored as URLs; source keys and asset files are bare keys.
+ * Local-dev URLs carry a `/content/` path prefix that isn't part of the key.
+ */
+function urlToKey(urlOrKey: string): string {
+	let path = urlOrKey;
+	if (/^(https?:)?\/\//.test(urlOrKey)) {
+		try {
+			path = decodeURIComponent(new URL(urlOrKey).pathname);
+		} catch {
+			path = urlOrKey;
+		}
+	}
+	path = path.replace(/^\/+/, "");
+	if (path.startsWith("content/")) path = path.slice("content/".length);
+	return path;
+}
+
+/**
+ * Best-effort purge of a content item's stored media before the row (and its cascaded
+ * assets/transcodes/post-refs) are deleted: the source, thumbnail, every asset file, each
+ * completed video transcode's HLS output prefix, and any processed-audio output. Failures
+ * are logged and swallowed so a storage hiccup never blocks the DB delete.
+ */
+async function purgeItemMedia(
+	item: ContentItemRow,
+	itemAssets: AssetRow[],
+	jobRows: TranscodingJobRow[],
 ): Promise<void> {
-	for (let i = 0; i < elements.length; i++) {
-		const [inserted] = await db
-			.insert(postContents)
-			.values(elementValues(elements[i], postId, i))
-			.returning();
-		await queueTranscodeFor(inserted);
+	const keys = new Set<string>();
+	const prefixes = new Set<string>();
+
+	if (item.sourceKey) keys.add(urlToKey(item.sourceKey));
+	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
+	for (const a of itemAssets) if (a.file) keys.add(urlToKey(a.file));
+	for (const job of jobRows) {
+		if (job.hlsManifestUrl) {
+			const masterKey = urlToKey(job.hlsManifestUrl);
+			const prefix = masterKey.replace(/\/[^/]+$/, "");
+			if (prefix && prefix !== masterKey) prefixes.add(prefix);
+		}
+		if (job.outputFileUrl) keys.add(urlToKey(job.outputFileUrl));
+	}
+
+	for (const prefix of prefixes) {
+		try {
+			await storage.deletePrefix(prefix);
+		} catch (err) {
+			console.error(`[content-item delete] deletePrefix failed for ${prefix}:`, err);
+		}
+	}
+	for (const key of keys) {
+		if (!key) continue;
+		try {
+			await storage.delete(key);
+		} catch (err) {
+			console.error(`[content-item delete] delete failed for ${key}:`, err);
+		}
+	}
+}
+
+// ─── Post entry persistence ─────────────────────────────────────────────────────
+
+/** Map a validated post entry to its post_contents column values. */
+function entryValues(entry: PostEntryInput, postId: number, position: number) {
+	if (entry.kind === "text") {
+		return {
+			postId,
+			position,
+			kind: "text",
+			bodyHtml: entry.bodyHtml ? sanitizePostHtml(entry.bodyHtml) : "",
+			contentItemId: null,
+			caption: "",
+		};
+	}
+	return {
+		postId,
+		position,
+		kind: "content",
+		bodyHtml: "",
+		contentItemId: entry.contentItemId,
+		caption: entry.caption ?? "",
+	};
+}
+
+/**
+ * Load the caller-owned content items referenced by a set of entries. `ok` is false when
+ * any `content` entry points at an item the caller doesn't own (or that doesn't exist) —
+ * the create/patch handlers turn that into a 400.
+ */
+async function loadOwnedItemsForEntries(
+	entries: PostEntryInput[],
+	creatorId: number,
+): Promise<{ ok: boolean; itemsById: Map<number, ContentItemRow> }> {
+	const ids = [
+		...new Set(
+			entries
+				.filter((e): e is Extract<PostEntryInput, { kind: "content" }> => e.kind === "content")
+				.map((e) => e.contentItemId),
+		),
+	];
+	if (ids.length === 0) return { ok: true, itemsById: new Map() };
+	const rows = await db
+		.select()
+		.from(contentItems)
+		.where(and(inArray(contentItems.id, ids), eq(contentItems.creatorId, creatorId)));
+	const itemsById = new Map(rows.map((r) => [r.id, r]));
+	return { ok: ids.every((id) => itemsById.has(id)), itemsById };
+}
+
+/** Insert a fresh ordered set of post entries (create path). No transcode queueing. */
+async function insertPostEntries(postId: number, entries: PostEntryInput[]): Promise<void> {
+	for (let i = 0; i < entries.length; i++) {
+		await db.insert(postContents).values(entryValues(entries[i], postId, i));
 	}
 }
 
 /**
- * Reconcile a post's content elements against a submitted array (update path):
- * keep+update elements referenced by id (preserving their assets/transcodes),
- * insert new ones, and delete those dropped from the array.
+ * Reconcile a post's entries against a submitted array (update path): keep+update entries
+ * referenced by id, insert new ones, and delete those dropped — preserving order via
+ * `position`. Processing is a library concern, so nothing is queued here.
  */
-async function reconcileContents(
-	postId: number,
-	elements: z.infer<typeof contentElementSchema>[],
-): Promise<void> {
+async function reconcilePostEntries(postId: number, entries: PostEntryInput[]): Promise<void> {
 	const existing = await db.select().from(postContents).where(eq(postContents.postId, postId));
 	const existingById = new Map(existing.map((e) => [e.id, e]));
 	const keep = new Set<number>();
 
-	for (let i = 0; i < elements.length; i++) {
-		const el = elements[i];
-		const prev = el.id != null ? existingById.get(el.id) : undefined;
+	for (let i = 0; i < entries.length; i++) {
+		const entry = entries[i];
+		const prev = entry.id != null ? existingById.get(entry.id) : undefined;
 		if (prev) {
 			keep.add(prev.id);
 			await db
 				.update(postContents)
-				.set({ ...elementValues(el, postId, i), updatedAt: new Date() })
+				.set({ ...entryValues(entry, postId, i), updatedAt: new Date() })
 				.where(eq(postContents.id, prev.id));
-			// Re-queue when a streamed media source changed.
-			if (el.contentType === "video" && el.videoFile && el.videoFile !== prev.videoFile) {
-				await queueTranscodeFor({ ...prev, ...elementValues(el, postId, i) });
-			} else if (el.contentType === "audio" && el.audioFile && el.audioFile !== prev.audioFile) {
-				await queueTranscodeFor({ ...prev, ...elementValues(el, postId, i) });
-			}
 		} else {
-			const [inserted] = await db
-				.insert(postContents)
-				.values(elementValues(el, postId, i))
-				.returning();
-			await queueTranscodeFor(inserted);
+			await db.insert(postContents).values(entryValues(entry, postId, i));
 		}
 	}
 
@@ -414,14 +558,6 @@ async function reconcileContents(
 	if (toDelete.length > 0) {
 		await db.delete(postContents).where(inArray(postContents.id, toDelete));
 	}
-}
-
-/** Drop internal-only keys (e.g. client-transcode variant storage keys) from metadata. */
-function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
-	if (!metadata || typeof metadata !== "object") return {};
-	const { clientVariants, ...rest } = metadata as Record<string, unknown>;
-	void clientVariants;
-	return rest;
 }
 
 /**
@@ -435,109 +571,138 @@ interface HlsStreamCtx {
 	origin: string;
 }
 
-/** URL of the access-checked HLS master for a gated video element. */
-function buildHlsManifestUrl(ctx: HlsStreamCtx, contentId: number, file = "master.m3u8"): string {
-	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/hls/${contentId}/${file}`;
+/** URL of the access-checked HLS master for a gated video item referenced by a post. */
+function buildHlsManifestUrl(
+	ctx: HlsStreamCtx,
+	contentItemId: number,
+	file = "master.m3u8",
+): string {
+	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/hls/${contentItemId}/${file}`;
 }
 
-/** Serialize one content element for a response, stripping the payload when gated. */
-function serializeContent(
-	el: typeof postContents.$inferSelect,
-	elAssets: (typeof assets.$inferSelect)[],
-	job: typeof transcodingJobs.$inferSelect | null,
+/** Serialize one post entry for a response, blanking the referenced item's media when gated. */
+function serializeEntry(
+	entry: typeof postContents.$inferSelect,
+	item: ContentItemRow | null,
+	itemAssets: AssetRow[],
+	job: TranscodingJobRow | null,
 	canAccess: boolean,
 	hls: HlsStreamCtx | null,
 ) {
-	// Gated video: hand the player our signed-segment manifest endpoint, not the raw
-	// CDN URL (whose .ts segments are private → 403). Free/public posts keep the
-	// direct public manifest (CDN-served, no per-request signing).
+	if (entry.kind === "text") {
+		return {
+			kind: "text" as const,
+			id: entry.id,
+			postId: entry.postId,
+			position: entry.position,
+			// Inline prose is part of the post's gated deliverable — blanked when locked.
+			bodyHtml: canAccess ? entry.bodyHtml : "",
+		};
+	}
+
+	// Video: hand the player our signed-segment manifest endpoint, not the raw CDN URL.
+	// Library content is processed with PRIVATE segments (access isn't known at upload
+	// time), so every accessible post — free or gated — routes through the access-checked
+	// signing endpoint in S3 mode; local dev serves the direct manifest (no ACLs).
 	let transcoding = job;
 	if (
 		hls &&
 		canAccess &&
 		job &&
-		el.contentType === "video" &&
+		item?.type === "video" &&
 		job.status === "completed" &&
 		job.hlsManifestUrl
 	) {
-		transcoding = { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, el.id) };
+		transcoding = { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, item.id) };
 	}
 
+	const contentItem = item
+		? {
+				id: item.id,
+				type: item.type,
+				title: item.title,
+				thumbnail: item.thumbnail,
+				durationSeconds: item.durationSeconds,
+				// `clientVariants` are an internal packaging detail (storage keys) — never expose.
+				metadata: stripInternalMetadata(item.metadata),
+				// Media payload is the deliverable — only handed out when the viewer has access.
+				sourceKey: canAccess ? item.sourceKey : "",
+				embedUrl: canAccess ? item.embedUrl : "",
+				// Download keys are only handed out through the access-checked download route.
+				assets: itemAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
+				transcoding,
+			}
+		: null;
+
 	return {
-		id: el.id,
-		postId: el.postId,
-		position: el.position,
-		contentType: el.contentType,
-		title: el.title,
-		thumbnail: el.thumbnail,
-		durationSeconds: el.durationSeconds,
-		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
-		metadata: stripInternalMetadata(el.metadata),
-		// Payload is the deliverable — only handed out when the viewer has access.
-		bodyHtml: canAccess ? el.bodyHtml : "",
-		images: canAccess ? el.images : [],
-		videoFile: canAccess ? el.videoFile : "",
-		audioFile: canAccess ? el.audioFile : "",
-		embedUrl: canAccess ? el.embedUrl : "",
-		// Download keys are only handed out through the access-checked download route.
-		assets: elAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
-		transcoding,
+		kind: "content" as const,
+		id: entry.id,
+		postId: entry.postId,
+		position: entry.position,
+		caption: entry.caption,
+		contentItem,
 	};
 }
 
-/** Load a post's content elements with their assets + latest transcode job, gating as needed. */
+/** Load a post's entries, resolving each content ref to its item + assets + latest job, gated. */
 async function loadPostContents(
 	postId: number,
 	canAccess: boolean,
 	hls: HlsStreamCtx | null = null,
 ) {
-	const contents = await db
+	const entries = await db
 		.select()
 		.from(postContents)
 		.where(eq(postContents.postId, postId))
 		.orderBy(asc(postContents.position));
-	if (contents.length === 0) return [];
+	if (entries.length === 0) return [];
 
-	const contentIds = contents.map((c) => c.id);
-	const [assetRows, jobRows] = await Promise.all([
-		db.select().from(assets).where(inArray(assets.contentId, contentIds)),
-		db
-			.select()
-			.from(transcodingJobs)
-			.where(inArray(transcodingJobs.contentId, contentIds))
-			.orderBy(desc(transcodingJobs.createdAt)),
-	]);
+	const itemIds = [
+		...new Set(
+			entries
+				.filter((e) => e.kind === "content" && e.contentItemId != null)
+				.map((e) => e.contentItemId as number),
+		),
+	];
 
-	const assetsByContent = new Map<number, (typeof assets.$inferSelect)[]>();
-	for (const a of assetRows) {
-		const list = assetsByContent.get(a.contentId) ?? [];
-		list.push(a);
-		assetsByContent.set(a.contentId, list);
+	const itemsById = new Map<number, ContentItemRow>();
+	const assetsByItem = new Map<number, AssetRow[]>();
+	const jobByItem = new Map<number, TranscodingJobRow>();
+
+	if (itemIds.length > 0) {
+		const [itemRows, assetRows, jobRows] = await Promise.all([
+			db.select().from(contentItems).where(inArray(contentItems.id, itemIds)),
+			db.select().from(assets).where(inArray(assets.contentItemId, itemIds)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(inArray(transcodingJobs.contentItemId, itemIds))
+				.orderBy(desc(transcodingJobs.createdAt)),
+		]);
+
+		await Promise.all(itemRows.map(resolveItemThumbnail));
+		for (const item of itemRows) itemsById.set(item.id, item);
+		for (const a of assetRows) {
+			const list = assetsByItem.get(a.contentItemId) ?? [];
+			list.push(a);
+			assetsByItem.set(a.contentItemId, list);
+		}
+		for (const j of jobRows) {
+			if (!jobByItem.has(j.contentItemId)) jobByItem.set(j.contentItemId, j);
+		}
 	}
-	const jobByContent = new Map<number, typeof transcodingJobs.$inferSelect>();
-	for (const j of jobRows) {
-		if (!jobByContent.has(j.contentId)) jobByContent.set(j.contentId, j);
-	}
 
-	// Thumbnails render directly as <img src>; older rows stored a bare storage key
-	// instead of a URL — resolve those to public URLs (new uploads already store URLs).
-	await Promise.all(
-		contents.map(async (el) => {
-			if (el.thumbnail && !/^(https?:)?\/\//.test(el.thumbnail) && !el.thumbnail.startsWith("/")) {
-				el.thumbnail = await storage.getUrl(el.thumbnail);
-			}
-		}),
-	);
-
-	return contents.map((el) =>
-		serializeContent(
-			el,
-			assetsByContent.get(el.id) ?? [],
-			jobByContent.get(el.id) ?? null,
+	return entries.map((entry) => {
+		const item = entry.contentItemId != null ? (itemsById.get(entry.contentItemId) ?? null) : null;
+		return serializeEntry(
+			entry,
+			item,
+			item ? (assetsByItem.get(item.id) ?? []) : [],
+			item ? (jobByItem.get(item.id) ?? null) : null,
 			canAccess,
 			hls,
-		),
-	);
+		);
+	});
 }
 
 /**
@@ -571,7 +736,7 @@ const HLS_SEGMENT_TTL_SECONDS = 6 * 60 * 60;
  */
 async function rewriteHlsPlaylist(
 	text: string,
-	opts: { isMaster: boolean; prefixKey: string; ctx: HlsStreamCtx; contentId: number },
+	opts: { isMaster: boolean; prefixKey: string; ctx: HlsStreamCtx; contentItemId: number },
 ): Promise<string> {
 	const out: string[] = [];
 	for (const raw of text.split("\n")) {
@@ -582,7 +747,7 @@ async function rewriteHlsPlaylist(
 		}
 		if (opts.isMaster) {
 			// A variant playlist (e.g. "720p.m3u8") → back through this endpoint.
-			out.push(buildHlsManifestUrl(opts.ctx, opts.contentId, encodeURIComponent(line)));
+			out.push(buildHlsManifestUrl(opts.ctx, opts.contentItemId, encodeURIComponent(line)));
 		} else {
 			// A segment (e.g. "720p_000.ts") → a short-lived signed CDN URL.
 			out.push(
@@ -689,7 +854,7 @@ const contentRoutes = new Hono()
 
 		const postIds = result.map((r) => r.post.id);
 
-		// Latest transcoding status per post (across its content elements).
+		// Latest transcoding status per post (across the items its content entries reference).
 		const transcodingMap = new Map<number, { status: string; progress: number }>();
 		if (postIds.length > 0) {
 			const jobs = await db
@@ -699,7 +864,7 @@ const contentRoutes = new Hono()
 					progress: transcodingJobs.progress,
 				})
 				.from(transcodingJobs)
-				.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
+				.innerJoin(postContents, eq(transcodingJobs.contentItemId, postContents.contentItemId))
 				.where(inArray(postContents.postId, postIds))
 				.orderBy(desc(transcodingJobs.createdAt));
 			for (const job of jobs) {
@@ -751,9 +916,11 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
-		// A post can only be published once every media slot has a source (drafts are free).
-		if (data.isPublished && unfilledMediaSlots(data.contents) > 0) {
-			return c.json({ error: "Add a source to every media element before publishing." }, 400);
+		// Every content ref must point at a library item the caller owns (a ref inherently
+		// points at an already-uploaded item, so there are no "empty media slots").
+		const { ok, itemsById } = await loadOwnedItemsForEntries(data.contents, user.id);
+		if (!ok) {
+			return c.json({ error: "A referenced content item was not found in your library." }, 400);
 		}
 
 		// Explicit slug must be free; otherwise derive a unique one from the title.
@@ -768,8 +935,8 @@ const contentRoutes = new Hono()
 		}
 
 		const bodyHtml = sanitizePostHtml(data.bodyHtml);
-		const contentType = deriveContentType(data.contents);
-		const thumbnail = deriveThumbnail(data.contents);
+		const contentType = deriveContentType(data.contents, itemsById);
+		const thumbnail = deriveThumbnail(data.contents, itemsById);
 
 		// Read time comes from the post body (the always-visible rich text).
 		const readText = bodyHtml || data.body;
@@ -802,7 +969,7 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		await insertContents(post.id, data.contents);
+		await insertPostEntries(post.id, data.contents);
 
 		// Optionally attach to a project (collection) the creator owns.
 		if (data.projectId != null) {
@@ -882,21 +1049,12 @@ const contentRoutes = new Hono()
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		// Publishing requires every media slot filled (drafts stay free). Validate before any
-		// writes — check the incoming elements when provided, else the post's current ones.
-		if (data.isPublished === true) {
-			const elementsForGate =
-				data.contents ??
-				(await db
-					.select({
-						contentType: postContents.contentType,
-						videoFile: postContents.videoFile,
-						audioFile: postContents.audioFile,
-					})
-					.from(postContents)
-					.where(eq(postContents.postId, existing.id)));
-			if (unfilledMediaSlots(elementsForGate) > 0) {
-				return c.json({ error: "Add a source to every media element before publishing." }, 400);
+		// When entries are provided, every content ref must belong to the caller — validate
+		// before any writes so a bad ref never partially applies.
+		if (data.contents !== undefined) {
+			const { ok } = await loadOwnedItemsForEntries(data.contents, user.id);
+			if (!ok) {
+				return c.json({ error: "A referenced content item was not found in your library." }, 400);
 			}
 		}
 
@@ -904,19 +1062,34 @@ const contentRoutes = new Hono()
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
-		// Reconcile content elements first (if provided), then derive post-level fields.
+		// Reconcile content entries first (if provided), then derive post-level fields.
 		if (data.contents !== undefined) {
-			await reconcileContents(existing.id, data.contents);
+			await reconcilePostEntries(existing.id, data.contents);
 		}
-		const currentContents = await db
-			.select({
-				contentType: postContents.contentType,
-				thumbnail: postContents.thumbnail,
-				images: postContents.images,
-			})
+		const currentEntries = await db
+			.select({ kind: postContents.kind, contentItemId: postContents.contentItemId })
 			.from(postContents)
 			.where(eq(postContents.postId, existing.id))
 			.orderBy(asc(postContents.position));
+		// Denormalized type/thumbnail derive from the first content ref's item.
+		const currentItemIds = [
+			...new Set(
+				currentEntries
+					.filter((e) => e.kind === "content" && e.contentItemId != null)
+					.map((e) => e.contentItemId as number),
+			),
+		];
+		const currentItems = currentItemIds.length
+			? await db
+					.select({
+						id: contentItems.id,
+						type: contentItems.type,
+						thumbnail: contentItems.thumbnail,
+					})
+					.from(contentItems)
+					.where(inArray(contentItems.id, currentItemIds))
+			: [];
+		const currentItemsById = new Map(currentItems.map((i) => [i.id, i]));
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
@@ -935,8 +1108,8 @@ const contentRoutes = new Hono()
 		if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
 
 		// Keep the denormalized type/thumbnail + read time in sync.
-		updates.contentType = deriveContentType(currentContents);
-		updates.thumbnail = deriveThumbnail(currentContents);
+		updates.contentType = deriveContentType(currentEntries, currentItemsById);
+		updates.thumbnail = deriveThumbnail(currentEntries, currentItemsById);
 		const readText =
 			(data.bodyHtml !== undefined ? updates.bodyHtml : existing.bodyHtml) ||
 			(data.body !== undefined ? data.body : existing.body) ||
@@ -1042,63 +1215,19 @@ const contentRoutes = new Hono()
 		return c.json({ rating }, 201);
 	})
 
-	// ── Content-element downloadable assets ──────────────────────────────────────
-	.post(
-		"/posts/:slug/contents/:contentId/assets",
-		requireAuth,
-		zValidator("json", createAssetSchema),
-		async (c) => {
-			const user = c.get("user");
-			const post = await findPostRow(c.req.param("slug"));
-			if (!post || post.creatorId !== user.id) return c.json({ error: "Post not found" }, 404);
-
-			const contentId = Number(c.req.param("contentId"));
-			const [element] = await db
-				.select({ id: postContents.id })
-				.from(postContents)
-				.where(and(eq(postContents.id, contentId), eq(postContents.postId, post.id)))
-				.limit(1);
-			if (!element) return c.json({ error: "Content element not found" }, 404);
-
-			const data = c.req.valid("json");
-			const [asset] = await db
-				.insert(assets)
-				.values({ contentId, ...data })
-				.returning();
-			return c.json({ asset }, 201);
-		},
-	)
-
-	.delete("/posts/:slug/contents/:contentId/assets/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post || post.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
-
-		const contentId = Number(c.req.param("contentId"));
-		const deleted = await db
-			.delete(assets)
-			.where(
-				and(
-					eq(assets.id, Number(c.req.param("id"))),
-					eq(assets.contentId, contentId),
-					sql`${contentId} IN (SELECT id FROM post_contents WHERE post_id = ${post.id})`,
-				),
-			)
-			.returning({ id: assets.id });
-
-		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
-		return c.body(null, 204);
-	})
-
+	// ── Access-checked asset download ─────────────────────────────────────────────
+	// Assets belong to content items; a post can deliver an item's asset only while it
+	// references that item. Access is enforced at the post level (the access point).
 	.post("/posts/:slug/assets/:id/download", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		// Resolve the asset via its content element, scoped to this post.
+		// Resolve the asset via its content item, and confirm the item is referenced by
+		// this post (a post_contents row with that contentItemId).
 		const [row] = await db
 			.select({ asset: assets })
 			.from(assets)
-			.innerJoin(postContents, eq(assets.contentId, postContents.id))
+			.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
 			.where(and(eq(assets.id, Number(c.req.param("id"))), eq(postContents.postId, post.id)))
 			.limit(1);
 		if (!row) return c.json({ error: "Asset not found" }, 404);
@@ -1122,15 +1251,15 @@ const contentRoutes = new Hono()
 		return c.json({ url });
 	})
 
-	// ── Transcoding status (across the post's content elements) ──────────────────
+	// ── Transcoding status (across the items the post's content entries reference) ──
 	.get("/posts/:slug/transcoding", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const jobs = await db
-			.select({ job: transcodingJobs, contentId: postContents.id })
+			.select({ job: transcodingJobs })
 			.from(transcodingJobs)
-			.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
+			.innerJoin(postContents, eq(transcodingJobs.contentItemId, postContents.contentItemId))
 			.where(eq(postContents.postId, post.id))
 			.orderBy(desc(transcodingJobs.createdAt));
 
@@ -1138,9 +1267,10 @@ const contentRoutes = new Hono()
 	})
 
 	// ── Gated HLS delivery (access-checked, signed segments) ─────────────────────
-	// Serves the master + variant playlists for a gated video, rewriting segment refs
-	// to short-lived signed CDN URLs. Only reached for gated posts (free posts stream
-	// the public CDN manifest directly); the player is pointed here by serializeContent.
+	// Serves the master + variant playlists for a gated video, rewriting segment refs to
+	// short-lived signed CDN URLs. `:contentId` is a content-item id referenced by the
+	// post. Only reached for gated posts (free posts stream the public CDN manifest
+	// directly); the player is pointed here by serializeEntry.
 	.get("/posts/:slug/hls/:contentId/:file", async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
@@ -1155,15 +1285,22 @@ const contentRoutes = new Hono()
 		const access = resolveAccessSync(post as AccessiblePost, ctx);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
-		const contentId = Number(c.req.param("contentId"));
-		const [row] = await db
-			.select({ job: transcodingJobs })
+		const contentItemId = Number(c.req.param("contentId"));
+		// Confirm the item is referenced by this post before serving its transcode.
+		const [ref] = await db
+			.select({ id: postContents.id })
+			.from(postContents)
+			.where(and(eq(postContents.contentItemId, contentItemId), eq(postContents.postId, post.id)))
+			.limit(1);
+		if (!ref) return c.json({ error: "Not found" }, 404);
+
+		const [job] = await db
+			.select()
 			.from(transcodingJobs)
-			.innerJoin(postContents, eq(transcodingJobs.contentId, postContents.id))
-			.where(and(eq(transcodingJobs.contentId, contentId), eq(postContents.postId, post.id)))
+			.where(eq(transcodingJobs.contentItemId, contentItemId))
 			.orderBy(desc(transcodingJobs.createdAt))
 			.limit(1);
-		const manifestUrl = row?.job.hlsManifestUrl;
+		const manifestUrl = job?.hlsManifestUrl;
 		if (!manifestUrl) return c.json({ error: "Not found" }, 404);
 
 		// Storage key prefix = the directory of the master.m3u8 key (playlists are public,
@@ -1178,12 +1315,218 @@ const contentRoutes = new Hono()
 			isMaster: file === "master.m3u8",
 			prefixKey,
 			ctx: { slug: post.slug, origin: publicOrigin() },
-			contentId,
+			contentItemId,
 		});
 		return c.body(rewritten, 200, {
 			"Content-Type": "application/vnd.apple.mpegurl",
 			"Cache-Control": "no-store",
 		});
+	})
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// CONTENT LIBRARY — creator-owned, reusable content items
+	// ══════════════════════════════════════════════════════════════════════════
+
+	/**
+	 * Create a library content item owned by the caller. Media items with a source that
+	 * needs processing are queued here (once, in the library) — never on post save.
+	 */
+	.post("/content-items", requireAuth, zValidator("json", createContentItemSchema), async (c) => {
+		const user = c.get("user");
+		const data = c.req.valid("json");
+
+		const [item] = await db
+			.insert(contentItems)
+			.values({
+				creatorId: user.id,
+				type: data.type,
+				title: data.title,
+				description: data.description,
+				thumbnail: data.thumbnail,
+				sourceKey: data.sourceKey,
+				embedUrl: data.embedUrl,
+				durationSeconds: data.durationSeconds ?? null,
+				metadata: data.metadata ?? {},
+			})
+			.returning();
+
+		await queueTranscodeForItem(item);
+		await resolveItemThumbnail(item);
+		return c.json({ item: serializeItem(item) }, 201);
+	})
+
+	/** The caller's library, each item with its latest transcode + assets for the UI. */
+	.get("/content-items", requireAuth, async (c) => {
+		const user = c.get("user");
+
+		const items = await db
+			.select()
+			.from(contentItems)
+			.where(eq(contentItems.creatorId, user.id))
+			.orderBy(desc(contentItems.createdAt));
+		if (items.length === 0) return c.json({ items: [] });
+
+		const ids = items.map((i) => i.id);
+		const [assetRows, jobRows] = await Promise.all([
+			db.select().from(assets).where(inArray(assets.contentItemId, ids)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(inArray(transcodingJobs.contentItemId, ids))
+				.orderBy(desc(transcodingJobs.createdAt)),
+		]);
+
+		const assetsByItem = new Map<number, AssetRow[]>();
+		for (const a of assetRows) {
+			const list = assetsByItem.get(a.contentItemId) ?? [];
+			list.push(a);
+			assetsByItem.set(a.contentItemId, list);
+		}
+		const jobByItem = new Map<number, TranscodingJobRow>();
+		for (const j of jobRows) {
+			if (!jobByItem.has(j.contentItemId)) jobByItem.set(j.contentItemId, j);
+		}
+
+		await Promise.all(items.map(resolveItemThumbnail));
+		return c.json({
+			items: items.map((i) =>
+				serializeItem(i, assetsByItem.get(i.id) ?? [], jobByItem.get(i.id) ?? null),
+			),
+		});
+	})
+
+	/** One library item (owner-only) with its assets + latest transcode. */
+	.get("/content-items/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) {
+			return c.json({ error: "Content item not found" }, 404);
+		}
+
+		const [itemAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.contentItemId, id)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.contentItemId, id))
+				.orderBy(desc(transcodingJobs.createdAt)),
+		]);
+
+		await resolveItemThumbnail(item);
+		return c.json({ item: serializeItem(item, itemAssets, jobRows[0] ?? null) });
+	})
+
+	/** Update a library item (owner-only). Re-queues processing when the source changes. */
+	.patch(
+		"/content-items/:id",
+		requireAuth,
+		zValidator("json", updateContentItemSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
+			if (!item || item.creatorId !== user.id) {
+				return c.json({ error: "Content item not found" }, 404);
+			}
+
+			const data = c.req.valid("json");
+			const updates: Record<string, unknown> = { updatedAt: new Date() };
+			if (data.title !== undefined) updates.title = data.title;
+			if (data.description !== undefined) updates.description = data.description;
+			if (data.thumbnail !== undefined) updates.thumbnail = data.thumbnail;
+			if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
+			if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
+			if (data.metadata !== undefined) updates.metadata = data.metadata;
+			const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== item.sourceKey;
+			if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
+
+			const [updated] = await db
+				.update(contentItems)
+				.set(updates)
+				.where(eq(contentItems.id, id))
+				.returning();
+
+			// A new source means the old transcode is stale — re-process from the library.
+			if (sourceChanged && updated.sourceKey) await queueTranscodeForItem(updated);
+
+			const [itemAssets, jobRows] = await Promise.all([
+				db.select().from(assets).where(eq(assets.contentItemId, id)),
+				db
+					.select()
+					.from(transcodingJobs)
+					.where(eq(transcodingJobs.contentItemId, id))
+					.orderBy(desc(transcodingJobs.createdAt)),
+			]);
+
+			await resolveItemThumbnail(updated);
+			return c.json({ item: serializeItem(updated, itemAssets, jobRows[0] ?? null) });
+		},
+	)
+
+	/**
+	 * Delete a library item (owner-only). Best-effort purges its stored media first, then
+	 * deletes the row — cascade removes its assets, transcodes, and any post_contents refs.
+	 */
+	.delete("/content-items/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) {
+			return c.json({ error: "Content item not found" }, 404);
+		}
+
+		const [itemAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.contentItemId, id)),
+			db.select().from(transcodingJobs).where(eq(transcodingJobs.contentItemId, id)),
+		]);
+		await purgeItemMedia(item, itemAssets, jobRows);
+
+		await db.delete(contentItems).where(eq(contentItems.id, id));
+		return c.body(null, 204);
+	})
+
+	// ── Content-item downloadable assets (builds/variants) ────────────────────────
+	.post(
+		"/content-items/:id/assets",
+		requireAuth,
+		zValidator("json", createAssetSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db
+				.select({ id: contentItems.id })
+				.from(contentItems)
+				.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
+				.limit(1);
+			if (!item) return c.json({ error: "Content item not found" }, 404);
+
+			const data = c.req.valid("json");
+			const [asset] = await db
+				.insert(assets)
+				.values({ contentItemId: id, ...data })
+				.returning();
+			return c.json({ asset }, 201);
+		},
+	)
+
+	.delete("/content-items/:id/assets/:assetId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db
+			.select({ id: contentItems.id })
+			.from(contentItems)
+			.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
+			.limit(1);
+		if (!item) return c.json({ error: "Not found" }, 404);
+
+		const deleted = await db
+			.delete(assets)
+			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.contentItemId, id)))
+			.returning({ id: assets.id });
+
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+		return c.body(null, 204);
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
