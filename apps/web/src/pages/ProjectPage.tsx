@@ -12,6 +12,7 @@ import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { useAttentionTracker } from "@/lib/attention";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
+import { studioUrl } from "../lib/studio";
 
 export default function ProjectPage() {
 	const { slug } = useParams<{ slug: string }>();
@@ -80,13 +81,13 @@ export default function ProjectPage() {
 				<div className="flex items-start justify-between gap-4 mb-2">
 					<h1 className="text-3xl font-bold">{project.title}</h1>
 					{isOwner && (
-						<Link
-							to={`/dashboard/projects/${project.slug}/edit`}
+						<a
+							href={studioUrl(`/projects/${project.slug}/edit`)}
 							className="btn btn-outline btn-sm shrink-0"
 						>
 							<PencilSquareIcon className="w-4 h-4" />
 							Edit
-						</Link>
+						</a>
 					)}
 				</div>
 				{project.creator && (

@@ -9,6 +9,7 @@ import type {
 	Project,
 	PublicUser,
 } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import FormField from "@anthers/web-shared/ui/FormField";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -24,7 +25,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
-import EmptyState from "../components/ui/EmptyState";
 
 const apiBase =
 	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"

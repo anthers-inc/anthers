@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { studioEditPostUrl, studioNewPostUrl } from "../../lib/studio";
+import { useLocation } from "react-router-dom";
+import { studioOrigin } from "../../lib/studio";
 
 /**
- * Post authoring moved to the Creator Studio (studio.anthers.org, a separate origin).
- * The old in-site routes (/dashboard/posts/new, /dashboard/posts/:slug/edit) are kept
- * as a safety net for bookmarks/stale links and hard-redirect to the Studio.
+ * Creator tooling moved to the Studio (studio.anthers.org, a separate origin). The old
+ * in-site `/dashboard/*` routes are kept as a safety net for bookmarks/stale links and
+ * hard-redirect to the Studio equivalent — the Studio's root IS the dashboard, so we
+ * just strip the `/dashboard` prefix (`/dashboard/analytics` → `/analytics`,
+ * `/dashboard` → `/`).
  */
-export default function StudioRedirect({ mode }: { mode: "new" | "edit" }) {
-	const { slug } = useParams<{ slug: string }>();
+export default function StudioRedirect() {
+	const { pathname, search } = useLocation();
 
 	useEffect(() => {
-		window.location.href = mode === "edit" && slug ? studioEditPostUrl(slug) : studioNewPostUrl();
-	}, [mode, slug]);
+		const studioPath = pathname.replace(/^\/dashboard/, "") || "/";
+		window.location.href = `${studioOrigin()}${studioPath}${search}`;
+	}, [pathname, search]);
 
 	return (
 		<div className="flex justify-center items-center min-h-[60vh] text-base-content/60">

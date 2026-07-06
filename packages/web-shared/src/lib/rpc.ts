@@ -13,7 +13,7 @@ import type { AppType } from "../../../../apps/api/src/index.js";
  *     cookie make the shared login work (see epic E50 — Creator Studio).
  *   - otherwise             → same-origin ("") — the consumer site on the apex.
  */
-function apiBaseUrl(): string {
+export function apiBaseUrl(): string {
 	if (typeof location === "undefined") return "";
 	const h = location.hostname;
 	if (h === "localhost" || h === "127.0.0.1") return "http://localhost:8000";

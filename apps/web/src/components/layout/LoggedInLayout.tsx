@@ -13,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
+import { studioUrl } from "../../lib/studio";
 import MiniPlayer from "../media/MiniPlayer";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
@@ -24,11 +25,6 @@ const NAV_LINKS = [
 	{ to: "/library", label: "Library", icon: RectangleStackIcon },
 	{ to: "/discover", label: "Discover", icon: MagnifyingGlassIcon },
 	{ to: "/jams", label: "Jams", icon: TrophyIcon },
-] as const;
-
-const CREATOR_LINKS = [
-	{ to: "/dashboard", label: "Dashboard", icon: Squares2X2Icon },
-	{ to: "/dashboard/analytics", label: "Analytics", icon: ChartBarIcon },
 ] as const;
 
 function LoggedInLayoutInner() {
@@ -133,16 +129,15 @@ function LoggedInLayoutInner() {
 								</NavLink>
 							))}
 
-							{/* Creator section */}
+							{/* Creator section — the Studio (studio.anthers.org) is the all-in-one
+								creator management surface, a separate origin, so this links out. */}
 							{user?.isCreator && (
 								<>
 									<div className="divider my-1 px-1 text-xs text-base-content/30">Creator</div>
-									{CREATOR_LINKS.map((link) => (
-										<NavLink key={link.to} to={link.to} className={navLinkClass}>
-											<link.icon className="w-5 h-5 shrink-0" />
-											{link.label}
-										</NavLink>
-									))}
+									<a href={studioUrl("/")} className={navLinkClass({ isActive: false })}>
+										<Squares2X2Icon className="w-5 h-5 shrink-0" />
+										Studio
+									</a>
 								</>
 							)}
 						</nav>

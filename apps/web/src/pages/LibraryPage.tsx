@@ -3,6 +3,7 @@
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { client } from "@anthers/web-shared/rpc";
 import type { Purchase } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	MusicalNoteIcon,
@@ -14,7 +15,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import EmptyState from "../components/ui/EmptyState";
 
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },

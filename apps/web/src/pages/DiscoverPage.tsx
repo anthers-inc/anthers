@@ -2,6 +2,7 @@
 
 import { client } from "@anthers/web-shared/rpc";
 import type { Project, PublicUser } from "@anthers/web-shared/types";
+import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BoltIcon,
@@ -15,7 +16,6 @@ import CreatorCard from "../components/cards/CreatorCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
-import EmptyState from "../components/ui/EmptyState";
 
 // Exploration modes
 const EXPLORE_MODES = [

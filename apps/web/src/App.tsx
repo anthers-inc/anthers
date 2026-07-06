@@ -9,34 +9,27 @@ import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
 import StudioRedirect from "./components/ui/StudioRedirect";
 import AboutPage from "./pages/AboutPage";
-import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
 // Authenticated home page
 import AuthenticatedHomePage from "./pages/AuthenticatedHomePage";
-import BuildsPage from "./pages/BuildsPage";
 import CompareGhostPage from "./pages/CompareGhostPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CreatorBreakdownDemoPage from "./pages/CreatorBreakdownDemoPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
 import CreatorProfilePage from "./pages/CreatorProfilePage";
-// Protected pages
-import DashboardPage from "./pages/DashboardPage";
 // Shared content pages (work for both logged-in and logged-out)
 import DiscoverPage from "./pages/DiscoverPage";
 import FAQPage from "./pages/FAQPage";
 // Public marketing pages
 import ForCreatorsPage from "./pages/ForCreatorsPage";
 import ForUsersPage from "./pages/ForUsersPage";
-import ImportPage from "./pages/ImportPage";
 import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
-import JamFormPage from "./pages/JamFormPage";
 import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
 // Auth pages
 import LoginPage from "./pages/LoginPage";
 import PostPage from "./pages/PostPage";
-import ProjectFormPage from "./pages/ProjectFormPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import RoadmapPage from "./pages/RoadmapPage";
@@ -87,83 +80,16 @@ export default function App() {
 						</ProtectedRoute>
 					}
 				/>
+				{/*
+					Creator tooling lives in the Studio (studio.anthers.org) now. Keep the whole
+					/dashboard/* tree as a redirect safety net for bookmarks/stale links — it
+					hard-redirects to the Studio equivalent (StudioRedirect strips /dashboard).
+				*/}
 				<Route
-					path="/dashboard"
+					path="/dashboard/*"
 					element={
 						<ProtectedRoute>
-							<DashboardPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/projects/new"
-					element={
-						<ProtectedRoute>
-							<ProjectFormPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/projects/:slug/edit"
-					element={
-						<ProtectedRoute>
-							<ProjectFormPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/posts/:slug/builds"
-					element={
-						<ProtectedRoute>
-							<BuildsPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/posts/new"
-					element={
-						<ProtectedRoute>
-							<StudioRedirect mode="new" />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/posts/:slug/edit"
-					element={
-						<ProtectedRoute>
-							<StudioRedirect mode="edit" />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/jams/new"
-					element={
-						<ProtectedRoute>
-							<JamFormPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/jams/:slug/edit"
-					element={
-						<ProtectedRoute>
-							<JamFormPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/import"
-					element={
-						<ProtectedRoute>
-							<ImportPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="/dashboard/analytics"
-					element={
-						<ProtectedRoute>
-							<AnalyticsDashboardPage />
+							<StudioRedirect />
 						</ProtectedRoute>
 					}
 				/>

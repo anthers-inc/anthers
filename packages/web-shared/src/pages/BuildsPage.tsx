@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { client } from "@anthers/web-shared/rpc";
-import type { Asset, ContentElement, Post } from "@anthers/web-shared/types";
-import FormField from "@anthers/web-shared/ui/FormField";
-import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
+import FormField from "../components/ui/FormField";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { client } from "../lib/rpc";
+import type { Asset, ContentElement, Post } from "../lib/types";
+import { uploadMediaFile } from "../lib/upload";
 
 function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -161,7 +161,7 @@ export default function BuildsPage() {
 	return (
 		<div className="max-w-7xl mx-auto px-4 py-8">
 			<div className="flex items-center gap-2 mb-6">
-				<Link to="/dashboard" className="link text-sm">
+				<Link to="/" className="link text-sm">
 					Dashboard
 				</Link>
 				<span className="text-base-content/30">/</span>

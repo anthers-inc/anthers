@@ -23,3 +23,8 @@ export function studioNewPostUrl(): string {
 export function studioEditPostUrl(slug: string): string {
 	return `${studioOrigin()}/posts/${slug}/edit`;
 }
+
+/** Full URL to a path within the Studio (e.g. "/", "/analytics", "/settings"). */
+export function studioUrl(path = "/"): string {
+	return `${studioOrigin()}${path}`;
+}
