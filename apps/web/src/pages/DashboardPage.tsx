@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
+import { studioEditPostUrl, studioNewPostUrl } from "../lib/studio";
 
 export default function DashboardPage() {
 	const { user } = useAuth();
@@ -70,10 +71,10 @@ export default function DashboardPage() {
 							<PlusIcon className="w-4 h-4" />
 							New Project
 						</Link>
-						<Link to="/dashboard/posts/new" className="btn btn-outline btn-sm">
+						<a href={studioNewPostUrl()} className="btn btn-outline btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Post
-						</Link>
+						</a>
 					</div>
 				)}
 			</div>
@@ -233,13 +234,13 @@ export default function DashboardPage() {
 											{new Date(post.createdAt).toLocaleDateString()}
 										</td>
 										<td className="flex gap-1">
-											<Link
-												to={`/dashboard/posts/${post.slug}/edit`}
+											<a
+												href={studioEditPostUrl(post.slug)}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
 												<PencilSquareIcon className="w-4 h-4" />
-											</Link>
+											</a>
 											{post.downloadEnabled && (
 												<Link
 													to={`/dashboard/posts/${post.slug}/builds`}
@@ -261,9 +262,9 @@ export default function DashboardPage() {
 						description="Write your first devlog or update."
 						action={
 							user?.isCreator ? (
-								<Link to="/dashboard/posts/new" className="btn btn-primary btn-sm">
+								<a href={studioNewPostUrl()} className="btn btn-primary btn-sm">
 									Write a Post
-								</Link>
+								</a>
 							) : undefined
 						}
 					/>

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import StarRating from "../components/ui/StarRating";
+import { studioNewPostUrl } from "../lib/studio";
 
 function formatDate(dateStr: string): string {
 	return new Date(dateStr).toLocaleDateString("en-US", {
@@ -131,9 +132,9 @@ function SubmitEntryForm({ jamSlug, onSubmitted }: { jamSlug: string; onSubmitte
 		return (
 			<p className="text-sm text-base-content/50">
 				You need a published post to submit.{" "}
-				<Link to="/dashboard/posts/new" className="link">
+				<a href={studioNewPostUrl()} className="link">
 					Create one
-				</Link>
+				</a>
 			</p>
 		);
 	}

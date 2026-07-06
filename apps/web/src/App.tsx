@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import PostFormPage from "@anthers/web-shared/PostFormPage";
 import { Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
@@ -8,6 +7,7 @@ import LoggedOutLayout from "./components/layout/LoggedOutLayout";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
+import StudioRedirect from "./components/ui/StudioRedirect";
 import AboutPage from "./pages/AboutPage";
 import AnalyticsDashboardPage from "./pages/AnalyticsDashboardPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
@@ -123,7 +123,7 @@ export default function App() {
 					path="/dashboard/posts/new"
 					element={
 						<ProtectedRoute>
-							<PostFormPage />
+							<StudioRedirect mode="new" />
 						</ProtectedRoute>
 					}
 				/>
@@ -131,7 +131,7 @@ export default function App() {
 					path="/dashboard/posts/:slug/edit"
 					element={
 						<ProtectedRoute>
-							<PostFormPage />
+							<StudioRedirect mode="edit" />
 						</ProtectedRoute>
 					}
 				/>

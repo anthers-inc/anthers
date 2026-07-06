@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+@import "tailwindcss";
+/* Shared brand theme (palette + base surface), single source of truth in
+   @anthers/web-shared — keeps the Studio in lockstep with the consumer site's look.
+   Its :root overrides are unlayered, so they win over DaisyUI's @layer-based theme
+   regardless of import order (kept first to satisfy the CSS @import-position rule). */
+@import "../../../../packages/web-shared/src/styles/theme.css";
+@plugin "@tailwindcss/typography";
+@plugin "daisyui" {
+	themes:
+		dark --default,
+		light;
+}
+
+/* The shared client layer (@anthers/web-shared) lives outside apps/studio, so
+   Tailwind's automatic content detection (scoped to this app) misses it. Register its
+   source tree explicitly so the authoring components' utility classes get generated. */
+@source "../../../../packages/web-shared/src";
