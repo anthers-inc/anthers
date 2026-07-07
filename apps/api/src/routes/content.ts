@@ -1263,14 +1263,30 @@ const contentRoutes = new Hono()
 			.where(eq(postContents.postId, post.id))
 			.orderBy(desc(transcodingJobs.createdAt));
 
-		return c.json({ jobs: jobs.map((j) => j.job) });
+		// Sign completed video manifests exactly as the post-detail serialization does, so a
+		// job the poller sees flip to "completed" hands the player a usable manifest (segments
+		// are always private → the raw CDN manifest 403s).
+		const viewerId = await getOptionalUserId(c);
+		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
+		const canAccess = resolveAccessSync(post as AccessiblePost, ctx).canAccess;
+		const hls = hlsStreamCtxFor(post);
+		const signed = jobs.map(({ job }) =>
+			hls &&
+			canAccess &&
+			job.mediaType === "video" &&
+			job.status === "completed" &&
+			job.hlsManifestUrl
+				? { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, job.contentItemId) }
+				: job,
+		);
+		return c.json({ jobs: signed });
 	})
 
-	// ── Gated HLS delivery (access-checked, signed segments) ─────────────────────
-	// Serves the master + variant playlists for a gated video, rewriting segment refs to
+	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
+	// Serves the master + variant playlists for a video, rewriting segment refs to
 	// short-lived signed CDN URLs. `:contentId` is a content-item id referenced by the
-	// post. Only reached for gated posts (free posts stream the public CDN manifest
-	// directly); the player is pointed here by serializeEntry.
+	// post. Library segments are always private, so EVERY accessible post (free or gated)
+	// is pointed here by serializeEntry; the access check below is the gate.
 	.get("/posts/:slug/hls/:contentId/:file", async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.

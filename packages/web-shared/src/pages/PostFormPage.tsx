@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * New / Edit Post builder. Four sections: Basics (title + body + timeline + project),
- * Content (an ordered array of typed content elements), Access (stream/download +
- * the Boost and Anthers access tables), and Publish (pin + draft/publish).
+ * Content (an ordered list of text blocks + references to library content items),
+ * Access (stream/download + the Boost and Anthers access tables), and Publish
+ * (pin + draft/publish).
  *
  * The post body is the always-visible rich text shown to anyone with visibility —
- * it is NOT the deliverable. The deliverable is the content-element array. Tags are
- * parsed from `#hashtag` tokens in the body on save; the server derives contentType,
+ * it is NOT the deliverable. The deliverable is the post-entry list. Tags are parsed
+ * from `#hashtag` tokens in the body on save; the server derives contentType,
  * thumbnail, and read time.
  */
 import { useEffect, useState } from "react";
@@ -20,12 +21,11 @@ import AccessTables, {
 	serializeAnthersRows,
 	serializeBoostRows,
 } from "../components/post/AccessTables";
-import ContentElementList, {
-	type ContentElementDraft,
-	draftFromElement,
-	isUnfilledMediaSlot,
-	serializeElement,
-} from "../components/post/ContentElementList";
+import PostContentEditor, {
+	draftFromPostEntry,
+	type PostEntryDraft,
+	serializePostEntry,
+} from "../components/post/PostContentEditor";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { postUrl } from "../lib/postUrl";
@@ -62,7 +62,7 @@ export default function PostFormPage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 
 	// ── Content ──
-	const [elements, setElements] = useState<ContentElementDraft[]>([]);
+	const [entries, setEntries] = useState<PostEntryDraft[]>([]);
 
 	// ── Access ──
 	const [streamEnabled, setStreamEnabled] = useState(true);
@@ -79,16 +79,9 @@ export default function PostFormPage() {
 	const [error, setError] = useState<string | null>(null);
 
 	// Physical/Service content forces download-only delivery.
-	const forceDownloadOnly = elements.some(
-		(e) => e.contentType === "physical" || e.contentType === "service",
+	const forceDownloadOnly = entries.some(
+		(e) => e.item?.type === "physical" || e.item?.type === "service",
 	);
-
-	// Publish gating (mirrored server-side): a post can be saved as a draft at any time,
-	// but publishing is blocked while a media slot still lacks a source or an upload is in
-	// flight. This is what decouples drafting from filling media (E50 Phase 3).
-	const unfilledMediaSlots = elements.filter(isUnfilledMediaSlot);
-	const anyUploading = elements.some((e) => e.uploading);
-	const canPublish = unfilledMediaSlots.length === 0 && !anyUploading;
 
 	useEffect(() => {
 		if (forceDownloadOnly) {
@@ -129,7 +122,7 @@ export default function PostFormPage() {
 					setStreamEnabled(post.streamEnabled);
 					setDownloadEnabled(post.downloadEnabled);
 					setIsPinned(post.isPinned);
-					setElements((post.contents ?? []).map(draftFromElement));
+					setEntries((post.contents ?? []).map(draftFromPostEntry));
 					setBoostRows(buildBoostRows(boostGates, post.boostAccess));
 					setAnthersRows(buildAnthersRows(post.anthersAccess));
 				} catch {
@@ -183,7 +176,9 @@ export default function PostFormPage() {
 			isPinned,
 			tags: parseTags(body),
 			isPublished: publish,
-			contents: elements.map(serializeElement),
+			contents: entries
+				.map(serializePostEntry)
+				.filter((e): e is NonNullable<typeof e> => e !== null),
 		};
 
 		// After save: publish → the live post view (a separate origin on the Studio, which
@@ -308,11 +303,11 @@ export default function PostFormPage() {
 					<div>
 						<h2 className="text-lg font-semibold">Content</h2>
 						<p className="text-xs text-base-content/50">
-							The deliverable — an ordered set of typed content elements. May be left empty for a
-							body-only post.
+							The deliverable — an ordered list of text blocks and attached library content. May be
+							left empty for a body-only post.
 						</p>
 					</div>
-					<ContentElementList value={elements} onChange={setElements} />
+					<PostContentEditor value={entries} onChange={setEntries} />
 				</section>
 
 				{/* ── 3. Access ── */}
@@ -395,21 +390,11 @@ export default function PostFormPage() {
 							type="button"
 							className="btn btn-primary"
 							onClick={() => handleSubmit(true)}
-							disabled={saving || !canPublish}
-							title={canPublish ? undefined : "Fill every media slot before publishing"}
+							disabled={saving}
 						>
 							{saving ? "Saving..." : "Publish Post"}
 						</button>
 					</div>
-					{!canPublish && (
-						<p className="text-xs text-base-content/50">
-							{anyUploading
-								? "An upload is still in progress — you can save a draft now and publish once it finishes."
-								: `Add a source to ${unfilledMediaSlots.length} media ${
-										unfilledMediaSlots.length === 1 ? "slot" : "slots"
-									} to publish. You can save this as a draft and fill them anytime.`}
-						</p>
-					)}
 				</section>
 			</form>
 		</div>

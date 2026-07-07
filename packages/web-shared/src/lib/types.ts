@@ -81,7 +81,7 @@ export interface AccessResult {
 /** Downloadable file (build, track, PDF, installer, …) attached to a content element. */
 export interface Asset {
 	id: number;
-	contentId: number;
+	contentItemId: number;
 	file: string;
 	filename: string;
 	fileSize: number | null;
@@ -94,7 +94,7 @@ export interface Asset {
 
 export interface TranscodingJob {
 	id: number;
-	contentId: number;
+	contentItemId: number;
 	mediaType: string;
 	status: string;
 	progress: number | null;
@@ -107,7 +107,8 @@ export interface TranscodingJob {
 	updatedAt: string;
 }
 
-/** Content type discriminator. */
+/** Content type discriminator. Text is post-native, not a library type — library items
+ *  are the uploadable/processable types below. */
 export type ContentType =
 	| "text"
 	| "image"
@@ -118,24 +119,63 @@ export type ContentType =
 	| "physical"
 	| "service";
 
-/** One element of a post's deliverable content array (GET /posts/:slug). */
-export interface ContentElement {
+/** The uploadable/processable library content types (everything but post-native text). */
+export type LibraryContentType = Exclude<ContentType, "text">;
+
+/**
+ * A creator-owned content library item — the first-class, reusable unit that owns its
+ * media, downloadable variants (assets), and transcodes. Posts reference it. The full
+ * shape comes from the library endpoints; when embedded in a post entry the creator-only
+ * fields are omitted and the media payload is blanked for viewers without access.
+ */
+export interface ContentItem {
 	id: number;
-	postId: number;
-	position: number;
-	contentType: ContentType;
+	creatorId?: number; // library endpoints only
+	type: ContentType;
 	title: string | null;
+	description?: string | null; // library endpoints only
 	thumbnail: string | null;
+	// Media payload — blanked (empty) by the API when the viewer lacks access.
+	sourceKey: string | null;
+	embedUrl: string | null;
 	durationSeconds: number | null;
 	metadata: Record<string, unknown> | null;
-	// Payload — blanked by the API when the viewer lacks access.
-	bodyHtml: string | null;
-	images: string[] | null;
-	videoFile: string | null;
-	audioFile: string | null;
-	embedUrl: string | null;
 	assets: Asset[];
 	transcoding: TranscodingJob | null;
+	createdAt?: string;
+	updatedAt?: string;
+}
+
+/**
+ * One entry in a post's ordered content list (GET /posts/:slug). Either an inline text
+ * block (post-native prose) or a reference to a library content item.
+ */
+export type PostEntry =
+	| { kind: "text"; id: number; postId: number; position: number; bodyHtml: string | null }
+	| {
+			kind: "content";
+			id: number;
+			postId: number;
+			position: number;
+			caption: string | null;
+			contentItem: ContentItem | null;
+	  };
+
+/** Post-entry input for create/patch. */
+export type PostEntryInput =
+	| { kind: "text"; id?: number; bodyHtml?: string }
+	| { kind: "content"; id?: number; contentItemId: number; caption?: string };
+
+/** Library content-item create/patch input. */
+export interface ContentItemInput {
+	type: LibraryContentType;
+	title?: string;
+	description?: string;
+	thumbnail?: string;
+	sourceKey?: string;
+	embedUrl?: string;
+	durationSeconds?: number;
+	metadata?: Record<string, unknown>;
 }
 
 /** The universal content unit — full detail shape (GET /posts/:slug). */
@@ -178,7 +218,7 @@ export interface Post {
 	creator?: Creator;
 	ratingAverage?: number | null;
 	ratingCount?: number;
-	contents?: ContentElement[];
+	contents?: PostEntry[];
 	access?: AccessResult;
 }
 

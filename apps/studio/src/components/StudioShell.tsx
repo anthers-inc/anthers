@@ -6,6 +6,7 @@ import {
 	ChartBarIcon,
 	Cog6ToothIcon,
 	PencilSquareIcon,
+	RectangleStackIcon,
 	Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, ReactNode } from "react";
@@ -14,6 +15,7 @@ import { consumerOrigin } from "../lib/consumer";
 
 const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
 	{ to: "/", label: "Dashboard", icon: Squares2X2Icon },
+	{ to: "/library", label: "Library", icon: RectangleStackIcon },
 	{ to: "/posts/new", label: "New Post", icon: PencilSquareIcon },
 	{ to: "/analytics", label: "Analytics", icon: ChartBarIcon },
 	{ to: "/import", label: "Import", icon: ArrowUpTrayIcon },

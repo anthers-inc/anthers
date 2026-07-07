@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import AnalyticsDashboardPage from "@anthers/web-shared/AnalyticsDashboardPage";
-import BuildsPage from "@anthers/web-shared/BuildsPage";
+import ContentLibraryPage from "@anthers/web-shared/ContentLibraryPage";
 import DashboardPage from "@anthers/web-shared/DashboardPage";
 import ImportPage from "@anthers/web-shared/ImportPage";
 import JamFormPage from "@anthers/web-shared/JamFormPage";
@@ -14,7 +14,7 @@ import StudioShell from "./components/StudioShell";
 
 /**
  * The Studio is the all-in-one creator management surface (E50 Phase 4): the creator
- * dashboard, analytics, post/project/jam authoring, downloadable builds, itch.io import,
+ * dashboard, the content library, analytics, post/project/jam authoring, itch.io import,
  * and creator settings (payouts, platform connections, boost tiers). Consumer/account
  * surfaces (profile, account settings, library, viewing) stay on anthers.org — every
  * non-creator path bounces there via ConsumerRedirect.
@@ -34,10 +34,10 @@ export default function App() {
 		<Routes>
 			<Route element={<StudioLayout />}>
 				<Route path="/" element={<DashboardPage />} />
+				<Route path="/library" element={<ContentLibraryPage />} />
 				<Route path="/analytics" element={<AnalyticsDashboardPage />} />
 				<Route path="/posts/new" element={<PostFormPage />} />
 				<Route path="/posts/:slug/edit" element={<PostFormPage />} />
-				<Route path="/posts/:slug/builds" element={<BuildsPage />} />
 				<Route path="/projects/new" element={<ProjectFormPage />} />
 				<Route path="/projects/:slug/edit" element={<ProjectFormPage />} />
 				<Route path="/jams/new" element={<JamFormPage />} />
