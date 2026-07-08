@@ -131,12 +131,12 @@ db-studio: ## Open Drizzle Studio (database GUI)
 db-seed: ## Seed dev database with fake creators/projects/posts
 	bun run db:seed
 
-db-reset: ## Recreate the dev Postgres from scratch and reapply the schema (wipes data)
+db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipes data)
 	docker compose down -v
 	docker compose up -d
 	@echo "  -> waiting for Postgres to accept connections..."
 	@until docker compose exec -T postgres pg_isready -U anthers -d anthers >/dev/null 2>&1; do sleep 1; done
-	$(MAKE) db-push
+	$(MAKE) db-migrate
 
 # ─── Quality ───
 
