@@ -1,5 +1,5 @@
 {
-  "id": "9e0ed06d-c16d-4226-81cf-b98ba476d7c0",
+  "id": "3cb93ba6-57cb-4ef6-913e-3864379b1da3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1840,8 +1840,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "content_id": {
-          "name": "content_id",
+        "content_item_id": {
+          "name": "content_item_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -1902,11 +1902,11 @@
         }
       },
       "indexes": {
-        "idx_assets_content": {
-          "name": "idx_assets_content",
+        "idx_assets_content_item": {
+          "name": "idx_assets_content_item",
           "columns": [
             {
-              "expression": "content_id",
+              "expression": "content_item_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1919,12 +1919,12 @@
         }
       },
       "foreignKeys": {
-        "assets_content_id_post_contents_id_fk": {
-          "name": "assets_content_id_post_contents_id_fk",
+        "assets_content_item_id_content_items_id_fk": {
+          "name": "assets_content_item_id_content_items_id_fk",
           "tableFrom": "assets",
-          "tableTo": "post_contents",
+          "tableTo": "content_items",
           "columnsFrom": [
-            "content_id"
+            "content_item_id"
           ],
           "columnsTo": [
             "id"
@@ -2152,6 +2152,144 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.content_items": {
+      "name": "content_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "creator_id": {
+          "name": "creator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "thumbnail": {
+          "name": "thumbnail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "source_key": {
+          "name": "source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "embed_url": {
+          "name": "embed_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "duration_seconds": {
+          "name": "duration_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_content_items_creator": {
+          "name": "idx_content_items_creator",
+          "columns": [
+            {
+              "expression": "creator_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_content_items_type": {
+          "name": "idx_content_items_type",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "content_items_creator_id_users_id_fk": {
+          "name": "content_items_creator_id_users_id_fk",
+          "tableFrom": "content_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2610,26 +2748,12 @@
           "notNull": true,
           "default": 0
         },
-        "content_type": {
-          "name": "content_type",
+        "kind": {
+          "name": "kind",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'text'"
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail": {
-          "name": "thumbnail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
+          "default": "'content'"
         },
         "body_html": {
           "name": "body_html",
@@ -2638,46 +2762,18 @@
           "notNull": false,
           "default": "''"
         },
-        "images": {
-          "name": "images",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
-        },
-        "video_file": {
-          "name": "video_file",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "audio_file": {
-          "name": "audio_file",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "embed_url": {
-          "name": "embed_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "duration_seconds": {
-          "name": "duration_seconds",
+        "content_item_id": {
+          "name": "content_item_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
+        "caption": {
+          "name": "caption",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
-          "default": "'{}'::jsonb"
+          "default": "''"
         },
         "created_at": {
           "name": "created_at",
@@ -2715,6 +2811,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_post_contents_item": {
+          "name": "idx_post_contents_item",
+          "columns": [
+            {
+              "expression": "content_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2724,6 +2835,19 @@
           "tableTo": "posts",
           "columnsFrom": [
             "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "post_contents_content_item_id_content_items_id_fk": {
+          "name": "post_contents_content_item_id_content_items_id_fk",
+          "tableFrom": "post_contents",
+          "tableTo": "content_items",
+          "columnsFrom": [
+            "content_item_id"
           ],
           "columnsTo": [
             "id"
@@ -3385,8 +3509,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "content_id": {
-          "name": "content_id",
+        "content_item_id": {
+          "name": "content_item_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -3410,6 +3534,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": 0
+        },
+        "eta_seconds": {
+          "name": "eta_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "error_message": {
           "name": "error_message",
@@ -3454,11 +3584,11 @@
         }
       },
       "indexes": {
-        "idx_transcoding_content": {
-          "name": "idx_transcoding_content",
+        "idx_transcoding_content_item": {
+          "name": "idx_transcoding_content_item",
           "columns": [
             {
-              "expression": "content_id",
+              "expression": "content_item_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3471,12 +3601,12 @@
         }
       },
       "foreignKeys": {
-        "transcoding_jobs_content_id_post_contents_id_fk": {
-          "name": "transcoding_jobs_content_id_post_contents_id_fk",
+        "transcoding_jobs_content_item_id_content_items_id_fk": {
+          "name": "transcoding_jobs_content_item_id_content_items_id_fk",
           "tableFrom": "transcoding_jobs",
-          "tableTo": "post_contents",
+          "tableTo": "content_items",
           "columnsFrom": [
-            "content_id"
+            "content_item_id"
           ],
           "columnsTo": [
             "id"
