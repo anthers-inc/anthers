@@ -102,10 +102,50 @@ export const posts = pgTable(
 );
 
 /**
- * Content elements — the ordered, typed deliverables that make up a post.
- * A post can bundle several (a game + its trailer + art). Each element carries
- * its own type-specific media and an optional custom thumbnail; downloadable
- * files (`assets`) and transcodes (`transcoding_jobs`) key off the element.
+ * Content library — the creator's first-class, reusable content items. A creator
+ * uploads content here once (processing runs async, no babysitting), then references
+ * it from any number of posts via `post_contents`. The item OWNS its source media,
+ * downloadable variants (`assets`), and transcodes (`transcoding_jobs`) — a post only
+ * references it, so deleting a post never destroys content. Private to the creator
+ * until a post/project makes it accessible. Rich text/prose is NOT a library item;
+ * it stays post-native (the post body + inline text blocks in `post_contents`).
+ */
+export const contentItems = pgTable(
+	"content_items",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// video | audio | image | game | software | physical | service
+		type: text("type").notNull(),
+		title: text("title").default(""),
+		description: text("description").default(""),
+		thumbnail: text("thumbnail").default(""), // poster/cover key or URL
+
+		// ── Source media (only the field relevant to `type` is populated) ──
+		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
+		embedUrl: text("embed_url").default(""), // game/software web embed
+		durationSeconds: integer("duration_seconds"), // video/audio
+		// Browser-encode transport (metadata.clientVariants) + physical/service product
+		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
+		// downloadable variants (game/software builds) live in `assets`.
+		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_content_items_creator").on(table.creatorId),
+		index("idx_content_items_type").on(table.type),
+	],
+);
+
+/**
+ * A post's ordered content list. Each entry is either an inline TEXT block (post-native
+ * prose) or a REFERENCE to a library content item. The post is the access point: a
+ * referenced item inherits the post's access rules. Media/downloads/transcodes live on
+ * the content item, never here — so a post can be deleted without destroying content.
  */
 export const postContents = pgTable(
 	"post_contents",
@@ -115,25 +155,21 @@ export const postContents = pgTable(
 			.notNull()
 			.references(() => posts.id, { onDelete: "cascade" }),
 		position: integer("position").notNull().default(0),
-		// text | image | audio | video | game | software | physical | service
-		contentType: text("content_type").notNull().default("text"),
-		title: text("title").default(""),
-		thumbnail: text("thumbnail").default(""),
-
-		// ── Type-specific payload (only the relevant fields are populated) ──
-		bodyHtml: text("body_html").default(""), // text element
-		images: jsonb("images").$type<string[]>().default([]), // image element (gallery of keys)
-		videoFile: text("video_file").default(""), // video source key (HLS in transcoding_jobs)
-		audioFile: text("audio_file").default(""), // audio source key
-		embedUrl: text("embed_url").default(""), // game/software web embed
-		durationSeconds: integer("duration_seconds"),
-		// physical/service fulfillment details (sku, shipping, service terms) — stubbed for now
-		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+		// "text" (inline prose block) | "content" (reference to a library item)
+		kind: text("kind").notNull().default("content"),
+		bodyHtml: text("body_html").default(""), // kind = text
+		contentItemId: integer("content_item_id").references(() => contentItems.id, {
+			onDelete: "cascade",
+		}), // kind = content
+		caption: text("caption").default(""), // optional per-post caption for a content ref
 
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_post_contents_post").on(table.postId, table.position)],
+	(table) => [
+		index("idx_post_contents_post").on(table.postId, table.position),
+		index("idx_post_contents_item").on(table.contentItemId),
+	],
 );
 
 /**
@@ -179,14 +215,14 @@ export const projectPosts = pgTable(
 	],
 );
 
-/** Downloadable files (builds, tracks, PDFs, installers, …) attached to a content element. */
+/** Downloadable files/variants (builds, tracks, PDFs, installers, …) of a content item. */
 export const assets = pgTable(
 	"assets",
 	{
 		id: serial("id").primaryKey(),
-		contentId: integer("content_id")
+		contentItemId: integer("content_item_id")
 			.notNull()
-			.references(() => postContents.id, { onDelete: "cascade" }),
+			.references(() => contentItems.id, { onDelete: "cascade" }),
 		file: text("file").notNull(), // storage key
 		filename: text("filename").notNull(),
 		// bigint — a build/installer can exceed int4 (2.1 GB).
@@ -197,16 +233,18 @@ export const assets = pgTable(
 		isPrimary: boolean("is_primary").default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_assets_content").on(table.contentId)],
+	(table) => [index("idx_assets_content_item").on(table.contentItemId)],
 );
 
+/** Media processing for a content item (video HLS transcode, audio normalize) — runs once
+ *  on upload to the library, then every post that references the item reuses the output. */
 export const transcodingJobs = pgTable(
 	"transcoding_jobs",
 	{
 		id: serial("id").primaryKey(),
-		contentId: integer("content_id")
+		contentItemId: integer("content_item_id")
 			.notNull()
-			.references(() => postContents.id, { onDelete: "cascade" }),
+			.references(() => contentItems.id, { onDelete: "cascade" }),
 		mediaType: text("media_type").notNull(), // video | audio
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
 		progress: integer("progress").default(0),
@@ -218,7 +256,7 @@ export const transcodingJobs = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_transcoding_content").on(table.contentId)],
+	(table) => [index("idx_transcoding_content_item").on(table.contentItemId)],
 );
 
 export const inlineImages = pgTable("inline_images", {

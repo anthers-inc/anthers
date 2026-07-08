@@ -17,6 +17,7 @@ import {
 	bookmarks,
 	boostAllocations,
 	comments,
+	contentItems,
 	creatorGates,
 	db,
 	follows,
@@ -706,20 +707,31 @@ async function seed() {
 				})
 				.returning({ id: posts.id });
 
-			// One content element carries the deliverable; download works get a build asset.
-			const [element] = await db
-				.insert(postContents)
-				.values({ postId: inserted.id, position: 0, contentType: work.mediaType })
-				.returning({ id: postContents.id });
-			if (delivery.downloadEnabled) {
-				await db.insert(assets).values({
-					contentId: element.id,
-					file: `creators/${creatorId}/assets/seed-${slug}.zip`,
-					filename: `${slug}.zip`,
-					fileSize: randomInt(50, 800) * 1024 * 1024,
-					mimeType: "application/zip",
-					platform: work.mediaType === "game" ? "windows" : "",
-				});
+			// Media works become a library content item the post references; text works
+			// stay post-native (body only). Download works get a build asset on the item.
+			if (work.mediaType !== "text") {
+				const [item] = await db
+					.insert(contentItems)
+					.values({
+						creatorId,
+						type: work.mediaType,
+						title: work.title,
+						description: work.shortDescription,
+					})
+					.returning({ id: contentItems.id });
+				await db
+					.insert(postContents)
+					.values({ postId: inserted.id, position: 0, kind: "content", contentItemId: item.id });
+				if (delivery.downloadEnabled) {
+					await db.insert(assets).values({
+						contentItemId: item.id,
+						file: `creators/${creatorId}/assets/seed-${slug}.zip`,
+						filename: `${slug}.zip`,
+						fileSize: randomInt(50, 800) * 1024 * 1024,
+						mimeType: "application/zip",
+						platform: work.mediaType === "game" ? "windows" : "",
+					});
+				}
 			}
 
 			recordPost(inserted.id, slug, work.title, username);

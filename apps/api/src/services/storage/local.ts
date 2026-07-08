@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { access, copyFile, mkdir, unlink } from "node:fs/promises";
+import { access, copyFile, mkdir, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { StorageService } from "./types.js";
@@ -66,6 +66,11 @@ export class LocalStorageService implements StorageService {
 				return;
 			throw err;
 		}
+	}
+
+	async deletePrefix(prefix: string): Promise<void> {
+		// A prefix maps to a directory on disk; remove it recursively. Idempotent.
+		await rm(join(CONTENT_ROOT, prefix), { recursive: true, force: true });
 	}
 
 	async exists(key: string): Promise<boolean> {

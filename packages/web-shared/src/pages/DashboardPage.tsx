@@ -5,7 +5,6 @@ import {
 	ChartBarIcon,
 	PencilSquareIcon,
 	PlusIcon,
-	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -240,15 +239,6 @@ export default function DashboardPage() {
 											>
 												<PencilSquareIcon className="w-4 h-4" />
 											</Link>
-											{post.downloadEnabled && (
-												<Link
-													to={`/posts/${post.slug}/builds`}
-													className="btn btn-ghost btn-xs"
-													title="Manage downloads"
-												>
-													<WrenchScrewdriverIcon className="w-4 h-4" />
-												</Link>
-											)}
 										</td>
 									</tr>
 								))}

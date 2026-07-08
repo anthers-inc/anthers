@@ -11,8 +11,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	DeleteObjectCommand,
+	DeleteObjectsCommand,
 	GetObjectCommand,
 	HeadObjectCommand,
+	ListObjectsV2Command,
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
@@ -98,6 +100,30 @@ export class S3StorageService implements StorageService {
 
 	async delete(key: string): Promise<void> {
 		await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+	}
+
+	async deletePrefix(prefix: string): Promise<void> {
+		// List (paginated) then batch-delete every object under the prefix.
+		let continuationToken: string | undefined;
+		do {
+			const listed = await s3.send(
+				new ListObjectsV2Command({
+					Bucket: bucket,
+					Prefix: prefix,
+					ContinuationToken: continuationToken,
+				}),
+			);
+			const objects = (listed.Contents ?? [])
+				.map((o) => o.Key)
+				.filter((k): k is string => !!k)
+				.map((Key) => ({ Key }));
+			if (objects.length > 0) {
+				await s3.send(
+					new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }),
+				);
+			}
+			continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+		} while (continuationToken);
 	}
 
 	async exists(key: string): Promise<boolean> {

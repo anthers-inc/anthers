@@ -4,9 +4,15 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover, UnlockPanel } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { client } from "@anthers/web-shared/rpc";
-import type { Comment, ContentElement, Post, TranscodingJob } from "@anthers/web-shared/types";
+import type {
+	Comment,
+	ContentItem,
+	Post,
+	PostEntry,
+	TranscodingJob,
+} from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { ClockIcon, FilmIcon, MusicalNoteIcon } from "@heroicons/react/24/outline";
+import { ClockIcon, FilmIcon, MusicalNoteIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,7 +24,6 @@ import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
-import ProjectScreenshots from "../components/project/ProjectScreenshots";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionTracker } from "../lib/attention";
 import { useMediaPlayer } from "../lib/media-player";
@@ -28,16 +33,12 @@ function isJobPending(status: string): boolean {
 	return status !== "completed";
 }
 
-/** Thumbnail-only preview shown when a media element's payload is gated/blank. */
-function MediaPreview({ element, icon }: { element: ContentElement; icon: React.ReactNode }) {
-	if (element.thumbnail) {
+/** Thumbnail-only preview shown when a content item lacks a playable payload. */
+function MediaPreview({ item, icon }: { item: ContentItem; icon: React.ReactNode }) {
+	if (item.thumbnail) {
 		return (
 			<div className="relative rounded-lg overflow-hidden bg-base-200">
-				<img
-					src={element.thumbnail}
-					alt={element.title ?? "Preview"}
-					className="w-full object-cover"
-				/>
+				<img src={item.thumbnail} alt={item.title ?? "Preview"} className="w-full object-cover" />
 			</div>
 		);
 	}
@@ -49,8 +50,8 @@ function MediaPreview({ element, icon }: { element: ContentElement; icon: React.
 }
 
 /** Card describing a physical good or service (no media payload). */
-function PhysicalServiceCard({ element }: { element: ContentElement }) {
-	const meta = element.metadata ?? {};
+function PhysicalServiceCard({ item }: { item: ContentItem }) {
+	const meta = item.metadata ?? {};
 	const scalarEntries = Object.entries(meta).filter(
 		([, v]) => typeof v === "string" || typeof v === "number",
 	);
@@ -59,12 +60,12 @@ function PhysicalServiceCard({ element }: { element: ContentElement }) {
 			<div className="card-body gap-2">
 				<div className="flex items-center gap-2">
 					<h3 className="card-title text-base">
-						{element.title ?? (element.contentType === "service" ? "Service" : "Physical item")}
+						{item.title ?? (item.type === "service" ? "Service" : "Physical item")}
 					</h3>
-					<span className="badge badge-outline badge-sm capitalize">{element.contentType}</span>
+					<span className="badge badge-outline badge-sm capitalize">{item.type}</span>
 				</div>
-				{element.bodyHtml && (
-					<SanitizedHtml className="prose prose-sm max-w-none" html={element.bodyHtml} />
+				{item.description && (
+					<p className="text-sm text-base-content/70 whitespace-pre-line">{item.description}</p>
 				)}
 				{scalarEntries.length > 0 && (
 					<dl className="text-sm">
@@ -129,13 +130,14 @@ export default function PostPage() {
 		}
 	}, [post, location.pathname, navigate]);
 
-	// While any element is still transcoding, poll its status so the progress bar
+	// While a referenced item is still transcoding, poll its status so the progress bar
 	// advances live and the player swaps in on completion — no manual refresh.
 	const hasActiveTranscode = (post?.contents ?? []).some(
-		(c) =>
-			c.transcoding != null &&
-			c.transcoding.status !== "completed" &&
-			c.transcoding.status !== "failed",
+		(entry) =>
+			entry.kind === "content" &&
+			entry.contentItem?.transcoding != null &&
+			entry.contentItem.transcoding.status !== "completed" &&
+			entry.contentItem.transcoding.status !== "failed",
 	);
 	useEffect(() => {
 		if (!slug || !hasActiveTranscode) return;
@@ -145,22 +147,24 @@ export default function PostPage() {
 				if (!res.ok) return;
 				const { jobs } = (await res.json()) as unknown as { jobs: TranscodingJob[] };
 				const latest = new Map<number, TranscodingJob>();
-				for (const j of jobs) if (!latest.has(j.contentId)) latest.set(j.contentId, j);
+				for (const j of jobs) if (!latest.has(j.contentItemId)) latest.set(j.contentItemId, j);
 				setPost((prev) => {
 					if (!prev?.contents) return prev;
 					let changed = false;
-					const contents = prev.contents.map((el) => {
-						const job = latest.get(el.id);
+					const contents = prev.contents.map((entry) => {
+						if (entry.kind !== "content" || !entry.contentItem) return entry;
+						const job = latest.get(entry.contentItem.id);
+						const cur = entry.contentItem.transcoding;
 						if (
 							job &&
-							(el.transcoding?.status !== job.status ||
-								el.transcoding?.progress !== job.progress ||
-								el.transcoding?.etaSeconds !== job.etaSeconds)
+							(cur?.status !== job.status ||
+								cur?.progress !== job.progress ||
+								cur?.etaSeconds !== job.etaSeconds)
 						) {
 							changed = true;
-							return { ...el, transcoding: job };
+							return { ...entry, contentItem: { ...entry.contentItem, transcoding: job } };
 						}
-						return el;
+						return entry;
 					});
 					return changed ? { ...prev, contents } : prev;
 				});
@@ -232,23 +236,24 @@ export default function PostPage() {
 	const canAccess = !access || access.canAccess;
 	const contents = post.contents ?? [];
 
-	const playAudioInMiniPlayer = (element: ContentElement, src: string) => {
+	const playAudioInMiniPlayer = (item: ContentItem, src: string) => {
 		mediaPlayer.playTrack({
 			src,
-			title: element.title || post.title || "Untitled",
+			title: item.title || post.title || "Untitled",
 			creator: post.creator?.username || "",
 			creatorId: post.creatorId,
-			thumbnail: element.thumbnail || post.thumbnail,
+			thumbnail: item.thumbnail || post.thumbnail,
 			postId: post.id,
-			waveform: element.transcoding?.waveformData,
+			waveform: item.transcoding?.waveformData,
 		});
 	};
 
-	const renderElementBody = (element: ContentElement) => {
-		switch (element.contentType) {
+	/** The media/body for one content item (null → nothing to render). */
+	const renderContentItem = (item: ContentItem): React.ReactNode => {
+		switch (item.type) {
 			case "video": {
-				const job = element.transcoding;
-				const src = job?.hlsManifestUrl || element.videoFile || "";
+				const job = item.transcoding;
+				const src = job?.hlsManifestUrl || item.sourceKey || "";
 				if (job && isJobPending(job.status)) {
 					return (
 						<TranscodingStatus
@@ -259,12 +264,12 @@ export default function PostPage() {
 						/>
 					);
 				}
-				if (src) return <VideoPlayer src={src} poster={element.thumbnail ?? undefined} />;
-				return <MediaPreview element={element} icon={<FilmIcon className="w-16 h-16" />} />;
+				if (src) return <VideoPlayer src={src} poster={item.thumbnail ?? undefined} />;
+				return <MediaPreview item={item} icon={<FilmIcon className="w-16 h-16" />} />;
 			}
 			case "audio": {
-				const job = element.transcoding;
-				const src = job?.outputFileUrl || element.audioFile || "";
+				const job = item.transcoding;
+				const src = job?.outputFileUrl || item.sourceKey || "";
 				if (job && isJobPending(job.status)) {
 					return (
 						<TranscodingStatus
@@ -279,35 +284,75 @@ export default function PostPage() {
 					return (
 						<AudioPlayer
 							src={src}
-							waveform={element.transcoding?.waveformData}
-							onPlayInMiniPlayer={() => playAudioInMiniPlayer(element, src)}
+							waveform={item.transcoding?.waveformData}
+							onPlayInMiniPlayer={() => playAudioInMiniPlayer(item, src)}
 						/>
 					);
-				return <MediaPreview element={element} icon={<MusicalNoteIcon className="w-12 h-12" />} />;
+				return <MediaPreview item={item} icon={<MusicalNoteIcon className="w-12 h-12" />} />;
 			}
-			case "image": {
-				const images = element.images ?? [];
-				if (images.length > 0) return <ProjectScreenshots images={images} />;
-				return <MediaPreview element={element} icon={<FilmIcon className="w-16 h-16" />} />;
-			}
+			case "image":
+				return item.sourceKey ? (
+					<img
+						src={item.sourceKey}
+						alt={item.title ?? ""}
+						className="w-full rounded-lg object-contain bg-base-200"
+					/>
+				) : (
+					<MediaPreview item={item} icon={<PhotoIcon className="w-16 h-16" />} />
+				);
 			case "game":
 			case "software":
-				return element.embedUrl ? (
+				return item.embedUrl ? (
 					<ProjectEmbed
-						embedUrl={element.embedUrl}
-						title={element.title || post.title || "Embedded content"}
+						embedUrl={item.embedUrl}
+						title={item.title || post.title || "Embedded content"}
 					/>
-				) : null;
-			case "text":
-				return element.bodyHtml ? (
-					<SanitizedHtml className="prose prose-sm max-w-none" html={element.bodyHtml} />
 				) : null;
 			case "physical":
 			case "service":
-				return <PhysicalServiceCard element={element} />;
+				return <PhysicalServiceCard item={item} />;
 			default:
 				return null;
 		}
+	};
+
+	/** Render one ordered post entry (text block or content reference). */
+	const renderEntry = (entry: PostEntry): React.ReactNode => {
+		if (entry.kind === "text") {
+			return entry.bodyHtml ? (
+				<SanitizedHtml className="prose prose-sm max-w-none" html={entry.bodyHtml} />
+			) : null;
+		}
+
+		const item = entry.contentItem;
+		if (!item) {
+			return (
+				<div className="rounded-lg bg-base-200 p-4 text-sm text-base-content/50">
+					This content is no longer available.
+				</div>
+			);
+		}
+
+		const media = renderContentItem(item);
+		const showDownloads = post.downloadEnabled && item.assets.length > 0;
+		if (!media && !showDownloads) return null;
+
+		return (
+			<>
+				{media}
+				{entry.caption && <p className="text-sm text-base-content/60 mt-2">{entry.caption}</p>}
+				{showDownloads && (
+					<div className="mt-4">
+						<ProjectDownloads
+							assets={item.assets}
+							contentType={item.type}
+							postSlug={post.slug}
+							canAccess={canAccess}
+						/>
+					</div>
+				)}
+			</>
+		);
 	};
 
 	return (
@@ -356,27 +401,13 @@ export default function PostPage() {
 							</div>
 						)}
 
-						{/* Deliverable — the ordered content elements. */}
-						{contents.map((element) => {
-							const body = renderElementBody(element);
-							const showDownloads = post.downloadEnabled && element.assets.length > 0;
-							if (!body && !showDownloads) return null;
+						{/* Deliverable — the ordered post entries. */}
+						{contents.map((entry) => {
+							const node = renderEntry(entry);
+							if (!node) return null;
 							return (
-								<div key={element.id} className="mb-6">
-									{element.title && contents.length > 1 && (
-										<h2 className="text-lg font-semibold mb-2">{element.title}</h2>
-									)}
-									{body}
-									{showDownloads && (
-										<div className="mt-4">
-											<ProjectDownloads
-												assets={element.assets}
-												contentType={element.contentType}
-												postSlug={post.slug}
-												canAccess={canAccess}
-											/>
-										</div>
-									)}
+								<div key={entry.id} className="mb-6">
+									{node}
 								</div>
 							);
 						})}

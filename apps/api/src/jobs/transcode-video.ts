@@ -19,9 +19,8 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
+import { contentItems, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { type AccessiblePost, isPubliclyFree } from "../services/access.js";
 import { storage } from "../services/storage/index.js";
 
 export interface TranscodeVideoData {
@@ -215,22 +214,15 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		.set({ status: "processing", progress: 0 })
 		.where(eq(transcodingJobs.id, jobId));
 
-	const [element] = await db
+	const [item] = await db
 		.select()
-		.from(postContents)
-		.where(eq(postContents.id, job.contentId))
+		.from(contentItems)
+		.where(eq(contentItems.id, job.contentItemId))
 		.limit(1);
-	if (!element) throw new Error(`Content element ${job.contentId} not found`);
+	if (!item) throw new Error(`Content item ${job.contentItemId} not found`);
 
-	const [post] = await db.select().from(posts).where(eq(posts.id, element.postId)).limit(1);
-	if (!post) throw new Error(`Post ${element.postId} not found`);
-
-	// A post is publicly served when it's free to everyone. Priced/gated posts keep
-	// their media private (served later via signed URLs).
-	const isPublicPost = isPubliclyFree(post as AccessiblePost);
-
-	const storageKey = element.videoFile ?? "";
-	if (!storageKey) throw new Error("No video file on content element");
+	const storageKey = item.sourceKey ?? "";
+	if (!storageKey) throw new Error("No source file on content item");
 
 	let localPath: string | null = null;
 	let outputDir: string | null = null;
@@ -251,12 +243,12 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		const sourceHeight = Number.parseInt(videoStream.height ?? "0", 10);
 		const sourceWidth = Number.parseInt(videoStream.width ?? "0", 10);
 
-		// Update the content element's duration
+		// Update the content item's duration
 		if (duration > 0) {
 			await db
-				.update(postContents)
+				.update(contentItems)
 				.set({ durationSeconds: Math.round(duration) })
-				.where(eq(postContents.id, element.id));
+				.where(eq(contentItems.id, item.id));
 		}
 
 		await updateJobProgress(jobId, 10);
@@ -338,41 +330,37 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		await updateJobProgress(jobId, 80);
 
 		// 5. Upload HLS files to storage (creator-first layout — see media-upload route)
-		const storagePrefix = `creators/${post.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
+		const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 		const hlsFiles = await readdir(outputDir);
 		for (const filename of hlsFiles) {
 			const filePath = join(outputDir, filename);
 			const fileBuffer = await readFile(filePath);
 			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
-			// Playlists (.m3u8) are always public so the player can bootstrap. Segments
-			// follow access: a free/ungated post gets public segments the CDN serves
-			// directly to hls.js; priced/gated posts keep segments private (to be served
-			// via signed URLs once gated playback lands). Without this, public videos
-			// won't play — hls.js fetches segments straight from the CDN.
+			// Content is processed in the library before it's attached to any post, so its
+			// access isn't known yet (and one item can be posted with different access).
+			// Segments are always PRIVATE and served through the access-checking signed-HLS
+			// endpoint; playlists stay public so that endpoint (and the player) can bootstrap.
 			const isPlaylist = filename.endsWith(".m3u8");
-			const acl = isPlaylist || isPublicPost ? "public" : "private";
+			const acl = isPlaylist ? "public" : "private";
 			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
 		}
 		await updateJobProgress(jobId, 90);
 
-		// 6. Auto-generate a thumbnail for the element (and the post card) if none set
+		// 6. Auto-generate a poster thumbnail for the item if none set. Posts that
+		// reference the item derive their card image from it at display time.
 		let thumbnailKey: string | null = null;
-		if (!element.thumbnail) {
+		if (!item.thumbnail) {
 			const thumbPosition = Math.max(1, Math.round(duration * 0.25));
 			thumbPath = await generateThumbnail(localPath, thumbPosition);
 			if (thumbPath) {
 				const thumbBuffer = await readFile(thumbPath);
-				thumbnailKey = `creators/${post.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
+				thumbnailKey = `creators/${item.creatorId}/thumbnails/${randomUUID().replace(/-/g, "")}.jpg`;
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
 				await db
-					.update(postContents)
+					.update(contentItems)
 					.set({ thumbnail: thumbnailUrl })
-					.where(eq(postContents.id, element.id));
-				// Backfill the post's denormalized card thumbnail if it has none.
-				if (!post.thumbnail) {
-					await db.update(posts).set({ thumbnail: thumbnailUrl }).where(eq(posts.id, post.id));
-				}
+					.where(eq(contentItems.id, item.id));
 			}
 		}
 
