@@ -16,6 +16,7 @@
 		"screenshot": "bun run scripts/screenshot.ts"
 	},
 	"dependencies": {
+		"@anthers/brand": "workspace:*",
 		"@anthers/shared": "workspace:*",
 		"@anthers/web-shared": "workspace:*",
 		"@ffmpeg/core": "^0.12.6",

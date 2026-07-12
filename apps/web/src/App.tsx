@@ -30,6 +30,7 @@ import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
 // Auth pages
 import LoginPage from "./pages/LoginPage";
+import ForUsersLabPage from "./pages/lab/ForUsersLabPage";
 import PostPage from "./pages/PostPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
@@ -48,6 +49,9 @@ import WikiPage from "./pages/WikiPage";
 export default function App() {
 	return (
 		<Routes>
+			{/* Design test bed — bare full-page canvas, no marketing chrome (see pages/lab/) */}
+			<Route path="/for-users-lab" element={<ForUsersLabPage />} />
+
 			{/*
 				Marketing / logged-out layout
 				These pages always show the marketing chrome (sign up/log in buttons,
