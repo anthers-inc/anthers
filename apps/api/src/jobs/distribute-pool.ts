@@ -131,10 +131,20 @@ async function distributeForAccount(acct: {
 			}
 		}
 
-		// Correct time-pool rounding drift against the largest allocation.
+		// Correct rounding drift against the largest allocation so each pot is conserved.
 		correctDrift(distributions, timePool, (d) => d.poolAmount, (d, v) => {
 			d.poolAmount = v;
 		});
+		if (undirectedBoost.gt(0)) {
+			correctDrift(
+				distributions,
+				directedTotal.plus(undirectedBoost),
+				(d) => d.boostAmount,
+				(d, v) => {
+					d.boostAmount = v;
+				},
+			);
+		}
 	}
 
 	// Record watch-time even for creators that only received a directed boost.

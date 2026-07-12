@@ -1317,7 +1317,7 @@ async function seed() {
 	console.log(`  All seed usernames start with "${SEED_PREFIX}" for easy identification.`);
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
-		console.log(`    ${tu.username} — ${tu.tier} tier — ${tu.displayName}`);
+		console.log(`    ${tu.username} — ${tu.tier} profile — ${tu.displayName}`);
 	}
 	for (const c of CREATORS) {
 		console.log(`    ${c.username} — creator — ${c.displayName}`);
