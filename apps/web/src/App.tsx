@@ -16,6 +16,7 @@ import CompareGhostPage from "./pages/CompareGhostPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CreatorBreakdownDemoPage from "./pages/CreatorBreakdownDemoPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
+import CreatorMonetizationCalculatorPage from "./pages/CreatorMonetizationCalculatorPage";
 import CreatorProfilePage from "./pages/CreatorProfilePage";
 // Shared content pages (work for both logged-in and logged-out)
 import DiscoverPage from "./pages/DiscoverPage";
@@ -32,6 +33,7 @@ import LoginPage from "./pages/LoginPage";
 import PostPage from "./pages/PostPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
+import ResourcesPage from "./pages/ResourcesPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import SettingsPage from "./pages/SettingsPage";
 import SignupPage from "./pages/SignupPage";
@@ -39,6 +41,8 @@ import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import UserDemoPage from "./pages/UserDemoPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
+import VideoBandwidthCalculatorPage from "./pages/VideoBandwidthCalculatorPage";
+import VideoStorageCalculatorPage from "./pages/VideoStorageCalculatorPage";
 import WikiPage from "./pages/WikiPage";
 
 export default function App() {
@@ -142,6 +146,16 @@ export default function App() {
 				<Route path="/jams/:slug" element={<JamPage />} />
 				<Route path="/faq" element={<FAQPage />} />
 				<Route path="/roadmap" element={<RoadmapPage />} />
+
+				{/* Resource tools / calculators — public, work logged-in or out.
+					Must be registered before the /:username catch-alls below. */}
+				<Route path="/resources" element={<ResourcesPage />} />
+				<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
+				<Route path="/resources/video-bandwidth" element={<VideoBandwidthCalculatorPage />} />
+				<Route
+					path="/resources/creator-monetization"
+					element={<CreatorMonetizationCalculatorPage />}
+				/>
 
 				{/* Creator site routes */}
 				<Route path="/:username/:slug" element={<ProjectPage />} />

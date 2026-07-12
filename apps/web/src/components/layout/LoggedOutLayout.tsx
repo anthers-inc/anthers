@@ -51,6 +51,9 @@ export default function LoggedOutLayout() {
 							<li>
 								<Link to="/roadmap">Roadmap</Link>
 							</li>
+							<li>
+								<Link to="/resources">Resources</Link>
+							</li>
 						</ul>
 					</div>
 
@@ -93,6 +96,9 @@ export default function LoggedOutLayout() {
 						</li>
 						<li>
 							<Link to="/roadmap">Roadmap</Link>
+						</li>
+						<li>
+							<Link to="/resources">Resources</Link>
 						</li>
 					</ul>
 				</div>
@@ -169,6 +175,9 @@ export default function LoggedOutLayout() {
 							</Link>
 							<Link to="/roadmap" className="link link-hover">
 								Roadmap
+							</Link>
+							<Link to="/resources" className="link link-hover">
+								Resources
 							</Link>
 							<Link to="/wiki" className="link link-hover">
 								Wiki
