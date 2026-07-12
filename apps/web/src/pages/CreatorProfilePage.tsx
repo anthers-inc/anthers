@@ -37,11 +37,12 @@ const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
 	{ id: "root", name: "Root", price: 3 },
 	{ id: "sprout", name: "Sprout", price: 7 },
 	{ id: "petal", name: "Petal", price: 15 },
-	{ id: "bloom", name: "Bloom", price: 30 },
+	{ id: "blossom", name: "Blossom", price: 30 },
 ];
 
 function tierNameFor(id: string): string {
-	return id.charAt(0).toUpperCase() + id.slice(1) || "Free";
+	if (id === "none" || id === "free" || !id) return "Free";
+	return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
 /** Resolve display access for a post from its per-viewer AccessResult. */
@@ -135,7 +136,7 @@ function TiersTab({
 	userBoost: string;
 	creatorName: string;
 }) {
-	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_tier");
+	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_badge");
 	const boostGates = gates.filter((g) => g.gateType === "boost");
 	const unlockedSet = new Set(unlockedGates);
 
@@ -151,7 +152,7 @@ function TiersTab({
 	return (
 		<div className="max-w-2xl space-y-8">
 			{/* User's current status */}
-			{userTier !== "free" && (
+			{userTier !== "none" && userTier !== "free" && (
 				<div className="card bg-base-200">
 					<div className="card-body py-3 px-4">
 						<div className="flex items-center justify-between text-sm">
@@ -172,9 +173,9 @@ function TiersTab({
 			{/* Anthers Tiers */}
 			{anthersTierGates.length > 0 && (
 				<div>
-					<h3 className="text-lg font-bold mb-1">Anthers Tiers</h3>
+					<h3 className="text-lg font-bold mb-1">Anthers Badges</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Platform-wide tiers based on your Anthers subscription level.
+						Platform-wide tiers unlocked by your Anthers Badge.
 					</p>
 					<div className="space-y-2">
 						{anthersTierGates.map((gate) => {
@@ -270,14 +271,14 @@ function TiersTab({
 			)}
 
 			{/* Upgrade prompt */}
-			{userTier === "free" && (
+			{(userTier === "none" || userTier === "free") && (
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Subscribe to Anthers to start unlocking tiers and supporting {creatorName}.
+							Add Usage or Boost on Anthers to start unlocking tiers and supporting {creatorName}.
 						</p>
 						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
-							Choose a Plan
+							Get Started
 						</Link>
 					</div>
 				</div>
@@ -717,11 +718,11 @@ export default function CreatorProfilePage() {
 								>
 									{isFollowing ? "Following" : "Follow"}
 								</button>
-								{/* Tier/boost badges */}
-								{creatorStatus && creatorStatus.anthersTier !== "free" && (
+								{/* Badge/boost badges */}
+								{creatorStatus && creatorStatus.badge !== "none" && (
 									<div className="flex items-center gap-2 text-xs">
 										<span className="badge badge-sm badge-outline">
-											{tierNameFor(creatorStatus.anthersTier)}
+											{tierNameFor(creatorStatus.badge)}
 										</span>
 										{parseFloat(creatorStatus.boostAmount) > 0 && (
 											<span className="badge badge-sm badge-primary badge-outline">
@@ -861,7 +862,7 @@ export default function CreatorProfilePage() {
 						<TiersTab
 							gates={creatorStatus?.gates ?? []}
 							unlockedGates={creatorStatus?.unlockedGates ?? []}
-							userTier={creatorStatus?.anthersTier ?? "free"}
+							userTier={creatorStatus?.badge ?? "none"}
 							userBoost={creatorStatus?.boostAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.username}
 						/>

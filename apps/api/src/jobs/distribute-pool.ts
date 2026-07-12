@@ -1,49 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Pool distribution job: distribute Time Pool based on attention time.
+ * Pool distribution job: distribute the Time Pool and Boost to creators.
  *
- * For each active paid subscriber:
- * 1. Sum attention seconds per creator during the billing cycle.
- * 2. Compute the subscriber's Time Pool (V2: creatorShare − boostPool).
- * 3. Distribute Time Pool proportionally by attention time.
- * 4. Apply any boost allocations.
- * 5. Create/update PoolDistribution ledger entries.
+ * For each active account:
+ * 1. Sum watch-time seconds per creator during the billing cycle.
+ * 2. Time Pool = usageGiB × $0.015 (funded per-GiB), distributed proportionally by time.
+ * 3. Boost = 100% to creators: directed boosts go to the named creators; the
+ *    undirected remainder (boostTotal − Σ directed) is distributed by time.
+ * 4. Create/update PoolDistribution ledger entries.
  */
 
 import { db } from "@anthers/db";
-import {
-	attentionEvents,
-	boostAllocations,
-	poolDistributions,
-	subscriptions,
-} from "@anthers/db/schema";
+import { accounts, attentionEvents, boostAllocations, poolDistributions } from "@anthers/db/schema";
+import { TIME_POOL_PER_GIB } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
-import { and, eq, gte, lt, ne, sum } from "drizzle-orm";
+import { and, eq, gte, lt, sum } from "drizzle-orm";
 
 export interface DistributePoolData {
-	/** If set, distribute for a single subscriber. Otherwise all active paid. */
-	subscriptionId?: number;
+	/** If set, distribute for a single account. Otherwise all active accounts. */
+	accountId?: number;
 }
 
-/**
- * V2 economics: Time Pool and Boost Pool are computed from the subscriber's
- * funding level. Boost Pool = ceil(fundingLevel × 0.5), Time Pool = remainder
- * of the 92% creator share. Unallocated boost flows back into the Time Pool.
- */
-function computeTimePoolAmount(fundingLevel: number): string {
-	if (fundingLevel < 3) return "0.00";
-	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
-	const boostPool = Math.ceil(fundingLevel * 0.5);
-	const timePool = Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
-	return timePool.toFixed(2);
+/** V3: the Time Pool a user funds this cycle = usageGiB × $0.015. */
+function computeTimePoolAmount(usageGiB: number): Decimal {
+	if (usageGiB <= 0) return new Decimal(0);
+	return new Decimal(usageGiB).mul(TIME_POOL_PER_GIB);
 }
 
-function getBillingCycle(sub: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
-	if (sub.currentPeriodStart && sub.currentPeriodEnd) {
-		return {
-			start: sub.currentPeriodStart,
-			end: sub.currentPeriodEnd,
-		};
+function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
+	if (acct.currentPeriodStart && acct.currentPeriodEnd) {
+		return { start: acct.currentPeriodStart, end: acct.currentPeriodEnd };
 	}
 	// Fallback to current calendar month
 	const now = new Date();
@@ -59,17 +45,24 @@ function billingCycleDate(cycleStart: Date): string {
 	return `${y}-${m}-01`;
 }
 
-async function distributeForSubscriber(sub: {
+interface Dist {
+	poolAmount: Decimal;
+	boostAmount: Decimal;
+	attentionSeconds: number;
+}
+
+async function distributeForAccount(acct: {
 	id: number;
 	userId: number;
-	fundingLevel: number;
+	usageGiB: number;
+	boostTotal: string;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
-	const { start, end } = getBillingCycle(sub);
+	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// 1. Aggregate attention time per creator
+	// 1. Aggregate watch-time per creator
 	const attentionRows = await db
 		.select({
 			creatorId: attentionEvents.creatorId,
@@ -78,7 +71,7 @@ async function distributeForSubscriber(sub: {
 		.from(attentionEvents)
 		.where(
 			and(
-				eq(attentionEvents.userId, sub.userId),
+				eq(attentionEvents.userId, acct.userId),
 				gte(attentionEvents.createdAt, start),
 				lt(attentionEvents.createdAt, end),
 			),
@@ -95,78 +88,84 @@ async function distributeForSubscriber(sub: {
 		}
 	}
 
-	// 2. Calculate proportional Time Pool distribution
-	const poolAmount = new Decimal(computeTimePoolAmount(sub.fundingLevel));
-	const distributions = new Map<
-		number,
-		{
-			poolAmount: Decimal;
-			boostAmount: Decimal;
-			attentionSeconds: number;
+	const distributions = new Map<number, Dist>();
+	const ensure = (creatorId: number): Dist => {
+		let d = distributions.get(creatorId);
+		if (!d) {
+			d = { poolAmount: new Decimal(0), boostAmount: new Decimal(0), attentionSeconds: 0 };
+			distributions.set(creatorId, d);
 		}
-	>();
+		return d;
+	};
 
-	if (totalAttention > 0 && poolAmount.gt(0)) {
-		for (const [creatorId, seconds] of attentionByCreator) {
-			const proportion = new Decimal(seconds).div(totalAttention);
-			const amount = poolAmount.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-			if (amount.gt(0)) {
-				distributions.set(creatorId, {
-					poolAmount: amount,
-					boostAmount: new Decimal(0),
-					attentionSeconds: seconds,
-				});
-			}
-		}
-
-		// Correct rounding drift
-		let totalDistributed = new Decimal(0);
-		for (const d of distributions.values()) {
-			totalDistributed = totalDistributed.plus(d.poolAmount);
-		}
-		const drift = poolAmount.minus(totalDistributed);
-		if (!drift.isZero() && distributions.size > 0) {
-			// Adjust the largest allocation
-			let largestId = 0;
-			let largestAmount = new Decimal(0);
-			for (const [id, d] of distributions) {
-				if (d.poolAmount.gt(largestAmount)) {
-					largestId = id;
-					largestAmount = d.poolAmount;
-				}
-			}
-			const entry = distributions.get(largestId)!;
-			entry.poolAmount = entry.poolAmount.plus(drift);
-		}
-	}
-
-	// 3. Apply boost allocations
-	const boosts = await db
+	// 2. Directed boosts (100% to the named creator) + compute the undirected remainder.
+	const directed = await db
 		.select()
 		.from(boostAllocations)
 		.where(
-			and(eq(boostAllocations.userId, sub.userId), eq(boostAllocations.billingCycle, cycleDate)),
+			and(eq(boostAllocations.userId, acct.userId), eq(boostAllocations.billingCycle, cycleDate)),
 		);
 
-	for (const boost of boosts) {
-		const existing = distributions.get(boost.creatorId);
-		if (existing) {
-			existing.boostAmount = new Decimal(boost.amount);
-		} else {
-			distributions.set(boost.creatorId, {
-				poolAmount: new Decimal(0),
-				boostAmount: new Decimal(boost.amount),
-				attentionSeconds: 0,
-			});
+	let directedTotal = new Decimal(0);
+	for (const boost of directed) {
+		const amt = new Decimal(boost.amount);
+		directedTotal = directedTotal.plus(amt);
+		ensure(boost.creatorId).boostAmount = amt;
+	}
+	const undirectedBoost = Decimal.max(0, new Decimal(acct.boostTotal).minus(directedTotal));
+
+	// 3. Distribute the Time Pool and undirected Boost proportionally by watch-time.
+	const timePool = computeTimePoolAmount(acct.usageGiB);
+	if (totalAttention > 0 && (timePool.gt(0) || undirectedBoost.gt(0))) {
+		for (const [creatorId, seconds] of attentionByCreator) {
+			const proportion = new Decimal(seconds).div(totalAttention);
+			const d = ensure(creatorId);
+			d.attentionSeconds = seconds;
+			if (timePool.gt(0)) {
+				d.poolAmount = d.poolAmount.plus(
+					timePool.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+				);
+			}
+			if (undirectedBoost.gt(0)) {
+				d.boostAmount = d.boostAmount.plus(
+					undirectedBoost.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+				);
+			}
 		}
+
+		// Correct rounding drift against the largest allocation so each pot is conserved.
+		correctDrift(
+			distributions,
+			timePool,
+			(d) => d.poolAmount,
+			(d, v) => {
+				d.poolAmount = v;
+			},
+		);
+		if (undirectedBoost.gt(0)) {
+			correctDrift(
+				distributions,
+				directedTotal.plus(undirectedBoost),
+				(d) => d.boostAmount,
+				(d, v) => {
+					d.boostAmount = v;
+				},
+			);
+		}
+	}
+
+	// Record watch-time even for creators that only received a directed boost.
+	for (const [creatorId, seconds] of attentionByCreator) {
+		ensure(creatorId).attentionSeconds = seconds;
 	}
 
 	// 4. Write PoolDistribution ledger entries
 	for (const [creatorId, data] of distributions) {
+		if (data.poolAmount.lte(0) && data.boostAmount.lte(0)) continue;
 		await db
 			.insert(poolDistributions)
 			.values({
-				subscriberId: sub.userId,
+				subscriberId: acct.userId,
 				creatorId,
 				billingCycle: cycleDate,
 				poolAmount: data.poolAmount.toString(),
@@ -188,35 +187,43 @@ async function distributeForSubscriber(sub: {
 	}
 }
 
-export async function distributePool(data: DistributePoolData) {
-	const query = db
-		.select()
-		.from(subscriptions)
-		.where(and(eq(subscriptions.isActive, true), ne(subscriptions.tier, "window")));
+/** Push any rounding drift between the target and the summed allocations onto the largest one. */
+function correctDrift(
+	distributions: Map<number, Dist>,
+	target: Decimal,
+	get: (d: Dist) => Decimal,
+	set: (d: Dist, v: Decimal) => void,
+) {
+	if (distributions.size === 0) return;
+	let total = new Decimal(0);
+	for (const d of distributions.values()) total = total.plus(get(d));
+	const drift = target.minus(total);
+	if (drift.isZero()) return;
+	let largest: Dist | null = null;
+	for (const d of distributions.values()) {
+		if (!largest || get(d).gt(get(largest))) largest = d;
+	}
+	if (largest) set(largest, get(largest).plus(drift));
+}
 
-	const subs = data.subscriptionId
+export async function distributePool(data: DistributePoolData) {
+	const accts = data.accountId
 		? await db
 				.select()
-				.from(subscriptions)
-				.where(
-					and(
-						eq(subscriptions.id, data.subscriptionId),
-						eq(subscriptions.isActive, true),
-						ne(subscriptions.tier, "window"),
-					),
-				)
-		: await query;
+				.from(accounts)
+				.where(and(eq(accounts.id, data.accountId), eq(accounts.isActive, true)))
+		: await db.select().from(accounts).where(eq(accounts.isActive, true));
 
 	let processed = 0;
-	for (const sub of subs) {
+	for (const acct of accts) {
 		try {
-			await distributeForSubscriber(sub);
+			await distributeForAccount(acct);
 			processed++;
 		} catch (error) {
-			console.error(`Pool distribution failed for user ${sub.userId}:`, error);
+			console.error(`Pool distribution failed for user ${acct.userId}:`, error);
 		}
 	}
 
-	console.log(`Pool distribution complete: ${processed} subscribers processed`);
+	console.log(`Pool distribution complete: ${processed} accounts processed`);
 	return processed;
 }

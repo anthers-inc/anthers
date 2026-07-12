@@ -23,8 +23,10 @@ CREATE TABLE "purchases" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"buyer_id" integer NOT NULL,
 	"post_id" integer NOT NULL,
+	"type" text DEFAULT 'digital' NOT NULL,
 	"amount" numeric NOT NULL,
 	"processing_fee" numeric NOT NULL,
+	"delivery_fee" numeric DEFAULT '0.00' NOT NULL,
 	"crf_fee" numeric NOT NULL,
 	"creator_earnings" numeric NOT NULL,
 	"stripe_payment_intent_id" text NOT NULL,
@@ -147,6 +149,36 @@ CREATE TABLE "verification_tokens" (
 	CONSTRAINT "verification_tokens_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
+CREATE TABLE "account_cycles" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"usage_gib" integer DEFAULT 0 NOT NULL,
+	"boost_total" numeric DEFAULT '0.00' NOT NULL,
+	"usage_spend" numeric DEFAULT '0.00' NOT NULL,
+	"boost_spend" numeric DEFAULT '0.00' NOT NULL,
+	"total_spend" numeric DEFAULT '0.00' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "accounts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"usage_gib" integer DEFAULT 0 NOT NULL,
+	"boost_total" numeric DEFAULT '0.00' NOT NULL,
+	"redownload_balance" numeric DEFAULT '0.00' NOT NULL,
+	"is_self_hosting" boolean DEFAULT false NOT NULL,
+	"stripe_customer_id" text DEFAULT '',
+	"is_active" boolean DEFAULT true,
+	"current_period_start" timestamp with time zone,
+	"current_period_end" timestamp with time zone,
+	"canceled_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "accounts_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
 CREATE TABLE "attention_events" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
@@ -194,20 +226,13 @@ CREATE TABLE "pool_distributions" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "subscriptions" (
+CREATE TABLE "redownload_ledger" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"tier" text DEFAULT 'free' NOT NULL,
-	"funding_level" integer DEFAULT 0 NOT NULL,
-	"stripe_customer_id" text DEFAULT '',
-	"stripe_subscription_id" text DEFAULT '',
-	"is_active" boolean DEFAULT true,
-	"current_period_start" timestamp with time zone,
-	"current_period_end" timestamp with time zone,
-	"canceled_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "subscriptions_user_id_unique" UNIQUE("user_id")
+	"delta" numeric NOT NULL,
+	"reason" text NOT NULL,
+	"post_id" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "assets" (
@@ -416,6 +441,8 @@ ALTER TABLE "follows" ADD CONSTRAINT "follows_follower_id_users_id_fk" FOREIGN K
 ALTER TABLE "follows" ADD CONSTRAINT "follows_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "verification_tokens" ADD CONSTRAINT "verification_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "account_cycles" ADD CONSTRAINT "account_cycles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -424,7 +451,8 @@ ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_creator_id_use
 ALTER TABLE "creator_gates" ADD CONSTRAINT "creator_gates_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_subscriber_id_users_id_fk" FOREIGN KEY ("subscriber_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "redownload_ledger" ADD CONSTRAINT "redownload_ledger_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "redownload_ledger" ADD CONSTRAINT "redownload_ledger_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "assets" ADD CONSTRAINT "assets_content_item_id_content_items_id_fk" FOREIGN KEY ("content_item_id") REFERENCES "public"."content_items"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -451,11 +479,13 @@ CREATE UNIQUE INDEX "uq_crf_subsidies_creator_cycle" ON "crf_subsidies" USING bt
 CREATE UNIQUE INDEX "uq_jam_entries_jam_post" ON "jam_entries" USING btree ("jam_id","post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_jam_votes_entry_user" ON "jam_votes" USING btree ("entry_id","user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_follows_follower_creator" ON "follows" USING btree ("follower_id","creator_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_account_cycles_user_cycle" ON "account_cycles" USING btree ("user_id","billing_cycle");--> statement-breakpoint
 CREATE INDEX "idx_attention_user_date" ON "attention_events" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_attention_creator_date" ON "attention_events" USING btree ("creator_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_boost_user_creator_cycle" ON "boost_allocations" USING btree ("user_id","creator_id","billing_cycle");--> statement-breakpoint
 CREATE INDEX "idx_creator_gates_creator" ON "creator_gates" USING btree ("creator_id","sort_order");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_pool_dist_sub_creator_cycle" ON "pool_distributions" USING btree ("subscriber_id","creator_id","billing_cycle");--> statement-breakpoint
+CREATE INDEX "idx_redownload_user_date" ON "redownload_ledger" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_assets_content_item" ON "assets" USING btree ("content_item_id");--> statement-breakpoint
 CREATE INDEX "idx_bookmarks_user" ON "bookmarks" USING btree ("user_id","sort_order");--> statement-breakpoint
 CREATE INDEX "idx_content_items_creator" ON "content_items" USING btree ("creator_id");--> statement-breakpoint

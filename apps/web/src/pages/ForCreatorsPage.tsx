@@ -210,17 +210,22 @@ export default function ForCreatorsPage() {
 						{/* Example receipt */}
 						<div className="card bg-base-200">
 							<div className="card-body">
-								<h3 className="font-bold text-lg mb-3">Example: $10 game (card payment)</h3>
+								<h3 className="font-bold text-lg mb-3">
+									Example: $10 game, 2 GiB download (card payment)
+								</h3>
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
-									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine label="Anthers Foundation Fee (8%)" amount="$0.80" />
+									<ReceiptLine
+										label="Download bandwidth (2 GiB @ $0.01/GiB, at cost)"
+										amount="$0.02"
+									/>
+									<ReceiptLine label="Anthers Foundation Fee (50% of bandwidth)" amount="$0.01" />
 									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
-									<ReceiptLine label="You pay" amount="$11.40" bold />
+									<ReceiptLine label="You pay" amount="$10.62" bold />
 								</div>
 								<p className="text-xs text-base-content/40 mt-3">
-									Creator receives $10.00—every time.
+									Creator receives $10.00—every time. Anthers keeps $0.00.
 								</p>
 							</div>
 						</div>
@@ -256,9 +261,10 @@ export default function ForCreatorsPage() {
 								<div>
 									<h4 className="font-semibold text-sm">Anthers Foundation</h4>
 									<p className="text-sm text-base-content/60">
-										8% of transactions funds the Anthers Foundation, which allocates between
-										charitable programs and organizational operations. It's a community investment,
-										not a platform tax.
+										The Foundation fee rides on the infrastructure a transaction actually uses—50%
+										of the bandwidth a download or stream needs, plus 50% of creator storage. It
+										funds free access, charitable programs, and lean operations. It's a community
+										investment, not a platform tax—Anthers itself keeps nothing.
 									</p>
 								</div>
 							</div>
@@ -376,69 +382,71 @@ export default function ForCreatorsPage() {
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">
-						Subscribers fund creators, not platforms
+						Users fund creators, not platforms
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Users subscribe to Anthers, and their subscription funds are distributed to creators
-						proportionally based on what they actually watch, read, listen to, and play. No platform
-						cut—just transparent allocation.
+						Users make two independent, prepaid choices—Usage (open, per-GiB access) and Boost ($1
+						units sent straight to specific creators)—and earn a rolling Anthers Badge from their
+						combined spend. Every dollar is bandwidth at cost, money to creators, or the Anthers
+						Foundation fee. Anthers keeps $0.
 					</p>
 					<div className="overflow-x-auto">
 						<table className="table table-sm max-w-3xl mx-auto">
 							<thead>
 								<tr>
-									<th>Tier</th>
-									<th className="text-right">Price</th>
-									<th className="text-right">Time Pool</th>
-									<th className="text-right">Boost Pool</th>
+									<th>Badge</th>
+									<th className="text-right">Usage</th>
+									<th className="text-right">Boost</th>
+									<th className="text-right">Combined spend</th>
+									<th className="text-right">To creators</th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr>
 									<td>Free</td>
-									<td className="text-right">Free</td>
+									<td className="text-right text-base-content/40">First 3 GiB free</td>
 									<td className="text-right text-base-content/40">—</td>
+									<td className="text-right text-base-content/40">&lt; $3</td>
 									<td className="text-right text-base-content/40">—</td>
 								</tr>
 								<tr>
 									<td>Root</td>
-									<td className="text-right">$3/mo</td>
-									<td className="text-right text-success">$0.76</td>
-									<td className="text-right text-primary">$2.00</td>
+									<td className="text-right">100 GiB</td>
+									<td className="text-right">$0</td>
+									<td className="text-right">$3</td>
+									<td className="text-right text-success">$1.50</td>
 								</tr>
 								<tr>
 									<td>Sprout</td>
-									<td className="text-right">$7/mo</td>
-									<td className="text-right text-success">$2.44</td>
-									<td className="text-right text-primary">$4.00</td>
-								</tr>
-								<tr className="text-base-content/50 border-dashed border-t border-base-300/50">
-									<td className="italic">e.g. Sprout+</td>
-									<td className="text-right italic">$10/mo</td>
-									<td className="text-right text-success">$4.20</td>
-									<td className="text-right text-primary">$5.00</td>
+									<td className="text-right">200 GiB</td>
+									<td className="text-right">$1</td>
+									<td className="text-right">$7</td>
+									<td className="text-right text-success">$4.00</td>
 								</tr>
 								<tr>
 									<td>Petal</td>
-									<td className="text-right">$15/mo</td>
-									<td className="text-right text-success">$5.80</td>
-									<td className="text-right text-primary">$8.00</td>
+									<td className="text-right">300 GiB</td>
+									<td className="text-right">$6</td>
+									<td className="text-right">$15</td>
+									<td className="text-right text-success">$10.50</td>
 								</tr>
 								<tr>
-									<td>Bloom</td>
-									<td className="text-right">$30/mo</td>
-									<td className="text-right text-success">$12.60</td>
-									<td className="text-right text-primary">$15.00</td>
+									<td>Blossom</td>
+									<td className="text-right">400 GiB</td>
+									<td className="text-right">$18</td>
+									<td className="text-right">$30</td>
+									<td className="text-right text-success">$24.00</td>
 								</tr>
 							</tbody>
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4">
-						These are values at each tier threshold — users can fund at any $1 increment, and both
-						pools scale with the funding level. The Boost Pool is the $1 increment closest to half
-						the funding amount (Boost = ⌈funding × 0.5⌉); the Time Pool is the rest of the 92%
-						creator share (funding × 0.92 − Boost), distributed proportionally by time spent.
-						Subscriptions coming soon.
+						You're never locked into a tier. Usage is sold in 100 GiB / $3.00 packs (first 3 GiB
+						free); each Usage dollar splits into bandwidth at cost ($0.01/GiB), the Anthers
+						Foundation fee ($0.005/GiB), and the Time Pool ($0.015/GiB) that pays creators by
+						watch-time. Boost is bought in $1 units that go 100% to the creators you choose. Your
+						combined Usage + Boost spend sets your rolling Anthers Badge—Root at $3, Sprout at $7,
+						Petal at $15, Blossom at $30. Anthers keeps $0. Coming soon.
 					</p>
 				</div>
 			</section>

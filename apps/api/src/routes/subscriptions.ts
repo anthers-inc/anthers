@@ -1,106 +1,120 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Subscription routes — tiers, subscribe, cancel, attention tracking,
- * pool distributions, boosts, creator gates, content access.
+ * Account & economics routes — V3.
  *
- * Tiers are thresholds on a continuous funding level. Users can fund at any
- * $1 increment. The boost budget is computed from the funding level, not
- * looked up by tier name.
+ * Users don't subscribe to a tier. They hold an account and make two prepaid,
+ * per-cycle choices: a **Usage** level (GiB) and a total **Boost** ($). Their
+ * **Anthers Badge** is derived from combined spend across the trailing cycles.
+ * This file also serves time (attention) tracking, pool distributions, boost
+ * allocation, the re-download wallet, creator gates, and content access.
  *
- * Note: Stripe subscription management is stubbed with TODO markers.
+ * Note: Stripe payment movement is stubbed with TODO markers — the endpoints set
+ * levels/balances directly until Stripe is wired.
  */
 
 import { db } from "@anthers/db/client";
 import {
+	accountCycles,
+	accounts,
 	attentionEvents,
 	boostAllocations,
 	creatorGates,
 	poolDistributions,
 	posts,
-	subscriptions,
+	redownloadLedger,
 	users,
 } from "@anthers/db/schema";
+import { BADGE_THRESHOLDS, badgeForSpend, USAGE_PER_GIB } from "@anthers/shared/constants";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
-import { resolveAccess } from "../services/access.js";
+import { resolveAccess, rollingBadgeSpend } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const TIERS = [
-	{
-		id: "free",
-		name: "Free",
-		price: 0,
-		features: ["Browse and discover content", "Rate and comment", "Follow creators"],
-	},
-	{
-		id: "root",
-		name: "Root",
-		price: 3,
-		features: [
-			"Support the platform",
-			"Access subscriber-only content",
-			"Pool distribution to creators",
-			"Boost pool available at funding levels above $3",
-		],
-	},
-	{
-		id: "sprout",
-		name: "Sprout",
-		price: 7,
-		features: [
-			"Everything in Root",
-			"Boost allocation (varies by funding level, $3.68+ at threshold)",
-			"Gate access for boosted creators",
-		],
-	},
-	{
-		id: "petal",
-		name: "Petal",
-		price: 15,
-		features: [
-			"Everything in Sprout",
-			"Boost allocation (varies by funding level, $11.04+ at threshold)",
-			"Priority support",
-		],
-	},
-	{
-		id: "bloom",
-		name: "Bloom",
-		price: 30,
-		features: [
-			"Everything in Petal",
-			"Boost allocation (varies by funding level, $24.84+ at threshold)",
-			"Creator analytics insights",
-		],
-	},
-];
+/** The rolling Anthers Badges and the combined-spend threshold each requires. */
+const BADGES = [
+	{ id: "root", name: "Root", threshold: BADGE_THRESHOLDS.root },
+	{ id: "sprout", name: "Sprout", threshold: BADGE_THRESHOLDS.sprout },
+	{ id: "petal", name: "Petal", threshold: BADGE_THRESHOLDS.petal },
+	{ id: "blossom", name: "Blossom", threshold: BADGE_THRESHOLDS.blossom },
+] as const;
 
-/**
- * V2 economics: Boost Pool = ceil(fundingLevel × 0.5), in $1 increments.
- * Time Pool = (fundingLevel × 0.92) − boostPool.
- * Unallocated boost flows back to the Time Pool.
- */
-function computeBoostBudget(fundingLevel: number): number {
-	if (fundingLevel < 3) return 0;
-	return Math.ceil(fundingLevel * 0.5);
-}
+/** Minimum re-download top-up — a few dollars so the card fee isn't outsized. */
+const MIN_REDOWNLOAD_TOPUP = 2;
 
-function computeTimePool(fundingLevel: number): number {
-	if (fundingLevel < 3) return 0;
-	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
-	const boostPool = computeBoostBudget(fundingLevel);
-	return Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getCurrentBillingCycle(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function currentPeriod() {
+	const now = new Date();
+	return {
+		start: new Date(now.getFullYear(), now.getMonth(), 1),
+		end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+	};
+}
+
+function money(n: number): string {
+	return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+/** Record this cycle's prepaid levels + derived spend (the Badge ledger). */
+async function upsertAccountCycle(
+	userId: number,
+	cycle: string,
+	usageGiB: number,
+	boostTotal: number,
+) {
+	const usageSpend = money(usageGiB * USAGE_PER_GIB);
+	const boostSpend = money(boostTotal);
+	const totalSpend = money(usageGiB * USAGE_PER_GIB + boostTotal);
+	await db
+		.insert(accountCycles)
+		.values({
+			userId,
+			billingCycle: cycle,
+			usageGiB,
+			boostTotal: boostSpend,
+			usageSpend,
+			boostSpend,
+			totalSpend,
+		})
+		.onConflictDoUpdate({
+			target: [accountCycles.userId, accountCycles.billingCycle],
+			set: {
+				usageGiB,
+				boostTotal: boostSpend,
+				usageSpend,
+				boostSpend,
+				totalSpend,
+				updatedAt: new Date(),
+			},
+		});
+}
+
+async function getAccount(userId: number) {
+	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, userId)).limit(1);
+	return acct ?? null;
+}
+
+/** Ensure an account row exists; returns it. */
+async function ensureAccount(userId: number) {
+	const existing = await getAccount(userId);
+	if (existing) return existing;
+	const { start, end } = currentPeriod();
+	const [created] = await db
+		.insert(accounts)
+		.values({ userId, currentPeriodStart: start, currentPeriodEnd: end })
+		.returning();
+	return created;
 }
 
 async function getOptionalUserId(c: any): Promise<number | null> {
@@ -113,99 +127,129 @@ async function getOptionalUserId(c: any): Promise<number | null> {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const subscriptionRoutes = new Hono()
-	// ── Tier List ─────────────────────────────────────────────────────────────
-	.get("/tiers", (c) => c.json({ tiers: TIERS }))
+	// ── Badge List ────────────────────────────────────────────────────────────
+	.get("/badges", (c) => c.json({ badges: BADGES }))
 
-	// ── Current Subscription ─────────────────────────────────────────────────
+	// ── Current Account ──────────────────────────────────────────────────────
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
+		const acct = await getAccount(user.id);
+		const badgeSpend = await rollingBadgeSpend(user.id);
 
-		const [sub] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, user.id))
-			.limit(1);
-
-		if (!sub) {
+		if (!acct) {
 			return c.json({
-				subscription: {
-					tier: "free",
+				account: {
+					usageGiB: 0,
+					boostTotal: "0.00",
+					redownloadBalance: "0.00",
+					isSelfHosting: false,
 					isActive: true,
 					currentPeriodStart: null,
 					currentPeriodEnd: null,
 					canceledAt: null,
 				},
+				badge: badgeForSpend(badgeSpend),
+				badgeSpend,
 			});
 		}
 
-		return c.json({ subscription: sub });
+		return c.json({ account: acct, badge: badgeForSpend(badgeSpend), badgeSpend });
 	})
 
-	// ── Subscribe / Change Tier ──────────────────────────────────────────────
+	// ── Set Prepaid Levels (Usage + total Boost) ─────────────────────────────
 	.post(
-		"/subscribe",
+		"/account",
 		requireAuth,
 		requireVerified,
-		zValidator("json", z.object({ tier: z.enum(["root", "sprout", "petal", "bloom"]) })),
+		zValidator(
+			"json",
+			z.object({
+				usageGiB: z.number().int().min(0).optional(),
+				boostTotal: z.number().min(0).optional(),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
-			const { tier } = c.req.valid("json");
+			const { usageGiB, boostTotal } = c.req.valid("json");
+			const cycle = getCurrentBillingCycle();
 
-			// TODO: Create Stripe Checkout Session for new subscriptions
-			// TODO: Update Stripe subscription for tier changes (proration)
+			// TODO: Charge the prepaid amount (usage + boost delta) via Stripe before applying.
+			const existing = await getAccount(user.id);
+			const { start, end } = currentPeriod();
+			const nextUsage = usageGiB ?? existing?.usageGiB ?? 0;
+			const nextBoost = boostTotal ?? Number(existing?.boostTotal ?? 0);
 
-			return c.json({
-				checkoutUrl: "https://checkout.stripe.com/placeholder",
-				message: "Stripe subscription checkout not yet implemented",
-			});
+			if (existing) {
+				await db
+					.update(accounts)
+					.set({
+						usageGiB: nextUsage,
+						boostTotal: money(nextBoost),
+						isActive: true,
+						canceledAt: null,
+						currentPeriodStart: existing.currentPeriodStart ?? start,
+						currentPeriodEnd: existing.currentPeriodEnd ?? end,
+						updatedAt: new Date(),
+					})
+					.where(eq(accounts.id, existing.id));
+			} else {
+				await db.insert(accounts).values({
+					userId: user.id,
+					usageGiB: nextUsage,
+					boostTotal: money(nextBoost),
+					currentPeriodStart: start,
+					currentPeriodEnd: end,
+				});
+			}
+
+			await upsertAccountCycle(user.id, cycle, nextUsage, nextBoost);
+			const badgeSpend = await rollingBadgeSpend(user.id);
+			const acct = await getAccount(user.id);
+			return c.json({ account: acct, badge: badgeForSpend(badgeSpend), badgeSpend });
 		},
 	)
 
-	// ── Cancel Subscription ──────────────────────────────────────────────────
+	// ── Self-Hosting Toggle (creators) ───────────────────────────────────────
+	.post(
+		"/self-hosting",
+		requireAuth,
+		zValidator("json", z.object({ enabled: z.boolean() })),
+		async (c) => {
+			const user = c.get("user");
+			const { enabled } = c.req.valid("json");
+			await ensureAccount(user.id);
+			await db
+				.update(accounts)
+				.set({ isSelfHosting: enabled, updatedAt: new Date() })
+				.where(eq(accounts.userId, user.id));
+			return c.json({ isSelfHosting: enabled });
+		},
+	)
+
+	// ── Cancel Account (stop prepaid renewal) ────────────────────────────────
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
-
-		const [sub] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, user.id))
-			.limit(1);
-
-		if (!sub || sub.tier === "free") {
-			return c.json({ error: "No active paid subscription" }, 400);
+		const acct = await getAccount(user.id);
+		if (!acct || (acct.usageGiB === 0 && Number(acct.boostTotal) === 0)) {
+			return c.json({ error: "No active spend to cancel" }, 400);
 		}
-
-		// TODO: Cancel at period end via Stripe
-		await db
-			.update(subscriptions)
-			.set({ canceledAt: new Date() })
-			.where(eq(subscriptions.id, sub.id));
-
-		const [updated] = await db.select().from(subscriptions).where(eq(subscriptions.id, sub.id));
-
-		return c.json({ subscription: updated });
+		// TODO: Cancel any Stripe renewal at period end.
+		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
+		const updated = await getAccount(user.id);
+		return c.json({ account: updated });
 	})
 
-	// ── Resume Subscription ──────────────────────────────────────────────────
+	// ── Resume Account ───────────────────────────────────────────────────────
 	.post("/resume", requireAuth, async (c) => {
 		const user = c.get("user");
-
-		const [sub] = await db
-			.select()
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, user.id))
-			.limit(1);
-
-		if (!sub?.canceledAt) {
-			return c.json({ error: "No canceled subscription to resume" }, 400);
+		const acct = await getAccount(user.id);
+		if (!acct?.canceledAt) {
+			return c.json({ error: "No canceled account to resume" }, 400);
 		}
-
-		// TODO: Undo cancellation via Stripe
-		await db.update(subscriptions).set({ canceledAt: null }).where(eq(subscriptions.id, sub.id));
-
-		const [updated] = await db.select().from(subscriptions).where(eq(subscriptions.id, sub.id));
-
-		return c.json({ subscription: updated });
+		// TODO: Undo cancellation via Stripe.
+		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
+		const updated = await getAccount(user.id);
+		return c.json({ account: updated });
 	})
 
 	// ── Billing Portal ───────────────────────────────────────────────────────
@@ -217,7 +261,36 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Attention Events ─────────────────────────────────────────────────────
+	// ── Re-download Balance ──────────────────────────────────────────────────
+	.get("/redownload/balance", requireAuth, async (c) => {
+		const user = c.get("user");
+		const acct = await getAccount(user.id);
+		return c.json({ balance: acct?.redownloadBalance ?? "0.00" });
+	})
+
+	.post(
+		"/redownload/topup",
+		requireAuth,
+		requireVerified,
+		zValidator("json", z.object({ amount: z.number().min(MIN_REDOWNLOAD_TOPUP) })),
+		async (c) => {
+			const user = c.get("user");
+			const { amount } = c.req.valid("json");
+			// TODO: Charge the top-up via Stripe (min a few dollars so the card fee isn't outsized).
+			const acct = await ensureAccount(user.id);
+			const next = money(Number(acct.redownloadBalance ?? 0) + amount);
+			await db
+				.update(accounts)
+				.set({ redownloadBalance: next, updatedAt: new Date() })
+				.where(eq(accounts.id, acct.id));
+			await db
+				.insert(redownloadLedger)
+				.values({ userId: user.id, delta: money(amount), reason: "topup" });
+			return c.json({ balance: next });
+		},
+	)
+
+	// ── Time (Attention) Events ──────────────────────────────────────────────
 	.post(
 		"/attention",
 		requireAuth,
@@ -258,7 +331,7 @@ const subscriptionRoutes = new Hono()
 		},
 	)
 
-	// ── Attention Summary ────────────────────────────────────────────────────
+	// ── Time Summary ─────────────────────────────────────────────────────────
 	.get("/attention/summary", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
@@ -351,6 +424,7 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Boost Allocations ────────────────────────────────────────────────────
+	// Budget is the total Boost the user has bought this cycle; 100% goes to creators.
 	.get("/boosts", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
@@ -365,14 +439,8 @@ const subscriptionRoutes = new Hono()
 			.innerJoin(users, eq(boostAllocations.creatorId, users.id))
 			.where(and(eq(boostAllocations.userId, user.id), eq(boostAllocations.billingCycle, cycle)));
 
-		const [sub] = await db
-			.select({ fundingLevel: subscriptions.fundingLevel })
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, user.id))
-			.limit(1);
-
-		const fundingLevel = sub?.fundingLevel ?? 0;
-		const budget = computeBoostBudget(fundingLevel);
+		const acct = await getAccount(user.id);
+		const budget = Number(acct?.boostTotal ?? 0);
 		const allocated = result.reduce((sum, r) => sum + Number(r.boost.amount), 0);
 
 		return c.json({
@@ -421,20 +489,14 @@ const subscriptionRoutes = new Hono()
 				return c.json({ error: "Can only edit boosts for current or next billing cycle" }, 400);
 			}
 
-			const [sub] = await db
-				.select({ fundingLevel: subscriptions.fundingLevel })
-				.from(subscriptions)
-				.where(eq(subscriptions.userId, user.id))
-				.limit(1);
+			const acct = await getAccount(user.id);
+			const budget = Number(acct?.boostTotal ?? 0);
 
-			const fundingLevel = sub?.fundingLevel ?? 0;
-			const budget = computeBoostBudget(fundingLevel);
-
-			if (budget === 0) {
-				return c.json({ error: "Boost allocations require a funding level above $3" }, 400);
+			if (budget <= 0) {
+				return c.json({ error: "Buy some Boost before allocating it to creators" }, 400);
 			}
 
-			// Current month: can only increase, not decrease
+			// Current month: allocation locks — can only increase a creator, not decrease.
 			if (cycle === currentCycle) {
 				const [existing] = await db
 					.select({ amount: boostAllocations.amount })
@@ -453,7 +515,7 @@ const subscriptionRoutes = new Hono()
 				}
 			}
 
-			// Check total allocated (excluding the creator being updated)
+			// Check total allocated (excluding the creator being updated) against the budget.
 			const [currentAllocated] = await db
 				.select({
 					total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)`,
@@ -469,7 +531,7 @@ const subscriptionRoutes = new Hono()
 
 			const otherAllocated = Number(currentAllocated.total);
 			if (otherAllocated + amountNum > budget) {
-				return c.json({ error: "Exceeds boost budget" }, 400);
+				return c.json({ error: "Exceeds the Boost you've bought this cycle" }, 400);
 			}
 
 			if (amountNum === 0) {
@@ -554,7 +616,7 @@ const subscriptionRoutes = new Hono()
 				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
-				gateType: z.enum(["boost", "anthers_tier"]).optional().default("boost"),
+				gateType: z.enum(["boost", "anthers_badge"]).optional().default("boost"),
 			}),
 		),
 		async (c) => {
@@ -645,7 +707,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for creator page tier/boost display) ────────────────
+	// ── Creator Status (for creator page Badge/boost display) ───────────────
 	.get("/creator-status/:username", async (c) => {
 		const { username } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -667,25 +729,16 @@ const subscriptionRoutes = new Hono()
 
 		if (!currentUserId) {
 			return c.json({
-				anthersTier: "free",
-				fundingLevel: 0,
+				badge: "none",
+				badgeSpend: 0,
 				boostAmount: "0.00",
 				gates,
 				unlockedGates: [],
 			});
 		}
 
-		// Get user's subscription
-		const [sub] = await db
-			.select({ tier: subscriptions.tier, fundingLevel: subscriptions.fundingLevel })
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, currentUserId))
-			.limit(1);
-
-		const tier = sub?.tier ?? "free";
-		const fundingLevel = sub?.fundingLevel ?? 0;
-
-		// Get user's boost allocation to this creator
+		// The viewer's rolling Badge and their boost to this creator this cycle.
+		const badgeSpend = await rollingBadgeSpend(currentUserId);
 		const cycle = getCurrentBillingCycle();
 		const [boost] = await db
 			.select({ amount: boostAllocations.amount })
@@ -701,31 +754,30 @@ const subscriptionRoutes = new Hono()
 
 		const boostAmount = boost?.amount ?? "0.00";
 
-		// Determine which gates are unlocked
+		// Determine which gates are unlocked: Anthers Gate by Badge spend, Boost Gate by boost.
 		const unlockedGates = gates
 			.filter((g) => {
-				if (g.gateType === "anthers_tier") {
-					return fundingLevel >= Number(g.threshold);
+				if (g.gateType === "anthers_badge") {
+					return badgeSpend >= Number(g.threshold);
 				}
 				return Number(boostAmount) >= Number(g.threshold);
 			})
 			.map((g) => g.id);
 
 		return c.json({
-			anthersTier: tier,
-			fundingLevel,
+			badge: badgeForSpend(badgeSpend),
+			badgeSpend,
 			boostAmount,
 			gates,
 			unlockedGates,
 		});
 	})
 
-	// ── Subscription Webhook ─────────────────────────────────────────────────
+	// ── Payment Webhook ──────────────────────────────────────────────────────
 	.post("/webhook", async (c) => {
 		// TODO: Verify Stripe webhook signature
-		// TODO: Handle customer.subscription.created/updated/deleted
-		// TODO: Handle invoice.payment_succeeded/failed
-		// TODO: Handle checkout.session.completed
+		// TODO: Handle checkout.session.completed for usage/boost/re-download top-ups
+		// TODO: Handle payment_intent.succeeded/failed
 
 		return c.json({ received: true });
 	});

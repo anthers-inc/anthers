@@ -171,7 +171,7 @@ const CONTENT_ITEM_TYPES = [
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 const anthersAccessRowSchema = z.object({
-	tier: z.enum(["free", "root", "sprout", "petal", "bloom"]),
+	tier: z.enum(["free", "root", "sprout", "petal", "blossom"]),
 	allow: z.boolean(),
 	price: z.string().regex(MONEY),
 });

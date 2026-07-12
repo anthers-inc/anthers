@@ -4,37 +4,38 @@
  * "may this user consume this post, and if not, what does it cost?"
  *
  * Access is expressed by two per-post tables (see `packages/db/src/schema/content.ts`):
- *   - `anthersAccess`: one row per Anthers tier (free/root/sprout/petal/bloom)
+ *   - `anthersAccess`: one row per Anthers Badge tier (free/root/sprout/petal/blossom)
  *   - `boostAccess`:   the $0 "everyone" baseline plus the creator's boost-ladder rungs
  *
  * Each row is `{ allow, price }`. A viewer *qualifies* for a row when they meet its
- * tier / boost threshold. Access is the **OR** across BOTH tables: among the rows the
+ * Badge / boost threshold. Access is the **OR** across BOTH tables: among the rows the
  * viewer qualifies for AND that are allowed, the cheapest price wins. price 0 = free;
  * a positive price = a one-time purchase that unlocks the post's enabled delivery
  * (stream and/or download — one price unlocks both). No qualifying allowed row is a
  * hard gate. Posts ship "free but fully locked" (every row allow=false).
  *
- * Resolution reads three viewer facts — subscription, per-creator boost this cycle,
- * and prior purchases — which `buildAccessContext` loads once so a batch (the
+ * Resolution reads three viewer facts — rolling Badge spend, per-creator boost this
+ * cycle, and prior purchases — which `buildAccessContext` loads once so a batch (the
  * timeline) resolves without an N+1.
  */
 
 import { db } from "@anthers/db/client";
 import type { AnthersAccessRow, BoostAccessRow } from "@anthers/db/schema";
-import { boostAllocations, purchases, subscriptions } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { accountCycles, boostAllocations, purchases } from "@anthers/db/schema";
+import { BADGE_THRESHOLDS } from "@anthers/shared/constants";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
-/** Minimum whole-dollar monthly funding each Anthers tier requires. */
-export const TIER_MIN_FUNDING: Record<string, number> = {
+/** Minimum combined Usage+Boost spend ($) each Anthers Badge tier requires. */
+export const BADGE_MIN_SPEND: Record<string, number> = {
 	free: 0,
-	root: 3,
-	sprout: 7,
-	petal: 15,
-	bloom: 30,
+	root: BADGE_THRESHOLDS.root,
+	sprout: BADGE_THRESHOLDS.sprout,
+	petal: BADGE_THRESHOLDS.petal,
+	blossom: BADGE_THRESHOLDS.blossom,
 };
 
-/** Anthers tiers, low → high. */
-export const TIER_ORDER = ["free", "root", "sprout", "petal", "bloom"] as const;
+/** Anthers Badge tiers, low → high. */
+export const TIER_ORDER = ["free", "root", "sprout", "petal", "blossom"] as const;
 
 /** The post fields access resolution depends on (structurally satisfied by a full post row). */
 export interface AccessiblePost {
@@ -49,7 +50,8 @@ export interface AccessiblePost {
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of posts. */
 export interface AccessContext {
 	userId: number | null;
-	subscription: { tier: string; fundingLevel: number; isActive: boolean } | null;
+	/** The viewer's rolling Badge spend (max combined spend across the trailing 3 cycles). */
+	badgeSpend: number;
 	/** creatorId → boost amount allocated to that creator this billing cycle */
 	boostByCreator: Map<number, number>;
 	/** post ids the viewer has a completed purchase for */
@@ -75,7 +77,7 @@ export interface AccessResult {
 	requiresPurchase: boolean;
 	/** Minimum price to unlock via purchase (money string), or null when free/gated. */
 	price: string | null;
-	/** Viewer qualifies via an allowed tier/boost row (a gate), even if a price still applies. */
+	/** Viewer qualifies via an allowed Badge/boost row (a gate), even if a price still applies. */
 	isEntitled: boolean;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
@@ -85,6 +87,26 @@ export interface AccessResult {
 export function currentBillingCycle(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** The current cycle plus the two prior — the trailing-3-month Badge window. */
+function last3Cycles(): string[] {
+	const now = new Date();
+	return [0, 1, 2].map((back) => {
+		const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+	});
+}
+
+/** A user's rolling Badge spend: the highest combined spend across the trailing 3 cycles. */
+export async function rollingBadgeSpend(userId: number): Promise<number> {
+	const [row] = await db
+		.select({ maxSpend: sql<string>`COALESCE(MAX(CAST(total_spend AS numeric)), 0)` })
+		.from(accountCycles)
+		.where(
+			and(eq(accountCycles.userId, userId), inArray(accountCycles.billingCycle, last3Cycles())),
+		);
+	return Number(row?.maxSpend ?? 0);
 }
 
 function money(n: number): string {
@@ -97,13 +119,13 @@ interface Offer {
 	baseline: boolean;
 }
 
-/** Anthers-table offers the viewer qualifies for. Free tier always qualifies; paid tiers need an active sub. */
-function anthersOffers(rows: AnthersAccessRow[], viewerFunding: number, active: boolean): Offer[] {
+/** Anthers-table offers the viewer qualifies for. Free tier always qualifies; paid tiers need Badge spend. */
+function anthersOffers(rows: AnthersAccessRow[], badgeSpend: number): Offer[] {
 	const offers: Offer[] = [];
 	for (const row of rows) {
 		if (!row.allow) continue;
-		const need = TIER_MIN_FUNDING[row.tier] ?? 0;
-		const qualifies = need <= 0 ? true : active && viewerFunding >= need;
+		const need = BADGE_MIN_SPEND[row.tier] ?? 0;
+		const qualifies = need <= 0 ? true : badgeSpend >= need;
 		if (!qualifies) continue;
 		offers.push({ price: Number(row.price ?? "0"), baseline: need <= 0 });
 	}
@@ -145,13 +167,10 @@ export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "purchased" };
 	}
 
-	const sub = ctx.subscription;
-	const active = !!sub?.isActive;
-	const viewerFunding = active ? (sub?.fundingLevel ?? 0) : 0;
 	const viewerBoost = ctx.boostByCreator.get(post.creatorId) ?? 0;
 
 	const offers = [
-		...anthersOffers(post.anthersAccess ?? [], viewerFunding, active),
+		...anthersOffers(post.anthersAccess ?? [], ctx.badgeSpend),
 		...boostOffers(post.boostAccess ?? [], viewerBoost),
 	];
 
@@ -160,7 +179,7 @@ export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): Acc
 		return { ...base, canAccess: false, reason: ctx.userId != null ? "gated" : "login_required" };
 	}
 
-	// Qualifies via a non-baseline (tier/boost) row → "entitled" for display.
+	// Qualifies via a non-baseline (Badge/boost) row → "entitled" for display.
 	const isEntitled = offers.some((o) => !o.baseline);
 
 	// Free when any qualifying allowed row is priced at/below 0.
@@ -198,7 +217,7 @@ export async function buildAccessContext(
 	if (userId == null) {
 		return {
 			userId: null,
-			subscription: null,
+			badgeSpend: 0,
 			boostByCreator: new Map(),
 			purchasedPostIds: new Set(),
 		};
@@ -207,16 +226,8 @@ export async function buildAccessContext(
 	const cycle = currentBillingCycle();
 	const scoped = opts.postIds && opts.postIds.length > 0;
 
-	const [subRows, boostRows, purchaseRows] = await Promise.all([
-		db
-			.select({
-				tier: subscriptions.tier,
-				fundingLevel: subscriptions.fundingLevel,
-				isActive: subscriptions.isActive,
-			})
-			.from(subscriptions)
-			.where(eq(subscriptions.userId, userId))
-			.limit(1),
+	const [badgeSpend, boostRows, purchaseRows] = await Promise.all([
+		rollingBadgeSpend(userId),
 		db
 			.select({ creatorId: boostAllocations.creatorId, amount: boostAllocations.amount })
 			.from(boostAllocations)
@@ -233,7 +244,6 @@ export async function buildAccessContext(
 			),
 	]);
 
-	const sub = subRows[0];
 	const boostByCreator = new Map<number, number>();
 	for (const b of boostRows) {
 		boostByCreator.set(b.creatorId, Number(b.amount));
@@ -241,9 +251,7 @@ export async function buildAccessContext(
 
 	return {
 		userId,
-		subscription: sub
-			? { tier: sub.tier, fundingLevel: sub.fundingLevel, isActive: sub.isActive ?? false }
-			: null,
+		badgeSpend,
 		boostByCreator,
 		purchasedPostIds: new Set(purchaseRows.map((p) => p.postId)),
 	};
@@ -253,7 +261,7 @@ export async function buildAccessContext(
 export function isPubliclyFree(post: AccessiblePost): boolean {
 	const ctx: AccessContext = {
 		userId: null,
-		subscription: null,
+		badgeSpend: 0,
 		boostByCreator: new Map(),
 		purchasedPostIds: new Set(),
 	};

@@ -20,11 +20,11 @@ interface SubscriberMilestone {
 }
 
 interface RevenueByTier {
-	tier: string;
-	price: number;
-	pool: number;
+	badge: string;
+	usageGib: number;
 	boost: number;
-	total: number;
+	combined: number;
+	toCreators: number;
 }
 
 interface ContentItem {
@@ -105,6 +105,20 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
 // Demo data — three creators at different scales and content types
 // ---------------------------------------------------------------------------
 
+/**
+ * V3 Anthers Badge personas (spec §4). Users aren't on a plan — they spend on
+ * Usage (per GiB) + Boost ($1 units) and earn a rolling badge from the combined
+ * total. "toCreators" = platform-wide Time Pool ($0.015/GiB, distributed by
+ * watch-time) + Boost (100% to creators). Shared across creators; each creator's
+ * actual take is their watch-time share of the Time Pool plus any directed Boosts.
+ */
+const BADGE_FUNDING: RevenueByTier[] = [
+	{ badge: "Root", usageGib: 100, boost: 0, combined: 3, toCreators: 1.5 },
+	{ badge: "Sprout", usageGib: 200, boost: 1, combined: 7, toCreators: 4.0 },
+	{ badge: "Petal", usageGib: 300, boost: 6, combined: 15, toCreators: 10.5 },
+	{ badge: "Blossom", usageGib: 400, boost: 18, combined: 30, toCreators: 24.0 },
+];
+
 const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 	{
 		id: "video",
@@ -174,13 +188,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ label: "Match YouTube gross", subscribers: 3466, pctOfAudience: 2.4 },
 			{ label: "Double YouTube net", subscribers: 3810, pctOfAudience: 2.6 },
 		],
-		revenueByTier: [
-			{ tier: "Root", price: 3, pool: 0.83, boost: 0.0, total: 0.83 },
-			{ tier: "Sprout", price: 7, pool: 0.77, boost: 0.66, total: 1.43 },
-			{ tier: "Sprout+", price: 10, pool: 0.77, boost: 1.12, total: 1.89 },
-			{ tier: "Petal", price: 15, pool: 0.77, boost: 1.64, total: 2.41 },
-			{ tier: "Bloom", price: 30, pool: 0.75, boost: 3.94, total: 4.69 },
-		],
+		revenueByTier: BADGE_FUNDING,
 		insight:
 			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Boost income is load-bearing — it accounts for over half of revenue at Sprout and above. With WebRTC peer-assisted delivery (30-60% bandwidth savings), infrastructure drops to ~$575/mo, widening the margin significantly.",
 		infraBreakdown: [
@@ -262,13 +270,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ label: "Match combined gross", subscribers: 1288, pctOfAudience: 5.4 },
 			{ label: "Double Patreon net", subscribers: 2240, pctOfAudience: 9.3 },
 		],
-		revenueByTier: [
-			{ tier: "Root", price: 3, pool: 0.66, boost: 0.0, total: 0.66 },
-			{ tier: "Sprout", price: 7, pool: 0.62, boost: 0.52, total: 1.14 },
-			{ tier: "Sprout+", price: 10, pool: 0.62, boost: 0.89, total: 1.51 },
-			{ tier: "Petal", price: 15, pool: 0.62, boost: 1.3, total: 1.92 },
-			{ tier: "Bloom", price: 30, pool: 0.6, boost: 3.12, total: 3.72 },
-		],
+		revenueByTier: BADGE_FUNDING,
 		insight:
 			"Audio and text are incredibly cheap to serve. Sage's entire monthly infrastructure cost is under $50 — less than 0.5% of revenue. This means nearly every dollar from subscribers flows directly to income. Compared to Patreon's 8-12% fee + payment processing, Anthers saves over $1,200/mo at the same subscriber count.",
 		infraBreakdown: [
@@ -351,13 +353,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			{ label: "Match itch.io + subs", subscribers: 320, pctOfAudience: 10.0 },
 			{ label: "Double itch.io net", subscribers: 560, pctOfAudience: 17.5 },
 		],
-		revenueByTier: [
-			{ tier: "Root", price: 3, pool: 0.51, boost: 0.0, total: 0.51 },
-			{ tier: "Sprout", price: 7, pool: 0.48, boost: 0.4, total: 0.88 },
-			{ tier: "Sprout+", price: 10, pool: 0.48, boost: 0.69, total: 1.17 },
-			{ tier: "Petal", price: 15, pool: 0.48, boost: 1.0, total: 1.48 },
-			{ tier: "Bloom", price: 30, pool: 0.46, boost: 2.4, total: 2.86 },
-		],
+		revenueByTier: BADGE_FUNDING,
 		insight:
 			"Game developers benefit from both subscription income (devlog followers, OST listeners) and direct sales on the marketplace. Nova's infrastructure costs are minimal — downloads are one-time transfers, not continuous streaming. Combined with direct game sales, even a small subscriber base creates a sustainable income floor that smooths out the feast-or-famine cycle of launch-driven sales.",
 		infraBreakdown: [
@@ -703,49 +699,40 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			<table className="table table-sm w-full">
 				<thead>
 					<tr>
-						<th>Tier</th>
-						<th className="text-right">Price</th>
-						<th className="text-right">Pool</th>
+						<th>Badge</th>
+						<th className="text-right">Usage</th>
 						<th className="text-right">Boost</th>
-						<th className="text-right">Total to creator</th>
+						<th className="text-right">Combined spend</th>
+						<th className="text-right">To creators</th>
 					</tr>
 				</thead>
 				<tbody>
-					{creator.revenueByTier.map((row) => {
-						const isExample = row.tier.includes("+");
-						return (
-							<tr
-								key={row.tier}
-								className={
-									isExample ? "text-base-content/50 border-dashed border-t border-base-300/50" : ""
-								}
-							>
-								<td className={`text-sm ${isExample ? "italic" : "font-medium"}`}>
-									{isExample ? `e.g. ${row.tier}` : row.tier}
-								</td>
-								<td
-									className={`text-sm text-right ${isExample ? "italic" : "text-base-content/60"}`}
-								>
-									${row.price}/mo
-								</td>
-								<td className="text-sm text-right text-success">${row.pool.toFixed(2)}</td>
-								<td className="text-sm text-right text-primary">
-									{row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
-								</td>
-								<td className={`text-sm text-right ${isExample ? "" : "font-semibold"}`}>
-									${row.total.toFixed(2)}
-								</td>
-							</tr>
-						);
-					})}
+					{creator.revenueByTier.map((row) => (
+						<tr key={row.badge}>
+							<td className="text-sm font-medium">{row.badge}</td>
+							<td className="text-sm text-right tabular-nums text-base-content/60">
+								{row.usageGib} GiB
+							</td>
+							<td className="text-sm text-right tabular-nums text-primary">
+								{row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
+							</td>
+							<td className="text-sm text-right tabular-nums text-base-content/60">
+								${row.combined.toFixed(2)}
+							</td>
+							<td className="text-sm text-right tabular-nums font-semibold text-success">
+								${row.toCreators.toFixed(2)}
+							</td>
+						</tr>
+					))}
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Named tiers show revenue at the threshold price; "Sprout+" shows $10/mo as an example of
-				continuous $1-increment funding between tiers. Boost scales continuously — actual funding
-				levels vary. Per-subscriber revenue assumes this creator receives{" "}
+				Users aren't on a plan — they spend on Usage (per GiB) and Boost ($1 units) and earn a
+				rolling Anthers Badge from the combined total. "To creators" is the platform-wide Time Pool
+				(funded at $0.015/GiB of Usage, distributed by watch-time) plus Boost (100% to creators, no
+				cut). {creator.displayName} earns their watch-time share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
-				typical subscriber's engagement time.
+				typical subscriber's time — of that Time Pool, plus any Boosts directed to them.
 			</p>
 		</div>
 	);
@@ -847,7 +834,7 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 				</div>
 				<div>
 					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
-						Per-Subscriber Revenue by Tier
+						Per-Subscriber Funding by Badge
 					</h4>
 					<div className="card bg-base-200/60 shadow-sm">
 						<div className="card-body p-4">
@@ -918,8 +905,8 @@ export default function CreatorBreakdownDemoPage() {
 				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
 					Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
 					three real-world creator profiles showing exactly how audience size, content type, and
-					subscriber tiers determine income on Anthers — and how it compares to the platforms you're
-					on today.
+					spend levels determine income on Anthers — and how it compares to the platforms you're on
+					today.
 				</p>
 			</section>
 

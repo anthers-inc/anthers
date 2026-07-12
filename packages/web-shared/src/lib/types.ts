@@ -45,7 +45,7 @@ export interface Creator {
 
 /** One row of a post's Anthers Access table (per tier). */
 export interface AnthersAccessRow {
-	tier: string; // free | root | sprout | petal | bloom
+	tier: string; // free | root | sprout | petal | blossom (the Anthers Badge tier)
 	allow: boolean;
 	price: string; // money string; "0" = free when allowed
 }
@@ -360,28 +360,40 @@ export interface OwnershipResponse {
 
 // ─── Subscription Types ───
 
-export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "bloom";
+/** The Anthers Access tier vocabulary (per-post access rows include "free"). */
+export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
-export interface SubscriptionTierOption {
+/** A user's rolling Anthers Badge, derived from combined Usage + Boost spend. */
+export type Badge = "none" | "root" | "sprout" | "petal" | "blossom";
+
+export interface BadgeOption {
 	id: string;
 	name: string;
-	price: number;
-	features: string[];
+	threshold: number;
 }
 
-export interface Subscription {
+/** A user's prepaid spend account (V3 — replaces the V2 subscription). */
+export interface Account {
 	id?: number;
 	userId?: number;
-	tier: string;
-	fundingLevel?: number;
+	usageGiB: number;
+	boostTotal: string;
+	redownloadBalance: string;
+	isSelfHosting: boolean;
 	stripeCustomerId?: string | null;
-	stripeSubscriptionId?: string | null;
 	isActive: boolean | null;
 	currentPeriodStart: string | null;
 	currentPeriodEnd: string | null;
 	canceledAt: string | null;
 	createdAt?: string;
 	updatedAt?: string;
+}
+
+/** Response of GET /subscriptions/me — the account plus the derived Badge. */
+export interface AccountResponse {
+	account: Account;
+	badge: Badge;
+	badgeSpend: number;
 }
 
 export interface AttentionSummary {
@@ -449,7 +461,7 @@ export interface ContentAccessResponse {
 export interface CreatorGate {
 	id: number;
 	creatorId: number;
-	gateType: "boost" | "anthers_tier";
+	gateType: "boost" | "anthers_badge";
 	threshold: string;
 	label: string;
 	description: string | null;
@@ -459,8 +471,8 @@ export interface CreatorGate {
 }
 
 export interface CreatorStatus {
-	anthersTier: string;
-	fundingLevel: number;
+	badge: Badge;
+	badgeSpend: number;
 	boostAmount: string;
 	gates: CreatorGate[];
 	unlockedGates: number[];

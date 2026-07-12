@@ -14,11 +14,11 @@ import {
 import { users } from "./auth.js";
 
 /**
- * A row in a post's **Anthers Access** table — one per Anthers tier. Access is
- * granted (possibly at a price) when `allow` is true; `price` "0" = free.
+ * A row in a post's **Anthers Access** table — one per Anthers Badge tier. Access
+ * is granted (possibly at a price) when `allow` is true; `price` "0" = free.
  */
 export interface AnthersAccessRow {
-	tier: string; // free | root | sprout | petal | bloom
+	tier: string; // free | root | sprout | petal | blossom (the Anthers Badge tier)
 	allow: boolean;
 	price: string; // money string; "0" = free for this tier when allowed
 }

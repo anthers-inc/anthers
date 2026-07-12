@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Foundation subsidy calculation job.
- *
- * Ported from _legacy/backend/payments/tasks.py calculate_crf_subsidies()
+ * Foundation subsidy calculation job (V3: discretionary — not an automatic
+ * net-never-negative guarantee).
  *
  * Runs daily (idempotent per monthly billing cycle). Iterates creators,
- * estimates hosting costs, compares to earnings, and subsidizes the gap
- * for creators who earn less than their hosting costs.
+ * estimates their storage cost + storage AFF (a self-hosting creator pays a flat
+ * fee instead), compares to earnings, and — at the Foundation's discretion, within
+ * its budget — may subsidize the gap for creators who earn less than that cost.
+ * Storage is the creator's own opt-in cost (3 GiB free); delivery is viewer-funded.
  */
 
 import { db } from "@anthers/db";
 import {
+	accounts,
 	assets,
 	contentItems,
 	crfLedger,
@@ -20,9 +22,9 @@ import {
 	purchases,
 	users,
 } from "@anthers/db/schema";
-import { estimateHostingCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
+import { estimateStorageCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, count, eq, inArray, sql, sum } from "drizzle-orm";
+import { and, count, eq, sql, sum } from "drizzle-orm";
 
 /** Returns the first day of the current month as YYYY-MM-DD for Drizzle date columns. */
 function getCycleDate(): string {
@@ -88,11 +90,16 @@ export async function calculateCrfSubsidies() {
 		return 0;
 	}
 
-	// Find all creators with published content
+	// Find all creators with published content (with their self-hosting flag)
 	const creators = await db
-		.selectDistinct({ id: users.id, username: users.username })
+		.selectDistinct({
+			id: users.id,
+			username: users.username,
+			isSelfHosting: accounts.isSelfHosting,
+		})
 		.from(users)
 		.innerJoin(posts, eq(posts.creatorId, users.id))
+		.leftJoin(accounts, eq(accounts.userId, users.id))
 		.where(and(eq(users.isCreator, true), eq(posts.isPublished, true)));
 
 	let subsidized = 0;
@@ -107,23 +114,11 @@ export async function calculateCrfSubsidies() {
 			.limit(1);
 		if (existing) continue;
 
-		// Calculate hosting cost. Everything is a post now; the hosting model's
-		// "projectCount" maps to the creator's published works (posts).
+		// Published-post count, kept for the subsidy audit record.
 		const [publishedPostCount] = await db
 			.select({ count: count() })
 			.from(posts)
 			.where(and(eq(posts.creatorId, creator.id), eq(posts.isPublished, true)));
-
-		const [mediaPostCount] = await db
-			.select({ count: count() })
-			.from(posts)
-			.where(
-				and(
-					eq(posts.creatorId, creator.id),
-					eq(posts.isPublished, true),
-					inArray(posts.contentType, ["video", "audio"]),
-				),
-			);
 
 		// Storage is a library concern now: sum the file sizes of the assets on the
 		// creator's content items (which own their downloadable variants directly).
@@ -135,11 +130,12 @@ export async function calculateCrfSubsidies() {
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 
-		const hostingCost = estimateHostingCost({
+		// V3 creator cost = storage beyond the free 3 GiB + 50% storage AFF (or a flat
+		// self-host fee). Delivery is viewer-funded, so it is not part of this cost.
+		const hostingCost = estimateStorageCost({
 			storageBytes,
-			projectCount: publishedPostCount?.count ?? 0,
-			mediaPostCount: mediaPostCount?.count ?? 0,
-		});
+			isSelfHosting: creator.isSelfHosting ?? false,
+		}).total;
 
 		const earnings = await getCreatorEarnings(creator.id, cycleDate);
 

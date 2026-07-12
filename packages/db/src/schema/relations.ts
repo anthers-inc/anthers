@@ -22,11 +22,13 @@ import {
 import { gameJams, jamEntries, jamVotes } from "./jams.js";
 import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
 import {
+	accountCycles,
+	accounts,
 	attentionEvents,
 	boostAllocations,
 	creatorGates,
 	poolDistributions,
-	subscriptions,
+	redownloadLedger,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -54,8 +56,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	purchases: many(purchases),
 	crfSubsidies: many(crfSubsidies),
 
-	// Subscriptions
-	subscription: one(subscriptions),
+	// Accounts & economics
+	account: one(accounts),
+	accountCycles: many(accountCycles),
+	redownloadLedger: many(redownloadLedger),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
 	boostAllocationsAsUser: many(boostAllocations, { relationName: "boostUser" }),
@@ -207,8 +211,17 @@ export const crfSubsidiesRelations = relations(crfSubsidies, ({ one }) => ({
 
 // ─── Subscriptions ───────────────────────────────────────────────────────────
 
-export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-	user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
+export const accountsRelations = relations(accounts, ({ one }) => ({
+	user: one(users, { fields: [accounts.userId], references: [users.id] }),
+}));
+
+export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({
+	user: one(users, { fields: [accountCycles.userId], references: [users.id] }),
+}));
+
+export const redownloadLedgerRelations = relations(redownloadLedger, ({ one }) => ({
+	user: one(users, { fields: [redownloadLedger.userId], references: [users.id] }),
+	post: one(posts, { fields: [redownloadLedger.postId], references: [posts.id] }),
 }));
 
 export const attentionEventsRelations = relations(attentionEvents, ({ one }) => ({

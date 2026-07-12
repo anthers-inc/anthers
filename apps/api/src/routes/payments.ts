@@ -112,9 +112,10 @@ const paymentRoutes = new Hono()
 			.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
 			.where(eq(postContents.postId, post.id));
 
-		// Pass-through model: the creator receives the full listed price; processing,
-		// the Foundation Fee, and delivery are added on top and paid by the buyer.
-		const fees = calculateFees(amount, assetSize?.bytes ?? 0);
+		// Pass-through model: the creator receives the full listed price; the Foundation
+		// Fee, delivery bandwidth, and card + tax are added on top and paid by the buyer.
+		// Digital download → Digital AFF (50% of the download's bandwidth).
+		const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
 
 		// TODO: Create Stripe PaymentIntent
 		// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -128,10 +129,11 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2), // listed price — what the creator receives
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2), // download bandwidth
-			crfFee: fees.crfFee.toFixed(2), // Legacy field name for Foundation Fee
+			deliveryFee: fees.deliveryFee.toFixed(2), // download bandwidth (at cost)
+			crfFee: fees.crfFee.toFixed(2), // Legacy field name for the Anthers Foundation Fee (AFF)
+			salesTax: fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2), // == amount (pass-through)
-			buyerTotal: fees.buyerTotal.toFixed(2), // price + fees — what the buyer is charged
+			buyerTotal: fees.buyerTotal.toFixed(2), // price + fees + tax — what the buyer is charged
 			clientSecret: "placeholder_client_secret",
 			message: "Stripe checkout not yet fully implemented",
 		});

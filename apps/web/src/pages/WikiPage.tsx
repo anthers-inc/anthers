@@ -96,7 +96,7 @@ const wikiAreas: WikiArea[] = [
 				items: [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Creating an Account", file: "01-CreatingAnAccount.md" },
-					{ name: "Subscription Tiers", file: "02-SubscriptionTiers.md" },
+					{ name: "Anthers Badges", file: "02-SubscriptionTiers.md" },
 					{ name: "Managing Your Subscription", file: "03-ManagingYourSubscription.md" },
 				],
 			},
@@ -396,7 +396,7 @@ export default function WikiPage() {
 										The Anthers Model
 									</button>
 									<p className="text-sm text-base-content/60">
-										Understand transparent pricing and the CRF
+										Understand transparent pricing and the Anthers Foundation
 									</p>
 								</div>
 							</li>
