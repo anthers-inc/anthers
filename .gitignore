@@ -37,7 +37,7 @@ coverage/
 *.lcov
 
 # ─── Local content storage (dev) ───
-content/
+/content/
 
 # ─── Agent files (contributor-specific) ───
 AGENTS.md
