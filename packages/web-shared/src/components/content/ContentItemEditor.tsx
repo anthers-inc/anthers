@@ -18,10 +18,10 @@ import {
 	uploadClientTranscodedVideo,
 	uploadMediaFile,
 } from "../../lib/upload";
+import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import LoadingSpinner from "../ui/LoadingSpinner";
-import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./contentItems";
 
 type EncodeMode = "device" | "server";
@@ -71,22 +71,30 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 	);
 
 	// Video
-	const [videoKey, setVideoKey] = useState(editing?.type === "video" ? (editing.sourceKey ?? "") : "");
+	const [videoKey, setVideoKey] = useState(
+		editing?.type === "video" ? (editing.sourceKey ?? "") : "",
+	);
 	const [videoName, setVideoName] = useState<string | null>(
 		editing?.type === "video" && editing.sourceKey ? "Existing video" : null,
 	);
 	const [videoVariants, setVideoVariants] = useState<UploadedVariant[]>([]);
-	const [videoDuration, setVideoDuration] = useState<number | null>(editing?.durationSeconds ?? null);
+	const [videoDuration, setVideoDuration] = useState<number | null>(
+		editing?.durationSeconds ?? null,
+	);
 	const [encodeMode, setEncodeMode] = useState<EncodeMode>("device");
 
 	// Audio
-	const [audioKey, setAudioKey] = useState(editing?.type === "audio" ? (editing.sourceKey ?? "") : "");
+	const [audioKey, setAudioKey] = useState(
+		editing?.type === "audio" ? (editing.sourceKey ?? "") : "",
+	);
 	const [audioName, setAudioName] = useState<string | null>(
 		editing?.type === "audio" && editing.sourceKey ? "Existing audio" : null,
 	);
 
 	// Image
-	const [imageUrl, setImageUrl] = useState(editing?.type === "image" ? (editing.sourceKey ?? "") : "");
+	const [imageUrl, setImageUrl] = useState(
+		editing?.type === "image" ? (editing.sourceKey ?? "") : "",
+	);
 	const [imagePreview, setImagePreview] = useState<string | null>(
 		editing?.type === "image" && editing.sourceKey ? keyToPreview(editing.sourceKey) : null,
 	);
@@ -734,7 +742,11 @@ function EncodeModeChooser({
 			label: "Encode on device",
 			hint: "Faster to publish · uses your CPU · stay until it finishes",
 		},
-		{ mode: "server", label: "Upload & we process", hint: "Leave anytime · we encode on our servers" },
+		{
+			mode: "server",
+			label: "Upload & we process",
+			hint: "Leave anytime · we encode on our servers",
+		},
 	];
 	return (
 		<div className="flex flex-col gap-2">
@@ -751,7 +763,9 @@ function EncodeModeChooser({
 					</button>
 				))}
 			</div>
-			<p className="text-xs text-base-content/50">{opts.find((o) => o.mode === encodeMode)?.hint}</p>
+			<p className="text-xs text-base-content/50">
+				{opts.find((o) => o.mode === encodeMode)?.hint}
+			</p>
 		</div>
 	);
 }
