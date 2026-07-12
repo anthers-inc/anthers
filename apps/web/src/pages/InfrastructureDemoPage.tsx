@@ -25,7 +25,10 @@ const BASE_COSTS = {
 	computeCostPerGb: 0.005,
 };
 
-const POOL_RATE_PER_VIEW_MIN = 0.0065;
+// V3 Time Pool rate — $0.015 of every Usage GiB funds creators, distributed by
+// watch-time (spec §2). Usage is $0.03/GiB all-in: $0.01 bandwidth + $0.005
+// Foundation fee (AFF) + $0.015 Time Pool.
+const USAGE_TIME_POOL_PER_GIB = 0.015;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -488,22 +491,17 @@ function UnitCostCalculator() {
 							At {VIDEO_QUALITIES[videoQualityIdx].label}, delivery costs{" "}
 							<span className="font-semibold text-base-content">
 								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
-							</span>
-							. The pool payout rate is{" "}
-							<span className="font-semibold text-success">
-								{fmtCost(POOL_RATE_PER_VIEW_MIN)}/min
 							</span>{" "}
-							— infrastructure is{" "}
-							{(
-								(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN) *
-								100
-							).toFixed(1)}
-							% of payout, leaving{" "}
-							{(
-								100 -
-								(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin / POOL_RATE_PER_VIEW_MIN) * 100
-							).toFixed(1)}
-							% as creator income.
+							— a bandwidth pass-through the viewer's Usage covers at cost. That same Usage funds{" "}
+							<span className="font-semibold text-success">
+								{fmtCost(
+									(VIDEO_QUALITIES[videoQualityIdx].mbPerMin / 1024) * USAGE_TIME_POOL_PER_GIB,
+								)}
+								/min
+							</span>{" "}
+							to the Time Pool, paid to creators and distributed by watch-time. Usage is priced at
+							$0.03/GiB all-in — $0.01 bandwidth + $0.005 Foundation fee + $0.015 Time Pool — with
+							the first 3 GiB free.
 						</p>
 					</div>
 				</div>
@@ -560,7 +558,7 @@ function CrossMediaComparison() {
 		label: fmtCost(d.costPerMin),
 	}));
 
-	// Cost per attention-minute table (all media)
+	// Cost per time-minute table (all media)
 	const creatorProfiles = [
 		{ type: "Game dev (5 games, 5K DL/mo)", volume: "5 GB stored, 2.5 TB delivered", cost: "$25" },
 		{ type: "Game dev (1 jam, 500 DL/mo)", volume: "200 MB stored, 100 GB delivered", cost: "$1" },
@@ -581,19 +579,18 @@ function CrossMediaComparison() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				The metric that matters most for the subscription pool model is{" "}
-				<span className="font-semibold text-base-content">
-					cost per minute of audience attention
-				</span>
-				, since revenue is distributed proportionally to attention time. Video is by far the most
-				expensive medium — audio, text, and games are 30-500x cheaper per attention-minute.
+				The metric that matters most for the Time Pool model is{" "}
+				<span className="font-semibold text-base-content">cost per minute of audience time</span>,
+				since Time Pool revenue is distributed proportionally to watch-time (the equal-time
+				principle). Video is by far the most expensive medium to deliver — audio, text, and games
+				are 30-500x cheaper per time-minute.
 			</p>
 
 			{/* Chart */}
 			<div className="card bg-base-200/50 border border-base-300">
 				<div className="card-body p-4">
 					<div className="flex justify-between items-center mb-2">
-						<h4 className="text-sm font-semibold">Delivery Cost per Attention-Minute</h4>
+						<h4 className="text-sm font-semibold">Delivery Cost per Time-Minute</h4>
 						<label className="label cursor-pointer gap-2">
 							<span className="text-xs text-base-content/50">Log scale</span>
 							<input
@@ -644,13 +641,13 @@ function CrossMediaComparison() {
 				</div>
 			</div>
 
-			{/* Table: cost per attention minute */}
+			{/* Table: cost per time-minute */}
 			<div className="overflow-x-auto">
 				<table className="table table-sm w-full">
 					<thead>
 						<tr>
 							<th>Media Type</th>
-							<th className="text-right">Cost per Attention-Min</th>
+							<th className="text-right">Cost per Time-Min</th>
 							<th className="text-right">Ratio to Video</th>
 						</tr>
 					</thead>
@@ -719,9 +716,10 @@ function ReferenceCreatorProfiles() {
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
 				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
-				fee. Anthers takes 0% — only real infrastructure costs are deducted. Creators whose
-				infrastructure exceeds their pool earnings are covered by the{" "}
-				<span className="font-semibold text-base-content">Anthers Foundation</span>.
+				fee. Anthers takes 0% — a zero-cut platform where only real infrastructure costs (shown
+				below) are deducted, at cost with no markup. The{" "}
+				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by the
+				usage fee, covers free access across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -828,10 +826,17 @@ function ReferenceCreatorProfiles() {
 						playback rate.
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
-					<p>Anthers subscription: $7/mo. 8% Foundation Fee. Pool payout ~$0.0065/view-minute.</p>
+					<p>
+						Anthers Sprout user: 200 GiB Usage + $1 Boost = $7 combined spend. The Foundation fee is
+						the usage AFF — 50% of bandwidth ($0.005/GiB) — not a flat 8%. Time Pool ($0.015/GiB) is
+						paid to creators and distributed by watch-time.
+					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
-					<p>The Foundation subsidizes any creator whose pool income {"<"} infrastructure cost.</p>
+					<p>
+						The Anthers Foundation, funded by the AFF, covers free access — 3 GiB free Usage per
+						viewer and 3 GiB free storage per creator — from a shared subsidy pool.
+					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>
 			</details>

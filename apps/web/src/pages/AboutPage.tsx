@@ -260,10 +260,10 @@ export default function AboutPage() {
 						<div className="border-l-2 border-primary/30 pl-6">
 							<h3 className="text-sm uppercase tracking-wider text-primary mb-3">For Creators</h3>
 							<p className="text-base-content/60 leading-relaxed">
-								The vast majority of subscription and purchase revenue flows directly to creators.
-								Infrastructure costs are transparent and passed through at cost. The organization's
-								operating expenses are fixed to reasonable staff and infrastructure, and all surplus
-								is directed to the Anthers Foundation's charitable programs.
+								Every dollar a user spends is one of three things: bandwidth at cost, money to
+								creators, or the Anthers Foundation fee. There is no platform margin—Anthers keeps
+								nothing. Creators keep 100% of every Boost and every direct purchase, while the
+								shared Time Pool pays out to creators by watch-time.
 							</p>
 						</div>
 						<div className="border-l-2 border-secondary/30 pl-6">
@@ -282,9 +282,10 @@ export default function AboutPage() {
 					<div className="max-w-7xl mx-auto">
 						<h3 className="text-2xl font-bold text-center mb-2">The Anthers Foundation</h3>
 						<p className="text-base-content/70 text-center max-w-3xl mx-auto mb-10">
-							The Foundation is the operational heart of Anthers's mission, allocating at least 50%
-							of the 8% Foundation Fee to charitable programs: infrastructure equity, education,
-							creation grants, and emergency assistance.
+							The Foundation is the operational heart of Anthers's mission, funded by the Anthers
+							Foundation fee—50% of the bandwidth each stream or download uses, plus 50% of creator
+							storage. Around 90% of that fee is charitable: it funds free access for everyone, plus
+							infrastructure equity, education, creation grants, and emergency assistance.
 						</p>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 							{FOUNDATION_PILLARS.map((pillar) => (
@@ -337,12 +338,12 @@ export default function AboutPage() {
 								{
 									num: "02",
 									title: "Audiences Choose What They See",
-									text: "The default feed is chronological and subscriber-driven. Algorithmic discovery is available as an opt-in mode, never the primary experience. Anthers has no ads and no incentive to manipulate attention.",
+									text: "The default feed is chronological and subscriber-driven. Algorithmic discovery is available as an opt-in mode, never the primary experience. Anthers has no ads and nothing to gain from capturing your attention—creators are funded by the time you choose to spend with their work, not by an algorithm built to keep you scrolling.",
 								},
 								{
 									num: "03",
 									title: "Funding Flows Directly",
-									text: "Revenue enters through subscriptions and direct purchases. The vast majority goes to creators through a transparent pool model. No matter how much money flows through the platform, operating costs are fixed and every dollar of surplus goes to the Foundation's programs.",
+									text: "Money enters through Usage, Boost, and direct purchases. Every dollar is bandwidth at cost, money to creators, or the Anthers Foundation fee—Anthers keeps no margin of its own. The fee itself is mostly charitable, funding free access and the Foundation's programs.",
 								},
 								{
 									num: "04",

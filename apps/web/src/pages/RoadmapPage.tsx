@@ -340,9 +340,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 					items: [
 						{
 							id: "u-sub-tiers",
-							title: "Subscription Tiers",
+							title: "Usage, Boost & Badges",
 							description:
-								"Five tiers from Free to Bloom ($30/mo) with continuous $1-increment funding between thresholds. 92% to creators, 8% to the Anthers Foundation. Transparent split.",
+								"Two independent prepaid choices—Usage (open per-GiB access) and Boost ($1 units to specific creators)—that earn a rolling Anthers Badge (Root, Sprout, Petal, Blossom) from combined spend. Zero platform cut: every dollar is bandwidth at cost, money to creators, or the Anthers Foundation fee.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,

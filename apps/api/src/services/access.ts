@@ -103,7 +103,9 @@ export async function rollingBadgeSpend(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ maxSpend: sql<string>`COALESCE(MAX(CAST(total_spend AS numeric)), 0)` })
 		.from(accountCycles)
-		.where(and(eq(accountCycles.userId, userId), inArray(accountCycles.billingCycle, last3Cycles())));
+		.where(
+			and(eq(accountCycles.userId, userId), inArray(accountCycles.billingCycle, last3Cycles())),
+		);
 	return Number(row?.maxSpend ?? 0);
 }
 

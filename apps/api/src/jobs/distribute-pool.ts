@@ -102,7 +102,9 @@ async function distributeForAccount(acct: {
 	const directed = await db
 		.select()
 		.from(boostAllocations)
-		.where(and(eq(boostAllocations.userId, acct.userId), eq(boostAllocations.billingCycle, cycleDate)));
+		.where(
+			and(eq(boostAllocations.userId, acct.userId), eq(boostAllocations.billingCycle, cycleDate)),
+		);
 
 	let directedTotal = new Decimal(0);
 	for (const boost of directed) {
@@ -132,9 +134,14 @@ async function distributeForAccount(acct: {
 		}
 
 		// Correct rounding drift against the largest allocation so each pot is conserved.
-		correctDrift(distributions, timePool, (d) => d.poolAmount, (d, v) => {
-			d.poolAmount = v;
-		});
+		correctDrift(
+			distributions,
+			timePool,
+			(d) => d.poolAmount,
+			(d, v) => {
+				d.poolAmount = v;
+			},
+		);
 		if (undirectedBoost.gt(0)) {
 			correctDrift(
 				distributions,

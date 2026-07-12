@@ -75,7 +75,14 @@ export function calculateFees(
 	const salesTax = CENTS(subtotal.mul(SALES_TAX_RATE));
 	const buyerTotal = subtotal.plus(processingFee).plus(salesTax);
 
-	return { processingFee, deliveryFee, salesTax, crfFee: foundationFee, creatorEarnings, buyerTotal };
+	return {
+		processingFee,
+		deliveryFee,
+		salesTax,
+		crfFee: foundationFee,
+		creatorEarnings,
+		buyerTotal,
+	};
 }
 
 /**

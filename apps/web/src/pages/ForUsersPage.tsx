@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
+import { USAGE_AFF_PER_GIB } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import {
 	AdjustmentsHorizontalIcon,
@@ -74,13 +74,13 @@ export default function ForUsersPage() {
 							icon={<CurrencyDollarIcon className="w-7 h-7 text-success" />}
 							tone="bg-success/15"
 							title="Your money reaches creators"
-							description="92% of every subscription and 100% of every direct purchase goes to creators. Fees are shown as itemized line items—never a silent percentage skimmed off the top."
+							description="Anthers keeps nothing—a zero-cut platform. Every dollar you pay is exactly one of four things: bandwidth at cost, money to creators, the Anthers Foundation's charity fee, or card and tax. Boosts and direct purchases go 100% to creators. Each fee is a named line item—never a silent percentage skimmed off the top."
 						/>
 						<Pillar
 							icon={<SignalIcon className="w-7 h-7 text-secondary" />}
 							tone="bg-secondary/15"
 							title="You pay for what you use"
-							description="No ads paying for infrastructure by harvesting your attention. Delivery costs are small, transparent, and—uniquely—something you can actually see and control."
+							description="No ads paying for infrastructure by monetizing your time and data. Delivery costs are small, transparent, and—uniquely—something you can actually see and control."
 						/>
 						<Pillar
 							icon={<GlobeAltIcon className="w-7 h-7 text-primary" />}
@@ -123,10 +123,11 @@ export default function ForUsersPage() {
 						</IconFeature>
 						<IconFeature
 							icon={<HeartIcon className="w-5 h-5 text-error" />}
-							title="An 8% Foundation Fee, not a platform tax"
+							title="A tiny Foundation fee, not a platform tax"
 						>
-							The same 8% that funds the Anthers Foundation on subscriptions—supporting charitable
-							programs and keeping the platform running, instead of enriching shareholders.
+							The only thing added beyond real costs is the Anthers Foundation Fee—on a download,
+							just half the bandwidth it takes to deliver it. It funds charitable programs and free
+							access for others, instead of enriching shareholders. Anthers itself keeps $0.
 						</IconFeature>
 					</div>
 
@@ -155,50 +156,56 @@ export default function ForUsersPage() {
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">
-						One subscription, split transparently
+						Two choices, every dollar itemized
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Instead of a separate pledge to every creator, you fund Anthers at whatever level you
-						choose—starting at $3/month, adjustable a dollar at a time. That single subscription is
-						split the same way at every amount: 8% funds the Foundation, and 92% flows to creators
-						through two pools.
+						Instead of one fixed price, you make two independent choices: buy Usage for open,
+						watch-anything access, and send Boosts—a dollar at a time—to the specific creators you
+						want to fund. At every amount the breakdown is the same and nothing is hidden: bandwidth
+						at cost, a small Foundation charity fee, and the rest to creators. Anthers keeps $0.
 					</p>
 
 					{/* Breakdown visual */}
 					<div className="max-w-3xl mx-auto card bg-base-100 shadow-sm mb-12">
 						<div className="card-body">
 							<div className="flex items-baseline justify-between mb-1">
-								<h3 className="font-bold text-lg">Where a $7 Sprout subscription goes</h3>
-								<span className="text-sm text-base-content/50">per month</span>
+								<h3 className="font-bold text-lg">Where a $7 Sprout month goes</h3>
+								<span className="text-sm text-base-content/50">200 GiB usage + $1 boost</span>
 							</div>
 							<div className="flex flex-col gap-3 text-sm mt-2">
 								<SplitRow
-									label="Anthers Foundation Fee (8%)"
-									amount="$0.56"
+									label="Bandwidth — delivery, at cost"
+									amount="$2.00"
 									barClass="bg-base-300"
-									widthClass="w-[8%]"
+									widthClass="w-[29%]"
 								/>
 								<SplitRow
-									label="Time Pool — auto, by time spent"
-									amount="$2.44"
+									label="Anthers Foundation Fee — charity"
+									amount="$1.00"
+									barClass="bg-info"
+									widthClass="w-[14%]"
+								/>
+								<SplitRow
+									label="Time Pool — creators, by time spent"
+									amount="$3.00"
 									barClass="bg-secondary"
-									widthClass="w-[35%]"
+									widthClass="w-[43%]"
 								/>
 								<SplitRow
-									label="Boost Pool — you direct it (or leave on auto)"
-									amount="$4.00"
+									label="Boost — creators you direct it to"
+									amount="$1.00"
 									barClass="bg-primary"
-									widthClass="w-[57%]"
+									widthClass="w-[14%]"
 								/>
 							</div>
 							<div className="divider my-2" />
 							<div className="flex justify-between text-sm font-semibold">
-								<span>To creators (92%)</span>
-								<span className="text-success">$6.44</span>
+								<span>To creators (Time Pool + Boost)</span>
+								<span className="text-success">$4.00</span>
 							</div>
 							<p className="text-xs text-base-content/40 mt-2">
-								Delivery is billed separately, on top—see below. The creator share is never reduced
-								by infrastructure costs.
+								Card processing and sales tax are added on top and leave the system entirely—they go
+								to the processor and the state, never to Anthers. Anthers's own cut is $0.
 							</p>
 						</div>
 					</div>
@@ -210,71 +217,55 @@ export default function ForUsersPage() {
 							tone="bg-secondary/15"
 							eyebrow="Automatic"
 							title="The Time Pool"
-							description="Distributed automatically based on the time you spend—and a minute is a minute. Watching a video, reading an essay, listening to an album, and playing a game all count exactly the same. Every creator you spend time with gets funded, with no effort from you."
+							description="Funded by your Usage and distributed automatically by the time you spend—and a minute is a minute. Watching a video, reading an essay, listening to an album, and playing a game all count exactly the same. Every creator you spend time with gets funded, with no effort from you."
 						/>
 						<ConceptCard
 							icon={<BoltIcon className="w-6 h-6 text-primary" />}
 							tone="bg-primary/15"
 							eyebrow="Your call"
-							title="The Boost Pool"
-							description="Point your support wherever you want, in $1 steps—or leave it on auto and it mirrors your time. Boost is how you champion the creators who matter most to you, and it's what unlocks their premium content. Anything you don't allocate flows back into the Time Pool, so nothing is wasted."
+							title="Boost"
+							description="Point your support wherever you want, in $1 units—or leave it on auto and it follows your time. Every boost dollar goes 100% to creators—no fee, nothing skimmed for processing. Boost is how you champion the creators who matter most to you, and it's what unlocks their premium content. Anything you don't direct is shared out by your time spent, so nothing is wasted."
 						/>
 					</div>
 
-					{/* Tier table */}
+					{/* Badge table */}
 					<div className="overflow-x-auto mt-14">
 						<table className="table table-sm max-w-3xl mx-auto">
 							<thead>
 								<tr>
-									<th>Tier</th>
-									<th className="text-right">Starts at</th>
-									<th className="text-right">Foundation (8%)</th>
-									<th className="text-right">Time Pool</th>
-									<th className="text-right">Boost Pool</th>
-									<th className="text-right">Watch time</th>
+									<th>Badge</th>
+									<th className="text-right">Usage</th>
+									<th className="text-right">Boost</th>
+									<th className="text-right">Combined spend</th>
+									<th className="text-right">To creators</th>
 								</tr>
 							</thead>
 							<tbody>
-								<TierRow tier="Free" price="$0" foundation="—" time="—" boost="—" cap="10 hrs/mo" />
-								<TierRow
-									tier="Root"
-									price="$3/mo"
-									foundation="$0.24"
-									time="$0.76"
-									boost="$2.00"
-									cap="25 hrs/mo"
+								<BadgeRow badge="Free" usage="up to 3 GiB" boost="—" spend="$0" toCreators="—" />
+								<BadgeRow badge="Root" usage="100 GiB" boost="$0" spend="$3" toCreators="$1.50" />
+								<BadgeRow badge="Sprout" usage="200 GiB" boost="$1" spend="$7" toCreators="$4.00" />
+								<BadgeRow
+									badge="Petal"
+									usage="300 GiB"
+									boost="$6"
+									spend="$15"
+									toCreators="$10.50"
 								/>
-								<TierRow
-									tier="Sprout"
-									price="$7/mo"
-									foundation="$0.56"
-									time="$2.44"
-									boost="$4.00"
-									cap="Unlimited"
-								/>
-								<TierRow
-									tier="Petal"
-									price="$15/mo"
-									foundation="$1.20"
-									time="$5.80"
-									boost="$8.00"
-									cap="Unlimited"
-								/>
-								<TierRow
-									tier="Bloom"
-									price="$30/mo"
-									foundation="$2.40"
-									time="$12.60"
-									boost="$15.00"
-									cap="Unlimited"
+								<BadgeRow
+									badge="Blossom"
+									usage="400 GiB"
+									boost="$18"
+									spend="$30"
+									toCreators="$24.00"
 								/>
 							</tbody>
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4 max-w-2xl mx-auto">
-						Tiers are just named starting points on a continuous scale—you can fund at any dollar
-						amount, and the 8% / 92% split holds at every level. Both pools grow as you fund more.
-						Subscriptions coming soon.
+						Badges aren't tiers you subscribe to—they're a rolling rank earned from your combined
+						Usage + Boost spend, and you can spend any amount you like. There's no platform cut at
+						any level: every dollar is bandwidth at cost, money to creators, or the Foundation's
+						charity fee. Buying Usage and sending Boosts is coming soon.
 					</p>
 				</div>
 			</section>
@@ -311,11 +302,7 @@ export default function ForUsersPage() {
 								</p>
 								<div className="flex flex-col gap-1.5 text-sm">
 									<GateThreshold amount="$1" name="Follow+" perk="Chat access, community polls" />
-									<GateThreshold
-										amount="$1.50"
-										name="Insider"
-										perk="Early access, community posts"
-									/>
+									<GateThreshold amount="$2" name="Insider" perk="Early access, community posts" />
 									<GateThreshold
 										amount="$3"
 										name="Supporter"
@@ -326,7 +313,7 @@ export default function ForUsersPage() {
 							</div>
 						</div>
 
-						{/* Tier gates */}
+						{/* Anthers gates */}
 						<div className="card bg-base-200">
 							<div className="card-body">
 								<div className="flex items-center gap-3 mb-1">
@@ -337,13 +324,13 @@ export default function ForUsersPage() {
 										<p className="text-xs uppercase tracking-wide text-secondary/80 font-medium">
 											Based on your total support across the platform
 										</p>
-										<h3 className="font-bold text-lg">Anthers Tier Gates</h3>
+										<h3 className="font-bold text-lg">Anthers Gates</h3>
 									</div>
 								</div>
 								<p className="text-sm text-base-content/60 mb-4">
-									Clear a funding threshold and unlock that tier's content across <em>every</em>{" "}
-									creator—even ones you don't boost. Upgrading to reach one creator lifts your
-									support for all of them, so advocacy becomes a rising tide.
+									Earn a Badge by clearing a combined-spend threshold to unlock that badge's content
+									across <em>every</em> creator—even ones you don't boost. Spending more to reach
+									one creator lifts your standing for all of them, so support becomes a rising tide.
 								</p>
 								<div className="flex flex-col gap-1.5 text-sm">
 									<GateThreshold
@@ -363,8 +350,8 @@ export default function ForUsersPage() {
 									/>
 									<GateThreshold
 										amount="$30+"
-										name="Bloom"
-										perk="Bloom-level content, platform-wide"
+										name="Blossom"
+										perk="Blossom-level content, platform-wide"
 									/>
 								</div>
 							</div>
@@ -374,7 +361,7 @@ export default function ForUsersPage() {
 					<p className="text-center text-sm text-base-content/50 mt-8 max-w-2xl mx-auto">
 						Creators can combine both—for example,{" "}
 						<span className="text-base-content/70">
-							"Petal subscribers <em>or</em> anyone boosting $3+ to me"
+							"anyone with a Petal badge <em>or</em> boosting $3+ to me"
 						</span>
 						—so there's usually more than one way in.
 					</p>
@@ -389,18 +376,19 @@ export default function ForUsersPage() {
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
 						Streaming and downloads cost bandwidth. Every other platform hides that cost inside ad
-						revenue or a giant platform cut. Anthers shows it: a small delivery charge on top of
-						your subscription, separate from the creator's share. Because it's visible, you get real
+						revenue or a giant platform cut. Anthers shows it: bandwidth is a line item in your
+						Usage—at cost, separate from the creator's share. Because it's visible, you get real
 						tools to keep it low—something no ad-funded platform can offer.
 					</p>
 
 					<div className="max-w-3xl mx-auto mb-12 rounded-xl bg-base-100 p-6 text-center shadow-sm">
 						<p className="text-base-content/70">
 							<span className="font-bold text-success">
-								Your first $1 of delivery each month is free
+								Your first 3 GiB of usage each month is free
 							</span>
-							, covered by the Foundation—roughly 15 hours of HD video, or far more audio and
-							reading. Go beyond that and you pay only for the bandwidth you actually used, at cost.
+							, covered by the Foundation—a couple of hours of HD video, or far more audio and
+							reading. Go beyond that and Usage is just $0.03/GiB—a third of it real bandwidth, at
+							cost.
 						</p>
 					</div>
 
@@ -593,30 +581,27 @@ function ConceptCard({
 	);
 }
 
-function TierRow({
-	tier,
-	price,
-	foundation,
-	time,
+function BadgeRow({
+	badge,
+	usage,
 	boost,
-	cap,
+	spend,
+	toCreators,
 }: {
-	tier: string;
-	price: string;
-	foundation: string;
-	time: string;
+	badge: string;
+	usage: string;
 	boost: string;
-	cap: string;
+	spend: string;
+	toCreators: string;
 }) {
 	const muted = (v: string) => (v === "—" ? "text-base-content/30" : "");
 	return (
 		<tr>
-			<td className="font-medium">{tier}</td>
-			<td className="text-right">{price}</td>
-			<td className={`text-right ${muted(foundation)}`}>{foundation}</td>
-			<td className={`text-right ${muted(time)}`}>{time}</td>
+			<td className="font-medium">{badge}</td>
+			<td className="text-right">{usage}</td>
 			<td className={`text-right ${muted(boost)}`}>{boost}</td>
-			<td className="text-right text-base-content/60">{cap}</td>
+			<td className="text-right">{spend}</td>
+			<td className={`text-right font-medium text-success ${muted(toCreators)}`}>{toCreators}</td>
 		</tr>
 	);
 }
@@ -844,12 +829,14 @@ function PurchaseCalculator() {
 
 	const rawDelivery = scenario.sizeGb * DELIVERY_PER_GB;
 	const delivery = round2(rawDelivery);
-	const foundation = round2(scenario.price * (FOUNDATION_FEE_PERCENTAGE / 100));
+	const rawFoundation = scenario.sizeGb * USAGE_AFF_PER_GIB;
+	const foundation = round2(rawFoundation);
 	const processing = round2(scenario.price * 0.029 + 0.3);
 	const total = round2(scenario.price + delivery + foundation + processing);
 	const platformPortion = round2(delivery + foundation + processing);
 
 	const deliveryDisplay = rawDelivery > 0 && delivery === 0 ? "<$0.01" : money(delivery);
+	const foundationDisplay = rawFoundation > 0 && foundation === 0 ? "<$0.01" : money(foundation);
 	const nounCap = scenario.noun.charAt(0).toUpperCase() + scenario.noun.slice(1);
 	const article = /^[aeiou]/i.test(scenario.noun) ? "an" : "a";
 
@@ -902,8 +889,8 @@ function PurchaseCalculator() {
 						/>
 						<CalcRow
 							label="Anthers Foundation"
-							desc={`${FOUNDATION_FEE_PERCENTAGE}% goes back to the community and charitable work`}
-							amount={money(foundation)}
+							desc="Half the download's bandwidth—the Foundation's charity fee, funding free access for others"
+							amount={foundationDisplay}
 						/>
 						<CalcRow
 							label="Card processing"
@@ -925,9 +912,9 @@ function PurchaseCalculator() {
 				<p className="mt-4 text-sm text-base-content/70">
 					In short: <span className="font-semibold text-base-content">{money(scenario.price)}</span>{" "}
 					for your {scenario.noun}, straight to the creator—and just{" "}
-					<span className="font-semibold text-base-content">{money(platformPortion)}</span> for an
-					ad-free, charitable platform that keeps a healthier, freer creative community running
-					forever, for every creator and for users like you.
+					<span className="font-semibold text-base-content">{money(platformPortion)}</span> in real
+					costs on top: bandwidth at cost, the Foundation's charity fee, and card processing. None
+					of it is a cut for Anthers, which keeps $0.
 				</p>
 
 				<div className="mt-3 flex items-start gap-2 text-xs text-base-content/50">

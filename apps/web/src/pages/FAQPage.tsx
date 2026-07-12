@@ -53,27 +53,31 @@ const FAQ_ITEMS: FAQItem[] = [
 	},
 	{
 		category: "Subscriptions & Payments",
-		question: "How does the subscription model work?",
+		question: "How does paying for Anthers work?",
 		answer: (
 			<div className="space-y-2">
 				<p>
-					Anthers uses a subscription pool model with four paid tiers — Root (starting at $3),
-					Sprout ($7), Petal ($15), and Bloom ($30). These tiers are thresholds, not fixed prices:
-					you pick a starting tier and can adjust your support level in $1 increments. At every
-					funding level, the same 8%/92% split applies:
+					There's no fixed subscription. You make two independent, prepaid choices, and Anthers
+					keeps nothing—every dollar you pay is itemized:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>92%</strong> goes to creators (via the Time Pool and your Boost allocations)
+						<strong>Usage</strong> — open, watch-anything access, bought per GiB. Every GiB is
+						$0.03: $0.01 bandwidth at cost, $0.005 to the Anthers Foundation, and $0.015 to creators
+						through the Time Pool. Sold in 100 GiB / $3.00 packs, with your first 3 GiB free.
 					</li>
 					<li>
-						<strong>8%</strong> funds the Anthers Foundation (charitable programs and operations)
+						<strong>Boost</strong> — $1 units you direct to specific creators, Patreon-style. 100%
+						goes to the creator, with no fee and nothing skimmed for processing.
 					</li>
 				</ul>
 				<p>
-					Your 92% creator share is split between the Time Pool (distributed automatically based on
-					the time you spend with creators) and the Boost Pool (which you direct to specific
-					creators to unlock gated content). Both pools scale with your funding level.
+					Your combined Usage + Boost spend earns a rolling <strong>Anthers Badge</strong>—Root
+					(≥$3), Sprout (≥$7), Petal (≥$15), or Blossom (≥$30)—which unlocks platform-wide gated
+					content. There's no platform cut at any level: half of every usage dollar funds creators,
+					a third is real bandwidth, a sixth is the Foundation's charity fee, and every boost dollar
+					goes straight to a creator. Card processing and sales tax are added on top and leave the
+					system entirely.
 				</p>
 			</div>
 		),
@@ -82,13 +86,13 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Subscriptions & Payments",
 		question: "What is the Anthers Foundation?",
 		answer:
-			"The Foundation receives 8% of all subscription revenue and allocates it between charitable programs (infrastructure equity, education, creation grants, emergency assistance) and organizational operations, with at least 50% going to programs.",
+			"The Anthers Foundation is funded by the Anthers Foundation Fee (AFF) — 50% of the bandwidth you use, plus 50% of a creator's storage cost — never a cut of anyone's earnings. Its revenue splits three ways: 10% to operations, 40% to charitable programs, and 50% to a shared subsidy pool that pays for everyone's free access (free usage for users, free storage for creators). Counting free access as the charitable program it is, roughly 90% of the fee is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"For direct purchases (buying a game, download, etc.), fees are added on top of the creator's price rather than deducted from it. The creator receives 100% of their listed price. Processing fees and a small Foundation Fee are paid by the buyer as a transparent pass-through.",
+			"Direct purchases (a game, an album, a one-time download) sit outside the Usage and Boost system. The creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, the Anthers Foundation Fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Anthers keeps $0 — every line is a real cost or a charitable fee, never a platform cut.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -100,18 +104,18 @@ const FAQ_ITEMS: FAQItem[] = [
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Boost gates</strong> — per-creator gates based on how much of your Boost Pool
-						you allocate to that creator. Any funding level above $3 generates Boost Pool funds, so
-						boost gates are available starting at Root.
+						<strong>Boost gates</strong> — per-creator gates based on how much you've boosted that
+						creator this month. Creators set the thresholds in $1 increments and name the tiers
+						themselves.
 					</li>
 					<li>
-						<strong>Platform tier gates</strong> — based on your overall funding level clearing a
-						tier threshold (e.g. Sprout at $7, Petal at $15). These are the same regardless of which
-						creator you're viewing.
+						<strong>Anthers gates</strong> — based on your current Anthers Badge (Root, Sprout,
+						Petal, or Blossom), earned from your combined Usage + Boost spend. These unlock the same
+						content across every creator, regardless of which one you're viewing.
 					</li>
 				</ul>
 				<p>
-					This means a creator could gate content behind "Sprout tier OR $2/mo boost to me," giving
+					This means a creator could gate content behind "Sprout badge OR $2/mo boost to me," giving
 					users multiple paths to access.
 				</p>
 			</div>
@@ -121,7 +125,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"From subscriptions, creators receive 92% of revenue through the pool system. From direct purchases, creators receive 100% of their listed price -- fees are added on top and paid by the buyer. Anthers never takes a cut from creator earnings.",
+			"Anthers never takes a cut. Creators are funded by the Time Pool (from users' Usage, distributed by the time people spend with them) plus 100% of every Boost dollar directed to them. On direct purchases they keep 100% of their listed price. The only thing a creator pays is their own storage beyond a free 3 GiB -- DigitalOcean's rate plus the Foundation's storage fee -- which is entirely their choice.",
 	},
 	{
 		category: "Creators",

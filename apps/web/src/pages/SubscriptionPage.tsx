@@ -1,54 +1,67 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {
+	BADGE_THRESHOLDS,
+	BANDWIDTH_PER_GIB,
+	badgeForSpend,
+	badgeLabel,
+	CARD_FLAT,
+	CARD_RATE,
+	FREE_USAGE_GIB,
+	SALES_TAX_RATE,
+	TIME_POOL_PER_GIB,
+	USAGE_AFF_PER_GIB,
+	USAGE_PER_GIB,
+} from "@anthers/shared/constants";
 import { client } from "@anthers/web-shared/rpc";
 import type {
+	Account,
 	AttentionSummary,
+	Badge,
 	BoostAllocation,
 	CreatorGate,
 	PoolDistribution,
-	Subscription,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
-/*  Constants & V2 economics                                           */
+/*  Constants & V3 economics                                           */
+/*                                                                     */
+/*  Anthers keeps $0. A user holds an account with two independent,    */
+/*  prepaid choices per cycle: a Usage level (GiB) and a total Boost   */
+/*  ($). Usage is $0.03/GiB = bandwidth ($0.01, at cost) + Anthers     */
+/*  Foundation fee ($0.005) + Time Pool ($0.015, to creators by watch- */
+/*  time). Boost is whole dollars, 100% to creators. The user's        */
+/*  Anthers Badge is derived from combined spend (usage + boost).      */
 /* ------------------------------------------------------------------ */
 
-const ALLOC = { creators: 0.92, foundation: 0.08 };
-
-function computePools(fundingLevel: number) {
-	const creatorShare = Number((fundingLevel * 0.92).toFixed(2));
-	const boostPool = fundingLevel >= 3 ? Math.ceil(fundingLevel * 0.5) : 0;
-	const timePool = Math.max(0, Number((creatorShare - boostPool).toFixed(2)));
-	return { creatorShare, boostPool, timePool };
-}
-
-const DELIVERY_PER_HOUR_VIDEO = ((112.5 * 60) / 1024) * 0.01;
-const DELIVERY_CREDIT = 1.0;
-
-const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
-	{ id: "free", name: "Free", price: 0 },
-	{ id: "root", name: "Root", price: 3 },
-	{ id: "sprout", name: "Sprout", price: 7 },
-	{ id: "petal", name: "Petal", price: 15 },
-	{ id: "bloom", name: "Bloom", price: 30 },
-];
-
-const SLIDER_MAX = 50;
-
-/** Color used for pending changes (boost pending fill, subscription pending, text indicators) */
+/** Color used for pending (unsaved) changes across the UI. */
 const PENDING_COLOR = "#C04475";
 
-function tierFor(id: string) {
-	return TIER_THRESHOLDS.find((t) => t.id === id) ?? TIER_THRESHOLDS[0];
+/** Usage slider bounds (GiB). Badge personas span 100–400 GiB; give headroom. */
+const USAGE_SLIDER_MAX = 500;
+const USAGE_SLIDER_STEP = 10;
+/** Boost slider bounds ($, whole dollars). */
+const BOOST_SLIDER_MAX = 30;
+
+function round2(n: number): number {
+	return Math.round(n * 100) / 100;
 }
 
-function tierForAmount(amount: number) {
-	for (let i = TIER_THRESHOLDS.length - 1; i >= 0; i--) {
-		if (amount >= TIER_THRESHOLDS[i].price) return TIER_THRESHOLDS[i];
-	}
-	return TIER_THRESHOLDS[0];
+/**
+ * V3 usage/boost breakdown. Every field is a real destination of the user's
+ * money — none of it is platform margin.
+ */
+function computeEconomics(usageGiB: number, boostTotal: number) {
+	const timePool = round2(usageGiB * TIME_POOL_PER_GIB); // to creators, by watch-time
+	const bandwidth = round2(usageGiB * BANDWIDTH_PER_GIB); // egress, at cost
+	const foundation = round2(usageGiB * USAGE_AFF_PER_GIB); // Anthers Foundation fee
+	const usageSpend = round2(usageGiB * USAGE_PER_GIB); // all-in usage price
+	const boostPool = round2(boostTotal); // whole dollars, 100% to creators
+	const subtotal = round2(usageSpend + boostPool); // combined spend = badge basis
+	const toCreators = round2(timePool + boostPool); // Time Pool + Boost
+	return { timePool, bandwidth, foundation, usageSpend, boostPool, subtotal, toCreators };
 }
 
 function fmt(n: number): string {
@@ -119,12 +132,79 @@ function InfoTip({ text }: { text: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  BoostBar — slider + gate hash marks in one column                  */
+/*  BadgeBar — read-only combined-spend progress with badge marks      */
 /* ------------------------------------------------------------------ */
 
-/** Maximum dollar value shown on the bar. Covers most boost gate ranges. */
-const BAR_MAX = 35.2;
-const GATE_THRESHOLDS_VISUAL = [2, 4, 8, 16, 32];
+const BADGE_MARKS = [
+	{ id: "root", name: "Root", spend: BADGE_THRESHOLDS.root },
+	{ id: "sprout", name: "Sprout", spend: BADGE_THRESHOLDS.sprout },
+	{ id: "petal", name: "Petal", spend: BADGE_THRESHOLDS.petal },
+	{ id: "blossom", name: "Blossom", spend: BADGE_THRESHOLDS.blossom },
+] as const;
+
+function BadgeBar({ spend, pending }: { spend: number; pending: boolean }) {
+	const max = BADGE_THRESHOLDS.blossom;
+	const pct = Math.min((spend / max) * 100, 100);
+	return (
+		<div>
+			{/* Badge name marks */}
+			<div className="relative w-full h-4 mb-1">
+				{BADGE_MARKS.map((m) => {
+					const pos = (m.spend / max) * 100;
+					const active = spend >= m.spend;
+					return (
+						<span
+							key={m.id}
+							className={`absolute -translate-x-1/2 text-[10px] ${active ? "text-base-content font-semibold" : "text-base-content/50"}`}
+							style={{ left: `${pos}%`, bottom: 0 }}
+						>
+							{m.name}
+						</span>
+					);
+				})}
+			</div>
+			{/* Track */}
+			<div className="relative h-2.5 bg-base-300 rounded-full overflow-hidden">
+				<div
+					className={`absolute inset-y-0 left-0 rounded-full ${pending ? "" : "bg-success/80"}`}
+					style={{
+						width: `${pct}%`,
+						...(pending ? { backgroundColor: PENDING_COLOR } : {}),
+					}}
+				/>
+				{BADGE_MARKS.map((m) => {
+					const pos = (m.spend / max) * 100;
+					return (
+						<div
+							key={m.id}
+							className={`absolute top-0 bottom-0 w-px ${spend >= m.spend ? "bg-base-content" : "bg-base-content/40"}`}
+							style={{ left: `${pos}%` }}
+						/>
+					);
+				})}
+			</div>
+			{/* Dollar marks */}
+			<div className="relative w-full h-4 mt-0.5">
+				{BADGE_MARKS.map((m) => {
+					const pos = (m.spend / max) * 100;
+					return (
+						<span
+							key={m.id}
+							className="absolute -translate-x-1/2 text-[9px] text-base-content/40"
+							style={{ left: `${pos}%` }}
+						>
+							${m.spend}
+						</span>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  BoostBar — slider + gate hash marks in one column                  */
+/* ------------------------------------------------------------------ */
 
 function BoostBar({
 	value,
@@ -135,7 +215,7 @@ function BoostBar({
 	disabled,
 }: {
 	value: number;
-	/** The committed (saved) boost value — used to show pending fill in yellow */
+	/** The committed (saved) boost value — used to show pending fill. */
 	committedValue: number;
 	boostPool: number;
 	gates: CreatorGate[];
@@ -191,7 +271,7 @@ function BoostBar({
 
 	return (
 		<div className={disabled ? "opacity-60" : ""}>
-			{/* Tier name labels above the track */}
+			{/* Gate name labels above the track */}
 			{boostGates.length > 0 && (
 				<div className="relative h-4 mb-0.5">
 					{boostGates.map((gate) => {
@@ -631,11 +711,12 @@ function CreatorInfoCard({
 
 export default function SubscriptionPage() {
 	const [searchParams] = useSearchParams();
-	const [sub, setSub] = useState<Subscription | null>(null);
+	const [account, setAccount] = useState<Account | null>(null);
+	const [badge, setBadge] = useState<Badge>("none");
+	const [badgeSpend, setBadgeSpend] = useState(0);
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
 	const [distributions, setDistributions] = useState<PoolDistribution[]>([]);
 	const [committedBoosts, setCommittedBoosts] = useState<BoostAllocation[]>([]);
-	const [boostBudget, setBoostBudget] = useState(0);
 	const [creatorGatesMap, setCreatorGatesMap] = useState<Map<string, CreatorGate[]>>(new Map());
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -644,7 +725,8 @@ export default function SubscriptionPage() {
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
 	// ── Pending changes (local, not saved) ──
-	const [pendingFunding, setPendingFunding] = useState<number | null>(null);
+	const [pendingUsageGiB, setPendingUsageGiB] = useState<number | null>(null);
+	const [pendingBoostTotal, setPendingBoostTotal] = useState<number | null>(null);
 	const [pendingBoosts, setPendingBoosts] = useState<Map<number, number>>(new Map());
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
@@ -652,7 +734,7 @@ export default function SubscriptionPage() {
 	const [hoverSource, setHoverSource] = useState<"pie" | "boost">("pie");
 	const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	/** Debounced focus change — waits 500ms before switching creator */
+	/** Debounced focus change — waits before switching creator. */
 	const debouncedFocus = useCallback((creatorId: number, source: "pie" | "boost") => {
 		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
 		hoverTimerRef.current = setTimeout(() => {
@@ -676,19 +758,21 @@ export default function SubscriptionPage() {
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
 
-	// TODO: Rotate default creator archetype — currently always "Top Creator"
-	// (most time this cycle). Future archetypes: Trending Creator (increasing
-	// time vs. previous cycles), New Creator (newest creator with time), etc.
-
 	// ── Data fetching ──
 
-	const fetchSubscription = useCallback(async () => {
+	const fetchAccount = useCallback(async () => {
 		try {
 			const res = await client.api.subscriptions.me.$get();
-			const data = (await res.json()) as { subscription: Subscription };
-			setSub(data.subscription);
+			const data = (await res.json()) as {
+				account: Account;
+				badge: Badge;
+				badgeSpend: number;
+			};
+			setAccount(data.account);
+			setBadge(data.badge);
+			setBadgeSpend(data.badgeSpend);
 		} catch {
-			setError("Failed to load subscription.");
+			setError("Failed to load your account.");
 		} finally {
 			setLoading(false);
 		}
@@ -731,39 +815,53 @@ export default function SubscriptionPage() {
 				remaining: string;
 			};
 			setCommittedBoosts(data.boosts);
-			setBoostBudget(parseFloat(data.budget));
 		}
 		// Clear pending state when switching months
-		setPendingFunding(null);
+		setPendingUsageGiB(null);
+		setPendingBoostTotal(null);
 		setPendingBoosts(new Map());
 	}, []);
 
 	useEffect(() => {
-		fetchSubscription();
-	}, [fetchSubscription]);
+		fetchAccount();
+	}, [fetchAccount]);
 	useEffect(() => {
 		fetchCycleData(selectedCycle);
 	}, [selectedCycle, fetchCycleData]);
 
 	useEffect(() => {
 		if (sessionId) {
-			setSuccess("Subscription activated! Welcome aboard.");
-			const timer = setTimeout(fetchSubscription, 2000);
+			setSuccess("Payment received! Your account is updated.");
+			const timer = setTimeout(fetchAccount, 2000);
 			return () => clearTimeout(timer);
 		}
-	}, [sessionId, fetchSubscription]);
+	}, [sessionId, fetchAccount]);
 
 	// ── Derived values ──
 
-	const committedFunding = sub?.fundingLevel ?? tierFor(sub?.tier ?? "free").price;
-	const effectiveFunding = pendingFunding ?? committedFunding;
-	const tier = tierForAmount(effectiveFunding);
-	const isPaid = committedFunding >= 3;
-	const isCanceling = sub ? !!sub.canceledAt : false;
+	const committedUsageGiB = account?.usageGiB ?? 0;
+	const committedBoostTotal = Number(account?.boostTotal ?? 0);
+	const effectiveUsageGiB = pendingUsageGiB ?? committedUsageGiB;
+	const effectiveBoostTotal = pendingBoostTotal ?? committedBoostTotal;
 
-	const financials = useMemo(() => computePools(effectiveFunding), [effectiveFunding]);
-	const committedFinancials = useMemo(() => computePools(committedFunding), [committedFunding]);
-	const foundationFee = Math.round(effectiveFunding * ALLOC.foundation * 100) / 100;
+	const financials = useMemo(
+		() => computeEconomics(effectiveUsageGiB, effectiveBoostTotal),
+		[effectiveUsageGiB, effectiveBoostTotal],
+	);
+	const committed = useMemo(
+		() => computeEconomics(committedUsageGiB, committedBoostTotal),
+		[committedUsageGiB, committedBoostTotal],
+	);
+
+	const committedSpend = committed.subtotal;
+	const effectiveSpend = financials.subtotal;
+	const effectiveBadge = badgeForSpend(effectiveSpend);
+	const isPaid = committedSpend >= BADGE_THRESHOLDS.root; // has cleared the Root floor
+	const isCanceling = account ? !!account.canceledAt : false;
+
+	const usageChanged = pendingUsageGiB !== null && pendingUsageGiB !== committedUsageGiB;
+	const boostTotalChanged = pendingBoostTotal !== null && pendingBoostTotal !== committedBoostTotal;
+	const hasPendingLevels = usageChanged || boostTotalChanged;
 
 	// Committed boost map
 	const committedBoostMap = useMemo(() => {
@@ -775,8 +873,9 @@ export default function SubscriptionPage() {
 	// Build rows with pending boost values
 	const rows: CreatorRow[] = useMemo(() => {
 		return distributions.map((d) => {
-			const committed = committedBoostMap.get(d.creatorId) ?? Math.round(parseFloat(d.boostAmount));
-			const pending = pendingBoosts.get(d.creatorId) ?? committed;
+			const committedBoost =
+				committedBoostMap.get(d.creatorId) ?? Math.round(parseFloat(d.boostAmount));
+			const pending = pendingBoosts.get(d.creatorId) ?? committedBoost;
 			return {
 				creatorId: d.creatorId,
 				username: d.creator?.username ?? "",
@@ -784,7 +883,7 @@ export default function SubscriptionPage() {
 				avatar: d.creator?.avatar ?? null,
 				timeSeconds: d.attentionSeconds ?? 0,
 				poolAmount: parseFloat(d.poolAmount),
-				committedBoost: committed,
+				committedBoost,
 				pendingBoost: pending,
 				gates: creatorGatesMap.get(d.creator?.username ?? "") ?? [],
 			};
@@ -795,6 +894,7 @@ export default function SubscriptionPage() {
 	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
 	const totalPendingBoost = rows.reduce((s, r) => s + r.pendingBoost, 0);
 	const allocatedBoost = totalPendingBoost;
+	// Unallocated (undirected) boost flows to creators by watch-time, like the Time Pool.
 	const unallocatedBoost = Math.max(0, financials.boostPool - allocatedBoost);
 
 	// Default focus to top creator (most time) when rows load
@@ -807,51 +907,48 @@ export default function SubscriptionPage() {
 
 	// Detect if there are any pending changes
 	const hasPendingChanges = useMemo(() => {
-		if (pendingFunding !== null && pendingFunding !== committedFunding) return true;
+		if (hasPendingLevels) return true;
 		for (const [cid, val] of pendingBoosts) {
-			const committed = committedBoostMap.get(cid) ?? 0;
-			if (val !== committed) return true;
+			const committedVal = committedBoostMap.get(cid) ?? 0;
+			if (val !== committedVal) return true;
 		}
 		return false;
-	}, [pendingFunding, committedFunding, pendingBoosts, committedBoostMap]);
-
-	const deliveryEstimate = useMemo(() => {
-		const hrs = attention?.hoursUsed ?? 0;
-		const gross = Math.round(hrs * DELIVERY_PER_HOUR_VIDEO * 100) / 100;
-		const net = isPaid ? Math.max(0, Math.round((gross - DELIVERY_CREDIT) * 100) / 100) : gross;
-		return { hours: hrs, gross, net };
-	}, [attention, isPaid]);
+	}, [hasPendingLevels, pendingBoosts, committedBoostMap]);
 
 	// ── Pending change handlers ──
 
-	const handleFundingChange = (newVal: number) => {
-		if (viewMode === "current" && newVal < committedFunding) return; // increase only
-		setPendingFunding(newVal === committedFunding ? null : newVal);
+	const handleUsageChange = (newGiB: number) => {
+		if (viewMode === "current" && newGiB < committedUsageGiB) return; // increase only
+		setPendingUsageGiB(newGiB === committedUsageGiB ? null : newGiB);
+	};
 
-		// If funding decreased, clamp boosts to fit the new budget
-		const newBudget = computePools(newVal).boostPool;
-		const currentBoosts: { creatorId: number; amount: number }[] = rows.map((r) => ({
+	const handleBoostTotalChange = (newTotal: number) => {
+		if (viewMode === "current" && newTotal < committedBoostTotal) return; // increase only
+		setPendingBoostTotal(newTotal === committedBoostTotal ? null : newTotal);
+
+		// If the boost budget shrank, trim per-creator allocations to fit.
+		const currentBoosts = rows.map((r) => ({
 			creatorId: r.creatorId,
 			amount: pendingBoosts.get(r.creatorId) ?? r.committedBoost,
 		}));
 		const totalAllocated = currentBoosts.reduce((s, b) => s + b.amount, 0);
 
-		if (totalAllocated > newBudget) {
+		if (totalAllocated > newTotal) {
 			// Trim from smallest boosts first
 			const sorted = [...currentBoosts].sort((a, b) => a.amount - b.amount);
-			let excess = totalAllocated - newBudget;
+			let excess = totalAllocated - newTotal;
 			const newBoostMap = new Map(pendingBoosts);
 
 			for (const entry of sorted) {
 				if (excess <= 0) break;
-				const committed = committedBoostMap.get(entry.creatorId) ?? 0;
-				// In current month, can't go below committed
-				const floor = viewMode === "current" ? committed : 0;
+				const committedVal = committedBoostMap.get(entry.creatorId) ?? 0;
+				// In current month, can't go below the committed allocation.
+				const floor = viewMode === "current" ? committedVal : 0;
 				const reducible = entry.amount - floor;
 				const reduction = Math.min(reducible, excess);
 				if (reduction > 0) {
 					const newAmount = entry.amount - reduction;
-					if (newAmount === committed) {
+					if (newAmount === committedVal) {
 						newBoostMap.delete(entry.creatorId);
 					} else {
 						newBoostMap.set(entry.creatorId, newAmount);
@@ -865,10 +962,10 @@ export default function SubscriptionPage() {
 	};
 
 	const handleBoostChange = (creatorId: number, newVal: number) => {
-		const committed = committedBoostMap.get(creatorId) ?? 0;
-		if (viewMode === "current" && newVal < committed) return; // increase only
+		const committedVal = committedBoostMap.get(creatorId) ?? 0;
+		if (viewMode === "current" && newVal < committedVal) return; // increase only
 
-		// Cap at available budget (boost pool minus other allocations)
+		// Cap at available budget (total boost minus other allocations)
 		const otherBoosts =
 			Array.from(pendingBoosts.entries())
 				.filter(([cid]) => cid !== creatorId)
@@ -881,7 +978,7 @@ export default function SubscriptionPage() {
 
 		setPendingBoosts((prev) => {
 			const next = new Map(prev);
-			if (clamped === committed) next.delete(creatorId);
+			if (clamped === committedVal) next.delete(creatorId);
 			else next.set(creatorId, clamped);
 			return next;
 		});
@@ -895,14 +992,24 @@ export default function SubscriptionPage() {
 		setError(null);
 
 		try {
-			// Save funding level change if applicable
-			// TODO: In production, this would trigger a Stripe subscription update
-			// For now, update the subscription record directly
-			if (pendingFunding !== null && pendingFunding !== committedFunding) {
-				// The subscribe endpoint would handle this; for now we note the intent
+			// Persist Usage / Boost level changes first (raises the budget before allocations).
+			// TODO: In production this charges the prepaid delta (usage + boost) via Stripe.
+			if (hasPendingLevels) {
+				const res = await client.api.subscriptions.account.$post({
+					json: {
+						usageGiB: effectiveUsageGiB,
+						boostTotal: effectiveBoostTotal,
+					},
+				});
+				if (!res.ok) {
+					const data = (await res.json()) as { error?: string };
+					setError(data.error ?? "Failed to update your account levels.");
+					setActionLoading(null);
+					return;
+				}
 			}
 
-			// Save boost changes
+			// Save per-creator boost allocations.
 			for (const [creatorId, amount] of pendingBoosts) {
 				const res = await client.api.subscriptions.boosts.$post({
 					json: { creatorId, amount: amount.toFixed(2), cycle: selectedCycle },
@@ -913,7 +1020,7 @@ export default function SubscriptionPage() {
 					break;
 				}
 
-				// Current month changes auto-propagate to next month
+				// Current month changes auto-propagate to next month.
 				if (viewMode === "current") {
 					const nextCycle = offsetCycle(getCurrentCycle(), 1);
 					await client.api.subscriptions.boosts.$post({
@@ -923,8 +1030,10 @@ export default function SubscriptionPage() {
 			}
 
 			setSuccess("Changes saved.");
-			setPendingFunding(null);
+			setPendingUsageGiB(null);
+			setPendingBoostTotal(null);
 			setPendingBoosts(new Map());
+			await fetchAccount();
 			await fetchCycleData(selectedCycle);
 		} catch {
 			setError("Failed to save changes.");
@@ -935,21 +1044,22 @@ export default function SubscriptionPage() {
 
 	const handleRevert = () => {
 		setShowRevertConfirm(false);
-		setPendingFunding(null);
+		setPendingUsageGiB(null);
+		setPendingBoostTotal(null);
 		setPendingBoosts(new Map());
-		// Reload committed data from current month
+		// Reload committed data
 		fetchCycleData(selectedCycle);
 	};
 
-	// ── Subscription actions ──
+	// ── Account actions ──
 
 	const handleCancel = async () => {
 		setActionLoading("cancel");
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.cancel.$post();
-			setSub(((await res.json()) as { subscription: Subscription }).subscription);
-			setSuccess("Your subscription will cancel at the end of the current billing period.");
+			setAccount(((await res.json()) as { account: Account }).account);
+			setSuccess("Your prepaid renewal will stop at the end of the current billing period.");
 		} catch {
 			setError("Failed to cancel.");
 		} finally {
@@ -962,8 +1072,8 @@ export default function SubscriptionPage() {
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.resume.$post();
-			setSub(((await res.json()) as { subscription: Subscription }).subscription);
-			setSuccess("Subscription resumed.");
+			setAccount(((await res.json()) as { account: Account }).account);
+			setSuccess("Renewal resumed.");
 		} catch {
 			setError("Failed to resume.");
 		} finally {
@@ -991,24 +1101,24 @@ export default function SubscriptionPage() {
 			</div>
 		);
 
-	if (!sub)
+	if (!account)
 		return (
 			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
-				<h1 className="text-2xl font-bold mb-4">No Subscription</h1>
-				<p className="mb-4">You don't have an active subscription yet.</p>
+				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
+				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
 				<Link to="/subscribe" className="btn btn-primary">
-					Choose a Plan
+					Explore Usage & Boost
 				</Link>
 			</div>
 		);
 
-	/* ---- Free user view ---- */
+	/* ---- Free user view (below the Root badge floor) ---- */
 	if (!isPaid)
 		return (
 			<div className="max-w-2xl mx-auto px-4 py-8">
 				<div className="flex items-baseline justify-between mb-6">
 					<h1 className="text-2xl font-bold">Your Anthers</h1>
-					<span className="text-sm text-base-content/60">Free Plan</span>
+					<span className="text-sm text-base-content/60">Free · no badge yet</span>
 				</div>
 				{error && (
 					<div className="alert alert-error mb-4">
@@ -1024,11 +1134,11 @@ export default function SubscriptionPage() {
 					<div className="card-body">
 						<div className="flex items-center justify-between">
 							<div>
-								<h2 className="card-title">Free Plan</h2>
+								<h2 className="card-title">Free</h2>
 								<div className="badge badge-success badge-sm mt-1">Active</div>
 							</div>
 							<Link to="/subscribe" className="btn btn-primary btn-sm">
-								Upgrade
+								Add Usage or Boost
 							</Link>
 						</div>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
@@ -1044,8 +1154,19 @@ export default function SubscriptionPage() {
 								</p>
 							</div>
 						)}
+						<div className="mt-4">
+							<p className="text-xs text-base-content/50 uppercase tracking-wider mb-2">
+								Progress to your first badge
+							</p>
+							<BadgeBar spend={effectiveSpend} pending={false} />
+							<p className="text-xs text-base-content/40 mt-3">
+								Spend {fmt(BADGE_THRESHOLDS.root)}+ combined (Usage + Boost) to earn your first
+								Anthers Badge (Root).
+							</p>
+						</div>
 						<div className="mt-4 text-sm text-base-content/60">
-							Delivery covered by the Anthers Foundation (up to 10 hrs/mo).
+							Your first {FREE_USAGE_GIB} GiB of usage each month is free, subsidized by the Anthers
+							Foundation.
 						</div>
 					</div>
 				</div>
@@ -1057,37 +1178,22 @@ export default function SubscriptionPage() {
 	/* ──────────────────────────────────────────────────────────────────── */
 
 	const canEdit = viewMode === "current" || viewMode === "next";
-	const hasPendingSub = pendingFunding !== null && pendingFunding !== committedFunding;
 
-	// Colors for the cost breakdown dots (matching SubscribePage)
+	// Colors for the cost breakdown dots
 	const DOT_COLORS = {
 		timePool: "#2563eb",
 		boost: "#c026d3",
+		bandwidth: "#db2777",
 		foundation: "#0f766e",
-		delivery: "#db2777",
 		salesTax: "#737373",
 		cardFee: "#d97706",
 	};
 
-	// Delivery + fees for cost breakdown
-	const grossDelivery = Math.round(deliveryEstimate.hours * DELIVERY_PER_HOUR_VIDEO * 100) / 100;
-	const deliveryAmt = isPaid
-		? Math.max(0, Math.round((grossDelivery - DELIVERY_CREDIT) * 100) / 100)
-		: grossDelivery;
-	const AVG_SALES_TAX_RATE = 0.0663;
-	const subtotalForFees = effectiveFunding + deliveryAmt;
-	const salesTax = Math.round(subtotalForFees * AVG_SALES_TAX_RATE * 100) / 100;
-	// TODO: Add card/bank fee toggle when payment processing is wired up
-	const cardFee = Math.round((subtotalForFees * 0.029 + 0.3) * 100) / 100;
-	const totalWithFees =
-		Math.round((effectiveFunding + deliveryAmt + salesTax + cardFee) * 100) / 100;
-
-	// Format seconds as HH:MM
-	const fmtTime = (seconds: number) => {
-		const h = Math.floor(seconds / 3600);
-		const m = Math.round((seconds % 3600) / 60);
-		return `${h}:${String(m).padStart(2, "0")}`;
-	};
+	// Card + tax are added on top of the (usage + boost) subtotal; both leave the system.
+	const subtotalForFees = financials.subtotal;
+	const salesTax = round2(subtotalForFees * SALES_TAX_RATE);
+	const cardFee = round2(subtotalForFees * CARD_RATE + CARD_FLAT);
+	const totalWithFees = round2(subtotalForFees + salesTax + cardFee);
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
@@ -1106,7 +1212,8 @@ export default function SubscriptionPage() {
 			{viewMode === "next" && (
 				<div className="alert alert-info text-sm mb-4">
 					<span>
-						Preview for {cycleLabel(selectedCycle)}. You can increase or decrease boosts freely.
+						Preview for {cycleLabel(selectedCycle)}. You can increase or decrease your levels and
+						boosts freely.
 					</span>
 				</div>
 			)}
@@ -1120,7 +1227,7 @@ export default function SubscriptionPage() {
 			<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto space-y-6">
 				{/* Panel header with action buttons in corners */}
 				<div className="flex items-start justify-between">
-					{/* Left: subscription management */}
+					{/* Left: account management */}
 					{viewMode === "current" ? (
 						<div className="flex flex-col gap-2 flex-shrink-0">
 							<button
@@ -1138,7 +1245,7 @@ export default function SubscriptionPage() {
 									onClick={handleResume}
 									disabled={!!actionLoading}
 								>
-									{actionLoading === "resume" ? "Resuming..." : "Resume Subscription"}
+									{actionLoading === "resume" ? "Resuming..." : "Resume Renewal"}
 								</button>
 							) : (
 								<button
@@ -1147,7 +1254,7 @@ export default function SubscriptionPage() {
 									onClick={handleCancel}
 									disabled={!!actionLoading}
 								>
-									{actionLoading === "cancel" ? "Canceling..." : "Cancel Subscription"}
+									{actionLoading === "cancel" ? "Canceling..." : "Cancel Renewal"}
 								</button>
 							)}
 						</div>
@@ -1155,16 +1262,24 @@ export default function SubscriptionPage() {
 						<div className="w-36 flex-shrink-0" />
 					)}
 
-					{/* Center: title + month selector */}
+					{/* Center: title + badge + month selector */}
 					<div className="text-center flex-1">
 						<h2 className="text-2xl font-bold mb-1">Your Anthers — {cycleLabel(selectedCycle)}</h2>
-						<p className="text-sm text-base-content/60 mb-3">
-							{tier.name} tier
-							{hasPendingSub && (
+						<p className="text-sm text-base-content/60 mb-1">
+							<strong style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}>
+								{badgeLabel(effectiveBadge)}
+							</strong>{" "}
+							badge
+							<span className="text-base-content/40"> · {fmt(effectiveSpend)} combined spend</span>
+							{hasPendingLevels && (
 								<span className="ml-1" style={{ color: PENDING_COLOR }}>
 									(pending change)
 								</span>
 							)}
+						</p>
+						<p className="text-xs text-base-content/40 mb-3">
+							Rolling standing: {badgeLabel(badge)} · {fmt(badgeSpend)}
+							<InfoTip text="Your canonical badge is the highest threshold you've cleared in any of the trailing 3 months — a good month keeps its perks for a while rather than evaporating instantly." />
 						</p>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 					</div>
@@ -1185,7 +1300,8 @@ export default function SubscriptionPage() {
 								className="btn btn-outline btn-warning btn-sm"
 								disabled={!hasPendingChanges}
 								onClick={() => {
-									setPendingFunding(null);
+									setPendingUsageGiB(null);
+									setPendingBoostTotal(null);
 									setPendingBoosts(new Map());
 								}}
 							>
@@ -1206,113 +1322,77 @@ export default function SubscriptionPage() {
 					)}
 				</div>
 
-				{/* ── SUBSCRIPTION AMOUNT ── */}
+				{/* ── ACCOUNT LEVELS (Usage + Boost) ── */}
 				{canEdit && (
 					<div>
 						<div className="divider text-sm text-base-content/50 my-2">
-							Subscription Amount
-							<InfoTip
-								text={
-									viewMode === "current"
-										? "Your monthly funding level. Can only be increased in the current month. Determines your Anthers Tier, Time Pool, and Boost Pool budget."
-										: "Your monthly funding level for the upcoming billing cycle. You can increase or decrease freely before the cycle starts."
-								}
+							Account Levels
+							<InfoTip text="Two independent, prepaid choices: Usage (open, YouTube-style bandwidth, bought per GiB) and Boost (per-creator, Patreon-style support in whole dollars — 100% to creators). Your Anthers Badge is derived from the combined spend." />
+						</div>
+
+						{/* Badge progress (combined spend) */}
+						<div className="mb-5">
+							<BadgeBar spend={effectiveSpend} pending={hasPendingLevels} />
+						</div>
+
+						{/* Usage slider */}
+						<div className="mb-4">
+							<div className="flex items-baseline justify-between mb-1">
+								<span className="text-sm text-base-content/70">
+									Usage
+									<InfoTip text="Open, YouTube-style bandwidth. $0.03/GiB = bandwidth ($0.01, at cost) + Anthers Foundation ($0.005) + Time Pool ($0.015, to creators by watch-time). Your first 3 GiB each month are free." />
+								</span>
+								<span className="text-sm">
+									<strong style={usageChanged ? { color: PENDING_COLOR } : undefined}>
+										{effectiveUsageGiB} GiB
+									</strong>
+									<span className="text-base-content/40 ml-1">
+										· {fmt(financials.usageSpend)} · +{FREE_USAGE_GIB} GiB free
+									</span>
+								</span>
+							</div>
+							<input
+								type="range"
+								min={0}
+								max={USAGE_SLIDER_MAX}
+								step={USAGE_SLIDER_STEP}
+								value={effectiveUsageGiB}
+								onChange={(e) => handleUsageChange(Number(e.target.value))}
+								className="range range-sm range-success"
 							/>
 						</div>
-						{/* Tier threshold marks above slider */}
-						<div className="relative w-full h-6 mb-1">
-							{TIER_THRESHOLDS.filter((t) => t.price > 0).map((t) => {
-								const pct = ((t.price - 0) / (SLIDER_MAX - 0)) * 100;
-								const isActive = effectiveFunding >= t.price;
-								return (
-									<div
-										key={t.id}
-										className="absolute -translate-x-1/2 flex flex-col items-center"
-										style={{ left: `${pct}%`, bottom: 0 }}
-									>
-										<span
-											className={`text-[10px] mb-0.5 ${isActive ? "text-base-content font-semibold" : "text-base-content/50"}`}
-										>
-											{t.name}
-										</span>
-										<div className="w-px h-3 bg-base-content/20" />
-									</div>
-								);
-							})}
+
+						{/* Boost slider */}
+						<div>
+							<div className="flex items-baseline justify-between mb-1">
+								<span className="text-sm text-base-content/70">
+									Boost
+									<InfoTip text="Per-creator, Patreon-style support in whole dollars — 100% goes to creators, no Foundation fee. Allocate it to specific creators below; unallocated boost flows to creators by your watch-time." />
+								</span>
+								<span className="text-sm">
+									<strong style={boostTotalChanged ? { color: PENDING_COLOR } : undefined}>
+										{fmt(effectiveBoostTotal)}
+									</strong>
+									<span className="text-base-content/40 ml-1">· 100% to creators</span>
+								</span>
+							</div>
+							<input
+								type="range"
+								min={0}
+								max={BOOST_SLIDER_MAX}
+								step={1}
+								value={effectiveBoostTotal}
+								onChange={(e) => handleBoostTotalChange(Number(e.target.value))}
+								className="range range-sm range-primary"
+							/>
 						</div>
-						{/* Custom track with committed/pending fill */}
-						{(() => {
-							const cPct = (committedFunding / SLIDER_MAX) * 100;
-							const pPct = (effectiveFunding / SLIDER_MAX) * 100;
-							return (
-								<div
-									className="relative h-5 select-none cursor-pointer"
-									onPointerDown={(e) => {
-										const rect = e.currentTarget.getBoundingClientRect();
-										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-										handleFundingChange(Math.round(pct * SLIDER_MAX));
-										e.preventDefault();
-										(e.target as HTMLElement).setPointerCapture(e.pointerId);
-									}}
-									onPointerMove={(e) => {
-										if (!(e.buttons & 1)) return;
-										const rect = e.currentTarget.getBoundingClientRect();
-										const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-										handleFundingChange(Math.round(pct * SLIDER_MAX));
-									}}
-								>
-									<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
-										{/* Committed fill (teal) */}
-										<div
-											className="absolute inset-y-0 left-0 bg-success/80 rounded-full"
-											style={{ width: `${cPct}%` }}
-										/>
-										{/* Pending fill */}
-										{hasPendingSub && effectiveFunding > committedFunding && (
-											<div
-												className="absolute inset-y-0 rounded-r-full"
-												style={{
-													left: `${cPct}%`,
-													width: `${pPct - cPct}%`,
-													backgroundColor: `${PENDING_COLOR}CC`,
-												}}
-											/>
-										)}
-									</div>
-									{/* Thumb */}
-									<div
-										className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${hasPendingSub ? "" : "bg-success border-success"}`}
-										style={{
-											left: `${pPct}%`,
-											...(hasPendingSub
-												? { backgroundColor: PENDING_COLOR, borderColor: PENDING_COLOR }
-												: {}),
-										}}
-									/>
-								</div>
-							);
-						})()}
-						{/* Tick marks below slider */}
-						<div className="relative w-full h-6 mt-1">
-							{Array.from({ length: SLIDER_MAX + 1 }, (_, i) => i).map((tick) => {
-								const pct = (tick / SLIDER_MAX) * 100;
-								const isLabeled = tick % 5 === 0;
-								return (
-									<div
-										key={tick}
-										className="absolute -translate-x-1/2 flex flex-col items-center"
-										style={{ left: `${pct}%` }}
-									>
-										<div
-											className={`bg-base-content/20 ${isLabeled ? "w-px h-3" : "w-px h-1.5"}`}
-										/>
-										{isLabeled && (
-											<span className="text-[10px] text-base-content/50 mt-0.5">${tick}</span>
-										)}
-									</div>
-								);
-							})}
-						</div>
+
+						{Number(account.redownloadBalance) > 0 && (
+							<div className="mt-3 text-xs text-base-content/40">
+								Re-download balance: {fmt(Number(account.redownloadBalance))}
+								<InfoTip text="A small prepaid balance for re-downloading purchases. Kept separate from streaming Usage so a big download never distorts Time-Pool distribution." />
+							</div>
+						)}
 					</div>
 				)}
 
@@ -1320,7 +1400,7 @@ export default function SubscriptionPage() {
 				<div>
 					<div className="divider text-sm text-base-content/50 my-2">
 						Creator Allocations
-						<InfoTip text="Your subscription is split between the Time Pool (automatic, based on time spent) and Boost allocations (manual, in $1 increments). Boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
+						<InfoTip text="Money reaches creators two ways: the Time Pool (automatic, from your Usage, distributed by watch-time) and Boost (manual, whole dollars you direct to specific creators). Boost determines which gated content you can access. Unallocated boost flows to creators by watch-time." />
 					</div>
 					{rows.length > 0 ? (
 						<div className="grid grid-cols-3 divide-x divide-base-content/10">
@@ -1340,13 +1420,10 @@ export default function SubscriptionPage() {
 								<div className="mt-3 space-y-1">
 									{rows.map((row, i) => {
 										const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
-										const poolChanged =
-											pendingFunding !== null && pendingFunding !== committedFunding;
 										const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
 										const displayPool =
-											poolChanged && totalTime > 0
-												? Math.round(pendingTimePoolTotal * (row.timeSeconds / totalTime) * 100) /
-													100
+											hasPendingLevels && totalTime > 0
+												? round2(pendingTimePoolTotal * (row.timeSeconds / totalTime))
 												: row.poolAmount;
 										return (
 											<div
@@ -1366,8 +1443,8 @@ export default function SubscriptionPage() {
 												</span>
 												<span className="text-base-content/40 tabular-nums">{pct}%</span>
 												<span
-													className={`tabular-nums ${poolChanged ? "" : "text-success"}`}
-													style={poolChanged ? { color: PENDING_COLOR } : undefined}
+													className={`tabular-nums ${hasPendingLevels ? "" : "text-success"}`}
+													style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
 												>
 													{fmt(displayPool)}
 												</span>
@@ -1385,15 +1462,11 @@ export default function SubscriptionPage() {
 								{(() => {
 									const focusedRow = rows.find((r) => r.creatorId === focusedCreatorId) ?? null;
 									const colorIdx = focusedRow ? rows.indexOf(focusedRow) : 0;
-									const poolChanged =
-										pendingFunding !== null && pendingFunding !== committedFunding;
 									const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
 									const focusedPool =
 										focusedRow && totalTime > 0
-											? poolChanged
-												? Math.round(
-														pendingTimePoolTotal * (focusedRow.timeSeconds / totalTime) * 100,
-													) / 100
+											? hasPendingLevels
+												? round2(pendingTimePoolTotal * (focusedRow.timeSeconds / totalTime))
 												: focusedRow.poolAmount
 											: 0;
 									return (
@@ -1483,14 +1556,12 @@ export default function SubscriptionPage() {
 					) : (
 						<div className="py-6 text-center text-sm text-base-content/40">
 							{viewMode === "next" ? (
-								<p>
-									Next month's distributions will be calculated based on your time with creators.
-								</p>
+								<p>Next month's distributions will be calculated from your time with creators.</p>
 							) : (
 								<>
 									<p>No distributions yet this cycle.</p>
 									<p className="mt-1">
-										Your time pool is distributed proportionally — video, audio, text, and gameplay
+										Your Time Pool is distributed by watch-time — video, audio, text, and gameplay
 										all count equally.
 									</p>
 								</>
@@ -1503,15 +1574,15 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-2">Cost Breakdown</div>
 				<div className="flex justify-center mb-4">
 					<div className="text-sm w-full max-w-lg">
-						{/* Subscription header */}
+						{/* Spend header (badge basis) */}
 						<div className="flex items-center justify-between py-2 border-b border-base-content/10">
-							<span className="text-base-content/60">Subscription</span>
+							<span className="text-base-content/60">Usage + Boost</span>
 							<div className="flex items-baseline gap-1">
 								<span
 									className="text-xl font-bold"
-									style={hasPendingSub ? { color: PENDING_COLOR } : undefined}
+									style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
 								>
-									${effectiveFunding}
+									{fmt(effectiveSpend)}
 								</span>
 								<span className="text-base-content/40 text-xs">/mo</span>
 							</div>
@@ -1538,7 +1609,7 @@ export default function SubscriptionPage() {
 									<strong className="text-success">
 										{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}
 									</strong>
-									<InfoTip text="Distributed automatically to creators based on the time you spend with their content. A minute of video, audio, reading, or gameplay all count equally." />
+									<InfoTip text="To creators, distributed by the watch-time you spend with their content. A minute of video, audio, reading, or gameplay all count equally. Funded per-GiB of Usage." />
 								</div>
 							</div>
 							{financials.boostPool > 0 && (
@@ -1548,14 +1619,27 @@ export default function SubscriptionPage() {
 											className="w-2.5 h-2.5 rounded-sm"
 											style={{ backgroundColor: DOT_COLORS.boost }}
 										/>
-										<span className="text-base-content/70">Boost Pool</span>
+										<span className="text-base-content/70">Boost</span>
 									</div>
 									<div className="flex items-center gap-1">
 										<strong className="text-primary">{fmt(allocatedBoost)}</strong>
-										<InfoTip text="Funds you direct to specific creators in $1 increments. Your boost determines which gated content you can access. Unallocated boost returns to the Time Pool." />
+										<InfoTip text="Whole dollars you direct to specific creators — 100% to creators, no Foundation fee. Determines which gated content you can access." />
 									</div>
 								</div>
 							)}
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<div
+										className="w-2.5 h-2.5 rounded-sm"
+										style={{ backgroundColor: DOT_COLORS.bandwidth }}
+									/>
+									<span className="text-base-content/70">Bandwidth (at cost)</span>
+								</div>
+								<div className="flex items-center gap-1">
+									<strong>{fmt(financials.bandwidth)}</strong>
+									<InfoTip text="The DigitalOcean egress cost of the Usage you buy ($0.01/GiB) — a pass-through, at cost. None of it is platform profit." />
+								</div>
+							</div>
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-2">
 									<div
@@ -1565,79 +1649,60 @@ export default function SubscriptionPage() {
 									<span className="text-base-content/70">Anthers Foundation</span>
 								</div>
 								<div className="flex items-center gap-1">
-									<strong>{fmt(foundationFee)}</strong>
-									<InfoTip text="8% of your subscription funds the Anthers Foundation, which allocates between charitable programs (min 50%) and organizational operations. Quarterly reports show exactly how the fee is spent." />
+									<strong>{fmt(financials.foundation)}</strong>
+									<InfoTip text="The Anthers Foundation charity fee — 50% of your bandwidth cost ($0.005/GiB). Funds free access, charitable programs, and operations." />
 								</div>
 							</div>
-							{viewMode !== "next" && (
-								<>
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2">
-											<div
-												className="w-2.5 h-2.5 rounded-sm"
-												style={{ backgroundColor: DOT_COLORS.delivery }}
-											/>
-											<span className="text-base-content/70">
-												Delivery
-												{deliveryAmt > 0 && (
-													<span className="text-base-content/40 text-xs ml-1">
-														({fmt(grossDelivery)} − $1.00 credit)
-													</span>
-												)}
-												{deliveryAmt === 0 && deliveryEstimate.hours > 0 && (
-													<span className="text-success text-xs ml-1">($1 credit covers this)</span>
-												)}
-											</span>
-										</div>
-										<div className="flex items-center gap-1">
-											<strong>{fmt(deliveryAmt)}</strong>
-											<InfoTip text="Bandwidth cost of content you consume. Estimate assumes 1080p video — audio and text cost far less. Your $1/mo delivery credit is applied first." />
-										</div>
-									</div>
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2">
-											<div
-												className="w-2.5 h-2.5 rounded-sm"
-												style={{ backgroundColor: DOT_COLORS.salesTax }}
-											/>
-											<span className="text-base-content/70">Est. sales tax</span>
-										</div>
-										<strong>{fmt(salesTax)}</strong>
-									</div>
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2">
-											<div
-												className="w-2.5 h-2.5 rounded-sm"
-												style={{ backgroundColor: DOT_COLORS.cardFee }}
-											/>
-											<span className="text-base-content/70">Card fee</span>
-										</div>
-										<strong>{fmt(cardFee)}</strong>
-									</div>
-								</>
-							)}
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<div
+										className="w-2.5 h-2.5 rounded-sm"
+										style={{ backgroundColor: DOT_COLORS.salesTax }}
+									/>
+									<span className="text-base-content/70">Est. sales tax</span>
+								</div>
+								<strong>{fmt(salesTax)}</strong>
+							</div>
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<div
+										className="w-2.5 h-2.5 rounded-sm"
+										style={{ backgroundColor: DOT_COLORS.cardFee }}
+									/>
+									<span className="text-base-content/70">Card fee</span>
+								</div>
+								<strong>{fmt(cardFee)}</strong>
+							</div>
 						</div>
+
+						{/* To creators emphasis */}
+						<div className="flex items-center justify-between py-1 border-t border-base-content/10">
+							<span className="text-base-content/70 font-medium">To creators</span>
+							<strong className="text-success">{fmt(financials.toCreators)}</strong>
+						</div>
+						<p className="text-[10px] text-base-content/40 mb-1">
+							Anthers keeps $0 — every dollar is bandwidth (at cost), money to creators, the Anthers
+							Foundation fee, or card + tax.
+						</p>
 
 						{/* Total */}
 						<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
-							<span className="font-bold">
-								{viewMode === "next" ? "Monthly total" : "Total w/Fees"}
-							</span>
+							<span className="font-bold">Total (all-in)</span>
 							<div className="flex items-baseline gap-1">
 								<span
 									className="text-xl font-bold"
-									style={hasPendingSub ? { color: PENDING_COLOR } : undefined}
+									style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
 								>
-									{fmt(viewMode === "next" ? effectiveFunding : totalWithFees)}
+									{fmt(totalWithFees)}
 								</span>
 								<span className="text-base-content/40 text-xs">/mo</span>
 							</div>
 						</div>
 
-						{sub.currentPeriodEnd && viewMode === "current" && (
+						{account.currentPeriodEnd && viewMode === "current" && (
 							<p className="text-xs text-base-content/40 mt-1">
 								Next charge:{" "}
-								{new Date(sub.currentPeriodEnd).toLocaleDateString("en-US", {
+								{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
 									month: "long",
 									day: "numeric",
 									year: "numeric",
@@ -1657,23 +1722,31 @@ export default function SubscriptionPage() {
 				onCancel={() => setShowConfirm(false)}
 				confirmLabel="Confirm & Save"
 			>
-				{pendingFunding !== null && pendingFunding !== committedFunding && (
+				{usageChanged && (
 					<div className="flex justify-between py-1">
-						<span>Subscription level</span>
+						<span>Usage</span>
 						<span>
-							{fmt(committedFunding)} &rarr; <strong>{fmt(pendingFunding)}</strong>
+							{committedUsageGiB} GiB &rarr; <strong>{effectiveUsageGiB} GiB</strong>
+						</span>
+					</div>
+				)}
+				{boostTotalChanged && (
+					<div className="flex justify-between py-1">
+						<span>Total boost</span>
+						<span>
+							{fmt(committedBoostTotal)} &rarr; <strong>{fmt(effectiveBoostTotal)}</strong>
 						</span>
 					</div>
 				)}
 				{Array.from(pendingBoosts.entries()).map(([cid, amount]) => {
 					const row = rows.find((r) => r.creatorId === cid);
-					const committed = committedBoostMap.get(cid) ?? 0;
-					if (amount === committed) return null;
+					const committedVal = committedBoostMap.get(cid) ?? 0;
+					if (amount === committedVal) return null;
 					return (
 						<div key={cid} className="flex justify-between py-1">
 							<span>Boost to @{row?.displayName || row?.username}</span>
 							<span>
-								${committed} &rarr; <strong>${amount}</strong>
+								${committedVal} &rarr; <strong>${amount}</strong>
 							</span>
 						</div>
 					);

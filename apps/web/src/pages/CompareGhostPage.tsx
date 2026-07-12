@@ -130,7 +130,7 @@ export default function CompareGhostPage() {
 									</li>
 									<li className="flex gap-2">
 										<span className="text-success flex-shrink-0">✓</span>
-										Subscription pool with attention-based distribution
+										Subscription pool with time-based distribution
 									</li>
 								</ul>
 							</div>
@@ -196,7 +196,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<UserGroupIcon className="w-6 h-6" />}
 							title="Audience model"
-							description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers's model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by attention time."
+							description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers's model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by watch-time."
 						/>
 						<DiffCard
 							icon={<CodeBracketIcon className="w-6 h-6" />}

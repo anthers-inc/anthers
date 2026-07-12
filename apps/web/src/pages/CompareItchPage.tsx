@@ -102,7 +102,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<UserGroupIcon className="w-6 h-6" />}
 							title="Subscription model that funds creators"
-							description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual attention time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
+							description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual watch-time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
 						/>
 						<DiffCard
 							icon={<ChartBarIcon className="w-6 h-6" />}
@@ -153,17 +153,19 @@ export default function CompareItchPage() {
 								</p>
 								<div className="flex flex-col gap-2 text-sm">
 									<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
-									<ReceiptLine label="Infrastructure fee" amount="$0.01" />
-									<ReceiptLine label="Anthers Foundation Fee (8%)" amount="$0.80" />
+									<ReceiptLine label="Delivery bandwidth (~1 GiB, at cost)" amount="$0.01" />
+									<ReceiptLine label="Anthers Foundation fee (Digital AFF)" amount="$0.005" />
 									<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 									<div className="divider my-1" />
-									<ReceiptLine label="Buyer pays" amount="$11.40" />
+									<ReceiptLine label="Buyer pays" amount="$10.61" />
 									<div className="text-success font-semibold text-right">
 										Creator receives $10.00
 									</div>
 								</div>
 								<p className="text-xs text-base-content/40 mt-3">
-									Costs are added on top, not subtracted from your earnings.
+									Anthers keeps $0. The Foundation fee on a digital download is half the delivery
+									bandwidth—a fraction of a cent. Costs are added on top, never subtracted from your
+									earnings.
 								</p>
 							</div>
 						</div>

@@ -31,7 +31,7 @@ interface DemoPurchase {
 	item: string;
 	type: "download" | "content" | "experience" | "physical";
 	price: number;
-	/** Platform fee already included in price */
+	/** Anthers Foundation fee (AFF) on this purchase — digital: 50% of download bandwidth; physical/service: 1% of price. Anthers keeps $0. */
 	fee: number;
 	date: string;
 }
@@ -48,12 +48,19 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // Demo data
 // ---------------------------------------------------------------------------
 
+// V3: users aren't on a tiered plan — they prepay Usage (per GiB) + Boost ($1
+// units) and earn a rolling Anthers Badge from the combined spend. This demo user
+// buys 300 GiB Usage ($9.00 = $3 bandwidth + $1.50 AFF + $4.50 Time Pool) and $6
+// Boost, for $15 combined → the Petal badge (≥$15). See spec §4.
 const DEMO_PLAN = {
-	tier: "Sprout",
-	price: 10,
-	foundation: 0.8,
-	timePool: 2.44,
-	boostPool: 6.44,
+	badge: "Petal",
+	usageGib: 300,
+	usageTotal: 9.0,
+	bandwidth: 3.0, // 300 GiB × $0.01/GiB — DigitalOcean egress, at cost
+	foundation: 1.5, // Anthers Foundation fee (AFF): 50% of usage bandwidth = $0.005/GiB
+	timePool: 4.5, // 300 GiB × $0.015/GiB — to creators, distributed by watch-time
+	boostPool: 6.0,
+	combined: 15.0, // usage + boost — the Anthers Badge basis
 	month: "February 2026",
 };
 
@@ -63,8 +70,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "bugfishhhh",
 		avatar: "BF",
 		watchHours: 8.2,
-		poolAmount: 1.54,
-		boostAmount: 3.86,
+		poolAmount: 1.47,
+		boostAmount: 3.42,
 		gates: [
 			{
 				threshold: 2,
@@ -98,7 +105,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "LifeOfRiza",
 		avatar: "LR",
 		watchHours: 6.5,
-		poolAmount: 1.22,
+		poolAmount: 1.17,
 		boostAmount: 1.21,
 		gates: [
 			{
@@ -118,7 +125,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "RaceDayCafe",
 		avatar: "RC",
 		watchHours: 5.1,
-		poolAmount: 0.96,
+		poolAmount: 0.92,
 		boostAmount: 0.85,
 		gates: [
 			{
@@ -143,7 +150,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "Amaiguri",
 		avatar: "AM",
 		watchHours: 3.0,
-		poolAmount: 0.56,
+		poolAmount: 0.54,
 		boostAmount: 0.39,
 		gates: [
 			{
@@ -168,7 +175,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "MAPHRA",
 		avatar: "MA",
 		watchHours: 1.5,
-		poolAmount: 0.28,
+		poolAmount: 0.27,
 		boostAmount: 0.13,
 		gates: [
 			{
@@ -193,7 +200,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "4 others",
 		avatar: "..",
 		watchHours: 0.7,
-		poolAmount: 0.14,
+		poolAmount: 0.13,
 		boostAmount: 0.0,
 		gates: [],
 	},
@@ -205,7 +212,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		item: "Moonvale OST (FLAC)",
 		type: "download",
 		price: 8.0,
-		fee: 0.8,
+		fee: 0.01,
 		date: "Feb 4",
 	},
 	{
@@ -213,7 +220,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		item: '"Cascade" Stems + Session Files',
 		type: "download",
 		price: 15.0,
-		fee: 1.5,
+		fee: 0.03,
 		date: "Feb 11",
 	},
 	{
@@ -221,7 +228,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		item: "Portfolio Review (30 min)",
 		type: "experience",
 		price: 25.0,
-		fee: 1.25,
+		fee: 0.25,
 		date: "Feb 18",
 	},
 	{
@@ -229,7 +236,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		item: "Seasonal Recipe Zine—Spring 2026",
 		type: "physical",
 		price: 12.0,
-		fee: 0.6,
+		fee: 0.12,
 		date: "Feb 22",
 	},
 ];
@@ -417,6 +424,8 @@ function SubscriptionDashboardDemo() {
 	const totalWatchHours = DEMO_ALLOCATIONS.reduce((s, a) => s + a.watchHours, 0);
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalBoost = boosts.reduce((s, b) => s + b, 0);
+	// V3 all-in monthly spend (pre card/tax): bandwidth + Foundation fee + Time Pool + Boost
+	const monthlyTotal = DEMO_PLAN.bandwidth + DEMO_PLAN.foundation + totalPool + totalBoost;
 
 	const handleSlider = (idx: number, value: number) => {
 		const newBoosts = [...boosts];
@@ -451,7 +460,8 @@ function SubscriptionDashboardDemo() {
 			<div>
 				<h3 className="text-lg font-bold">Your Anther—{DEMO_PLAN.month}</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.tier} tier — ${DEMO_PLAN.price}/mo
+					{DEMO_PLAN.badge} badge — {DEMO_PLAN.usageGib} GiB Usage + $
+					{DEMO_PLAN.boostPool.toFixed(2)} Boost
 				</p>
 			</div>
 
@@ -463,7 +473,9 @@ function SubscriptionDashboardDemo() {
 							Anthers Foundation Fee
 						</p>
 						<p className="text-xl font-bold">${DEMO_PLAN.foundation.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">8% of subscription</p>
+						<p className="text-xs text-base-content/40">
+							50% of usage bandwidth &middot; $0.005/GiB
+						</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
@@ -553,6 +565,10 @@ function SubscriptionDashboardDemo() {
 			<div className="card bg-base-200">
 				<div className="card-body p-4 space-y-1">
 					<div className="flex justify-between text-sm">
+						<span className="text-base-content/70">Bandwidth (at cost)</span>
+						<span>${DEMO_PLAN.bandwidth.toFixed(2)}</span>
+					</div>
+					<div className="flex justify-between text-sm">
 						<span className="text-base-content/70">Anthers Foundation Fee</span>
 						<span>${DEMO_PLAN.foundation.toFixed(2)}</span>
 					</div>
@@ -561,15 +577,17 @@ function SubscriptionDashboardDemo() {
 						<span className="text-success">${totalPool.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Boost Pool</span>
+						<span className="text-base-content/70">Boost</span>
 						<span className="text-primary">${totalBoost.toFixed(2)}</span>
 					</div>
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">
 						<span>Monthly total</span>
-						<span>${DEMO_PLAN.price.toFixed(2)}</span>
+						<span>${monthlyTotal.toFixed(2)}</span>
 					</div>
-					<p className="text-xs text-base-content/40 mt-1">Next charge: March 1, 2026</p>
+					<p className="text-xs text-base-content/40 mt-1">
+						Prepaid &middot; next charge March 1, 2026
+					</p>
 				</div>
 			</div>
 		</div>

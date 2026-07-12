@@ -24,11 +24,7 @@ import {
 	redownloadLedger,
 	users,
 } from "@anthers/db/schema";
-import {
-	BADGE_THRESHOLDS,
-	USAGE_PER_GIB,
-	badgeForSpend,
-} from "@anthers/shared/constants";
+import { BADGE_THRESHOLDS, badgeForSpend, USAGE_PER_GIB } from "@anthers/shared/constants";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -82,10 +78,25 @@ async function upsertAccountCycle(
 	const totalSpend = money(usageGiB * USAGE_PER_GIB + boostTotal);
 	await db
 		.insert(accountCycles)
-		.values({ userId, billingCycle: cycle, usageGiB, boostTotal: boostSpend, usageSpend, boostSpend, totalSpend })
+		.values({
+			userId,
+			billingCycle: cycle,
+			usageGiB,
+			boostTotal: boostSpend,
+			usageSpend,
+			boostSpend,
+			totalSpend,
+		})
 		.onConflictDoUpdate({
 			target: [accountCycles.userId, accountCycles.billingCycle],
-			set: { usageGiB, boostTotal: boostSpend, usageSpend, boostSpend, totalSpend, updatedAt: new Date() },
+			set: {
+				usageGiB,
+				boostTotal: boostSpend,
+				usageSpend,
+				boostSpend,
+				totalSpend,
+				updatedAt: new Date(),
+			},
 		});
 }
 

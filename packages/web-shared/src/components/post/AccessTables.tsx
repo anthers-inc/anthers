@@ -9,8 +9,8 @@ import type { AnthersAccessRow, BoostAccessRow, CreatorGate } from "../../lib/ty
 
 // ─── Row drafts ───
 
-/** The fixed Anthers tiers, matching the API's tier enum. */
-export type AnthersTier = "free" | "root" | "sprout" | "petal" | "bloom";
+/** The fixed Anthers Badge tiers, matching the API's tier enum. */
+export type AnthersTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
 export interface BoostRowDraft {
 	threshold: number;
@@ -31,7 +31,7 @@ const ANTHERS_TIERS: { tier: AnthersTier; label: string }[] = [
 	{ tier: "root", label: "Root" },
 	{ tier: "sprout", label: "Sprout" },
 	{ tier: "petal", label: "Petal" },
-	{ tier: "bloom", label: "Bloom" },
+	{ tier: "blossom", label: "Blossom" },
 ];
 
 /** Coerce a user-entered price to a valid money string ("0" when blank/invalid). */

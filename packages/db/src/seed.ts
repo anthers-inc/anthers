@@ -1177,7 +1177,9 @@ async function seed() {
 		} catch {
 			// unique constraint on (userId, billingCycle)
 		}
-		console.log(`    account: ${tu.tier} (usage ${levels.usageGiB} GiB, boost $${levels.boostTotal})`);
+		console.log(
+			`    account: ${tu.tier} (usage ${levels.usageGiB} GiB, boost $${levels.boostTotal})`,
+		);
 
 		// -- Attention events --
 		let totalEvents = 0;

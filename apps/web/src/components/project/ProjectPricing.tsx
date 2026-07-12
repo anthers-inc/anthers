@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { FOUNDATION_FEE_PERCENTAGE } from "@anthers/shared/constants";
+import { CARD_FLAT, CARD_RATE, SALES_TAX_RATE } from "@anthers/shared/constants";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
@@ -15,21 +15,20 @@ interface ProjectPricingProps {
 }
 
 function buildReceipt(price: number) {
-	const processing = Math.round(price * 0.029 * 100) / 100 + 0.3;
-	const foundation = Math.round(price * (FOUNDATION_FEE_PERCENTAGE / 100) * 100) / 100;
-	// Pass-through: the creator receives the full price; fees are added on top.
-	const buyerTotal = Math.round((price + foundation + processing) * 100) / 100;
+	const r2 = (n: number) => Math.round(n * 100) / 100;
+	// Zero-cut: the creator receives 100% of the price. Card processing and sales tax are
+	// added on top, along with a small per-download Foundation fee (the Digital AFF) and
+	// delivery at cost — those are byte-based and finalized at checkout.
+	const processing = r2(price * CARD_RATE + CARD_FLAT);
+	const tax = r2(price * SALES_TAX_RATE);
+	const buyerTotal = r2(price + processing + tax);
 
 	return {
 		price,
 		buyerTotal,
 		lines: [
-			{
-				label: "Anthers Foundation Fee",
-				amount: foundation,
-				note: `${FOUNDATION_FEE_PERCENTAGE}%`,
-			},
-			{ label: "Payment processing", amount: processing, note: "Stripe" },
+			{ label: "Payment processing", amount: processing, note: "card" },
+			{ label: "Sales tax", amount: tax, note: "est." },
 		],
 	};
 }
