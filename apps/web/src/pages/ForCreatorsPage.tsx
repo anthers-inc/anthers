@@ -403,41 +403,42 @@ export default function ForCreatorsPage() {
 								<tr>
 									<td>Root</td>
 									<td className="text-right">$3/mo</td>
-									<td className="text-right text-success">$2.76</td>
-									<td className="text-right text-base-content/40">—†</td>
+									<td className="text-right text-success">$0.76</td>
+									<td className="text-right text-primary">$2.00</td>
 								</tr>
 								<tr>
 									<td>Sprout</td>
 									<td className="text-right">$7/mo</td>
-									<td className="text-right text-success">$2.76</td>
-									<td className="text-right text-primary">$3.68</td>
+									<td className="text-right text-success">$2.44</td>
+									<td className="text-right text-primary">$4.00</td>
 								</tr>
 								<tr className="text-base-content/50 border-dashed border-t border-base-300/50">
 									<td className="italic">e.g. Sprout+</td>
 									<td className="text-right italic">$10/mo</td>
-									<td className="text-right text-success">$2.76</td>
-									<td className="text-right text-primary">$6.44</td>
+									<td className="text-right text-success">$4.20</td>
+									<td className="text-right text-primary">$5.00</td>
 								</tr>
 								<tr>
 									<td>Petal</td>
 									<td className="text-right">$15/mo</td>
-									<td className="text-right text-success">$2.76</td>
-									<td className="text-right text-primary">$11.04</td>
+									<td className="text-right text-success">$5.80</td>
+									<td className="text-right text-primary">$8.00</td>
 								</tr>
 								<tr>
 									<td>Bloom</td>
 									<td className="text-right">$30/mo</td>
-									<td className="text-right text-success">$2.76</td>
-									<td className="text-right text-primary">$24.84</td>
+									<td className="text-right text-success">$12.60</td>
+									<td className="text-right text-primary">$15.00</td>
 								</tr>
 							</tbody>
 						</table>
 					</div>
 					<p className="text-center text-xs text-base-content/40 mt-4">
-						These are values at each tier threshold — users can fund at any $1 increment and boost
-						scales continuously. Time Pool is fixed at $2.76/mo at any funding level $3+,
-						distributed proportionally by attention time. †Boost starts above $3, so a user at
-						exactly $3 has no boost; at $4 they have $0.92 in boost. Subscriptions coming soon.
+						These are values at each tier threshold — users can fund at any $1 increment, and both
+						pools scale with the funding level. The Boost Pool is the $1 increment closest to half
+						the funding amount (Boost = ⌈funding × 0.5⌉); the Time Pool is the rest of the 92%
+						creator share (funding × 0.92 − Boost), distributed proportionally by time spent.
+						Subscriptions coming soon.
 					</p>
 				</div>
 			</section>
