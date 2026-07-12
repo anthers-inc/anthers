@@ -10,8 +10,10 @@
  * and removed without affecting real data.
  */
 
-import { eq, like } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import {
+	accountCycles,
+	accounts,
 	assets,
 	attentionEvents,
 	bookmarks,
@@ -28,7 +30,6 @@ import {
 	projects,
 	purchases,
 	ratings,
-	subscriptions,
 	users,
 } from "./index.js";
 
@@ -64,7 +65,7 @@ function daysAgo(n: number): Date {
 	return d;
 }
 
-const ACCESS_TIERS = ["free", "root", "sprout", "petal", "bloom"] as const;
+const ACCESS_TIERS = ["free", "root", "sprout", "petal", "blossom"] as const;
 
 /** The neutral Anthers table — every tier locked. */
 function lockedAnthers() {
@@ -890,13 +891,13 @@ async function seed() {
 	> = {
 		[`${SEED_PREFIX}novapixel`]: [
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "3.00",
 				label: "Root",
 				description: "Early devlogs and behind-the-scenes screenshots",
 			},
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "7.00",
 				label: "Sprout",
 				description: "Beta access to in-progress builds",
@@ -916,7 +917,7 @@ async function seed() {
 		],
 		[`${SEED_PREFIX}sagemoreno`]: [
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "3.00",
 				label: "Root",
 				description: "Early access to essays (one week before public)",
@@ -942,7 +943,7 @@ async function seed() {
 		],
 		[`${SEED_PREFIX}fluxbeats`]: [
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "3.00",
 				label: "Root",
 				description: "Stems and project files for released tracks",
@@ -962,13 +963,13 @@ async function seed() {
 		],
 		[`${SEED_PREFIX}marisol`]: [
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "3.00",
 				label: "Root",
 				description: "High-resolution art downloads",
 			},
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "15.00",
 				label: "Petal",
 				description: "Exclusive print-ready illustrations",
@@ -988,7 +989,7 @@ async function seed() {
 		],
 		[`${SEED_PREFIX}hexbound`]: [
 			{
-				gateType: "anthers_tier",
+				gateType: "anthers_badge",
 				threshold: "7.00",
 				label: "Sprout",
 				description: "Director's commentary audio tracks for all games",
@@ -1100,9 +1101,21 @@ async function seed() {
 			const amount = parseFloat(priceByTitle[title] ?? "0");
 			if (amount <= 0) continue;
 
-			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
-			const crfFee = Math.round(amount * 0.08 * 100) / 100; // 8% Anthers Foundation Fee
-			// Pass-through: the creator keeps the full listed price; fees ride on top.
+			// Delivery bandwidth of the post's downloadable assets → V3 digital fees.
+			const [sz] = await db
+				.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
+				.from(assets)
+				.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
+				.where(eq(postContents.postId, p.id));
+			const deliveryGiB = Number(sz?.bytes ?? 0) / 1073741824;
+
+			// Digital purchase (zero-cut): the creator keeps 100%; the buyer pays delivery at
+			// cost, the Digital AFF (50% of that bandwidth), and card + tax on top.
+			let deliveryFee = Math.round(deliveryGiB * 0.01 * 100) / 100;
+			if (deliveryGiB > 0 && deliveryFee <= 0) deliveryFee = 0.01;
+			const crfFee = Math.round(deliveryGiB * 0.005 * 100) / 100; // Digital AFF
+			const subtotal = amount + crfFee + deliveryFee;
+			const processingFee = Math.round((subtotal * 0.029 + 0.3) * 100) / 100;
 			const creatorEarnings = amount;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
 
@@ -1110,8 +1123,10 @@ async function seed() {
 				await db.insert(purchases).values({
 					buyerId: userId,
 					postId: p.id,
+					type: "digital",
 					amount: amount.toFixed(2),
 					processingFee: processingFee.toFixed(2),
+					deliveryFee: deliveryFee.toFixed(2),
 					crfFee: crfFee.toFixed(2),
 					creatorEarnings: creatorEarnings.toFixed(2),
 					stripePaymentIntentId: fakePaymentId,
@@ -1123,21 +1138,25 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Subscription --
+		// -- Account (V3: prepaid Usage + Boost; Badge derived from spend) --
 		const cycleStart = billingCycleStart();
 		const cycleEnd = billingCycleEnd();
-		const tierPrices: Record<string, number> = {
-			free: 0,
-			root: 3,
-			sprout: 7,
-			petal: 15,
-			bloom: 30,
+		// Per-cycle prepaid levels for each Badge tier (seed profiles).
+		const V3_LEVELS: Record<string, { usageGiB: number; boostTotal: number }> = {
+			free: { usageGiB: 0, boostTotal: 0 },
+			root: { usageGiB: 100, boostTotal: 0 },
+			sprout: { usageGiB: 200, boostTotal: 4 }, // $6 usage + $4 boost = $10 → Sprout; boost demonstrates directed allocations
+			petal: { usageGiB: 300, boostTotal: 6 },
+			blossom: { usageGiB: 400, boostTotal: 18 },
 		};
+		const levels = V3_LEVELS[tu.tier] ?? V3_LEVELS.free;
+		const usageSpend = Math.round(levels.usageGiB * 0.03 * 100) / 100;
+		const totalSpend = Math.round((usageSpend + levels.boostTotal) * 100) / 100;
 		try {
-			await db.insert(subscriptions).values({
+			await db.insert(accounts).values({
 				userId,
-				tier: tu.tier,
-				fundingLevel: tierPrices[tu.tier] ?? 0,
+				usageGiB: levels.usageGiB,
+				boostTotal: levels.boostTotal.toFixed(2),
 				isActive: true,
 				currentPeriodStart: cycleStart,
 				currentPeriodEnd: cycleEnd,
@@ -1145,7 +1164,20 @@ async function seed() {
 		} catch {
 			// unique constraint on userId
 		}
-		console.log(`    subscription: ${tu.tier}`);
+		try {
+			await db.insert(accountCycles).values({
+				userId,
+				billingCycle: currentBillingCycle(),
+				usageGiB: levels.usageGiB,
+				boostTotal: levels.boostTotal.toFixed(2),
+				usageSpend: usageSpend.toFixed(2),
+				boostSpend: levels.boostTotal.toFixed(2),
+				totalSpend: totalSpend.toFixed(2),
+			});
+		} catch {
+			// unique constraint on (userId, billingCycle)
+		}
+		console.log(`    account: ${tu.tier} (usage ${levels.usageGiB} GiB, boost $${levels.boostTotal})`);
 
 		// -- Attention events --
 		let totalEvents = 0;
@@ -1163,38 +1195,35 @@ async function seed() {
 		}
 		console.log(`    ${totalEvents} attention events`);
 
-		// -- Pool distributions (paid users only) --
-		if (tu.tier !== "free") {
-			// V2 economics: boostPool = ceil(fundingLevel × 0.5), timePool = creatorShare − boostPool
-			const fundLevel = tierPrices[tu.tier] ?? 0;
-			const creatorShare = Math.round(fundLevel * 0.92 * 100) / 100;
-			const boostPool = Math.ceil(fundLevel * 0.5);
-			const timePool = Math.round((creatorShare - boostPool) * 100) / 100;
+		// -- Pool distributions (users with usage/boost only) --
+		if (levels.usageGiB > 0 || levels.boostTotal > 0) {
+			// V3: Time Pool = usageGiB × $0.015 (funded per-GiB), distributed by watch-time.
+			const timePool = Math.round(levels.usageGiB * 0.015 * 100) / 100;
+			const boostTotal = levels.boostTotal;
 
-			// Compute attention proportions
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 			const cycle = currentBillingCycle();
 
-			// First pass: compute $1-rounded boost amounts, then assign leftover to time pool
-			const boostAmounts = new Map<string, number>();
-			let totalAllocatedBoost = 0;
+			// Directed boost in whole-$ units by watch-time; the undirected remainder by time.
+			const directed = new Map<string, number>();
+			let directedTotal = 0;
 			for (const [creatorUsername, target] of entries) {
-				const proportion = target.seconds / totalSeconds;
-				const boostAmt = Math.floor(boostPool * proportion); // $1 increments
-				boostAmounts.set(creatorUsername, boostAmt);
-				totalAllocatedBoost += boostAmt;
+				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
+				const amt = Math.floor(boostTotal * proportion); // $1 increments
+				directed.set(creatorUsername, amt);
+				directedTotal += amt;
 			}
-			// Unallocated boost (from rounding) goes back to time pool
-			const effectiveTimePool = timePool + (boostPool - totalAllocatedBoost);
+			const undirected = boostTotal - directedTotal;
 
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
 				if (!creatorId) continue;
 
-				const proportion = target.seconds / totalSeconds;
-				const poolAmt = Math.round(effectiveTimePool * proportion * 100) / 100;
-				const boostAmt = boostAmounts.get(creatorUsername) ?? 0;
+				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
+				const poolAmt = Math.round(timePool * proportion * 100) / 100;
+				const boostAmt =
+					(directed.get(creatorUsername) ?? 0) + Math.round(undirected * proportion * 100) / 100;
 
 				try {
 					await db.insert(poolDistributions).values({
@@ -1209,27 +1238,29 @@ async function seed() {
 					// unique constraint
 				}
 			}
-			// -- Boost allocations (matching pool distribution proportions, $1 increments) --
+
+			// -- Boost allocations (directed whole-$ boosts) --
+			let allocationCount = 0;
 			for (const [creatorUsername] of entries) {
 				const cId = createdUserIds[creatorUsername];
 				if (!cId) continue;
-
-				const boostAmt = boostAmounts.get(creatorUsername) ?? 0;
+				const amt = directed.get(creatorUsername) ?? 0;
+				if (amt <= 0) continue;
 
 				try {
 					await db.insert(boostAllocations).values({
 						userId,
 						creatorId: cId,
-						amount: boostAmt.toFixed(2),
+						amount: amt.toFixed(2),
 						billingCycle: cycle,
 						isLocked: false,
 					});
+					allocationCount++;
 				} catch {
 					// unique constraint
 				}
 			}
-			console.log(`    ${entries.length} boost allocations`);
-
+			console.log(`    ${allocationCount} boost allocations`);
 			console.log(`    ${entries.length} pool distributions`);
 		}
 

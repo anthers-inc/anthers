@@ -36,9 +36,11 @@ export const purchases = pgTable("purchases", {
 	postId: integer("post_id")
 		.notNull()
 		.references(() => posts.id, { onDelete: "cascade" }),
+	type: text("type").notNull().default("digital"), // digital | physical | service — sets the AFF basis
 	amount: numeric("amount").notNull(),
 	processingFee: numeric("processing_fee").notNull(),
-	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee amount
+	deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
+	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee (AFF) amount
 	creatorEarnings: numeric("creator_earnings").notNull(),
 	stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
 	status: text("status").notNull().default("pending"), // pending | completed | failed | refunded

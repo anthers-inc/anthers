@@ -1,5 +1,5 @@
 {
-  "id": "3cb93ba6-57cb-4ef6-913e-3864379b1da3",
+  "id": "24563b34-12ce-40ac-93cd-33769b31e47d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -197,6 +197,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'digital'"
+        },
         "amount": {
           "name": "amount",
           "type": "numeric",
@@ -208,6 +215,13 @@
           "type": "numeric",
           "primaryKey": false,
           "notNull": true
+        },
+        "delivery_fee": {
+          "name": "delivery_fee",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
         },
         "crf_fee": {
           "name": "crf_fee",
@@ -1208,6 +1222,243 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.account_cycles": {
+      "name": "account_cycles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "billing_cycle": {
+          "name": "billing_cycle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "usage_gib": {
+          "name": "usage_gib",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "boost_total": {
+          "name": "boost_total",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "usage_spend": {
+          "name": "usage_spend",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "boost_spend": {
+          "name": "boost_spend",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "total_spend": {
+          "name": "total_spend",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_account_cycles_user_cycle": {
+          "name": "uq_account_cycles_user_cycle",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "billing_cycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "account_cycles_user_id_users_id_fk": {
+          "name": "account_cycles_user_id_users_id_fk",
+          "tableFrom": "account_cycles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.accounts": {
+      "name": "accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "usage_gib": {
+          "name": "usage_gib",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "boost_total": {
+          "name": "boost_total",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "redownload_balance": {
+          "name": "redownload_balance",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "is_self_hosting": {
+          "name": "is_self_hosting",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "current_period_start": {
+          "name": "current_period_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_period_end": {
+          "name": "current_period_end",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canceled_at": {
+          "name": "canceled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "accounts_user_id_users_id_fk": {
+          "name": "accounts_user_id_users_id_fk",
+          "tableFrom": "accounts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "accounts_user_id_unique": {
+          "name": "accounts_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.attention_events": {
       "name": "attention_events",
       "schema": "",
@@ -1716,8 +1967,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.subscriptions": {
-      "name": "subscriptions",
+    "public.redownload_ledger": {
+      "name": "redownload_ledger",
       "schema": "",
       "columns": {
         "id": {
@@ -1732,56 +1983,21 @@
           "primaryKey": false,
           "notNull": true
         },
-        "tier": {
-          "name": "tier",
+        "delta": {
+          "name": "delta",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'free'"
+          "notNull": true
         },
-        "funding_level": {
-          "name": "funding_level",
+        "post_id": {
+          "name": "post_id",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "stripe_customer_id": {
-          "name": "stripe_customer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "stripe_subscription_id": {
-          "name": "stripe_subscription_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
-        },
-        "current_period_start": {
-          "name": "current_period_start",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_period_end": {
-          "name": "current_period_end",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "canceled_at": {
-          "name": "canceled_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1791,20 +2007,35 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_redownload_user_date": {
+          "name": "idx_redownload_user_date",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "subscriptions_user_id_users_id_fk": {
-          "name": "subscriptions_user_id_users_id_fk",
-          "tableFrom": "subscriptions",
+        "redownload_ledger_user_id_users_id_fk": {
+          "name": "redownload_ledger_user_id_users_id_fk",
+          "tableFrom": "redownload_ledger",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -1814,18 +2045,23 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "redownload_ledger_post_id_posts_id_fk": {
+          "name": "redownload_ledger_post_id_posts_id_fk",
+          "tableFrom": "redownload_ledger",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "subscriptions_user_id_unique": {
-          "name": "subscriptions_user_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

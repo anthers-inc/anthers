@@ -1,70 +1,105 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import Decimal from "decimal.js";
-import { FOUNDATION_FEE_PERCENTAGE } from "./constants.js";
+import {
+	AFF_INFRA_RATE,
+	BANDWIDTH_PER_GIB,
+	CARD_FLAT,
+	CARD_RATE,
+	FREE_STORAGE_GIB,
+	PHYSICAL_AFF_RATE,
+	SALES_TAX_RATE,
+	SELF_HOST_FEE,
+	STORAGE_PER_GIB_MONTH,
+	TIME_POOL_PER_GIB,
+	USAGE_AFF_PER_GIB,
+} from "./constants.js";
 
-/** Stripe processing fee: 2.9% + $0.30 */
-const PROCESSING_RATE = new Decimal("0.029");
-const PROCESSING_FLAT = new Decimal("0.30");
+/** Bytes per GiB (binary). */
+const GIB = new Decimal("1073741824");
+const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** Anthers Foundation Fee as a rate (8% of the transaction amount). */
-const FOUNDATION_RATE = new Decimal(FOUNDATION_FEE_PERCENTAGE).div(100);
-
-/** Delivery/egress: ~$0.01 per GB of download bandwidth (per-GB, decimal). */
-const DELIVERY_PER_GB = new Decimal("0.01");
-const BYTES_PER_GB = new Decimal("1000000000");
-
-/** Foundation hosting cost model constants (monthly per-creator) */
-export const HOSTING_COSTS = {
-	BASE_PER_CREATOR: new Decimal("0.50"),
-	PER_GB_STORAGE: new Decimal("0.05"),
-	PER_PROJECT: new Decimal("0.10"),
-	PER_MEDIA_POST: new Decimal("0.15"),
-} as const;
-
-/** Maximum Foundation subsidy per creator per month */
+/** Maximum discretionary Foundation subsidy per creator per month. */
 export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 
+/** What a direct purchase delivers, which sets its Foundation Fee basis. */
+export type PurchaseType = "digital" | "physical" | "service";
+
 /**
- * Calculate fee breakdown for a purchase (pass-through model).
- *
- * The creator receives the full listed price; processing, the Foundation Fee, and
- * delivery are added on top and paid by the buyer — never subtracted from earnings.
- * `deliveryBytes` is the total size of the downloadable content; pass 0 for items
- * with nothing to download.
+ * Usage-price breakdown for a number of GiB (unrounded, full precision):
+ * bandwidth (at cost) + AFF (charity) + Time Pool (to creators) = $0.03/GiB.
  */
-export function calculateFees(amount: Decimal, deliveryBytes: Decimal | number = 0) {
-	const processingFee = amount
-		.mul(PROCESSING_RATE)
-		.plus(PROCESSING_FLAT)
-		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-	const foundationFee = amount.mul(FOUNDATION_RATE).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-
-	const bytes = new Decimal(deliveryBytes);
-	let deliveryFee = bytes
-		.div(BYTES_PER_GB)
-		.mul(DELIVERY_PER_GB)
-		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-	// Any real download costs at least a cent to deliver — we can't bill sub-cent.
-	if (bytes.gt(0) && deliveryFee.lte(0)) deliveryFee = new Decimal("0.01");
-
-	const creatorEarnings = amount;
-	const buyerTotal = amount.plus(processingFee).plus(foundationFee).plus(deliveryFee);
-
-	return { processingFee, deliveryFee, crfFee: foundationFee, creatorEarnings, buyerTotal };
+export function usageBreakdown(gib: Decimal | number) {
+	const g = new Decimal(gib);
+	const bandwidth = g.mul(BANDWIDTH_PER_GIB);
+	const aff = g.mul(USAGE_AFF_PER_GIB);
+	const timePool = g.mul(TIME_POOL_PER_GIB);
+	return { bandwidth, aff, timePool, total: bandwidth.plus(aff).plus(timePool) };
 }
 
 /**
- * Estimate monthly hosting costs for a creator.
+ * Fee breakdown for a direct purchase (zero-cut, pass-through model).
+ *
+ * The creator receives the full listed price; the Anthers Foundation Fee, delivery
+ * bandwidth, and card + sales tax are added on top and paid by the buyer — never
+ * subtracted from earnings. Anthers keeps $0.
+ *
+ * - `digital`: the AFF is the **Digital AFF** — 50% of the download's bandwidth,
+ *   the same fee as streaming — and the buyer also pays that bandwidth at cost.
+ * - `physical` / `service`: no bytes are delivered, so the AFF is a nominal
+ *   **Physical & Service AFF** of 1% of the price, and there is no delivery fee.
+ *
+ * `crfFee` keeps its legacy key name but holds the Foundation Fee (AFF) amount.
  */
-export function estimateHostingCost(params: {
-	storageBytes: number;
-	projectCount: number;
-	mediaPostCount: number;
-}): Decimal {
-	const storageGb = new Decimal(params.storageBytes).div("1073741824");
+export function calculateFees(
+	amount: Decimal,
+	opts: { deliveryBytes?: Decimal | number; type?: PurchaseType } = {},
+) {
+	const type = opts.type ?? "digital";
+	const deliveryGiB = new Decimal(opts.deliveryBytes ?? 0).div(GIB);
 
-	return HOSTING_COSTS.BASE_PER_CREATOR.plus(HOSTING_COSTS.PER_GB_STORAGE.mul(storageGb))
-		.plus(HOSTING_COSTS.PER_PROJECT.mul(params.projectCount))
-		.plus(HOSTING_COSTS.PER_MEDIA_POST.mul(params.mediaPostCount))
-		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+	let deliveryFee = new Decimal(0);
+	let foundationFee: Decimal;
+	if (type === "digital") {
+		deliveryFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB));
+		foundationFee = CENTS(deliveryGiB.mul(USAGE_AFF_PER_GIB));
+		// Any real download costs at least a cent to deliver — we can't bill sub-cent.
+		if (deliveryGiB.gt(0) && deliveryFee.lte(0)) deliveryFee = new Decimal("0.01");
+	} else {
+		foundationFee = CENTS(amount.mul(PHYSICAL_AFF_RATE));
+	}
+
+	const creatorEarnings = amount;
+	// Card + tax apply to the buyer-paid subtotal (price + AFF + delivery); both leave the system.
+	const subtotal = amount.plus(foundationFee).plus(deliveryFee);
+	const processingFee = CENTS(subtotal.mul(CARD_RATE).plus(CARD_FLAT));
+	const salesTax = CENTS(subtotal.mul(SALES_TAX_RATE));
+	const buyerTotal = subtotal.plus(processingFee).plus(salesTax);
+
+	return { processingFee, deliveryFee, salesTax, crfFee: foundationFee, creatorEarnings, buyerTotal };
+}
+
+/**
+ * A creator's monthly storage cost and the storage-side Foundation Fee.
+ *
+ * Storage beyond the free allowance is billed at DigitalOcean rates; the AFF is
+ * 50% of that storage cost. Delivery is viewer-funded, so it is not billed here.
+ * A self-hosting creator (Anthers stores/serves nothing) pays a flat fee instead.
+ */
+export function estimateStorageCost(params: { storageBytes: number; isSelfHosting?: boolean }): {
+	storageGiB: Decimal;
+	storageCost: Decimal;
+	storageAff: Decimal;
+	total: Decimal;
+} {
+	if (params.isSelfHosting) {
+		const fee = new Decimal(SELF_HOST_FEE);
+		return { storageGiB: new Decimal(0), storageCost: new Decimal(0), storageAff: fee, total: fee };
+	}
+	const billableGiB = Decimal.max(
+		0,
+		new Decimal(params.storageBytes).div(GIB).minus(FREE_STORAGE_GIB),
+	);
+	const storageCost = CENTS(billableGiB.mul(STORAGE_PER_GIB_MONTH));
+	const storageAff = CENTS(storageCost.mul(AFF_INFRA_RATE));
+	return { storageGiB: billableGiB, storageCost, storageAff, total: storageCost.plus(storageAff) };
 }
