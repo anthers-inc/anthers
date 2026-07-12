@@ -43,6 +43,13 @@ coverage/
 AGENTS.md
 CLAUDE.md
 
+# ─── Playwright / browser testing ───
+.screenshots/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # ─── Legacy (Python) ───
 __pycache__/
 *.py[cod]

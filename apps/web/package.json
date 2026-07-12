@@ -11,7 +11,9 @@
 		"build": "bun run vendor:ffmpeg && bun run build.ts",
 		"preview": "bun run serve.ts",
 		"typecheck": "tsc --noEmit",
-		"test": "bun test"
+		"test": "bun test",
+		"test:e2e": "playwright test",
+		"screenshot": "bun run scripts/screenshot.ts"
 	},
 	"dependencies": {
 		"@anthers/shared": "workspace:*",

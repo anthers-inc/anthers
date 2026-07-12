@@ -2,7 +2,8 @@
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
-        typecheck test lint lint-fix format
+        typecheck test lint lint-fix format \
+        e2e-install screenshots test-e2e test-e2e-ui
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
@@ -154,5 +155,21 @@ lint-fix: ## Lint + apply safe fixes with Biome
 
 format: ## Format code with Biome
 	bun run format
+
+# ─── Browser testing (Playwright) ───
+# Drives Playwright's own bundled Chromium (not your installed browser). See
+# apps/web/tests/README.md — notably the SiteGate localStorage bypass.
+
+e2e-install: ## Install the Chromium build Playwright drives (one-time)
+	bunx playwright install chromium
+
+screenshots: ## Screenshot routes and flag JS errors (ROUTES="/a /b" to override)
+	cd apps/web && bun run build.ts && bun run scripts/screenshot.ts $(ROUTES)
+
+test-e2e: ## Run the Playwright e2e suite (builds + serves automatically)
+	cd apps/web && bunx playwright test
+
+test-e2e-ui: ## Run the Playwright e2e suite in UI mode
+	cd apps/web && bunx playwright test --ui
 
 .DEFAULT_GOAL := help
