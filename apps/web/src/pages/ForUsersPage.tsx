@@ -11,6 +11,7 @@ import {
 	ClockIcon,
 	CurrencyDollarIcon,
 	EyeSlashIcon,
+	GiftIcon,
 	GlobeAltIcon,
 	HeartIcon,
 	LockOpenIcon,
@@ -92,16 +93,140 @@ export default function ForUsersPage() {
 				</div>
 			</section>
 
-			{/* ───────────── Direct purchases ───────────── */}
+			{/* ───────────── Three ways to use Anthers ───────────── */}
+			<section className="py-20">
+				<div className="container mx-auto px-4 max-w-5xl">
+					<h2 className="text-3xl font-bold text-center mb-4">Three ways to use Anthers</h2>
+					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+						There are three ways to reach content and creators here—free use, one-time purchases,
+						and ongoing support. They aren't rival plans to choose between; they're layers you
+						combine however suits you.
+					</p>
+
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+						<WaySignpost
+							step="1"
+							tone="bg-secondary/15 text-secondary"
+							title="Free use"
+							description="Browse, download free content, and play web games within a generous free allowance—no account required."
+						/>
+						<WaySignpost
+							step="2"
+							tone="bg-primary/15 text-primary"
+							title="One-time purchases"
+							description="Buy a game, album, film, or book outright. The creator's price is exactly what they receive."
+						/>
+						<WaySignpost
+							step="3"
+							tone="bg-success/15 text-success"
+							title="Support"
+							description="Buy Usage for open access and send Boosts to creators—unlocking more across the platform, a dollar at a time."
+						/>
+					</div>
+
+					<p className="text-center text-sm text-base-content/50 mt-8 max-w-2xl mx-auto">
+						Distinct, but fully combinable. A free account can still make a one-time purchase, and
+						supporting creators still gets you everything a free user does—plus more.
+					</p>
+				</div>
+			</section>
+
+			{/* ───────────── ① Free use ───────────── */}
+			<section className="bg-base-200/50 py-20">
+				<div className="container mx-auto px-4 max-w-7xl">
+					<p className="text-sm font-medium text-secondary mb-3 tracking-wide uppercase text-center">
+						① Free use
+					</p>
+					<h2 className="text-3xl font-bold text-center mb-4">Free, and always will be</h2>
+					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+						Anthers has a free tier, and it isn't a trial or a teaser you're meant to grow out of.
+						It's a standing commitment from the Anthers Foundation—a non-profit—that reaching
+						creative work shouldn't depend on your ability to pay. No ads, no selling your data, no
+						manufactured friction to herd you toward paying.
+					</p>
+
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+						{/* How free stays free */}
+						<div className="card bg-base-100 shadow-sm">
+							<div className="card-body">
+								<div className="flex items-center gap-3 mb-2">
+									<div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center">
+										<HeartIcon className="w-6 h-6 text-primary" />
+									</div>
+									<h3 className="font-bold text-lg">How free stays free</h3>
+								</div>
+								<p className="text-sm text-base-content/60 leading-relaxed mb-3">
+									Every free tier is paid for by someone. On ad-funded platforms it's
+									advertisers—which makes you the product. On Anthers, the small cost of a free
+									viewer's bandwidth is covered by the Anthers Foundation's Subsidy pool—funded by
+									the charity fee on paid Usage, and pooled across the whole community—so free
+									access never depends on ads or on selling your data.
+								</p>
+								<p className="text-sm text-base-content/60 leading-relaxed">
+									Instead of one powerful company amassing a war chest by selling ads and data, the
+									small real costs are diffused across everyone who benefits. That's not
+									free-as-in-loss-leader; it's free-as-in-shared-responsibility—the way a healthier
+									internet ought to work.
+								</p>
+							</div>
+						</div>
+
+						{/* What a free account includes */}
+						<div className="card bg-base-100 shadow-sm">
+							<div className="card-body">
+								<div className="flex items-center gap-3 mb-2">
+									<div className="w-11 h-11 rounded-full bg-secondary/15 flex items-center justify-center">
+										<GiftIcon className="w-6 h-6 text-secondary" />
+									</div>
+									<h3 className="font-bold text-lg">What a free account includes</h3>
+								</div>
+								<div className="flex flex-col gap-2 text-sm mt-1">
+									<FreeLimit included>
+										Your first 3 GiB of delivery each month—watching, listening, reading, and
+										playing—covered by the Foundation.
+									</FreeLimit>
+									<FreeLimit included>
+										Everything a creator has chosen to make free, with no login wall and no
+										"subscribe to download" trick.
+									</FreeLimit>
+									<FreeLimit included>
+										Web games you can play instantly, no account required.
+									</FreeLimit>
+									<FreeLimit>
+										Gated Boost and Badge content stays locked until you support the creator or
+										platform.
+									</FreeLimit>
+									<FreeLimit>
+										Free time doesn't fund the creator pools—that's what buying Usage and boosting
+										add.
+									</FreeLimit>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<p className="text-center text-sm text-base-content/50 mt-8 max-w-2xl mx-auto">
+						These limits exist to keep the free tier something the Foundation can sustain
+						indefinitely—not to nag you into upgrading. If free is all you ever use, that's the
+						platform working as intended.
+					</p>
+				</div>
+			</section>
+
+			{/* ───────────── ② One-time purchases ───────────── */}
 			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
+					<p className="text-sm font-medium text-primary mb-3 tracking-wide uppercase text-center">
+						② One-time purchases
+					</p>
 					<h2 className="text-3xl font-bold text-center mb-4">
-						Buy directly—the price is what the creator gets
+						Buy it once—the price is what the creator gets
 					</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Games, albums, and one-time content can be bought outright. The creator's listed price
-						is exactly what they receive; real costs are added on top and itemized, so you see every
-						penny before you pay—and you can lower them by paying from your bank.
+						You never need an ongoing plan to get something on Anthers. Games, albums, films, books,
+						and apps can be bought outright—a one-time purchase, yours to keep. The creator's listed
+						price is exactly what they receive; real costs are added on top and itemized, so you see
+						every penny before you pay—and you can lower them by paying from your bank.
 					</p>
 
 					<PurchaseCalculator />
@@ -152,17 +277,19 @@ export default function ForUsersPage() {
 				</div>
 			</section>
 
-			{/* ───────────── Subscriptions: the pool ───────────── */}
+			{/* ───────────── ③ Support, split transparently ───────────── */}
 			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
-					<h2 className="text-3xl font-bold text-center mb-4">
-						Two choices, every dollar itemized
-					</h2>
+					<p className="text-sm font-medium text-success mb-3 tracking-wide uppercase text-center">
+						③ Support
+					</p>
+					<h2 className="text-3xl font-bold text-center mb-4">Support, split transparently</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
-						Instead of one fixed price, you make two independent choices: buy Usage for open,
-						watch-anything access, and send Boosts—a dollar at a time—to the specific creators you
-						want to fund. At every amount the breakdown is the same and nothing is hidden: bandwidth
-						at cost, a small Foundation charity fee, and the rest to creators. Anthers keeps $0.
+						The third way—and where most creators earn the most. Instead of one fixed price, you
+						make two independent choices: buy Usage for open, watch-anything access, and send
+						Boosts—a dollar at a time—to the creators you want to fund. At every amount the split is
+						the same and nothing is hidden: bandwidth at cost, a small Foundation charity fee, and
+						the rest to creators. Anthers keeps $0.
 					</p>
 
 					{/* Breakdown visual */}
@@ -227,51 +354,63 @@ export default function ForUsersPage() {
 							description="Point your support wherever you want, in $1 units—or leave it on auto and it follows your time. Every boost dollar goes 100% to creators—no fee, nothing skimmed for processing. Boost is how you champion the creators who matter most to you, and it's what unlocks their premium content. Anything you don't direct is shared out by your time spent, so nothing is wasted."
 						/>
 					</div>
+				</div>
+			</section>
 
-					{/* Badge table */}
-					<div className="overflow-x-auto mt-14">
-						<table className="table table-sm max-w-3xl mx-auto">
-							<thead>
-								<tr>
-									<th>Badge</th>
-									<th className="text-right">Usage</th>
-									<th className="text-right">Boost</th>
-									<th className="text-right">Combined spend</th>
-									<th className="text-right">To creators</th>
-								</tr>
-							</thead>
-							<tbody>
-								<BadgeRow badge="Free" usage="up to 3 GiB" boost="—" spend="$0" toCreators="—" />
-								<BadgeRow badge="Root" usage="100 GiB" boost="$0" spend="$3" toCreators="$1.50" />
-								<BadgeRow badge="Sprout" usage="200 GiB" boost="$1" spend="$7" toCreators="$4.00" />
-								<BadgeRow
-									badge="Petal"
-									usage="300 GiB"
-									boost="$6"
-									spend="$15"
-									toCreators="$10.50"
-								/>
-								<BadgeRow
-									badge="Blossom"
-									usage="400 GiB"
-									boost="$18"
-									spend="$30"
-									toCreators="$24.00"
-								/>
-							</tbody>
-						</table>
+			{/* ───────────── Anthers Badge ───────────── */}
+			<section className="py-20">
+				<div className="container mx-auto px-4 max-w-7xl">
+					<h2 className="text-3xl font-bold text-center mb-4">
+						Your Anthers Badge—a rank that grows with you
+					</h2>
+					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
+						Everything you spend—Usage and Boosts alike—earns you an Anthers Badge. It isn't a plan
+						you pick or a tier you subscribe to: it's a rank you grow into, like a plant reaching
+						for light. Support more over time and you climb; ease off and it gently recedes. No
+						commitment, no lock-in—just recognition for backing the work you love.
+					</p>
+
+					<div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+						<BadgeRank
+							emoji="🌰"
+							name="Root"
+							threshold="$3+"
+							tone="bg-warning/15"
+							flavor="Your first few dollars of support—you're on the board."
+						/>
+						<BadgeRank
+							emoji="🌱"
+							name="Sprout"
+							threshold="$7+"
+							tone="bg-success/15"
+							flavor="Putting down roots, supporting creators month to month."
+						/>
+						<BadgeRank
+							emoji="🌷"
+							name="Petal"
+							threshold="$15+"
+							tone="bg-secondary/15"
+							flavor="In full leaf—a real pillar for the creators you follow."
+						/>
+						<BadgeRank
+							emoji="🌸"
+							name="Blossom"
+							threshold="$30+"
+							tone="bg-primary/15"
+							flavor="Flourishing—among the platform's most devoted supporters."
+						/>
 					</div>
-					<p className="text-center text-xs text-base-content/40 mt-4 max-w-2xl mx-auto">
-						Badges aren't tiers you subscribe to—they're a rolling rank earned from your combined
-						Usage + Boost spend, and you can spend any amount you like. There's no platform cut at
-						any level: every dollar is bandwidth at cost, money to creators, or the Foundation's
-						charity fee. Buying Usage and sending Boosts is coming soon.
+
+					<p className="text-center text-sm text-base-content/50 mt-8 max-w-2xl mx-auto">
+						Everyone starts unranked; your first $3 of combined Usage + Boost earns Root. Your badge
+						reflects the last few months of spend, so it moves with you—and some creators use it as
+						a key, opening content to whole ranks at once (that's an Anthers Gate, just below).
 					</p>
 				</div>
 			</section>
 
 			{/* ───────────── Gates ───────────── */}
-			<section className="py-20">
+			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">Two clear ways to unlock more</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
@@ -369,7 +508,7 @@ export default function ForUsersPage() {
 			</section>
 
 			{/* ───────────── Delivery ───────────── */}
-			<section className="bg-base-200/50 py-20">
+			<section className="py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">
 						Pay for the bandwidth you use—and control it
@@ -423,7 +562,7 @@ export default function ForUsersPage() {
 			</section>
 
 			{/* ───────────── Identity & relationships ───────────── */}
-			<section className="py-20">
+			<section className="bg-base-200/50 py-20">
 				<div className="container mx-auto px-4 max-w-7xl">
 					<h2 className="text-3xl font-bold text-center mb-4">Your identity, your relationships</h2>
 					<p className="text-center text-base-content/60 max-w-2xl mx-auto mb-12">
@@ -479,6 +618,74 @@ export default function ForUsersPage() {
 }
 
 // ─── Sub-components ───
+
+function WaySignpost({
+	step,
+	tone,
+	title,
+	description,
+}: {
+	step: string;
+	tone: string;
+	title: string;
+	description: string;
+}) {
+	return (
+		<div className="card bg-base-200 h-full">
+			<div className="card-body items-center text-center p-6">
+				<div
+					className={`w-10 h-10 rounded-full ${tone} flex items-center justify-center font-bold text-lg mb-1`}
+				>
+					{step}
+				</div>
+				<h3 className="font-bold text-lg">{title}</h3>
+				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
+			</div>
+		</div>
+	);
+}
+
+function FreeLimit({ included, children }: { included?: boolean; children: React.ReactNode }) {
+	return (
+		<div className="flex items-start gap-2.5">
+			{included ? (
+				<CheckCircleIcon className="w-5 h-5 text-success shrink-0 mt-0.5" />
+			) : (
+				<span className="w-5 h-5 shrink-0 mt-0.5 flex items-center justify-center font-bold text-base-content/30">
+					–
+				</span>
+			)}
+			<span className="text-base-content/70">{children}</span>
+		</div>
+	);
+}
+
+function BadgeRank({
+	emoji,
+	name,
+	threshold,
+	flavor,
+	tone,
+}: {
+	emoji: string;
+	name: string;
+	threshold: string;
+	flavor: string;
+	tone: string;
+}) {
+	return (
+		<div className="card bg-base-100 shadow-sm h-full">
+			<div className="card-body items-center text-center gap-1 p-5">
+				<div className={`w-16 h-16 rounded-full ${tone} flex items-center justify-center text-3xl`}>
+					<span aria-hidden="true">{emoji}</span>
+				</div>
+				<h3 className="font-bold text-lg mt-1">{name}</h3>
+				<span className="badge badge-ghost badge-sm font-mono">{threshold}</span>
+				<p className="text-xs text-base-content/60 leading-relaxed mt-1">{flavor}</p>
+			</div>
+		</div>
+	);
+}
 
 function Pillar({
 	icon,
@@ -578,31 +785,6 @@ function ConceptCard({
 				<p className="text-sm text-base-content/60 leading-relaxed">{description}</p>
 			</div>
 		</div>
-	);
-}
-
-function BadgeRow({
-	badge,
-	usage,
-	boost,
-	spend,
-	toCreators,
-}: {
-	badge: string;
-	usage: string;
-	boost: string;
-	spend: string;
-	toCreators: string;
-}) {
-	const muted = (v: string) => (v === "—" ? "text-base-content/30" : "");
-	return (
-		<tr>
-			<td className="font-medium">{badge}</td>
-			<td className="text-right">{usage}</td>
-			<td className={`text-right ${muted(boost)}`}>{boost}</td>
-			<td className="text-right">{spend}</td>
-			<td className={`text-right font-medium text-success ${muted(toCreators)}`}>{toCreators}</td>
-		</tr>
 	);
 }
 
