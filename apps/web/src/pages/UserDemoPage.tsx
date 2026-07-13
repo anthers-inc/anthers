@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Lede } from "@anthers/web-shared/decor/sections";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+
+const serif = { fontFamily: FONTS.fraunces };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -458,7 +464,9 @@ function SubscriptionDashboardDemo() {
 		<div className="space-y-6">
 			{/* Header */}
 			<div>
-				<h3 className="text-lg font-bold">Your Anther—{DEMO_PLAN.month}</h3>
+				<h3 style={serif} className="text-xl font-medium">
+					Your Anther—{DEMO_PLAN.month}
+				</h3>
 				<p className="text-sm text-base-content/60">
 					{DEMO_PLAN.badge} badge — {DEMO_PLAN.usageGib} GiB Usage + $
 					{DEMO_PLAN.boostPool.toFixed(2)} Boost
@@ -504,11 +512,21 @@ function SubscriptionDashboardDemo() {
 						<thead>
 							<tr>
 								{/* Table column widths*/}
-								<th className="w-45">Creator</th>
-								<th className="w-25">Time</th>
-								<th className="w-25">Pool</th>
-								<th className="w-60">Boost</th>
-								<th>Total</th>
+								<th style={serif} className="w-45 font-medium">
+									Creator
+								</th>
+								<th style={serif} className="w-25 font-medium">
+									Time
+								</th>
+								<th style={serif} className="w-25 font-medium">
+									Pool
+								</th>
+								<th style={serif} className="w-60 font-medium">
+									Boost
+								</th>
+								<th style={serif} className="font-medium">
+									Total
+								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -605,7 +623,9 @@ function PurchasesDashboardDemo() {
 		<div className="space-y-6">
 			{/* Header */}
 			<div>
-				<h3 className="text-lg font-bold">Purchases—{DEMO_PLAN.month}</h3>
+				<h3 style={serif} className="text-xl font-medium">
+					Purchases—{DEMO_PLAN.month}
+				</h3>
 				<p className="text-sm text-base-content/60">
 					Direct purchases are charged at time of sale, separate from your subscription.
 				</p>
@@ -616,11 +636,21 @@ function PurchasesDashboardDemo() {
 				<table className="table table-sm w-full">
 					<thead>
 						<tr>
-							<th>Item</th>
-							<th className="w-28">Creator</th>
-							<th className="w-24">Type</th>
-							<th className="w-20">Date</th>
-							<th className="w-20">Amount</th>
+							<th style={serif} className="font-medium">
+								Item
+							</th>
+							<th style={serif} className="w-28 font-medium">
+								Creator
+							</th>
+							<th style={serif} className="w-24 font-medium">
+								Type
+							</th>
+							<th style={serif} className="w-20 font-medium">
+								Date
+							</th>
+							<th style={serif} className="w-20 font-medium">
+								Amount
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -680,16 +710,26 @@ export default function UserDemoPage() {
 	return (
 		<div className="pb-16">
 			{/* Hero intro */}
-			<section className="py-12 px-4 text-center">
-				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">
-					User Experience
-				</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">See where your money goes.</h1>
-				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Anthers gives you full transparency over your subscription. Browse your feed, then check
-					your dashboard to see exactly how your money is split across the creators you engage with.
-				</p>
-			</section>
+			<header className="bg-base-200/70">
+				<div className="mx-auto max-w-5xl px-6 pt-24 pb-20 text-center">
+					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+						User Experience
+					</p>
+					<h1
+						style={serif}
+						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
+					>
+						See where your <em className="font-medium text-primary not-italic">money goes.</em>
+					</h1>
+					<Lede>
+						Anthers gives you full transparency over your subscription. Browse your feed, then check
+						your dashboard to see exactly how your money is split across the creators you engage
+						with.
+					</Lede>
+					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+				</div>
+			</header>
 
 			{/* Tabs + content */}
 			<div className="max-w-7xl mx-auto px-4">
@@ -698,21 +738,21 @@ export default function UserDemoPage() {
 					<button
 						type="button"
 						onClick={() => setActiveTab("feed")}
-						className={`btn btn-sm ${activeTab === "feed" ? "btn-primary" : "btn-ghost"}`}
+						className={`btn btn-sm rounded-full ${activeTab === "feed" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Feed
 					</button>
 					<button
 						type="button"
 						onClick={() => setActiveTab("dashboard")}
-						className={`btn btn-sm ${activeTab === "dashboard" ? "btn-primary" : "btn-ghost"}`}
+						className={`btn btn-sm rounded-full ${activeTab === "dashboard" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Subscription Dashboard
 					</button>
 					<button
 						type="button"
 						onClick={() => setActiveTab("purchases")}
-						className={`btn btn-sm ${activeTab === "purchases" ? "btn-primary" : "btn-ghost"}`}
+						className={`btn btn-sm rounded-full ${activeTab === "purchases" ? "btn-primary" : "btn-ghost"}`}
 					>
 						Purchases Dashboard
 					</button>
@@ -759,7 +799,9 @@ export default function UserDemoPage() {
 										/>
 									</svg>
 								</div>
-								<h3 className="text-lg font-bold text-base-content/40 mb-2">Feed Demo</h3>
+								<h3 style={serif} className="text-lg font-medium text-base-content/40 mb-2">
+									Feed Demo
+								</h3>
 								<p className="text-sm text-base-content/30 max-w-md">
 									A personalized feed of posts, videos, audio, and games from the creators you
 									follow. Coming soon to this demo.
@@ -778,7 +820,7 @@ export default function UserDemoPage() {
 					<p className="text-base-content/50 text-sm mb-4">
 						Full transparency. No hidden fees. Every dollar accounted for.
 					</p>
-					<Link to="/subscribe" className="btn btn-primary">
+					<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
 						Choose a plan
 					</Link>
 				</div>
