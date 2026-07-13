@@ -2,11 +2,11 @@
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
+import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
-import ThemeToggle from "../ui/ThemeToggle";
 
 const serif = { fontFamily: FONTS.fraunces };
 

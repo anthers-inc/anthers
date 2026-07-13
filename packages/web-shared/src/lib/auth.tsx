@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { client } from "./rpc";
+import { applyTheme, storeTheme, type Theme } from "./theme";
 
 /**
  * User shape returned from /api/auth/me.
@@ -18,6 +19,7 @@ export interface User {
 	websiteUrl: string | null;
 	location: string | null;
 	emailVerified: boolean | null;
+	themePreference: Theme | null;
 	atprotoDid: string | null;
 	atprotoHandle: string | null;
 	createdAt: string;
@@ -59,6 +61,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		refreshUser().finally(() => setIsLoading(false));
 	}, [refreshUser]);
+
+	// The account's saved theme (once we know who's signed in) overrides the device
+	// choice the pre-paint script already applied. Mirror it into localStorage too, so
+	// this device's next pre-paint matches and there's no flash on the following load.
+	useEffect(() => {
+		const pref = user?.themePreference;
+		if (pref) {
+			applyTheme(pref);
+			storeTheme(pref);
+		}
+	}, [user?.themePreference]);
 
 	const signIn = useCallback(async (login: string, password: string) => {
 		const res = await client.api.auth["sign-in"].$post({

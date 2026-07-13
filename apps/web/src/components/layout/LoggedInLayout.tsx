@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	Bars3Icon,
 	MagnifyingGlassIcon,
@@ -14,7 +15,6 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import MiniPlayer from "../media/MiniPlayer";
-import ThemeToggle from "../ui/ThemeToggle";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
 import VerificationBanner from "./VerificationBanner";

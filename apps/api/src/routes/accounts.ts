@@ -63,6 +63,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
+		themePreference: user.themePreference,
 		atprotoDid: user.atprotoDid,
 		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,
@@ -87,6 +88,7 @@ const updateProfileSchema = z.object({
 	headerImage: z.string().max(500).optional(),
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
+	themePreference: z.enum(["light", "dark"]).optional(),
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ const accountRoutes = new Hono()
 		if (data.headerImage !== undefined) updates.headerImage = data.headerImage;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.location !== undefined) updates.location = data.location;
+		if (data.themePreference !== undefined) updates.themePreference = data.themePreference;
 
 		if (Object.keys(updates).length === 0) {
 			return c.json({ error: "No fields to update" }, 400);
