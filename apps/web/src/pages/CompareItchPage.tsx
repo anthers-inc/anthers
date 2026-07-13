@@ -49,7 +49,7 @@ export default function CompareItchPage() {
 						<br />
 						<em className="font-medium text-primary not-italic">You'll feel right at home.</em>
 					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+					<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						itch.io is a beloved platform that's done more for indie creators than almost anyone.
 						Anthers builds on that same spirit — creator-first economics, open publishing, community
 						game jams — and extends it with multi-media support, transparent pricing, and data
@@ -83,7 +83,7 @@ export default function CompareItchPage() {
 					a vibrant community of game jams. Millions of indie games have found their audience
 					because itch.io exists.
 				</Lede>
-				<p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-base-content/65">
+				<p className="mx-auto mt-6 max-w-4xl text-lg leading-relaxed text-base-content/65">
 					Anthers aims to carry that mission forward and expand it. We believe creators deserve 100%
 					of their earnings, support for every medium they work in, and true ownership of their
 					identity and data. If itch.io is the place that showed the world what indie game
@@ -315,12 +315,12 @@ export default function CompareItchPage() {
 
 			{/* Closing */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-2xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 					<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						Ready to try something new?
 					</h2>
-					<p className="mx-auto mt-5 max-w-xl leading-relaxed text-base-content/70">
+					<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 						Anthers is free to use. No platform cut, no hidden fees. Publish your work and keep 100%
 						of what you earn. If you love itch.io, you'll love what comes next.
 					</p>

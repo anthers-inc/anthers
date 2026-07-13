@@ -53,7 +53,7 @@ export default function CompareGhostPage() {
 						<br />
 						<em className="font-medium text-primary not-italic">different strengths</em>
 					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+					<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						Ghost is a beautifully crafted publishing platform for writers and newsletter creators.
 						Anthers is a creator economy platform for games, video, audio, and writing. Here's how
 						they compare and where each one shines.
@@ -386,12 +386,12 @@ export default function CompareGhostPage() {
 
 			{/* Closing */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-2xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 					<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						Ready to publish your creative work?
 					</h2>
-					<p className="mx-auto mt-5 max-w-xl leading-relaxed text-base-content/70">
+					<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 						If you're a writer or journalist, Ghost is an excellent choice. If you make games,
 						videos, music, or multimedia creative work — Anthers was built for you. Free to use,
 						100% to creators.

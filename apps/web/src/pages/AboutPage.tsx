@@ -193,7 +193,7 @@ export default function AboutPage() {
 						The creative internet{" "}
 						<em className="font-medium text-primary not-italic">can work differently.</em>
 					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+					<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						Anthers is a federated, open content network for video, audio, text, games, and
 						interactive experiences—built and operated as a 501(c)(3) non-profit so that it is
 						structurally incapable of prioritizing profit over people.
@@ -305,7 +305,7 @@ export default function AboutPage() {
 					<h3 style={serif} className="text-2xl font-medium sm:text-3xl">
 						The Anthers Foundation
 					</h3>
-					<p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-base-content/65">
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						The Foundation is the operational heart of Anthers's mission, funded by the Anthers
 						Foundation fee—50% of the bandwidth each stream or download uses, plus 50% of creator
 						storage. Around 90% of that fee is charitable: it funds free access for everyone, plus
@@ -511,12 +511,12 @@ export default function AboutPage() {
 
 			{/* ───────────── Closing CTA ───────────── */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-2xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 					<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						Built to serve creators. Structurally incapable of doing otherwise.
 					</h2>
-					<p className="mx-auto mt-5 max-w-xl leading-relaxed text-base-content/70">
+					<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 						Whether you create games, videos, music, writing, or interactive experiences—Anthers is
 						designed so that every dollar flows to the people who make the platform valuable.
 					</p>
