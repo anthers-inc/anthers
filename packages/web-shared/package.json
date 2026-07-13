@@ -16,6 +16,7 @@
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
 		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",
 		"./decor/MeadowFloor": "./src/components/decor/MeadowFloor.tsx",
+		"./decor/MeadowVines": "./src/components/decor/MeadowVines.tsx",
 		"./decor/sections": "./src/components/decor/sections.tsx",
 		"./economics": "./src/components/economics/economics.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
