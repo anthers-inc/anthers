@@ -5,6 +5,7 @@ import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
+import ThemeToggle from "../ui/ThemeToggle";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -27,10 +28,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	},
 	{
 		title: "Users",
-		links: [
-			["For Users", "/for-users"],
-			["Subscribe", "/subscribe"],
-		],
+		links: [["Subscribe", "/subscribe"]],
 	},
 	{
 		title: "Compare",
@@ -79,9 +77,6 @@ export default function LoggedOutLayout() {
 								<Link to="/for-creators">For Creators</Link>
 							</li>
 							<li>
-								<Link to="/for-users">For Users</Link>
-							</li>
-							<li>
 								<Link to="/subscribe">Subscribe</Link>
 							</li>
 							<li>
@@ -125,9 +120,6 @@ export default function LoggedOutLayout() {
 							<Link to="/for-creators">For Creators</Link>
 						</li>
 						<li>
-							<Link to="/for-users">For Users</Link>
-						</li>
-						<li>
 							<Link to="/subscribe">Subscribe</Link>
 						</li>
 						<li>
@@ -156,7 +148,8 @@ export default function LoggedOutLayout() {
 				</div>
 
 				<div className="navbar-end">
-					<div className="flex gap-2">
+					<div className="flex items-center gap-2">
+						<ThemeToggle />
 						<Link to="/login" className="btn btn-ghost btn-sm">
 							Log in
 						</Link>

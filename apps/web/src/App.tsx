@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import LoggedOutLayout from "./components/layout/LoggedOutLayout";
@@ -24,7 +24,6 @@ import DiscoverPage from "./pages/DiscoverPage";
 import FAQPage from "./pages/FAQPage";
 // Public marketing pages
 import ForCreatorsPage from "./pages/ForCreatorsPage";
-import ForUsersPage from "./pages/ForUsersPage";
 import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
 import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
@@ -55,10 +54,13 @@ export default function App() {
 				marketing nav links).         Authenticated users hitting / get redirected to /feed.
 			*/}
 			<Route element={<LoggedOutLayout />}>
+				{/* The For Users page is the homepage (RootRedirect renders it for logged-out
+					visitors; authed users go to /feed). It renders its own <MeadowDecor>. */}
 				<Route path="/" element={<RootRedirect />} />
-				{/* For Users / For Creators render their own <MeadowDecor> (editorial pages). */}
+				{/* /for-users is retired as a destination — redirect old links to the homepage. */}
+				<Route path="/for-users" element={<Navigate to="/" replace />} />
+				{/* For Creators renders its own <MeadowDecor> (editorial page). */}
 				<Route path="/for-creators" element={<ForCreatorsPage />} />
-				<Route path="/for-users" element={<ForUsersPage />} />
 				{/* Secondary marketing pages share the botanical decor (vines + pollen) via
 					the nested MeadowDecorLayout; the grassy floor comes from LoggedOutLayout. */}
 				<Route element={<MeadowDecorLayout />}>

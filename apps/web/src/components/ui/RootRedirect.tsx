@@ -3,12 +3,12 @@
 import { useAuth } from "@anthers/web-shared/auth";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { Navigate } from "react-router-dom";
-import HomePage from "../../pages/HomePage";
+import ForUsersPage from "../../pages/ForUsersPage";
 
 /**
  * Handles the / route:
  * - Authenticated users are redirected to /feed
- * - Unauthenticated users see the marketing landing page
+ * - Unauthenticated users see the For Users page, which serves as the homepage
  */
 export default function RootRedirect() {
 	const { isAuthenticated, isLoading } = useAuth();
@@ -25,5 +25,5 @@ export default function RootRedirect() {
 		return <Navigate to="/feed" replace />;
 	}
 
-	return <HomePage />;
+	return <ForUsersPage />;
 }

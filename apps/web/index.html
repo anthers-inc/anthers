@@ -5,6 +5,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Anthers</title>
+    <!-- Apply the saved light/dark choice before first paint (default dark, set on <html>). -->
+    <script>
+      try {
+        if (localStorage.getItem("anthers_theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
