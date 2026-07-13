@@ -1,8 +1,60 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
+
+const serif = { fontFamily: FONTS.fraunces };
+
+// The Meadow footer nav — mirrors the header, plus a Support column. label → href.
+const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
+	{
+		title: "Discover",
+		links: [
+			["Browse Projects", "/discover"],
+			["Jams", "/jams"],
+		],
+	},
+	{
+		title: "Creators",
+		links: [
+			["For Creators", "/for-creators"],
+			["Creator Hubs", "/demo-creator-page"],
+			["Creator Economics", "/demo-creator-breakdown"],
+		],
+	},
+	{
+		title: "Users",
+		links: [
+			["For Users", "/for-users"],
+			["Subscribe", "/subscribe"],
+		],
+	},
+	{
+		title: "Compare",
+		links: [
+			["Anthers vs itch.io", "/compare/itch-io"],
+			["Anthers vs Ghost", "/compare/ghost"],
+		],
+	},
+	{
+		title: "Support",
+		links: [
+			["FAQ", "/faq"],
+			["Resources", "/resources"],
+			["Wiki", "/wiki"],
+		],
+	},
+	{
+		title: "About",
+		links: [
+			["About Us", "/about"],
+			["Roadmap", "/roadmap"],
+		],
+	},
+];
 
 export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
@@ -121,71 +173,49 @@ export default function LoggedOutLayout() {
 
 			<MiniPlayer />
 
+			{/* Meadow footer — transparent (no bg overlay), compact, sitting right atop
+				the grassy floor below it. */}
 			<footer
-				className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+				className={`relative border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
 			>
-				<div className="max-w-7xl mx-auto">
-					<div className="join join-horizontal w-full">
-						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-							<h6 className="footer-title text-xs">Discover</h6>
-							<Link to="/discover" className="link link-hover">
-								Browse Projects
-							</Link>
-							<Link to="/jams" className="link link-hover">
-								Jams
-							</Link>
-						</nav>
-						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-							<h6 className="footer-title text-xs">Creators</h6>
-							<Link to="/for-creators" className="link link-hover">
-								For Creators
-							</Link>
-							<Link to="/demo-creator-page" className="link link-hover">
-								Creator Hubs
-							</Link>
-							<Link to="/demo-creator-breakdown" className="link link-hover">
-								Creator Economics
-							</Link>
-						</nav>
-						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-							<h6 className="footer-title text-xs">Users</h6>
-							<Link to="/for-users" className="link link-hover">
-								For Users
-							</Link>
-							<Link to="/subscribe" className="link link-hover">
-								Subscribe
-							</Link>
-						</nav>
-						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-							<h6 className="footer-title text-xs">Compare</h6>
-							<Link to="/compare/itch-io" className="link link-hover">
-								Anthers vs itch.io
-							</Link>
-							<Link to="/compare/ghost" className="link link-hover">
-								Anthers vs Ghost
-							</Link>
-						</nav>
-						<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-							<h6 className="footer-title text-xs">About</h6>
-							<Link to="/about" className="link link-hover">
-								About Us
-							</Link>
-							<Link to="/faq" className="link link-hover">
-								FAQ
-							</Link>
-							<Link to="/roadmap" className="link link-hover">
-								Roadmap
-							</Link>
-							<Link to="/resources" className="link link-hover">
-								Resources
-							</Link>
-							<Link to="/wiki" className="link link-hover">
-								Wiki
-							</Link>
-						</nav>
+				<div className="mx-auto max-w-6xl">
+					<div className="mb-8 flex flex-col items-center text-center">
+						<p style={serif} className="text-2xl font-medium text-primary">
+							Anthers
+						</p>
+						<p className="mt-1.5 max-w-md text-xs leading-relaxed text-base-content/55">
+							A non-profit home for creative work, planted by the people who use it.
+						</p>
 					</div>
+					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-6">
+						{FOOTER_NAV.map((col) => (
+							<nav key={col.title} className="flex flex-col items-start gap-2">
+								<h6
+									style={serif}
+									className="text-xs font-semibold uppercase tracking-wider text-base-content/50"
+								>
+									{col.title}
+								</h6>
+								{col.links.map(([label, href]) => (
+									<Link
+										key={label}
+										to={href}
+										className="text-base-content/70 transition-colors hover:text-primary"
+									>
+										{label}
+									</Link>
+								))}
+							</nav>
+						))}
+					</div>
+					<p className="mt-9 text-center text-xs text-base-content/45">
+						© Anthers Foundation · Free to browse, always.
+					</p>
 				</div>
 			</footer>
+
+			{/* The grassy meadow every logged-out page ends on. */}
+			<MeadowFloor />
 		</div>
 	);
 }

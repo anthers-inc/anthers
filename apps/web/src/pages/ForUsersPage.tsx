@@ -44,7 +44,7 @@ const BADGE_GATES = [
 
 export default function ForUsersPage() {
 	return (
-		<MeadowDecor vine="triple" style={{ fontFamily: FONTS.nunito }}>
+		<MeadowDecor vine="triple" floor={false} style={{ fontFamily: FONTS.nunito }}>
 			{/* Hero */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-5xl px-6 pt-24 pb-20 text-center">

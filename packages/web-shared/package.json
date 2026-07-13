@@ -15,6 +15,7 @@
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
 		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",
+		"./decor/MeadowFloor": "./src/components/decor/MeadowFloor.tsx",
 		"./economics": "./src/components/economics/economics.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
 		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
