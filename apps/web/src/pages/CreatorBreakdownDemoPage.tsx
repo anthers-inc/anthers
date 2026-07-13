@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+
+const serif = { fontFamily: FONTS.fraunces };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -494,13 +499,25 @@ function ContentLibraryTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			<div className="overflow-x-auto">
 				<table className="table table-sm w-full">
 					<thead>
-						<tr>
-							<th>Content</th>
-							<th className="text-right">Items</th>
-							<th className="text-right">Monthly plays</th>
-							<th className="text-right">Storage</th>
-							<th className="text-right">Delivery/mo</th>
-							<th className="text-right">Cost/mo</th>
+						<tr className="border-base-content/10">
+							<th style={serif} className="font-medium">
+								Content
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Items
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Monthly plays
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Storage
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Delivery/mo
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Cost/mo
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -641,10 +658,14 @@ function ComparisonTable({ creator }: { creator: DemoCreatorBreakdown }) {
 		<div className="overflow-x-auto">
 			<table className="table table-sm w-full">
 				<thead>
-					<tr>
+					<tr className="border-base-content/10">
 						<th />
-						<th className="text-right">{currentPlatform}</th>
-						<th className="text-right">Anthers</th>
+						<th style={serif} className="text-right font-medium">
+							{currentPlatform}
+						</th>
+						<th style={serif} className="text-right font-medium">
+							Anthers
+						</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -698,12 +719,22 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 		<div className="overflow-x-auto">
 			<table className="table table-sm w-full">
 				<thead>
-					<tr>
-						<th>Badge</th>
-						<th className="text-right">Usage</th>
-						<th className="text-right">Boost</th>
-						<th className="text-right">Combined spend</th>
-						<th className="text-right">To creators</th>
+					<tr className="border-base-content/10">
+						<th style={serif} className="font-medium">
+							Badge
+						</th>
+						<th style={serif} className="text-right font-medium">
+							Usage
+						</th>
+						<th style={serif} className="text-right font-medium">
+							Boost
+						</th>
+						<th style={serif} className="text-right font-medium">
+							Combined spend
+						</th>
+						<th style={serif} className="text-right font-medium">
+							To creators
+						</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -776,7 +807,9 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 					{creator.avatar}
 				</div>
 				<div>
-					<h3 className="text-xl font-bold">{creator.displayName}</h3>
+					<h3 style={serif} className="text-xl font-medium">
+						{creator.displayName}
+					</h3>
 					<p className="text-sm text-base-content/60">{creator.contentType}</p>
 					<p className="text-sm text-base-content/50 mt-1 max-w-2xl leading-relaxed">
 						{creator.description}
@@ -786,10 +819,10 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 
 			{/* Content library & infrastructure derivation */}
 			<div>
-				<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+				<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 					Content Library & Infrastructure
 				</h4>
-				<div className="card bg-base-200/60 shadow-sm">
+				<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 					<div className="card-body p-4">
 						<ContentLibraryTable creator={creator} />
 					</div>
@@ -798,7 +831,7 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 
 			{/* Audience stats */}
 			<div>
-				<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+				<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 					Current Audience ({creator.currentPlatform})
 				</h4>
 				<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -810,10 +843,10 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 
 			{/* Revenue comparison */}
 			<div>
-				<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+				<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 					Revenue Comparison
 				</h4>
-				<div className="card bg-base-200/60 shadow-sm">
+				<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 					<div className="card-body p-4">
 						<ComparisonTable creator={creator} />
 					</div>
@@ -823,20 +856,20 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 			{/* Two-column: Milestones + Tier Revenue */}
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 						Subscriber Milestones
 					</h4>
-					<div className="card bg-base-200/60 shadow-sm">
+					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4">
 							<MilestoneBar creator={creator} />
 						</div>
 					</div>
 				</div>
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 						Per-Subscriber Funding by Badge
 					</h4>
-					<div className="card bg-base-200/60 shadow-sm">
+					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4">
 							<TierRevenueTable creator={creator} />
 						</div>
@@ -847,20 +880,20 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 			{/* Two-column: Infrastructure + Content stats */}
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 						Infrastructure Costs
 					</h4>
-					<div className="card bg-base-200/60 shadow-sm">
+					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4">
 							<InfraBreakdown creator={creator} />
 						</div>
 					</div>
 				</div>
 				<div>
-					<h4 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
 						Content Profile
 					</h4>
-					<div className="card bg-base-200/60 shadow-sm">
+					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4 space-y-2">
 							{creator.contentStats.map((stat) => (
 								<div key={stat.label} className="flex justify-between text-sm">
@@ -895,23 +928,31 @@ export default function CreatorBreakdownDemoPage() {
 	return (
 		<div className="pb-16">
 			{/* Hero intro */}
-			<section className="py-12 px-4 text-center">
-				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">
-					Creator Economics
-				</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">
-					How your audience translates to income.
-				</h1>
-				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
-					three real-world creator profiles showing exactly how audience size, content type, and
-					spend levels determine income on Anthers — and how it compares to the platforms you're on
-					today.
-				</p>
-			</section>
+			<header className="bg-base-200/70">
+				<div className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
+					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+						Creator Economics
+					</p>
+					<h1
+						style={serif}
+						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
+					>
+						How your audience translates to{" "}
+						<em className="font-medium text-primary not-italic">income.</em>
+					</h1>
+					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+						Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
+						three real-world creator profiles showing exactly how audience size, content type, and
+						spend levels determine income on Anthers — and how it compares to the platforms you're
+						on today.
+					</p>
+					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+				</div>
+			</header>
 
 			{/* Content */}
-			<div className="max-w-7xl mx-auto px-4">
+			<div className="mx-auto max-w-7xl px-4 pt-12">
 				{/* Creator selector tabs */}
 				<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
 					{DEMO_CREATORS.map((c) => (
@@ -947,10 +988,10 @@ export default function CreatorBreakdownDemoPage() {
 						No hidden fees. No percentage cut. Real infrastructure costs, transparently deducted.
 					</p>
 					<div className="flex flex-wrap justify-center gap-3">
-						<Link to="/for-creators" className="btn btn-primary">
+						<Link to="/for-creators" className="btn btn-primary rounded-full px-7">
 							Learn more for creators
 						</Link>
-						<Link to="/demo-creator-page" className="btn btn-ghost">
+						<Link to="/demo-creator-page" className="btn btn-ghost rounded-full px-7">
 							See creator page demos
 						</Link>
 					</div>

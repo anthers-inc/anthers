@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Lede } from "@anthers/web-shared/decor/sections";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { LinkIcon, MapPinIcon, MusicalNoteIcon, StarIcon } from "@heroicons/react/24/outline";
 import { PlayIcon as PlaySolid, StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+
+const serif = { fontFamily: FONTS.fraunces };
 
 // ---------------------------------------------------------------------------
 // Types for fake data
@@ -591,17 +597,28 @@ export default function CreatorDemoPage() {
 	return (
 		<div className="pb-16">
 			{/* Hero intro */}
-			<section className="py-12 px-4 text-center">
-				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">
-					Creator Hubs
-				</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">Your page. Your style.</h1>
-				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Every creator on Anthers gets a customizable anther—not a cookie-cutter profile. Choose
-					your layout, colors, and typography. Pin featured work. Organize your content your way.
-					Below are three examples of what's possible.
-				</p>
-			</section>
+			<header className="bg-base-200/70">
+				<div className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
+					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+						Creator Hubs
+					</p>
+					<h1
+						style={serif}
+						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
+					>
+						Your page.
+						<br />
+						<em className="font-medium text-primary not-italic">Your style.</em>
+					</h1>
+					<Lede>
+						Every creator on Anthers gets a customizable anther—not a cookie-cutter profile. Choose
+						your layout, colors, and typography. Pin featured work. Organize your content your way.
+						Below are three examples of what's possible.
+					</Lede>
+					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+				</div>
+			</header>
 
 			{/* Demo frame */}
 			<div className="max-w-7xl mx-auto px-4">
@@ -665,7 +682,7 @@ export default function CreatorDemoPage() {
 						Layouts, color palettes, typography, pinned content, and more—all customizable by the
 						creator.
 					</p>
-					<Link to="/for-creators" className="btn btn-primary">
+					<Link to="/for-creators" className="btn btn-primary rounded-full px-7">
 						Learn more about Creator Hubs
 					</Link>
 				</div>
