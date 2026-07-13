@@ -141,6 +141,7 @@
       "name": "@anthers/web-shared",
       "version": "0.1.0",
       "dependencies": {
+        "@anthers/brand": "workspace:*",
         "@ffmpeg/ffmpeg": "^0.12.10",
         "@ffmpeg/util": "^0.12.1",
         "@heroicons/react": "^2.2.0",

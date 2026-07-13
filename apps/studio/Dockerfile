@@ -8,6 +8,7 @@ WORKDIR /app
 
 # Install deps — copy workspace manifests first for layer caching.
 COPY package.json bun.lock ./
+COPY packages/brand/package.json packages/brand/
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/web-shared/package.json packages/web-shared/

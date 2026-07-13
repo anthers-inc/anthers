@@ -11,6 +11,11 @@
 		"./postUrl": "./src/lib/postUrl.ts",
 		"./upload": "./src/lib/upload.ts",
 		"./transcode": "./src/lib/transcode.ts",
+		"./fonts": "./src/styles/fonts.ts",
+		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
+		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
+		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",
+		"./economics": "./src/components/economics/economics.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
 		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
 		"./ui/FileUpload": "./src/components/ui/FileUpload.tsx",
@@ -38,6 +43,7 @@
 		"react-router-dom": "^7.0.0"
 	},
 	"dependencies": {
+		"@anthers/brand": "workspace:*",
 		"@ffmpeg/ffmpeg": "^0.12.10",
 		"@ffmpeg/util": "^0.12.1",
 		"@heroicons/react": "^2.2.0",
