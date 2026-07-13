@@ -19,6 +19,7 @@ install: ## Install all dependencies
 
 dev: db-ready ## Start API + worker + web dev servers
 	@mkdir -p data
+	@bun run db:dev-account
 	@KILLED=0; \
 	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
