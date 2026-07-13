@@ -45,7 +45,7 @@ function bloomFilled(x: number, y: number, fill: string, core: string, s: number
 
 // ─── vines ───
 
-type VineColors = { stem: string; flower: string; bee: string };
+type VineColors = { stem: string; flower: string };
 
 // Bloom-dominant solid wildflowers scattered along the vine (see build-icons CURATED).
 const VINE_BLOOMS = ["bloom-cluster", "bloom-round", "bloom-tulip"] as const;
@@ -83,8 +83,10 @@ export type VineWaveName = keyof typeof VINE_WAVES;
  * (dainty, and freer to meander than any tiling border), wandering via stacked
  * harmonics (`wave`) so the tile reads as one organic vine climbing the page rather
  * than a rigid repeating pattern. Real blooms from @anthers/brand (solid wildflowers)
- * are scattered along it in the soft yellow for life, with a few amber bees resting
- * among them. Colors are baked in (background images can't inherit `currentColor`).
+ * are scattered along it in the soft yellow for life. Colors are baked in (background
+ * images can't inherit `currentColor`). Bees are drawn separately as <BrandGlyph>
+ * overlays (see <MeadowVines>), not baked in — so they match the grass bees and can
+ * drift inward toward center, which a repeating side-column tile can't.
  */
 export function vineTileDataUri(c: VineColors, wave: VineWave = VINE_WAVES.calm): string {
 	const W = 120;
@@ -123,17 +125,8 @@ export function vineTileDataUri(c: VineColors, wave: VineWave = VINE_WAVES.calm)
 			rotate: rot,
 		});
 	}
-	// A few amber bees resting among the blooms.
-	let bees = "";
-	for (const [name, y, off, rot] of [
-		["bee", 520, 22, 12],
-		["bee-flying", 1370, -24, -10],
-		["bee", 2110, 20, 6],
-	] as const) {
-		bees += iconGroup(name, { x: xAt(y) + off, y, size: 17, color: c.bee, rotate: rot });
-	}
 	return uri(
-		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><g opacity="0.62">${foliage}</g>${flowers}${bees}</svg>`,
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><g opacity="0.62">${foliage}</g>${flowers}</svg>`,
 	);
 }
 
@@ -152,11 +145,12 @@ export type VineStrand = {
  * seamlessly tileable `repeat-y` data URI. Strands are drawn back-to-front, and
  * each lays down a background-colored "casing" under its stem, so a front strand
  * visually passes OVER the ones behind it wherever they cross (natural over/under
- * depth). Blooms + bees ride the front strand. `c.casing` should be the page's base
- * color so the casings read as gaps. Colors are baked in.
+ * depth). Blooms ride the front strand (bees are overlaid separately, see
+ * <MeadowVines>). `c.casing` should be the page's base color so the casings read as
+ * gaps. Colors are baked in.
  */
 export function wovenVineTileDataUri(
-	c: { stem: string; flower: string; bee: string; casing: string },
+	c: { stem: string; flower: string; casing: string },
 	strands: VineStrand[],
 	H = 2400,
 ): string {
@@ -184,7 +178,7 @@ export function wovenVineTileDataUri(
 		}
 		body += `<g opacity="${(s.opacity ?? 1).toFixed(2)}">${g}</g>`;
 	});
-	// Blooms + bees ride the front strand.
+	// Blooms ride the front strand (bees are overlaid separately, see <MeadowVines>).
 	const frontX = xOf(strands[strands.length - 1]);
 	let deco = "";
 	for (const [bi, y, off, size, rot] of [
@@ -201,13 +195,6 @@ export function wovenVineTileDataUri(
 			color: c.flower,
 			rotate: rot,
 		});
-	}
-	for (const [name, y, off, rot] of [
-		["bee", 600, 20, 12],
-		["bee-flying", 1500, -22, -10],
-		["bee", 2260, 18, 6],
-	] as const) {
-		deco += iconGroup(name, { x: frontX(y) + off, y, size: 17, color: c.bee, rotate: rot });
 	}
 	return uri(
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${body}${deco}</svg>`,

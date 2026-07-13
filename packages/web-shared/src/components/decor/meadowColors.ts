@@ -13,10 +13,12 @@ export type DecorColors = {
 	/** pollen mote color + its opacity scale (quieter on the darker surface) */
 	pollen: string;
 	pollenScale: number;
-	/** vine + grass stem (primary), bloom (secondary), bee/flower-core (accent) */
+	/** vine stem (primary), bloom (secondary), bee/flower-core (accent) */
 	stem: string;
 	flower: string;
 	accent: string;
+	/** grass-blade color for the floor band (darker than the vine stem) */
+	grass: string;
 	/** woven-vine casing = the base surface, so crossings read as over/under gaps */
 	casing: string;
 	vineOpacity: number;
@@ -25,24 +27,26 @@ export type DecorColors = {
 
 export const DARK: DecorColors = {
 	pollen: "oklch(68% 0.1 95)",
-	pollenScale: 0.5,
+	pollenScale: 0.35,
 	stem: "oklch(75% 0.15 150)",
-	flower: "oklch(86% 0.13 94)",
+	flower: "oklch(71% 0.13 92)",
 	accent: "oklch(79% 0.13 76)",
-	casing: "oklch(17% 0.017 158)",
+	grass: "oklch(42.4% 0.078 151)",
+	casing: "oklch(14% 0.014 70)",
 	vineOpacity: 0.72,
-	floorOpacity: 0.48,
+	floorOpacity: 1,
 };
 
 export const LIGHT: DecorColors = {
 	pollen: "oklch(72% 0.12 92)",
-	pollenScale: 1,
+	pollenScale: 1.4,
 	stem: "oklch(49% 0.11 152)",
 	flower: "oklch(84% 0.13 92)",
 	accent: "oklch(69% 0.14 74)",
+	grass: "oklch(60% 0.12 152)",
 	casing: "oklch(98.6% 0.012 96)",
 	vineOpacity: 0.62,
-	floorOpacity: 0.6,
+	floorOpacity: 1,
 };
 
 /** Pick the decor color set for a mode. */

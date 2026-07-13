@@ -6,7 +6,15 @@
 
 import { type BrandIconName, iconDataUri } from "@anthers/brand";
 
-export function BrandGlyph({ name, className }: { name: BrandIconName; className?: string }) {
+export function BrandGlyph({
+	name,
+	className,
+	style,
+}: {
+	name: BrandIconName;
+	className?: string;
+	style?: React.CSSProperties;
+}) {
 	const url = `url("${iconDataUri(name, "#000")}")`;
 	return (
 		<span
@@ -23,6 +31,7 @@ export function BrandGlyph({ name, className }: { name: BrandIconName; className
 				WebkitMaskPosition: "center",
 				maskSize: "contain",
 				WebkitMaskSize: "contain",
+				...style,
 			}}
 		/>
 	);
