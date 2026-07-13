@@ -3,7 +3,6 @@
 import { useAuth } from "@anthers/web-shared/auth";
 import {
 	Bars3Icon,
-	ChartBarIcon,
 	MagnifyingGlassIcon,
 	RectangleStackIcon,
 	RssIcon,
@@ -15,6 +14,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import MiniPlayer from "../media/MiniPlayer";
+import ThemeToggle from "../ui/ThemeToggle";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
 import VerificationBanner from "./VerificationBanner";
@@ -67,7 +67,8 @@ function LoggedInLayoutInner() {
 					<SearchBar />
 				</div>
 
-				<div className="navbar-end">
+				<div className="navbar-end gap-1">
+					<ThemeToggle />
 					<div className="dropdown dropdown-end">
 						<label tabIndex={0} className="btn btn-ghost btn-circle">
 							{user?.avatar ? (
