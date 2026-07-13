@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// The Resources marketing page — restyled into the Meadow design. Airy editorial
+// forest-green, Fraunces display serif over Nunito Sans, alternating tinted
+// section bands, rounded cards, and a botanical Sprig. The page is wrapped in the
+// shared <MeadowDecor> (pollen + woven side vines) at the route level, so this
+// file styles content only. Tool/explainer data and links are unchanged.
 
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Card, Eyebrow, Lede, Section } from "@anthers/web-shared/decor/sections";
+import { FONTS } from "@anthers/web-shared/fonts";
 import {
 	ArrowRightIcon,
 	BanknotesIcon,
@@ -10,6 +19,8 @@ import {
 	WalletIcon,
 } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
+
+const serif = { fontFamily: FONTS.fraunces };
 
 interface ResourceCard {
 	to: string;
@@ -72,62 +83,75 @@ const RELATED: ResourceCard[] = [
 	},
 ];
 
-function Card({ r }: { r: ResourceCard }) {
-	const Icon = r.icon;
+export default function ResourcesPage() {
 	return (
-		<Link
-			to={r.to}
-			className="group card bg-base-100 border border-base-300 hover:border-primary/50 transition-colors"
-		>
-			<div className="card-body p-5">
-				<div className="flex items-start justify-between gap-3">
-					<span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
-						<Icon className="w-5 h-5" />
-					</span>
-					<span className="badge badge-sm badge-ghost">{r.tag}</span>
+		<div>
+			{/* Hero */}
+			<header className="bg-base-200/70">
+				<div className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
+					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+						Resources
+					</p>
+					<h1 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
+						Tools &amp; calculators
+					</h1>
+					<Lede>
+						Open, no-login planning tools that model the real numbers behind Anthers —
+						infrastructure costs at cost, and how watch-time converts to creator revenue.
+						Everything's transparent by design; poke at the assumptions yourself.
+					</Lede>
 				</div>
-				<h3 className="mt-3 text-lg font-semibold group-hover:text-primary transition-colors">
-					{r.title}
-				</h3>
-				<p className="text-sm text-base-content/60 leading-relaxed">{r.blurb}</p>
-				<span className="mt-1 inline-flex items-center gap-1 text-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-					Open <ArrowRightIcon className="w-4 h-4" />
-				</span>
-			</div>
-		</Link>
+			</header>
+
+			{/* Calculators */}
+			<Section>
+				<Eyebrow>Calculators</Eyebrow>
+				<div className="mt-10 grid grid-cols-1 gap-6 text-left sm:grid-cols-2 lg:grid-cols-3">
+					{CALCULATORS.map((r) => (
+						<ResourceTile key={r.to} r={r} />
+					))}
+				</div>
+			</Section>
+
+			{/* More to explore */}
+			<Section tint>
+				<Eyebrow>More to explore</Eyebrow>
+				<div className="mt-10 grid grid-cols-1 gap-6 text-left sm:grid-cols-2 lg:grid-cols-3">
+					{RELATED.map((r) => (
+						<ResourceTile key={r.to} r={r} />
+					))}
+				</div>
+			</Section>
+		</div>
 	);
 }
 
-export default function ResourcesPage() {
+/** A single tool/explainer card — a clickable Meadow rounded card. */
+function ResourceTile({ r }: { r: ResourceCard }) {
+	const Icon = r.icon;
 	return (
-		<div className="max-w-6xl mx-auto px-4 pb-16">
-			<section className="pt-12 pb-8 text-center">
-				<p className="text-sm font-medium text-primary mb-2 tracking-wide uppercase">Resources</p>
-				<h1 className="text-4xl font-bold tracking-tight mb-3">Tools & calculators</h1>
-				<p className="text-base-content/60 max-w-2xl mx-auto leading-relaxed">
-					Open, no-login planning tools that model the real numbers behind Anthers — infrastructure
-					costs at cost, and how watch-time converts to creator revenue. Everything's transparent by
-					design; poke at the assumptions yourself.
-				</p>
-			</section>
-
-			<h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mb-3">
-				Calculators
-			</h2>
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-				{CALCULATORS.map((r) => (
-					<Card key={r.to} r={r} />
-				))}
-			</div>
-
-			<h2 className="text-sm font-semibold text-base-content/50 uppercase tracking-wider mt-10 mb-3">
-				More to explore
-			</h2>
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-				{RELATED.map((r) => (
-					<Card key={r.to} r={r} />
-				))}
-			</div>
-		</div>
+		<Link to={r.to} className="group block">
+			<Card className="h-full transition-colors hover:border-primary/40">
+				<div className="flex items-start justify-between gap-3">
+					<span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+						<Icon className="h-5 w-5" />
+					</span>
+					<span className="rounded-full bg-base-200 px-3 py-1 text-xs font-medium text-base-content/55">
+						{r.tag}
+					</span>
+				</div>
+				<h3
+					style={serif}
+					className="mt-4 text-lg font-medium transition-colors group-hover:text-primary"
+				>
+					{r.title}
+				</h3>
+				<p className="mt-1 text-sm leading-relaxed text-base-content/65">{r.blurb}</p>
+				<span className="mt-3 inline-flex items-center gap-1 text-sm text-primary opacity-0 transition-opacity group-hover:opacity-100">
+					Open <ArrowRightIcon className="h-4 w-4" />
+				</span>
+			</Card>
+		</Link>
 	);
 }

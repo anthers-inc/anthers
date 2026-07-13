@@ -9,11 +9,12 @@
 // of this group to avoid double-wrapping.
 
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { Outlet } from "react-router-dom";
 
 export default function MeadowDecorLayout() {
 	return (
-		<MeadowDecor floor={false}>
+		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
 			<Outlet />
 		</MeadowDecor>
 	);
