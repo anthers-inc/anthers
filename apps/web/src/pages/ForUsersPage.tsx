@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The For Users marketing page — the production Meadow design, ported from the
-// /for-users-lab reference (v=meadow). Airy editorial forest-green over a soft-
-// yellow accent, Fraunces display serif over Nunito Sans. Renders inside the
+// The For Users marketing page — the production Meadow design (ported from the
+// Meadow design-lab reference, since removed; see git history). Airy editorial
+// forest-green over a soft-yellow accent, Fraunces display serif over Nunito Sans.
+// Renders inside the
 // shared LoggedOutLayout (site nav + footer); the shared <MeadowDecor> supplies
 // the pollen surface, woven climbing side vines, and grassy flowered floor around
 // the content. Copy is Parker's rewrite; every economics number derives from the
