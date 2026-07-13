@@ -96,14 +96,15 @@ export default function ForCreatorsPage() {
 					<H2>Creators deserve better</H2>
 					<Lede>
 						Existing platforms take 10–30% of your revenue, own your data, and fragment your
-						audience across multiple services. Whether someone buys your work outright or supports
-						you month to month, a middleman takes a cut of it.
+						audience across multiple services. Whether someone buys your work outright or spends
+						hours enjoying it, a middleman takes a cut of it.
 					</Lede>
 				</Reveal>
-				<div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
-					{/* min-w-0 lets each card shrink to its grid track so the tables scroll
-						inside their own overflow-x-auto rather than blowing the card wider
-						than the column (which clipped on mobile). */}
+				{/* Two cards side by side only on wide (landscape) viewports; they stack on
+					narrower / portrait ones (the richer content wants the room). min-w-0
+					lets each card shrink to its grid track so the tables scroll inside their
+					own overflow-x-auto rather than blowing the card wider than the column. */}
+				<div className="mx-auto mt-12 grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2">
 					<Reveal className="h-full min-w-0">
 						<PurchaseComparison />
 					</Reveal>
@@ -114,8 +115,8 @@ export default function ForCreatorsPage() {
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-xl text-sm text-base-content/45">
 						On Anthers, real costs (payment processing, infrastructure) are shown as transparent
-						line items—never a percentage cut. Competitor rates above are those platforms' standard
-						published cuts.
+						line items—never a percentage cut. The competitor figures above are rough industry
+						estimates.
 					</p>
 				</Reveal>
 			</Section>
@@ -629,7 +630,7 @@ const PURCHASE_TABS = [
 		icon: <PuzzlePieceIcon className="h-4 w-4" />,
 		rows: [
 			["itch.io", "$9.00", "$1.00 (10%)"],
-			["Epic Games Store", "$8.80", "$1.20 (12%)"],
+			["Epic Games", "$8.80", "$1.20 (12%)"],
 			["Steam", "$7.00", "$3.00 (30%)"],
 		],
 	},
@@ -729,26 +730,85 @@ function PurchaseComparison() {
 	);
 }
 
-/** Recurring-support cut across the popular streaming / membership platforms. */
-const SUBSCRIPTION_ROWS = [
-	["Patreon", "8–12%", "Most of it, minus fees"],
-	["Substack", "10%", "Most of it, minus fees"],
-	["YouTube", "30–45%", "A slice of ads & memberships"],
-	["Twitch", "~50%", "Half of every subscription"],
-	["Spotify", "~30%", "Fractions of a cent per stream"],
+/** Per-medium "paid for time" economics — what a creator earns per hour a fan
+ * spends with their work. On other platforms that hourly take is pennies and
+ * skimmed, and for some media there's no per-time payout at all. On Anthers every
+ * medium earns the same watch-time share of the Time Pool, in full, plus Boost.
+ * Competitor figures are rough industry estimates. */
+const SUBSCRIPTION_TABS = [
+	{
+		key: "games",
+		label: "Games",
+		icon: <PuzzlePieceIcon className="h-4 w-4" />,
+		rows: [
+			["Steam / itch.io", "—", "one-time sale only"],
+			["Xbox Game Pass", "pennies / hr", "undisclosed pool"],
+		],
+	},
+	{
+		key: "music",
+		label: "Music",
+		icon: <MusicalNoteIcon className="h-4 w-4" />,
+		rows: [
+			["Spotify", "~$0.04 / hr", "~$0.003/stream, then labels"],
+			["Apple Music", "~$0.08 / hr", "higher, still skimmed"],
+		],
+	},
+	{
+		key: "video",
+		label: "Video",
+		icon: <FilmIcon className="h-4 w-4" />,
+		rows: [
+			["YouTube (Ads)", "< $0.05 / hr", "~45% to YouTube"],
+			["YouTube (Premium)", "< $0.25 / hr", "~45% to YouTube"],
+			["Twitch", "~$0.02 / hr", "~50% to Twitch"],
+		],
+	},
+	{
+		key: "writing",
+		label: "Writing",
+		icon: <DocumentTextIcon className="h-4 w-4" />,
+		rows: [
+			["Medium", "pennies / hr", "members' read-time only"],
+			["Substack", "—", "subscription, −10%"],
+		],
+	},
 ] as const;
 
-/** The recurring-support comparison — where fan money goes on the streaming and
- * membership platforms vs. Anthers (where it goes straight to creators). */
+/** The "paid for time" comparison, tabbed by medium. Reframes the old "subscribe
+ * to you" table: on Anthers users don't subscribe to a creator directly — their
+ * time with your work earns your share of the Time Pool (in full), plus Boost. */
 function SubscriptionComparison() {
+	const [tab, setTab] = useState<(typeof SUBSCRIPTION_TABS)[number]["key"]>("video");
+	const active = SUBSCRIPTION_TABS.find((t) => t.key === tab) ?? SUBSCRIPTION_TABS[0];
 	return (
 		<Card className="h-full text-left">
 			<p className="text-xs font-semibold uppercase tracking-wider text-accent">
-				When fans support you every month
+				When fans spend time with your work
 			</p>
-			<h3 style={serif} className="mb-4 text-xl font-medium">
-				Subscriptions &amp; streaming
+			<h3 style={serif} className="text-xl font-medium">
+				Watch-time earnings
 			</h3>
+			<p className="mb-4 text-sm text-base-content/55">
+				What you earn per hour a fan spends with your work.
+			</p>
+			<div className="mb-4 flex flex-wrap gap-1.5">
+				{SUBSCRIPTION_TABS.map((t) => (
+					<button
+						key={t.key}
+						type="button"
+						onClick={() => setTab(t.key)}
+						className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors ${
+							t.key === tab
+								? "bg-primary/15 font-medium text-primary"
+								: "text-base-content/55 hover:bg-base-content/5"
+						}`}
+					>
+						{t.icon}
+						{t.label}
+					</button>
+				))}
+			</div>
 			<div className="overflow-x-auto">
 				<table className="table">
 					<thead>
@@ -757,29 +817,34 @@ function SubscriptionComparison() {
 								Platform
 							</th>
 							<th style={serif} className="text-right font-medium">
-								Platform's cut
+								Per watch-hour
 							</th>
 							<th style={serif} className="font-medium">
-								What reaches you
+								The catch
 							</th>
 						</tr>
 					</thead>
 					<tbody>
 						<tr className="border-base-content/10 bg-primary/10 font-semibold">
 							<td>Anthers</td>
-							<td className="text-right text-primary">0%</td>
-							<td>100%, to the creators you support</td>
+							<td className="text-right text-primary">Time Pool + Boost</td>
+							<td>None — 100% to you</td>
 						</tr>
-						{SUBSCRIPTION_ROWS.map(([name, cut, reaches]) => (
+						{active.rows.map(([name, perHour, note]) => (
 							<tr key={name} className="border-base-content/10">
 								<td>{name}</td>
-								<td className="text-right text-error">{cut}</td>
-								<td className="text-base-content/60">{reaches}</td>
+								<td className="text-right text-base-content/70">{perHour}</td>
+								<td className="text-error">{note}</td>
 							</tr>
 						))}
 					</tbody>
 				</table>
 			</div>
+			<p className="mt-3 text-xs text-base-content/45">
+				On Anthers, time spent with your work earns your share of the Time Pool ($0.015/GiB, ~$0.03
+				per HD hour), paid in full and the same for every medium—plus any Boost. Other figures are
+				rough industry estimates.
+			</p>
 		</Card>
 	);
 }
