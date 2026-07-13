@@ -62,18 +62,18 @@ export default function ForUsersPage() {
 						<br />
 						<em className="font-medium text-primary not-italic">where we can all grow together</em>
 					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+					<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						Anthers is a creative garden for everyone—a peaceful place for videos, games, music,
 						writing, crafts, services, and more, all on an open, distributed network. A harmonious
 						ecosystem supported by a new non-profit foundation, where we can all nurture a creative
 						internet worth loving again.
 					</p>
-					<p className="mx-auto mt-4 max-w-2xl leading-relaxed text-base-content/65">
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						Here, your relationship with the creators and content you love belongs to you. Not to
 						advertisers, data brokers, or billionaire edgelords. This is the place where we open the
 						gates, and let you and the artists and artisans who inspire you be free.
 					</p>
-					<p className="mx-auto mt-4 max-w-2xl leading-relaxed text-base-content/65">
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						No ads, ever. No shareholders, ever. Just freedom to see and be seen, to listen and be
 						heard, and to understand and be understood.
 					</p>
@@ -101,7 +101,7 @@ export default function ForUsersPage() {
 					<strong className="font-semibold text-base-content/80">purchase</strong> games, albums,
 					books, merch, even services.
 				</Lede>
-				<p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-base-content/55">
+				<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 					Whatever path you walk through Anthers, 100% of your subscriptions and purchases goes
 					straight to supporting the people who make what you love, providing free access to new or
 					small users and creators, and empowering Anthers Foundation charitable programs like
@@ -183,7 +183,7 @@ export default function ForUsersPage() {
 				</div>
 				<p
 					style={serif}
-					className="mx-auto mt-12 max-w-xl text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
+					className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
 				>
 					By sharing the load together, mountains diffuse into pebbles—and we all get a healthier,
 					better internet for it.
@@ -203,11 +203,11 @@ export default function ForUsersPage() {
 					It doesn't <em className="not-italic underline decoration-primary/40">have</em> to be like
 					that.
 				</Lede>
-				<p className="mx-auto mt-4 max-w-2xl leading-relaxed text-base-content/65">
+				<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 					On Anthers, your subscription goes as directly as possible to the things that really
 					matter, and we stay as out of the way as possible. Here's what it looks like, no secrets:
 				</p>
-				<div className="mx-auto mt-12 max-w-2xl">
+				<div className="mx-auto mt-12 max-w-3xl">
 					<SubscriptionCalculator />
 				</div>
 			</Section>
@@ -221,7 +221,7 @@ export default function ForUsersPage() {
 					creator receives 100% of the listed price, period. The biggest fees you pay on top of that
 					are standard card fees and taxes.
 				</Lede>
-				<div className="mx-auto mt-12 max-w-lg">
+				<div className="mx-auto mt-12 max-w-3xl">
 					<PurchaseExample />
 				</div>
 			</Section>
@@ -258,7 +258,7 @@ export default function ForUsersPage() {
 						</div>
 					))}
 				</div>
-				<p className="mx-auto mt-10 max-w-2xl text-base leading-relaxed text-base-content/65">
+				<p className="mx-auto mt-10 max-w-4xl text-lg leading-relaxed text-base-content/65">
 					The more your support grows, the more special content and perks you'll receive. Creators
 					can gate exclusive content in one of two ways:
 				</p>
@@ -290,12 +290,12 @@ export default function ForUsersPage() {
 
 			{/* Closing */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-2xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 					<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						Plant something worth growing
 					</h2>
-					<p className="mx-auto mt-5 max-w-xl leading-relaxed text-base-content/70">
+					<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 						Support the creators you love, on terms you can see and trust. Browse the whole catalog
 						free with an account you can create in seconds.
 					</p>

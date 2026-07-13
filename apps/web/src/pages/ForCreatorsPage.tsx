@@ -58,7 +58,7 @@ export default function ForCreatorsPage() {
 						<br />
 						<em className="font-medium text-primary not-italic">Keep what you earn.</em>
 					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+					<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 						Games, videos, music, and writing—all under one roof, one identity, one audience. No
 						platform cut. No hidden fees. Transparent costs you can see and verify.
 					</p>
@@ -589,12 +589,12 @@ export default function ForCreatorsPage() {
 
 			{/* Closing */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-2xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
 					<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 					<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
 						Ready to share your work?
 					</h2>
-					<p className="mx-auto mt-5 max-w-xl leading-relaxed text-base-content/70">
+					<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 						Anthers is free to use. No platform cut, no hidden fees. Just publish your work and keep
 						what you earn.
 					</p>
