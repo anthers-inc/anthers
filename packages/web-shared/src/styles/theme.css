@@ -1,30 +1,72 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* Shared Anthers theme — the palette + base surface used by every app that renders
-   the shared client layer (the consumer site and the Studio). Imported by each app's
-   globals.css AFTER `@plugin "daisyui"` so these :root overrides win over the theme
-   defaults. Keep app-specific styling (e.g. the consumer wiki `.prose` block) out of
-   here — this file is the single source of truth for the brand look, so both surfaces
-   stay in lockstep. */
+/* Shared Anthers theme — the "Meadow" palette + base surface used by every app that
+   renders the shared client layer (the consumer site and the Studio). Imported by each
+   app's globals.css AFTER `@plugin "daisyui"` so these :root overrides win over the
+   theme defaults. Keep app-specific styling (e.g. the consumer wiki `.prose` block) out
+   of here — this file is the single source of truth for the brand look, so both surfaces
+   stay in lockstep.
 
-/* Site palette: violet primary, teal secondary */
-:root {
-	--color-primary: oklch(0.524 0.254 278.707);
-	--color-primary-content: oklch(93% 0.03 279);
-	--color-secondary: oklch(0.751 0.127 199.334);
-	--color-secondary-content: oklch(20% 0.04 199);
-	--color-accent: oklch(75% 0.15 330);
-	--color-accent-content: oklch(20% 0.04 330);
-	--color-success: oklch(0.892 0.17 173.647);
-	--color-success-content: oklch(20% 0.04 174);
-	/* Base neutrals—hue nudged to 279 to match primary */
-	--color-base-100: oklch(25.3% 0.016 279);
-	--color-base-200: oklch(23.3% 0.014 279);
-	--color-base-300: oklch(21.2% 0.012 279);
-	--color-base-content: oklch(97.8% 0.015 279);
+   Meadow = airy editorial, forest green + soft yellow, amber accent. The two token sets
+   below are lifted verbatim from the reference design (`apps/web/src/pages/lab/variants/
+   Meadow.tsx` LIGHT/DARK). Dark is the site default (applied at :root); light applies
+   only under [data-theme=light]. Both blocks are unlayered, so they beat DaisyUI's
+   layered `dark`/`light` themes regardless of @import order. */
+
+/* Dark — the site default. Deliberately darkened + desaturated greens so the pollen
+   texture and botanical decor read subtly over it. */
+:root,
+[data-theme="dark"] {
+	color-scheme: dark;
+	--color-base-100: oklch(17% 0.017 158);
+	--color-base-200: oklch(21.5% 0.019 158);
+	--color-base-300: oklch(27% 0.022 158);
+	--color-base-content: oklch(93% 0.03 96);
+	--color-primary: oklch(75% 0.15 150);
+	--color-primary-content: oklch(20% 0.05 150);
+	--color-secondary: oklch(86% 0.13 94);
+	--color-secondary-content: oklch(24% 0.05 88);
+	--color-accent: oklch(79% 0.13 76);
+	--color-accent-content: oklch(22% 0.05 76);
+	--color-neutral: oklch(31% 0.03 158);
+	--color-neutral-content: oklch(93% 0.03 96);
+	--color-info: oklch(70% 0.1 220);
+	--color-info-content: oklch(17% 0.017 158);
+	--color-success: oklch(73% 0.14 150);
+	--color-success-content: oklch(17% 0.017 158);
+	--color-warning: oklch(83% 0.13 88);
+	--color-warning-content: oklch(17% 0.017 158);
+	--color-error: oklch(66% 0.16 28);
+	--color-error-content: oklch(17% 0.017 158);
+}
+
+/* Light — soft cream base, deeper green ink. Applies only where a subtree opts in with
+   data-theme=light; the consumer site currently renders dark everywhere. */
+[data-theme="light"] {
+	color-scheme: light;
+	--color-base-100: oklch(98.6% 0.012 96);
+	--color-base-200: oklch(95.2% 0.024 98);
+	--color-base-300: oklch(91.5% 0.035 102);
+	--color-base-content: oklch(31% 0.05 155);
+	--color-primary: oklch(49% 0.11 152);
+	--color-primary-content: oklch(98% 0.02 110);
+	--color-secondary: oklch(84% 0.13 92);
+	--color-secondary-content: oklch(32% 0.06 88);
+	--color-accent: oklch(69% 0.14 74);
+	--color-accent-content: oklch(24% 0.05 74);
+	--color-neutral: oklch(36% 0.04 150);
+	--color-neutral-content: oklch(96% 0.02 100);
+	--color-info: oklch(62% 0.09 220);
+	--color-info-content: oklch(98.6% 0.012 96);
+	--color-success: oklch(57% 0.13 150);
+	--color-success-content: oklch(98.6% 0.012 96);
+	--color-warning: oklch(80% 0.14 85);
+	--color-warning-content: oklch(98.6% 0.012 96);
+	--color-error: oklch(57% 0.17 28);
+	--color-error-content: oklch(98.6% 0.012 96);
 }
 
 /* Softer form-control borders — the default bordered inputs/selects read as
-   too intense against the dark base, so halve the border intensity by default.
+   too intense against the base, so halve the border intensity by default.
    Plain class selectors (not :where) so this wins over DaisyUI's own .input
    rule on source order; focus/hover states still get the stronger accent. */
 .input,
@@ -34,18 +76,10 @@
 	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
 }
 
+/* Flat Meadow base surface. The reference page layers a subtle pollen texture and
+   botanical decor on top (shipping as shared decor in the migration's next phase);
+   the body itself is just the darkest base tone so raised bg-base-200/300 surfaces
+   lift off it. */
 body {
-	background:
-		radial-gradient(
-			ellipse at 100% 50%,
-			oklch(from var(--color-primary) calc(l * 0.4) c h / 0.22) 10%,
-			transparent 80%
-		),
-		radial-gradient(
-			ellipse at 0% 50%,
-			oklch(from var(--color-accent) calc(l * 0.6) calc(c * 0.6) h / 0.15) 10%,
-			transparent 80%
-		),
-		oklch(from var(--color-base-200) calc(l * 0.4) c h);
-	background-attachment: fixed;
+	background-color: var(--color-base-100);
 }
