@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
+import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
@@ -58,7 +59,10 @@ export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
 
 	return (
-		<div className="min-h-screen flex flex-col">
+		// `relative isolate` scopes the decor z-order: content + footer (z-10) sit
+		// below the side vines (z-20), which sit below the grassy floor (z-30). The
+		// sticky nav stays on top (z-40).
+		<div className="relative isolate min-h-screen flex flex-col">
 			<header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
 				<div className="navbar-start gap-1">
 					{/* Mobile menu */}
@@ -160,16 +164,16 @@ export default function LoggedOutLayout() {
 				</div>
 			</header>
 
-			<main className={`flex-1 ${currentTrack ? "pb-16" : ""}`}>
+			<main className={`relative z-10 flex-1 ${currentTrack ? "pb-16" : ""}`}>
 				<Outlet />
 			</main>
 
 			<MiniPlayer />
 
 			{/* Meadow footer — transparent (no bg overlay), compact, sitting right atop
-				the grassy floor below it. */}
+				the grassy floor below it. z-10 keeps it behind the side vines (z-20). */}
 			<footer
-				className={`relative border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
+				className={`relative z-10 border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
 			>
 				<div className="mx-auto max-w-6xl">
 					<div className="mb-8 flex flex-col items-center text-center">
@@ -206,6 +210,10 @@ export default function LoggedOutLayout() {
 					</p>
 				</div>
 			</footer>
+
+			{/* Climbing side vines spanning the whole page — in front of the content and
+				footer (z-20), behind the grassy floor below (z-30). Wide screens only. */}
+			<MeadowVines />
 
 			{/* The grassy meadow every logged-out page ends on. */}
 			<MeadowFloor />
