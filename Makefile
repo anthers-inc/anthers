@@ -7,6 +7,7 @@
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
+STUDIO_PORT ?= 3001
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -19,7 +20,7 @@ install: ## Install all dependencies
 dev: db-ready ## Start API + worker + web dev servers
 	@mkdir -p data
 	@KILLED=0; \
-	for PORT in $(API_PORT) $(WEB_PORT); do \
+	for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 		EXISTING_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
 		if [ -n "$$EXISTING_PID" ]; then \
 			echo "  -> WARNING: Port $$PORT in use (pid $$EXISTING_PID) — killing to free port"; \
@@ -83,7 +84,7 @@ down: ## Stop everything
 	done; \
 	if [ "$$FOUND" = "0" ]; then \
 		echo "  -> No pid files found, checking ports..."; \
-		for PORT in $(API_PORT) $(WEB_PORT); do \
+		for PORT in $(API_PORT) $(WEB_PORT) $(STUDIO_PORT); do \
 			PORT_PID=$$(lsof -ti :$$PORT 2>/dev/null); \
 			if [ -n "$$PORT_PID" ]; then \
 				kill $$PORT_PID 2>/dev/null || true; \
