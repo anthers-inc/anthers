@@ -10,18 +10,21 @@
 import { grassFloorDataUri } from "@anthers/brand";
 import { BrandGlyph } from "./BrandGlyph";
 import { decorColors } from "./meadowColors";
+import { useDecorMode } from "./useDecorMode";
 
 export function MeadowFloor({
-	mode = "dark",
+	mode,
 	className = "",
 }: {
+	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
 	mode?: "light" | "dark";
 	className?: string;
 }) {
-	const c = decorColors(mode);
+	const observed = useDecorMode();
+	const c = decorColors(mode ?? observed);
 	const floorStyle: React.CSSProperties = {
 		backgroundImage: `url("${grassFloorDataUri({
-			grass: c.stem,
+			grass: c.grass,
 			flower: c.flower,
 			core: c.accent,
 		})}")`,
@@ -52,6 +55,14 @@ export function MeadowFloor({
 			<BrandGlyph
 				name="bee-flying"
 				className="absolute right-[9%] top-4 h-7 w-7 -rotate-12 text-accent/85"
+			/>
+			<BrandGlyph
+				name="bee"
+				className="absolute left-[37%] top-10 h-5 w-5 -rotate-6 text-accent/75"
+			/>
+			<BrandGlyph
+				name="bee-flying"
+				className="absolute left-[79%] top-2 h-6 w-6 rotate-12 text-accent/80"
 			/>
 		</div>
 	);

@@ -14,14 +14,16 @@
 import { pollenDataUri } from "@anthers/brand";
 import { MeadowFloor } from "./MeadowFloor";
 import { decorColors } from "./meadowColors";
+import { useDecorMode } from "./useDecorMode";
 
 export function MeadowDecor({
-	mode = "dark",
+	mode,
 	floor = true,
 	className = "",
 	style,
 	children,
 }: {
+	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
 	mode?: "light" | "dark";
 	/** draw the grassy floor at the bottom of this container (default true) */
 	floor?: boolean;
@@ -29,7 +31,9 @@ export function MeadowDecor({
 	style?: React.CSSProperties;
 	children: React.ReactNode;
 }) {
-	const c = decorColors(mode);
+	const observed = useDecorMode();
+	const resolvedMode = mode ?? observed;
+	const c = decorColors(resolvedMode);
 
 	// "Pollen in the air" over the base surface (the base itself stays a live CSS var
 	// so it follows whatever palette scope this lands in).
@@ -41,7 +45,7 @@ export function MeadowDecor({
 			style={{ background: pollen, ...style }}
 		>
 			<div className="relative z-10">{children}</div>
-			{floor && <MeadowFloor mode={mode} />}
+			{floor && <MeadowFloor mode={resolvedMode} />}
 		</div>
 	);
 }
