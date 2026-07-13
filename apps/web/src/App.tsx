@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import LoggedOutLayout from "./components/layout/LoggedOutLayout";
+import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
@@ -55,16 +56,21 @@ export default function App() {
 			*/}
 			<Route element={<LoggedOutLayout />}>
 				<Route path="/" element={<RootRedirect />} />
+				{/* For Users / For Creators render their own <MeadowDecor> (editorial pages). */}
 				<Route path="/for-creators" element={<ForCreatorsPage />} />
 				<Route path="/for-users" element={<ForUsersPage />} />
-				<Route path="/compare/itch-io" element={<CompareItchPage />} />
-				<Route path="/compare/ghost" element={<CompareGhostPage />} />
-				<Route path="/demo-creator-page" element={<CreatorDemoPage />} />
-				<Route path="/demo-creator-breakdown" element={<CreatorBreakdownDemoPage />} />
-				<Route path="/demo-infrastructure" element={<InfrastructureDemoPage />} />
-				<Route path="/demo-user" element={<UserDemoPage />} />
+				{/* Secondary marketing pages share the botanical decor (vines + pollen) via
+					the nested MeadowDecorLayout; the grassy floor comes from LoggedOutLayout. */}
+				<Route element={<MeadowDecorLayout />}>
+					<Route path="/compare/itch-io" element={<CompareItchPage />} />
+					<Route path="/compare/ghost" element={<CompareGhostPage />} />
+					<Route path="/demo-creator-page" element={<CreatorDemoPage />} />
+					<Route path="/demo-creator-breakdown" element={<CreatorBreakdownDemoPage />} />
+					<Route path="/demo-infrastructure" element={<InfrastructureDemoPage />} />
+					<Route path="/demo-user" element={<UserDemoPage />} />
+					<Route path="/about" element={<AboutPage />} />
+				</Route>
 				<Route path="/wiki/*" element={<WikiPage />} />
-				<Route path="/about" element={<AboutPage />} />
 				<Route path="/login" element={<LoginPage />} />
 				<Route path="/signup" element={<SignupPage />} />
 				<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
@@ -149,7 +155,11 @@ export default function App() {
 
 				{/* Resource tools / calculators — public, work logged-in or out.
 					Must be registered before the /:username catch-alls below. */}
-				<Route path="/resources" element={<ResourcesPage />} />
+				<Route element={<MeadowDecorLayout />}>
+					{/* The resources landing gets the botanical decor; the calculators stay
+						plain so the vines don't crowd their controls. */}
+					<Route path="/resources" element={<ResourcesPage />} />
+				</Route>
 				<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
 				<Route path="/resources/video-bandwidth" element={<VideoBandwidthCalculatorPage />} />
 				<Route
