@@ -9,6 +9,16 @@
 // of the (usage+boost) subtotal.
 
 import type { BrandIconName } from "@anthers/brand";
+import {
+	BADGE_THRESHOLDS,
+	BANDWIDTH_PER_GIB,
+	CARD_FLAT,
+	CARD_RATE,
+	SALES_TAX_RATE,
+	TIME_POOL_PER_GIB,
+	USAGE_AFF_PER_GIB,
+	USAGE_PER_GIB,
+} from "@anthers/shared/constants";
 import { ChevronDownIcon, ChevronUpIcon, InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
 import { FONTS } from "../../styles/fonts";
@@ -16,28 +26,29 @@ import { BrandGlyph } from "../decor/BrandGlyph";
 
 const serif = { fontFamily: FONTS.fraunces };
 
-// ─── V3 rates ───
-const USAGE_PER_GIB = 0.03; // bandwidth 0.01 + AF 0.005 + time pool 0.015
-const BANDWIDTH_SHARE = 1 / 3; // of a usage dollar → real egress, at cost
-const TIMEPOOL_SHARE = 1 / 2; // → creators, distributed by watch-time
-const COMMUNITY_SHARE = 1 / 6; // → Anthers Foundation (free tier + charity)
-const DIGITAL_AFF_PER_GIB = 0.005; // digital-purchase Foundation fee = 50% of bandwidth
-const CARD_PCT = 0.029;
-const CARD_FLAT = 0.3;
-const TAX_PCT = 0.065; // US-avg combined; varies by state
+// ─── V3 rates — single source of truth: @anthers/shared/constants (the same
+// numbers the API charges). Only the presentation (which share of a usage dollar
+// each part is, badge emoji/wreaths) lives here. ───
+const BANDWIDTH_SHARE = BANDWIDTH_PER_GIB / USAGE_PER_GIB; // 1/3 → real egress, at cost
+const TIMEPOOL_SHARE = TIME_POOL_PER_GIB / USAGE_PER_GIB; // 1/2 → creators, by watch-time
+const COMMUNITY_SHARE = USAGE_AFF_PER_GIB / USAGE_PER_GIB; // 1/6 → Anthers Foundation
+const DIGITAL_AFF_PER_GIB = USAGE_AFF_PER_GIB; // digital-purchase Foundation fee (= 50% of bandwidth)
+const CARD_PCT = CARD_RATE;
+const TAX_PCT = SALES_TAX_RATE;
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 const TAX_TIP =
 	"An average U.S. combined sales-tax rate. Your actual rate depends on your state and may be higher or lower.";
 
-// ─── Badges (highest threshold first) ───
+// ─── Badges (highest threshold first). Thresholds from shared constants; emoji +
+// wreath are presentation. ───
 type Badge = { name: string; emoji: string; min: number; wreath: BrandIconName };
 const BADGES: Badge[] = [
-	{ name: "Blossom", emoji: "🌼", min: 30, wreath: "wreath-blossom" },
-	{ name: "Petal", emoji: "🌷", min: 15, wreath: "wreath-petal" },
-	{ name: "Sprout", emoji: "🌱", min: 7, wreath: "wreath-sprout" },
-	{ name: "Root", emoji: "🫚", min: 3, wreath: "wreath-root" },
+	{ name: "Blossom", emoji: "🌼", min: BADGE_THRESHOLDS.blossom, wreath: "wreath-blossom" },
+	{ name: "Petal", emoji: "🌷", min: BADGE_THRESHOLDS.petal, wreath: "wreath-petal" },
+	{ name: "Sprout", emoji: "🌱", min: BADGE_THRESHOLDS.sprout, wreath: "wreath-sprout" },
+	{ name: "Root", emoji: "🫚", min: BADGE_THRESHOLDS.root, wreath: "wreath-root" },
 ];
 const badgeFor = (subtotal: number) => BADGES.find((b) => subtotal >= b.min) ?? null;
 
@@ -48,10 +59,20 @@ export const BADGE_LADDER: {
 	threshold: string;
 	wreath: BrandIconName;
 }[] = [
-	{ name: "Root", emoji: "🫚", threshold: "$3+", wreath: "wreath-root" },
-	{ name: "Sprout", emoji: "🌱", threshold: "$7+", wreath: "wreath-sprout" },
-	{ name: "Petal", emoji: "🌷", threshold: "$15+", wreath: "wreath-petal" },
-	{ name: "Blossom", emoji: "🌼", threshold: "$30+", wreath: "wreath-blossom" },
+	{ name: "Root", emoji: "🫚", threshold: `$${BADGE_THRESHOLDS.root}+`, wreath: "wreath-root" },
+	{
+		name: "Sprout",
+		emoji: "🌱",
+		threshold: `$${BADGE_THRESHOLDS.sprout}+`,
+		wreath: "wreath-sprout",
+	},
+	{ name: "Petal", emoji: "🌷", threshold: `$${BADGE_THRESHOLDS.petal}+`, wreath: "wreath-petal" },
+	{
+		name: "Blossom",
+		emoji: "🌼",
+		threshold: `$${BADGE_THRESHOLDS.blossom}+`,
+		wreath: "wreath-blossom",
+	},
 ];
 
 // ─── shared bits ───
