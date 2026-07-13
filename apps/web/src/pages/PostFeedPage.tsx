@@ -35,8 +35,8 @@ export default function PostFeedPage() {
 		fetch(`${baseUrl}/api/content/posts${qs ? `?${qs}` : ""}`, {
 			credentials: "include",
 		})
-			.then((res) => res.json())
-			.then((data: { posts: PostListItem[] }) => setPosts(data.posts))
+			.then((res) => (res.ok ? res.json() : { posts: [] }))
+			.then((data: { posts?: PostListItem[] }) => setPosts(data.posts ?? []))
 			.catch((err) => console.error("Failed to load posts:", err))
 			.finally(() => setLoading(false));
 	}, [contentTypeFilter]);

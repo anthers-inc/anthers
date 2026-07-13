@@ -219,26 +219,38 @@ export default function AuthenticatedHomePage() {
 	]);
 
 	useEffect(() => {
-		// Fetch the user's feed
+		// Fetch the user's feed. Guard on res.ok before reading the body: an error
+		// response (e.g. a 401 when the session cookie isn't valid) is `{ error }`,
+		// not `{ posts }`, so parsing it blindly would set feedPosts to `undefined`
+		// and crash the render on `feedPosts.length`. On error we keep the initial [].
 		client.api.accounts.me.feed
 			.$get()
-			.then((res) => res.json())
-			.then((data) => setFeedPosts((data as { posts: PostListItem[] }).posts))
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as { posts: PostListItem[] };
+				setFeedPosts(data.posts);
+			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
 
 		// Fetch featured projects for discovery section
 		client.api.content.projects
 			.$get()
-			.then((res) => res.json())
-			.then((data) => setProjects(data.projects.slice(0, 8)))
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = await res.json();
+				setProjects(data.projects.slice(0, 8));
+			})
 			.catch(() => {});
 
 		// Fetch creators for discovery section
 		client.api.accounts.creators
 			.$get()
-			.then((res) => res.json())
-			.then((data) => setCreators(data.creators.slice(0, 4)))
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = await res.json();
+				setCreators(data.creators.slice(0, 4));
+			})
 			.catch(() => {});
 	}, []);
 
