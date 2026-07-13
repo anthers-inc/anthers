@@ -354,12 +354,6 @@ export default function ForUsersPage() {
 							<Link to="/signup" className={`btn btn-primary rounded-full px-7 ${ctaMotion}`}>
 								Start your adventures
 							</Link>
-							<Link
-								to="/discover"
-								className={`btn btn-outline rounded-full border-base-content/20 px-7 ${ctaMotion}`}
-							>
-								Browse projects
-							</Link>
 						</div>
 					</Reveal>
 				</div>

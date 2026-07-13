@@ -105,6 +105,18 @@ export default function App() {
 						</ProtectedRoute>
 					}
 				/>
+				{/* Discover is a logged-in browse/search experience (search sends queries
+					here). It's intentionally gated — logged-out visitors are bounced to
+					login rather than seeing it dressed in marketing chrome. The legacy
+					/discover/:slug redirect stays public (it just bounces to canonical URLs). */}
+				<Route
+					path="/discover"
+					element={
+						<ProtectedRoute>
+							<DiscoverPage />
+						</ProtectedRoute>
+					}
+				/>
 				<Route
 					path="/library"
 					element={
@@ -146,7 +158,6 @@ export default function App() {
 			*/}
 			<Route element={<Layout />}>
 				<Route path="/verify-email" element={<VerifyEmailPage />} />
-				<Route path="/discover" element={<DiscoverPage />} />
 				<Route path="/discover/:slug" element={<ProjectRedirect />} />
 				<Route path="/posts/:slug" element={<PostPage />} />
 				<Route path="/subscribe" element={<SubscribePage />} />
