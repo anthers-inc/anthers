@@ -44,11 +44,13 @@ const TAX_TIP =
 // ─── Badges (highest threshold first). Thresholds from shared constants; emoji +
 // wreath are presentation. ───
 type Badge = { name: string; emoji: string; min: number; wreath: BrandIconName };
+// Every badge shares one round botanical frame (`frame-round`) — a single,
+// consistent wreath across all ranks; the emoji inside is what differs.
 const BADGES: Badge[] = [
-	{ name: "Blossom", emoji: "🌼", min: BADGE_THRESHOLDS.blossom, wreath: "wreath-blossom" },
-	{ name: "Petal", emoji: "🌷", min: BADGE_THRESHOLDS.petal, wreath: "wreath-petal" },
-	{ name: "Sprout", emoji: "🌱", min: BADGE_THRESHOLDS.sprout, wreath: "wreath-sprout" },
-	{ name: "Root", emoji: "🫚", min: BADGE_THRESHOLDS.root, wreath: "wreath-root" },
+	{ name: "Blossom", emoji: "🌼", min: BADGE_THRESHOLDS.blossom, wreath: "frame-round" },
+	{ name: "Petal", emoji: "🌷", min: BADGE_THRESHOLDS.petal, wreath: "frame-round" },
+	{ name: "Sprout", emoji: "🌱", min: BADGE_THRESHOLDS.sprout, wreath: "frame-round" },
+	{ name: "Root", emoji: "🫚", min: BADGE_THRESHOLDS.root, wreath: "frame-round" },
 ];
 const badgeFor = (subtotal: number) => BADGES.find((b) => subtotal >= b.min) ?? null;
 
@@ -59,19 +61,19 @@ export const BADGE_LADDER: {
 	threshold: string;
 	wreath: BrandIconName;
 }[] = [
-	{ name: "Root", emoji: "🫚", threshold: `$${BADGE_THRESHOLDS.root}+`, wreath: "wreath-root" },
+	{ name: "Root", emoji: "🫚", threshold: `$${BADGE_THRESHOLDS.root}+`, wreath: "frame-round" },
 	{
 		name: "Sprout",
 		emoji: "🌱",
 		threshold: `$${BADGE_THRESHOLDS.sprout}+`,
-		wreath: "wreath-sprout",
+		wreath: "frame-round",
 	},
-	{ name: "Petal", emoji: "🌷", threshold: `$${BADGE_THRESHOLDS.petal}+`, wreath: "wreath-petal" },
+	{ name: "Petal", emoji: "🌷", threshold: `$${BADGE_THRESHOLDS.petal}+`, wreath: "frame-round" },
 	{
 		name: "Blossom",
 		emoji: "🌼",
 		threshold: `$${BADGE_THRESHOLDS.blossom}+`,
-		wreath: "wreath-blossom",
+		wreath: "frame-round",
 	},
 ];
 
@@ -252,7 +254,7 @@ function SplitRow({
 
 export function SubscriptionCalculator() {
 	const [usageGiB, setUsageGiB] = useState(100); // bought in 100-GiB increments, like real plans
-	const [boosts, setBoosts] = useState(0); // whole Boost units, $1 each
+	const [boosts, setBoosts] = useState(1); // whole Boost units, $1 each — defaults to 1×
 
 	const usage = usageGiB * USAGE_PER_GIB;
 	const bandwidth = usage * BANDWIDTH_SHARE;

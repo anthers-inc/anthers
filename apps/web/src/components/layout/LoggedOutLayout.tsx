@@ -63,7 +63,7 @@ export default function LoggedOutLayout() {
 		// below the side vines (z-20), which sit below the grassy floor (z-30). The
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
-			<header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
+			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
 				<div className="navbar-start gap-1">
 					{/* Mobile menu */}
 					<div className="dropdown lg:hidden">

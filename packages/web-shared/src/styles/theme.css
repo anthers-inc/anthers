@@ -79,6 +79,62 @@
 	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
 }
 
+/* Slightly larger default buttons. DaisyUI sizes `.btn` off the CSS vars below
+   (`--size` height, `--fontsize`, `--btn-p` inline padding); bumping them one notch
+   above the stock default (10 → 11 units, .875 → .95rem) makes the primary CTAs
+   read a touch more substantial site-wide. Scoped with :not() so the explicit size
+   modifiers (btn-xs/sm/lg/xl) keep their own scale, and left unlayered so it wins
+   over DaisyUI's layered defaults. Padding rides `--btn-p`, which any explicit
+   px-* utility still overrides, so buttons that set their own width are untouched. */
+.btn:not(.btn-xs):not(.btn-sm):not(.btn-lg):not(.btn-xl) {
+	--size: calc(var(--size-field, 0.25rem) * 11);
+	--fontsize: 0.95rem;
+	--btn-p: 1.25rem;
+}
+
+/* Crisp separation for a sticky top navbar: a hairline plus a short, soft drop so
+   it lifts off the content scrolling beneath. Both parts mix from base-content, so
+   it stays legible in either theme (a dark line on light, a soft light edge on
+   dark). Kept tight (small spread) so it reads as a thin edge, not a big shadow. */
+.nav-edge {
+	box-shadow:
+		0 1px 0 0 color-mix(in oklch, var(--color-base-content) 14%, transparent),
+		0 6px 16px -10px color-mix(in oklch, var(--color-base-content) 24%, transparent);
+}
+
+/* Scroll/load reveal — see <Reveal>. Elements start faded + nudged down and settle
+   into place once JS marks them revealed. Guarded by prefers-reduced-motion so a
+   visitor who opts out never sees the hidden start state (content shows normally).
+   The delay var lets siblings stagger. */
+@media (prefers-reduced-motion: no-preference) {
+	[data-reveal] {
+		opacity: 0;
+		transform: translateY(1rem);
+		transition:
+			opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+			transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+		transition-delay: var(--reveal-delay, 0ms);
+	}
+	[data-reveal][data-revealed] {
+		opacity: 1;
+		transform: none;
+	}
+
+	/* A gentle hover lift for content cards — they rise a hair and cast a slightly
+	   deeper shadow on hover. Opt-in via the `card-lift` class; motion-safe only. */
+	.card-lift {
+		transition:
+			transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+			box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+	.card-lift:hover {
+		transform: translateY(-0.25rem);
+		box-shadow:
+			0 10px 24px -12px color-mix(in oklch, var(--color-base-content) 28%, transparent),
+			0 2px 6px -4px color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+}
+
 /* Flat Meadow base surface. The reference page layers a subtle pollen texture and
    botanical decor on top (shipping as shared decor in the migration's next phase);
    the body itself is just the darkest base tone so raised bg-base-200/300 surfaces

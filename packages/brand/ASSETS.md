@@ -38,6 +38,7 @@
 | `bloom-round` | `nature/wildflowers-solid-271979/noun-wildflower-7762479.svg` |
 | `bloom-tulip` | `nature/wildflowers-solid-271979/noun-wildflower-7595473.svg` |
 | `wreath` | `nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg` |
+| `frame-round` | `nature/botanical-borders-and-frames-228479/noun-botanical-round-frame-7366626.svg` |
 | `wreath-root` | `nature/botanical-borders-and-frames-228479/noun-botanical-circle-border-7366645.svg` |
 | `wreath-sprout` | `nature/botanical-borders-and-frames-228479/noun-leafy-wreath-6832659.svg` |
 | `wreath-petal` | `nature/botanical-borders-and-frames-228479/noun-floral-wreath-6832663.svg` |
