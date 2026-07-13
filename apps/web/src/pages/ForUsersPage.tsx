@@ -12,6 +12,7 @@
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
+import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import {
 	BADGE_LADDER,
 	InfoDot,
@@ -145,7 +146,7 @@ export default function ForUsersPage() {
 					it's an attempt to fulfill what we believe is a common right for everyone to share and
 					experience creativity and community with their neighbors around the world.
 				</Lede>
-				<div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
 					<Card>
 						<h3 style={serif} className="mb-3 text-xl font-medium">
 							🌿&nbsp; How free stays free
@@ -316,46 +317,6 @@ export default function ForUsersPage() {
 }
 
 // ─── Local building blocks ───
-
-function Section({ children, tint }: { children: React.ReactNode; tint?: boolean }) {
-	return (
-		<section className={tint ? "bg-base-200/70" : ""}>
-			<div className="mx-auto max-w-6xl px-6 py-24 text-center">{children}</div>
-		</section>
-	);
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-	return (
-		<p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary/80">
-			{children}
-		</p>
-	);
-}
-
-function H2({ children }: { children: React.ReactNode }) {
-	return (
-		<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
-			{children}
-		</h2>
-	);
-}
-
-function Lede({ children }: { children: React.ReactNode }) {
-	return (
-		<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-			{children}
-		</p>
-	);
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
-			{children}
-		</div>
-	);
-}
 
 /** A numbered signpost card for the "three ways" section. */
 function SignpostCard({

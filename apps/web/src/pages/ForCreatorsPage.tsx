@@ -11,6 +11,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
+import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import {
 	ArrowDownTrayIcon,
@@ -466,10 +467,7 @@ export default function ForCreatorsPage() {
 						</p>
 						<div className="mt-1 flex items-center gap-1 text-sm text-warning">
 							{[1, 2, 3, 4, 5].map((n) => (
-								<StarIcon
-									key={n}
-									className={`h-4 w-4 ${n <= 4 ? "fill-current" : "opacity-30"}`}
-								/>
+								<StarIcon key={n} className={`h-4 w-4 ${n <= 4 ? "fill-current" : "opacity-30"}`} />
 							))}
 							<span className="ml-1 text-base-content/50">4.2 (128 ratings)</span>
 						</div>
@@ -617,49 +615,8 @@ export default function ForCreatorsPage() {
 	);
 }
 
-// ─── Local building blocks (Meadow editorial primitives) ───
-
-function Section({ children, tint }: { children: React.ReactNode; tint?: boolean }) {
-	return (
-		<section className={tint ? "bg-base-200/70" : ""}>
-			<div className="mx-auto max-w-6xl px-6 py-24 text-center">{children}</div>
-		</section>
-	);
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-	return (
-		<p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary/80">
-			{children}
-		</p>
-	);
-}
-
-function H2({ children }: { children: React.ReactNode }) {
-	return (
-		<h2 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
-			{children}
-		</h2>
-	);
-}
-
-function Lede({ children }: { children: React.ReactNode }) {
-	return (
-		<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-			{children}
-		</p>
-	);
-}
-
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-	return (
-		<div
-			className={`rounded-3xl border border-base-content/10 bg-base-100 p-7 shadow-sm ${className}`}
-		>
-			{children}
-		</div>
-	);
-}
+// ─── Local building blocks (page-specific; shared editorial primitives —
+//     Section/Eyebrow/H2/Lede/Card — come from @anthers/web-shared/decor/sections) ───
 
 /** An icon + heading + body card (the "how it works" / data-portability trios). */
 function ValueCard({
