@@ -5,7 +5,12 @@
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
 // shared LoggedOutLayout supplies the Meadow footer + grassy floor. Copy is the
 // existing V3-accurate marketing content, reflowed into the Meadow section
-// vocabulary. Every economics figure stays V3-accurate.
+// vocabulary. Every Anthers economics figure stays V3-accurate; competitor cuts
+// in "The problem" are the other platforms' standard published rates (illustrative).
+//
+// Section flow is a deliberate call-and-response: "The problem" (everyone else
+// takes a cut, on purchases AND subscriptions) is immediately answered by
+// "Transparent by design" (Anthers takes none).
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
@@ -19,7 +24,6 @@ import {
 	ArrowPathIcon,
 	ChartBarIcon,
 	ChatBubbleLeftRightIcon,
-	CurrencyDollarIcon,
 	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
@@ -34,6 +38,7 @@ import {
 	TrophyIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -73,7 +78,7 @@ export default function ForCreatorsPage() {
 								Start Creating
 							</Link>
 							<Link
-								to="/discover"
+								to="/demo-creator-page"
 								className="btn btn-outline rounded-full border-base-content/20 px-7"
 							>
 								See What Others Built
@@ -84,142 +89,35 @@ export default function ForCreatorsPage() {
 				</div>
 			</header>
 
-			{/* Revenue comparison */}
+			{/* The problem — how everyone else takes a cut, on purchases AND subscriptions */}
 			<Section>
 				<Reveal>
 					<Eyebrow>The problem</Eyebrow>
 					<H2>Creators deserve better</H2>
 					<Lede>
 						Existing platforms take 10–30% of your revenue, own your data, and fragment your
-						audience across multiple services. You need a separate account for every medium, a
-						separate audience for every platform.
+						audience across multiple services. Whether someone buys your work outright or supports
+						you month to month, a middleman takes a cut of it.
 					</Lede>
 				</Reveal>
-				<Reveal className="mx-auto mt-12 block max-w-2xl">
-					<Card className="overflow-x-auto">
-						<table className="table">
-							<thead>
-								<tr className="border-base-content/10">
-									<th style={serif} className="font-medium">
-										Platform
-									</th>
-									<th style={serif} className="text-right font-medium">
-										Creator keeps on $10 sale
-									</th>
-									<th style={serif} className="text-right font-medium">
-										Platform takes
-									</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr className="border-base-content/10 bg-primary/10 font-semibold">
-									<td>Anthers</td>
-									<td className="text-right text-primary">$10.00 (100%)</td>
-									<td className="text-right">$0.00</td>
-								</tr>
-								{[
-									["itch.io", "$9.00", "$1.00 (10%)"],
-									["Epic Games Store", "$8.80", "$1.20 (12%)"],
-									["Patreon", "$9.20", "$0.80 (8%)"],
-									["Steam", "$7.00", "$3.00 (30%)"],
-								].map(([name, keeps, takes]) => (
-									<tr key={name} className="border-base-content/10">
-										<td>{name}</td>
-										<td className="text-right text-base-content/70">{keeps}</td>
-										<td className="text-right text-error">{takes}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</Card>
-				</Reveal>
+				<div className="mx-auto mt-12 flex max-w-2xl flex-col gap-6">
+					<Reveal>
+						<PurchaseComparison />
+					</Reveal>
+					<Reveal delay={110}>
+						<SubscriptionComparison />
+					</Reveal>
+				</div>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-xl text-sm text-base-content/45">
 						On Anthers, real costs (payment processing, infrastructure) are shown as transparent
-						line items—never a percentage cut.
+						line items—never a percentage cut. Competitor rates above are those platforms' standard
+						published cuts.
 					</p>
 				</Reveal>
 			</Section>
 
-			{/* Core value props */}
-			<Section tint>
-				<Reveal>
-					<Eyebrow>Why Anthers</Eyebrow>
-					<H2>How Anthers works for creators</H2>
-				</Reveal>
-				<div className="mt-14 grid gap-8 text-left sm:grid-cols-3">
-					<Reveal delay={0} className="h-full">
-						<ValueCard icon={<CurrencyDollarIcon className="h-7 w-7" />} title="100% to Creators">
-							You set a price, you receive that price. Processing fees and infrastructure costs are
-							passed through transparently as itemized line items the buyer sees at checkout—never
-							hidden, never a percentage cut from your earnings.
-						</ValueCard>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
-						<ValueCard icon={<GlobeAltIcon className="h-7 w-7" />} title="One Home for Everything">
-							Games, videos, music, writing—all under one roof, one identity, one audience. A game
-							developer who writes devlogs and composes music shouldn't need three separate
-							platforms. Followers subscribe to{" "}
-							<em className="not-italic text-base-content/85">you</em>, not a medium.
-						</ValueCard>
-					</Reveal>
-					<Reveal delay={220} className="h-full">
-						<ValueCard icon={<UserGroupIcon className="h-7 w-7" />} title="Community Built In">
-							Follows, devlogs, comments, ratings, game jams—everything you need to build and engage
-							your audience lives on the same platform where your work lives. No more scattering
-							your community across Discord, Patreon, and Twitter.
-						</ValueCard>
-					</Reveal>
-				</div>
-			</Section>
-
-			{/* Multi-media showcase */}
-			<Section>
-				<Reveal>
-					<Eyebrow>Every medium</Eyebrow>
-					<H2>Every kind of creative work</H2>
-					<Lede>
-						Anthers isn't just for games. Publish anything you create—the platform adapts to the
-						medium while keeping the same tools, the same audience, and the same economics.
-					</Lede>
-				</Reveal>
-				<div className="mt-14 grid gap-6 text-left sm:grid-cols-2 lg:grid-cols-4">
-					<Reveal delay={0} className="h-full">
-						<MediaCard
-							icon={<PuzzlePieceIcon className="h-8 w-8" />}
-							title="Games"
-							description="Upload builds for Windows, Mac, Linux. Host HTML5 games playable in the browser. Manage versions, platforms, and pricing."
-							features={["Multi-platform downloads", "Web game embedding", "Game jam support"]}
-						/>
-					</Reveal>
-					<Reveal delay={100} className="h-full">
-						<MediaCard
-							icon={<FilmIcon className="h-8 w-8" />}
-							title="Video"
-							description="Publish video content alongside your other work. Your devlog videos and your games live in the same place, for the same audience."
-							features={["Native hosting", "Devlog series", "Creator portfolio"]}
-						/>
-					</Reveal>
-					<Reveal delay={200} className="h-full">
-						<MediaCard
-							icon={<MusicalNoteIcon className="h-8 w-8" />}
-							title="Audio"
-							description="Share music, soundtracks, podcasts. A game composer can publish their soundtrack right alongside the game it belongs to."
-							features={["Album & track hosting", "Soundtrack bundling", "Streaming playback"]}
-						/>
-					</Reveal>
-					<Reveal delay={300} className="h-full">
-						<MediaCard
-							icon={<DocumentTextIcon className="h-8 w-8" />}
-							title="Writing"
-							description="Essays, tutorials, fiction, devlogs. First-class publishing for written content with your full creator profile and audience behind it."
-							features={["Rich text posts", "Devlog journals", "Standalone essays"]}
-						/>
-					</Reveal>
-				</div>
-			</Section>
-
-			{/* Transparent pricing */}
+			{/* Transparent pricing — the response to "the problem" above */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>Transparent by design</Eyebrow>
@@ -287,6 +185,52 @@ export default function ForCreatorsPage() {
 							Set your price and receive 100% of it. Transparent fees are added on top for the
 							buyer—never taken from your cut.
 						</PricingOption>
+					</Reveal>
+				</div>
+			</Section>
+
+			{/* Multi-media showcase */}
+			<Section>
+				<Reveal>
+					<Eyebrow>Every medium</Eyebrow>
+					<H2>Every kind of creative work</H2>
+					<Lede>
+						Anthers isn't just for games. Publish anything you create—the platform adapts to the
+						medium while keeping the same tools, the same audience, and the same economics.
+					</Lede>
+				</Reveal>
+				<div className="mt-14 grid gap-6 text-left sm:grid-cols-2 lg:grid-cols-4">
+					<Reveal delay={0} className="h-full">
+						<MediaCard
+							icon={<PuzzlePieceIcon className="h-8 w-8" />}
+							title="Games"
+							description="Upload builds for Windows, Mac, Linux. Host HTML5 games playable in the browser. Manage versions, platforms, and pricing."
+							features={["Multi-platform downloads", "Web game embedding", "Game jam support"]}
+						/>
+					</Reveal>
+					<Reveal delay={100} className="h-full">
+						<MediaCard
+							icon={<FilmIcon className="h-8 w-8" />}
+							title="Video"
+							description="Publish video content alongside your other work. Your devlog videos and your games live in the same place, for the same audience."
+							features={["Native hosting", "Devlog series", "Creator portfolio"]}
+						/>
+					</Reveal>
+					<Reveal delay={200} className="h-full">
+						<MediaCard
+							icon={<MusicalNoteIcon className="h-8 w-8" />}
+							title="Audio"
+							description="Share music, soundtracks, podcasts. A game composer can publish their soundtrack right alongside the game it belongs to."
+							features={["Album & track hosting", "Soundtrack bundling", "Streaming playback"]}
+						/>
+					</Reveal>
+					<Reveal delay={300} className="h-full">
+						<MediaCard
+							icon={<DocumentTextIcon className="h-8 w-8" />}
+							title="Writing"
+							description="Essays, tutorials, fiction, devlogs. First-class publishing for written content with your full creator profile and audience behind it."
+							features={["Rich text posts", "Devlog journals", "Standalone essays"]}
+						/>
 					</Reveal>
 				</div>
 			</Section>
@@ -462,17 +406,21 @@ export default function ForCreatorsPage() {
 				</Reveal>
 			</Section>
 
-			{/* Creator profile preview */}
+			{/* Your identity & work — profile + project-page previews, one section */}
 			<Section tint>
 				<Reveal>
-					<Eyebrow>Your identity</Eyebrow>
+					<Eyebrow>Your identity &amp; work</Eyebrow>
 					<H2>Your home on the internet</H2>
 					<Lede>
-						Every creator gets a profile page that brings together everything they do. Games,
-						devlogs, music, writing—one identity, one audience, one URL to share.
+						Every creator gets a profile that brings together everything they do—games, devlogs,
+						music, writing—and every project gets a full-featured page adapted to the kind of work
+						you're sharing. One identity, one audience, one URL to share.
 					</Lede>
 				</Reveal>
 				<Reveal className="mx-auto mt-12 block max-w-2xl">
+					<p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary/70">
+						Your profile
+					</p>
 					<Card className="overflow-hidden !p-0 text-left">
 						<div className="h-32 bg-gradient-to-r from-primary/30 to-secondary/30" />
 						<div className="-mt-10 p-7">
@@ -516,19 +464,10 @@ export default function ForCreatorsPage() {
 						</div>
 					</Card>
 				</Reveal>
-			</Section>
-
-			{/* Project page preview */}
-			<Section>
-				<Reveal>
-					<Eyebrow>Your work</Eyebrow>
-					<H2>Project pages that do the work</H2>
-					<Lede>
-						Every project gets a full-featured page with everything your audience needs—adapted to
-						the type of work you're sharing.
-					</Lede>
-				</Reveal>
-				<Reveal className="mx-auto mt-12 block max-w-2xl">
+				<Reveal delay={110} className="mx-auto mt-10 block max-w-2xl">
+					<p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary/70">
+						A project page
+					</p>
 					<Card className="overflow-hidden !p-0 text-left">
 						<div className="flex h-44 items-center justify-center bg-gradient-to-br from-secondary/20 to-primary/20">
 							<span className="text-5xl opacity-30">🎮</span>
@@ -599,7 +538,7 @@ export default function ForCreatorsPage() {
 			</Section>
 
 			{/* Data portability */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Ownership</Eyebrow>
 					<H2>Your data is yours</H2>
@@ -639,58 +578,6 @@ export default function ForCreatorsPage() {
 				</div>
 			</Section>
 
-			{/* Platform comparison */}
-			<Section>
-				<Reveal>
-					<Eyebrow>All in one</Eyebrow>
-					<H2>Everything in one place</H2>
-					<Lede>
-						Instead of juggling itch.io + Patreon + YouTube + Substack, Anthers gives you all of it
-						under one identity.
-					</Lede>
-				</Reveal>
-				<Reveal className="mx-auto mt-12 block max-w-3xl">
-					<Card className="overflow-x-auto">
-						<table className="table">
-							<thead>
-								<tr className="border-base-content/10">
-									<th style={serif} className="font-medium">
-										Feature
-									</th>
-									{["Anthers", "itch.io", "Patreon"].map((h) => (
-										<th key={h} style={serif} className="text-center font-medium">
-											{h}
-										</th>
-									))}
-								</tr>
-							</thead>
-							<tbody>
-								{(
-									[
-										["Game hosting", true, true, false],
-										["Video/audio/writing", true, false, true],
-										["Audience follows", true, false, true],
-										["Devlogs & posts", true, true, true],
-										["Game jams", true, true, false],
-										["100% to creator", true, false, false],
-										["Transparent fees", true, false, false],
-										["Data portability", true, false, false],
-										["Multi-media profile", true, false, false],
-									] as const
-								).map(([feature, a, i, p]) => (
-									<tr key={feature} className="border-base-content/10">
-										<td>{feature}</td>
-										<Cell on={a} highlight />
-										<Cell on={i} />
-										<Cell on={p} />
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</Card>
-				</Reveal>
-			</Section>
-
 			{/* Closing */}
 			<section className="bg-base-200/70">
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
@@ -711,10 +598,10 @@ export default function ForCreatorsPage() {
 								Create Your Account
 							</Link>
 							<Link
-								to="/discover"
+								to="/demo-creator-page"
 								className="btn btn-outline rounded-full border-base-content/20 px-7"
 							>
-								Browse Projects
+								See a Creator Page
 							</Link>
 						</div>
 					</Reveal>
@@ -727,7 +614,174 @@ export default function ForCreatorsPage() {
 // ─── Local building blocks (page-specific; shared editorial primitives —
 //     Section/Eyebrow/H2/Lede/Card — come from @anthers/web-shared/decor/sections) ───
 
-/** An icon + heading + body card (the "how it works" / data-portability trios). */
+// ─── "The problem" comparisons ───
+
+/** Per-medium one-time-purchase economics — what the creator keeps and what the
+ * platform takes on a $10 sale. Competitor figures are their standard published
+ * cuts (approximate, illustrative); Anthers takes $0 on every one. */
+const PURCHASE_TABS = [
+	{
+		key: "games",
+		label: "Games",
+		icon: <PuzzlePieceIcon className="h-4 w-4" />,
+		rows: [
+			["itch.io", "$9.00", "$1.00 (10%)"],
+			["Epic Games Store", "$8.80", "$1.20 (12%)"],
+			["Steam", "$7.00", "$3.00 (30%)"],
+		],
+	},
+	{
+		key: "music",
+		label: "Music",
+		icon: <MusicalNoteIcon className="h-4 w-4" />,
+		rows: [
+			["Gumroad", "$9.00", "$1.00 (10%)"],
+			["Bandcamp", "$8.50", "$1.50 (15%)"],
+			["iTunes Store", "$7.00", "$3.00 (30%)"],
+		],
+	},
+	{
+		key: "video",
+		label: "Video",
+		icon: <FilmIcon className="h-4 w-4" />,
+		rows: [
+			["Gumroad", "$9.00", "$1.00 (10%)"],
+			["Vimeo", "$9.00", "$1.00 (10%)"],
+			["YouTube", "$7.00", "$3.00 (30%)"],
+		],
+	},
+	{
+		key: "writing",
+		label: "Writing",
+		icon: <DocumentTextIcon className="h-4 w-4" />,
+		rows: [
+			["Gumroad", "$9.00", "$1.00 (10%)"],
+			["Leanpub", "$8.00", "$2.00 (20%)"],
+			["Amazon KDP", "$7.00", "$3.00 (30%)"],
+		],
+	},
+] as const;
+
+/** The one-time-purchase comparison, with a tab per medium. */
+function PurchaseComparison() {
+	const [tab, setTab] = useState<(typeof PURCHASE_TABS)[number]["key"]>("games");
+	const active = PURCHASE_TABS.find((t) => t.key === tab) ?? PURCHASE_TABS[0];
+	return (
+		<Card className="h-full text-left">
+			<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
+				When someone buys your work
+			</p>
+			<h3 style={serif} className="mb-4 text-xl font-medium">
+				One-time purchases
+			</h3>
+			<div className="mb-4 flex flex-wrap gap-1.5">
+				{PURCHASE_TABS.map((t) => (
+					<button
+						key={t.key}
+						type="button"
+						onClick={() => setTab(t.key)}
+						className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors ${
+							t.key === tab
+								? "bg-primary/15 font-medium text-primary"
+								: "text-base-content/55 hover:bg-base-content/5"
+						}`}
+					>
+						{t.icon}
+						{t.label}
+					</button>
+				))}
+			</div>
+			<div className="overflow-x-auto">
+				<table className="table">
+					<thead>
+						<tr className="border-base-content/10">
+							<th style={serif} className="font-medium">
+								Platform
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Creator keeps on $10
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Platform takes
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr className="border-base-content/10 bg-primary/10 font-semibold">
+							<td>Anthers</td>
+							<td className="text-right text-primary">$10.00 (100%)</td>
+							<td className="text-right">$0.00</td>
+						</tr>
+						{active.rows.map(([name, keeps, takes]) => (
+							<tr key={name} className="border-base-content/10">
+								<td>{name}</td>
+								<td className="text-right text-base-content/70">{keeps}</td>
+								<td className="text-right text-error">{takes}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</Card>
+	);
+}
+
+/** Recurring-support cut across the popular streaming / membership platforms. */
+const SUBSCRIPTION_ROWS = [
+	["Patreon", "8–12%", "Most of it, minus fees"],
+	["Substack", "10%", "Most of it, minus fees"],
+	["YouTube", "30–45%", "A slice of ads & memberships"],
+	["Twitch", "~50%", "Half of every subscription"],
+	["Spotify", "~30%", "Fractions of a cent per stream"],
+] as const;
+
+/** The recurring-support comparison — where fan money goes on the streaming and
+ * membership platforms vs. Anthers (where it goes straight to creators). */
+function SubscriptionComparison() {
+	return (
+		<Card className="h-full text-left">
+			<p className="text-xs font-semibold uppercase tracking-wider text-accent">
+				When fans support you every month
+			</p>
+			<h3 style={serif} className="mb-4 text-xl font-medium">
+				Subscriptions &amp; streaming
+			</h3>
+			<div className="overflow-x-auto">
+				<table className="table">
+					<thead>
+						<tr className="border-base-content/10">
+							<th style={serif} className="font-medium">
+								Platform
+							</th>
+							<th style={serif} className="text-right font-medium">
+								Platform's cut
+							</th>
+							<th style={serif} className="font-medium">
+								What reaches you
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr className="border-base-content/10 bg-primary/10 font-semibold">
+							<td>Anthers</td>
+							<td className="text-right text-primary">0%</td>
+							<td>100%, to the creators you support</td>
+						</tr>
+						{SUBSCRIPTION_ROWS.map(([name, cut, reaches]) => (
+							<tr key={name} className="border-base-content/10">
+								<td>{name}</td>
+								<td className="text-right text-error">{cut}</td>
+								<td className="text-base-content/60">{reaches}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</Card>
+	);
+}
+
+/** An icon + heading + body card (the data-portability trio). */
 function ValueCard({
 	icon,
 	title,
@@ -856,18 +910,5 @@ function Feature({
 				<p className="text-sm leading-relaxed text-base-content/65">{description}</p>
 			</div>
 		</div>
-	);
-}
-
-/** A ✓/– cell in the platform-comparison table. */
-function Cell({ on, highlight }: { on: boolean; highlight?: boolean }) {
-	return (
-		<td className={`text-center ${highlight ? "bg-primary/5" : ""}`}>
-			{on ? (
-				<span className="font-bold text-primary">✓</span>
-			) : (
-				<span className="text-base-content/20">—</span>
-			)}
-		</td>
 	);
 }

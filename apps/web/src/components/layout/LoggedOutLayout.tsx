@@ -13,11 +13,8 @@ const serif = { fontFamily: FONTS.fraunces };
 // The Meadow footer nav — mirrors the header, plus a Support column. label → href.
 const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
-		title: "Discover",
-		links: [
-			["Browse Projects", "/discover"],
-			["Jams", "/jams"],
-		],
+		title: "Explore",
+		links: [["Jams", "/jams"]],
 	},
 	{
 		title: "Creators",
@@ -75,13 +72,10 @@ export default function LoggedOutLayout() {
 							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
 						>
 							<li>
-								<Link to="/discover">Discover</Link>
+								<Link to="/subscribe">Subscribe</Link>
 							</li>
 							<li>
 								<Link to="/for-creators">For Creators</Link>
-							</li>
-							<li>
-								<Link to="/subscribe">Subscribe</Link>
 							</li>
 							<li>
 								<details>
@@ -118,13 +112,10 @@ export default function LoggedOutLayout() {
 				<div className="navbar-center hidden lg:flex">
 					<ul className="menu menu-horizontal px-1 gap-1">
 						<li>
-							<Link to="/discover">Discover</Link>
+							<Link to="/subscribe">Subscribe</Link>
 						</li>
 						<li>
 							<Link to="/for-creators">For Creators</Link>
-						</li>
-						<li>
-							<Link to="/subscribe">Subscribe</Link>
 						</li>
 						<li>
 							<details>

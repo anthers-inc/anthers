@@ -68,12 +68,6 @@ export default function CompareItchPage() {
 							>
 								Try Anthers Free
 							</Link>
-							<Link
-								to="/discover"
-								className="btn btn-outline rounded-full border-base-content/20 px-7"
-							>
-								Explore Projects
-							</Link>
 						</div>
 						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
 					</Reveal>
@@ -394,12 +388,6 @@ export default function CompareItchPage() {
 								className="btn btn-primary rounded-full px-7"
 							>
 								Create Your Account
-							</Link>
-							<Link
-								to="/discover"
-								className="btn btn-outline rounded-full border-base-content/20 px-7"
-							>
-								Browse Projects
 							</Link>
 						</div>
 					</Reveal>
