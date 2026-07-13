@@ -100,7 +100,7 @@ export const THREE_WAYS = [
 	{
 		step: "1",
 		title: "Free use",
-		body: "Browse, download free content, and play web games within a generous free allowance—no account required.",
+		body: "Browse, download free content, and play web games within a generous free allowance on a free account.",
 	},
 	{
 		step: "2",
@@ -123,7 +123,7 @@ export const FREE_INCLUDES = [
 		yes: true,
 		text: "Everything a creator has chosen to make free, with no login wall and no “subscribe to download” trick.",
 	},
-	{ yes: true, text: "Web games you can play instantly, no account required." },
+	{ yes: true, text: "Web games you can play instantly with a free account." },
 	{
 		yes: false,
 		text: "Gated Boost and Badge content stays locked until you support the creator or platform.",
@@ -224,7 +224,7 @@ export const DELIVERY_CONTROLS = [
 ] as const;
 
 export const PRICING_MODELS = [
-	{ title: "Free", body: "If a creator made it free, you get it free—no account, no login wall." },
+	{ title: "Free", body: "If a creator made it free, you get it free—no purchase, no paywall." },
 	{
 		title: "Pay what you want",
 		body: "Some creators let you choose. Give what you can—even $1 helps—or nothing at all.",

@@ -8,6 +8,7 @@
 
 import { MoonIcon, SunIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
+import type { VineStyle } from "./botanical";
 import type { Mode } from "./kit";
 import Canopy from "./variants/Canopy";
 import Herbarium from "./variants/Herbarium";
@@ -20,8 +21,12 @@ type Variant = {
 	id: string;
 	label: string;
 	blurb: string;
-	Component: (props: { mode: Mode }) => React.ReactNode;
+	Component: (props: { mode: Mode; vine?: VineStyle }) => React.ReactNode;
 };
+
+// Vine styles, Meadow-only: one meandering strand, or several woven together.
+// Toggled from the lab chrome.
+const VINE_STYLES: VineStyle[] = ["single", "braid", "helix", "triple", "twin"];
 
 const VARIANTS: Variant[] = [
 	{
@@ -62,37 +67,45 @@ const VARIANTS: Variant[] = [
 	},
 ];
 
-/** Initial variant/mode come from the URL (?v=…&mode=…) so the lab is deep-linkable. */
-function initialState(): { id: string; mode: Mode } {
-	if (typeof window === "undefined") return { id: VARIANTS[0].id, mode: "dark" };
+/** Initial state comes from the URL (?v=…&mode=…&vine=…) so the lab is deep-linkable. */
+function initialState(): { id: string; mode: Mode; vine: VineStyle } {
+	if (typeof window === "undefined") return { id: VARIANTS[0].id, mode: "dark", vine: "triple" };
 	const p = new URLSearchParams(window.location.search);
 	const v = p.get("v");
 	const id = v && VARIANTS.some((x) => x.id === v) ? v : VARIANTS[0].id;
-	return { id, mode: p.get("mode") === "light" ? "light" : "dark" };
+	const s = p.get("vine");
+	const vine = VINE_STYLES.includes((s ?? "") as VineStyle) ? (s as VineStyle) : "triple";
+	return { id, mode: p.get("mode") === "light" ? "light" : "dark", vine };
 }
 
 export default function ForUsersLabPage() {
 	const [start] = useState(initialState);
 	const [activeId, setActiveId] = useState(start.id);
 	const [mode, setMode] = useState<Mode>(start.mode);
+	const [vine, setVine] = useState<VineStyle>(start.vine);
 	const active = VARIANTS.find((v) => v.id === activeId) ?? VARIANTS[0];
 	const Active = active.Component;
 
 	// Keep the URL in sync so any state is shareable/refresh-safe.
-	function sync(id: string, m: Mode) {
+	function sync(id: string, m: Mode, s: VineStyle) {
 		if (typeof window === "undefined") return;
 		const p = new URLSearchParams(window.location.search);
 		p.set("v", id);
 		p.set("mode", m);
+		p.set("vine", s);
 		window.history.replaceState(null, "", `?${p.toString()}`);
 	}
 	function pickVariant(id: string) {
 		setActiveId(id);
-		sync(id, mode);
+		sync(id, mode, vine);
 	}
 	function pickMode(m: Mode) {
 		setMode(m);
-		sync(activeId, m);
+		sync(activeId, m, vine);
+	}
+	function pickVine(s: VineStyle) {
+		setVine(s);
+		sync(activeId, mode, s);
 	}
 
 	return (
@@ -146,13 +159,34 @@ export default function ForUsersLabPage() {
 						</button>
 					</div>
 				</div>
-				<div className="mx-auto max-w-7xl px-4 pb-1.5 text-[11px] text-zinc-500">
-					<span className="font-medium text-zinc-300">{active.label}</span> — {active.blurb}
+				<div className="mx-auto flex max-w-7xl items-center gap-3 px-4 pb-1.5 text-[11px] text-zinc-500">
+					<span className="flex-1">
+						<span className="font-medium text-zinc-300">{active.label}</span> — {active.blurb}
+					</span>
+					{active.id === "meadow" && (
+						<div className="flex shrink-0 items-center gap-1.5">
+							<span className="uppercase tracking-widest text-zinc-600">Vine</span>
+							<div className="flex items-center rounded-full bg-zinc-800 p-0.5">
+								{VINE_STYLES.map((s) => (
+									<button
+										key={s}
+										type="button"
+										onClick={() => pickVine(s)}
+										className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+											s === vine ? "bg-zinc-100 text-zinc-900" : "text-zinc-400 hover:text-zinc-100"
+										}`}
+									>
+										{s}
+									</button>
+								))}
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 
 			{/* The variant renders on its own scoped palette */}
-			<Active mode={mode} />
+			<Active mode={mode} vine={vine} />
 		</div>
 	);
 }

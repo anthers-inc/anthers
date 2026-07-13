@@ -34,4 +34,11 @@
 | `grass-cattail` | `nature/grass-289179/noun-grass-8183001.svg` |
 | `grass-reed` | `nature/grass-289179/noun-grass-8183009.svg` |
 | `divider-botanical` | `nature/botanical-borders-and-frames-228479/noun-botanical-border-7282328.svg` |
+| `bloom-cluster` | `nature/wildflowers-solid-271979/noun-wildflower-7595393.svg` |
+| `bloom-round` | `nature/wildflowers-solid-271979/noun-wildflower-7762479.svg` |
+| `bloom-tulip` | `nature/wildflowers-solid-271979/noun-wildflower-7595473.svg` |
 | `wreath` | `nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg` |
+| `wreath-root` | `nature/botanical-borders-and-frames-228479/noun-botanical-circle-border-7366645.svg` |
+| `wreath-sprout` | `nature/botanical-borders-and-frames-228479/noun-leafy-wreath-6832659.svg` |
+| `wreath-petal` | `nature/botanical-borders-and-frames-228479/noun-floral-wreath-6832663.svg` |
+| `wreath-blossom` | `nature/botanical-borders-and-frames-228479/noun-leafy-circle-border-7366620.svg` |

@@ -35,9 +35,31 @@ const CURATED: { id: string; path: string }[] = [
 		id: "divider-botanical",
 		path: "nature/botanical-borders-and-frames-228479/noun-botanical-border-7282328.svg",
 	},
+	// Solid single blooms scattered along the hand-drawn side vines for life. Chosen
+	// as bloom-dominant (minimal stem) shapes that stay legible at ~small size.
+	{ id: "bloom-cluster", path: "nature/wildflowers-solid-271979/noun-wildflower-7595393.svg" },
+	{ id: "bloom-round", path: "nature/wildflowers-solid-271979/noun-wildflower-7762479.svg" },
+	{ id: "bloom-tulip", path: "nature/wildflowers-solid-271979/noun-wildflower-7595473.svg" },
 	{
 		id: "wreath",
 		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg",
+	},
+	// One wreath per Anthers Badge — sparse → full to echo growing support.
+	{
+		id: "wreath-root",
+		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-border-7366645.svg",
+	},
+	{
+		id: "wreath-sprout",
+		path: "nature/botanical-borders-and-frames-228479/noun-leafy-wreath-6832659.svg",
+	},
+	{
+		id: "wreath-petal",
+		path: "nature/botanical-borders-and-frames-228479/noun-floral-wreath-6832663.svg",
+	},
+	{
+		id: "wreath-blossom",
+		path: "nature/botanical-borders-and-frames-228479/noun-leafy-circle-border-7366620.svg",
 	},
 ];
 

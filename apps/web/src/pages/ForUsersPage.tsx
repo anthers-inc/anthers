@@ -372,7 +372,7 @@ export default function ForUsersPage() {
 
 					<div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto">
 						<BadgeRank
-							emoji="🌰"
+							emoji="🫚"
 							name="Root"
 							threshold="$3+"
 							tone="bg-warning/15"
@@ -393,7 +393,7 @@ export default function ForUsersPage() {
 							flavor="In full leaf—a real pillar for the creators you follow."
 						/>
 						<BadgeRank
-							emoji="🌸"
+							emoji="🌼"
 							name="Blossom"
 							threshold="$30+"
 							tone="bg-primary/15"
