@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcPageHeader } from "../components/calculators/ui";
 
@@ -723,76 +724,86 @@ function AudienceBuilder() {
 export default function CreatorMonetizationCalculatorPage() {
 	return (
 		<div className="max-w-5xl mx-auto px-4 pb-16">
-			<CalcPageHeader
-				eyebrow="Time Pool · watch-time → revenue"
-				title="How watch-time becomes creator revenue"
-				lede={
-					<>
-						On Anthers, a viewer's <b className="text-base-content">Time Pool</b> is split across
-						every creator they engage with,{" "}
-						<b className="text-base-content">proportionally by time</b> — a minute is a minute,
-						whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
-						platform rate: it's worth a{" "}
-						<b className="text-base-content">slice of that viewer's Time Pool</b>, plus any Boost
-						they direct your way. This tool traces that conversion, from one viewer up to a
-						creator's monthly earnings.
-					</>
-				}
-			/>
+			<Reveal>
+				<CalcPageHeader
+					eyebrow="Time Pool · watch-time → revenue"
+					title="How watch-time becomes creator revenue"
+					lede={
+						<>
+							On Anthers, a viewer's <b className="text-base-content">Time Pool</b> is split across
+							every creator they engage with,{" "}
+							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
+							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
+							platform rate: it's worth a{" "}
+							<b className="text-base-content">slice of that viewer's Time Pool</b>, plus any Boost
+							they direct your way. This tool traces that conversion, from one viewer up to a
+							creator's monthly earnings.
+						</>
+					}
+				/>
+			</Reveal>
 
-			<div className="collapse collapse-arrow bg-base-100 border border-base-300 mb-4">
-				<input type="checkbox" />
-				<div className="collapse-title text-sm font-medium text-base-content/70">
-					What this models — and what it leaves out
-				</div>
-				<div className="collapse-content text-sm text-base-content/60 space-y-3">
-					<div>
-						<h4 className="font-semibold text-base-content/80 mb-1">The V3 mechanic</h4>
-						<ul className="list-disc pl-5 space-y-1">
-							<li>
-								A viewer prepays two independent purchases: <b>Usage</b> (per GiB, all-in $0.03/GiB
-								= $0.01 bandwidth at cost + $0.005 Anthers Foundation fee + $0.015 Time Pool) and{" "}
-								<b>Boost</b> ($1 units, 100% to creators). Anthers keeps $0.
-							</li>
-							<li>
-								Their <b>Time Pool</b> = Usage GiB × $0.015. It's divided among the creators they
-								watch <b>in proportion to time spent</b>. A creator who holds <code>s</code> =
-								(their minutes ÷ the viewer's total minutes) earns <code>s × Time Pool</code> from
-								that viewer, plus any Boost the viewer directs to them.
-							</li>
-							<li>
-								<b>Equal-time principle:</b> a minute counts the same across all media types.
-								Delivery cost differs by medium, but that's billed on the viewer's side and never
-								touches the creator share.
-							</li>
-							<li>
-								The rolling <b>Anthers Badge</b> (Root $3 / Sprout $7 / Petal $15 / Blossom $30) is
-								earned from combined spend (Usage $ + Boost $), not a chosen plan.
-							</li>
-						</ul>
+			<Reveal>
+				<div className="collapse collapse-arrow bg-base-100 border border-base-300 mb-4">
+					<input type="checkbox" />
+					<div className="collapse-title text-sm font-medium text-base-content/70">
+						What this models — and what it leaves out
 					</div>
-					<div>
-						<h4 className="font-semibold text-base-content/80 mb-1">What it leaves out</h4>
-						<ul className="list-disc pl-5 space-y-1">
-							<li>
-								Undirected Boost is modeled explicitly only in Section 1; the audience builder
-								counts just the Boost each segment directs to you. One-time / direct purchases and
-								creator <b>storage</b> costs are out of scope — see the companion storage &amp;
-								bandwidth calculators.
-							</li>
-							<li>
-								Formulas from the V3 Subscription Economics spec. Planning model — approximate, not
-								for invoicing.
-							</li>
-						</ul>
+					<div className="collapse-content text-sm text-base-content/60 space-y-3">
+						<div>
+							<h4 className="font-semibold text-base-content/80 mb-1">The V3 mechanic</h4>
+							<ul className="list-disc pl-5 space-y-1">
+								<li>
+									A viewer prepays two independent purchases: <b>Usage</b> (per GiB, all-in
+									$0.03/GiB = $0.01 bandwidth at cost + $0.005 Anthers Foundation fee + $0.015 Time
+									Pool) and <b>Boost</b> ($1 units, 100% to creators). Anthers keeps $0.
+								</li>
+								<li>
+									Their <b>Time Pool</b> = Usage GiB × $0.015. It's divided among the creators they
+									watch <b>in proportion to time spent</b>. A creator who holds <code>s</code> =
+									(their minutes ÷ the viewer's total minutes) earns <code>s × Time Pool</code> from
+									that viewer, plus any Boost the viewer directs to them.
+								</li>
+								<li>
+									<b>Equal-time principle:</b> a minute counts the same across all media types.
+									Delivery cost differs by medium, but that's billed on the viewer's side and never
+									touches the creator share.
+								</li>
+								<li>
+									The rolling <b>Anthers Badge</b> (Root $3 / Sprout $7 / Petal $15 / Blossom $30)
+									is earned from combined spend (Usage $ + Boost $), not a chosen plan.
+								</li>
+							</ul>
+						</div>
+						<div>
+							<h4 className="font-semibold text-base-content/80 mb-1">What it leaves out</h4>
+							<ul className="list-disc pl-5 space-y-1">
+								<li>
+									Undirected Boost is modeled explicitly only in Section 1; the audience builder
+									counts just the Boost each segment directs to you. One-time / direct purchases and
+									creator <b>storage</b> costs are out of scope — see the companion storage &amp;
+									bandwidth calculators.
+								</li>
+								<li>
+									Formulas from the V3 Subscription Economics spec. Planning model — approximate,
+									not for invoicing.
+								</li>
+							</ul>
+						</div>
 					</div>
 				</div>
-			</div>
+			</Reveal>
 
 			<div className="space-y-4">
-				<ConversionEngine />
-				<ValueMatrix />
-				<AudienceBuilder />
+				<Reveal>
+					<ConversionEngine />
+				</Reveal>
+				<Reveal>
+					<ValueMatrix />
+				</Reveal>
+				<Reveal>
+					<AudienceBuilder />
+				</Reveal>
 			</div>
 		</div>
 	);

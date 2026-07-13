@@ -44,6 +44,12 @@ const CURATED: { id: string; path: string }[] = [
 		id: "wreath",
 		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg",
 	},
+	// The single round botanical frame used behind every Anthers Badge on the
+	// marketing site (one consistent wreath for all ranks, per Parker's call).
+	{
+		id: "frame-round",
+		path: "nature/botanical-borders-and-frames-228479/noun-botanical-round-frame-7366626.svg",
+	},
 	// One wreath per Anthers Badge — sparse → full to echo growing support.
 	{
 		id: "wreath-root",

@@ -7,6 +7,7 @@
 // file styles content only. Tool/explainer data and links are unchanged.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import {
@@ -89,37 +90,52 @@ export default function ResourcesPage() {
 			{/* Hero */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
-					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
-					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						Resources
-					</p>
-					<h1 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
-						Tools &amp; calculators
-					</h1>
-					<Lede>
-						Open, no-login planning tools that model the real numbers behind Anthers —
-						infrastructure costs at cost, and how watch-time converts to creator revenue.
-						Everything's transparent by design; poke at the assumptions yourself.
-					</Lede>
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							Resources
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-4xl font-light leading-tight sm:text-5xl"
+						>
+							Tools &amp; calculators
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<Lede>
+							Open, no-login planning tools that model the real numbers behind Anthers —
+							infrastructure costs at cost, and how watch-time converts to creator revenue.
+							Everything's transparent by design; poke at the assumptions yourself.
+						</Lede>
+					</Reveal>
 				</div>
 			</header>
 
 			{/* Calculators */}
 			<Section>
-				<Eyebrow>Calculators</Eyebrow>
+				<Reveal>
+					<Eyebrow>Calculators</Eyebrow>
+				</Reveal>
 				<div className="mt-10 grid grid-cols-1 gap-6 text-left sm:grid-cols-2 lg:grid-cols-3">
-					{CALCULATORS.map((r) => (
-						<ResourceTile key={r.to} r={r} />
+					{CALCULATORS.map((r, i) => (
+						<Reveal key={r.to} delay={i * 100} className="h-full">
+							<ResourceTile r={r} />
+						</Reveal>
 					))}
 				</div>
 			</Section>
 
 			{/* More to explore */}
 			<Section tint>
-				<Eyebrow>More to explore</Eyebrow>
+				<Reveal>
+					<Eyebrow>More to explore</Eyebrow>
+				</Reveal>
 				<div className="mt-10 grid grid-cols-1 gap-6 text-left sm:grid-cols-2 lg:grid-cols-3">
-					{RELATED.map((r) => (
-						<ResourceTile key={r.to} r={r} />
+					{RELATED.map((r, i) => (
+						<Reveal key={r.to} delay={i * 100} className="h-full">
+							<ResourceTile r={r} />
+						</Reveal>
 					))}
 				</div>
 			</Section>
@@ -131,7 +147,7 @@ export default function ResourcesPage() {
 function ResourceTile({ r }: { r: ResourceCard }) {
 	const Icon = r.icon;
 	return (
-		<Link to={r.to} className="group block">
+		<Link to={r.to} className="group block h-full">
 			<Card className="h-full transition-colors hover:border-primary/40">
 				<div className="flex items-start justify-between gap-3">
 					<span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">

@@ -18,6 +18,7 @@
 		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",
 		"./decor/MeadowFloor": "./src/components/decor/MeadowFloor.tsx",
 		"./decor/MeadowVines": "./src/components/decor/MeadowVines.tsx",
+		"./decor/Reveal": "./src/components/decor/Reveal.tsx",
 		"./decor/sections": "./src/components/decor/sections.tsx",
 		"./economics": "./src/components/economics/economics.tsx",
 		"./ui/ThemeToggle": "./src/components/ui/ThemeToggle.tsx",

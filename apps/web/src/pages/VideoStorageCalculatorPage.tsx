@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcNotes, CalcPageHeader, NumberField, SegControl } from "../components/calculators/ui";
 import {
@@ -137,239 +138,253 @@ export default function VideoStorageCalculatorPage() {
 
 	return (
 		<div className="max-w-5xl mx-auto px-4 pb-16">
-			<CalcPageHeader
-				eyebrow="Original master + AV1 ladder · storage cost"
-				title="Video storage cost per source-hour"
-				lede={
-					<>
-						Pick the master resolution and framerate, and how the original was exported. The tool
-						stores that <b className="text-base-content">original file as-is</b>, then builds a full{" "}
-						<b className="text-base-content">AV1</b> transcode ladder down to{" "}
-						<b className="text-base-content">240p30</b> and stores that too — reporting monthly
-						storage cost per hour of source content.
-					</>
-				}
-			/>
+			<Reveal>
+				<CalcPageHeader
+					eyebrow="Original master + AV1 ladder · storage cost"
+					title="Video storage cost per source-hour"
+					lede={
+						<>
+							Pick the master resolution and framerate, and how the original was exported. The tool
+							stores that <b className="text-base-content">original file as-is</b>, then builds a
+							full <b className="text-base-content">AV1</b> transcode ladder down to{" "}
+							<b className="text-base-content">240p30</b> and stores that too — reporting monthly
+							storage cost per hour of source content.
+						</>
+					}
+				/>
+			</Reveal>
 
 			{/* Inputs + readout */}
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-				<div className="card bg-base-100 border border-base-300">
-					<div className="card-body p-5 gap-5">
-						<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40">
-							Source · Inputs
-						</p>
-						<div>
-							<span className="block text-sm text-base-content/70 mb-2">Master resolution</span>
-							<SegControl
-								ariaLabel="Master resolution"
-								value={res}
-								onChange={setRes}
-								options={MASTER_RESOLUTIONS.map((r) => ({ value: r, label: r }))}
-							/>
-						</div>
-						<div>
-							<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Master framerate</span>
-								<span className="text-xs font-mono text-base-content/40">sub-720p held to 30</span>
-							</span>
-							<SegControl
-								ariaLabel="Master framerate"
-								value={fps}
-								onChange={setFps}
-								options={[
-									{ value: 24, label: "24 fps" },
-									{ value: 30, label: "30 fps" },
-									{ value: 60, label: "60 fps" },
-								]}
-							/>
-						</div>
-						<div>
-							<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Original export</span>
-								<span className="text-xs font-mono text-base-content/40">stored as-is</span>
-							</span>
-							<SegControl
-								ariaLabel="Original export format"
-								value={master}
-								onChange={setMaster}
-								options={[
-									{ value: "h264", label: "H.264" },
-									{ value: "h265", label: "H.265" },
-									{ value: "prores", label: "ProRes" },
-									{ value: "custom", label: "Custom" },
-								]}
-							/>
-						</div>
-						{master === "custom" && (
-							<NumberField
-								label="Master video bitrate"
-								hint="audio added on top"
-								value={masterMbps}
-								onChange={setMasterMbps}
-								step={1}
-								suffix="Mbps"
-							/>
-						)}
-						<NumberField
-							label="Storage price"
-							value={price}
-							onChange={setPrice}
-							step={0.001}
-							prefix="$"
-							suffix="/ GiB / month"
-						/>
-					</div>
-				</div>
-
-				<div className="card bg-gradient-to-b from-base-200 to-base-300/40 border border-base-300">
-					<div className="card-body p-5 justify-between">
-						<div>
-							<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-2">
-								Master + ladder · per source-hour
+			<Reveal delay={120}>
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+					<div className="card bg-base-100 border border-base-300">
+						<div className="card-body p-5 gap-5">
+							<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40">
+								Source · Inputs
 							</p>
-							<p className="font-mono text-5xl font-bold tabular-nums text-warning leading-none">
-								{moneyBig(sumCost)}
-								<span className="text-base font-medium text-base-content/50 ml-1.5">/hr/mo</span>
-							</p>
-							<p className="mt-3 font-mono text-sm text-base-content/60">
-								<span className="text-success">{fixed(sumGib, 2)} GiB</span> per source-hour ·
-								master {fixed(masterVar.gib, 2)} + ladder {fixed(ladderGib, 2)}
-							</p>
-						</div>
-						<div className="mt-6">
-							<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-base-content/40 mb-2">
-								<span>storage share</span>
-								<span>
-									master + {rungCount} rung{rungCount === 1 ? "" : "s"}
+							<div>
+								<span className="block text-sm text-base-content/70 mb-2">Master resolution</span>
+								<SegControl
+									ariaLabel="Master resolution"
+									value={res}
+									onChange={setRes}
+									options={MASTER_RESOLUTIONS.map((r) => ({ value: r, label: r }))}
+								/>
+							</div>
+							<div>
+								<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
+									<span>Master framerate</span>
+									<span className="text-xs font-mono text-base-content/40">
+										sub-720p held to 30
+									</span>
 								</span>
+								<SegControl
+									ariaLabel="Master framerate"
+									value={fps}
+									onChange={setFps}
+									options={[
+										{ value: 24, label: "24 fps" },
+										{ value: 30, label: "30 fps" },
+										{ value: 60, label: "60 fps" },
+									]}
+								/>
 							</div>
-							<div className="flex w-full h-7 rounded-md overflow-hidden border border-base-content/10 bg-base-200">
-								{variants.map((v) => (
-									<div
-										key={v.key}
-										className="h-full transition-[width] duration-500"
-										style={{
-											width: `${sumGib > 0 ? (v.gib / sumGib) * 100 : 0}%`,
-											background: v.color,
-										}}
-										title={`${v.isMaster ? v.label : v.label} — ${fixed(v.gib, 2)} GiB/hr (${sumGib > 0 ? Math.round((v.gib / sumGib) * 100) : 0}%)`}
-									/>
-								))}
+							<div>
+								<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
+									<span>Original export</span>
+									<span className="text-xs font-mono text-base-content/40">stored as-is</span>
+								</span>
+								<SegControl
+									ariaLabel="Original export format"
+									value={master}
+									onChange={setMaster}
+									options={[
+										{ value: "h264", label: "H.264" },
+										{ value: "h265", label: "H.265" },
+										{ value: "prores", label: "ProRes" },
+										{ value: "custom", label: "Custom" },
+									]}
+								/>
+							</div>
+							{master === "custom" && (
+								<NumberField
+									label="Master video bitrate"
+									hint="audio added on top"
+									value={masterMbps}
+									onChange={setMasterMbps}
+									step={1}
+									suffix="Mbps"
+								/>
+							)}
+							<NumberField
+								label="Storage price"
+								value={price}
+								onChange={setPrice}
+								step={0.001}
+								prefix="$"
+								suffix="/ GiB / month"
+							/>
+						</div>
+					</div>
+
+					<div className="card bg-gradient-to-b from-base-200 to-base-300/40 border border-base-300">
+						<div className="card-body p-5 justify-between">
+							<div>
+								<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-2">
+									Master + ladder · per source-hour
+								</p>
+								<p className="font-mono text-5xl font-bold tabular-nums text-warning leading-none">
+									{moneyBig(sumCost)}
+									<span className="text-base font-medium text-base-content/50 ml-1.5">/hr/mo</span>
+								</p>
+								<p className="mt-3 font-mono text-sm text-base-content/60">
+									<span className="text-success">{fixed(sumGib, 2)} GiB</span> per source-hour ·
+									master {fixed(masterVar.gib, 2)} + ladder {fixed(ladderGib, 2)}
+								</p>
+							</div>
+							<div className="mt-6">
+								<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-base-content/40 mb-2">
+									<span>storage share</span>
+									<span>
+										master + {rungCount} rung{rungCount === 1 ? "" : "s"}
+									</span>
+								</div>
+								<div className="flex w-full h-7 rounded-md overflow-hidden border border-base-content/10 bg-base-200">
+									{variants.map((v) => (
+										<div
+											key={v.key}
+											className="h-full transition-[width] duration-500"
+											style={{
+												width: `${sumGib > 0 ? (v.gib / sumGib) * 100 : 0}%`,
+												background: v.color,
+											}}
+											title={`${v.isMaster ? v.label : v.label} — ${fixed(v.gib, 2)} GiB/hr (${sumGib > 0 ? Math.round((v.gib / sumGib) * 100) : 0}%)`}
+										/>
+									))}
+								</div>
 							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</Reveal>
 
 			{/* Ladder table */}
-			<div className="card bg-base-100 border border-base-300 overflow-hidden mb-4">
-				<div className="overflow-x-auto">
-					<table className="table table-sm w-full font-mono tabular-nums">
-						<thead>
-							<tr className="text-[10px] uppercase tracking-[0.14em] text-base-content/40">
-								<th>Variant</th>
-								<th className="text-right">Video</th>
-								<th className="text-right hidden sm:table-cell">Total bitrate</th>
-								<th className="text-right">Size / hr</th>
-								<th className="text-right">Cost / hr / mo</th>
-							</tr>
-						</thead>
-						<tbody>
-							{variants.map((v) => (
-								<tr
-									key={v.key}
-									className={v.cost === maxCost ? "bg-warning/5" : undefined}
-									style={
-										v.cost === maxCost
-											? { boxShadow: "inset 2px 0 0 var(--color-warning)" }
-											: undefined
-									}
-								>
-									<td>
-										<span className="flex items-center gap-2.5">
-											<span
-												className="w-2.5 h-2.5 rounded-sm shrink-0"
-												style={{ background: v.color }}
-											/>
-											<span className={v.isMaster ? "font-semibold not-italic" : ""}>
-												{v.label}
-											</span>
-											<span className="text-[11px] text-base-content/40">{v.tag}</span>
-										</span>
-									</td>
-									<td className="text-right text-base-content/60">{fixed(v.video, 2)} Mbps</td>
-									<td className="text-right text-base-content/60 hidden sm:table-cell">
-										{fixed(v.total, 2)} Mbps
-									</td>
-									<td className="text-right">{fixed(v.gib, 3)} GiB</td>
-									<td className="text-right">{money(v.cost)}</td>
+			<Reveal>
+				<div className="card bg-base-100 border border-base-300 overflow-hidden mb-4">
+					<div className="overflow-x-auto">
+						<table className="table table-sm w-full font-mono tabular-nums">
+							<thead>
+								<tr className="text-[10px] uppercase tracking-[0.14em] text-base-content/40">
+									<th>Variant</th>
+									<th className="text-right">Video</th>
+									<th className="text-right hidden sm:table-cell">Total bitrate</th>
+									<th className="text-right">Size / hr</th>
+									<th className="text-right">Cost / hr / mo</th>
 								</tr>
-							))}
-						</tbody>
-						<tfoot>
-							<tr className="border-t border-base-300 font-semibold">
-								<td>Master + AV1 ladder</td>
-								<td className="text-right text-base-content/60">{fixed(sumVideo, 2)} Mbps</td>
-								<td className="text-right hidden sm:table-cell">{fixed(sumTotal, 2)} Mbps</td>
-								<td className="text-right">{fixed(sumGib, 2)} GiB</td>
-								<td className="text-right text-warning">{money(sumCost)}</td>
-							</tr>
-						</tfoot>
-					</table>
+							</thead>
+							<tbody>
+								{variants.map((v) => (
+									<tr
+										key={v.key}
+										className={v.cost === maxCost ? "bg-warning/5" : undefined}
+										style={
+											v.cost === maxCost
+												? { boxShadow: "inset 2px 0 0 var(--color-warning)" }
+												: undefined
+										}
+									>
+										<td>
+											<span className="flex items-center gap-2.5">
+												<span
+													className="w-2.5 h-2.5 rounded-sm shrink-0"
+													style={{ background: v.color }}
+												/>
+												<span className={v.isMaster ? "font-semibold not-italic" : ""}>
+													{v.label}
+												</span>
+												<span className="text-[11px] text-base-content/40">{v.tag}</span>
+											</span>
+										</td>
+										<td className="text-right text-base-content/60">{fixed(v.video, 2)} Mbps</td>
+										<td className="text-right text-base-content/60 hidden sm:table-cell">
+											{fixed(v.total, 2)} Mbps
+										</td>
+										<td className="text-right">{fixed(v.gib, 3)} GiB</td>
+										<td className="text-right">{money(v.cost)}</td>
+									</tr>
+								))}
+							</tbody>
+							<tfoot>
+								<tr className="border-t border-base-300 font-semibold">
+									<td>Master + AV1 ladder</td>
+									<td className="text-right text-base-content/60">{fixed(sumVideo, 2)} Mbps</td>
+									<td className="text-right hidden sm:table-cell">{fixed(sumTotal, 2)} Mbps</td>
+									<td className="text-right">{fixed(sumGib, 2)} GiB</td>
+									<td className="text-right text-warning">{money(sumCost)}</td>
+								</tr>
+							</tfoot>
+						</table>
+					</div>
 				</div>
-			</div>
+			</Reveal>
 
 			{/* Scale out */}
-			<div className="card bg-base-100 border border-base-300 mb-2">
-				<div className="card-body p-5">
-					<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-3">
-						Scale out · library total
-					</p>
-					<div className="flex flex-wrap items-center gap-4">
-						<div className="w-56">
-							<NumberField
-								label="Total library"
-								value={hours}
-								onChange={setHours}
-								step={1}
-								suffix="source hours"
-							/>
-						</div>
-						<span className="text-base-content/40 font-mono mt-6">→</span>
-						<div className="mt-6">
-							<span className="font-mono text-2xl font-bold text-warning tabular-nums">
-								{money(sumCost * hours)}
-							</span>
-							<span className="text-xs text-base-content/50 ml-1.5">/ month, master + ladder</span>
+			<Reveal>
+				<div className="card bg-base-100 border border-base-300 mb-2">
+					<div className="card-body p-5">
+						<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-3">
+							Scale out · library total
+						</p>
+						<div className="flex flex-wrap items-center gap-4">
+							<div className="w-56">
+								<NumberField
+									label="Total library"
+									value={hours}
+									onChange={setHours}
+									step={1}
+									suffix="source hours"
+								/>
+							</div>
+							<span className="text-base-content/40 font-mono mt-6">→</span>
+							<div className="mt-6">
+								<span className="font-mono text-2xl font-bold text-warning tabular-nums">
+									{money(sumCost * hours)}
+								</span>
+								<span className="text-xs text-base-content/50 ml-1.5">
+									/ month, master + ladder
+								</span>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</Reveal>
 
-			<CalcNotes>
-				<p>
-					<strong className="text-base-content/70">Master.</strong> The original upload is stored
-					untouched at {fixed(masterVar.total, 2)} Mbps ({fixed(masterVar.gib, 2)} GiB per
-					source-hour) — {masterShare}% of the total store here. Defaults assume a quality-leaning
-					NLE export; ProRes 422 HQ masters run 10–40× an H.264 export and will swamp everything.
-					Switch to <em className="text-base-content/60 not-italic font-semibold">Custom</em> to
-					model your own observed upload bitrate.
-				</p>
-				<p>
-					<strong className="text-base-content/70">Ladder.</strong> AV1 video at delivery bitrates
-					(240p 0.15 · 480p 0.55 · 720p 1.40 · 1080p 2.80 · 1440p 5.50 · 2160p 9.0 Mbps at 30fps),
-					scaled ×0.92 / ×1.0 / ×1.40 for 24 / 30 / 60 fps, plus 128 kbps Opus per rung. Rungs at
-					720p and above inherit the master framerate; lower rungs are held to 30fps. The full
-					ladder is {fixed(ladderGib, 2)} GiB per source-hour.
-				</p>
-				<p>
-					<strong className="text-base-content/70">Units.</strong> Size = bitrate × 3600s ÷ 8, in
-					GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage only —
-					egress (see the companion bandwidth tool), requests, and any replication factor land on
-					top. DigitalOcean Spaces prices per GB (10⁹); multiply by 1.074 for $/GiB. Planning model,
-					not for invoicing.
-				</p>
-			</CalcNotes>
+			<Reveal>
+				<CalcNotes>
+					<p>
+						<strong className="text-base-content/70">Master.</strong> The original upload is stored
+						untouched at {fixed(masterVar.total, 2)} Mbps ({fixed(masterVar.gib, 2)} GiB per
+						source-hour) — {masterShare}% of the total store here. Defaults assume a quality-leaning
+						NLE export; ProRes 422 HQ masters run 10–40× an H.264 export and will swamp everything.
+						Switch to <em className="text-base-content/60 not-italic font-semibold">Custom</em> to
+						model your own observed upload bitrate.
+					</p>
+					<p>
+						<strong className="text-base-content/70">Ladder.</strong> AV1 video at delivery bitrates
+						(240p 0.15 · 480p 0.55 · 720p 1.40 · 1080p 2.80 · 1440p 5.50 · 2160p 9.0 Mbps at 30fps),
+						scaled ×0.92 / ×1.0 / ×1.40 for 24 / 30 / 60 fps, plus 128 kbps Opus per rung. Rungs at
+						720p and above inherit the master framerate; lower rungs are held to 30fps. The full
+						ladder is {fixed(ladderGib, 2)} GiB per source-hour.
+					</p>
+					<p>
+						<strong className="text-base-content/70">Units.</strong> Size = bitrate × 3600s ÷ 8, in
+						GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage only
+						— egress (see the companion bandwidth tool), requests, and any replication factor land
+						on top. DigitalOcean Spaces prices per GB (10⁹); multiply by 1.074 for $/GiB. Planning
+						model, not for invoicing.
+					</p>
+				</CalcNotes>
+			</Reveal>
 		</div>
 	);
 }

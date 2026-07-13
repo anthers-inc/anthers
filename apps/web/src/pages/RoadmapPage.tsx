@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /* ------------------------------------------------------------------ */
@@ -1042,14 +1043,18 @@ export default function RoadmapPage() {
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
 			{/* Header */}
 			<div className="text-center mb-8">
-				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
-					501(c)(3) non-profit
-				</p>
-				<h1 className="text-3xl font-bold mb-2">Roadmap</h1>
-				<p className="text-base-content/70 max-w-xl mx-auto">
-					See what we're building, what's next, and where we're headed. Anthers is built in the open
-					— everything here reflects our actual plans and priorities.
-				</p>
+				<Reveal>
+					<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
+						501(c)(3) non-profit
+					</p>
+					<h1 className="text-3xl font-bold mb-2">Roadmap</h1>
+				</Reveal>
+				<Reveal delay={120}>
+					<p className="text-base-content/70 max-w-xl mx-auto">
+						See what we're building, what's next, and where we're headed. Anthers is built in the
+						open — everything here reflects our actual plans and priorities.
+					</p>
+				</Reveal>
 			</div>
 
 			{/* Tab selector */}
@@ -1095,14 +1100,14 @@ export default function RoadmapPage() {
 			)}
 
 			{/* Bottom section — Contributing */}
-			<div className="mt-16 max-w-3xl mx-auto text-center pb-4">
+			<Reveal className="mt-16 max-w-3xl mx-auto text-center pb-4">
 				<h2 className="text-xl font-bold mb-3">Built in the Open</h2>
 				<p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
 					Anthers is a non-profit, and our roadmap reflects our commitment to transparency.
 					Priorities are shaped by creator and user feedback, not investor demands. Have a feature
 					request or want to get involved? Join our community or reach out directly.
 				</p>
-			</div>
+			</Reveal>
 		</div>
 	);
 }

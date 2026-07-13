@@ -48,7 +48,7 @@ function LoggedInLayoutInner() {
 	return (
 		<div className="h-screen flex flex-col overflow-hidden">
 			{/* Top bar — simplified: brand + hamburger on left, avatar on right */}
-			<header className="navbar bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
+			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 				<div className="navbar-start gap-1">
 					<button
 						type="button"
