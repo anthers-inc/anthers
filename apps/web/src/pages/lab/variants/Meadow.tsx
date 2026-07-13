@@ -3,19 +3,17 @@
 // Variant 1 — "Meadow": airy editorial, foresty green + soft yellow.
 // Fraunces display serif over Nunito Sans, generous whitespace, hairline rules.
 
+import type { VineStyle } from "@anthers/brand";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import {
-	BrandGlyph,
-	grassFloorDataUri,
-	pollenDataUri,
-	Sprig,
-	VINE_WAVES,
-	VINE_WEAVES,
-	type VineStyle,
-	vineTileDataUri,
-	wovenVineTileDataUri,
-} from "../botanical";
+	BADGE_LADDER,
+	InfoDot,
+	PurchaseExample,
+	SubscriptionCalculator,
+} from "@anthers/web-shared/economics";
 import { ANTHERS_GATES, BOOST_GATES, FONTS, type Mode, type Palette, paletteVars } from "../kit";
-import { BADGE_LADDER, InfoDot, PurchaseExample, SubscriptionCalculator } from "./meadow-econ";
 
 const LIGHT: Palette = {
 	"base-100": "oklch(98.6% 0.012 96)",
@@ -113,64 +111,13 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 export default function Meadow({ mode, vine = "triple" }: { mode: Mode; vine?: VineStyle }) {
 	const pal = mode === "light" ? LIGHT : DARK;
 
-	// "Pollen in the air" texture over the base surface (no top radial gradient). On
-	// dark it's a touch darker and dialed back so the motes don't read too loud.
-	const pollen =
-		mode === "light"
-			? pollenDataUri("oklch(72% 0.12 92)")
-			: pollenDataUri("oklch(68% 0.1 95)", 0.5);
-	const bg = `url("${pollen}") repeat, var(--color-base-100)`;
-
-	// Dainty hand-drawn climbing vine(s) with real soft-yellow blooms and amber bees,
-	// scrolling with the page and springing from the grass floor. `vine` picks a
-	// single meandering strand or several woven together (front strand carries the
-	// blooms; casings give the crossings natural over/under depth).
-	const vineColors = { stem: pal.primary, flower: pal.secondary, bee: pal.accent };
-	const vineUri =
-		vine === "single"
-			? vineTileDataUri(vineColors, VINE_WAVES.calm)
-			: wovenVineTileDataUri({ ...vineColors, casing: pal["base-100"] }, VINE_WEAVES[vine]);
-	const vineStyle = {
-		backgroundImage: `url("${vineUri}")`,
-		backgroundRepeat: "repeat-y",
-		backgroundSize: "100% auto",
-		backgroundPosition: "center top",
-		opacity: mode === "dark" ? 0.72 : 0.62,
-	};
-
-	// Grassy/flowery floor the vines spring out of, tiled across the very bottom and
-	// nudged down so the blade bases sit just below the page's edge (no gap).
-	const floorStyle = {
-		backgroundImage: `url("${grassFloorDataUri({
-			grass: pal.primary,
-			flower: pal.secondary,
-			core: pal.accent,
-		})}")`,
-		backgroundRepeat: "repeat-x",
-		backgroundSize: "auto 100%",
-		backgroundPosition: "left calc(100% + 6px)",
-		opacity: mode === "dark" ? 0.48 : 0.6,
-	};
-
+	// The botanical decoration — pollen surface, woven climbing side vines, and the
+	// grassy flowered floor the vines spring from, in the correct z-order — is the
+	// shared <MeadowDecor>. Here it renders inside the lab's scoped palette; on the
+	// real site it wraps the page under the global theme.
 	return (
-		<div
-			style={paletteVars(pal, mode, { background: bg, fontFamily: FONTS.nunito })}
-			className="relative min-h-screen overflow-hidden text-base-content"
-		>
-			{/* Botanical flowering side vines — woven strands that scroll with the page
-				and spring from the grass floor; frame the centered content on wide screens */}
-			<div
-				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-28 xl:block"
-				style={vineStyle}
-			/>
-			<div
-				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-28 -scale-x-100 xl:block"
-				style={vineStyle}
-			/>
-
-			<div className="relative z-10">
+		<div style={paletteVars(pal, mode, { fontFamily: FONTS.nunito })}>
+			<MeadowDecor mode={mode} vine={vine}>
 				{/* Hero */}
 				<header className="bg-base-200/70">
 					<div className="mx-auto max-w-5xl px-6 pt-28 pb-20 text-center">
@@ -444,33 +391,7 @@ export default function Meadow({ mode, vine = "triple" }: { mode: Mode; vine?: V
 				</section>
 
 				<MeadowFooter />
-			</div>
-
-			{/* Grassy floor across the very bottom, sitting below the footer so it stays
-				readable; the side vines spring from it and a few bees drift above the tops */}
-			<div aria-hidden="true" className="pointer-events-none relative z-30 h-56">
-				<div className="absolute inset-0" style={floorStyle} />
-				<BrandGlyph
-					name="bee-flying"
-					className="absolute left-[10%] top-3 h-7 w-7 -rotate-12 text-accent/85"
-				/>
-				<BrandGlyph
-					name="bee"
-					className="absolute left-[27%] top-9 h-5 w-5 rotate-6 text-accent/70"
-				/>
-				<BrandGlyph
-					name="bee-flying"
-					className="absolute left-[47%] top-1.5 h-6 w-6 rotate-12 text-accent/80"
-				/>
-				<BrandGlyph
-					name="bee"
-					className="absolute left-[64%] top-8 h-5 w-5 -rotate-6 text-accent/75"
-				/>
-				<BrandGlyph
-					name="bee-flying"
-					className="absolute right-[9%] top-4 h-7 w-7 -rotate-12 text-accent/85"
-				/>
-			</div>
+			</MeadowDecor>
 		</div>
 	);
 }

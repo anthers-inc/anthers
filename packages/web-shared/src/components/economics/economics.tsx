@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Meadow's two economics cards — the interactive "Where your subscription goes"
-// calculator and the one-time-purchase example. All numbers derive from the V3
-// model (see `20260711 - V3 Subscription Economics`): usage $0.03/GiB = bandwidth
-// $0.01 + Community Share (AF fee) $0.005 + Time Pool $0.015; Boost is 100% to
-// creators; card 2.9%+$0.30 and sales tax ~6.5% ride on top and leave the system;
-// badges at $3/$7/$15/$30 of the (usage+boost) subtotal.
+// The two Meadow economics cards — the interactive "Where your subscription goes"
+// calculator and the one-time-purchase example — plus the badge ladder and the
+// hover-tooltip (i). All numbers derive from the V3 model (see `20260711 - V3
+// Subscription Economics`): usage $0.03/GiB = bandwidth $0.01 + Community Share
+// (AF fee) $0.005 + Time Pool $0.015; Boost is 100% to creators; card 2.9%+$0.30
+// and sales tax ~6.5% ride on top and leave the system; badges at $3/$7/$15/$30
+// of the (usage+boost) subtotal.
 
 import type { BrandIconName } from "@anthers/brand";
 import { ChevronDownIcon, ChevronUpIcon, InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
-import { BrandGlyph } from "../botanical";
-import { FONTS } from "../kit";
+import { FONTS } from "../../styles/fonts";
+import { BrandGlyph } from "../decor/BrandGlyph";
 
 const serif = { fontFamily: FONTS.fraunces };
 

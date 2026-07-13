@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y ffmpeg curl && rm -rf /var/lib/apt/list
 
 # Install dependencies — copy package manifests first for layer caching
 COPY package.json bun.lock ./
+COPY packages/brand/package.json packages/brand/
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/web-shared/package.json packages/web-shared/
