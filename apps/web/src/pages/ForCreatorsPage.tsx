@@ -100,11 +100,14 @@ export default function ForCreatorsPage() {
 						you month to month, a middleman takes a cut of it.
 					</Lede>
 				</Reveal>
-				<div className="mx-auto mt-12 flex max-w-2xl flex-col gap-6">
-					<Reveal>
+				<div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
+					{/* min-w-0 lets each card shrink to its grid track so the tables scroll
+						inside their own overflow-x-auto rather than blowing the card wider
+						than the column (which clipped on mobile). */}
+					<Reveal className="h-full min-w-0">
 						<PurchaseComparison />
 					</Reveal>
-					<Reveal delay={110}>
+					<Reveal delay={110} className="h-full min-w-0">
 						<SubscriptionComparison />
 					</Reveal>
 				</div>
