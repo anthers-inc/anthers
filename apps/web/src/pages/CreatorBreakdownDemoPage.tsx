@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -930,24 +931,30 @@ export default function CreatorBreakdownDemoPage() {
 			{/* Hero intro */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
-					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
-					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						Creator Economics
-					</p>
-					<h1
-						style={serif}
-						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
-					>
-						How your audience translates to{" "}
-						<em className="font-medium text-primary not-italic">income.</em>
-					</h1>
-					<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
-						Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
-						three real-world creator profiles showing exactly how audience size, content type, and
-						spend levels determine income on Anthers — and how it compares to the platforms you're
-						on today.
-					</p>
-					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							Creator Economics
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
+						>
+							How your audience translates to{" "}
+							<em className="font-medium text-primary not-italic">income.</em>
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+							Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
+							three real-world creator profiles showing exactly how audience size, content type, and
+							spend levels determine income on Anthers — and how it compares to the platforms you're
+							on today.
+						</p>
+					</Reveal>
+					<Reveal delay={300}>
+						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					</Reveal>
 				</div>
 			</header>
 

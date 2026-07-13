@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Lede } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { useEffect, useRef, useState } from "react";
@@ -712,22 +713,26 @@ export default function UserDemoPage() {
 			{/* Hero intro */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-5xl px-6 pt-24 pb-20 text-center">
-					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
-					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						User Experience
-					</p>
-					<h1
-						style={serif}
-						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
-					>
-						See where your <em className="font-medium text-primary not-italic">money goes.</em>
-					</h1>
-					<Lede>
-						Anthers gives you full transparency over your subscription. Browse your feed, then check
-						your dashboard to see exactly how your money is split across the creators you engage
-						with.
-					</Lede>
-					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							User Experience
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
+						>
+							See where your <em className="font-medium text-primary not-italic">money goes.</em>
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<Lede>
+							Anthers gives you full transparency over your subscription. Browse your feed, then
+							check your dashboard to see exactly how your money is split across the creators you
+							engage with.
+						</Lede>
+						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					</Reveal>
 				</div>
 			</header>
 
@@ -816,14 +821,14 @@ export default function UserDemoPage() {
 				</div>
 
 				{/* CTA */}
-				<div className="mt-8 text-center">
+				<Reveal className="mt-8 text-center">
 					<p className="text-base-content/50 text-sm mb-4">
 						Full transparency. No hidden fees. Every dollar accounted for.
 					</p>
 					<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
 						Choose a plan
 					</Link>
-				</div>
+				</Reveal>
 			</div>
 		</div>
 	);

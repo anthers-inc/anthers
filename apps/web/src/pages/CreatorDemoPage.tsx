@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Lede } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { LinkIcon, MapPinIcon, MusicalNoteIcon, StarIcon } from "@heroicons/react/24/outline";
@@ -599,24 +600,28 @@ export default function CreatorDemoPage() {
 			{/* Hero intro */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
-					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
-					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						Creator Hubs
-					</p>
-					<h1
-						style={serif}
-						className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
-					>
-						Your page.
-						<br />
-						<em className="font-medium text-primary not-italic">Your style.</em>
-					</h1>
-					<Lede>
-						Every creator on Anthers gets a customizable anther—not a cookie-cutter profile. Choose
-						your layout, colors, and typography. Pin featured work. Organize your content your way.
-						Below are three examples of what's possible.
-					</Lede>
-					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							Creator Hubs
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
+						>
+							Your page.
+							<br />
+							<em className="font-medium text-primary not-italic">Your style.</em>
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<Lede>
+							Every creator on Anthers gets a customizable anther—not a cookie-cutter profile.
+							Choose your layout, colors, and typography. Pin featured work. Organize your content
+							your way. Below are three examples of what's possible.
+						</Lede>
+						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					</Reveal>
 				</div>
 			</header>
 
@@ -677,7 +682,7 @@ export default function CreatorDemoPage() {
 				</div>
 
 				{/* Customization callout */}
-				<div className="mt-8 text-center">
+				<Reveal className="mt-8 text-center">
 					<p className="text-base-content/50 text-sm mb-4">
 						Layouts, color palettes, typography, pinned content, and more—all customizable by the
 						creator.
@@ -685,7 +690,7 @@ export default function CreatorDemoPage() {
 					<Link to="/for-creators" className="btn btn-primary rounded-full px-7">
 						Learn more about Creator Hubs
 					</Link>
-				</div>
+				</Reveal>
 			</div>
 		</div>
 	);

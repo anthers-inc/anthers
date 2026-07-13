@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { useMemo, useState } from "react";
 import {
@@ -1243,19 +1244,28 @@ export default function InfrastructureDemoPage() {
 			{/* Hero */}
 			<header className="bg-base-200/70">
 				<div className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
-					<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
-					<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-						Infrastructure Economics
-					</p>
-					<h1 style={serif} className="text-balance text-4xl font-light leading-tight sm:text-5xl">
-						What it actually costs to host content.
-					</h1>
-					<p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-base-content/75">
-						Anthers passes infrastructure costs through at cost with zero markup. Storage at
-						$0.02/GB/month. Delivery at $0.01/GB. No percentage cut, no hidden fees. Explore the
-						real numbers below.
-					</p>
-					<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							Infrastructure Economics
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-4xl font-light leading-tight sm:text-5xl"
+						>
+							What it actually costs to host content.
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-base-content/75">
+							Anthers passes infrastructure costs through at cost with zero markup. Storage at
+							$0.02/GB/month. Delivery at $0.01/GB. No percentage cut, no hidden fees. Explore the
+							real numbers below.
+						</p>
+					</Reveal>
+					<Reveal delay={300}>
+						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+					</Reveal>
 				</div>
 			</header>
 

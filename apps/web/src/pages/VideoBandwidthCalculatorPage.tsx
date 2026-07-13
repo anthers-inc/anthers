@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcNotes, CalcPageHeader, NumberField, SegControl } from "../components/calculators/ui";
 import {
@@ -87,209 +88,223 @@ export default function VideoBandwidthCalculatorPage() {
 
 	return (
 		<div className="max-w-5xl mx-auto px-4 pb-16">
-			<CalcPageHeader
-				eyebrow={`${CODECS[codec].label} delivery · bandwidth allowance`}
-				title="Stream time on your allowance"
-				lede={
-					<>
-						Pick the resolution and framerate a viewer streams, and the bandwidth allowance to
-						spend. A player only pulls <b className="text-base-content">one</b> tier at a time —
-						adaptive bitrate just switches between them — so there's no ladder to sum. The tool
-						sizes that single stream and reports{" "}
-						<b className="text-base-content">how much watch time the allowance buys</b> before it
-						runs out.
-					</>
-				}
-			/>
+			<Reveal>
+				<CalcPageHeader
+					eyebrow={`${CODECS[codec].label} delivery · bandwidth allowance`}
+					title="Stream time on your allowance"
+					lede={
+						<>
+							Pick the resolution and framerate a viewer streams, and the bandwidth allowance to
+							spend. A player only pulls <b className="text-base-content">one</b> tier at a time —
+							adaptive bitrate just switches between them — so there's no ladder to sum. The tool
+							sizes that single stream and reports{" "}
+							<b className="text-base-content">how much watch time the allowance buys</b> before it
+							runs out.
+						</>
+					}
+				/>
+			</Reveal>
 
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-				<div className="card bg-base-100 border border-base-300">
-					<div className="card-body p-5 gap-5">
-						<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40">
-							Delivery · Inputs
-						</p>
-						<div>
-							<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Delivery codec</span>
-								<span className="text-xs font-mono text-base-content/40">{CODECS[codec].hint}</span>
-							</span>
-							<SegControl
-								ariaLabel="Delivery codec"
-								value={codec}
-								onChange={setCodec}
-								options={(Object.keys(CODECS) as Codec[]).map((c) => ({
-									value: c,
-									label: CODECS[c].label,
-								}))}
-							/>
-						</div>
-						<div>
-							<span className="block text-sm text-base-content/70 mb-2">Delivered resolution</span>
-							<SegControl
-								ariaLabel="Delivered resolution"
-								value={res}
-								onChange={setRes}
-								options={RES_TIERS_LOW_TO_HIGH.map((r) => ({ value: r, label: r }))}
-							/>
-						</div>
-						<div>
-							<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Delivered framerate</span>
-								<span className="text-xs font-mono text-base-content/40">
-									sub-720p capped at 30
+			<Reveal delay={120}>
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+					<div className="card bg-base-100 border border-base-300">
+						<div className="card-body p-5 gap-5">
+							<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40">
+								Delivery · Inputs
+							</p>
+							<div>
+								<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
+									<span>Delivery codec</span>
+									<span className="text-xs font-mono text-base-content/40">
+										{CODECS[codec].hint}
+									</span>
 								</span>
-							</span>
-							<SegControl
-								ariaLabel="Delivered framerate"
-								value={fps}
-								onChange={setFps}
-								options={[
-									{ value: 24, label: "24 fps" },
-									{ value: 30, label: "30 fps" },
-									{ value: 60, label: "60 fps" },
-								]}
-							/>
-						</div>
-						<NumberField
-							label="Bandwidth allowance"
-							value={allowance}
-							onChange={setAllowance}
-							step={0.5}
-							suffix="GiB"
-						/>
-						<NumberField
-							label="Bandwidth price"
-							value={price}
-							onChange={setPrice}
-							step={0.001}
-							prefix="$"
-							suffix="/ GiB egress"
-						/>
-					</div>
-				</div>
-
-				<div className="card bg-gradient-to-b from-base-200 to-base-300/40 border border-base-300">
-					<div className="card-body p-5 justify-between">
-						<div>
-							<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-2">
-								Stream time · {trimNum(allowance)} GiB allowance
-							</p>
-							<p className="font-mono text-5xl font-bold tabular-nums text-warning leading-none">
-								{fmtTime(allowance / sel.gib)}
-							</p>
-							<p className="mt-3 font-mono text-sm text-base-content/60">
-								burns <span className="text-success">{fixed(sel.gib, 2)} GiB/hr</span> at{" "}
-								{fixed(sel.total, 2)} Mbps · allowance ≈ {money(allowance * price)}
-							</p>
-						</div>
-						<div className="mt-6">
-							<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-base-content/40 mb-2">
-								<span>allowance drain rate</span>
-								<span>{Math.round(ceilingPct)}% of ceiling</span>
-							</div>
-							<div className="relative w-full h-7 rounded-md overflow-hidden border border-base-content/10 bg-base-200">
-								<div
-									className="absolute inset-y-0 left-0 transition-[width] duration-500"
-									style={{
-										width: `${ceilingPct}%`,
-										background:
-											"linear-gradient(90deg, color-mix(in oklch, var(--color-warning) 35%, transparent), var(--color-warning))",
-									}}
+								<SegControl
+									ariaLabel="Delivery codec"
+									value={codec}
+									onChange={setCodec}
+									options={(Object.keys(CODECS) as Codec[]).map((c) => ({
+										value: c,
+										label: CODECS[c].label,
+									}))}
 								/>
 							</div>
-							<div className="flex justify-between font-mono text-[10px] text-base-content/40 mt-1.5">
-								<span>0 GiB/hr</span>
-								<span>
-									{maxTier.tier}
-									{maxTier.fps} · {fixed(maxTier.gib, 2)} GiB/hr
+							<div>
+								<span className="block text-sm text-base-content/70 mb-2">
+									Delivered resolution
 								</span>
+								<SegControl
+									ariaLabel="Delivered resolution"
+									value={res}
+									onChange={setRes}
+									options={RES_TIERS_LOW_TO_HIGH.map((r) => ({ value: r, label: r }))}
+								/>
+							</div>
+							<div>
+								<span className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
+									<span>Delivered framerate</span>
+									<span className="text-xs font-mono text-base-content/40">
+										sub-720p capped at 30
+									</span>
+								</span>
+								<SegControl
+									ariaLabel="Delivered framerate"
+									value={fps}
+									onChange={setFps}
+									options={[
+										{ value: 24, label: "24 fps" },
+										{ value: 30, label: "30 fps" },
+										{ value: 60, label: "60 fps" },
+									]}
+								/>
+							</div>
+							<NumberField
+								label="Bandwidth allowance"
+								value={allowance}
+								onChange={setAllowance}
+								step={0.5}
+								suffix="GiB"
+							/>
+							<NumberField
+								label="Bandwidth price"
+								value={price}
+								onChange={setPrice}
+								step={0.001}
+								prefix="$"
+								suffix="/ GiB egress"
+							/>
+						</div>
+					</div>
+
+					<div className="card bg-gradient-to-b from-base-200 to-base-300/40 border border-base-300">
+						<div className="card-body p-5 justify-between">
+							<div>
+								<p className="text-[10px] font-mono uppercase tracking-[0.2em] text-base-content/40 mb-2">
+									Stream time · {trimNum(allowance)} GiB allowance
+								</p>
+								<p className="font-mono text-5xl font-bold tabular-nums text-warning leading-none">
+									{fmtTime(allowance / sel.gib)}
+								</p>
+								<p className="mt-3 font-mono text-sm text-base-content/60">
+									burns <span className="text-success">{fixed(sel.gib, 2)} GiB/hr</span> at{" "}
+									{fixed(sel.total, 2)} Mbps · allowance ≈ {money(allowance * price)}
+								</p>
+							</div>
+							<div className="mt-6">
+								<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-base-content/40 mb-2">
+									<span>allowance drain rate</span>
+									<span>{Math.round(ceilingPct)}% of ceiling</span>
+								</div>
+								<div className="relative w-full h-7 rounded-md overflow-hidden border border-base-content/10 bg-base-200">
+									<div
+										className="absolute inset-y-0 left-0 transition-[width] duration-500"
+										style={{
+											width: `${ceilingPct}%`,
+											background:
+												"linear-gradient(90deg, color-mix(in oklch, var(--color-warning) 35%, transparent), var(--color-warning))",
+										}}
+									/>
+								</div>
+								<div className="flex justify-between font-mono text-[10px] text-base-content/40 mt-1.5">
+									<span>0 GiB/hr</span>
+									<span>
+										{maxTier.tier}
+										{maxTier.fps} · {fixed(maxTier.gib, 2)} GiB/hr
+									</span>
+								</div>
 							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</Reveal>
 
 			{/* Tier menu */}
-			<div className="card bg-base-100 border border-base-300 overflow-hidden mb-4">
-				<div className="overflow-x-auto">
-					<table className="table table-sm w-full font-mono tabular-nums">
-						<thead>
-							<tr className="text-[10px] uppercase tracking-[0.14em] text-base-content/40">
-								<th>Delivered tier</th>
-								<th className="text-right hidden sm:table-cell">Stream bitrate</th>
-								<th className="text-right hidden sm:table-cell">GiB / hr</th>
-								<th className="text-right">Stream time</th>
-								<th className="text-right w-32">Drain rate</th>
-							</tr>
-						</thead>
-						<tbody>
-							{rows.map((r) => {
-								const isSel = r.tier === res;
-								const relW = maxGib > 0 ? (r.gib / maxGib) * 100 : 0;
-								return (
-									<tr
-										key={r.tier}
-										className={isSel ? "bg-warning/5" : undefined}
-										style={isSel ? { boxShadow: "inset 2px 0 0 var(--color-warning)" } : undefined}
-									>
-										<td>
-											<span className="flex items-center gap-2.5">
-												<span
-													className="w-2.5 h-2.5 rounded-sm shrink-0"
-													style={{ background: RES_COLOR[r.tier] }}
-												/>
-												<span className={isSel ? "font-semibold" : ""}>{r.tier}</span>
-												<span className="text-[11px] text-base-content/40">{r.fps}fps</span>
-											</span>
-										</td>
-										<td className="text-right text-base-content/60 hidden sm:table-cell">
-											{fixed(r.total, 2)} Mbps
-										</td>
-										<td className="text-right text-base-content/60 hidden sm:table-cell">
-											{fixed(r.gib, 3)} GiB
-										</td>
-										<td className={`text-right ${isSel ? "text-warning" : ""}`}>
-											{fmtTime(allowance / r.gib)}
-										</td>
-										<td>
-											<div className="h-2 rounded bg-base-200 border border-base-content/10 overflow-hidden">
-												<div
-													className="h-full rounded-l transition-[width] duration-500"
-													style={{ width: `${relW}%`, background: RES_COLOR[r.tier] }}
-												/>
-											</div>
-										</td>
-									</tr>
-								);
-							})}
-						</tbody>
-					</table>
+			<Reveal>
+				<div className="card bg-base-100 border border-base-300 overflow-hidden mb-4">
+					<div className="overflow-x-auto">
+						<table className="table table-sm w-full font-mono tabular-nums">
+							<thead>
+								<tr className="text-[10px] uppercase tracking-[0.14em] text-base-content/40">
+									<th>Delivered tier</th>
+									<th className="text-right hidden sm:table-cell">Stream bitrate</th>
+									<th className="text-right hidden sm:table-cell">GiB / hr</th>
+									<th className="text-right">Stream time</th>
+									<th className="text-right w-32">Drain rate</th>
+								</tr>
+							</thead>
+							<tbody>
+								{rows.map((r) => {
+									const isSel = r.tier === res;
+									const relW = maxGib > 0 ? (r.gib / maxGib) * 100 : 0;
+									return (
+										<tr
+											key={r.tier}
+											className={isSel ? "bg-warning/5" : undefined}
+											style={
+												isSel ? { boxShadow: "inset 2px 0 0 var(--color-warning)" } : undefined
+											}
+										>
+											<td>
+												<span className="flex items-center gap-2.5">
+													<span
+														className="w-2.5 h-2.5 rounded-sm shrink-0"
+														style={{ background: RES_COLOR[r.tier] }}
+													/>
+													<span className={isSel ? "font-semibold" : ""}>{r.tier}</span>
+													<span className="text-[11px] text-base-content/40">{r.fps}fps</span>
+												</span>
+											</td>
+											<td className="text-right text-base-content/60 hidden sm:table-cell">
+												{fixed(r.total, 2)} Mbps
+											</td>
+											<td className="text-right text-base-content/60 hidden sm:table-cell">
+												{fixed(r.gib, 3)} GiB
+											</td>
+											<td className={`text-right ${isSel ? "text-warning" : ""}`}>
+												{fmtTime(allowance / r.gib)}
+											</td>
+											<td>
+												<div className="h-2 rounded bg-base-200 border border-base-content/10 overflow-hidden">
+													<div
+														className="h-full rounded-l transition-[width] duration-500"
+														style={{ width: `${relW}%`, background: RES_COLOR[r.tier] }}
+													/>
+												</div>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
 				</div>
-			</div>
+			</Reveal>
 
-			<CalcNotes>
-				<p>
-					<strong className="text-base-content/70">Model.</strong> {CODECS[codec].label} video at
-					delivery bitrates (
-					{RES_TIERS_LOW_TO_HIGH.map((t) => `${t} ${trimNum(CODECS[codec].ref[t])}`).join(" · ")}{" "}
-					Mbps at 30fps), scaled ×0.92 / ×1.0 / ×1.40 for 24 / 30 / 60 fps, plus 128 kbps audio
-					(Opus, or AAC for H.264) in the stream. 720p and above stream at the chosen framerate;{" "}
-					{capped ? "240p and 480p are held to 30fps here." : "240p and 480p are held to 30fps."}
-				</p>
-				<p>
-					<strong className="text-base-content/70">Codec.</strong> {CODEC_NOTE[codec]}
-				</p>
-				<p>
-					<strong className="text-base-content/70">Allowance.</strong> A tier burns bitrate × 3600s
-					÷ 8 per hour — one Mbps for an hour is 0.419 GiB — so stream time = allowance ÷ that rate.
-					At the current framerate the lowest tier stretches the same allowance about{" "}
-					{stretch.toFixed(0)}× further than 2160p. On Anthers a viewer's Usage covers this egress
-					at cost ($0.01/GiB); the companion{" "}
-					<em className="text-base-content/60 not-italic font-semibold">storage calculator</em>{" "}
-					charges the whole transcode ladder every month instead. DigitalOcean Spaces bills per GB
-					(10⁹); multiply by 1.074 for $/GiB. Planning model, not for invoicing.
-				</p>
-			</CalcNotes>
+			<Reveal>
+				<CalcNotes>
+					<p>
+						<strong className="text-base-content/70">Model.</strong> {CODECS[codec].label} video at
+						delivery bitrates (
+						{RES_TIERS_LOW_TO_HIGH.map((t) => `${t} ${trimNum(CODECS[codec].ref[t])}`).join(" · ")}{" "}
+						Mbps at 30fps), scaled ×0.92 / ×1.0 / ×1.40 for 24 / 30 / 60 fps, plus 128 kbps audio
+						(Opus, or AAC for H.264) in the stream. 720p and above stream at the chosen framerate;{" "}
+						{capped ? "240p and 480p are held to 30fps here." : "240p and 480p are held to 30fps."}
+					</p>
+					<p>
+						<strong className="text-base-content/70">Codec.</strong> {CODEC_NOTE[codec]}
+					</p>
+					<p>
+						<strong className="text-base-content/70">Allowance.</strong> A tier burns bitrate ×
+						3600s ÷ 8 per hour — one Mbps for an hour is 0.419 GiB — so stream time = allowance ÷
+						that rate. At the current framerate the lowest tier stretches the same allowance about{" "}
+						{stretch.toFixed(0)}× further than 2160p. On Anthers a viewer's Usage covers this egress
+						at cost ($0.01/GiB); the companion{" "}
+						<em className="text-base-content/60 not-italic font-semibold">storage calculator</em>{" "}
+						charges the whole transcode ladder every month instead. DigitalOcean Spaces bills per GB
+						(10⁹); multiply by 1.074 for $/GiB. Planning model, not for invoicing.
+					</p>
+				</CalcNotes>
+			</Reveal>
 		</div>
 	);
 }

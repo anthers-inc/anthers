@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -172,23 +173,29 @@ function FAQAccordion({ item }: { item: FAQItem }) {
 export default function FAQPage() {
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
-			<h1 className="text-3xl font-bold mb-2">Frequently Asked Questions</h1>
-			<p className="text-base-content/60 mb-8">
-				Everything you need to know about how Anthers works.
-			</p>
+			<Reveal>
+				<h1 className="text-3xl font-bold mb-2">Frequently Asked Questions</h1>
+			</Reveal>
+			<Reveal delay={120}>
+				<p className="text-base-content/60 mb-8">
+					Everything you need to know about how Anthers works.
+				</p>
+			</Reveal>
 
 			{CATEGORIES.map((category) => (
 				<section key={category} className="mb-8">
 					<h2 className="text-lg font-semibold mb-3 text-base-content/80">{category}</h2>
 					<div className="flex flex-col gap-2">
-						{FAQ_ITEMS.filter((item) => item.category === category).map((item) => (
-							<FAQAccordion key={item.question} item={item} />
+						{FAQ_ITEMS.filter((item) => item.category === category).map((item, i) => (
+							<Reveal key={item.question} delay={i * 60}>
+								<FAQAccordion item={item} />
+							</Reveal>
 						))}
 					</div>
 				</section>
 			))}
 
-			<div className="text-center py-8 border-t border-base-300/50 mt-8">
+			<Reveal className="text-center py-8 border-t border-base-300/50 mt-8">
 				<p className="text-sm text-base-content/50 mb-3">Still have questions?</p>
 				<div className="flex gap-3 justify-center">
 					<Link to="/about" className="btn btn-ghost btn-sm">
@@ -198,7 +205,7 @@ export default function FAQPage() {
 						Wiki
 					</Link>
 				</div>
-			</div>
+			</Reveal>
 		</div>
 	);
 }
