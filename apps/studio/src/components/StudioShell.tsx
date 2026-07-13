@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useAuth } from "@anthers/web-shared/auth";
+import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	ArrowTopRightOnSquareIcon,
 	ArrowUpTrayIcon,
@@ -56,6 +57,7 @@ export default function StudioShell({ children }: { children: ReactNode }) {
 								<span className="hidden sm:inline">Back to Anthers</span>
 								<ArrowTopRightOnSquareIcon className="w-4 h-4" />
 							</a>
+							<ThemeToggle />
 						</div>
 					</div>
 					<nav className="flex items-center gap-1 -mb-px overflow-x-auto">

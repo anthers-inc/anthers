@@ -71,6 +71,7 @@ function serializeUser(user: typeof users.$inferSelect) {
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
+		themePreference: user.themePreference,
 		atprotoDid: user.atprotoDid,
 		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,

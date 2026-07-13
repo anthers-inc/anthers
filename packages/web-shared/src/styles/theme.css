@@ -8,39 +8,15 @@
 
    Meadow = airy editorial, forest green + soft yellow, amber accent. The two token sets
    below are lifted verbatim from the reference design (`apps/web/src/pages/lab/variants/
-   Meadow.tsx` LIGHT/DARK). Dark is the site default (applied at :root); light applies
-   only under [data-theme=light]. Both blocks are unlayered, so they beat DaisyUI's
+   Meadow.tsx` LIGHT/DARK). Light is the site default (applied at :root); dark applies
+   only under [data-theme=dark]. Both blocks are unlayered, so they beat DaisyUI's
    layered `dark`/`light` themes regardless of @import order. */
 
-/* Dark — the site default. Deliberately darkened + desaturated greens so the pollen
-   texture and botanical decor read subtly over it. */
+/* Light — soft cream base, deeper green ink. The site default, applied at :root so a
+   page with no data-theme (or data-theme=light) renders light. Declared FIRST so the
+   equal-specificity [data-theme=dark] block below wins by source order when dark is set
+   (:root always matches <html>, so it can't come after dark or it would re-win). */
 :root,
-[data-theme="dark"] {
-	color-scheme: dark;
-	--color-base-100: oklch(14% 0.014 70);
-	--color-base-200: oklch(18% 0.015 70);
-	--color-base-300: oklch(23% 0.016 70);
-	--color-base-content: oklch(93% 0.03 96);
-	--color-primary: oklch(75% 0.15 150);
-	--color-primary-content: oklch(20% 0.05 150);
-	--color-secondary: oklch(86% 0.13 94);
-	--color-secondary-content: oklch(24% 0.05 88);
-	--color-accent: oklch(79% 0.13 76);
-	--color-accent-content: oklch(22% 0.05 76);
-	--color-neutral: oklch(31% 0.03 158);
-	--color-neutral-content: oklch(93% 0.03 96);
-	--color-info: oklch(70% 0.1 220);
-	--color-info-content: oklch(17% 0.017 158);
-	--color-success: oklch(73% 0.14 150);
-	--color-success-content: oklch(17% 0.017 158);
-	--color-warning: oklch(83% 0.13 88);
-	--color-warning-content: oklch(17% 0.017 158);
-	--color-error: oklch(66% 0.16 28);
-	--color-error-content: oklch(17% 0.017 158);
-}
-
-/* Light — soft cream base, deeper green ink. Applies only where a subtree opts in with
-   data-theme=light; the consumer site currently renders dark everywhere. */
 [data-theme="light"] {
 	color-scheme: light;
 	--color-base-100: oklch(98.6% 0.012 96);
@@ -63,6 +39,33 @@
 	--color-warning-content: oklch(98.6% 0.012 96);
 	--color-error: oklch(57% 0.17 28);
 	--color-error-content: oklch(98.6% 0.012 96);
+}
+
+/* Dark — opt-in via data-theme=dark. Deliberately darkened + desaturated greens so the
+   pollen texture and botanical decor read subtly over it. Must follow the :root block
+   above so it wins by source order at equal specificity. */
+[data-theme="dark"] {
+	color-scheme: dark;
+	--color-base-100: oklch(14% 0.014 70);
+	--color-base-200: oklch(18% 0.015 70);
+	--color-base-300: oklch(23% 0.016 70);
+	--color-base-content: oklch(93% 0.03 96);
+	--color-primary: oklch(75% 0.15 150);
+	--color-primary-content: oklch(20% 0.05 150);
+	--color-secondary: oklch(86% 0.13 94);
+	--color-secondary-content: oklch(24% 0.05 88);
+	--color-accent: oklch(79% 0.13 76);
+	--color-accent-content: oklch(22% 0.05 76);
+	--color-neutral: oklch(31% 0.03 158);
+	--color-neutral-content: oklch(93% 0.03 96);
+	--color-info: oklch(70% 0.1 220);
+	--color-info-content: oklch(17% 0.017 158);
+	--color-success: oklch(73% 0.14 150);
+	--color-success-content: oklch(17% 0.017 158);
+	--color-warning: oklch(83% 0.13 88);
+	--color-warning-content: oklch(17% 0.017 158);
+	--color-error: oklch(66% 0.16 28);
+	--color-error-content: oklch(17% 0.017 158);
 }
 
 /* Softer form-control borders — the default bordered inputs/selects read as

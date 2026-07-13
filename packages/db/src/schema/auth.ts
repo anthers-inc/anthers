@@ -23,6 +23,9 @@ export const users = pgTable("users", {
 	websiteUrl: text("website_url").default(""),
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),
+	// UI light/dark preference ("light" | "dark"); null = no account-level choice, so
+	// the client falls back to the device (localStorage) setting / default.
+	themePreference: text("theme_preference"),
 	atprotoDid: text("atproto_did").unique(),
 	atprotoHandle: text("atproto_handle").default(""),
 	atprotoPdsUrl: text("atproto_pds_url").default(""),

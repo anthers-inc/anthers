@@ -1,10 +1,18 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Anthers Studio</title>
+    <!-- Apply the saved light/dark choice before first paint. Default light (set on <html>);
+         override to dark if stored. Key + default mirror packages/web-shared/src/lib/theme.ts. -->
+    <script>
+      try {
+        if (localStorage.getItem("anthers_theme") === "dark")
+          document.documentElement.setAttribute("data-theme", "dark");
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="./src/styles/globals.css" />
   </head>
   <body>
