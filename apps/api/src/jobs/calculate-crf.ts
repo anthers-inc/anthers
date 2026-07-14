@@ -7,7 +7,7 @@
  * estimates their storage cost + storage AFF (a self-hosting creator pays a flat
  * fee instead), compares to earnings, and — at the Foundation's discretion, within
  * its budget — may subsidize the gap for creators who earn less than that cost.
- * Storage is the creator's own opt-in cost (3 GiB free); delivery is viewer-funded.
+ * Storage is the creator's own opt-in cost (50 GiB free); delivery is viewer-funded.
  */
 
 import { db } from "@anthers/db";
@@ -35,11 +35,11 @@ function getCycleDate(): string {
 }
 
 async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise<Decimal> {
-	// Pool + boost distributions
+	// Pool + Seed distributions
 	const [poolResult] = await db
 		.select({
 			poolTotal: sum(poolDistributions.poolAmount),
-			boostTotal: sum(poolDistributions.boostAmount),
+			seedTotal: sum(poolDistributions.seedAmount),
 		})
 		.from(poolDistributions)
 		.where(
@@ -50,7 +50,7 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 		);
 
 	const poolAmount = new Decimal(poolResult?.poolTotal ?? "0");
-	const boostAmount = new Decimal(poolResult?.boostTotal ?? "0");
+	const seedAmount = new Decimal(poolResult?.seedTotal ?? "0");
 
 	// Marketplace earnings this month
 	// cycleDate is "YYYY-MM-01"; derive month boundaries for timestamp comparison
@@ -75,7 +75,7 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 
 	const salesEarnings = new Decimal(salesResult?.total ?? "0");
 
-	return poolAmount.plus(boostAmount).plus(salesEarnings);
+	return poolAmount.plus(seedAmount).plus(salesEarnings);
 }
 
 export async function calculateCrfSubsidies() {
@@ -130,7 +130,7 @@ export async function calculateCrfSubsidies() {
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 
-		// V3 creator cost = storage beyond the free 3 GiB + 50% storage AFF (or a flat
+		// Creator cost = storage beyond the free 50 GiB + 50% storage AFF (or a flat
 		// self-host fee). Delivery is viewer-funded, so it is not part of this cost.
 		const hostingCost = estimateStorageCost({
 			storageBytes,

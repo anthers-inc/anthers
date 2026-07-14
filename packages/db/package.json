@@ -9,12 +9,17 @@
 		"./client": "./src/client.ts",
 		"./schema": "./src/schema/index.ts"
 	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
 	"dependencies": {
+		"@anthers/shared": "workspace:*",
 		"drizzle-orm": "0.45.1",
 		"postgres": "3.4.9"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
-		"drizzle-kit": "^0.31.0"
+		"drizzle-kit": "^0.31.0",
+		"typescript": "^5.8.0"
 	}
 }

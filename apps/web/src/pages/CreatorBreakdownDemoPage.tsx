@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { BADGE_PLANS, SEED_PRICE } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -25,11 +26,15 @@ interface SubscriberMilestone {
 	pctOfAudience: number;
 }
 
-interface RevenueByTier {
+interface RevenueByPlan {
 	badge: string;
-	usageGib: number;
-	boost: number;
-	combined: number;
+	/** Whole-dollar monthly plan price. */
+	price: number;
+	/** Time Pool ($) — to creators, by watch-time. */
+	timePool: number;
+	/** Included Seeds (count, $1 each) — 100% to the chosen creator. */
+	seeds: number;
+	/** Money to creators from this plan = Time Pool + Seeds. */
 	toCreators: number;
 }
 
@@ -64,8 +69,8 @@ interface DemoCreatorBreakdown {
 	anthers: PlatformComparison;
 	/** Subscriber milestones to hit key revenue targets */
 	milestones: SubscriberMilestone[];
-	/** Per-subscriber revenue by Anthers tier */
-	revenueByTier: RevenueByTier[];
+	/** Per-subscriber funding by Anthers Badge plan */
+	revenueByTier: RevenueByPlan[];
 	/** Key insight text */
 	insight: string;
 	/** Monthly infra breakdown */
@@ -112,18 +117,25 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
 // ---------------------------------------------------------------------------
 
 /**
- * V3 Anthers Badge personas (spec §4). Users aren't on a plan — they spend on
- * Usage (per GiB) + Boost ($1 units) and earn a rolling badge from the combined
- * total. "toCreators" = platform-wide Time Pool ($0.015/GiB, distributed by
- * watch-time) + Boost (100% to creators). Shared across creators; each creator's
- * actual take is their watch-time share of the Time Pool plus any directed Boosts.
+ * V4 Anthers Badge plans. A viewer CHOOSES a plan (Root $4 / Sprout $8 / Petal
+ * $16 / Blossom $32); its price splits into a Time Pool (to creators, by
+ * watch-time), included Seeds ($1 units, 100% to a chosen creator), and the
+ * Community Share (the charitable remainder). "toCreators" = Time Pool + Seeds,
+ * shared across creators; each creator's actual take is their watch-time share of
+ * the Time Pool plus any directed Seeds. Derived from @anthers/shared/constants.
  */
-const BADGE_FUNDING: RevenueByTier[] = [
-	{ badge: "Root", usageGib: 100, boost: 0, combined: 3, toCreators: 1.5 },
-	{ badge: "Sprout", usageGib: 200, boost: 1, combined: 7, toCreators: 4.0 },
-	{ badge: "Petal", usageGib: 300, boost: 6, combined: 15, toCreators: 10.5 },
-	{ badge: "Blossom", usageGib: 400, boost: 18, combined: 30, toCreators: 24.0 },
-];
+const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
+	(b) => {
+		const p = BADGE_PLANS[b];
+		return {
+			badge: b.charAt(0).toUpperCase() + b.slice(1),
+			price: p.price,
+			timePool: p.timePool,
+			seeds: p.seeds,
+			toCreators: p.timePool + p.seeds * SEED_PRICE,
+		};
+	},
+);
 
 const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 	{
@@ -196,7 +208,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Boost income is load-bearing — it accounts for over half of revenue at Sprout and above. With WebRTC peer-assisted delivery (30-60% bandwidth savings), infrastructure drops to ~$575/mo, widening the margin significantly.",
+			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Seed income is load-bearing — directed Seeds account for over half of revenue at Sprout and above. With WebRTC peer-assisted delivery (30-60% bandwidth savings), infrastructure drops to ~$575/mo, widening the margin significantly.",
 		infraBreakdown: [
 			{ label: "CDN delivery (~106 TB)", cost: 1060 },
 			{ label: "Object storage (~133 GB)", cost: 2.66 },
@@ -722,16 +734,16 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				<thead>
 					<tr className="border-base-content/10">
 						<th style={serif} className="font-medium">
-							Badge
+							Plan
 						</th>
 						<th style={serif} className="text-right font-medium">
-							Usage
+							Price
 						</th>
 						<th style={serif} className="text-right font-medium">
-							Boost
+							Time Pool
 						</th>
 						<th style={serif} className="text-right font-medium">
-							Combined spend
+							Seeds
 						</th>
 						<th style={serif} className="text-right font-medium">
 							To creators
@@ -743,13 +755,13 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 						<tr key={row.badge}>
 							<td className="text-sm font-medium">{row.badge}</td>
 							<td className="text-sm text-right tabular-nums text-base-content/60">
-								{row.usageGib} GiB
-							</td>
-							<td className="text-sm text-right tabular-nums text-primary">
-								{row.boost > 0 ? `$${row.boost.toFixed(2)}` : "—"}
+								${row.price.toFixed(2)}/mo
 							</td>
 							<td className="text-sm text-right tabular-nums text-base-content/60">
-								${row.combined.toFixed(2)}
+								${row.timePool.toFixed(2)}
+							</td>
+							<td className="text-sm text-right tabular-nums text-primary">
+								{row.seeds > 0 ? `${row.seeds} × $1` : "—"}
 							</td>
 							<td className="text-sm text-right tabular-nums font-semibold text-success">
 								${row.toCreators.toFixed(2)}
@@ -759,12 +771,11 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Users aren't on a plan — they spend on Usage (per GiB) and Boost ($1 units) and earn a
-				rolling Anthers Badge from the combined total. "To creators" is the platform-wide Time Pool
-				(funded at $0.015/GiB of Usage, distributed by watch-time) plus Boost (100% to creators, no
-				cut). {creator.displayName} earns their watch-time share —{" "}
+				Users choose a Badge plan; its price funds a Time Pool (distributed to creators by
+				watch-time) plus included Seeds ($1 units, 100% to a chosen creator). "To creators" is that
+				Time Pool + Seeds — Anthers keeps $0. {creator.displayName} earns their watch-time share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
-				typical subscriber's time — of that Time Pool, plus any Boosts directed to them.
+				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>
 		</div>
 	);

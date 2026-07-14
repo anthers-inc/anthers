@@ -25,10 +25,10 @@ import {
 	accountCycles,
 	accounts,
 	attentionEvents,
-	boostAllocations,
 	creatorGates,
 	poolDistributions,
-	redownloadLedger,
+	seedAllocations,
+	walletLedger,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -59,11 +59,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Accounts & economics
 	account: one(accounts),
 	accountCycles: many(accountCycles),
-	redownloadLedger: many(redownloadLedger),
+	walletLedger: many(walletLedger),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
-	boostAllocationsAsUser: many(boostAllocations, { relationName: "boostUser" }),
-	boostAllocationsAsCreator: many(boostAllocations, { relationName: "boostCreator" }),
+	seedAllocationsAsUser: many(seedAllocations, { relationName: "seedUser" }),
+	seedAllocationsAsCreator: many(seedAllocations, { relationName: "seedCreator" }),
 	poolDistributionsAsSubscriber: many(poolDistributions, { relationName: "poolSubscriber" }),
 	poolDistributionsAsCreator: many(poolDistributions, { relationName: "poolCreator" }),
 	creatorGates: many(creatorGates),
@@ -219,9 +219,8 @@ export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({
 	user: one(users, { fields: [accountCycles.userId], references: [users.id] }),
 }));
 
-export const redownloadLedgerRelations = relations(redownloadLedger, ({ one }) => ({
-	user: one(users, { fields: [redownloadLedger.userId], references: [users.id] }),
-	post: one(posts, { fields: [redownloadLedger.postId], references: [posts.id] }),
+export const walletLedgerRelations = relations(walletLedger, ({ one }) => ({
+	user: one(users, { fields: [walletLedger.userId], references: [users.id] }),
 }));
 
 export const attentionEventsRelations = relations(attentionEvents, ({ one }) => ({
@@ -238,16 +237,16 @@ export const attentionEventsRelations = relations(attentionEvents, ({ one }) => 
 	post: one(posts, { fields: [attentionEvents.postId], references: [posts.id] }),
 }));
 
-export const boostAllocationsRelations = relations(boostAllocations, ({ one }) => ({
+export const seedAllocationsRelations = relations(seedAllocations, ({ one }) => ({
 	user: one(users, {
-		fields: [boostAllocations.userId],
+		fields: [seedAllocations.userId],
 		references: [users.id],
-		relationName: "boostUser",
+		relationName: "seedUser",
 	}),
 	creator: one(users, {
-		fields: [boostAllocations.creatorId],
+		fields: [seedAllocations.creatorId],
 		references: [users.id],
-		relationName: "boostCreator",
+		relationName: "seedCreator",
 	}),
 }));
 

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { BADGE_ORDER, BADGE_PLANS, badgeLabel } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
 import type {
+	Badge,
 	CreatorGate,
 	CreatorStatus,
 	PostListItem,
@@ -33,16 +35,14 @@ const apiBase =
 
 type Tab = "all" | "games" | "videos" | "audio" | "writing" | "tiers" | "about";
 
-const TIER_THRESHOLDS: { id: string; name: string; price: number }[] = [
-	{ id: "root", name: "Root", price: 3 },
-	{ id: "sprout", name: "Sprout", price: 7 },
-	{ id: "petal", name: "Petal", price: 15 },
-	{ id: "blossom", name: "Blossom", price: 30 },
-];
-
 function tierNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
 	return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+/** An Anthers Gate's threshold is a Badge rank (1 = Root … 4 = Blossom). */
+function anthersBadgeForRank(rank: number): Badge | null {
+	return (BADGE_ORDER[rank] as Badge | undefined) ?? null;
 }
 
 /** Resolve display access for a post from its per-viewer AccessResult. */
@@ -127,17 +127,17 @@ function TiersTab({
 	gates,
 	unlockedGates,
 	userTier,
-	userBoost,
+	userSeed,
 	creatorName,
 }: {
 	gates: CreatorGate[];
 	unlockedGates: number[];
 	userTier: string;
-	userBoost: string;
+	userSeed: string;
 	creatorName: string;
 }) {
 	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_badge");
-	const boostGates = gates.filter((g) => g.gateType === "boost");
+	const seedGates = gates.filter((g) => g.gateType === "seed");
 	const unlockedSet = new Set(unlockedGates);
 
 	if (gates.length === 0) {
@@ -159,9 +159,9 @@ function TiersTab({
 							<span className="text-base-content/60">Your status with {creatorName}</span>
 							<div className="flex items-center gap-2">
 								<span className="badge badge-sm badge-outline">{tierNameFor(userTier)}</span>
-								{parseFloat(userBoost) > 0 && (
+								{parseFloat(userSeed) > 0 && (
 									<span className="badge badge-sm badge-primary badge-outline">
-										${userBoost} boost
+										${userSeed} in Seeds
 									</span>
 								)}
 							</div>
@@ -180,9 +180,8 @@ function TiersTab({
 					<div className="space-y-2">
 						{anthersTierGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
-							const tierInfo = TIER_THRESHOLDS.find(
-								(t) => Number(t.price) === Number(gate.threshold),
-							);
+							const gateBadge = anthersBadgeForRank(Number(gate.threshold));
+							const gatePlan = gateBadge ? BADGE_PLANS[gateBadge] : null;
 							return (
 								<div
 									key={gate.id}
@@ -197,10 +196,14 @@ function TiersTab({
 													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
 												)}
 												<div>
-													<span className="font-medium">{tierInfo?.name ?? gate.label}</span>
-													<span className="text-base-content/40 ml-2 text-sm">
-														${gate.threshold}/mo
+													<span className="font-medium">
+														{gateBadge ? badgeLabel(gateBadge) : gate.label}
 													</span>
+													{gatePlan && (
+														<span className="text-base-content/40 ml-2 text-sm">
+															${gatePlan.price}/mo plan
+														</span>
+													)}
 												</div>
 											</div>
 											{unlocked && <span className="badge badge-sm badge-success">Unlocked</span>}
@@ -216,19 +219,19 @@ function TiersTab({
 				</div>
 			)}
 
-			{/* Boost Tiers */}
-			{boostGates.length > 0 && (
+			{/* Seed Tiers */}
+			{seedGates.length > 0 && (
 				<div>
-					<h3 className="text-lg font-bold mb-1">Boost Tiers</h3>
+					<h3 className="text-lg font-bold mb-1">Seed Tiers</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Custom tiers set by {creatorName}. Boost this creator to unlock.
+						Custom tiers set by {creatorName}. Sow Seeds to this creator to unlock.
 					</p>
 					<div className="space-y-2">
-						{boostGates.map((gate) => {
+						{seedGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
-							const currentBoost = parseFloat(userBoost);
+							const currentSeed = parseFloat(userSeed);
 							const threshold = parseFloat(gate.threshold);
-							const remaining = Math.max(0, threshold - currentBoost);
+							const remaining = Math.max(0, threshold - currentSeed);
 							return (
 								<div
 									key={gate.id}
@@ -245,7 +248,7 @@ function TiersTab({
 												<div>
 													<span className="font-medium">{gate.label}</span>
 													<span className="text-base-content/40 ml-2 text-sm">
-														${gate.threshold}/mo boost
+														${gate.threshold} in Seeds
 													</span>
 												</div>
 											</div>
@@ -275,7 +278,7 @@ function TiersTab({
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Add Usage or Boost on Anthers to start unlocking tiers and supporting {creatorName}.
+							Pick an Anthers plan to start unlocking tiers and supporting {creatorName} with Seeds.
 						</p>
 						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
 							Get Started
@@ -718,15 +721,15 @@ export default function CreatorProfilePage() {
 								>
 									{isFollowing ? "Following" : "Follow"}
 								</button>
-								{/* Badge/boost badges */}
-								{creatorStatus && creatorStatus.badge !== "none" && (
+								{/* Badge/seed badges */}
+								{creatorStatus && creatorStatus.badge !== "free" && (
 									<div className="flex items-center gap-2 text-xs">
 										<span className="badge badge-sm badge-outline">
 											{tierNameFor(creatorStatus.badge)}
 										</span>
-										{parseFloat(creatorStatus.boostAmount) > 0 && (
+										{parseFloat(creatorStatus.seedAmount) > 0 && (
 											<span className="badge badge-sm badge-primary badge-outline">
-												${creatorStatus.boostAmount} boost
+												${creatorStatus.seedAmount} in Seeds
 											</span>
 										)}
 									</div>
@@ -862,8 +865,8 @@ export default function CreatorProfilePage() {
 						<TiersTab
 							gates={creatorStatus?.gates ?? []}
 							unlockedGates={creatorStatus?.unlockedGates ?? []}
-							userTier={creatorStatus?.badge ?? "none"}
-							userBoost={creatorStatus?.boostAmount ?? "0.00"}
+							userTier={creatorStatus?.badge ?? "free"}
+							userSeed={creatorStatus?.seedAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.username}
 						/>
 					)}

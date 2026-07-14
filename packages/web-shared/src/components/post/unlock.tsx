@@ -44,7 +44,7 @@ export function LockedCover({
 }
 
 /**
- * Reason-aware unlock panel for the post page (login / join-or-boost). The
+ * Reason-aware unlock panel for the post page (login / join-or-sow-Seeds). The
  * one-time-purchase case is handled by ProjectPricing, which has the checkout flow.
  */
 export function UnlockPanel({
@@ -59,7 +59,7 @@ export function UnlockPanel({
 	const isLogin = access.reason === "login_required";
 	const message = isLogin
 		? `Log in to check your access to this post from ${creatorName}.`
-		: `Join or boost ${creatorName} to unlock this post and their other members-only work.`;
+		: `Join or sow Seeds for ${creatorName} to unlock this post and their other members-only work.`;
 	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}` : "/subscribe";
 	return (
 		<div className="card bg-base-200 border border-base-300">
@@ -136,7 +136,7 @@ export function UnlockModal({
 		body = (
 			<>
 				<p className="text-sm text-base-content/60">
-					Join or boost {creatorName} to unlock this and their members-only work.
+					Join or sow Seeds for {creatorName} to unlock this and their members-only work.
 				</p>
 				<Link
 					to={post.creator?.username ? `/${post.creator.username}` : "/subscribe"}

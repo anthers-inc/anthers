@@ -2,13 +2,13 @@
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
  * the boundary (E50 Phase 4): Stripe payout onboarding, external platform connections
- * (cross-publish / unified analytics), and the boost-tier ladder. Account settings
+ * (cross-publish / unified analytics), and the Seed-tier ladder. Account settings
  * (profile, password, email, identity, the become-a-creator toggle) stay on
  * anthers.org/settings.
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BoostLadderEditor from "../components/post/BoostLadderEditor";
+import SeedLadderEditor from "../components/post/SeedLadderEditor";
 import { apiBaseUrl, client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
@@ -354,7 +354,7 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts, platform connections, and boost tiers. Account settings (profile, email, identity)
+				Payouts, platform connections, and Seed tiers. Account settings (profile, email, identity)
 				live on your Anthers account.
 			</p>
 
@@ -362,8 +362,8 @@ export default function StudioSettingsPage() {
 				<StripeOnboardingSection />
 				<PlatformConnectionsSection />
 				<div>
-					<h2 className="text-lg font-semibold mb-2">Boost Tiers</h2>
-					<BoostLadderEditor />
+					<h2 className="text-lg font-semibold mb-2">Seed Tiers</h2>
+					<SeedLadderEditor />
 				</div>
 			</div>
 		</div>

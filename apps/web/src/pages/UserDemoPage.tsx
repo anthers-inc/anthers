@@ -28,7 +28,7 @@ interface DemoCreatorAllocation {
 	avatar: string;
 	watchHours: number;
 	poolAmount: number;
-	boostAmount: number;
+	seedAmount: number;
 	/** Gates this creator has configured, sorted ascending by threshold */
 	gates: CreatorGate[];
 }
@@ -55,19 +55,19 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // Demo data
 // ---------------------------------------------------------------------------
 
-// V3: users aren't on a tiered plan — they prepay Usage (per GiB) + Boost ($1
-// units) and earn a rolling Anthers Badge from the combined spend. This demo user
-// buys 300 GiB Usage ($9.00 = $3 bandwidth + $1.50 AFF + $4.50 Time Pool) and $6
-// Boost, for $15 combined → the Petal badge (≥$15). See spec §4.
+// V4: a user CHOOSES a Badge plan. This demo user is on Petal ($16/mo). Its price
+// splits into a $9 Time Pool (to creators, by watch-time), 3 included Seeds ($3, $1
+// units, 100% to a chosen creator), and a $4 Community Share (the charitable
+// remainder). Bandwidth is a SEPARATE at-cost wallet with a free monthly allowance
+// (Petal = 30 GiB), not part of the plan price. See @anthers/shared/constants.
 const DEMO_PLAN = {
 	badge: "Petal",
-	usageGib: 300,
-	usageTotal: 9.0,
-	bandwidth: 3.0, // 300 GiB × $0.01/GiB — DigitalOcean egress, at cost
-	foundation: 1.5, // Anthers Foundation fee (AFF): 50% of usage bandwidth = $0.005/GiB
-	timePool: 4.5, // 300 GiB × $0.015/GiB — to creators, distributed by watch-time
-	boostPool: 6.0,
-	combined: 15.0, // usage + boost — the Anthers Badge basis
+	price: 16.0,
+	timePool: 9.0, // to creators, distributed by watch-time
+	seeds: 3, // included Seeds (count, $1 each)
+	seedPool: 3.0, // $ value of the included Seeds
+	communityShare: 4.0, // price − Time Pool − Seeds — charitable, funds the Foundation
+	freeBwGiB: 30, // free monthly bandwidth allowance (separate at-cost wallet)
 	month: "February 2026",
 };
 
@@ -77,8 +77,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "bugfishhhh",
 		avatar: "BF",
 		watchHours: 8.2,
-		poolAmount: 1.47,
-		boostAmount: 3.42,
+		poolAmount: 2.95,
+		seedAmount: 1.71,
 		gates: [
 			{
 				threshold: 2,
@@ -112,8 +112,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "LifeOfRiza",
 		avatar: "LR",
 		watchHours: 6.5,
-		poolAmount: 1.17,
-		boostAmount: 1.21,
+		poolAmount: 2.34,
+		seedAmount: 0.6,
 		gates: [
 			{
 				threshold: 2,
@@ -132,8 +132,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "RaceDayCafe",
 		avatar: "RC",
 		watchHours: 5.1,
-		poolAmount: 0.92,
-		boostAmount: 0.85,
+		poolAmount: 1.84,
+		seedAmount: 0.43,
 		gates: [
 			{
 				threshold: 2,
@@ -157,8 +157,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "Amaiguri",
 		avatar: "AM",
 		watchHours: 3.0,
-		poolAmount: 0.54,
-		boostAmount: 0.39,
+		poolAmount: 1.08,
+		seedAmount: 0.19,
 		gates: [
 			{
 				threshold: 4,
@@ -182,8 +182,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "MAPHRA",
 		avatar: "MA",
 		watchHours: 1.5,
-		poolAmount: 0.27,
-		boostAmount: 0.13,
+		poolAmount: 0.54,
+		seedAmount: 0.07,
 		gates: [
 			{
 				threshold: 2,
@@ -207,8 +207,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "4 others",
 		avatar: "..",
 		watchHours: 0.7,
-		poolAmount: 0.13,
-		boostAmount: 0.0,
+		poolAmount: 0.25,
+		seedAmount: 0.0,
 		gates: [],
 	},
 ];
@@ -426,39 +426,39 @@ function AccessBar({ total, gates }: { total: number; gates: CreatorGate[] }) {
 // ---------------------------------------------------------------------------
 
 function SubscriptionDashboardDemo() {
-	const [boosts, setBoosts] = useState<number[]>(DEMO_ALLOCATIONS.map((a) => a.boostAmount));
+	const [seedAllocs, setSeedAllocs] = useState<number[]>(DEMO_ALLOCATIONS.map((a) => a.seedAmount));
 
-	const totalWatchHours = DEMO_ALLOCATIONS.reduce((s, a) => s + a.watchHours, 0);
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
-	const totalBoost = boosts.reduce((s, b) => s + b, 0);
-	// V3 all-in monthly spend (pre card/tax): bandwidth + Foundation fee + Time Pool + Boost
-	const monthlyTotal = DEMO_PLAN.bandwidth + DEMO_PLAN.foundation + totalPool + totalBoost;
+	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
+	// V4 plan price (pre card/tax): Time Pool + Seeds + Community Share = the chosen
+	// Badge plan. Bandwidth is a separate at-cost wallet, billed apart from this.
+	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.communityShare;
 
 	const handleSlider = (idx: number, value: number) => {
-		const newBoosts = [...boosts];
-		const diff = value - newBoosts[idx];
-		newBoosts[idx] = value;
+		const next = [...seedAllocs];
+		const diff = value - next[idx];
+		next[idx] = value;
 
 		// Redistribute the difference proportionally among other sliders
-		const othersTotal = newBoosts.reduce((s, b, i) => (i !== idx ? s + b : s), 0);
+		const othersTotal = next.reduce((s, b, i) => (i !== idx ? s + b : s), 0);
 		if (othersTotal > 0) {
-			for (let i = 0; i < newBoosts.length; i++) {
+			for (let i = 0; i < next.length; i++) {
 				if (i !== idx) {
-					newBoosts[i] = Math.max(0, newBoosts[i] - diff * (newBoosts[i] / othersTotal));
+					next[i] = Math.max(0, next[i] - diff * (next[i] / othersTotal));
 				}
 			}
 		}
 
-		// Normalize to total boost pool
-		const sum = newBoosts.reduce((s, b) => s + b, 0);
+		// Normalize to the Seed pool
+		const sum = next.reduce((s, b) => s + b, 0);
 		if (sum > 0) {
-			const scale = DEMO_PLAN.boostPool / sum;
-			for (let i = 0; i < newBoosts.length; i++) {
-				newBoosts[i] = Math.round(newBoosts[i] * scale * 100) / 100;
+			const scale = DEMO_PLAN.seedPool / sum;
+			for (let i = 0; i < next.length; i++) {
+				next[i] = Math.round(next[i] * scale * 100) / 100;
 			}
 		}
 
-		setBoosts(newBoosts);
+		setSeedAllocs(next);
 	};
 
 	return (
@@ -469,24 +469,12 @@ function SubscriptionDashboardDemo() {
 					Your Anther—{DEMO_PLAN.month}
 				</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.badge} badge — {DEMO_PLAN.usageGib} GiB Usage + $
-					{DEMO_PLAN.boostPool.toFixed(2)} Boost
+					{DEMO_PLAN.badge} plan — ${DEMO_PLAN.price.toFixed(2)}/mo · {DEMO_PLAN.seeds} Seeds
 				</p>
 			</div>
 
 			{/* Breakdown summary cards */}
 			<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-				<div className="card bg-base-200">
-					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">
-							Anthers Foundation Fee
-						</p>
-						<p className="text-xl font-bold">${DEMO_PLAN.foundation.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">
-							50% of usage bandwidth &middot; $0.005/GiB
-						</p>
-					</div>
-				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Time Pool</p>
@@ -496,9 +484,18 @@ function SubscriptionDashboardDemo() {
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Boost Pool</p>
-						<p className="text-xl font-bold text-primary">${totalBoost.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">Drag sliders to adjust</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Seed Pool</p>
+						<p className="text-xl font-bold text-primary">${totalSeeds.toFixed(2)}</p>
+						<p className="text-xs text-base-content/40">
+							{DEMO_PLAN.seeds} × $1 &middot; drag to adjust
+						</p>
+					</div>
+				</div>
+				<div className="card bg-base-200">
+					<div className="card-body p-4">
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Community Share</p>
+						<p className="text-xl font-bold">${DEMO_PLAN.communityShare.toFixed(2)}</p>
+						<p className="text-xs text-base-content/40">Charity &middot; free access + programs</p>
 					</div>
 				</div>
 			</div>
@@ -523,7 +520,7 @@ function SubscriptionDashboardDemo() {
 									Pool
 								</th>
 								<th style={serif} className="w-60 font-medium">
-									Boost
+									Seeds
 								</th>
 								<th style={serif} className="font-medium">
 									Total
@@ -532,7 +529,7 @@ function SubscriptionDashboardDemo() {
 						</thead>
 						<tbody>
 							{DEMO_ALLOCATIONS.map((alloc, idx) => {
-								const rowTotal = alloc.poolAmount + boosts[idx];
+								const rowTotal = alloc.poolAmount + seedAllocs[idx];
 								return (
 									<tr key={alloc.username} className="hover">
 										<td className="w-36">
@@ -550,13 +547,13 @@ function SubscriptionDashboardDemo() {
 												<input
 													type="range"
 													min={0}
-													max={DEMO_PLAN.boostPool * 100}
-													value={Math.round(boosts[idx] * 100)}
+													max={DEMO_PLAN.seedPool * 100}
+													value={Math.round(seedAllocs[idx] * 100)}
 													onChange={(e) => handleSlider(idx, parseInt(e.target.value, 10) / 100)}
 													className="range range-xs range-primary flex-1"
 												/>
 												<span className="text-sm text-primary font-medium w-12 flex-shrink-0">
-													${boosts[idx].toFixed(2)}
+													${seedAllocs[idx].toFixed(2)}
 												</span>
 											</div>
 										</td>
@@ -584,24 +581,24 @@ function SubscriptionDashboardDemo() {
 			<div className="card bg-base-200">
 				<div className="card-body p-4 space-y-1">
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Bandwidth (at cost)</span>
-						<span>${DEMO_PLAN.bandwidth.toFixed(2)}</span>
+						<span className="text-base-content/70">Seeds</span>
+						<span className="text-primary">${totalSeeds.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Anthers Foundation Fee</span>
-						<span>${DEMO_PLAN.foundation.toFixed(2)}</span>
+						<span className="text-base-content/70">Community Share (charity)</span>
+						<span>${DEMO_PLAN.communityShare.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
 						<span className="text-base-content/70">Time Pool</span>
 						<span className="text-success">${totalPool.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Boost</span>
-						<span className="text-primary">${totalBoost.toFixed(2)}</span>
+						<span className="text-base-content/70">Bandwidth wallet (at cost, separate)</span>
+						<span className="text-base-content/50">{DEMO_PLAN.freeBwGiB} GiB free / mo</span>
 					</div>
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">
-						<span>Monthly total</span>
+						<span>{DEMO_PLAN.badge} plan total</span>
 						<span>${monthlyTotal.toFixed(2)}</span>
 					</div>
 					<p className="text-xs text-base-content/40 mt-1">

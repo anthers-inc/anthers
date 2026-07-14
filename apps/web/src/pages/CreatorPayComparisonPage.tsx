@@ -5,35 +5,35 @@
 // tab per platform (YouTube, Spotify, Steam, Bandcamp, Patreon, Substack); each
 // tab shows the relevant transaction(s) side by side.
 //
-// Framing (important): Anthers DOES take a cut — the Community Share. We do not
-// claim otherwise, and we deliberately avoid "no cut" / "we keep $0" language: on
-// streaming the Community Share comes out of the fan's usage payment *before* the
-// Time Pool is even defined, so we plainly take a share of what the user pays. What
-// makes it different from a for-profit platform is HOW and WHERE we take it, and
-// what it funds:
-//   • It's a charitable markup on the infrastructure a transaction uses (≈50% of a
-//     stream/download's bandwidth; a flat 1% on physical goods) — not a flat
-//     percentage skimmed off every dollar you earn.
-//   • On a sale it's added on top for the buyer, so your listed price reaches you
-//     in full; on streaming it's carved from usage; on Boost there's no fee at all.
-//   • The Foundation keeps it to fund free access, creator programs, and lean
-//     administration — a non-profit spending its cut on the commons, not profit.
-// So each Anthers row shows its actual cut (the Community Share), tagged as charity,
-// rather than a misleading "$0".
+// Framing (V4 "Big Rethink"): lead with the 0% cut. Anthers takes NOTHING out of
+// what reaches a creator — 100% of every Seed and every direct sale is theirs, and
+// the Time Pool (funded by viewers' chosen Badge plans) is distributed to creators
+// by watch-time with no platform cut. The one thing added is the Community Share: a
+// small charitable contribution the fan chooses on top as part of their plan price,
+// funding free access + creator programs. It is NOT skimmed from creator earnings.
+//   • On a direct sale the creator receives the full listed price; the Community
+//     Share is a charitable markup on that download's bandwidth (≈50% of it), added
+//     on top for the buyer — a fraction of a cent — never subtracted.
+//   • On a Seed there is no fee at all — $1, 100% to the creator.
+//   • On streaming the creator earns their watch-time share of every viewer's Time
+//     Pool, the same rate for every medium (equal-time). Anthers profits $0.
 //
-// This uses our CURRENT V3 model math even where it loses. Streaming is our weakest
-// number — the Time Pool is funded per-GiB of bandwidth, so cheap-to-stream media
-// (music) generates a small pool, and per hour we pay less than Spotify. We show
-// that straight: the point is to validate the model and find where it needs to
-// improve, not to flatter it.
+// Positioning (important): streaming is a secondary financial benefit, not the
+// headline. Under equal-time a music hour earns the same Time Pool share as a video
+// hour (V3's per-GiB penalty on cheap-to-stream media is gone), so we no longer
+// under-pay music — but we deliberately do NOT pitch streaming as out-earning
+// YouTube/Spotify per hour. Its real value is reach: your public work is available
+// effectively at cost, with no ads and no profit-taking. The earnings levers are
+// Seeds and direct sales, and those are 100% yours.
 //
-// Anthers figures: packages/shared/src/constants.ts (Time Pool $0.015/GiB, AF Fee
-// $0.005/GiB, bandwidth $0.01/GiB at cost, physical AFF 1%, Boost 100%) at the V3
-// reference bitrates. Competitor figures are their public rates.
+// Anthers figures derive from packages/shared/src/constants.ts (BADGE_PLANS Time
+// Pool + Seeds, BANDWIDTH_PER_GIB $0.01 at cost, Digital AFF = 50% of a download's
+// bandwidth, Physical & Service AFF 1%). Competitor figures are their public rates.
 //
 // Styled like the calculators (dense, DaisyUI-native, plain — no Meadow decor), so
 // it reads as one set with the rest of Resources.
 
+import { BADGE_PLANS } from "@anthers/shared/constants";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
@@ -73,31 +73,35 @@ interface Platform {
 	matchups: Matchup[];
 }
 
-// Anthers's per-transaction facts, reused across tabs. Each carries its real cut —
-// the Community Share (charity) — never "$0", except Boost, which truly has no fee.
-const A_STREAM_VIDEO: Side = {
-	keep: "~$0.026 / hr",
-	keepSub: "Time Pool · $0.015/GiB × 1.70 GiB/hr (1080p60), split by watch-time",
-	cut: "~$0.009 / hr",
-	cutKind: "charity",
-};
-const A_STREAM_MUSIC: Side = {
-	keep: "~$0.0008 / hr",
-	keepSub: "music streams ~34× lighter than video, so alone it funds a tiny pool",
-	cut: "<$0.001 / hr",
-	cutKind: "charity",
+// The paid Badge plans set the Time Pool a fan brings each month (Root $2 · Sprout
+// $4 · Petal $9 · Blossom $18). Split across everyone they watch by watch-time, that
+// lands roughly $0.05–0.60 per view-hour depending on plan and how much they watch —
+// the same rate for every medium (equal-time). 100% of it reaches creators.
+const PAID_POOLS = (["root", "sprout", "petal", "blossom"] as const).map(
+	(b) => BADGE_PLANS[b].timePool,
+);
+const POOL_RANGE = `$${PAID_POOLS[0]}–$${PAID_POOLS[PAID_POOLS.length - 1]}`;
+
+// Anthers's per-transaction facts, reused across tabs. Streaming and Seeds take a
+// literal $0 from the creator; a sale's only add is the charitable Community Share,
+// a markup on delivery bandwidth added on top for the buyer — never subtracted.
+const A_STREAM: Side = {
+	keep: "~$0.05–0.60 / hr",
+	keepSub: "your watch-time share of the fan's monthly Time Pool — the same rate for every medium",
+	cut: "$0",
+	cutKind: "none",
 };
 /** A direct sale: creator keeps the full listed price; the Community Share is the
- * (small) markup on the delivery, added on top for the buyer. */
+ * (small) charitable markup on the delivery, added on top for the buyer. */
 const aPrice = (amount: string, share: string): Side => ({
 	keep: amount,
 	keepSub: "100% — your listed price, in full",
 	cut: share,
 	cutKind: "charity",
 });
-const A_BOOST: Side = {
+const A_SEED: Side = {
 	keep: "$5.00",
-	keepSub: "100% — Boost, no fee and no payout processing",
+	keepSub: "100% — five $1 Seeds, no fee and no payout processing",
 	cut: "$0",
 	cutKind: "none",
 };
@@ -111,13 +115,13 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan streams 1 hour of your HD video",
 				kind: "Streaming",
-				anthers: A_STREAM_VIDEO,
+				anthers: A_STREAM,
 				rival: {
 					keep: "45% of the revenue",
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: "Of the ~$0.05 of usage the fan spends that hour, ~$0.026 reaches you (Time Pool), ~$0.009 is our Community Share (charity), and ~$0.017 is bandwidth at cost. YouTube keeps 55% of the ad/Premium revenue as profit — and on ads the viewer's data is the product.",
+				note: "A fan's Badge plan sets a monthly Time Pool that's split across everyone they watch, by watch-time — 100% reaches creators, Anthers profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads, we never take a cut, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
 			},
 		],
 	},
@@ -130,13 +134,13 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan listens to 1 hour of your music",
 				kind: "Streaming",
-				anthers: A_STREAM_MUSIC,
+				anthers: A_STREAM,
 				rival: {
 					keep: "~$0.069 / hr",
 					keepSub: "$0.004/stream × ~17 songs (3:30 each); an artist keeps less after their label",
 					cut: "~30% + labels",
 				},
-				note: "Our weakest number: on music alone we pay far less than Spotify, because the Time Pool is funded by bandwidth and music is cheap to stream (so our Community Share on it is tiny too). Equal-time lifts every minute to the blended video rate (~$0.026/hr) when the same fan also watches video — still under Spotify. Real support comes from purchases and Boost.",
+				note: "Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on the fan's plan that's roughly comparable to Spotify, ad-free and with no cut taken. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.",
 			},
 		],
 	},
@@ -150,7 +154,7 @@ const PLATFORMS: Platform[] = [
 				kind: "Digital purchase",
 				anthers: aPrice("$10.00", "~$0.01 · on top"),
 				rival: { keep: "$7.00", keepSub: "70%", cut: "30% (≈ $3.00)" },
-				note: "Anthers's cut here is the Community Share on the download bandwidth — about a cent, added on top for the buyer, so your $10 reaches you whole. Steam's 30% comes out of your sale.",
+				note: "Anthers's only add here is the Community Share on the download bandwidth — about a cent, a charitable contribution added on top for the buyer, so your $10 reaches you whole. Steam's 30% comes out of your sale.",
 			},
 		],
 	},
@@ -169,7 +173,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "85%, before payment processing",
 					cut: "15% (→ 10% after $5k/yr)",
 				},
-				note: "Our Community Share is the delivery markup, pennies added on top; your $10 is untouched. Bandcamp takes 15% of your sale and also deducts payment processing from your cut.",
+				note: "Our only add is the Community Share on delivery — pennies of charity added on top; your $10 is untouched. Bandcamp takes 15% of your sale and also deducts payment processing from your cut.",
 			},
 			{
 				scenario: "A fan buys your $25 vinyl",
@@ -188,14 +192,14 @@ const PLATFORMS: Platform[] = [
 		matchups: [
 			{
 				scenario: "A fan supports you $5 / month",
-				kind: "Subscription",
-				anthers: A_BOOST,
+				kind: "Seeds",
+				anthers: A_SEED,
 				rival: {
 					keep: "$4.50",
 					keepSub: "90% before processing → nets ~$4.05",
 					cut: "10% + processing",
 				},
-				note: "Boost is the one place we take nothing — no fee, no payout processing; the supporter covers the card fee on top (~$5.45 charged). Patreon takes 10%, then card processing comes out of what's left.",
+				note: "A Seed is $1 sent straight to a creator — no fee, no payout processing; the supporter covers the card fee on top (~$5.45 charged for five). Patreon takes 10%, then card processing comes out of what's left.",
 			},
 			{
 				scenario: "A fan buys a $10 one-time item",
@@ -216,14 +220,14 @@ const PLATFORMS: Platform[] = [
 		matchups: [
 			{
 				scenario: "A fan subscribes at $5 / month",
-				kind: "Subscription",
-				anthers: A_BOOST,
+				kind: "Seeds",
+				anthers: A_SEED,
 				rival: {
 					keep: "$4.50",
 					keepSub: "90% before processing → nets ~$4.05",
 					cut: "10% + processing",
 				},
-				note: "Boost takes no fee and no payout processing — the supporter covers the card fee on top. Substack takes 10%, then Stripe processing (~$0.45 on $5) comes out of your cut.",
+				note: "Five $1 Seeds reach you in full — no fee and no payout processing; the supporter covers the card fee on top. Substack takes 10%, then Stripe processing (~$0.45 on $5) comes out of your cut.",
 			},
 		],
 	},
@@ -242,12 +246,13 @@ export default function CreatorPayComparisonPage() {
 				title="How our pay compares"
 				lede={
 					<>
-						Anthers takes a cut too — we won't pretend otherwise. But it's a small{" "}
-						<b className="text-base-content">charitable fee</b> (the Community Share) on the
-						infrastructure a sale uses, not a percentage skimmed off everything you earn: it's added
-						on top of your price on purchases, it's nothing at all on Boost, and it funds free
-						access and creator programs instead of profit. Here's what actually reaches you,
-						platform by platform, on our current model math — including where we come out behind.
+						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
+						<b className="text-base-content">Seed</b> and every direct sale is 100% yours, and the
+						Time Pool is distributed to creators by watch-time with no platform cut. The one thing
+						we add is the <b className="text-base-content">Community Share</b> — a small charitable
+						contribution the fan chooses on top of their plan, funding free access and creator
+						programs, never subtracted from your earnings. Here's what actually reaches you,
+						platform by platform.
 					</>
 				}
 			/>
@@ -274,35 +279,40 @@ export default function CreatorPayComparisonPage() {
 			</div>
 
 			<div className="mt-6 rounded-xl border border-dashed border-base-300 bg-base-200/40 p-4 text-sm leading-relaxed text-base-content/70">
-				<b className="text-base-content">The bottom line.</b> We take a cut — the Community Share —
-				but it's small, it's charity, and it's structured differently: added on top of your price on
-				sales (so you keep <b className="text-base-content">100%</b> of what you charge), nothing at
-				all on Boost, and carved only from usage on streaming. Where we clearly win is purchases and
-				Boost. Where we fall behind is streaming — for music, well behind Spotify — because the Time
-				Pool is funded from usage after the Community Share and at-cost bandwidth. That's the number
-				we're working to raise.
+				<b className="text-base-content">The bottom line.</b> Nothing Anthers does comes out of your
+				earnings. You keep <b className="text-base-content">100%</b> of every Seed and every sale,
+				and the Time Pool reaches creators in full. Where we clearly win is Seeds and purchases.
+				Streaming we treat as a public good, not a paycheck: under equal-time a music hour now earns
+				the same as a video hour (no more per-medium penalty), it's ad-free, and we take no cut —
+				but we won't pretend a view-hour out-earns YouTube or Spotify. It makes your work
+				discoverable at cost; your income comes from the fans who Seed and buy.
 			</div>
 
 			<CalcNotes>
 				<p>
-					<b className="text-base-content/70">How our cut works.</b> Anthers does take a cut — the{" "}
-					<b className="text-base-content/70">Community Share</b> — just not the way a for-profit
-					platform does. It's a charitable markup on the infrastructure a transaction uses: roughly
-					half the bandwidth a stream or download costs, or a flat 1% on physical goods. On a sale
-					it's added on top for the buyer, so your listed price reaches you in full; on streaming
-					it's taken from the fan's usage payment before the Time Pool; on Boost there's no fee at
-					all. The Foundation keeps it to fund free access, creator programs, and lean
-					administration — a non-profit spending its cut on the commons rather than owner profit.
-					What we never do is skim a flat percentage off every dollar you earn.
+					<b className="text-base-content/70">How the money moves.</b> Anthers keeps{" "}
+					<b className="text-base-content/70">$0</b> of what reaches creators. A fan chooses a
+					monthly <b className="text-base-content/70">Badge plan</b> whose price splits into a Time
+					Pool (distributed to the creators they watch, by watch-time), directed <b>Seeds</b> ($1
+					units, 100% to a creator), and the <b className="text-base-content/70">Community Share</b>{" "}
+					— a charitable remainder funding free access and creator programs. Bandwidth is a separate
+					at-cost wallet with a free monthly allowance, not a creator-funding lever. On a direct
+					sale the creator receives the full listed price; the Community Share there is a charitable
+					markup on that download's bandwidth (about half of it) or a flat 1% on physical goods,
+					added on top for the buyer.
 				</p>
 				<p>
-					<b className="text-base-content/70">Anthers figures</b> are our current V3 model math
-					(Time Pool $0.015/GiB, Community Share $0.005/GiB or 1% physical, bandwidth $0.01/GiB at
-					cost, Boost 100%) at the AV1 reference bitrates (1080p60 ≈ 1.70 GiB/hr, Opus music ≈ 0.05
-					GiB/hr). <b className="text-base-content/70">Competitor figures</b> are each platform's
-					public fee and payout structure applied to the same transaction — rough estimates, not
-					quotes, and before their own payment-processing deductions except where noted. A planning
-					comparison, not an offer or guarantee.
+					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
+					their monthly watch-time, the same rate for every medium (equal-time). The paid plans
+					bring{" "}
+					{PAID_POOLS.map((p, i) => `${["Root", "Sprout", "Petal", "Blossom"][i]} $${p}`).join(
+						" · ",
+					)}{" "}
+					of Time Pool, so an engaged fan lands roughly {POOL_RANGE} of pool per month → about
+					$0.05–0.60 per view-hour. <b className="text-base-content/70">Competitor figures</b> are
+					each platform's public fee and payout structure on the same transaction — rough estimates,
+					not quotes, and before their own payment-processing deductions except where noted. A
+					planning comparison, not an offer or guarantee.
 				</p>
 				<p>
 					Want to model your own audience?{" "}
@@ -347,10 +357,10 @@ const CUT_STYLE: Record<CutKind, { tone: string; tag: string; tagTone: string }>
 	profit: { tone: "text-error/80", tag: "to the platform", tagTone: "text-error/50" },
 	charity: {
 		tone: "text-base-content/70",
-		tag: "Community Share · charity",
+		tag: "Community Share · charity, on top",
 		tagTone: "text-primary/70",
 	},
-	none: { tone: "text-success/80", tag: "no fee — 100% to you", tagTone: "text-success/60" },
+	none: { tone: "text-success/80", tag: "no cut — 100% to creators", tagTone: "text-success/60" },
 };
 
 /** One side of a matchup: who, the take-home headline, its basis, and the cut —

@@ -155,12 +155,12 @@ const wikiAreas: WikiArea[] = [
 			{
 				name: "Monetization & Analytics",
 				path: "32-Monetization-And-Analytics",
-				description: "Pricing, earnings, analytics, and the Boost Pool",
+				description: "Pricing, earnings, analytics, and Seeds",
 				items: [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Pricing Your Content", file: "01-PricingYourContent.md" },
 					{ name: "Earnings & Payouts", file: "02-EarningsAndPayouts.md" },
-					{ name: "Boost Pool & Premium Content", file: "03-BoostPoolAndPremiumContent.md" },
+					{ name: "Seeds & Premium Content", file: "03-BoostPoolAndPremiumContent.md" },
 					{ name: "Analytics Dashboard", file: "04-AnalyticsDashboard.md" },
 				],
 			},
@@ -172,11 +172,6 @@ const wikiAreas: WikiArea[] = [
  * Flat wiki structure for navigation and search.
  */
 const wikiStructure: WikiSection[] = wikiAreas.flatMap((area) => area.sections);
-
-/**
- * GitHub repository base URL for edit links.
- */
-const GITHUB_REPO_URL = "https://github.com/anthers-org/Anthers";
 
 /**
  * Wiki page component that displays documentation from the repo /wiki directory.

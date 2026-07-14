@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Settings card: the creator's boost ladder — the rungs that populate every post's
- * Boost Access table. Each rung is a boost gate (label + $threshold + description).
- * Wired to the subscriptions gates API (own boost-type gates only).
+ * Settings card: the creator's Seed ladder — the rungs that populate every post's
+ * Seed Access table. Each rung is a Seed gate (label + $threshold + description).
+ * Wired to the subscriptions gates API (own seed-type gates only).
  */
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
@@ -16,7 +16,7 @@ function twoDecimals(v: string): string {
 	return n.toFixed(2);
 }
 
-export default function BoostLadderEditor() {
+export default function SeedLadderEditor() {
 	const [gates, setGates] = useState<CreatorGate[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export default function BoostLadderEditor() {
 					return;
 				}
 				const data = (await res.json()) as { gates: CreatorGate[] };
-				setGates((data.gates ?? []).filter((g) => g.gateType === "boost"));
+				setGates((data.gates ?? []).filter((g) => g.gateType === "seed"));
 			})
 			.catch(() => setGates([]))
 			.finally(() => setLoading(false));
@@ -62,7 +62,7 @@ export default function BoostLadderEditor() {
 					threshold: twoDecimals(newThreshold),
 					label: newLabel.trim(),
 					description: newDescription.trim(),
-					gateType: "boost",
+					gateType: "seed",
 				},
 			});
 			if (!res.ok) throw new Error("Failed to add rung.");
@@ -125,10 +125,10 @@ export default function BoostLadderEditor() {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Boost Ladder</h3>
+				<h3 className="card-title text-lg">Seed Ladder</h3>
 				<p className="text-sm text-base-content/60 mb-2">
-					Boost rungs let supporters unlock content by boosting you past a dollar threshold. These
-					rungs appear as rows in every post's Boost Access table.
+					Seed rungs let supporters unlock content by sowing Seeds for you past a dollar threshold.
+					These rungs appear as rows in every post's Seed Access table.
 				</p>
 
 				{error && (
@@ -142,7 +142,7 @@ export default function BoostLadderEditor() {
 				) : (
 					<div className="flex flex-col gap-2">
 						{gates.length === 0 && (
-							<p className="text-sm text-base-content/50">No boost rungs yet.</p>
+							<p className="text-sm text-base-content/50">No seed rungs yet.</p>
 						)}
 						{gates.map((gate) =>
 							editingId === gate.id ? (

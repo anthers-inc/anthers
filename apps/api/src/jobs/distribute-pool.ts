@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Pool distribution job: distribute the Time Pool and Boost to creators.
+ * Pool distribution job: distribute the Time Pool and directed Seeds to creators.
  *
  * For each active account:
  * 1. Sum watch-time seconds per creator during the billing cycle.
- * 2. Time Pool = usageGiB × $0.015 (funded per-GiB), distributed proportionally by time.
- * 3. Boost = 100% to creators: directed boosts go to the named creators; the
- *    undirected remainder (boostTotal − Σ directed) is distributed by time.
+ * 2. Time Pool = the chosen badge's Time Pool budget (BADGE_PLANS[badge].timePool),
+ *    distributed proportionally by watch-time. A higher badge = a bigger pool, so
+ *    all of that viewer's watch-time pays creators more — no per-item multiplier.
+ * 3. Seeds: directed Seeds go 100% to the named creators. Undirected Seeds do NOT
+ *    flow automatically in V4 — the user must direct them; the undirected remainder
+ *    is settled to the subsidy pool at cycle end (see settle-cycle.ts).
  * 4. Create/update PoolDistribution ledger entries.
  */
 
 import { db } from "@anthers/db";
-import { accounts, attentionEvents, boostAllocations, poolDistributions } from "@anthers/db/schema";
-import { TIME_POOL_PER_GIB } from "@anthers/shared/constants";
+import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
+import { BADGE_PLANS, type Badge } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sum } from "drizzle-orm";
 
@@ -21,10 +24,9 @@ export interface DistributePoolData {
 	accountId?: number;
 }
 
-/** V3: the Time Pool a user funds this cycle = usageGiB × $0.015. */
-function computeTimePoolAmount(usageGiB: number): Decimal {
-	if (usageGiB <= 0) return new Decimal(0);
-	return new Decimal(usageGiB).mul(TIME_POOL_PER_GIB);
+/** The Time Pool a user funds this cycle = their chosen badge's Time Pool budget. */
+function computeTimePoolAmount(badge: Badge): Decimal {
+	return new Decimal(BADGE_PLANS[badge]?.timePool ?? 0);
 }
 
 function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
@@ -47,15 +49,14 @@ function billingCycleDate(cycleStart: Date): string {
 
 interface Dist {
 	poolAmount: Decimal;
-	boostAmount: Decimal;
+	seedAmount: Decimal;
 	attentionSeconds: number;
 }
 
 async function distributeForAccount(acct: {
 	id: number;
 	userId: number;
-	usageGiB: number;
-	boostTotal: string;
+	badge: string;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
@@ -92,48 +93,39 @@ async function distributeForAccount(acct: {
 	const ensure = (creatorId: number): Dist => {
 		let d = distributions.get(creatorId);
 		if (!d) {
-			d = { poolAmount: new Decimal(0), boostAmount: new Decimal(0), attentionSeconds: 0 };
+			d = { poolAmount: new Decimal(0), seedAmount: new Decimal(0), attentionSeconds: 0 };
 			distributions.set(creatorId, d);
 		}
 		return d;
 	};
 
-	// 2. Directed boosts (100% to the named creator) + compute the undirected remainder.
+	// 2. Directed Seeds → 100% to the named creator. (Undirected Seeds are NOT
+	//    distributed here — the user must direct them; the remainder is settled to
+	//    the subsidy pool in settle-cycle.ts.)
 	const directed = await db
 		.select()
-		.from(boostAllocations)
+		.from(seedAllocations)
 		.where(
-			and(eq(boostAllocations.userId, acct.userId), eq(boostAllocations.billingCycle, cycleDate)),
+			and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycleDate)),
 		);
 
-	let directedTotal = new Decimal(0);
-	for (const boost of directed) {
-		const amt = new Decimal(boost.amount);
-		directedTotal = directedTotal.plus(amt);
-		ensure(boost.creatorId).boostAmount = amt;
+	for (const seed of directed) {
+		ensure(seed.creatorId).seedAmount = new Decimal(seed.amount);
 	}
-	const undirectedBoost = Decimal.max(0, new Decimal(acct.boostTotal).minus(directedTotal));
 
-	// 3. Distribute the Time Pool and undirected Boost proportionally by watch-time.
-	const timePool = computeTimePoolAmount(acct.usageGiB);
-	if (totalAttention > 0 && (timePool.gt(0) || undirectedBoost.gt(0))) {
+	// 3. Distribute the Time Pool proportionally by watch-time.
+	const timePool = computeTimePoolAmount(acct.badge as Badge);
+	if (totalAttention > 0 && timePool.gt(0)) {
 		for (const [creatorId, seconds] of attentionByCreator) {
 			const proportion = new Decimal(seconds).div(totalAttention);
 			const d = ensure(creatorId);
 			d.attentionSeconds = seconds;
-			if (timePool.gt(0)) {
-				d.poolAmount = d.poolAmount.plus(
-					timePool.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-				);
-			}
-			if (undirectedBoost.gt(0)) {
-				d.boostAmount = d.boostAmount.plus(
-					undirectedBoost.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-				);
-			}
+			d.poolAmount = d.poolAmount.plus(
+				timePool.mul(proportion).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+			);
 		}
 
-		// Correct rounding drift against the largest allocation so each pot is conserved.
+		// Correct rounding drift against the largest allocation so the pot is conserved.
 		correctDrift(
 			distributions,
 			timePool,
@@ -142,26 +134,16 @@ async function distributeForAccount(acct: {
 				d.poolAmount = v;
 			},
 		);
-		if (undirectedBoost.gt(0)) {
-			correctDrift(
-				distributions,
-				directedTotal.plus(undirectedBoost),
-				(d) => d.boostAmount,
-				(d, v) => {
-					d.boostAmount = v;
-				},
-			);
-		}
 	}
 
-	// Record watch-time even for creators that only received a directed boost.
+	// Record watch-time even for creators that only received a directed Seed.
 	for (const [creatorId, seconds] of attentionByCreator) {
 		ensure(creatorId).attentionSeconds = seconds;
 	}
 
 	// 4. Write PoolDistribution ledger entries
 	for (const [creatorId, data] of distributions) {
-		if (data.poolAmount.lte(0) && data.boostAmount.lte(0)) continue;
+		if (data.poolAmount.lte(0) && data.seedAmount.lte(0)) continue;
 		await db
 			.insert(poolDistributions)
 			.values({
@@ -169,7 +151,7 @@ async function distributeForAccount(acct: {
 				creatorId,
 				billingCycle: cycleDate,
 				poolAmount: data.poolAmount.toString(),
-				boostAmount: data.boostAmount.toString(),
+				seedAmount: data.seedAmount.toString(),
 				attentionSeconds: data.attentionSeconds,
 			})
 			.onConflictDoUpdate({
@@ -180,7 +162,7 @@ async function distributeForAccount(acct: {
 				],
 				set: {
 					poolAmount: data.poolAmount.toString(),
-					boostAmount: data.boostAmount.toString(),
+					seedAmount: data.seedAmount.toString(),
 					attentionSeconds: data.attentionSeconds,
 				},
 			});

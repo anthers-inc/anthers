@@ -49,8 +49,6 @@ const createDefaultComponents = (onNavigate?: (section: string, file: string) =>
 		className?: string;
 		children: React.ReactNode;
 	}) => {
-		const match = /language-(\w+)/.exec(className || "");
-		const language = match ? match[1] : "";
 		const codeString = String(children).replace(/\n$/, "");
 
 		// Render code with syntax highlighting

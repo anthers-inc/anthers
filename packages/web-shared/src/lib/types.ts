@@ -50,8 +50,8 @@ export interface AnthersAccessRow {
 	price: string; // money string; "0" = free when allowed
 }
 
-/** One row of a post's Boost Access table (per boost threshold; 0 = everyone). */
-export interface BoostAccessRow {
+/** One row of a post's Seed Access table (per Seed-$ threshold; 0 = everyone). */
+export interface SeedAccessRow {
 	threshold: number;
 	allow: boolean;
 	price: string;
@@ -196,7 +196,7 @@ export interface Post {
 
 	// Access tables (OR-gated)
 	anthersAccess: AnthersAccessRow[] | null;
-	boostAccess: BoostAccessRow[] | null;
+	seedAccess: SeedAccessRow[] | null;
 
 	// Presentation
 	showOnTimeline: boolean;
@@ -360,25 +360,36 @@ export interface OwnershipResponse {
 
 // ─── Subscription Types ───
 
-/** The Anthers Access tier vocabulary (per-post access rows include "free"). */
+/** The Anthers Badge / plan vocabulary (per-post access rows include "free"). */
 export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A user's rolling Anthers Badge, derived from combined Usage + Boost spend. */
-export type Badge = "none" | "root" | "sprout" | "petal" | "blossom";
+/** A user's chosen Badge plan (point-in-time). */
+export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 
-export interface BadgeOption {
-	id: string;
+/** A Badge plan (GET /subscriptions/badges) — price decomposition + what's included. */
+export interface BadgePlan {
+	id: Badge;
 	name: string;
-	threshold: number;
+	price: number;
+	timePool: string;
+	seeds: number;
+	freeBwGiB: number;
+	communityShare: string;
+	toCreators: string;
+	subsidised: boolean;
 }
 
-/** A user's prepaid spend account (V3 — replaces the V2 subscription). */
+/** A user's account holding a chosen Badge plan + the bandwidth wallet (V4). */
 export interface Account {
 	id?: number;
 	userId?: number;
-	usageGiB: number;
-	boostTotal: string;
-	redownloadBalance: string;
+	badge: Badge;
+	walletBalance: string;
+	bandwidthUsedGiB: string;
+	seedTotal: string;
+	autoTopupEnabled: boolean | null;
+	autoTopupAmount?: string;
+	autoTopupThreshold?: string;
 	isSelfHosting: boolean;
 	stripeCustomerId?: string | null;
 	isActive: boolean | null;
@@ -389,11 +400,21 @@ export interface Account {
 	updatedAt?: string;
 }
 
-/** Response of GET /subscriptions/me — the account plus the derived Badge. */
+/** Response of GET /subscriptions/me — the account plus its held Badge + plan. */
 export interface AccountResponse {
 	account: Account;
 	badge: Badge;
-	badgeSpend: number;
+	plan: BadgePlan;
+}
+
+/** Response of GET /subscriptions/wallet/balance — the bandwidth wallet state. */
+export interface WalletBalance {
+	balance: string;
+	freeAllowanceGiB: number;
+	usedGiB: string;
+	autoTopupEnabled: boolean;
+	autoTopupAmount: string;
+	autoTopupThreshold: string;
 }
 
 export interface AttentionSummary {
@@ -408,7 +429,7 @@ export interface PoolDistribution {
 	creatorId: number;
 	billingCycle: string;
 	poolAmount: string;
-	boostAmount: string;
+	seedAmount: string;
 	attentionSeconds: number | null;
 	createdAt: string;
 	updatedAt: string;
@@ -417,13 +438,13 @@ export interface PoolDistribution {
 
 export interface CreatorEarnings {
 	poolTotal: string;
-	boostTotal: string;
+	seedTotal: string;
 	total: string;
 	subscriberCount: number;
 	cycle: string;
 }
 
-export interface BoostAllocation {
+export interface SeedAllocation {
 	id: number;
 	userId: number;
 	creatorId: number;
@@ -439,8 +460,8 @@ export interface BoostAllocation {
 	};
 }
 
-export interface BoostListResponse {
-	boosts: BoostAllocation[];
+export interface SeedListResponse {
+	seeds: SeedAllocation[];
 	budget: string;
 	allocated: string;
 	remaining: string;
@@ -461,7 +482,7 @@ export interface ContentAccessResponse {
 export interface CreatorGate {
 	id: number;
 	creatorId: number;
-	gateType: "boost" | "anthers_badge";
+	gateType: "seed" | "anthers_badge";
 	threshold: string;
 	label: string;
 	description: string | null;
@@ -472,8 +493,7 @@ export interface CreatorGate {
 
 export interface CreatorStatus {
 	badge: Badge;
-	badgeSpend: number;
-	boostAmount: string;
+	seedAmount: string;
 	gates: CreatorGate[];
 	unlockedGates: number[];
 }

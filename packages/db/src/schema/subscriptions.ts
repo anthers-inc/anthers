@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * V3 economics schema. Users don't subscribe to a tier — they hold an `account`
- * and make two prepaid, per-cycle choices: a Usage level (GiB) and a total Boost
- * ($). Their Anthers Badge is *derived* from combined spend across the trailing
- * cycles recorded in `accountCycles`. This file also holds the shared economics
- * tables: time (attention) events, boost allocations, pool distributions, the
- * re-download wallet ledger, and creator gates.
+ * V4 economics schema (the "Big Rethink" model). A user holds an `account` and
+ * *chooses* a Badge plan (free/root/sprout/petal/blossom) — the badge is stored
+ * point-in-time, not derived from spend. Bandwidth is a separate at-cost wallet
+ * with a per-tier free monthly allowance. This file also holds the shared
+ * economics tables: time (attention) events, Seed allocations, pool
+ * distributions, the bandwidth-wallet ledger, and creator gates.
  */
 import {
 	boolean,
@@ -22,10 +22,12 @@ import { users } from "./auth.js";
 import { posts } from "./content.js";
 
 /**
- * A user's standing spend account (one per user). Usage and total Boost are the
- * *current cycle's* prepaid levels; the per-cycle history in `accountCycles` is
- * the ledger that drives the rolling Badge. The free 3 GiB usage allowance is a
- * constant, not stored here.
+ * A user's standing account (one per user). `badge` is the *chosen* plan, held
+ * point-in-time. `walletBalance` is the prepaid bandwidth wallet (dollars);
+ * `bandwidthUsedGiB` is the running stream consumption this cycle, drawn against
+ * the badge's free monthly allowance first and then the wallet. `seedTotal` is
+ * the user's Seeds this cycle (badge-included + purchased). The per-tier free
+ * allowance is derived from the badge (`BADGE_PLANS[badge].freeBwGiB`), not stored.
  */
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
@@ -33,9 +35,13 @@ export const accounts = pgTable("accounts", {
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	usageGiB: integer("usage_gib").notNull().default(0), // current-cycle prepaid Usage level (paid GiB)
-	boostTotal: numeric("boost_total").notNull().default("0.00"), // current-cycle total Boost $ (directed + undirected)
-	redownloadBalance: numeric("redownload_balance").notNull().default("0.00"), // separate depleting re-download wallet
+	badge: text("badge").notNull().default("free"), // chosen plan: free|root|sprout|petal|blossom
+	walletBalance: numeric("wallet_balance").notNull().default("0.00"), // prepaid bandwidth wallet ($)
+	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed this cycle
+	seedTotal: numeric("seed_total").notNull().default("0.00"), // total Seeds this cycle ($ = qty × $1)
+	autoTopupEnabled: boolean("auto_topup_enabled").notNull().default(false),
+	autoTopupAmount: numeric("auto_topup_amount").notNull().default("5.00"), // $ added per auto top-up
+	autoTopupThreshold: numeric("auto_topup_threshold").notNull().default("2.00"), // top up when wallet < this
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage AFF
 	stripeCustomerId: text("stripe_customer_id").default(""),
 	isActive: boolean("is_active").default(true),
@@ -47,9 +53,9 @@ export const accounts = pgTable("accounts", {
 });
 
 /**
- * Per-cycle prepaid spend ledger — one row per (user, cycle). The Badge is the
- * highest threshold cleared by `totalSpend` across the trailing 3 cycles. The
- * current cycle's row mirrors the levels on `accounts`.
+ * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
+ * consumption history/analytics. In V4 the badge is chosen, so this no longer
+ * drives it; it simply records the plan the user held and what flowed that cycle.
  */
 export const accountCycles = pgTable(
 	"account_cycles",
@@ -59,11 +65,13 @@ export const accountCycles = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(), // YYYY-MM-01
-		usageGiB: integer("usage_gib").notNull().default(0),
-		boostTotal: numeric("boost_total").notNull().default("0.00"),
-		usageSpend: numeric("usage_spend").notNull().default("0.00"), // usageGiB × $0.03
-		boostSpend: numeric("boost_spend").notNull().default("0.00"), // == boostTotal
-		totalSpend: numeric("total_spend").notNull().default("0.00"), // usageSpend + boostSpend (Badge basis)
+		badge: text("badge").notNull().default("free"), // badge held this cycle
+		planPrice: numeric("plan_price").notNull().default("0.00"), // badge price paid this cycle
+		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
+		seedTotal: numeric("seed_total").notNull().default("0.00"), // Seeds this cycle ($)
+		communityShare: numeric("community_share").notNull().default("0.00"), // to the Foundation
+		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed
+		walletSpend: numeric("wallet_spend").notNull().default("0.00"), // bandwidth $ charged to wallet
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -71,23 +79,23 @@ export const accountCycles = pgTable(
 );
 
 /**
- * The re-download wallet ledger — a small prepaid balance, kept OFF the streaming
- * Usage allowance so a zero-watch-time download never distorts Time-Pool
- * distribution. `delta` is + on top-up/refund, − on a re-download debit.
+ * The bandwidth-wallet ledger. The wallet is a prepaid, at-cost balance that
+ * covers streaming beyond the badge's free monthly allowance. `delta` is + on a
+ * top-up/refund, − on a stream debit. Direct-download bandwidth is folded into
+ * the purchase price (Digital AFF) and never touches this wallet.
  */
-export const redownloadLedger = pgTable(
-	"redownload_ledger",
+export const walletLedger = pgTable(
+	"wallet_ledger",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		delta: numeric("delta").notNull(), // + top-up/refund, − re-download debit
-		reason: text("reason").notNull(), // "topup" | "redownload" | "refund"
-		postId: integer("post_id").references(() => posts.id, { onDelete: "set null" }),
+		delta: numeric("delta").notNull(), // + top-up/refund, − stream debit
+		reason: text("reason").notNull(), // "topup" | "auto_topup" | "stream" | "refund"
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_redownload_user_date").on(table.userId, table.createdAt)],
+	(table) => [index("idx_wallet_user_date").on(table.userId, table.createdAt)],
 );
 
 export const attentionEvents = pgTable(
@@ -112,9 +120,11 @@ export const attentionEvents = pgTable(
 );
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
-// The DIRECTED portion of a user's Boost; undirected boost = account.boostTotal − Σ directed.
-export const boostAllocations = pgTable(
-	"boost_allocations",
+// The DIRECTED portion of a user's Seeds — badge-included and purchased Seeds the
+// user has assigned to a creator (unlocking that creator's Seed Gates). Undirected
+// Seeds = account.seedTotal − Σ directed.
+export const seedAllocations = pgTable(
+	"seed_allocations",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
@@ -131,11 +141,7 @@ export const boostAllocations = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		uniqueIndex("uq_boost_user_creator_cycle").on(
-			table.userId,
-			table.creatorId,
-			table.billingCycle,
-		),
+		uniqueIndex("uq_seed_user_creator_cycle").on(table.userId, table.creatorId, table.billingCycle),
 	],
 );
 
@@ -150,8 +156,8 @@ export const poolDistributions = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(),
-		poolAmount: numeric("pool_amount").notNull().default("0.00"),
-		boostAmount: numeric("boost_amount").notNull().default("0.00"),
+		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
+		seedAmount: numeric("seed_amount").notNull().default("0.00"), // Seeds share
 		attentionSeconds: integer("attention_seconds").default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -166,9 +172,10 @@ export const poolDistributions = pgTable(
 );
 
 /**
- * Creator-defined gate ladder. `boost` rungs populate the Boost Access table;
- * `anthers_badge` rungs are the Anthers Gate — unlocked by the viewer's rolling
- * Badge spend (the `threshold` is the Badge's min combined-spend $).
+ * Creator-defined gate ladder. `seed` rungs populate the Seed Access table
+ * (`threshold` = dollars of Seeds sown to the creator this cycle); `anthers_badge`
+ * rungs are the Anthers Gate, unlocked by the viewer *currently holding* the
+ * required badge (`threshold` = badge rank, 1 = root … 4 = blossom).
  */
 export const creatorGates = pgTable(
 	"creator_gates",
@@ -177,8 +184,8 @@ export const creatorGates = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		gateType: text("gate_type").notNull().default("boost"), // "boost" | "anthers_badge"
-		threshold: numeric("threshold").notNull(),
+		gateType: text("gate_type").notNull().default("seed"), // "seed" | "anthers_badge"
+		threshold: numeric("threshold").notNull(), // seed: $ of Seeds; anthers_badge: badge rank 1–4
 		label: text("label").notNull(),
 		description: text("description").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),

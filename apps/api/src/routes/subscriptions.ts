@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Account & economics routes — V3.
+ * Account & economics routes — V4 (the "Big Rethink" badge-plan model).
  *
- * Users don't subscribe to a tier. They hold an account and make two prepaid,
- * per-cycle choices: a **Usage** level (GiB) and a total **Boost** ($). Their
- * **Anthers Badge** is derived from combined spend across the trailing cycles.
- * This file also serves time (attention) tracking, pool distributions, boost
- * allocation, the re-download wallet, creator gates, and content access.
+ * A user holds an account and *chooses* a Badge plan (free/root/sprout/petal/
+ * blossom). The plan's price decomposes into Time Pool + Seeds + Community Share.
+ * Bandwidth is a separate at-cost wallet with a per-tier free monthly allowance.
+ * This file also serves time (attention) tracking, pool distributions, Seed
+ * allocation, the bandwidth wallet, creator gates, and content access.
  *
  * Note: Stripe payment movement is stubbed with TODO markers — the endpoints set
- * levels/balances directly until Stripe is wired.
+ * plans/balances directly until Stripe is wired.
  */
 
 import { db } from "@anthers/db/client";
@@ -17,35 +17,54 @@ import {
 	accountCycles,
 	accounts,
 	attentionEvents,
-	boostAllocations,
 	creatorGates,
 	poolDistributions,
 	posts,
-	redownloadLedger,
+	seedAllocations,
 	users,
+	walletLedger,
 } from "@anthers/db/schema";
-import { BADGE_THRESHOLDS, badgeForSpend, USAGE_PER_GIB } from "@anthers/shared/constants";
+import {
+	BADGE_ORDER,
+	BADGE_PLANS,
+	type Badge,
+	badgeLabel,
+	badgeRank,
+	SEED_PRICE,
+} from "@anthers/shared/constants";
+import { badgePriceBreakdown } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
-import { resolveAccess, rollingBadgeSpend } from "../services/access.js";
+import { heldBadge, resolveAccess } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** The rolling Anthers Badges and the combined-spend threshold each requires. */
-const BADGES = [
-	{ id: "root", name: "Root", threshold: BADGE_THRESHOLDS.root },
-	{ id: "sprout", name: "Sprout", threshold: BADGE_THRESHOLDS.sprout },
-	{ id: "petal", name: "Petal", threshold: BADGE_THRESHOLDS.petal },
-	{ id: "blossom", name: "Blossom", threshold: BADGE_THRESHOLDS.blossom },
-] as const;
+const BADGE_IDS = ["free", "root", "sprout", "petal", "blossom"] as const;
 
-/** Minimum re-download top-up — a few dollars so the card fee isn't outsized. */
-const MIN_REDOWNLOAD_TOPUP = 2;
+/** The Badge plans, each with its price decomposition + what's included. */
+const PLANS = BADGE_ORDER.map((b) => {
+	const bd = badgePriceBreakdown(b);
+	const plan = BADGE_PLANS[b];
+	return {
+		id: b,
+		name: badgeLabel(b),
+		price: plan.price,
+		timePool: bd.timePool.toFixed(2),
+		seeds: plan.seeds,
+		freeBwGiB: plan.freeBwGiB,
+		communityShare: bd.communityShare.toFixed(2),
+		toCreators: bd.toCreators.toFixed(2),
+		subsidised: bd.subsidised,
+	};
+});
+
+/** Minimum wallet top-up — a few dollars so the card fee isn't outsized. */
+const MIN_WALLET_TOPUP = 2;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -66,37 +85,22 @@ function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-/** Record this cycle's prepaid levels + derived spend (the Badge ledger). */
-async function upsertAccountCycle(
-	userId: number,
-	cycle: string,
-	usageGiB: number,
-	boostTotal: number,
-) {
-	const usageSpend = money(usageGiB * USAGE_PER_GIB);
-	const boostSpend = money(boostTotal);
-	const totalSpend = money(usageGiB * USAGE_PER_GIB + boostTotal);
+/** Record this cycle's plan snapshot (badge + its price decomposition + Seeds). */
+async function upsertAccountCycle(userId: number, cycle: string, badge: Badge, seedTotal: number) {
+	const bd = badgePriceBreakdown(badge);
+	const values = {
+		badge,
+		planPrice: bd.price.toFixed(2),
+		timePool: bd.timePool.toFixed(2),
+		seedTotal: money(seedTotal),
+		communityShare: bd.communityShare.toFixed(2),
+	};
 	await db
 		.insert(accountCycles)
-		.values({
-			userId,
-			billingCycle: cycle,
-			usageGiB,
-			boostTotal: boostSpend,
-			usageSpend,
-			boostSpend,
-			totalSpend,
-		})
+		.values({ userId, billingCycle: cycle, ...values })
 		.onConflictDoUpdate({
 			target: [accountCycles.userId, accountCycles.billingCycle],
-			set: {
-				usageGiB,
-				boostTotal: boostSpend,
-				usageSpend,
-				boostSpend,
-				totalSpend,
-				updatedAt: new Date(),
-			},
+			set: { ...values, updatedAt: new Date() },
 		});
 }
 
@@ -127,64 +131,63 @@ async function getOptionalUserId(c: any): Promise<number | null> {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const subscriptionRoutes = new Hono()
-	// ── Badge List ────────────────────────────────────────────────────────────
-	.get("/badges", (c) => c.json({ badges: BADGES }))
+	// ── Badge Plans ─────────────────────────────────────────────────────────────
+	.get("/badges", (c) => c.json({ badges: PLANS }))
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		const badgeSpend = await rollingBadgeSpend(user.id);
+		const badge: Badge = (acct?.badge as Badge) ?? "free";
 
 		if (!acct) {
 			return c.json({
 				account: {
-					usageGiB: 0,
-					boostTotal: "0.00",
-					redownloadBalance: "0.00",
+					badge: "free",
+					walletBalance: "0.00",
+					bandwidthUsedGiB: "0",
+					seedTotal: "0.00",
+					autoTopupEnabled: false,
 					isSelfHosting: false,
 					isActive: true,
 					currentPeriodStart: null,
 					currentPeriodEnd: null,
 					canceledAt: null,
 				},
-				badge: badgeForSpend(badgeSpend),
-				badgeSpend,
+				badge: "free",
+				plan: PLANS[0],
 			});
 		}
 
-		return c.json({ account: acct, badge: badgeForSpend(badgeSpend), badgeSpend });
+		return c.json({ account: acct, badge, plan: PLANS[badgeRank(badge)] });
 	})
 
-	// ── Set Prepaid Levels (Usage + total Boost) ─────────────────────────────
+	// ── Subscribe to a Badge plan ────────────────────────────────────────────
 	.post(
 		"/account",
 		requireAuth,
 		requireVerified,
-		zValidator(
-			"json",
-			z.object({
-				usageGiB: z.number().int().min(0).optional(),
-				boostTotal: z.number().min(0).optional(),
-			}),
-		),
+		zValidator("json", z.object({ badge: z.enum(BADGE_IDS) })),
 		async (c) => {
 			const user = c.get("user");
-			const { usageGiB, boostTotal } = c.req.valid("json");
+			const { badge } = c.req.valid("json");
 			const cycle = getCurrentBillingCycle();
 
-			// TODO: Charge the prepaid amount (usage + boost delta) via Stripe before applying.
+			// TODO: Charge the plan price (or the delta on a change) via Stripe before applying.
 			const existing = await getAccount(user.id);
 			const { start, end } = currentPeriod();
-			const nextUsage = usageGiB ?? existing?.usageGiB ?? 0;
-			const nextBoost = boostTotal ?? Number(existing?.boostTotal ?? 0);
+
+			// Preserve any extra Seeds the user bought on top of their old plan's included Seeds.
+			const oldPlan = BADGE_PLANS[(existing?.badge as Badge) ?? "free"];
+			const purchasedExtra = Math.max(0, Number(existing?.seedTotal ?? 0) - oldPlan.seeds);
+			const nextSeedTotal = BADGE_PLANS[badge].seeds + purchasedExtra;
 
 			if (existing) {
 				await db
 					.update(accounts)
 					.set({
-						usageGiB: nextUsage,
-						boostTotal: money(nextBoost),
+						badge,
+						seedTotal: money(nextSeedTotal),
 						isActive: true,
 						canceledAt: null,
 						currentPeriodStart: existing.currentPeriodStart ?? start,
@@ -195,17 +198,42 @@ const subscriptionRoutes = new Hono()
 			} else {
 				await db.insert(accounts).values({
 					userId: user.id,
-					usageGiB: nextUsage,
-					boostTotal: money(nextBoost),
+					badge,
+					seedTotal: money(nextSeedTotal),
 					currentPeriodStart: start,
 					currentPeriodEnd: end,
 				});
 			}
 
-			await upsertAccountCycle(user.id, cycle, nextUsage, nextBoost);
-			const badgeSpend = await rollingBadgeSpend(user.id);
+			await upsertAccountCycle(user.id, cycle, badge, nextSeedTotal);
 			const acct = await getAccount(user.id);
-			return c.json({ account: acct, badge: badgeForSpend(badgeSpend), badgeSpend });
+			return c.json({ account: acct, badge, plan: PLANS[badgeRank(badge)] });
+		},
+	)
+
+	// ── Buy additional Seeds (on top of the plan's included Seeds) ────────────
+	.post(
+		"/seeds/buy",
+		requireAuth,
+		requireVerified,
+		zValidator("json", z.object({ quantity: z.number().int().min(1).max(1000) })),
+		async (c) => {
+			const user = c.get("user");
+			const { quantity } = c.req.valid("json");
+			// TODO: Charge quantity × SEED_PRICE via Stripe before crediting.
+			const acct = await ensureAccount(user.id);
+			const next = money(Number(acct.seedTotal ?? 0) + quantity * SEED_PRICE);
+			await db
+				.update(accounts)
+				.set({ seedTotal: next, updatedAt: new Date() })
+				.where(eq(accounts.id, acct.id));
+			await upsertAccountCycle(
+				user.id,
+				getCurrentBillingCycle(),
+				acct.badge as Badge,
+				Number(next),
+			);
+			return c.json({ seedTotal: next });
 		},
 	)
 
@@ -226,25 +254,25 @@ const subscriptionRoutes = new Hono()
 		},
 	)
 
-	// ── Cancel Account (stop prepaid renewal) ────────────────────────────────
+	// ── Cancel plan (revert to Free at period end) ───────────────────────────
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		if (!acct || (acct.usageGiB === 0 && Number(acct.boostTotal) === 0)) {
-			return c.json({ error: "No active spend to cancel" }, 400);
+		if (!acct || acct.badge === "free") {
+			return c.json({ error: "No paid plan to cancel" }, 400);
 		}
-		// TODO: Cancel any Stripe renewal at period end.
+		// TODO: Cancel any Stripe renewal at period end (plan reverts to Free then).
 		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
 	})
 
-	// ── Resume Account ───────────────────────────────────────────────────────
+	// ── Resume plan ──────────────────────────────────────────────────────────
 	.post("/resume", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
 		if (!acct?.canceledAt) {
-			return c.json({ error: "No canceled account to resume" }, 400);
+			return c.json({ error: "No canceled plan to resume" }, 400);
 		}
 		// TODO: Undo cancellation via Stripe.
 		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
@@ -261,32 +289,73 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Re-download Balance ──────────────────────────────────────────────────
-	.get("/redownload/balance", requireAuth, async (c) => {
+	// ── Bandwidth wallet ─────────────────────────────────────────────────────
+	.get("/wallet/balance", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		return c.json({ balance: acct?.redownloadBalance ?? "0.00" });
+		const badge: Badge = (acct?.badge as Badge) ?? "free";
+		return c.json({
+			balance: acct?.walletBalance ?? "0.00",
+			freeAllowanceGiB: BADGE_PLANS[badge].freeBwGiB,
+			usedGiB: acct?.bandwidthUsedGiB ?? "0",
+			autoTopupEnabled: acct?.autoTopupEnabled ?? false,
+			autoTopupAmount: acct?.autoTopupAmount ?? "5.00",
+			autoTopupThreshold: acct?.autoTopupThreshold ?? "2.00",
+		});
 	})
 
 	.post(
-		"/redownload/topup",
+		"/wallet/topup",
 		requireAuth,
 		requireVerified,
-		zValidator("json", z.object({ amount: z.number().min(MIN_REDOWNLOAD_TOPUP) })),
+		zValidator("json", z.object({ amount: z.number().min(MIN_WALLET_TOPUP) })),
 		async (c) => {
 			const user = c.get("user");
 			const { amount } = c.req.valid("json");
 			// TODO: Charge the top-up via Stripe (min a few dollars so the card fee isn't outsized).
 			const acct = await ensureAccount(user.id);
-			const next = money(Number(acct.redownloadBalance ?? 0) + amount);
+			const next = money(Number(acct.walletBalance ?? 0) + amount);
 			await db
 				.update(accounts)
-				.set({ redownloadBalance: next, updatedAt: new Date() })
+				.set({ walletBalance: next, updatedAt: new Date() })
 				.where(eq(accounts.id, acct.id));
 			await db
-				.insert(redownloadLedger)
+				.insert(walletLedger)
 				.values({ userId: user.id, delta: money(amount), reason: "topup" });
 			return c.json({ balance: next });
+		},
+	)
+
+	.post(
+		"/wallet/auto-topup",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				enabled: z.boolean(),
+				amount: z.number().min(MIN_WALLET_TOPUP).optional(),
+				threshold: z.number().min(0).optional(),
+			}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const { enabled, amount, threshold } = c.req.valid("json");
+			const acct = await ensureAccount(user.id);
+			await db
+				.update(accounts)
+				.set({
+					autoTopupEnabled: enabled,
+					...(amount != null ? { autoTopupAmount: money(amount) } : {}),
+					...(threshold != null ? { autoTopupThreshold: money(threshold) } : {}),
+					updatedAt: new Date(),
+				})
+				.where(eq(accounts.id, acct.id));
+			const updated = await getAccount(user.id);
+			return c.json({
+				autoTopupEnabled: updated?.autoTopupEnabled ?? false,
+				autoTopupAmount: updated?.autoTopupAmount ?? "5.00",
+				autoTopupThreshold: updated?.autoTopupThreshold ?? "2.00",
+			});
 		},
 	)
 
@@ -380,7 +449,7 @@ const subscriptionRoutes = new Hono()
 			)
 			.orderBy(
 				desc(
-					sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.boostAmount} AS numeric)`,
+					sql`CAST(${poolDistributions.poolAmount} AS numeric) + CAST(${poolDistributions.seedAmount} AS numeric)`,
 				),
 			);
 
@@ -404,7 +473,7 @@ const subscriptionRoutes = new Hono()
 		const [earnings] = await db
 			.select({
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
-				boostTotal: sql<string>`COALESCE(SUM(CAST(boost_amount AS numeric)), 0)`,
+				seedTotal: sql<string>`COALESCE(SUM(CAST(seed_amount AS numeric)), 0)`,
 				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
 			})
 			.from(poolDistributions)
@@ -412,40 +481,42 @@ const subscriptionRoutes = new Hono()
 				and(eq(poolDistributions.creatorId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			);
 
-		const total = (Number(earnings.poolTotal) + Number(earnings.boostTotal)).toFixed(2);
+		const total = (Number(earnings.poolTotal) + Number(earnings.seedTotal)).toFixed(2);
 
 		return c.json({
 			poolTotal: earnings.poolTotal,
-			boostTotal: earnings.boostTotal,
+			seedTotal: earnings.seedTotal,
 			total,
 			subscriberCount: Number(earnings.subscriberCount),
 			cycle,
 		});
 	})
 
-	// ── Boost Allocations ────────────────────────────────────────────────────
-	// Budget is the total Boost the user has bought this cycle; 100% goes to creators.
-	.get("/boosts", requireAuth, async (c) => {
+	// ── Seed Allocations ─────────────────────────────────────────────────────
+	// Budget is the total Seeds the user holds this cycle (included + purchased);
+	// 100% goes to creators. Included Seeds must be directed here — nothing flows
+	// automatically; undirected Seeds are settled to the subsidy pool at cycle end.
+	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
 
 		const result = await db
 			.select({
-				boost: boostAllocations,
+				seed: seedAllocations,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 			})
-			.from(boostAllocations)
-			.innerJoin(users, eq(boostAllocations.creatorId, users.id))
-			.where(and(eq(boostAllocations.userId, user.id), eq(boostAllocations.billingCycle, cycle)));
+			.from(seedAllocations)
+			.innerJoin(users, eq(seedAllocations.creatorId, users.id))
+			.where(and(eq(seedAllocations.userId, user.id), eq(seedAllocations.billingCycle, cycle)));
 
 		const acct = await getAccount(user.id);
-		const budget = Number(acct?.boostTotal ?? 0);
-		const allocated = result.reduce((sum, r) => sum + Number(r.boost.amount), 0);
+		const budget = Number(acct?.seedTotal ?? 0);
+		const allocated = result.reduce((sum, r) => sum + Number(r.seed.amount), 0);
 
 		return c.json({
-			boosts: result.map((r) => ({
-				...r.boost,
+			seeds: result.map((r) => ({
+				...r.seed,
 				creator: {
 					username: r.creatorUsername,
 					displayName: r.creatorDisplayName,
@@ -458,7 +529,7 @@ const subscriptionRoutes = new Hono()
 	})
 
 	.post(
-		"/boosts",
+		"/seeds",
 		requireAuth,
 		requireVerified,
 		zValidator(
@@ -480,38 +551,40 @@ const subscriptionRoutes = new Hono()
 			const cycle = requestedCycle ?? currentCycle;
 
 			// Only allow editing current or next month
-			const cycleDate = new Date(`${cycle}T00:00:00`);
 			const currentDate = new Date(`${currentCycle}T00:00:00`);
 			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
 			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
 			if (cycle !== currentCycle && cycle !== nextCycle) {
-				return c.json({ error: "Can only edit boosts for current or next billing cycle" }, 400);
+				return c.json(
+					{ error: "Can only direct Seeds for the current or next billing cycle" },
+					400,
+				);
 			}
 
 			const acct = await getAccount(user.id);
-			const budget = Number(acct?.boostTotal ?? 0);
+			const budget = Number(acct?.seedTotal ?? 0);
 
 			if (budget <= 0) {
-				return c.json({ error: "Buy some Boost before allocating it to creators" }, 400);
+				return c.json({ error: "You have no Seeds to sow this cycle" }, 400);
 			}
 
 			// Current month: allocation locks — can only increase a creator, not decrease.
 			if (cycle === currentCycle) {
 				const [existing] = await db
-					.select({ amount: boostAllocations.amount })
-					.from(boostAllocations)
+					.select({ amount: seedAllocations.amount })
+					.from(seedAllocations)
 					.where(
 						and(
-							eq(boostAllocations.userId, user.id),
-							eq(boostAllocations.creatorId, creatorId),
-							eq(boostAllocations.billingCycle, cycle),
+							eq(seedAllocations.userId, user.id),
+							eq(seedAllocations.creatorId, creatorId),
+							eq(seedAllocations.billingCycle, cycle),
 						),
 					)
 					.limit(1);
 
 				if (existing && amountNum < Number(existing.amount)) {
-					return c.json({ error: "Cannot decrease boost in the current billing cycle" }, 400);
+					return c.json({ error: "Cannot reduce Seeds sown in the current billing cycle" }, 400);
 				}
 			}
 
@@ -520,32 +593,32 @@ const subscriptionRoutes = new Hono()
 				.select({
 					total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)`,
 				})
-				.from(boostAllocations)
+				.from(seedAllocations)
 				.where(
 					and(
-						eq(boostAllocations.userId, user.id),
-						eq(boostAllocations.billingCycle, cycle),
-						sql`${boostAllocations.creatorId} != ${creatorId}`,
+						eq(seedAllocations.userId, user.id),
+						eq(seedAllocations.billingCycle, cycle),
+						sql`${seedAllocations.creatorId} != ${creatorId}`,
 					),
 				);
 
 			const otherAllocated = Number(currentAllocated.total);
 			if (otherAllocated + amountNum > budget) {
-				return c.json({ error: "Exceeds the Boost you've bought this cycle" }, 400);
+				return c.json({ error: "Exceeds the Seeds you hold this cycle" }, 400);
 			}
 
 			if (amountNum === 0) {
 				// Remove allocation (only allowed for next month)
 				if (cycle === currentCycle) {
-					return c.json({ error: "Cannot remove boost in the current billing cycle" }, 400);
+					return c.json({ error: "Cannot remove Seeds in the current billing cycle" }, 400);
 				}
 				await db
-					.delete(boostAllocations)
+					.delete(seedAllocations)
 					.where(
 						and(
-							eq(boostAllocations.userId, user.id),
-							eq(boostAllocations.creatorId, creatorId),
-							eq(boostAllocations.billingCycle, cycle),
+							eq(seedAllocations.userId, user.id),
+							eq(seedAllocations.creatorId, creatorId),
+							eq(seedAllocations.billingCycle, cycle),
 						),
 					);
 				return c.json({ success: true, removed: true });
@@ -553,7 +626,7 @@ const subscriptionRoutes = new Hono()
 
 			// Upsert allocation
 			await db
-				.insert(boostAllocations)
+				.insert(seedAllocations)
 				.values({
 					userId: user.id,
 					creatorId,
@@ -561,11 +634,7 @@ const subscriptionRoutes = new Hono()
 					billingCycle: cycle,
 				})
 				.onConflictDoUpdate({
-					target: [
-						boostAllocations.userId,
-						boostAllocations.creatorId,
-						boostAllocations.billingCycle,
-					],
+					target: [seedAllocations.userId, seedAllocations.creatorId, seedAllocations.billingCycle],
 					set: { amount, updatedAt: new Date() },
 				});
 
@@ -613,10 +682,11 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
+				// seed gate: dollars of Seeds. anthers_badge gate: badge rank (1=root … 4=blossom).
 				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
-				gateType: z.enum(["boost", "anthers_badge"]).optional().default("boost"),
+				gateType: z.enum(["seed", "anthers_badge"]).optional().default("seed"),
 			}),
 		),
 		async (c) => {
@@ -645,7 +715,7 @@ const subscriptionRoutes = new Hono()
 			z.object({
 				threshold: z
 					.string()
-					.regex(/^\d+\.\d{2}$/)
+					.regex(/^\d+(\.\d{1,2})?$/)
 					.optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),
@@ -707,7 +777,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for creator page Badge/boost display) ───────────────
+	// ── Creator Status (for creator page Badge/Seed display) ────────────────
 	.get("/creator-status/:username", async (c) => {
 		const { username } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -729,45 +799,43 @@ const subscriptionRoutes = new Hono()
 
 		if (!currentUserId) {
 			return c.json({
-				badge: "none",
-				badgeSpend: 0,
-				boostAmount: "0.00",
+				badge: "free",
+				seedAmount: "0.00",
 				gates,
 				unlockedGates: [],
 			});
 		}
 
-		// The viewer's rolling Badge and their boost to this creator this cycle.
-		const badgeSpend = await rollingBadgeSpend(currentUserId);
+		// The viewer's held Badge (point-in-time) and their Seeds to this creator this cycle.
+		const badge = await heldBadge(currentUserId);
 		const cycle = getCurrentBillingCycle();
-		const [boost] = await db
-			.select({ amount: boostAllocations.amount })
-			.from(boostAllocations)
+		const [seed] = await db
+			.select({ amount: seedAllocations.amount })
+			.from(seedAllocations)
 			.where(
 				and(
-					eq(boostAllocations.userId, currentUserId),
-					eq(boostAllocations.creatorId, creator.id),
-					eq(boostAllocations.billingCycle, cycle),
+					eq(seedAllocations.userId, currentUserId),
+					eq(seedAllocations.creatorId, creator.id),
+					eq(seedAllocations.billingCycle, cycle),
 				),
 			)
 			.limit(1);
 
-		const boostAmount = boost?.amount ?? "0.00";
+		const seedAmount = seed?.amount ?? "0.00";
 
-		// Determine which gates are unlocked: Anthers Gate by Badge spend, Boost Gate by boost.
+		// Anthers Gate unlocks when the held badge rank clears the gate's rank; Seed Gate by Seeds sown.
 		const unlockedGates = gates
 			.filter((g) => {
 				if (g.gateType === "anthers_badge") {
-					return badgeSpend >= Number(g.threshold);
+					return badgeRank(badge) >= Number(g.threshold);
 				}
-				return Number(boostAmount) >= Number(g.threshold);
+				return Number(seedAmount) >= Number(g.threshold);
 			})
 			.map((g) => g.id);
 
 		return c.json({
-			badge: badgeForSpend(badgeSpend),
-			badgeSpend,
-			boostAmount,
+			badge,
+			seedAmount,
 			gates,
 			unlockedGates,
 		});
@@ -776,7 +844,7 @@ const subscriptionRoutes = new Hono()
 	// ── Payment Webhook ──────────────────────────────────────────────────────
 	.post("/webhook", async (c) => {
 		// TODO: Verify Stripe webhook signature
-		// TODO: Handle checkout.session.completed for usage/boost/re-download top-ups
+		// TODO: Handle checkout.session.completed for plan subscription / Seed / wallet top-ups
 		// TODO: Handle payment_intent.succeeded/failed
 
 		return c.json({ received: true });

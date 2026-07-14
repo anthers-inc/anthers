@@ -2,16 +2,18 @@
 import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
+	BADGE_PLANS,
 	BANDWIDTH_PER_GIB,
+	type Badge,
 	CARD_FLAT,
 	CARD_RATE,
+	FOUNDATION_SPLIT,
 	FREE_STORAGE_GIB,
 	PHYSICAL_AFF_RATE,
 	SALES_TAX_RATE,
+	SEED_PRICE,
 	SELF_HOST_FEE,
 	STORAGE_PER_GIB_MONTH,
-	TIME_POOL_PER_GIB,
-	USAGE_AFF_PER_GIB,
 } from "./constants.js";
 
 /** Bytes per GiB (binary). */
@@ -21,20 +23,110 @@ const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 /** Maximum discretionary Foundation subsidy per creator per month. */
 export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 
-/** What a direct purchase delivers, which sets its Foundation Fee basis. */
-export type PurchaseType = "digital" | "physical" | "service";
+// ── Badge plan price decomposition ───────────────────────────────────────────
+/**
+ * Decompose a Badge plan's whole-dollar price into its parts (full precision):
+ *
+ *   Price = Time Pool + Seeds + Community Share
+ *
+ * where Time Pool (by watch-time) and Seeds (× $1, direct) both go 100% to
+ * creators, and Community Share is the derived remainder funding the Foundation.
+ *
+ * Free is special: it pays $0, so its Community Share is $0 and its small Time
+ * Pool is subsidised from the pool (still `toCreators`, but not user-funded).
+ */
+export function badgePriceBreakdown(badge: Badge): {
+	price: Decimal;
+	timePool: Decimal;
+	seeds: Decimal;
+	communityShare: Decimal;
+	toCreators: Decimal;
+	subsidised: boolean;
+} {
+	const plan = BADGE_PLANS[badge];
+	const price = new Decimal(plan.price);
+	const timePool = new Decimal(plan.timePool);
+	const seeds = new Decimal(plan.seeds).mul(SEED_PRICE);
+	const toCreators = timePool.plus(seeds);
+	// Free is fully subsidised — the user contributes nothing, so no Community Share.
+	const communityShare = plan.price === 0 ? new Decimal(0) : price.minus(toCreators);
+	return { price, timePool, seeds, communityShare, toCreators, subsidised: plan.price === 0 };
+}
+
+// ── Bandwidth: at-cost wallet + free monthly allowance ────────────────────────
+/** At-cost bandwidth cost for a number of GiB (a pass-through, no fee). */
+export function bandwidthCost(gib: Decimal | number): Decimal {
+	return CENTS(new Decimal(gib).mul(BANDWIDTH_PER_GIB));
+}
 
 /**
- * Usage-price breakdown for a number of GiB (unrounded, full precision):
- * bandwidth (at cost) + AFF (charity) + Time Pool (to creators) = $0.03/GiB.
+ * Apply a month's stream bandwidth against the free allowance first, then the
+ * prepaid wallet. The allowance is drawn down before any wallet dollars, does not
+ * roll over, and whatever is unused returns to the subsidy pool at month-end.
+ *
+ * `walletBalance` is in dollars. A positive `shortfall` is bandwidth the wallet
+ * couldn't cover (drives low-balance warnings / the free-allowance floor).
  */
-export function usageBreakdown(gib: Decimal | number) {
-	const g = new Decimal(gib);
-	const bandwidth = g.mul(BANDWIDTH_PER_GIB);
-	const aff = g.mul(USAGE_AFF_PER_GIB);
-	const timePool = g.mul(TIME_POOL_PER_GIB);
-	return { bandwidth, aff, timePool, total: bandwidth.plus(aff).plus(timePool) };
+export function drawBandwidth(params: {
+	consumedGiB: Decimal | number;
+	freeAllowanceGiB: Decimal | number;
+	walletBalance: Decimal | number;
+}): {
+	fromAllowanceGiB: Decimal;
+	fromWalletGiB: Decimal;
+	walletCost: Decimal;
+	walletDebit: Decimal;
+	shortfall: Decimal;
+	remainingAllowanceGiB: Decimal;
+	remainingWallet: Decimal;
+} {
+	const consumed = new Decimal(params.consumedGiB);
+	const allowance = new Decimal(params.freeAllowanceGiB);
+	const wallet = new Decimal(params.walletBalance);
+
+	const fromAllowanceGiB = Decimal.min(consumed, allowance);
+	const fromWalletGiB = consumed.minus(fromAllowanceGiB);
+	const walletCost = bandwidthCost(fromWalletGiB);
+	const walletDebit = Decimal.min(wallet, walletCost);
+	const shortfall = walletCost.minus(walletDebit);
+
+	return {
+		fromAllowanceGiB,
+		fromWalletGiB,
+		walletCost,
+		walletDebit,
+		shortfall,
+		remainingAllowanceGiB: allowance.minus(fromAllowanceGiB),
+		remainingWallet: wallet.minus(walletDebit),
+	};
 }
+
+/**
+ * The at-cost value of a free allowance left unused at month-end, which returns
+ * to the subsidy pool (it was budgeted as a potential cost the pool didn't incur).
+ */
+export function unusedAllowanceValue(remainingAllowanceGiB: Decimal | number): Decimal {
+	return bandwidthCost(remainingAllowanceGiB);
+}
+
+// ── Foundation fee split ──────────────────────────────────────────────────────
+/** Split a Foundation-fee amount into Admin / Programs / Subsidy (see FOUNDATION_SPLIT). */
+export function foundationSplit(feeAmount: Decimal | number): {
+	admin: Decimal;
+	programs: Decimal;
+	subsidy: Decimal;
+} {
+	const fee = new Decimal(feeAmount);
+	return {
+		admin: CENTS(fee.mul(FOUNDATION_SPLIT.admin)),
+		programs: CENTS(fee.mul(FOUNDATION_SPLIT.programs)),
+		subsidy: CENTS(fee.mul(FOUNDATION_SPLIT.subsidy)),
+	};
+}
+
+// ── Direct purchases (zero-cut, pass-through) ─────────────────────────────────
+/** What a direct purchase delivers, which sets its Foundation Fee basis. */
+export type PurchaseType = "digital" | "physical" | "service";
 
 /**
  * Fee breakdown for a direct purchase (zero-cut, pass-through model).
@@ -43,8 +135,9 @@ export function usageBreakdown(gib: Decimal | number) {
  * bandwidth, and card + sales tax are added on top and paid by the buyer — never
  * subtracted from earnings. Anthers keeps $0.
  *
- * - `digital`: the AFF is the **Digital AFF** — 50% of the download's bandwidth,
- *   the same fee as streaming — and the buyer also pays that bandwidth at cost.
+ * - `digital`: the AFF is the **Digital AFF** — 50% of the download's bandwidth —
+ *   and the buyer also pays that bandwidth at cost (folded into the price, never
+ *   drawn from the streaming wallet).
  * - `physical` / `service`: no bytes are delivered, so the AFF is a nominal
  *   **Physical & Service AFF** of 1% of the price, and there is no delivery fee.
  *
@@ -61,7 +154,7 @@ export function calculateFees(
 	let foundationFee: Decimal;
 	if (type === "digital") {
 		deliveryFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB));
-		foundationFee = CENTS(deliveryGiB.mul(USAGE_AFF_PER_GIB));
+		foundationFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB).mul(AFF_INFRA_RATE));
 		// Any real download costs at least a cent to deliver — we can't bill sub-cent.
 		if (deliveryGiB.gt(0) && deliveryFee.lte(0)) deliveryFee = new Decimal("0.01");
 	} else {

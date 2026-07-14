@@ -45,7 +45,7 @@ import {
 	type AccessiblePost,
 	buildAccessContext,
 	defaultAnthersAccess,
-	defaultBoostAccess,
+	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
@@ -176,7 +176,7 @@ const anthersAccessRowSchema = z.object({
 	price: z.string().regex(MONEY),
 });
 
-const boostAccessRowSchema = z.object({
+const seedAccessRowSchema = z.object({
 	threshold: z.number().nonnegative(),
 	allow: z.boolean(),
 	price: z.string().regex(MONEY),
@@ -237,7 +237,7 @@ const postBaseSchema = z.object({
 
 	// Access tables (default "free but fully locked" applied server-side when omitted)
 	anthersAccess: z.array(anthersAccessRowSchema).optional(),
-	boostAccess: z.array(boostAccessRowSchema).optional(),
+	seedAccess: z.array(seedAccessRowSchema).optional(),
 
 	// The post's ordered content list: text blocks and/or references to library items.
 	contents: z.array(postEntrySchema).optional().default([]),
@@ -958,7 +958,7 @@ const contentRoutes = new Hono()
 				streamEnabled: data.streamEnabled,
 				downloadEnabled: data.downloadEnabled,
 				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
-				boostAccess: data.boostAccess ?? defaultBoostAccess(),
+				seedAccess: data.seedAccess ?? defaultSeedAccess(),
 				showOnTimeline: data.showOnTimeline,
 				isPinned: data.isPinned,
 				tags: data.tags,
@@ -1099,7 +1099,7 @@ const contentRoutes = new Hono()
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
 		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
-		if (data.boostAccess !== undefined) updates.boostAccess = data.boostAccess;
+		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
 		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
