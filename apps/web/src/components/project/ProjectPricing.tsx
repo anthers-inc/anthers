@@ -16,7 +16,7 @@ interface ProjectPricingProps {
 
 function buildReceipt(price: number) {
 	const r2 = (n: number) => Math.round(n * 100) / 100;
-	// Zero-cut: the creator receives 100% of the price. Card processing and sales tax are
+	// Direct purchase: the creator keeps 100% of the price they set. Card processing and sales tax are
 	// added on top, along with a small per-download Foundation fee (the Digital AFF) and
 	// delivery at cost — those are byte-based and finalized at checkout.
 	const processing = r2(price * CARD_RATE + CARD_FLAT);

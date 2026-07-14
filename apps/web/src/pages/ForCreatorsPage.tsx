@@ -5,8 +5,8 @@
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
 // shared LoggedOutLayout supplies the Meadow footer + grassy floor. Copy tracks the
 // V4 "Big Rethink" model: users choose a Badge plan (Free/Root/Sprout/Petal/Blossom),
-// Seeds are $1 direct-to-creator units, bandwidth is a separate at-cost wallet, and
-// Anthers keeps $0. The lead pitch is the 0% cut — Patreon/Bandcamp/Steam/itch, first;
+// Seeds are $1 direct-to-creator units, bandwidth is a separate at-cost wallet. The
+// lead pitch is the 0% cut on Seeds and direct sales — Patreon/Bandcamp/Steam/itch, first;
 // public streaming is a secondary benefit (discovery + at-cost reach). Anthers plan
 // figures come from @anthers/shared/constants; competitor figures are rough public
 // estimates (illustrative).
@@ -90,8 +90,8 @@ export default function ForCreatorsPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is Patreon, Bandcamp, Steam, and itch—at a 0% cut. Games, videos, music, and
-							writing under one roof, one identity, one audience. Seeds and sales reach you in
-							full—there's no platform cut to claw back, and no hidden fees.
+							writing under one roof, one identity, one audience. Seeds and sales reach you in full,
+							with no hidden fees.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -153,11 +153,11 @@ export default function ForCreatorsPage() {
 				</div>
 			</Section>
 
-			{/* The solution — one home, zero platform cut; explore the economics live */}
+			{/* The solution — one home, 0% cut on Seeds and sales; explore the economics live */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The solution</Eyebrow>
-					<H2>Every way fans pay you, you keep 100%</H2>
+					<H2>Every way fans pay you, see what reaches you</H2>
 					<Lede>
 						Anthers is Patreon, Bandcamp, Steam, and itch—at a 0% cut. Seeds and purchases reach you
 						in full; public streaming makes your work available effectively at cost. Pick how a fan
@@ -169,7 +169,7 @@ export default function ForCreatorsPage() {
 				</Reveal>
 			</Section>
 
-			{/* Transparent pricing — the itemized receipt behind the zero-cut promise */}
+			{/* Transparent pricing — the itemized receipt behind the pass-through pricing */}
 			<Section>
 				<Reveal>
 					<Eyebrow>Transparent by design</Eyebrow>
@@ -197,7 +197,7 @@ export default function ForCreatorsPage() {
 								<ReceiptLine label="You pay" amount="$10.62" bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								Creator receives $10.00—every time. Anthers keeps $0.00.
+								Creator receives $10.00—every time. Costs are added on top, never subtracted.
 							</p>
 						</Card>
 					</Reveal>
@@ -404,7 +404,8 @@ export default function ForCreatorsPage() {
 						A user chooses a Badge plan. Its whole-dollar price is money to creators—the Time Pool,
 						shared out by watch-time, plus included Seeds sent straight to the creators they
 						pick—and a small Community Share to the Anthers Foundation. Bandwidth is separate: an
-						at-cost wallet, not a funding lever. Anthers keeps $0.
+						at-cost wallet, not a funding lever. Anthers is a 501(c)(3) non-profit—no investors, no
+						profit-taking.
 					</Lede>
 				</Reveal>
 				<Reveal className="mx-auto mt-12 block max-w-3xl">
@@ -463,8 +464,7 @@ export default function ForCreatorsPage() {
 						of past spend. Every Seed is $1 and goes 100% to the creator it's sown for, nothing
 						skimmed. The Time Pool pays creators by the time people spend with their work. Bandwidth
 						lives in a separate at-cost wallet ($0.01/GiB) with a free monthly allowance on every
-						plan (5/10/20/30/50 GiB), and creators get 50 GiB of free storage. Anthers keeps $0.
-						Coming soon.
+						plan (5/10/20/30/50 GiB), and creators get 50 GiB of free storage. Coming soon.
 					</p>
 				</Reveal>
 			</Section>
@@ -901,8 +901,8 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 /** The interactive heart of "the solution": pick how a fan supports you (purchase /
  * Seed / stream) and the medium, and see exactly what reaches the creator vs.
  * the platform on Anthers and elsewhere. Leads with purchase — the categorical 0%-cut
- * win. Scenario assumptions are stated in-card; figures are estimates and Anthers
- * keeps $0 on every one. */
+ * win. Scenario assumptions are stated in-card; figures are estimates and Anthers's
+ * profit is $0 on every one. */
 function SolutionExplorer() {
 	const [action, setAction] = useState<ActionKey>("purchase");
 	const [media, setMedia] = useState<MediaKey>("video");
@@ -1007,7 +1007,7 @@ function SolutionExplorer() {
 							lands on the line the table can't show: Anthers profit is always $0. */}
 						<div className="mt-4 rounded-2xl border border-base-content/10 bg-base-200/40 p-4">
 							<p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-primary/70">
-								On Anthers, {RECEIPT_INTRO[action]} — no profit, ever
+								On Anthers, {RECEIPT_INTRO[action]} — Anthers profit is $0
 							</p>
 							<dl className="flex flex-col gap-1.5 text-sm">
 								{combo.breakdown.map((line) => {

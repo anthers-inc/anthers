@@ -8,7 +8,7 @@
 // Framing (V4 "Big Rethink"): lead with the 0% cut. Anthers takes NOTHING out of
 // what reaches a creator — 100% of every Seed and every direct sale is theirs, and
 // the Time Pool (funded by viewers' chosen Badge plans) is distributed to creators
-// by watch-time with no platform cut. The one thing added is the Community Share: a
+// by watch-time. The one thing added is the Community Share: a
 // small charitable contribution the fan chooses on top as part of their plan price,
 // funding free access + creator programs. It is NOT skimmed from creator earnings.
 //   • On a direct sale the creator receives the full listed price; the Community
@@ -121,7 +121,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: "A fan's Badge plan sets a monthly Time Pool that's split across everyone they watch, by watch-time — 100% reaches creators, Anthers profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads, we never take a cut, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
+				note: "A fan's Badge plan sets a monthly Time Pool that's split across everyone they watch, by watch-time — 100% reaches creators, Anthers profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
 			},
 		],
 	},
@@ -140,7 +140,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "$0.004/stream × ~17 songs (3:30 each); an artist keeps less after their label",
 					cut: "~30% + labels",
 				},
-				note: "Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on the fan's plan that's roughly comparable to Spotify, ad-free and with no cut taken. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.",
+				note: "Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on the fan's plan that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.",
 			},
 		],
 	},
@@ -248,11 +248,10 @@ export default function CreatorPayComparisonPage() {
 					<>
 						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
 						<b className="text-base-content">Seed</b> and every direct sale is 100% yours, and the
-						Time Pool is distributed to creators by watch-time with no platform cut. The one thing
-						we add is the <b className="text-base-content">Community Share</b> — a small charitable
-						contribution the fan chooses on top of their plan, funding free access and creator
-						programs, never subtracted from your earnings. Here's what actually reaches you,
-						platform by platform.
+						Time Pool is distributed to creators by watch-time. The one thing we add is the{" "}
+						<b className="text-base-content">Community Share</b> — a small charitable contribution
+						the fan chooses on top of their plan, funding free access and creator programs, never
+						subtracted from your earnings. Here's what actually reaches you, platform by platform.
 					</>
 				}
 			/>
@@ -283,19 +282,19 @@ export default function CreatorPayComparisonPage() {
 				earnings. You keep <b className="text-base-content">100%</b> of every Seed and every sale,
 				and the Time Pool reaches creators in full. Where we clearly win is Seeds and purchases.
 				Streaming we treat as a public good, not a paycheck: under equal-time a music hour now earns
-				the same as a video hour (no more per-medium penalty), it's ad-free, and we take no cut —
-				but we won't pretend a view-hour out-earns YouTube or Spotify. It makes your work
-				discoverable at cost; your income comes from the fans who Seed and buy.
+				the same as a video hour (no more per-medium penalty), it's ad-free — but we won't pretend a
+				view-hour out-earns YouTube or Spotify. It makes your work discoverable at cost; your income
+				comes from the fans who Seed and buy.
 			</div>
 
 			<CalcNotes>
 				<p>
-					<b className="text-base-content/70">How the money moves.</b> Anthers keeps{" "}
-					<b className="text-base-content/70">$0</b> of what reaches creators. A fan chooses a
-					monthly <b className="text-base-content/70">Badge plan</b> whose price splits into a Time
-					Pool (distributed to the creators they watch, by watch-time), directed <b>Seeds</b> ($1
-					units, 100% to a creator), and the <b className="text-base-content/70">Community Share</b>{" "}
-					— a charitable remainder funding free access and creator programs. Bandwidth is a separate
+					<b className="text-base-content/70">How the money moves.</b> Nothing Anthers does comes
+					out of what reaches creators. A fan chooses a monthly{" "}
+					<b className="text-base-content/70">Badge plan</b> whose price splits into a Time Pool
+					(distributed to the creators they watch, by watch-time), directed <b>Seeds</b> ($1 units,
+					100% to a creator), and the <b className="text-base-content/70">Community Share</b> — a
+					charitable remainder funding free access and creator programs. Bandwidth is a separate
 					at-cost wallet with a free monthly allowance, not a creator-funding lever. On a direct
 					sale the creator receives the full listed price; the Community Share there is a charitable
 					markup on that download's bandwidth (about half of it) or a flat 1% on physical goods,

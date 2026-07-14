@@ -38,7 +38,7 @@ interface DemoPurchase {
 	item: string;
 	type: "download" | "content" | "experience" | "physical";
 	price: number;
-	/** Anthers Foundation fee (AFF) on this purchase — digital: 50% of download bandwidth; physical/service: 1% of price. Anthers keeps $0. */
+	/** Anthers Foundation fee (AFF) on this purchase — digital: 50% of download bandwidth; physical/service: 1% of price. Funds the Anthers Foundation, not platform profit. */
 	fee: number;
 	date: string;
 }

@@ -198,9 +198,9 @@ export default function CompareItchPage() {
 								<div className="text-right font-semibold text-primary">Creator receives $10.00</div>
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								Anthers keeps $0. The Foundation fee on a digital download is half the delivery
-								bandwidth—a fraction of a cent. Costs are added on top, never subtracted from your
-								earnings.
+								The creator keeps 100% of their $10 price. The Foundation fee on a digital download
+								is half the delivery bandwidth—a fraction of a cent. Every cost is added on top,
+								never subtracted from your earnings.
 							</p>
 						</Card>
 					</Reveal>
@@ -379,8 +379,8 @@ export default function CompareItchPage() {
 							Ready to try something new?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use. No platform cut, no hidden fees. Publish your work and keep
-							100% of what you earn. If you love itch.io, you'll love what comes next.
+							Anthers is free to use. Your sales are 0% cut—publish your work and keep 100% of your
+							price. If you love itch.io, you'll love what comes next.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link

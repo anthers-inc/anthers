@@ -304,10 +304,10 @@ export default function AboutPage() {
 						<div className="h-full border-l-2 border-primary/30 pl-6">
 							<h3 className="mb-3 text-sm uppercase tracking-wider text-primary">For Creators</h3>
 							<p className="leading-relaxed text-base-content/65">
-								Anthers takes no cut. Creators keep 100% of every Seed and every direct purchase,
-								and the shared Time Pool pays out to creators by watch-time. Every dollar a user
-								spends is money to creators, bandwidth at cost, or the Community Share to the
-								Anthers Foundation—there is no platform margin.
+								Creators keep 100% of every Seed and every direct purchase, and the shared Time Pool
+								pays out to creators by watch-time. Every dollar a user spends is money to creators,
+								bandwidth at cost, or the Community Share to the Anthers Foundation—a 501(c)(3)
+								non-profit, so no investors and no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -398,7 +398,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Badge plans, Seeds, and direct purchases. Every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation—Anthers keeps no margin of its own. The fee itself is mostly charitable, funding free access and the Foundation's programs.",
+								text: "Money enters through Badge plans, Seeds, and direct purchases. Every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation. As a 501(c)(3) non-profit, Anthers takes no profit—the Community Share it collects is mostly charitable, funding free access and the Foundation's programs.",
 							},
 							{
 								num: "04",

@@ -343,7 +343,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "u-sub-tiers",
 							title: "Badge Plans & Seeds",
 							description:
-								"Choose a Badge plan (Free, Root, Sprout, Petal, Blossom); its whole-dollar price funds creators through the Time Pool (shared by watch-time) and included Seeds (100% to creators you pick), and comes with a bandwidth-wallet allowance. Zero platform cut: every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation.",
+								"Choose a Badge plan (Free, Root, Sprout, Petal, Blossom); its whole-dollar price funds creators through the Time Pool (shared by watch-time) and included Seeds (100% to creators you pick), and comes with a bandwidth-wallet allowance. Every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
