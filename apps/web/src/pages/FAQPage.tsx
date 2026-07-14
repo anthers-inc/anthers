@@ -58,8 +58,8 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					Anthers keeps nothing—every dollar you pay is money to creators, bandwidth at cost, or a
-					small charitable Community Share. There are two ways to pay:
+					Every dollar you pay goes to creators, to bandwidth at cost, or to a small charitable
+					Community Share. There are two ways to pay:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
@@ -77,8 +77,8 @@ const FAQ_ITEMS: FAQItem[] = [
 				<p>
 					Streaming and downloads draw from a separate <strong>bandwidth wallet</strong>—prepaid at
 					cost ($0.01/GiB)—and every plan includes a free monthly bandwidth allowance (5 GiB on
-					Free, up to 50 GiB on Blossom). There's no platform cut at any level. Card processing and
-					sales tax are added on top and leave the system entirely.
+					Free, up to 50 GiB on Blossom). Bandwidth is billed at cost, with no markup. Card
+					processing and sales tax are added on top and leave the system entirely.
 				</p>
 			</div>
 		),
@@ -99,7 +99,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut: the creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, a small Foundation fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Anthers keeps $0 — every line is a real cost or a charitable fee, never a platform cut.",
+			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut: the creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, a small Foundation fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Every added line is a real cost or a charitable fee on top of the price—never subtracted from what the creator earns.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -132,7 +132,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"Anthers never takes a cut. Creators are funded by the Time Pool (from subscribers' Badge plans, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
+			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from subscribers' Badge plans, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
 	},
 	{
 		category: "Creators",

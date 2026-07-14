@@ -3,7 +3,7 @@
 
 ---
 
-A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing. **Anthers keeps $0** — users choose a Badge plan whose price flows to creators (a watch-time **Time Pool** + $1 **Seeds**, 100% to creators) and a **Community Share** to the Anthers Foundation; 100% of Seeds and direct purchases go to the creator. Bandwidth is a separate, at-cost prepaid wallet.
+A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing. A **501(c)(3) non-profit**: a user's Badge plan flows to creators (a watch-time **Time Pool** + $1 **Seeds**) and a **Community Share** to the Anthers Foundation, and **100% of Seeds and direct purchases go to the creator**. Bandwidth is a separate, at-cost prepaid wallet.
 
 Anthers is operated as a non-profit organization that is structurally incapable of prioritizing profit over the people it serves. It cannot be acquired, cannot take corrupting investment, and directs every dollar of surplus into charitable and educational programs for creators through the Creator Resilience Fund.
 
@@ -143,7 +143,7 @@ Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables inclu
 
 ## Key Concepts
 
-- **Badge plans:** Users choose a plan — Free $0 / Root $4 / Sprout $8 / Petal $16 / Blossom $32 — held **point-in-time** (you must currently hold a level to reach its gated content). Each whole-dollar price decomposes into a **Time Pool** + **Seeds** + a **Community Share** (the derived remainder). Anthers keeps **$0**; money to creators = Time Pool + Seeds.
+- **Badge plans:** Users choose a plan — Free $0 / Root $4 / Sprout $8 / Petal $16 / Blossom $32 — held **point-in-time** (you must currently hold a level to reach its gated content). Each whole-dollar price decomposes into a **Time Pool** + **Seeds** (both to creators) + a **Community Share** (the derived remainder, to the Foundation).
 - **Time Pool:** the badge plan's creator-funding budget (Free $0.05 subsidized / $2 / $4 / $9 / $18), distributed across the creators the user watched **in proportion to watch-time** — a minute is a minute across media (play/watch/read/listen). A higher badge means a bigger pool, so all of that user's watch-time pays creators more, with no per-item multiplier.
 - **Seeds:** $1 units of direct, per-creator support — 100% to the creator (no fee, no payout processing). Each plan **includes** some Seeds (0/1/2/3/4); users can buy more and **direct** them to creators, unlocking those creators' **Seed Gates**.
 - **Community Share:** the derived remainder of the plan price (—/$1/$2/$4/$10), funding the **Anthers Foundation** (Admin 10% / Programs 40% / Subsidy 50%). Together with the creators' storage AF Fee it funds all free access.

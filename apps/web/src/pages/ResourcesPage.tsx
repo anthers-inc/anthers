@@ -87,7 +87,7 @@ const RELATED: ResourceCard[] = [
 	{
 		to: "/demo-user",
 		title: "See where your money goes",
-		blurb: "A viewer's-eye view of Badge plans, Seeds, the Time Pool, and the zero-cut split.",
+		blurb: "A viewer's-eye view of Badge plans, Seeds, the Time Pool, and where every dollar goes.",
 		tag: "Explainer",
 		icon: WalletIcon,
 	},

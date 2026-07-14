@@ -738,7 +738,7 @@ export default function SubscriptionPage() {
 				{/* Plan decomposition */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your plan funds
-					<InfoTip text="Your plan price is money to creators (Time Pool + Seeds) plus your Community Share to the Anthers Foundation. Anthers keeps $0. Bandwidth is separate — see your wallet below." />
+					<InfoTip text="Your plan price is money to creators (Time Pool + Seeds) plus your Community Share to the Anthers Foundation. Bandwidth is separate — see your wallet below." />
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 					<div>

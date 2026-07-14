@@ -139,7 +139,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									100% to creators—no platform revenue share
+									100% of every Seed and sale to creators—no platform revenue share
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -447,7 +447,7 @@ export default function CompareGhostPage() {
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 							If you're a writer or journalist, Ghost is an excellent choice. If you make games,
 							videos, music, or multimedia creative work — Anthers was built for you. Free to use,
-							100% to creators.
+							and every Seed and sale is 100% yours.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to={startHref} className="btn btn-primary rounded-full px-7">

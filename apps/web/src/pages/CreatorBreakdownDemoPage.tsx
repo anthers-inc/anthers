@@ -773,7 +773,8 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			<p className="text-xs text-base-content/40 mt-2">
 				Users choose a Badge plan; its price funds a Time Pool (distributed to creators by
 				watch-time) plus included Seeds ($1 units, 100% to a chosen creator). "To creators" is that
-				Time Pool + Seeds — Anthers keeps $0. {creator.displayName} earns their watch-time share —{" "}
+				Time Pool + Seeds; the rest of the plan price is the Community Share to the Anthers
+				Foundation. {creator.displayName} earns their watch-time share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
 				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>

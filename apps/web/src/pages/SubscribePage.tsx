@@ -7,7 +7,7 @@ import type { AccountResponse, Badge, BadgePlan } from "@anthers/web-shared/type
 import { useEffect, useMemo, useState } from "react";
 
 /* ------------------------------------------------------------------ */
-/*  V4 economics — Anthers keeps $0                                    */
+/*  V4 economics — non-profit, no profit-taking                        */
 /* ------------------------------------------------------------------ */
 /*
  * A user CHOOSES a Badge plan (free/root/sprout/petal/blossom). The plan's

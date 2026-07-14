@@ -499,7 +499,8 @@ function UnitCostCalculator() {
 							($0.01/GiB, after a free monthly allowance). Creator earnings are{" "}
 							<span className="font-semibold text-success">decoupled</span> from this: they come
 							from viewers' Badge-plan Time Pool, distributed by watch-time (equal-time), plus
-							directed Seeds. Anthers takes 0% — no per-GiB markup, no platform cut.
+							directed Seeds. The Time Pool and Seeds reach creators in full; the bandwidth wallet
+							is billed at cost.
 						</p>
 					</div>
 				</div>
@@ -714,8 +715,8 @@ function ReferenceCreatorProfiles() {
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
 				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
-				fee. Anthers takes 0% — a zero-cut platform where only real infrastructure costs (shown
-				below) are deducted, at cost with no markup. The{" "}
+				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
+				at cost with no markup. The{" "}
 				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by
 				users' Community Share, covers free access across the platform.
 			</p>
@@ -827,8 +828,7 @@ function ReferenceCreatorProfiles() {
 					<p>
 						Anthers Sprout plan: $8/mo → $4 Time Pool + 2 Seeds ($2) to creators, with a $2
 						Community Share funding the Foundation. Time Pool is distributed to creators by
-						watch-time; Seeds go 100% to the chosen creator. Bandwidth is a separate at-cost wallet,
-						never a platform cut.
+						watch-time; Seeds go 100% to the chosen creator. Bandwidth is a separate at-cost wallet.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>

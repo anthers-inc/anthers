@@ -112,7 +112,8 @@ function ConversionEngine() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the Badge plan a viewer chose, then how they spend their month. Their Time Pool is
 					split across everyone they watch, by time; your slice of their watch-time — plus any Seeds
-					they direct to you — is what you take home from them. Anthers keeps $0.
+					they direct to you — is what you take home from them. Anthers is a 501(c)(3) non-profit—no
+					profit-taking.
 				</p>
 
 				<div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-6">
@@ -748,7 +749,7 @@ export default function CreatorMonetizationCalculatorPage() {
 									A viewer <b>chooses a Badge plan</b> — Free $0 / Root $4 / Sprout $8 / Petal $16 /
 									Blossom $32. Each plan's price splits into a <b>Time Pool</b> (to creators, by
 									watch-time), included <b>Seeds</b> ($1 units, 100% to a creator, user-directed),
-									and the <b>Community Share</b> (the charitable remainder). Anthers keeps $0.
+									and the <b>Community Share</b> (the charitable remainder).
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
