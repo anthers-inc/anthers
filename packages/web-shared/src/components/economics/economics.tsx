@@ -158,24 +158,34 @@ function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) =>
 								: "border-base-content/10 bg-base-100 hover:border-primary/40"
 						}`}
 					>
-						<span className="relative flex h-11 w-11 items-center justify-center">
-							<BrandGlyph
-								name={BADGE_ART[b].wreath}
-								className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/40"}`}
-							/>
-							<span aria-hidden="true" className="text-xl leading-none">
-								{BADGE_ART[b].emoji}
+						{b === "free" ? (
+							// Free has no badge — just the centered label, so it's clear it's badgeless.
+							<span
+								style={serif}
+								className={`flex flex-1 items-center justify-center text-sm font-medium ${active ? "text-primary" : "text-base-content/80"}`}
+							>
+								Free
 							</span>
-						</span>
-						<span
-							style={serif}
-							className={`text-sm font-medium ${active ? "text-primary" : "text-base-content/80"}`}
-						>
-							{badgeLabel(b)}
-						</span>
-						<span className="font-mono text-[11px] text-base-content/50">
-							{price === 0 ? "Free" : `$${price}`}
-						</span>
+						) : (
+							<>
+								<span className="relative flex h-11 w-11 items-center justify-center">
+									<BrandGlyph
+										name={BADGE_ART[b].wreath}
+										className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/40"}`}
+									/>
+									<span aria-hidden="true" className="text-xl leading-none">
+										{BADGE_ART[b].emoji}
+									</span>
+								</span>
+								<span
+									style={serif}
+									className={`text-sm font-medium ${active ? "text-primary" : "text-base-content/80"}`}
+								>
+									{badgeLabel(b)}
+								</span>
+								<span className="font-mono text-[11px] text-base-content/50">${price}</span>
+							</>
+						)}
 					</button>
 				);
 			})}

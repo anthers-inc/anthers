@@ -54,21 +54,29 @@ function PlanCard({
 			}`}
 		>
 			<div className="card-body p-5">
-				<div className="flex items-center justify-between">
-					<div className="flex items-center gap-2">
-						<span className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center">
-							<BrandGlyph
-								name={BADGE_ART[plan.id].wreath}
-								className="absolute inset-0 h-full w-full text-primary/55"
-							/>
-							<span aria-hidden="true" className="text-base">
-								{BADGE_ART[plan.id].emoji}
-							</span>
-						</span>
+				{isFree ? (
+					// Free has no badge — center the label so it's clear it's badgeless.
+					<div className="flex items-center justify-center gap-2">
 						<h3 className="text-lg font-bold">{plan.name}</h3>
+						{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
 					</div>
-					{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
-				</div>
+				) : (
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-2">
+							<span className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center">
+								<BrandGlyph
+									name={BADGE_ART[plan.id].wreath}
+									className="absolute inset-0 h-full w-full text-primary/55"
+								/>
+								<span aria-hidden="true" className="text-base">
+									{BADGE_ART[plan.id].emoji}
+								</span>
+							</span>
+							<h3 className="text-lg font-bold">{plan.name}</h3>
+						</div>
+						{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
+					</div>
+				)}
 
 				<div className="flex items-baseline gap-1 mt-1 mb-3">
 					<span className="text-3xl font-bold">{fmt(plan.price)}</span>
