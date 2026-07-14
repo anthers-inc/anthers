@@ -74,7 +74,7 @@ export default function ForCreatorsPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Games, videos, music, and writing—all under one roof, one identity, one audience. No
-							platform cut. No hidden fees. Transparent costs you can see and verify.
+							platform profit. No hidden fees. Transparent costs you can see and verify.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -173,7 +173,7 @@ export default function ForCreatorsPage() {
 									label="Download bandwidth (2 GiB @ $0.01/GiB, at cost)"
 									amount="$0.02"
 								/>
-								<ReceiptLine label="Anthers Foundation Fee (50% of bandwidth)" amount="$0.01" />
+								<ReceiptLine label="Community Share (50% of bandwidth)" amount="$0.01" />
 								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 								<div className="my-1 border-t border-base-content/10" />
 								<ReceiptLine label="You pay" amount="$10.62" bold />
@@ -192,11 +192,14 @@ export default function ForCreatorsPage() {
 								Every fee is itemized and explained. Buyers understand what they're paying for.
 								Creators understand what they're earning.
 							</PricePoint>
-							<PricePoint icon={<ServerStackIcon className="h-5 w-5" />} title="Anthers Foundation">
-								The Foundation fee rides on the infrastructure a transaction actually uses—50% of
+							<PricePoint
+								icon={<ServerStackIcon className="h-5 w-5" />}
+								title="The Community Share"
+							>
+								Anthers' one markup rides on the infrastructure a transaction actually uses—50% of
 								the bandwidth a download or stream needs, plus 50% of creator storage. It funds free
 								access, charitable programs, and lean operations. It's a community investment, not a
-								platform tax—Anthers itself keeps nothing.
+								platform tax—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -624,7 +627,7 @@ export default function ForCreatorsPage() {
 							Ready to share your work?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use. No platform cut, no hidden fees. Just publish your work and
+							Anthers is free to use. No platform profit, no hidden fees. Just publish your work and
 							keep what you earn.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -650,8 +653,9 @@ export default function ForCreatorsPage() {
 
 // ─── "The solution" — the interactive economics matrix ───
 
-type Deal = { name: string; creator: string; platform: string };
-type Combo = { scenario: string; rows: Deal[]; note?: string };
+type Deal = { name: string; creator: string; platform: string; platformNote?: string };
+type Line = { label: string; amount: string };
+type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] };
 
 const ACTIONS = [
 	{ key: "stream", label: "Streams your work" },
@@ -669,135 +673,193 @@ const MEDIA = [
 ] as const;
 type MediaKey = (typeof MEDIA)[number]["key"];
 
-/** The Anthers row for a combo — always first, always $0 to the platform. */
-const anthers = (creator: string): Deal => ({ name: "Anthers", creator, platform: "$0.00" });
+// Header intro for the per-combo Anthers mini-receipt (below the comparison).
+const RECEIPT_INTRO: Record<ActionKey, string> = {
+	stream: "the fan's usage that hour",
+	purchase: "the price plus delivery",
+	boost: "your $5 Boost",
+};
 
-// [action][media] → the scenario + who-gets-what. Anthers first. Competitor
-// figures are rough public estimates; Anthers keeps $0 on every one. `stream` has
-// no `merch` entry on purpose — that combo is a joke (see SolutionExplorer).
+const CS_NOTE = "community & charity";
+const PASSTHROUGH = "pure passthrough";
+
+/** The Anthers row for a combo. `platform` is the Community Share (a charitable
+ * markup that funds free access + Foundation programs, never profit) — or $0 for
+ * Boost, a pure passthrough. It is NOT a platform profit cut. */
+const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
+	name: "Anthers",
+	creator,
+	platform,
+	platformNote,
+});
+
+// The itemized Anthers side, shown as a mini-receipt under each comparison. The
+// closing line makes the honest point the comparison table can't: Anthers profit
+// is always $0 — the Community Share is charity, and bandwidth is an at-cost
+// passthrough, so "$0 to the platform" was only ever half the story.
+const streamReceipt: Line[] = [
+	{ label: "To you — Time Pool, by watch-time", amount: "~$0.03" },
+	{ label: "Community Share — free access & charity", amount: "~$0.01" },
+	{ label: "Bandwidth — delivery, at cost", amount: "~$0.02" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const purchaseReceipt = (price: string, cs: string, bw: string): Line[] => [
+	{ label: "To you — your price, in full", amount: price },
+	{ label: "Community Share — free access & charity", amount: cs },
+	{ label: "Bandwidth — delivery, at cost", amount: bw },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const merchReceipt: Line[] = [
+	{ label: "To you — your price, in full", amount: "$25.00" },
+	{ label: "Community Share — 1%, free access & charity", amount: "$0.25" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const boostReceipt: Line[] = [
+	{ label: "To you — every cent", amount: "$5.00" },
+	{ label: "Community Share", amount: "$0.00" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+
+// [action][media] → the scenario + who-gets-what + the Anthers breakdown. Anthers
+// first. Competitor figures are rough public estimates. `stream` has no `merch`
+// entry on purpose — that combo is a joke (see SolutionExplorer).
 const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 	stream: {
 		video: {
 			scenario: "A fan watches an hour of your HD video",
 			rows: [
-				anthers("~$0.03"),
+				anthers("~$0.03", "~$0.01", CS_NOTE),
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
 				{ name: "YouTube (Premium)", creator: "~$0.20", platform: "~$0.16" },
 			],
-			note: "Streaming pays little anywhere—but on Anthers 100% reaches you, at the same per-hour rate for every medium, with no ads. Real support comes from Boost.",
+			note: "Streaming pays little anywhere—but here there are no ads, Anthers never profits, and it's the same per-hour rate for every medium. Real support comes from Boost.",
+			breakdown: streamReceipt,
 		},
 		games: {
 			scenario: "A fan plays an hour of your browser game",
 			rows: [
-				anthers("~$0.03"),
+				anthers("~$0.03", "~$0.01", CS_NOTE),
 				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
 				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
 			],
 			note: "Almost nowhere pays indie devs for play-time. Anthers pays it the same per-hour rate it pays video.",
+			breakdown: streamReceipt,
 		},
 		music: {
 			scenario: "A fan listens to an hour of your music",
 			rows: [
-				anthers("~$0.03"),
+				anthers("~$0.03", "~$0.01", CS_NOTE),
 				{ name: "Spotify", creator: "~$0.02", platform: "rest to labels & Spotify" },
 				{ name: "Apple Music", creator: "~$0.04", platform: "skimmed" },
 			],
-			note: "Streaming pays fractions of a cent everywhere. On Anthers you keep all of it—plus Boost.",
+			note: "Streaming pays fractions of a cent everywhere. On Anthers there are no ads and no profit-taking—and Boost is where devoted fans really pay you.",
+			breakdown: streamReceipt,
 		},
 		writing: {
 			scenario: "A fan reads your work for an hour",
 			rows: [
-				anthers("~$0.03"),
+				anthers("~$0.03", "~$0.01", CS_NOTE),
 				{ name: "Medium", creator: "~$0.02", platform: "members only" },
 				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
 			],
 			note: "Most writing platforms don't pay per-read at all. Anthers pays the same per-hour rate as video.",
+			breakdown: streamReceipt,
 		},
 	},
 	purchase: {
 		video: {
 			scenario: "A fan buys your $12 video",
 			rows: [
-				anthers("$12.00"),
+				anthers("$12.00", "~$0.02", CS_NOTE),
 				{ name: "Gumroad", creator: "$10.80", platform: "$1.20" },
 				{ name: "Apple / iTunes", creator: "$8.40", platform: "$3.60" },
 			],
+			breakdown: purchaseReceipt("$12.00", "~$0.02", "~$0.03"),
 		},
 		games: {
 			scenario: "A fan buys your $15 game",
 			rows: [
-				anthers("$15.00"),
+				anthers("$15.00", "~$0.02", CS_NOTE),
 				{ name: "itch.io", creator: "$13.50", platform: "$1.50" },
 				{ name: "Steam", creator: "$10.50", platform: "$4.50" },
 			],
+			breakdown: purchaseReceipt("$15.00", "~$0.02", "~$0.03"),
 		},
 		music: {
 			scenario: "A fan buys your $10 album",
 			rows: [
-				anthers("$10.00"),
+				anthers("$10.00", "<$0.01", CS_NOTE),
 				{ name: "Bandcamp", creator: "$8.50", platform: "$1.50" },
 				{ name: "iTunes Store", creator: "$7.00", platform: "$3.00" },
 			],
+			breakdown: purchaseReceipt("$10.00", "<$0.01", "<$0.01"),
 		},
 		writing: {
 			scenario: "A fan buys your $8 ebook",
 			rows: [
-				anthers("$8.00"),
+				anthers("$8.00", "<$0.01", CS_NOTE),
 				{ name: "Gumroad", creator: "$7.20", platform: "$0.80" },
 				{ name: "Amazon KDP", creator: "$5.60", platform: "$2.40" },
 			],
+			breakdown: purchaseReceipt("$8.00", "<$0.01", "<$0.01"),
 		},
 		merch: {
 			scenario: "A fan buys your $25 shirt",
 			rows: [
-				anthers("$25.00"),
+				anthers("$25.00", "$0.25", CS_NOTE),
 				{ name: "Etsy", creator: "$22.25", platform: "$2.75" },
 				{ name: "Gumroad", creator: "$22.50", platform: "$2.50" },
 			],
 			note: "Excludes production & shipping—a real cost on any platform, including Anthers.",
+			breakdown: merchReceipt,
 		},
 	},
 	boost: {
 		video: {
 			scenario: "A fan Boosts you $5 / month",
 			rows: [
-				anthers("$5.00"),
+				anthers("$5.00", "$0.00", PASSTHROUGH),
 				{ name: "YouTube Memberships", creator: "$3.50", platform: "$1.50" },
 				{ name: "Twitch (sub)", creator: "$2.50", platform: "$2.50" },
 			],
+			breakdown: boostReceipt,
 		},
 		games: {
 			scenario: "A fan Boosts you $5 / month",
 			rows: [
-				anthers("$5.00"),
+				anthers("$5.00", "$0.00", PASSTHROUGH),
 				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
 				{ name: "Ko-fi", creator: "$4.75", platform: "$0.25" },
 			],
+			breakdown: boostReceipt,
 		},
 		music: {
 			scenario: "A fan Boosts you $5 / month",
 			rows: [
-				anthers("$5.00"),
+				anthers("$5.00", "$0.00", PASSTHROUGH),
 				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
 				{ name: "Bandcamp (subscription)", creator: "$4.25", platform: "$0.75" },
 			],
+			breakdown: boostReceipt,
 		},
 		writing: {
 			scenario: "A fan Boosts you $5 / month",
 			rows: [
-				anthers("$5.00"),
+				anthers("$5.00", "$0.00", PASSTHROUGH),
 				{ name: "Substack", creator: "$4.50", platform: "$0.50" },
 				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
 			],
+			breakdown: boostReceipt,
 		},
 		merch: {
 			scenario: "A fan Boosts you $5 / month",
 			rows: [
-				anthers("$5.00"),
+				anthers("$5.00", "$0.00", PASSTHROUGH),
 				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
 				{ name: "Buy Me a Coffee", creator: "$4.75", platform: "$0.25" },
 			],
 			note: "Boost supports the creator directly—whatever they make. Each $1 is 100% yours.",
+			breakdown: boostReceipt,
 		},
 	},
 };
@@ -888,10 +950,15 @@ function SolutionExplorer() {
 												>
 													{r.creator}
 												</td>
-												<td
-													className={`text-right ${isAnthers ? "text-base-content/50" : "text-error"}`}
-												>
-													{r.platform}
+												<td className={`text-right ${isAnthers ? "" : "text-error"}`}>
+													<span className={isAnthers ? "text-base-content/70" : ""}>
+														{r.platform}
+													</span>
+													{r.platformNote && (
+														<span className="block text-xs font-normal text-base-content/45">
+															{r.platformNote}
+														</span>
+													)}
 												</td>
 											</tr>
 										);
@@ -900,6 +967,38 @@ function SolutionExplorer() {
 							</table>
 						</div>
 						{combo.note && <p className="mt-3 text-sm text-base-content/55">{combo.note}</p>}
+						{/* The honest Anthers breakdown — the comparison's "to the Platform" is the
+							Community Share (charity), not profit; this itemizes where the rest goes and
+							lands on the line the table can't show: Anthers profit is always $0. */}
+						<div className="mt-4 rounded-2xl border border-base-content/10 bg-base-200/40 p-4">
+							<p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-primary/70">
+								On Anthers, {RECEIPT_INTRO[action]} — no profit, ever
+							</p>
+							<dl className="flex flex-col gap-1.5 text-sm">
+								{combo.breakdown.map((line) => {
+									const isProfit = line.label === "Anthers profit";
+									return (
+										<div
+											key={line.label}
+											className={`flex items-baseline justify-between gap-3 ${
+												isProfit ? "mt-1 border-t border-base-content/10 pt-2 font-medium" : ""
+											}`}
+										>
+											<span className={isProfit ? "text-base-content/80" : "text-base-content/60"}>
+												{line.label}
+											</span>
+											<span
+												className={`shrink-0 font-mono tabular-nums ${
+													isProfit ? "text-primary" : "text-base-content/70"
+												}`}
+											>
+												{line.amount}
+											</span>
+										</div>
+									);
+								})}
+							</dl>
+						</div>
 					</>
 				) : (
 					/* Easter egg: you can't stream merch. */
@@ -924,9 +1023,10 @@ function SolutionExplorer() {
 			</div>
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
-				Scenario figures are illustrative and competitor rates are rough public estimates. On
-				Anthers the platform's cut is always $0—real costs (bandwidth, processing) show at checkout
-				as transparent line items.
+				Anthers never profits: beyond your share and delivery at cost, the only markup is the
+				Community Share—a small charitable fee that funds free access for everyone and Anthers
+				Foundation programs (Boost is a pure passthrough). Scenario figures are illustrative;
+				competitor rates are rough public estimates.
 			</p>
 		</Card>
 	);
