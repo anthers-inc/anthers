@@ -246,7 +246,7 @@ export default function ForUsersPage() {
 						secrets:
 					</p>
 				</Reveal>
-				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl">
+				<Reveal delay={120} className="mx-auto mt-12 block max-w-4xl">
 					<SubscriptionCalculator />
 				</Reveal>
 			</Section>

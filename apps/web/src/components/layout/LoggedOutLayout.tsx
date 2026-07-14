@@ -60,97 +60,69 @@ export default function LoggedOutLayout() {
 		// below the side vines (z-20), which sit below the grassy floor (z-30). The
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
-			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40">
-				<div className="navbar-start gap-1">
-					{/* Mobile menu */}
-					<div className="dropdown lg:hidden">
-						<label tabIndex={0} className="btn btn-ghost">
-							<Bars3Icon className="w-5 h-5" />
-						</label>
-						<ul
-							tabIndex={0}
-							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
-						>
+			<header className="nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
+				{/* max-w container keeps the brand + actions off the screen corners while
+					the nav links stay centered (navbar-start / -center / -end). */}
+				<div className="navbar mx-auto w-full max-w-7xl px-4">
+					<div className="navbar-start gap-1">
+						{/* Mobile menu */}
+						<div className="dropdown lg:hidden">
+							<label tabIndex={0} className="btn btn-ghost">
+								<Bars3Icon className="w-5 h-5" />
+							</label>
+							<ul
+								tabIndex={0}
+								className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
+							>
+								<li>
+									<Link to="/">For Users</Link>
+								</li>
+								<li>
+									<Link to="/for-creators">For Creators</Link>
+								</li>
+								<li>
+									<Link to="/resources">Resources</Link>
+								</li>
+								<li>
+									<Link to="/about">About Us</Link>
+								</li>
+							</ul>
+						</div>
+
+						{/* Brand — links to the homepage (the For Users link does too, intentionally) */}
+						<Link to="/" className="btn btn-ghost text-lg font-bold px-2">
+							Anthers
+						</Link>
+					</div>
+
+					{/* Desktop nav — centered */}
+					<div className="navbar-center hidden lg:flex">
+						<ul className="menu menu-horizontal px-1 gap-1">
 							<li>
-								<Link to="/subscribe">Subscribe</Link>
+								<Link to="/">For Users</Link>
 							</li>
 							<li>
 								<Link to="/for-creators">For Creators</Link>
 							</li>
 							<li>
-								<details>
-									<summary>Compare</summary>
-									<ul className="bg-base-200 z-50">
-										<li>
-											<Link to="/compare/itch-io">vs itch.io</Link>
-										</li>
-										<li>
-											<Link to="/compare/ghost">vs Ghost</Link>
-										</li>
-									</ul>
-								</details>
-							</li>
-							<li>
-								<Link to="/about">About</Link>
-							</li>
-							<li>
-								<Link to="/roadmap">Roadmap</Link>
-							</li>
-							<li>
 								<Link to="/resources">Resources</Link>
+							</li>
+							<li>
+								<Link to="/about">About Us</Link>
 							</li>
 						</ul>
 					</div>
 
-					{/* Brand — links to the homepage */}
-					<Link to="/" className="btn btn-ghost text-lg font-bold px-2">
-						Anthers
-					</Link>
-				</div>
-
-				{/* Desktop nav */}
-				<div className="navbar-center hidden lg:flex">
-					<ul className="menu menu-horizontal px-1 gap-1">
-						<li>
-							<Link to="/subscribe">Subscribe</Link>
-						</li>
-						<li>
-							<Link to="/for-creators">For Creators</Link>
-						</li>
-						<li>
-							<details>
-								<summary>Compare</summary>
-								<ul className="bg-base-200 z-50">
-									<li>
-										<Link to="/compare/itch-io">vs itch.io</Link>
-									</li>
-									<li>
-										<Link to="/compare/ghost">vs Ghost</Link>
-									</li>
-								</ul>
-							</details>
-						</li>
-						<li>
-							<Link to="/about">About</Link>
-						</li>
-						<li>
-							<Link to="/roadmap">Roadmap</Link>
-						</li>
-						<li>
-							<Link to="/resources">Resources</Link>
-						</li>
-					</ul>
-				</div>
-
-				<div className="navbar-end">
-					<div className="flex items-center gap-2">
-						<ThemeToggle />
-						<Link to="/login" className="btn btn-ghost btn-sm">
-							Log in
-						</Link>
-						<Link to="/signup" className="btn btn-primary btn-sm">
-							Sign up
-						</Link>
+					<div className="navbar-end">
+						<div className="flex items-center gap-2">
+							<ThemeToggle />
+							<Link to="/login" className="btn btn-ghost btn-sm">
+								Log in
+							</Link>
+							<Link to="/signup" className="btn btn-primary btn-sm">
+								Sign up
+							</Link>
+						</div>
 					</div>
 				</div>
 			</header>
