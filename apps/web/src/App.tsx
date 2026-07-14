@@ -18,6 +18,7 @@ import CompareItchPage from "./pages/CompareItchPage";
 import CreatorBreakdownDemoPage from "./pages/CreatorBreakdownDemoPage";
 import CreatorDemoPage from "./pages/CreatorDemoPage";
 import CreatorMonetizationCalculatorPage from "./pages/CreatorMonetizationCalculatorPage";
+import CreatorPayComparisonPage from "./pages/CreatorPayComparisonPage";
 import CreatorProfilePage from "./pages/CreatorProfilePage";
 // Shared content pages (work for both logged-in and logged-out)
 import DiscoverPage from "./pages/DiscoverPage";
@@ -169,10 +170,11 @@ export default function App() {
 				{/* Resource tools / calculators — public, work logged-in or out.
 					Must be registered before the /:username catch-alls below. */}
 				<Route element={<MeadowDecorLayout />}>
-					{/* The resources landing gets the botanical decor; the calculators stay
-						plain so the vines don't crowd their controls. */}
+					{/* The resources landing gets the botanical decor; the calculators and the
+						pay-comparison stay plain so nothing crowds their dense controls/tables. */}
 					<Route path="/resources" element={<ResourcesPage />} />
 				</Route>
+				<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
 				<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
 				<Route path="/resources/video-bandwidth" element={<VideoBandwidthCalculatorPage />} />
 				<Route
