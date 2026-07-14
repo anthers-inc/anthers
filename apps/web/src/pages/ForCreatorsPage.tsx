@@ -5,12 +5,13 @@
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
 // shared LoggedOutLayout supplies the Meadow footer + grassy floor. Copy is the
 // existing V3-accurate marketing content, reflowed into the Meadow section
-// vocabulary. Every Anthers economics figure stays V3-accurate; competitor cuts
-// in "The problem" are the other platforms' standard published rates (illustrative).
+// vocabulary. Every Anthers economics figure stays V3-accurate; competitor figures
+// are rough public estimates (illustrative).
 //
-// Section flow is a deliberate call-and-response: "The problem" (everyone else
-// takes a cut, on purchases AND subscriptions) is immediately answered by
-// "Transparent by design" (Anthers takes none).
+// Section flow: a brief "The problem" (what's wrong across every kind of platform)
+// sets up "The solution" — an interactive matrix (how a fan supports you × the
+// medium) showing what reaches the creator vs. the platform on Anthers and
+// elsewhere.
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
@@ -24,16 +25,20 @@ import {
 	ArrowPathIcon,
 	ChartBarIcon,
 	ChatBubbleLeftRightIcon,
+	CurrencyDollarIcon,
 	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
 	GlobeAltIcon,
+	LockClosedIcon,
 	LockOpenIcon,
 	MusicalNoteIcon,
 	PaintBrushIcon,
 	PuzzlePieceIcon,
 	ServerStackIcon,
 	ShieldCheckIcon,
+	ShoppingBagIcon,
+	Squares2X2Icon,
 	StarIcon,
 	TrophyIcon,
 	UserGroupIcon,
@@ -69,7 +74,7 @@ export default function ForCreatorsPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Games, videos, music, and writing—all under one roof, one identity, one audience. No
-							platform cut. No hidden fees. Transparent costs you can see and verify.
+							platform profit. No hidden fees. Transparent costs you can see and verify.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -89,36 +94,65 @@ export default function ForCreatorsPage() {
 				</div>
 			</header>
 
-			{/* The problem — how everyone else takes a cut, on purchases AND subscriptions */}
+			{/* The problem — brief: what's wrong across every kind of platform */}
 			<Section>
 				<Reveal>
 					<Eyebrow>The problem</Eyebrow>
-					<H2>Creators deserve better</H2>
+					<H2>The creator internet is rigged</H2>
 					<Lede>
-						Existing platforms take 10–30% of your revenue, own your data, and fragment your
-						audience across multiple services. Whether someone buys your work outright or supports
-						you month to month, a middleman takes a cut of it.
+						Every kind of platform has its own way of taking from creators—and none of them let you
+						be all of who you are in one place.
 					</Lede>
 				</Reveal>
-				<div className="mx-auto mt-12 flex max-w-2xl flex-col gap-6">
-					<Reveal>
-						<PurchaseComparison />
+				<div className="mx-auto mt-12 grid max-w-4xl gap-x-10 gap-y-8 text-left sm:grid-cols-2">
+					<Reveal delay={0}>
+						<Feature
+							icon={<CurrencyDollarIcon className="h-6 w-6" />}
+							title="Storefronts skim every sale"
+							description="Steam, the App Store, and the rest take 10–30% of everything your fans pay you."
+						/>
 					</Reveal>
-					<Reveal delay={110}>
-						<SubscriptionComparison />
+					<Reveal delay={80}>
+						<Feature
+							icon={<EyeIcon className="h-6 w-6" />}
+							title="Ad platforms pay pennies"
+							description="YouTube-style platforms hand you a sliver of ad revenue—and turn your fans into the product."
+						/>
+					</Reveal>
+					<Reveal delay={160}>
+						<Feature
+							icon={<LockClosedIcon className="h-6 w-6" />}
+							title="Memberships skim and silo"
+							description="Patreon, Twitch, and Substack take a cut of your supporters' money and hold your audience hostage."
+						/>
+					</Reveal>
+					<Reveal delay={240}>
+						<Feature
+							icon={<Squares2X2Icon className="h-6 w-6" />}
+							title="Your work is scattered"
+							description="A game, a soundtrack, a devlog, a zine—each needs a different platform and a separate audience."
+						/>
 					</Reveal>
 				</div>
+			</Section>
+
+			{/* The solution — one home, zero platform cut; explore the economics live */}
+			<Section tint>
 				<Reveal>
-					<p className="mx-auto mt-5 max-w-xl text-sm text-base-content/45">
-						On Anthers, real costs (payment processing, infrastructure) are shown as transparent
-						line items—never a percentage cut. Competitor rates above are those platforms' standard
-						published cuts.
-					</p>
+					<Eyebrow>The solution</Eyebrow>
+					<H2>However fans support you, you keep more</H2>
+					<Lede>
+						One home for everything you make—and the platform takes nothing. Stream, purchase, or
+						Boost: see exactly what reaches the creator versus the middleman, for any kind of work.
+					</Lede>
+				</Reveal>
+				<Reveal delay={80} className="mt-12">
+					<SolutionExplorer />
 				</Reveal>
 			</Section>
 
-			{/* Transparent pricing — the response to "the problem" above */}
-			<Section tint>
+			{/* Transparent pricing — the itemized receipt behind the zero-cut promise */}
+			<Section>
 				<Reveal>
 					<Eyebrow>Transparent by design</Eyebrow>
 					<H2>Transparent pricing, not platform rent</H2>
@@ -139,7 +173,7 @@ export default function ForCreatorsPage() {
 									label="Download bandwidth (2 GiB @ $0.01/GiB, at cost)"
 									amount="$0.02"
 								/>
-								<ReceiptLine label="Anthers Foundation Fee (50% of bandwidth)" amount="$0.01" />
+								<ReceiptLine label="Community Share (50% of bandwidth)" amount="$0.01" />
 								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 								<div className="my-1 border-t border-base-content/10" />
 								<ReceiptLine label="You pay" amount="$10.62" bold />
@@ -158,11 +192,14 @@ export default function ForCreatorsPage() {
 								Every fee is itemized and explained. Buyers understand what they're paying for.
 								Creators understand what they're earning.
 							</PricePoint>
-							<PricePoint icon={<ServerStackIcon className="h-5 w-5" />} title="Anthers Foundation">
-								The Foundation fee rides on the infrastructure a transaction actually uses—50% of
+							<PricePoint
+								icon={<ServerStackIcon className="h-5 w-5" />}
+								title="The Community Share"
+							>
+								Anthers' one markup rides on the infrastructure a transaction actually uses—50% of
 								the bandwidth a download or stream needs, plus 50% of creator storage. It funds free
 								access, charitable programs, and lean operations. It's a community investment, not a
-								platform tax—Anthers itself keeps nothing.
+								platform tax—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -190,7 +227,7 @@ export default function ForCreatorsPage() {
 			</Section>
 
 			{/* Multi-media showcase */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Every medium</Eyebrow>
 					<H2>Every kind of creative work</H2>
@@ -590,7 +627,7 @@ export default function ForCreatorsPage() {
 							Ready to share your work?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use. No platform cut, no hidden fees. Just publish your work and
+							Anthers is free to use. No platform profit, no hidden fees. Just publish your work and
 							keep what you earn.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -614,169 +651,383 @@ export default function ForCreatorsPage() {
 // ─── Local building blocks (page-specific; shared editorial primitives —
 //     Section/Eyebrow/H2/Lede/Card — come from @anthers/web-shared/decor/sections) ───
 
-// ─── "The problem" comparisons ───
+// ─── "The solution" — the interactive economics matrix ───
 
-/** Per-medium one-time-purchase economics — what the creator keeps and what the
- * platform takes on a $10 sale. Competitor figures are their standard published
- * cuts (approximate, illustrative); Anthers takes $0 on every one. */
-const PURCHASE_TABS = [
-	{
-		key: "games",
-		label: "Games",
-		icon: <PuzzlePieceIcon className="h-4 w-4" />,
-		rows: [
-			["itch.io", "$9.00", "$1.00 (10%)"],
-			["Epic Games Store", "$8.80", "$1.20 (12%)"],
-			["Steam", "$7.00", "$3.00 (30%)"],
-		],
-	},
-	{
-		key: "music",
-		label: "Music",
-		icon: <MusicalNoteIcon className="h-4 w-4" />,
-		rows: [
-			["Gumroad", "$9.00", "$1.00 (10%)"],
-			["Bandcamp", "$8.50", "$1.50 (15%)"],
-			["iTunes Store", "$7.00", "$3.00 (30%)"],
-		],
-	},
-	{
-		key: "video",
-		label: "Video",
-		icon: <FilmIcon className="h-4 w-4" />,
-		rows: [
-			["Gumroad", "$9.00", "$1.00 (10%)"],
-			["Vimeo", "$9.00", "$1.00 (10%)"],
-			["YouTube", "$7.00", "$3.00 (30%)"],
-		],
-	},
-	{
-		key: "writing",
-		label: "Writing",
-		icon: <DocumentTextIcon className="h-4 w-4" />,
-		rows: [
-			["Gumroad", "$9.00", "$1.00 (10%)"],
-			["Leanpub", "$8.00", "$2.00 (20%)"],
-			["Amazon KDP", "$7.00", "$3.00 (30%)"],
-		],
-	},
+type Deal = { name: string; creator: string; platform: string; platformNote?: string };
+type Line = { label: string; amount: string };
+type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] };
+
+const ACTIONS = [
+	{ key: "stream", label: "Streams your work" },
+	{ key: "purchase", label: "Purchases your work" },
+	{ key: "boost", label: "Boosts your channel" },
 ] as const;
+type ActionKey = (typeof ACTIONS)[number]["key"];
 
-/** The one-time-purchase comparison, with a tab per medium. */
-function PurchaseComparison() {
-	const [tab, setTab] = useState<(typeof PURCHASE_TABS)[number]["key"]>("games");
-	const active = PURCHASE_TABS.find((t) => t.key === tab) ?? PURCHASE_TABS[0];
+const MEDIA = [
+	{ key: "video", label: "Video", icon: <FilmIcon className="h-4 w-4" /> },
+	{ key: "games", label: "Games", icon: <PuzzlePieceIcon className="h-4 w-4" /> },
+	{ key: "music", label: "Music", icon: <MusicalNoteIcon className="h-4 w-4" /> },
+	{ key: "writing", label: "Writing", icon: <DocumentTextIcon className="h-4 w-4" /> },
+	{ key: "merch", label: "Merch", icon: <ShoppingBagIcon className="h-4 w-4" /> },
+] as const;
+type MediaKey = (typeof MEDIA)[number]["key"];
+
+// Header intro for the per-combo Anthers mini-receipt (below the comparison).
+const RECEIPT_INTRO: Record<ActionKey, string> = {
+	stream: "the fan's usage that hour",
+	purchase: "the price plus delivery",
+	boost: "your $5 Boost",
+};
+
+const CS_NOTE = "community & charity";
+const PASSTHROUGH = "pure passthrough";
+
+/** The Anthers row for a combo. `platform` is the Community Share (a charitable
+ * markup that funds free access + Foundation programs, never profit) — or $0 for
+ * Boost, a pure passthrough. It is NOT a platform profit cut. */
+const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
+	name: "Anthers",
+	creator,
+	platform,
+	platformNote,
+});
+
+// The itemized Anthers side, shown as a mini-receipt under each comparison. The
+// closing line makes the honest point the comparison table can't: Anthers profit
+// is always $0 — the Community Share is charity, and bandwidth is an at-cost
+// passthrough, so "$0 to the platform" was only ever half the story.
+const streamReceipt: Line[] = [
+	{ label: "To you — Time Pool, by watch-time", amount: "~$0.03" },
+	{ label: "Community Share — free access & charity", amount: "~$0.01" },
+	{ label: "Bandwidth — delivery, at cost", amount: "~$0.02" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const purchaseReceipt = (price: string, cs: string, bw: string): Line[] => [
+	{ label: "To you — your price, in full", amount: price },
+	{ label: "Community Share — free access & charity", amount: cs },
+	{ label: "Bandwidth — delivery, at cost", amount: bw },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const merchReceipt: Line[] = [
+	{ label: "To you — your price, in full", amount: "$25.00" },
+	{ label: "Community Share — 1%, free access & charity", amount: "$0.25" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+const boostReceipt: Line[] = [
+	{ label: "To you — every cent", amount: "$5.00" },
+	{ label: "Community Share", amount: "$0.00" },
+	{ label: "Anthers profit", amount: "$0.00" },
+];
+
+// [action][media] → the scenario + who-gets-what + the Anthers breakdown. Anthers
+// first. Competitor figures are rough public estimates. `stream` has no `merch`
+// entry on purpose — that combo is a joke (see SolutionExplorer).
+const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
+	stream: {
+		video: {
+			scenario: "A fan watches an hour of your HD video",
+			rows: [
+				anthers("~$0.03", "~$0.01", CS_NOTE),
+				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
+				{ name: "YouTube (Premium)", creator: "~$0.20", platform: "~$0.16" },
+			],
+			note: "Streaming pays little anywhere—but here there are no ads, Anthers never profits, and it's the same per-hour rate for every medium. Real support comes from Boost.",
+			breakdown: streamReceipt,
+		},
+		games: {
+			scenario: "A fan plays an hour of your browser game",
+			rows: [
+				anthers("~$0.03", "~$0.01", CS_NOTE),
+				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
+				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
+			],
+			note: "Almost nowhere pays indie devs for play-time. Anthers pays it the same per-hour rate it pays video.",
+			breakdown: streamReceipt,
+		},
+		music: {
+			scenario: "A fan listens to an hour of your music",
+			rows: [
+				anthers("~$0.03", "~$0.01", CS_NOTE),
+				{ name: "Spotify", creator: "~$0.02", platform: "rest to labels & Spotify" },
+				{ name: "Apple Music", creator: "~$0.04", platform: "skimmed" },
+			],
+			note: "Streaming pays fractions of a cent everywhere. On Anthers there are no ads and no profit-taking—and Boost is where devoted fans really pay you.",
+			breakdown: streamReceipt,
+		},
+		writing: {
+			scenario: "A fan reads your work for an hour",
+			rows: [
+				anthers("~$0.03", "~$0.01", CS_NOTE),
+				{ name: "Medium", creator: "~$0.02", platform: "members only" },
+				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
+			],
+			note: "Most writing platforms don't pay per-read at all. Anthers pays the same per-hour rate as video.",
+			breakdown: streamReceipt,
+		},
+	},
+	purchase: {
+		video: {
+			scenario: "A fan buys your $12 video",
+			rows: [
+				anthers("$12.00", "~$0.02", CS_NOTE),
+				{ name: "Gumroad", creator: "$10.80", platform: "$1.20" },
+				{ name: "Apple / iTunes", creator: "$8.40", platform: "$3.60" },
+			],
+			breakdown: purchaseReceipt("$12.00", "~$0.02", "~$0.03"),
+		},
+		games: {
+			scenario: "A fan buys your $15 game",
+			rows: [
+				anthers("$15.00", "~$0.02", CS_NOTE),
+				{ name: "itch.io", creator: "$13.50", platform: "$1.50" },
+				{ name: "Steam", creator: "$10.50", platform: "$4.50" },
+			],
+			breakdown: purchaseReceipt("$15.00", "~$0.02", "~$0.03"),
+		},
+		music: {
+			scenario: "A fan buys your $10 album",
+			rows: [
+				anthers("$10.00", "<$0.01", CS_NOTE),
+				{ name: "Bandcamp", creator: "$8.50", platform: "$1.50" },
+				{ name: "iTunes Store", creator: "$7.00", platform: "$3.00" },
+			],
+			breakdown: purchaseReceipt("$10.00", "<$0.01", "<$0.01"),
+		},
+		writing: {
+			scenario: "A fan buys your $8 ebook",
+			rows: [
+				anthers("$8.00", "<$0.01", CS_NOTE),
+				{ name: "Gumroad", creator: "$7.20", platform: "$0.80" },
+				{ name: "Amazon KDP", creator: "$5.60", platform: "$2.40" },
+			],
+			breakdown: purchaseReceipt("$8.00", "<$0.01", "<$0.01"),
+		},
+		merch: {
+			scenario: "A fan buys your $25 shirt",
+			rows: [
+				anthers("$25.00", "$0.25", CS_NOTE),
+				{ name: "Etsy", creator: "$22.25", platform: "$2.75" },
+				{ name: "Gumroad", creator: "$22.50", platform: "$2.50" },
+			],
+			note: "Excludes production & shipping—a real cost on any platform, including Anthers.",
+			breakdown: merchReceipt,
+		},
+	},
+	boost: {
+		video: {
+			scenario: "A fan Boosts you $5 / month",
+			rows: [
+				anthers("$5.00", "$0.00", PASSTHROUGH),
+				{ name: "YouTube Memberships", creator: "$3.50", platform: "$1.50" },
+				{ name: "Twitch (sub)", creator: "$2.50", platform: "$2.50" },
+			],
+			breakdown: boostReceipt,
+		},
+		games: {
+			scenario: "A fan Boosts you $5 / month",
+			rows: [
+				anthers("$5.00", "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
+				{ name: "Ko-fi", creator: "$4.75", platform: "$0.25" },
+			],
+			breakdown: boostReceipt,
+		},
+		music: {
+			scenario: "A fan Boosts you $5 / month",
+			rows: [
+				anthers("$5.00", "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
+				{ name: "Bandcamp (subscription)", creator: "$4.25", platform: "$0.75" },
+			],
+			breakdown: boostReceipt,
+		},
+		writing: {
+			scenario: "A fan Boosts you $5 / month",
+			rows: [
+				anthers("$5.00", "$0.00", PASSTHROUGH),
+				{ name: "Substack", creator: "$4.50", platform: "$0.50" },
+				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
+			],
+			breakdown: boostReceipt,
+		},
+		merch: {
+			scenario: "A fan Boosts you $5 / month",
+			rows: [
+				anthers("$5.00", "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
+				{ name: "Buy Me a Coffee", creator: "$4.75", platform: "$0.25" },
+			],
+			note: "Boost supports the creator directly—whatever they make. Each $1 is 100% yours.",
+			breakdown: boostReceipt,
+		},
+	},
+};
+
+/** The interactive heart of "the solution": pick how a fan supports you (stream /
+ * purchase / boost) and the medium, and see exactly what reaches the creator vs.
+ * the platform on Anthers and elsewhere. Scenario assumptions are stated in-card;
+ * figures are estimates and Anthers keeps $0 on every one. */
+function SolutionExplorer() {
+	const [action, setAction] = useState<ActionKey>("stream");
+	const [media, setMedia] = useState<MediaKey>("video");
+	const combo = MATRIX[action][media];
+
 	return (
-		<Card className="h-full text-left">
-			<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
-				When someone buys your work
+		<Card className="mx-auto max-w-3xl text-left">
+			<p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">
+				When a user…
 			</p>
-			<h3 style={serif} className="mb-4 text-xl font-medium">
-				One-time purchases
-			</h3>
-			<div className="mb-4 flex flex-wrap gap-1.5">
-				{PURCHASE_TABS.map((t) => (
+			{/* How the fan supports you — completes "When a user…" */}
+			<div className="flex flex-wrap gap-2">
+				{ACTIONS.map((a) => (
 					<button
-						key={t.key}
+						key={a.key}
 						type="button"
-						onClick={() => setTab(t.key)}
+						onClick={() => setAction(a.key)}
+						className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+							a.key === action
+								? "bg-primary font-medium text-primary-content"
+								: "bg-base-200 text-base-content/65 hover:bg-base-300"
+						}`}
+					>
+						{a.label}
+					</button>
+				))}
+			</div>
+			{/* …and what kind of work it is */}
+			<div className="mt-3 flex flex-wrap gap-1.5">
+				{MEDIA.map((m) => (
+					<button
+						key={m.key}
+						type="button"
+						onClick={() => setMedia(m.key)}
 						className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors ${
-							t.key === tab
+							m.key === media
 								? "bg-primary/15 font-medium text-primary"
 								: "text-base-content/55 hover:bg-base-content/5"
 						}`}
 					>
-						{t.icon}
-						{t.label}
+						{m.icon}
+						{m.label}
 					</button>
 				))}
 			</div>
-			<div className="overflow-x-auto">
-				<table className="table">
-					<thead>
-						<tr className="border-base-content/10">
-							<th style={serif} className="font-medium">
-								Platform
-							</th>
-							<th style={serif} className="text-right font-medium">
-								Creator keeps on $10
-							</th>
-							<th style={serif} className="text-right font-medium">
-								Platform takes
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr className="border-base-content/10 bg-primary/10 font-semibold">
-							<td>Anthers</td>
-							<td className="text-right text-primary">$10.00 (100%)</td>
-							<td className="text-right">$0.00</td>
-						</tr>
-						{active.rows.map(([name, keeps, takes]) => (
-							<tr key={name} className="border-base-content/10">
-								<td>{name}</td>
-								<td className="text-right text-base-content/70">{keeps}</td>
-								<td className="text-right text-error">{takes}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
+
+			<div className="mt-6">
+				{combo ? (
+					<>
+						<p className="mb-4 text-sm text-base-content/60">
+							<span className="font-medium text-base-content/85">{combo.scenario}.</span> Here's
+							where the money goes:
+						</p>
+						<div className="overflow-x-auto">
+							<table className="table">
+								<thead>
+									<tr className="border-base-content/10">
+										<th style={serif} className="font-medium">
+											Platform
+										</th>
+										<th style={serif} className="text-right font-medium">
+											to the Creator
+										</th>
+										<th style={serif} className="text-right font-medium">
+											to the Platform
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									{combo.rows.map((r) => {
+										const isAnthers = r.name === "Anthers";
+										return (
+											<tr
+												key={r.name}
+												className={`border-base-content/10 ${isAnthers ? "bg-primary/10 font-semibold" : ""}`}
+											>
+												<td>{r.name}</td>
+												<td
+													className={`text-right ${isAnthers ? "text-primary" : "text-base-content/70"}`}
+												>
+													{r.creator}
+												</td>
+												<td className={`text-right ${isAnthers ? "" : "text-error"}`}>
+													<span className={isAnthers ? "text-base-content/70" : ""}>
+														{r.platform}
+													</span>
+													{r.platformNote && (
+														<span className="block text-xs font-normal text-base-content/45">
+															{r.platformNote}
+														</span>
+													)}
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</div>
+						{combo.note && <p className="mt-3 text-sm text-base-content/55">{combo.note}</p>}
+						{/* The honest Anthers breakdown — the comparison's "to the Platform" is the
+							Community Share (charity), not profit; this itemizes where the rest goes and
+							lands on the line the table can't show: Anthers profit is always $0. */}
+						<div className="mt-4 rounded-2xl border border-base-content/10 bg-base-200/40 p-4">
+							<p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-primary/70">
+								On Anthers, {RECEIPT_INTRO[action]} — no profit, ever
+							</p>
+							<dl className="flex flex-col gap-1.5 text-sm">
+								{combo.breakdown.map((line) => {
+									const isProfit = line.label === "Anthers profit";
+									return (
+										<div
+											key={line.label}
+											className={`flex items-baseline justify-between gap-3 ${
+												isProfit ? "mt-1 border-t border-base-content/10 pt-2 font-medium" : ""
+											}`}
+										>
+											<span className={isProfit ? "text-base-content/80" : "text-base-content/60"}>
+												{line.label}
+											</span>
+											<span
+												className={`shrink-0 font-mono tabular-nums ${
+													isProfit ? "text-primary" : "text-base-content/70"
+												}`}
+											>
+												{line.amount}
+											</span>
+										</div>
+									);
+								})}
+							</dl>
+						</div>
+					</>
+				) : (
+					/* Easter egg: you can't stream merch. */
+					<div className="flex flex-col items-center gap-2 rounded-2xl bg-base-200/60 px-6 py-12 text-center">
+						<span className="text-3xl">👕</span>
+						<p style={serif} className="text-lg font-medium">
+							Hey — you wouldn't download a shirt.
+						</p>
+						<p className="max-w-sm text-sm text-base-content/55">
+							You can't stream merch. Try{" "}
+							<button
+								type="button"
+								onClick={() => setAction("purchase")}
+								className="not-italic text-primary underline decoration-primary/40"
+							>
+								Purchases
+							</button>
+							, or pick another medium.
+						</p>
+					</div>
+				)}
 			</div>
-		</Card>
-	);
-}
 
-/** Recurring-support cut across the popular streaming / membership platforms. */
-const SUBSCRIPTION_ROWS = [
-	["Patreon", "8–12%", "Most of it, minus fees"],
-	["Substack", "10%", "Most of it, minus fees"],
-	["YouTube", "30–45%", "A slice of ads & memberships"],
-	["Twitch", "~50%", "Half of every subscription"],
-	["Spotify", "~30%", "Fractions of a cent per stream"],
-] as const;
-
-/** The recurring-support comparison — where fan money goes on the streaming and
- * membership platforms vs. Anthers (where it goes straight to creators). */
-function SubscriptionComparison() {
-	return (
-		<Card className="h-full text-left">
-			<p className="text-xs font-semibold uppercase tracking-wider text-accent">
-				When fans support you every month
+			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
+				Anthers never profits: beyond your share and delivery at cost, the only markup is the
+				Community Share—a small charitable fee that funds free access for everyone and Anthers
+				Foundation programs (Boost is a pure passthrough). Scenario figures are illustrative;
+				competitor rates are rough public estimates.
 			</p>
-			<h3 style={serif} className="mb-4 text-xl font-medium">
-				Subscriptions &amp; streaming
-			</h3>
-			<div className="overflow-x-auto">
-				<table className="table">
-					<thead>
-						<tr className="border-base-content/10">
-							<th style={serif} className="font-medium">
-								Platform
-							</th>
-							<th style={serif} className="text-right font-medium">
-								Platform's cut
-							</th>
-							<th style={serif} className="font-medium">
-								What reaches you
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr className="border-base-content/10 bg-primary/10 font-semibold">
-							<td>Anthers</td>
-							<td className="text-right text-primary">0%</td>
-							<td>100%, to the creators you support</td>
-						</tr>
-						{SUBSCRIPTION_ROWS.map(([name, cut, reaches]) => (
-							<tr key={name} className="border-base-content/10">
-								<td>{name}</td>
-								<td className="text-right text-error">{cut}</td>
-								<td className="text-base-content/60">{reaches}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			</div>
 		</Card>
 	);
 }
