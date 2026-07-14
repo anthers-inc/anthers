@@ -15,6 +15,7 @@ import {
 	BanknotesIcon,
 	ChartBarIcon,
 	CircleStackIcon,
+	ScaleIcon,
 	SignalIcon,
 	UserGroupIcon,
 	WalletIcon,
@@ -55,6 +56,14 @@ const CALCULATORS: ResourceCard[] = [
 			"How watch-time becomes revenue under the V3 Time Pool + Boost model — from one viewer up to a creator's monthly earnings.",
 		tag: "Economics",
 		icon: BanknotesIcon,
+	},
+	{
+		to: "/resources/pay-comparison",
+		title: "How our pay compares",
+		blurb:
+			"What reaches you on Anthers versus YouTube, Spotify, Steam, Bandcamp, Patreon, and Substack — our current math, head to head.",
+		tag: "Comparison",
+		icon: ScaleIcon,
 	},
 ];
 
