@@ -13,6 +13,7 @@ import AboutPage from "./pages/AboutPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
 // Authenticated home page
 import AuthenticatedHomePage from "./pages/AuthenticatedHomePage";
+import AuthPage from "./pages/AuthPage";
 import CompareGhostPage from "./pages/CompareGhostPage";
 import CompareItchPage from "./pages/CompareItchPage";
 import CreatorBreakdownDemoPage from "./pages/CreatorBreakdownDemoPage";
@@ -29,15 +30,12 @@ import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
 import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
-// Auth pages
-import LoginPage from "./pages/LoginPage";
 import PostPage from "./pages/PostPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import RoadmapPage from "./pages/RoadmapPage";
 import SettingsPage from "./pages/SettingsPage";
-import SignupPage from "./pages/SignupPage";
 import SubscribePage from "./pages/SubscribePage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import UserDemoPage from "./pages/UserDemoPage";
@@ -74,8 +72,9 @@ export default function App() {
 					<Route path="/about" element={<AboutPage />} />
 				</Route>
 				<Route path="/wiki/*" element={<WikiPage />} />
-				<Route path="/login" element={<LoginPage />} />
-				<Route path="/signup" element={<SignupPage />} />
+				{/* One combined auth page; /signup just deep-links into its signup card. */}
+				<Route path="/login" element={<AuthPage initialMode="login" />} />
+				<Route path="/signup" element={<AuthPage initialMode="signup" />} />
 				<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
 			</Route>
 

@@ -3,7 +3,7 @@ import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
-import { Bars3Icon } from "@heroicons/react/24/outline";
+import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { Link, Outlet } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
@@ -61,10 +61,40 @@ export default function LoggedOutLayout() {
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
 			<header className="nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
-				{/* max-w container keeps the brand + actions off the screen corners while
-					the nav links stay centered (navbar-start / -center / -end). */}
-				<div className="navbar mx-auto w-full max-w-7xl px-4">
-					<div className="navbar-start gap-1">
+				{/* Theme + language utilities, floated into the page's top-right corner —
+					deliberately outside the centered nav. Desktop only; on mobile the theme
+					toggle drops into the hamburger menu below. */}
+				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-6 lg:flex">
+					{/* Language picker — localization is a TODO; the menu is inert for now. */}
+					<div className="dropdown dropdown-end">
+						<label
+							tabIndex={0}
+							className="btn btn-ghost btn-sm btn-circle"
+							aria-label="Select language"
+							title="Select language"
+						>
+							<GlobeAltIcon className="w-5 h-5" />
+						</label>
+						<ul
+							tabIndex={0}
+							className="menu menu-sm dropdown-content mt-3 z-50 w-36 p-2 shadow bg-base-200 rounded-box"
+						>
+							<li>
+								<button type="button">English</button>
+							</li>
+							<li>
+								<button type="button">Español</button>
+							</li>
+						</ul>
+					</div>
+					<ThemeToggle />
+				</div>
+
+				{/* Main nav — brand on the left, page links centered, a single CTA on the
+					right. The mirrored flex-1 side clusters keep the links dead-center. */}
+				<div className="navbar mx-auto w-full max-w-5xl px-4">
+					{/* Left: brand (+ mobile menu) */}
+					<div className="flex flex-1 items-center gap-1">
 						{/* Mobile menu */}
 						<div className="dropdown lg:hidden">
 							<label tabIndex={0} className="btn btn-ghost">
@@ -81,10 +111,20 @@ export default function LoggedOutLayout() {
 									<Link to="/for-creators">For Creators</Link>
 								</li>
 								<li>
+									<Link to="/subscribe">Subscribe</Link>
+								</li>
+								<li>
 									<Link to="/resources">Resources</Link>
 								</li>
 								<li>
 									<Link to="/about">About Us</Link>
+								</li>
+								{/* Theme toggle for mobile (the corner utilities are desktop-only) */}
+								<li className="mt-1 border-t border-base-content/10 pt-1">
+									<div className="flex items-center justify-between">
+										<span className="text-base-content/70">Theme</span>
+										<ThemeToggle />
+									</div>
 								</li>
 							</ul>
 						</div>
@@ -95,39 +135,45 @@ export default function LoggedOutLayout() {
 						</Link>
 					</div>
 
-					{/* Desktop nav — centered */}
-					<div className="navbar-center hidden lg:flex">
-						<ul className="menu menu-horizontal px-1 gap-1">
-							<li>
-								<Link to="/">For Users</Link>
-							</li>
-							<li>
-								<Link to="/for-creators">For Creators</Link>
-							</li>
-							<li>
-								<Link to="/resources">Resources</Link>
-							</li>
-							<li>
-								<Link to="/about">About Us</Link>
-							</li>
-						</ul>
-					</div>
+					{/* Center: page links */}
+					<ul className="menu menu-horizontal hidden gap-1 px-1 lg:flex">
+						<li>
+							<Link to="/">For Users</Link>
+						</li>
+						<li>
+							<Link to="/for-creators">For Creators</Link>
+						</li>
+						<li>
+							<Link to="/subscribe">Subscribe</Link>
+						</li>
+						<li>
+							<Link to="/resources">Resources</Link>
+						</li>
+						<li>
+							<Link to="/about">About Us</Link>
+						</li>
+					</ul>
 
-					<div className="navbar-end">
-						<div className="flex items-center gap-2">
-							<ThemeToggle />
-							<Link to="/login" className="btn btn-ghost btn-sm">
-								Log in
-							</Link>
-							<Link to="/signup" className="btn btn-primary btn-sm">
-								Sign up
-							</Link>
-						</div>
+					{/* Right: single CTA — opens the combined auth page on its signup card
+						(/signup deep-links into signup mode). A soft primary-green glow makes it
+						stand out; text-sm matches the nav links so it isn't overshadowed. flex-1
+						+ justify-end mirror the brand side so the center links stay centered. */}
+					<div className="flex flex-1 items-center justify-end">
+						<Link
+							to="/signup"
+							className="btn btn-primary btn-sm text-sm shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
+						>
+							Start Exploring
+						</Link>
 					</div>
 				</div>
 			</header>
 
-			<main className={`relative z-10 flex-1 ${currentTrack ? "pb-16" : ""}`}>
+			{/* flex-col so a page can opt into filling the content area (e.g. AuthPage
+				grows a flex-1 child to vertically center its card between header and
+				footer). Ordinary pages render a single non-growing child, so it stacks
+				from the top exactly as a block child would. */}
+			<main className={`relative z-10 flex flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
 				<Outlet />
 			</main>
 
