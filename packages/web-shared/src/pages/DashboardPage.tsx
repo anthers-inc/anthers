@@ -106,8 +106,8 @@ export default function DashboardPage() {
 								<div className="text-xl font-bold text-success">${earnings.poolTotal}</div>
 							</div>
 							<div>
-								<div className="text-xs text-base-content/50 uppercase">Boost Income</div>
-								<div className="text-xl font-bold text-success">${earnings.boostTotal}</div>
+								<div className="text-xs text-base-content/50 uppercase">Seed Income</div>
+								<div className="text-xl font-bold text-success">${earnings.seedTotal}</div>
 							</div>
 							<div>
 								<div className="text-xs text-base-content/50 uppercase">Total</div>

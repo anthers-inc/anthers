@@ -7,7 +7,7 @@
 // shared LoggedOutLayout (site nav + footer); the shared <MeadowDecor> supplies
 // the pollen surface, woven climbing side vines, and grassy flowered floor around
 // the content. Copy is Parker's rewrite; every economics number derives from the
-// V3 model via @anthers/shared/constants (through the shared economics cards).
+// V4 model via @anthers/shared/constants (through the shared economics cards).
 //
 // Motion: content fades up on load (hero) and as it scrolls into view (sections),
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
@@ -32,13 +32,14 @@ const serif = { fontFamily: FONTS.fraunces };
 // Shared hover/press affordance for the primary CTA buttons (motion-safe lift).
 const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
 
-// What 100 GiB of monthly usage roughly buys — the (i) helper in the signpost card.
+// What a plan's monthly bandwidth allowance roughly buys — the (i) helper in the
+// signpost card. Free plans include 5 GiB; paid plans scale up to 50 GiB.
 const GIB_TIP =
-	"Roughly 80+ hours of FHD video, 2,000+ hours of music, or effectively unlimited reading each month.";
+	"Bandwidth covers streaming and downloads. As a rough guide, 10 GiB is several hours of FHD video, far more of music, or effectively unlimited reading each month.";
 
-// Creator-defined per-creator ladder (illustrative rungs) vs. the platform-wide
+// Creator-defined per-creator Seed ladder (illustrative rungs) vs. the platform-wide
 // Badge ladder — the two ways a creator can gate exclusive content.
-const BOOST_GATES = [
+const SEED_GATES = [
 	{ amount: "$1", name: "Follow+", perk: "Chat access, community polls" },
 	{ amount: "$2", name: "Insider", perk: "Early access, community posts" },
 	{ amount: "$3", name: "Supporter", perk: "Behind-the-scenes, extended cuts" },
@@ -46,10 +47,10 @@ const BOOST_GATES = [
 ] as const;
 
 const BADGE_GATES = [
-	{ amount: "$3+", name: "Root", perk: "Root-level content, platform-wide" },
-	{ amount: "$7+", name: "Sprout", perk: "Sprout-level content, platform-wide" },
-	{ amount: "$15+", name: "Petal", perk: "Petal-level content, platform-wide" },
-	{ amount: "$30+", name: "Blossom", perk: "Blossom-level content, platform-wide" },
+	{ amount: "$4", name: "Root", perk: "Root-level content, platform-wide" },
+	{ amount: "$8", name: "Sprout", perk: "Sprout-level content, platform-wide" },
+	{ amount: "$16", name: "Petal", perk: "Petal-level content, platform-wide" },
+	{ amount: "$32", name: "Blossom", perk: "Blossom-level content, platform-wide" },
 ] as const;
 
 export default function ForUsersPage() {
@@ -113,16 +114,17 @@ export default function ForUsersPage() {
 					<H2>Three ways to explore the garden</H2>
 					<Lede>
 						When you're ready for more than what we provide for free, there are two ways to get it:
-						you can <strong className="font-semibold text-base-content/80">subscribe</strong> to
-						unlock additional usage and gated creator content, and you can{" "}
+						you can{" "}
+						<strong className="font-semibold text-base-content/80">choose a Badge plan</strong> to
+						fund creators and unlock a bigger bandwidth allowance and gated content, and you can{" "}
 						<strong className="font-semibold text-base-content/80">purchase</strong> games, albums,
-						books, merch, even services.
+						books, merch, even services—100% to the creator, every time.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Whatever path you walk through Anthers, 100% of your subscriptions and purchases goes
-						straight to supporting the people who make what you love, providing free access to new
-						or small users and creators, and empowering Anthers Foundation charitable programs like
-						educational ventures and content bounties. Curious where your money goes? See our{" "}
+						Whatever path you walk through Anthers, every dollar of your plans and purchases goes to
+						the people who make what you love, to free access for new and small users and creators,
+						or to Anthers Foundation charitable programs like educational ventures and content
+						bounties—never to a platform's bottom line. Curious where your money goes? See our{" "}
 						<Link to="/resources" className="link text-primary decoration-primary/40">
 							financial transparency page
 						</Link>
@@ -139,13 +141,13 @@ export default function ForUsersPage() {
 						</SignpostCard>
 					</Reveal>
 					<Reveal delay={110}>
-						<SignpostCard step="2" title="Subscriptions &amp; Boosts">
-							Unlock additional usage and gated creator content with a{" "}
-							<strong className="font-semibold text-base-content/85">subscription</strong> to
-							Anthers. Each $3/month gives you 100 GiB of access <InfoDot tip={GIB_TIP} />, pays
-							creators automatically for the time you spend with their work, and supports free
-							access and charitable causes. To go even deeper with a creator, give them a Boost for
-							$1/month each.
+						<SignpostCard step="2" title="Subscriptions &amp; Seeds">
+							Choose a <strong className="font-semibold text-base-content/85">Badge plan</strong>
+							—Root $4, Sprout $8, Petal $16, or Blossom $32 a month. Your plan pays creators
+							automatically for the time you spend with their work (the Time Pool), sends its
+							included Seeds straight to creators you pick, and comes with a monthly bandwidth
+							allowance <InfoDot tip={GIB_TIP} />. To go even deeper with one creator, sow extra
+							Seeds—$1 each, 100% to them.
 						</SignpostCard>
 					</Reveal>
 					<Reveal delay={220}>
@@ -165,11 +167,12 @@ export default function ForUsersPage() {
 					<Eyebrow>① Free Use</Eyebrow>
 					<H2>Free, and always will be</H2>
 					<Lede>
-						Every account on Anthers receives an allowance of free access every month—equivalent to
-						6+ hours of HD video, 20+ hours of HQ-streaming audio, or thousands of articles with
-						media. This isn't a trial or a trick (we're a non-profit; there's not much incentive for
-						either), it's an attempt to fulfill what we believe is a common right for everyone to
-						share and experience creativity and community with their neighbors around the world.
+						Every account on Anthers receives a bandwidth allowance of free access every
+						month—enough for a few hours of HD video, far more of music, or thousands of articles
+						with media. This isn't a trial or a trick (we're a non-profit; there's not much
+						incentive for either), it's an attempt to fulfill what we believe is a common right for
+						everyone to share and experience creativity and community with their neighbors around
+						the world.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -193,20 +196,21 @@ export default function ForUsersPage() {
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
 								<FreeItem yes>
-									Your first 3 GiB of content delivery each month, covered by the Foundation.
+									5 GiB of content delivery each month—your free bandwidth allowance, covered by the
+									Foundation.
 								</FreeItem>
 								<FreeItem yes>
 									Everything that creators have made public, including posts, videos, games, and
 									much more.
 								</FreeItem>
 								<FreeItem>
-									Content that creators have gated behind Boosts ($1 increments paid directly to
-									them) and Badges (awarded when you subscribe to the platform).
+									Content that creators have gated behind Seeds ($1 increments sown directly to
+									them) and Badges (the plan you choose).
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
-								Subscribe for as low as $3/month to start unlocking gated content and 30× more
-								monthly usage.
+								Choose a plan from $4/month to unlock gated content, a bigger bandwidth allowance,
+								and Seeds for your favorite creators.
 							</p>
 						</Card>
 					</Reveal>
@@ -222,10 +226,10 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* (2) Subscriptions & Boosts */}
+			{/* (2) Subscriptions & Seeds */}
 			<Section>
 				<Reveal>
-					<Eyebrow>② Subscriptions &amp; Boosts</Eyebrow>
+					<Eyebrow>② Subscriptions &amp; Seeds</Eyebrow>
 					<H2>Support creators, not middlemen</H2>
 					<Lede>
 						We all deserve a way to support the creators we love without tossing more money onto a
@@ -269,8 +273,8 @@ export default function ForUsersPage() {
 					<Eyebrow>The Anthers Badges</Eyebrow>
 					<H2>Show your support and unlock exclusive content</H2>
 					<Lede>
-						Every month you're subscribed to Anthers, you'll receive a special Badge—based on the
-						highest subscription (Usage + Boost) amount you've spent in the past three months.
+						Choose a Badge plan and you'll wear its Badge—Root, Sprout, Petal, or Blossom—for as
+						long as you hold it. It's the plan you pick, not a rolling total of past spend.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl grid-cols-2 gap-6 md:grid-cols-4">
@@ -312,7 +316,7 @@ export default function ForUsersPage() {
 								Across the platform
 							</p>
 							<h3 style={serif} className="mb-4 text-xl font-medium">
-								Badge Gates
+								Anthers Gates
 							</h3>
 							{BADGE_GATES.map((g) => (
 								<GateRow key={g.name} {...g} />
@@ -325,9 +329,9 @@ export default function ForUsersPage() {
 								For one creator
 							</p>
 							<h3 style={serif} className="mb-4 text-xl font-medium">
-								Boost Gates
+								Seed Gates
 							</h3>
-							{BOOST_GATES.map((g) => (
+							{SEED_GATES.map((g) => (
 								<GateRow key={g.name} {...g} />
 							))}
 						</Card>

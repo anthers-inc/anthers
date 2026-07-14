@@ -1,73 +1,43 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import {
-	BADGE_THRESHOLDS,
-	BANDWIDTH_PER_GIB,
-	badgeForSpend,
-	badgeLabel,
-	CARD_FLAT,
-	CARD_RATE,
-	FREE_USAGE_GIB,
-	SALES_TAX_RATE,
-	TIME_POOL_PER_GIB,
-	USAGE_AFF_PER_GIB,
-	USAGE_PER_GIB,
-} from "@anthers/shared/constants";
-import { client } from "@anthers/web-shared/rpc";
+/*
+ * Account dashboard — V4 (the "Big Rethink" badge-plan model).
+ *
+ * The user holds a chosen Badge plan (free/root/sprout/petal/blossom). This page
+ * surfaces four things:
+ *   1. The held plan (price decomposition: Time Pool + Seeds + Community Share).
+ *   2. The bandwidth WALLET — a separate, at-cost prepaid balance ($0.01/GiB) with
+ *      a per-tier free monthly allowance; top-up + auto-top-up live here.
+ *   3. The Seed budget + per-creator Seed allocations (directed, $1 units).
+ *   4. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
+ *
+ * Plan changes happen on /subscribe; here we manage the wallet and direct Seeds.
+ */
+
+import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
+import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
 	Account,
+	AccountResponse,
 	AttentionSummary,
 	Badge,
-	BoostAllocation,
+	BadgePlan,
+	CreatorEarnings,
 	CreatorGate,
 	PoolDistribution,
+	SeedListResponse,
+	WalletBalance,
 } from "@anthers/web-shared/types";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
-/*  Constants & V3 economics                                           */
-/*                                                                     */
-/*  Anthers keeps $0. A user holds an account with two independent,    */
-/*  prepaid choices per cycle: a Usage level (GiB) and a total Boost   */
-/*  ($). Usage is $0.03/GiB = bandwidth ($0.01, at cost) + Anthers     */
-/*  Foundation fee ($0.005) + Time Pool ($0.015, to creators by watch- */
-/*  time). Boost is whole dollars, 100% to creators. The user's        */
-/*  Anthers Badge is derived from combined spend (usage + boost).      */
+/*  Formatting helpers                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Color used for pending (unsaved) changes across the UI. */
-const PENDING_COLOR = "#C04475";
-
-/** Usage slider bounds (GiB). Badge personas span 100–400 GiB; give headroom. */
-const USAGE_SLIDER_MAX = 500;
-const USAGE_SLIDER_STEP = 10;
-/** Boost slider bounds ($, whole dollars). */
-const BOOST_SLIDER_MAX = 30;
-
-function round2(n: number): number {
-	return Math.round(n * 100) / 100;
+function fmt(n: number | string): string {
+	return `$${Number(n).toFixed(2)}`;
 }
-
-/**
- * V3 usage/boost breakdown. Every field is a real destination of the user's
- * money — none of it is platform margin.
- */
-function computeEconomics(usageGiB: number, boostTotal: number) {
-	const timePool = round2(usageGiB * TIME_POOL_PER_GIB); // to creators, by watch-time
-	const bandwidth = round2(usageGiB * BANDWIDTH_PER_GIB); // egress, at cost
-	const foundation = round2(usageGiB * USAGE_AFF_PER_GIB); // Anthers Foundation fee
-	const usageSpend = round2(usageGiB * USAGE_PER_GIB); // all-in usage price
-	const boostPool = round2(boostTotal); // whole dollars, 100% to creators
-	const subtotal = round2(usageSpend + boostPool); // combined spend = badge basis
-	const toCreators = round2(timePool + boostPool); // Time Pool + Boost
-	return { timePool, bandwidth, foundation, usageSpend, boostPool, subtotal, toCreators };
-}
-
-function fmt(n: number): string {
-	return `$${n.toFixed(2)}`;
-}
-
 function formatHours(seconds: number): string {
 	const hrs = seconds / 3600;
 	if (hrs >= 1) return `${hrs.toFixed(1)} hrs`;
@@ -83,26 +53,30 @@ function getCurrentCycle(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
-
 function offsetCycle(cycle: string, offset: number): string {
 	const d = new Date(`${cycle}T00:00:00`);
 	d.setMonth(d.getMonth() + offset);
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
-
 function cycleLabel(cycle: string): string {
 	return new Date(`${cycle}T00:00:00`).toLocaleString("default", {
 		month: "long",
 		year: "numeric",
 	});
 }
-
 type ViewMode = "past" | "current" | "next";
 function viewModeFor(cycle: string): ViewMode {
 	const current = getCurrentCycle();
 	if (cycle === current) return "current";
 	if (cycle > current) return "next";
 	return "past";
+}
+
+/** Fetch a subscriptions GET endpoint that carries query params (raw, credentialed). */
+async function getJson<T>(path: string): Promise<T> {
+	const res = await fetch(`${apiBaseUrl()}/api/subscriptions/${path}`, { credentials: "include" });
+	if (!res.ok) throw new Error(`Request failed: ${path}`);
+	return (await res.json()) as T;
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,243 +102,6 @@ function InfoTip({ text }: { text: string }) {
 				</div>
 			)}
 		</span>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  BadgeBar — read-only combined-spend progress with badge marks      */
-/* ------------------------------------------------------------------ */
-
-const BADGE_MARKS = [
-	{ id: "root", name: "Root", spend: BADGE_THRESHOLDS.root },
-	{ id: "sprout", name: "Sprout", spend: BADGE_THRESHOLDS.sprout },
-	{ id: "petal", name: "Petal", spend: BADGE_THRESHOLDS.petal },
-	{ id: "blossom", name: "Blossom", spend: BADGE_THRESHOLDS.blossom },
-] as const;
-
-function BadgeBar({ spend, pending }: { spend: number; pending: boolean }) {
-	const max = BADGE_THRESHOLDS.blossom;
-	const pct = Math.min((spend / max) * 100, 100);
-	return (
-		<div>
-			{/* Badge name marks */}
-			<div className="relative w-full h-4 mb-1">
-				{BADGE_MARKS.map((m) => {
-					const pos = (m.spend / max) * 100;
-					const active = spend >= m.spend;
-					return (
-						<span
-							key={m.id}
-							className={`absolute -translate-x-1/2 text-[10px] ${active ? "text-base-content font-semibold" : "text-base-content/50"}`}
-							style={{ left: `${pos}%`, bottom: 0 }}
-						>
-							{m.name}
-						</span>
-					);
-				})}
-			</div>
-			{/* Track */}
-			<div className="relative h-2.5 bg-base-300 rounded-full overflow-hidden">
-				<div
-					className={`absolute inset-y-0 left-0 rounded-full ${pending ? "" : "bg-success/80"}`}
-					style={{
-						width: `${pct}%`,
-						...(pending ? { backgroundColor: PENDING_COLOR } : {}),
-					}}
-				/>
-				{BADGE_MARKS.map((m) => {
-					const pos = (m.spend / max) * 100;
-					return (
-						<div
-							key={m.id}
-							className={`absolute top-0 bottom-0 w-px ${spend >= m.spend ? "bg-base-content" : "bg-base-content/40"}`}
-							style={{ left: `${pos}%` }}
-						/>
-					);
-				})}
-			</div>
-			{/* Dollar marks */}
-			<div className="relative w-full h-4 mt-0.5">
-				{BADGE_MARKS.map((m) => {
-					const pos = (m.spend / max) * 100;
-					return (
-						<span
-							key={m.id}
-							className="absolute -translate-x-1/2 text-[9px] text-base-content/40"
-							style={{ left: `${pos}%` }}
-						>
-							${m.spend}
-						</span>
-					);
-				})}
-			</div>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  BoostBar — slider + gate hash marks in one column                  */
-/* ------------------------------------------------------------------ */
-
-function BoostBar({
-	value,
-	committedValue,
-	boostPool,
-	gates,
-	onChange,
-	disabled,
-}: {
-	value: number;
-	/** The committed (saved) boost value — used to show pending fill. */
-	committedValue: number;
-	boostPool: number;
-	gates: CreatorGate[];
-	onChange: (v: number) => void;
-	disabled: boolean;
-}) {
-	const [dragging, setDragging] = useState(false);
-	const trackRef = useRef<HTMLDivElement>(null);
-
-	const boostGates = gates.filter((g) => g.gateType === "boost");
-
-	const highestGate =
-		boostGates.length > 0 ? Math.max(...boostGates.map((g) => Number(g.threshold))) : boostPool;
-	const sliderMax = Math.max(highestGate, 1);
-	const barMax = sliderMax * 1.1;
-	const committedPct = Math.min((committedValue / barMax) * 100, 100);
-	const pendingPct = Math.min((value / barMax) * 100, 100);
-	const thumbPct = pendingPct;
-	const hasPending = value !== committedValue;
-
-	const xToValue = useCallback(
-		(clientX: number) => {
-			const rect = trackRef.current?.getBoundingClientRect();
-			if (!rect) return value;
-			const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-			return Math.round(pct * barMax);
-		},
-		[barMax, value],
-	);
-
-	const handlePointerDown = useCallback(
-		(e: React.PointerEvent) => {
-			if (disabled) return;
-			e.preventDefault();
-			(e.target as HTMLElement).setPointerCapture(e.pointerId);
-			setDragging(true);
-			onChange(xToValue(e.clientX));
-		},
-		[disabled, onChange, xToValue],
-	);
-
-	const handlePointerMove = useCallback(
-		(e: React.PointerEvent) => {
-			if (!dragging) return;
-			onChange(xToValue(e.clientX));
-		},
-		[dragging, onChange, xToValue],
-	);
-
-	const handlePointerUp = useCallback(() => {
-		setDragging(false);
-	}, []);
-
-	return (
-		<div className={disabled ? "opacity-60" : ""}>
-			{/* Gate name labels above the track */}
-			{boostGates.length > 0 && (
-				<div className="relative h-4 mb-0.5">
-					{boostGates.map((gate) => {
-						const pos = (Number(gate.threshold) / barMax) * 100;
-						const unlocked = value >= Number(gate.threshold);
-						return (
-							<span
-								key={`name-${gate.threshold}`}
-								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									unlocked ? "text-base-content font-semibold" : "text-base-content/50"
-								}`}
-								style={{ left: `${pos}%` }}
-							>
-								{gate.label}
-							</span>
-						);
-					})}
-				</div>
-			)}
-
-			{/* Interactive track */}
-			<div>
-				<div
-					ref={trackRef}
-					className={`relative h-5 select-none ${disabled ? "pointer-events-none" : "cursor-pointer"}`}
-					onPointerDown={handlePointerDown}
-					onPointerMove={handlePointerMove}
-					onPointerUp={handlePointerUp}
-				>
-					<div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-2.5 bg-base-300 rounded-full overflow-hidden">
-						{/* Committed fill (primary) */}
-						<div
-							className="absolute inset-y-0 left-0 bg-primary/80 rounded-full"
-							style={{ width: `${committedPct}%` }}
-						/>
-						{/* Pending fill */}
-						{hasPending && value > committedValue && (
-							<div
-								className="absolute inset-y-0 rounded-r-full"
-								style={{
-									left: `${committedPct}%`,
-									width: `${pendingPct - committedPct}%`,
-									backgroundColor: `${PENDING_COLOR}CC`,
-								}}
-							/>
-						)}
-
-						{/* Gate hash lines */}
-						{boostGates.map((gate) => {
-							const pos = (Number(gate.threshold) / barMax) * 100;
-							return (
-								<div
-									key={`line-${gate.threshold}`}
-									className={`absolute top-0 bottom-0 w-px pointer-events-none ${
-										value >= Number(gate.threshold) ? "bg-base-content" : "bg-base-content/40"
-									}`}
-									style={{ left: `${pos}%` }}
-								/>
-							);
-						})}
-					</div>
-
-					{/* Thumb */}
-					<div
-						className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-md pointer-events-none ${hasPending ? "" : "bg-primary border-primary"}`}
-						style={{
-							left: `${thumbPct}%`,
-							...(hasPending ? { backgroundColor: PENDING_COLOR, borderColor: PENDING_COLOR } : {}),
-						}}
-					/>
-				</div>
-			</div>
-
-			{/* Gate dollar labels below track */}
-			{boostGates.length > 0 && (
-				<div className="relative h-3 mt-0.5">
-					{boostGates.map((gate) => {
-						const pos = (Number(gate.threshold) / barMax) * 100;
-						return (
-							<span
-								key={`label-${gate.threshold}`}
-								className={`absolute text-[9px] leading-tight -translate-x-1/2 ${
-									value >= Number(gate.threshold) ? "text-base-content" : "text-base-content/40"
-								}`}
-								style={{ left: `${pos}%` }}
-							>
-								${gate.threshold}
-							</span>
-						);
-					})}
-				</div>
-			)}
-		</div>
 	);
 }
 
@@ -406,99 +143,21 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 }
 
 /* ------------------------------------------------------------------ */
-/*  Confirmation Dialog                                                */
-/* ------------------------------------------------------------------ */
-
-function ConfirmDialog({
-	open,
-	title,
-	children,
-	onConfirm,
-	onCancel,
-	confirmLabel,
-	confirmClass,
-}: {
-	open: boolean;
-	title: string;
-	children: React.ReactNode;
-	onConfirm: () => void;
-	onCancel: () => void;
-	confirmLabel?: string;
-	confirmClass?: string;
-}) {
-	if (!open) return null;
-	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-			<div className="card bg-base-100 shadow-2xl max-w-md w-full mx-4">
-				<div className="card-body">
-					<h3 className="card-title text-lg">{title}</h3>
-					<div className="text-sm space-y-2">{children}</div>
-					<div className="card-actions justify-end mt-4">
-						<button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
-							Cancel
-						</button>
-						<button
-							type="button"
-							className={`btn btn-sm ${confirmClass ?? "btn-primary"}`}
-							onClick={onConfirm}
-						>
-							{confirmLabel ?? "Confirm"}
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Combined row data                                                  */
-/* ------------------------------------------------------------------ */
-
-interface CreatorRow {
-	creatorId: number;
-	username: string;
-	displayName: string | null;
-	avatar: string | null;
-	timeSeconds: number;
-	poolAmount: number;
-	committedBoost: number;
-	pendingBoost: number;
-	gates: CreatorGate[];
-}
-
-/* ------------------------------------------------------------------ */
-/*  Pie chart colors (per-creator, cycling)                            */
+/*  Pie chart of time distribution                                     */
 /* ------------------------------------------------------------------ */
 
 const PIE_COLORS = [
-	"#6d28d9", // violet
-	"#2563eb", // blue
-	"#0891b2", // cyan
-	"#059669", // emerald
-	"#d97706", // amber
-	"#dc2626", // red
-	"#c026d3", // fuchsia
-	"#4f46e5", // indigo
+	"#6d28d9",
+	"#2563eb",
+	"#0891b2",
+	"#059669",
+	"#d97706",
+	"#dc2626",
+	"#c026d3",
+	"#4f46e5",
 ];
 
-/* ------------------------------------------------------------------ */
-/*  TimePoolPie — SVG donut chart of time distribution                 */
-/* ------------------------------------------------------------------ */
-
-function TimePoolPie({
-	rows,
-	totalTime,
-	focusedCreatorId,
-	onHover,
-	onLeave,
-}: {
-	rows: CreatorRow[];
-	totalTime: number;
-	focusedCreatorId: number | null;
-	onHover: (creatorId: number) => void;
-	onLeave: () => void;
-}) {
+function TimePoolPie({ rows, totalTime }: { rows: CreatorRow[]; totalTime: number }) {
 	const size = 200;
 	const cx = size / 2;
 	const cy = size / 2;
@@ -507,7 +166,7 @@ function TimePoolPie({
 
 	if (totalTime === 0 || rows.length === 0) {
 		return (
-			<div className="flex items-center justify-center h-full">
+			<div className="flex items-center justify-center h-[200px]">
 				<div className="text-sm text-base-content/30 text-center">
 					<p>No time data yet</p>
 				</div>
@@ -515,32 +174,21 @@ function TimePoolPie({
 		);
 	}
 
-	// Build arc paths for each slice (no overlapping circles)
 	const arcPath = (startAngle: number, endAngle: number, r: number) => {
-		const start = {
-			x: cx + r * Math.cos(startAngle),
-			y: cy + r * Math.sin(startAngle),
-		};
-		const end = {
-			x: cx + r * Math.cos(endAngle),
-			y: cy + r * Math.sin(endAngle),
-		};
+		const start = { x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle) };
+		const end = { x: cx + r * Math.cos(endAngle), y: cy + r * Math.sin(endAngle) };
 		const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
 		return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 	};
 
-	let angleOffset = -Math.PI / 2; // start at 12 o'clock
+	let angleOffset = -Math.PI / 2;
 	const slices = rows.map((row, i) => {
 		const pct = row.timeSeconds / totalTime;
 		const sliceAngle = pct * 2 * Math.PI;
-		// Clamp to avoid full-circle arc (which SVG can't draw as a single arc)
 		const startAngle = angleOffset;
 		const endAngle = angleOffset + Math.min(sliceAngle, 2 * Math.PI - 0.001);
 		angleOffset += sliceAngle;
-
-		const isFocused = focusedCreatorId === row.creatorId;
-		const isDimmed = focusedCreatorId !== null && !isFocused;
-
+		if (pct === 0) return null;
 		return (
 			<path
 				key={row.creatorId}
@@ -549,10 +197,6 @@ function TimePoolPie({
 				stroke={PIE_COLORS[i % PIE_COLORS.length]}
 				strokeWidth={strokeWidth}
 				strokeLinecap="butt"
-				opacity={isDimmed ? 0.4 : 1}
-				className="transition-opacity duration-1000 cursor-pointer"
-				onMouseEnter={() => onHover(row.creatorId)}
-				onMouseLeave={onLeave}
 			/>
 		);
 	});
@@ -562,7 +206,6 @@ function TimePoolPie({
 			<svg role="img" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
 				<title>Time distribution by creator</title>
 				{slices}
-				{/* Center label */}
 				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
 					{formatHours(totalTime)}
 				</text>
@@ -575,134 +218,87 @@ function TimePoolPie({
 }
 
 /* ------------------------------------------------------------------ */
-/*  CreatorInfoCard — shows details about focused creator              */
+/*  Whole-dollar Seed stepper                                          */
 /* ------------------------------------------------------------------ */
 
-function CreatorInfoCard({
-	row,
-	colorIndex,
-	totalTime,
-	poolAmount,
-	hoverSource,
+function SeedStepper({
+	value,
+	min,
+	max,
+	onChange,
+	disabled,
 }: {
-	row: CreatorRow | null;
-	colorIndex: number;
-	totalTime: number;
-	poolAmount: number;
-	hoverSource: "pie" | "boost";
+	value: number;
+	min: number;
+	max: number;
+	onChange: (v: number) => void;
+	disabled: boolean;
 }) {
-	if (!row) return null;
+	const set = (v: number) => onChange(Math.max(min, Math.min(max, Math.floor(v))));
+	return (
+		<div className="flex items-center gap-1">
+			<button
+				type="button"
+				className="btn btn-xs btn-circle btn-ghost"
+				onClick={() => set(value - 1)}
+				disabled={disabled || value <= min}
+				aria-label="Fewer seeds"
+			>
+				−
+			</button>
+			<div className="join">
+				<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
+				<input
+					type="number"
+					min={min}
+					max={max}
+					step={1}
+					value={value}
+					onChange={(e) => set(Number(e.target.value) || 0)}
+					disabled={disabled}
+					className="join-item input input-xs input-bordered w-14 text-center"
+				/>
+			</div>
+			<button
+				type="button"
+				className="btn btn-xs btn-circle btn-ghost"
+				onClick={() => set(value + 1)}
+				disabled={disabled || value >= max}
+				aria-label="More seeds"
+			>
+				+
+			</button>
+		</div>
+	);
+}
 
-	const initials = (row.displayName || row.username)
+/* ------------------------------------------------------------------ */
+/*  Row model                                                          */
+/* ------------------------------------------------------------------ */
+
+interface CreatorRow {
+	creatorId: number;
+	username: string;
+	displayName: string | null;
+	avatar: string | null;
+	timeSeconds: number;
+	poolAmount: number;
+	/** Settled Seeds to this creator this cycle (from the distribution row). */
+	settledSeed: number;
+	/** Committed (saved) Seed allocation, whole dollars. */
+	committedSeed: number;
+	/** Effective Seed allocation including local pending edits. */
+	pendingSeed: number;
+	gates: CreatorGate[];
+}
+
+function initials(row: CreatorRow): string {
+	return (row.displayName || row.username)
 		.split(/\s+/)
 		.map((w) => w[0])
 		.join("")
 		.slice(0, 2)
 		.toUpperCase();
-	const timePct = totalTime > 0 ? (row.timeSeconds / totalTime) * 100 : 0;
-	const boostGates = row.gates.filter((g) => g.gateType === "boost");
-
-	return (
-		<div className="card bg-base-300/50 h-full">
-			<div className="card-body p-4 flex flex-col">
-				{/* Creator identity (always shown) */}
-				<div className="flex items-center gap-3 mb-3">
-					{row.avatar ? (
-						<img
-							src={row.avatar}
-							alt=""
-							className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-						/>
-					) : (
-						<div
-							className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-							style={{ backgroundColor: PIE_COLORS[colorIndex % PIE_COLORS.length] }}
-						>
-							{initials}
-						</div>
-					)}
-					<div className="min-w-0">
-						<Link
-							to={`/${row.username}`}
-							className="font-semibold text-sm link link-hover block truncate"
-						>
-							{row.displayName || row.username}
-						</Link>
-						<span className="text-xs text-base-content/50">@{row.username}</span>
-					</div>
-				</div>
-
-				<div className="divider my-1" />
-
-				{/* Time Pool section — highlighted when source is pie */}
-				<div
-					className={`transition-opacity duration-1000 ${hoverSource === "pie" ? "opacity-100" : "opacity-50"}`}
-				>
-					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">
-						Time Pool
-					</p>
-					<div className="space-y-1 text-sm">
-						<div className="flex justify-between">
-							<span className="text-base-content/60">Time</span>
-							<span className="font-medium">{formatHours(row.timeSeconds)}</span>
-						</div>
-						<div className="flex justify-between">
-							<span className="text-base-content/60">Share</span>
-							<span className="font-medium">{Math.round(timePct)}%</span>
-						</div>
-						<div className="flex justify-between">
-							<span className="text-base-content/60">Pool amount</span>
-							<span className="font-medium text-success">{fmt(poolAmount)}</span>
-						</div>
-					</div>
-				</div>
-
-				<div className="divider my-1" />
-
-				{/* Boost section — highlighted when source is boost */}
-				<div
-					className={`transition-opacity duration-1000 ${hoverSource === "boost" ? "opacity-100" : "opacity-50"}`}
-				>
-					<p className="text-[10px] text-base-content/40 uppercase tracking-wider mb-1">Boost</p>
-					<div className="space-y-1 text-sm">
-						<div className="flex justify-between">
-							<span className="text-base-content/60">Current boost</span>
-							<span className="font-medium text-primary">${row.pendingBoost}.00</span>
-						</div>
-						{boostGates.length > 0 && (
-							<div className="mt-1 space-y-1.5">
-								{boostGates.map((gate) => {
-									const unlocked = row.pendingBoost >= Number(gate.threshold);
-									return (
-										<div key={gate.id} className="flex items-start gap-2">
-											<span
-												className={`text-xs mt-0.5 ${unlocked ? "text-primary" : "text-base-content/30"}`}
-											>
-												{unlocked ? "✓" : "○"}
-											</span>
-											<div className="flex-1 min-w-0">
-												<div className="flex justify-between">
-													<span className={`text-xs font-medium ${unlocked ? "text-primary" : ""}`}>
-														{gate.label}
-													</span>
-													<span className="text-xs text-base-content/40">${gate.threshold}</span>
-												</div>
-												{gate.description && (
-													<p className="text-[10px] text-base-content/40 leading-snug">
-														{gate.description}
-													</p>
-												)}
-											</div>
-										</div>
-									);
-								})}
-							</div>
-						)}
-					</div>
-				</div>
-			</div>
-		</div>
-	);
 }
 
 /* ------------------------------------------------------------------ */
@@ -711,115 +307,102 @@ function CreatorInfoCard({
 
 export default function SubscriptionPage() {
 	const [searchParams] = useSearchParams();
+
+	// Account + plan + wallet + earnings
 	const [account, setAccount] = useState<Account | null>(null);
-	const [badge, setBadge] = useState<Badge>("none");
-	const [badgeSpend, setBadgeSpend] = useState(0);
+	const [badge, setBadge] = useState<Badge>("free");
+	const [plan, setPlan] = useState<BadgePlan | null>(null);
+	const [wallet, setWallet] = useState<WalletBalance | null>(null);
+	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
+
+	// Per-cycle data
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
 	const [distributions, setDistributions] = useState<PoolDistribution[]>([]);
-	const [committedBoosts, setCommittedBoosts] = useState<BoostAllocation[]>([]);
+	const [seedList, setSeedList] = useState<SeedListResponse | null>(null);
 	const [creatorGatesMap, setCreatorGatesMap] = useState<Map<string, CreatorGate[]>>(new Map());
+
+	// UI state
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
-	// ── Pending changes (local, not saved) ──
-	const [pendingUsageGiB, setPendingUsageGiB] = useState<number | null>(null);
-	const [pendingBoostTotal, setPendingBoostTotal] = useState<number | null>(null);
-	const [pendingBoosts, setPendingBoosts] = useState<Map<number, number>>(new Map());
-	const [showConfirm, setShowConfirm] = useState(false);
-	const [showRevertConfirm, setShowRevertConfirm] = useState(false);
-	const [focusedCreatorId, setFocusedCreatorId] = useState<number | null>(null);
-	const [hoverSource, setHoverSource] = useState<"pie" | "boost">("pie");
-	const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// Pending Seed edits (creatorId → whole dollars)
+	const [pendingSeeds, setPendingSeeds] = useState<Map<number, number>>(new Map());
 
-	/** Debounced focus change — waits before switching creator. */
-	const debouncedFocus = useCallback((creatorId: number, source: "pie" | "boost") => {
-		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-		hoverTimerRef.current = setTimeout(() => {
-			setFocusedCreatorId(creatorId);
-			setHoverSource(source);
-		}, 250);
-	}, []);
-
-	const cancelDebouncedFocus = useCallback(() => {
-		if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-	}, []);
-
-	// Cleanup timer on unmount
-	useEffect(
-		() => () => {
-			if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-		},
-		[],
-	);
+	// Wallet form state
+	const [topupAmount, setTopupAmount] = useState(5);
+	const [autoEnabled, setAutoEnabled] = useState(false);
+	const [autoAmount, setAutoAmount] = useState(5);
+	const [autoThreshold, setAutoThreshold] = useState(2);
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
+	const canEdit = viewMode === "current" || viewMode === "next";
 
 	// ── Data fetching ──
 
 	const fetchAccount = useCallback(async () => {
 		try {
-			const res = await client.api.subscriptions.me.$get();
-			const data = (await res.json()) as {
-				account: Account;
-				badge: Badge;
-				badgeSpend: number;
-			};
-			setAccount(data.account);
-			setBadge(data.badge);
-			setBadgeSpend(data.badgeSpend);
+			const [meRes, walletRes] = await Promise.all([
+				client.api.subscriptions.me.$get(),
+				client.api.subscriptions.wallet.balance.$get(),
+			]);
+			const me = (await meRes.json()) as AccountResponse;
+			setAccount(me.account);
+			setBadge(me.badge);
+			setPlan(me.plan);
+			const w = (await walletRes.json()) as WalletBalance;
+			setWallet(w);
+			setTopupAmount(5);
+			setAutoEnabled(w.autoTopupEnabled);
+			setAutoAmount(Math.max(2, Math.round(Number(w.autoTopupAmount))));
+			setAutoThreshold(Math.max(0, Math.round(Number(w.autoTopupThreshold))));
 		} catch {
 			setError("Failed to load your account.");
 		} finally {
 			setLoading(false);
 		}
+
+		// Earnings (non-blocking — only meaningful for creators)
+		client.api.subscriptions.earnings
+			.$get()
+			.then((res) => res.json())
+			.then((data) => setEarnings(data as CreatorEarnings))
+			.catch(() => {});
 	}, []);
 
 	const fetchCycleData = useCallback(async (cycle: string) => {
-		const [attRes, distRes, boostRes] = await Promise.allSettled([
-			client.api.subscriptions.attention.summary.$get({ query: { cycle } }),
-			client.api.subscriptions.distributions.$get({ query: { cycle } }),
-			client.api.subscriptions.boosts.$get({ query: { cycle } }),
+		const [att, dist, seeds] = await Promise.allSettled([
+			getJson<AttentionSummary>(`attention/summary?cycle=${cycle}`),
+			getJson<{ distributions: PoolDistribution[] }>(`distributions?cycle=${cycle}`),
+			getJson<SeedListResponse>(`seeds?cycle=${cycle}`),
 		]);
 
-		if (attRes.status === "fulfilled") {
-			setAttention((await attRes.value.json()) as AttentionSummary);
-		}
-		if (distRes.status === "fulfilled") {
-			const data = (await distRes.value.json()) as { distributions: PoolDistribution[] };
-			setDistributions(data.distributions);
-			// Fetch gates for each creator
-			const usernames = data.distributions
-				.map((d) => d.creator?.username)
-				.filter(Boolean) as string[];
+		if (att.status === "fulfilled") setAttention(att.value);
+		if (seeds.status === "fulfilled") setSeedList(seeds.value);
+
+		if (dist.status === "fulfilled") {
+			const rows = dist.value.distributions;
+			setDistributions(rows);
+
+			// Fetch each creator's gates for the Seed-gate hints.
+			const usernames = rows.map((d) => d.creator?.username).filter(Boolean) as string[];
 			const gatesMap = new Map<string, CreatorGate[]>();
 			const gateResults = await Promise.allSettled(
-				usernames.map(async (u) => {
-					const res = await client.api.subscriptions.gates.$get({ query: { creator: u } });
-					return { username: u, gates: ((await res.json()) as { gates: CreatorGate[] }).gates };
-				}),
+				usernames.map(async (u) => ({
+					username: u,
+					gates: (await getJson<{ gates: CreatorGate[] }>(`gates?creator=${u}`)).gates,
+				})),
 			);
 			for (const r of gateResults) {
 				if (r.status === "fulfilled") gatesMap.set(r.value.username, r.value.gates);
 			}
 			setCreatorGatesMap(gatesMap);
 		}
-		if (boostRes.status === "fulfilled") {
-			const data = (await boostRes.value.json()) as {
-				boosts: BoostAllocation[];
-				budget: string;
-				allocated: string;
-				remaining: string;
-			};
-			setCommittedBoosts(data.boosts);
-		}
-		// Clear pending state when switching months
-		setPendingUsageGiB(null);
-		setPendingBoostTotal(null);
-		setPendingBoosts(new Map());
+
+		setPendingSeeds(new Map());
 	}, []);
 
 	useEffect(() => {
@@ -837,218 +420,171 @@ export default function SubscriptionPage() {
 		}
 	}, [sessionId, fetchAccount]);
 
-	// ── Derived values ──
+	// ── Derived rows ──
 
-	const committedUsageGiB = account?.usageGiB ?? 0;
-	const committedBoostTotal = Number(account?.boostTotal ?? 0);
-	const effectiveUsageGiB = pendingUsageGiB ?? committedUsageGiB;
-	const effectiveBoostTotal = pendingBoostTotal ?? committedBoostTotal;
-
-	const financials = useMemo(
-		() => computeEconomics(effectiveUsageGiB, effectiveBoostTotal),
-		[effectiveUsageGiB, effectiveBoostTotal],
-	);
-	const committed = useMemo(
-		() => computeEconomics(committedUsageGiB, committedBoostTotal),
-		[committedUsageGiB, committedBoostTotal],
-	);
-
-	const committedSpend = committed.subtotal;
-	const effectiveSpend = financials.subtotal;
-	const effectiveBadge = badgeForSpend(effectiveSpend);
-	const isPaid = committedSpend >= BADGE_THRESHOLDS.root; // has cleared the Root floor
-	const isCanceling = account ? !!account.canceledAt : false;
-
-	const usageChanged = pendingUsageGiB !== null && pendingUsageGiB !== committedUsageGiB;
-	const boostTotalChanged = pendingBoostTotal !== null && pendingBoostTotal !== committedBoostTotal;
-	const hasPendingLevels = usageChanged || boostTotalChanged;
-
-	// Committed boost map
-	const committedBoostMap = useMemo(() => {
+	const committedSeedMap = useMemo(() => {
 		const map = new Map<number, number>();
-		for (const b of committedBoosts) map.set(b.creatorId, Math.round(parseFloat(b.amount)));
+		for (const s of seedList?.seeds ?? []) map.set(s.creatorId, Math.round(Number(s.amount)));
 		return map;
-	}, [committedBoosts]);
+	}, [seedList]);
 
-	// Build rows with pending boost values
 	const rows: CreatorRow[] = useMemo(() => {
-		return distributions.map((d) => {
-			const committedBoost =
-				committedBoostMap.get(d.creatorId) ?? Math.round(parseFloat(d.boostAmount));
-			const pending = pendingBoosts.get(d.creatorId) ?? committedBoost;
-			return {
+		const map = new Map<number, CreatorRow>();
+		for (const d of distributions) {
+			map.set(d.creatorId, {
 				creatorId: d.creatorId,
 				username: d.creator?.username ?? "",
 				displayName: d.creator?.displayName ?? null,
 				avatar: d.creator?.avatar ?? null,
 				timeSeconds: d.attentionSeconds ?? 0,
-				poolAmount: parseFloat(d.poolAmount),
-				committedBoost,
-				pendingBoost: pending,
-				gates: creatorGatesMap.get(d.creator?.username ?? "") ?? [],
-			};
-		});
-	}, [distributions, committedBoostMap, pendingBoosts, creatorGatesMap]);
+				poolAmount: Number(d.poolAmount),
+				settledSeed: Number(d.seedAmount),
+				committedSeed: 0,
+				pendingSeed: 0,
+				gates: [],
+			});
+		}
+		for (const s of seedList?.seeds ?? []) {
+			const committed = Math.round(Number(s.amount));
+			const existing = map.get(s.creatorId);
+			if (existing) {
+				existing.committedSeed = committed;
+			} else {
+				map.set(s.creatorId, {
+					creatorId: s.creatorId,
+					username: s.creator?.username ?? "",
+					displayName: s.creator?.displayName ?? null,
+					avatar: null,
+					timeSeconds: 0,
+					poolAmount: 0,
+					settledSeed: 0,
+					committedSeed: committed,
+					pendingSeed: 0,
+					gates: [],
+				});
+			}
+		}
+		for (const row of map.values()) {
+			row.pendingSeed = pendingSeeds.get(row.creatorId) ?? row.committedSeed;
+			row.gates = creatorGatesMap.get(row.username) ?? [];
+		}
+		return Array.from(map.values()).sort(
+			(a, b) => b.poolAmount + b.pendingSeed - (a.poolAmount + a.pendingSeed),
+		);
+	}, [distributions, seedList, pendingSeeds, creatorGatesMap]);
 
 	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
 	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
-	const totalPendingBoost = rows.reduce((s, r) => s + r.pendingBoost, 0);
-	const allocatedBoost = totalPendingBoost;
-	// Unallocated (undirected) boost flows to creators by watch-time, like the Time Pool.
-	const unallocatedBoost = Math.max(0, financials.boostPool - allocatedBoost);
 
-	// Default focus to top creator (most time) when rows load
-	useEffect(() => {
-		if (rows.length > 0 && focusedCreatorId === null) {
-			const top = [...rows].sort((a, b) => b.timeSeconds - a.timeSeconds)[0];
-			if (top) setFocusedCreatorId(top.creatorId);
-		}
-	}, [rows, focusedCreatorId]);
+	const seedBudget = Number(seedList?.budget ?? 0);
+	const allocatedSeed = rows.reduce((s, r) => s + r.pendingSeed, 0);
+	const remainingSeed = Math.max(0, seedBudget - allocatedSeed);
 
-	// Detect if there are any pending changes
-	const hasPendingChanges = useMemo(() => {
-		if (hasPendingLevels) return true;
-		for (const [cid, val] of pendingBoosts) {
-			const committedVal = committedBoostMap.get(cid) ?? 0;
-			if (val !== committedVal) return true;
+	const hasPendingSeeds = useMemo(() => {
+		for (const [cid, val] of pendingSeeds) {
+			if (val !== (committedSeedMap.get(cid) ?? 0)) return true;
 		}
 		return false;
-	}, [hasPendingLevels, pendingBoosts, committedBoostMap]);
+	}, [pendingSeeds, committedSeedMap]);
 
-	// ── Pending change handlers ──
+	const isPaid = badge !== "free";
+	const isCanceling = account ? !!account.canceledAt : false;
 
-	const handleUsageChange = (newGiB: number) => {
-		if (viewMode === "current" && newGiB < committedUsageGiB) return; // increase only
-		setPendingUsageGiB(newGiB === committedUsageGiB ? null : newGiB);
-	};
+	// ── Seed allocation handlers ──
 
-	const handleBoostTotalChange = (newTotal: number) => {
-		if (viewMode === "current" && newTotal < committedBoostTotal) return; // increase only
-		setPendingBoostTotal(newTotal === committedBoostTotal ? null : newTotal);
-
-		// If the boost budget shrank, trim per-creator allocations to fit.
-		const currentBoosts = rows.map((r) => ({
-			creatorId: r.creatorId,
-			amount: pendingBoosts.get(r.creatorId) ?? r.committedBoost,
-		}));
-		const totalAllocated = currentBoosts.reduce((s, b) => s + b.amount, 0);
-
-		if (totalAllocated > newTotal) {
-			// Trim from smallest boosts first
-			const sorted = [...currentBoosts].sort((a, b) => a.amount - b.amount);
-			let excess = totalAllocated - newTotal;
-			const newBoostMap = new Map(pendingBoosts);
-
-			for (const entry of sorted) {
-				if (excess <= 0) break;
-				const committedVal = committedBoostMap.get(entry.creatorId) ?? 0;
-				// In current month, can't go below the committed allocation.
-				const floor = viewMode === "current" ? committedVal : 0;
-				const reducible = entry.amount - floor;
-				const reduction = Math.min(reducible, excess);
-				if (reduction > 0) {
-					const newAmount = entry.amount - reduction;
-					if (newAmount === committedVal) {
-						newBoostMap.delete(entry.creatorId);
-					} else {
-						newBoostMap.set(entry.creatorId, newAmount);
-					}
-					excess -= reduction;
-				}
-			}
-
-			setPendingBoosts(newBoostMap);
-		}
-	};
-
-	const handleBoostChange = (creatorId: number, newVal: number) => {
-		const committedVal = committedBoostMap.get(creatorId) ?? 0;
-		if (viewMode === "current" && newVal < committedVal) return; // increase only
-
-		// Cap at available budget (total boost minus other allocations)
-		const otherBoosts =
-			Array.from(pendingBoosts.entries())
-				.filter(([cid]) => cid !== creatorId)
-				.reduce((s, [, v]) => s + v, 0) +
-			rows
-				.filter((r) => r.creatorId !== creatorId && !pendingBoosts.has(r.creatorId))
-				.reduce((s, r) => s + r.committedBoost, 0);
-		const available = Math.max(0, financials.boostPool - otherBoosts);
-		const clamped = Math.min(newVal, available);
-
-		setPendingBoosts((prev) => {
+	const handleSeedChange = (creatorId: number, newVal: number) => {
+		const committed = committedSeedMap.get(creatorId) ?? 0;
+		const floor = viewMode === "current" ? committed : 0;
+		const otherAllocated = rows
+			.filter((r) => r.creatorId !== creatorId)
+			.reduce((s, r) => s + r.pendingSeed, 0);
+		const maxForThis = Math.max(floor, seedBudget - otherAllocated);
+		const clamped = Math.max(floor, Math.min(Math.floor(newVal), maxForThis));
+		setPendingSeeds((prev) => {
 			const next = new Map(prev);
-			if (clamped === committedVal) next.delete(creatorId);
+			if (clamped === committed) next.delete(creatorId);
 			else next.set(creatorId, clamped);
 			return next;
 		});
 	};
 
-	// ── Save changes ──
-
-	const handleSave = async () => {
-		setShowConfirm(false);
-		setActionLoading("save");
+	const handleSaveSeeds = async () => {
+		setActionLoading("seeds");
 		setError(null);
-
 		try {
-			// Persist Usage / Boost level changes first (raises the budget before allocations).
-			// TODO: In production this charges the prepaid delta (usage + boost) via Stripe.
-			if (hasPendingLevels) {
-				const res = await client.api.subscriptions.account.$post({
+			for (const row of rows) {
+				if (row.pendingSeed === row.committedSeed) continue;
+				const res = await client.api.subscriptions.seeds.$post({
 					json: {
-						usageGiB: effectiveUsageGiB,
-						boostTotal: effectiveBoostTotal,
+						creatorId: row.creatorId,
+						amount: row.pendingSeed.toFixed(2),
+						cycle: selectedCycle,
 					},
 				});
 				if (!res.ok) {
 					const data = (await res.json()) as { error?: string };
-					setError(data.error ?? "Failed to update your account levels.");
-					setActionLoading(null);
-					return;
-				}
-			}
-
-			// Save per-creator boost allocations.
-			for (const [creatorId, amount] of pendingBoosts) {
-				const res = await client.api.subscriptions.boosts.$post({
-					json: { creatorId, amount: amount.toFixed(2), cycle: selectedCycle },
-				});
-				if (!res.ok) {
-					const data = (await res.json()) as { error?: string };
-					setError(data.error ?? "Failed to save boost.");
+					setError(data.error ?? "Failed to sow Seeds.");
 					break;
 				}
-
-				// Current month changes auto-propagate to next month.
-				if (viewMode === "current") {
-					const nextCycle = offsetCycle(getCurrentCycle(), 1);
-					await client.api.subscriptions.boosts.$post({
-						json: { creatorId, amount: amount.toFixed(2), cycle: nextCycle },
-					});
-				}
 			}
-
-			setSuccess("Changes saved.");
-			setPendingUsageGiB(null);
-			setPendingBoostTotal(null);
-			setPendingBoosts(new Map());
-			await fetchAccount();
+			setSuccess("Your Seeds are sown.");
+			setPendingSeeds(new Map());
 			await fetchCycleData(selectedCycle);
 		} catch {
-			setError("Failed to save changes.");
+			setError("Failed to sow Seeds.");
 		} finally {
 			setActionLoading(null);
 		}
 	};
 
-	const handleRevert = () => {
-		setShowRevertConfirm(false);
-		setPendingUsageGiB(null);
-		setPendingBoostTotal(null);
-		setPendingBoosts(new Map());
-		// Reload committed data
-		fetchCycleData(selectedCycle);
+	// ── Wallet handlers ──
+
+	const handleTopup = async () => {
+		setActionLoading("topup");
+		setError(null);
+		try {
+			// TODO: In production this charges the top-up via Stripe.
+			const res = await client.api.subscriptions.wallet.topup.$post({
+				json: { amount: topupAmount },
+			});
+			if (!res.ok) {
+				const data = (await res.json()) as { error?: string };
+				setError(data.error ?? "Failed to add funds.");
+				return;
+			}
+			setSuccess(`Added ${fmt(topupAmount)} to your bandwidth wallet.`);
+			await fetchAccount();
+		} catch {
+			setError("Failed to add funds.");
+		} finally {
+			setActionLoading(null);
+		}
+	};
+
+	const handleAutoTopup = async (enabled: boolean) => {
+		setActionLoading("auto-topup");
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.wallet["auto-topup"].$post({
+				json: { enabled, amount: autoAmount, threshold: autoThreshold },
+			});
+			if (!res.ok) {
+				setError("Failed to update auto-top-up.");
+				return;
+			}
+			const data = (await res.json()) as {
+				autoTopupEnabled: boolean;
+				autoTopupAmount: string;
+				autoTopupThreshold: string;
+			};
+			setAutoEnabled(data.autoTopupEnabled);
+			setSuccess(enabled ? "Auto-top-up on." : "Auto-top-up off.");
+			await fetchAccount();
+		} catch {
+			setError("Failed to update auto-top-up.");
+		} finally {
+			setActionLoading(null);
+		}
 	};
 
 	// ── Account actions ──
@@ -1059,7 +595,7 @@ export default function SubscriptionPage() {
 		try {
 			const res = await client.api.subscriptions.cancel.$post();
 			setAccount(((await res.json()) as { account: Account }).account);
-			setSuccess("Your prepaid renewal will stop at the end of the current billing period.");
+			setSuccess("Your plan will revert to Free at the end of the current billing period.");
 		} catch {
 			setError("Failed to cancel.");
 		} finally {
@@ -1073,7 +609,7 @@ export default function SubscriptionPage() {
 		try {
 			const res = await client.api.subscriptions.resume.$post();
 			setAccount(((await res.json()) as { account: Account }).account);
-			setSuccess("Renewal resumed.");
+			setSuccess("Plan renewal resumed.");
 		} catch {
 			setError("Failed to resume.");
 		} finally {
@@ -1101,102 +637,23 @@ export default function SubscriptionPage() {
 			</div>
 		);
 
-	if (!account)
+	if (!account || !plan)
 		return (
 			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
 				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
 				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
 				<Link to="/subscribe" className="btn btn-primary">
-					Explore Usage & Boost
+					Choose a plan
 				</Link>
 			</div>
 		);
 
-	/* ---- Free user view (below the Root badge floor) ---- */
-	if (!isPaid)
-		return (
-			<div className="max-w-2xl mx-auto px-4 py-8">
-				<div className="flex items-baseline justify-between mb-6">
-					<h1 className="text-2xl font-bold">Your Anthers</h1>
-					<span className="text-sm text-base-content/60">Free · no badge yet</span>
-				</div>
-				{error && (
-					<div className="alert alert-error mb-4">
-						<span>{error}</span>
-					</div>
-				)}
-				{success && (
-					<div className="alert alert-success mb-4">
-						<span>{success}</span>
-					</div>
-				)}
-				<div className="card bg-base-200">
-					<div className="card-body">
-						<div className="flex items-center justify-between">
-							<div>
-								<h2 className="card-title">Free</h2>
-								<div className="badge badge-success badge-sm mt-1">Active</div>
-							</div>
-							<Link to="/subscribe" className="btn btn-primary btn-sm">
-								Add Usage or Boost
-							</Link>
-						</div>
-						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
-						{attention && (
-							<div className="mt-4">
-								<div className="flex items-center justify-between text-sm mb-1">
-									<span className="text-base-content/60">Time with Creators</span>
-									<span className="font-medium">{attention.hoursUsed} hrs</span>
-								</div>
-								<p className="text-xs text-base-content/40">
-									All media types count equally — a minute of video, audio, reading, or gameplay is
-									the same when funding your creators.
-								</p>
-							</div>
-						)}
-						<div className="mt-4">
-							<p className="text-xs text-base-content/50 uppercase tracking-wider mb-2">
-								Progress to your first badge
-							</p>
-							<BadgeBar spend={effectiveSpend} pending={false} />
-							<p className="text-xs text-base-content/40 mt-3">
-								Spend {fmt(BADGE_THRESHOLDS.root)}+ combined (Usage + Boost) to earn your first
-								Anthers Badge (Root).
-							</p>
-						</div>
-						<div className="mt-4 text-sm text-base-content/60">
-							Your first {FREE_USAGE_GIB} GiB of usage each month is free, subsidized by the Anthers
-							Foundation.
-						</div>
-					</div>
-				</div>
-			</div>
-		);
-
-	/* ──────────────────────────────────────────────────────────────────── */
-	/*  Paid user view                                                     */
-	/* ──────────────────────────────────────────────────────────────────── */
-
-	const canEdit = viewMode === "current" || viewMode === "next";
-
-	// Colors for the cost breakdown dots
-	const DOT_COLORS = {
-		timePool: "#2563eb",
-		boost: "#c026d3",
-		bandwidth: "#db2777",
-		foundation: "#0f766e",
-		salesTax: "#737373",
-		cardFee: "#d97706",
-	};
-
-	// Card + tax are added on top of the (usage + boost) subtotal; both leave the system.
-	const subtotalForFees = financials.subtotal;
-	const salesTax = round2(subtotalForFees * SALES_TAX_RATE);
-	const cardFee = round2(subtotalForFees * CARD_RATE + CARD_FLAT);
-	const totalWithFees = round2(subtotalForFees + salesTax + cardFee);
+	const usedGiB = Number(wallet?.usedGiB ?? 0);
+	const freeAllowanceGiB = wallet?.freeAllowanceGiB ?? plan.freeBwGiB;
+	const walletLow = wallet ? Number(wallet.balance) < autoThreshold : false;
 
 	return (
-		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
+		<div className="mx-auto px-4 py-8" style={{ maxWidth: "72rem" }}>
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>
@@ -1208,12 +665,10 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* Banners */}
 			{viewMode === "next" && (
 				<div className="alert alert-info text-sm mb-4">
 					<span>
-						Preview for {cycleLabel(selectedCycle)}. You can increase or decrease your levels and
-						boosts freely.
+						Preview for {cycleLabel(selectedCycle)}. You can direct next month's Seeds now.
 					</span>
 				</div>
 			)}
@@ -1223,289 +678,316 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* ── Main panel ── */}
-			<div className="card bg-base-200/60 shadow-xl p-5 overflow-x-auto space-y-6">
-				{/* Panel header with action buttons in corners */}
-				<div className="flex items-start justify-between">
-					{/* Left: account management */}
-					{viewMode === "current" ? (
-						<div className="flex flex-col gap-2 flex-shrink-0">
-							<button
-								type="button"
-								className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`}
-								onClick={handleBillingPortal}
-								disabled={!!actionLoading}
-							>
-								{actionLoading === "portal" ? "Opening..." : "Manage Billing"}
-							</button>
-							{isCanceling ? (
+			{/* ── Header ── */}
+			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
+				<div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+					<div className="flex flex-col gap-2 md:w-40 order-2 md:order-1">
+						{viewMode === "current" && (
+							<>
 								<button
 									type="button"
-									className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
-									onClick={handleResume}
+									className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`}
+									onClick={handleBillingPortal}
 									disabled={!!actionLoading}
 								>
-									{actionLoading === "resume" ? "Resuming..." : "Resume Renewal"}
+									{actionLoading === "portal" ? "Opening…" : "Manage Billing"}
 								</button>
-							) : (
-								<button
-									type="button"
-									className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
-									onClick={handleCancel}
-									disabled={!!actionLoading}
-								>
-									{actionLoading === "cancel" ? "Canceling..." : "Cancel Renewal"}
-								</button>
-							)}
-						</div>
-					) : (
-						<div className="w-36 flex-shrink-0" />
-					)}
+								{isPaid &&
+									(isCanceling ? (
+										<button
+											type="button"
+											className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
+											onClick={handleResume}
+											disabled={!!actionLoading}
+										>
+											{actionLoading === "resume" ? "Resuming…" : "Resume Plan"}
+										</button>
+									) : (
+										<button
+											type="button"
+											className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
+											onClick={handleCancel}
+											disabled={!!actionLoading}
+										>
+											{actionLoading === "cancel" ? "Canceling…" : "Cancel Plan"}
+										</button>
+									))}
+							</>
+						)}
+					</div>
 
-					{/* Center: title + badge + month selector */}
-					<div className="text-center flex-1">
-						<h2 className="text-2xl font-bold mb-1">Your Anthers — {cycleLabel(selectedCycle)}</h2>
-						<p className="text-sm text-base-content/60 mb-1">
-							<strong style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}>
-								{badgeLabel(effectiveBadge)}
-							</strong>{" "}
-							badge
-							<span className="text-base-content/40"> · {fmt(effectiveSpend)} combined spend</span>
-							{hasPendingLevels && (
-								<span className="ml-1" style={{ color: PENDING_COLOR }}>
-									(pending change)
-								</span>
+					<div className="text-center flex-1 order-1 md:order-2">
+						<h1 className="text-2xl font-bold mb-1">Your Anthers — {cycleLabel(selectedCycle)}</h1>
+						<p className="text-sm text-base-content/60 mb-2">
+							<strong>{plan.name}</strong> plan
+							<span className="text-base-content/40"> · {fmt(plan.price)}/mo</span>
+							{isCanceling && (
+								<span className="text-error ml-1">(reverts to Free at period end)</span>
 							)}
-						</p>
-						<p className="text-xs text-base-content/40 mb-3">
-							Rolling standing: {badgeLabel(badge)} · {fmt(badgeSpend)}
-							<InfoTip text="Your canonical badge is the highest threshold you've cleared in any of the trailing 3 months — a good month keeps its perks for a while rather than evaporating instantly." />
 						</p>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
 					</div>
 
-					{/* Right: save/discard */}
-					{canEdit ? (
-						<div className="flex flex-col gap-2 items-end flex-shrink-0">
-							<button
-								type="button"
-								className={`btn btn-primary btn-sm ${actionLoading === "save" ? "btn-disabled" : ""}`}
-								onClick={() => setShowConfirm(true)}
-								disabled={!hasPendingChanges || !!actionLoading}
-							>
-								{actionLoading === "save" ? "Saving..." : "Save Changes"}
-							</button>
-							<button
-								type="button"
-								className="btn btn-outline btn-warning btn-sm"
-								disabled={!hasPendingChanges}
-								onClick={() => {
-									setPendingUsageGiB(null);
-									setPendingBoostTotal(null);
-									setPendingBoosts(new Map());
-								}}
-							>
-								Discard Changes
-							</button>
-							{viewMode === "next" && (
-								<button
-									type="button"
-									className="btn btn-ghost btn-xs"
-									onClick={() => setShowRevertConfirm(true)}
-								>
-									Revert to Current Month
-								</button>
-							)}
-						</div>
-					) : (
-						<div className="w-36 flex-shrink-0" />
-					)}
+					<div className="md:w-40 flex md:justify-end order-3">
+						<Link to="/subscribe" className="btn btn-primary btn-sm">
+							Change plan
+						</Link>
+					</div>
 				</div>
 
-				{/* ── ACCOUNT LEVELS (Usage + Boost) ── */}
-				{canEdit && (
+				{/* Plan decomposition */}
+				<div className="divider text-sm text-base-content/50 my-3">
+					What your plan funds
+					<InfoTip text="Your plan price is money to creators (Time Pool + Seeds) plus your Community Share to the Anthers Foundation. Anthers keeps $0. Bandwidth is separate — see your wallet below." />
+				</div>
+				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 					<div>
-						<div className="divider text-sm text-base-content/50 my-2">
-							Account Levels
-							<InfoTip text="Two independent, prepaid choices: Usage (open, YouTube-style bandwidth, bought per GiB) and Boost (per-creator, Patreon-style support in whole dollars — 100% to creators). Your Anthers Badge is derived from the combined spend." />
+						<div className="text-xs text-base-content/50 uppercase">Time Pool</div>
+						<div className="text-lg font-bold text-success">{fmt(plan.timePool)}</div>
+						<div className="text-[11px] text-base-content/40">to creators, by watch-time</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Included Seeds</div>
+						<div className="text-lg font-bold text-success">
+							{plan.seeds} <span className="text-sm font-normal">× $1</span>
 						</div>
+						<div className="text-[11px] text-base-content/40">direct, you sow them</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Community Share</div>
+						<div className="text-lg font-bold">{fmt(plan.communityShare)}</div>
+						<div className="text-[11px] text-base-content/40">to the Foundation</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Free bandwidth</div>
+						<div className="text-lg font-bold">{plan.freeBwGiB} GiB</div>
+						<div className="text-[11px] text-base-content/40">per month, then at cost</div>
+					</div>
+				</div>
+			</div>
 
-						{/* Badge progress (combined spend) */}
-						<div className="mb-5">
-							<BadgeBar spend={effectiveSpend} pending={hasPendingLevels} />
+			{/* ── Bandwidth wallet ── */}
+			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
+				<div className="divider text-sm text-base-content/50 mt-0 mb-3">
+					Bandwidth Wallet
+					<InfoTip text="Bandwidth is decoupled from your plan: a prepaid balance charged at DigitalOcean's pass-through cost ($0.01/GiB). Your plan's free monthly allowance is drawn down first; the wallet covers anything beyond it." />
+				</div>
+
+				<div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Wallet balance</div>
+						<div className={`text-2xl font-bold ${walletLow ? "text-warning" : ""}`}>
+							{fmt(wallet?.balance ?? 0)}
 						</div>
+						<div className="text-[11px] text-base-content/40">
+							≈ {Math.round(Number(wallet?.balance ?? 0) / BANDWIDTH_PER_GIB)} GiB at{" "}
+							{fmt(BANDWIDTH_PER_GIB)}/GiB
+						</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Free allowance</div>
+						<div className="text-2xl font-bold">{freeAllowanceGiB} GiB</div>
+						<div className="text-[11px] text-base-content/40">
+							≈ {Math.round(freeAllowanceGiB / DELIVERY_GIB_PER_HOUR)} hrs of 1080p video / mo
+						</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Used this cycle</div>
+						<div className="text-2xl font-bold">{usedGiB.toFixed(1)} GiB</div>
+						<div className="text-[11px] text-base-content/40">
+							{usedGiB <= freeAllowanceGiB
+								? `${(freeAllowanceGiB - usedGiB).toFixed(1)} GiB of allowance left`
+								: `${(usedGiB - freeAllowanceGiB).toFixed(1)} GiB billed to wallet`}
+						</div>
+					</div>
+				</div>
 
-						{/* Usage slider */}
-						<div className="mb-4">
-							<div className="flex items-baseline justify-between mb-1">
-								<span className="text-sm text-base-content/70">
-									Usage
-									<InfoTip text="Open, YouTube-style bandwidth. $0.03/GiB = bandwidth ($0.01, at cost) + Anthers Foundation ($0.005) + Time Pool ($0.015, to creators by watch-time). Your first 3 GiB each month are free." />
-								</span>
-								<span className="text-sm">
-									<strong style={usageChanged ? { color: PENDING_COLOR } : undefined}>
-										{effectiveUsageGiB} GiB
-									</strong>
-									<span className="text-base-content/40 ml-1">
-										· {fmt(financials.usageSpend)} · +{FREE_USAGE_GIB} GiB free
-									</span>
-								</span>
-							</div>
+				{/* Top-up */}
+				<div className="flex flex-col sm:flex-row sm:items-end gap-3 border-t border-base-content/10 pt-4">
+					<div>
+						<label className="text-xs text-base-content/50 uppercase block mb-1">Add funds</label>
+						<div className="join">
+							<span className="join-item btn btn-sm btn-disabled no-animation">$</span>
 							<input
-								type="range"
-								min={0}
-								max={USAGE_SLIDER_MAX}
-								step={USAGE_SLIDER_STEP}
-								value={effectiveUsageGiB}
-								onChange={(e) => handleUsageChange(Number(e.target.value))}
-								className="range range-sm range-success"
-							/>
-						</div>
-
-						{/* Boost slider */}
-						<div>
-							<div className="flex items-baseline justify-between mb-1">
-								<span className="text-sm text-base-content/70">
-									Boost
-									<InfoTip text="Per-creator, Patreon-style support in whole dollars — 100% goes to creators, no Foundation fee. Allocate it to specific creators below; unallocated boost flows to creators by your watch-time." />
-								</span>
-								<span className="text-sm">
-									<strong style={boostTotalChanged ? { color: PENDING_COLOR } : undefined}>
-										{fmt(effectiveBoostTotal)}
-									</strong>
-									<span className="text-base-content/40 ml-1">· 100% to creators</span>
-								</span>
-							</div>
-							<input
-								type="range"
-								min={0}
-								max={BOOST_SLIDER_MAX}
+								type="number"
+								min={2}
 								step={1}
-								value={effectiveBoostTotal}
-								onChange={(e) => handleBoostTotalChange(Number(e.target.value))}
-								className="range range-sm range-primary"
+								value={topupAmount}
+								onChange={(e) =>
+									setTopupAmount(Math.max(2, Math.floor(Number(e.target.value) || 0)))
+								}
+								className="join-item input input-sm input-bordered w-24 text-center"
 							/>
 						</div>
+					</div>
+					<button
+						type="button"
+						className={`btn btn-sm btn-primary ${actionLoading === "topup" ? "btn-disabled" : ""}`}
+						onClick={handleTopup}
+						disabled={!!actionLoading || topupAmount < 2}
+					>
+						{actionLoading === "topup" ? "Adding…" : "Add to wallet"}
+					</button>
+					<span className="text-[11px] text-base-content/40 sm:ml-1">
+						Minimum $2 so the card fee stays small.
+					</span>
+				</div>
 
-						{Number(account.redownloadBalance) > 0 && (
-							<div className="mt-3 text-xs text-base-content/40">
-								Re-download balance: {fmt(Number(account.redownloadBalance))}
-								<InfoTip text="A small prepaid balance for re-downloading purchases. Kept separate from streaming Usage so a big download never distorts Time-Pool distribution." />
+				{/* Auto top-up */}
+				<div className="flex flex-col gap-2 border-t border-base-content/10 pt-4 mt-4">
+					<label className="flex items-center gap-2 cursor-pointer">
+						<input
+							type="checkbox"
+							className="toggle toggle-primary toggle-sm"
+							checked={autoEnabled}
+							onChange={(e) => handleAutoTopup(e.target.checked)}
+							disabled={actionLoading === "auto-topup"}
+						/>
+						<span className="text-sm font-medium">Auto-top-up</span>
+						<InfoTip text="When your wallet dips below the threshold, we automatically add the top-up amount so streaming never stops." />
+					</label>
+					<div className="flex flex-wrap items-end gap-3 pl-1">
+						<div>
+							<label className="text-[11px] text-base-content/50 block mb-1">Add</label>
+							<div className="join">
+								<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
+								<input
+									type="number"
+									min={2}
+									step={1}
+									value={autoAmount}
+									onChange={(e) =>
+										setAutoAmount(Math.max(2, Math.floor(Number(e.target.value) || 0)))
+									}
+									className="join-item input input-xs input-bordered w-20 text-center"
+									disabled={!autoEnabled}
+								/>
 							</div>
+						</div>
+						<div>
+							<label className="text-[11px] text-base-content/50 block mb-1">When below</label>
+							<div className="join">
+								<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
+								<input
+									type="number"
+									min={0}
+									step={1}
+									value={autoThreshold}
+									onChange={(e) =>
+										setAutoThreshold(Math.max(0, Math.floor(Number(e.target.value) || 0)))
+									}
+									className="join-item input input-xs input-bordered w-20 text-center"
+									disabled={!autoEnabled}
+								/>
+							</div>
+						</div>
+						{autoEnabled && (
+							<button
+								type="button"
+								className={`btn btn-xs btn-outline ${actionLoading === "auto-topup" ? "btn-disabled" : ""}`}
+								onClick={() => handleAutoTopup(true)}
+								disabled={actionLoading === "auto-topup"}
+							>
+								Save settings
+							</button>
 						)}
 					</div>
+				</div>
+			</div>
+
+			{/* ── Time Pool + Seeds ── */}
+			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
+				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
+					Creators You Support
+					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your watch-time — video, audio, reading, and gameplay all count equally) and Seeds (whole dollars you direct to specific creators, 100% to them)." />
+				</div>
+				{attention && (
+					<p className="text-xs text-base-content/40 text-center mb-3">
+						{attention.hoursUsed} hrs of time with creators this cycle
+					</p>
 				)}
 
-				{/* ── CREATOR ALLOCATIONS ── */}
-				<div>
-					<div className="divider text-sm text-base-content/50 my-2">
-						Creator Allocations
-						<InfoTip text="Money reaches creators two ways: the Time Pool (automatic, from your Usage, distributed by watch-time) and Boost (manual, whole dollars you direct to specific creators). Boost determines which gated content you can access. Unallocated boost flows to creators by watch-time." />
-					</div>
-					{rows.length > 0 ? (
-						<div className="grid grid-cols-3 divide-x divide-base-content/10">
-							{/* ── Left: Time Pool pie chart ── */}
-							<div className="flex flex-col pr-4">
-								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-									Time Pool
-								</p>
-								<TimePoolPie
-									rows={rows}
-									totalTime={totalTime}
-									focusedCreatorId={focusedCreatorId}
-									onHover={(id) => debouncedFocus(id, "pie")}
-									onLeave={cancelDebouncedFocus}
-								/>
-								{/* Legend */}
-								<div className="mt-3 space-y-1">
-									{rows.map((row, i) => {
-										const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
-										const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
-										const displayPool =
-											hasPendingLevels && totalTime > 0
-												? round2(pendingTimePoolTotal * (row.timeSeconds / totalTime))
-												: row.poolAmount;
-										return (
+				{rows.length > 0 ? (
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+						{/* Time Pool */}
+						<div className="flex flex-col">
+							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
+								Time Pool
+							</p>
+							<TimePoolPie rows={rows} totalTime={totalTime} />
+							<div className="mt-3 space-y-1">
+								{rows.map((row, i) => {
+									const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
+									return (
+										<div
+											key={row.creatorId}
+											className="flex items-center gap-2 text-xs px-1 py-0.5"
+										>
 											<div
-												key={row.creatorId}
-												className={`flex items-center gap-2 text-xs cursor-pointer rounded px-1 py-0.5 transition-colors duration-1000 ${
-													focusedCreatorId === row.creatorId ? "bg-base-content/5" : ""
-												}`}
-												onMouseEnter={() => debouncedFocus(row.creatorId, "pie")}
-												onMouseLeave={cancelDebouncedFocus}
+												className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+												style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+											/>
+											<Link
+												to={`/${row.username}`}
+												className="text-base-content/70 truncate flex-1 link-hover"
 											>
-												<div
-													className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-													style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-												/>
-												<span className="text-base-content/70 truncate flex-1">
-													{row.displayName || row.username}
-												</span>
-												<span className="text-base-content/40 tabular-nums">{pct}%</span>
-												<span
-													className={`tabular-nums ${hasPendingLevels ? "" : "text-success"}`}
-													style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
-												>
-													{fmt(displayPool)}
-												</span>
-											</div>
-										);
-									})}
+												{row.displayName || row.username}
+											</Link>
+											<span className="text-base-content/40 tabular-nums">{pct}%</span>
+											<span className="tabular-nums text-success">{fmt(row.poolAmount)}</span>
+										</div>
+									);
+								})}
+							</div>
+							<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2">
+								<span className="text-base-content/60">Time Pool total</span>
+								<strong className="text-success">{fmt(totalPool)}</strong>
+							</div>
+						</div>
+
+						{/* Seeds */}
+						<div className="flex flex-col">
+							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
+								Seeds
+							</p>
+
+							{/* Budget summary */}
+							<div className="mb-3">
+								<div className="flex items-center justify-between text-xs text-base-content/60 mb-1">
+									<span>{fmt(seedBudget)} total</span>
+									<span>
+										{fmt(allocatedSeed)} sown · {fmt(remainingSeed)} left
+									</span>
+								</div>
+								<div className="relative h-2 bg-base-300 rounded-full overflow-hidden">
+									<div
+										className="absolute inset-y-0 left-0 bg-success/80 rounded-full"
+										style={{
+											width: `${seedBudget > 0 ? Math.min(100, (allocatedSeed / seedBudget) * 100) : 0}%`,
+										}}
+									/>
 								</div>
 							</div>
 
-							{/* ── Center: Creator info card ── */}
-							<div className="flex flex-col px-4">
-								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-									Creator Details
-								</p>
-								{(() => {
-									const focusedRow = rows.find((r) => r.creatorId === focusedCreatorId) ?? null;
-									const colorIdx = focusedRow ? rows.indexOf(focusedRow) : 0;
-									const pendingTimePoolTotal = financials.timePool + unallocatedBoost;
-									const focusedPool =
-										focusedRow && totalTime > 0
-											? hasPendingLevels
-												? round2(pendingTimePoolTotal * (focusedRow.timeSeconds / totalTime))
-												: focusedRow.poolAmount
-											: 0;
-									return (
-										<CreatorInfoCard
-											row={focusedRow}
-											colorIndex={colorIdx}
-											totalTime={totalTime}
-											poolAmount={focusedPool}
-											hoverSource={hoverSource}
-										/>
-									);
-								})()}
-							</div>
-
-							{/* ── Right: Boost table ── */}
-							<div className="flex flex-col pl-4">
-								<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-									Boost Allocations
-								</p>
+							{seedBudget <= 0 ? (
+								<div className="text-sm text-base-content/50 text-center py-4">
+									<p>Your plan includes no Seeds this cycle.</p>
+									<Link to="/subscribe" className="link link-primary text-sm">
+										Upgrade to sow Seeds
+									</Link>
+								</div>
+							) : (
 								<div className="space-y-2">
 									{rows.map((row, i) => {
-										const initials = (row.displayName || row.username)
-											.split(/\s+/)
-											.map((w) => w[0])
-											.join("")
-											.slice(0, 2)
-											.toUpperCase();
-										const boostChanged = row.pendingBoost !== row.committedBoost;
-										const isFocused = focusedCreatorId === row.creatorId;
-
+										const committed = row.committedSeed;
+										const floor = viewMode === "current" ? committed : 0;
+										const otherAllocated = allocatedSeed - row.pendingSeed;
+										const maxForThis = Math.max(floor, seedBudget - otherAllocated);
+										const changed = row.pendingSeed !== committed;
+										const seedGates = row.gates.filter((g) => g.gateType === "seed");
 										return (
-											<div
-												key={row.creatorId}
-												className={`rounded-lg p-2 transition-colors duration-1000 ${isFocused ? "bg-base-content/5" : ""}`}
-												onMouseEnter={() => debouncedFocus(row.creatorId, "boost")}
-												onMouseLeave={cancelDebouncedFocus}
-											>
-												{/* Creator name */}
-												<div className="flex items-center gap-1.5 mb-1">
+											<div key={row.creatorId} className="rounded-lg p-2 bg-base-100/40">
+												<div className="flex items-center gap-2">
 													<div
 														className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
 														style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
@@ -1517,260 +999,131 @@ export default function SubscriptionPage() {
 																className="w-5 h-5 rounded-full object-cover"
 															/>
 														) : (
-															initials
+															initials(row)
 														)}
 													</div>
-													<span className="text-xs text-base-content/70 truncate">
+													<Link
+														to={`/${row.username}`}
+														className="text-xs text-base-content/70 truncate flex-1 link-hover"
+													>
 														{row.displayName || row.username}
-													</span>
-													<span className="text-xs text-primary font-medium ml-auto tabular-nums">
-														${row.pendingBoost}.00
-													</span>
-													{boostChanged && (
-														<span className="text-[9px]" style={{ color: PENDING_COLOR }}>
-															(pending)
+													</Link>
+													{canEdit ? (
+														<SeedStepper
+															value={row.pendingSeed}
+															min={floor}
+															max={maxForThis}
+															onChange={(v) => handleSeedChange(row.creatorId, v)}
+															disabled={!!actionLoading}
+														/>
+													) : (
+														<span className="text-sm text-success tabular-nums">
+															{fmt(row.settledSeed || committed)}
 														</span>
 													)}
+													{changed && <span className="text-[9px] text-primary">(pending)</span>}
 												</div>
-												{/* Boost slider */}
-												{canEdit ? (
-													<BoostBar
-														value={row.pendingBoost}
-														committedValue={row.committedBoost}
-														boostPool={financials.boostPool}
-														gates={row.gates}
-														onChange={(v) => handleBoostChange(row.creatorId, v)}
-														disabled={
-															viewMode === "current" && unallocatedBoost <= 0 && !hasPendingChanges
-														}
-													/>
-												) : (
-													<div className="text-sm text-primary">${row.pendingBoost}.00</div>
+												{seedGates.length > 0 && (
+													<div className="mt-1 pl-7 flex flex-wrap gap-1">
+														{seedGates.map((gate) => {
+															const unlocked = row.pendingSeed >= Number(gate.threshold);
+															return (
+																<span
+																	key={gate.id}
+																	className={`badge badge-xs ${unlocked ? "badge-success" : "badge-ghost"}`}
+																	title={gate.description ?? undefined}
+																>
+																	{unlocked ? "✓" : "○"} {gate.label} (${gate.threshold})
+																</span>
+															);
+														})}
+													</div>
 												)}
 											</div>
 										);
 									})}
+
+									{canEdit && (
+										<div className="flex gap-2 pt-1">
+											<button
+												type="button"
+												className={`btn btn-primary btn-sm ${actionLoading === "seeds" ? "btn-disabled" : ""}`}
+												onClick={handleSaveSeeds}
+												disabled={!hasPendingSeeds || !!actionLoading}
+											>
+												{actionLoading === "seeds" ? "Sowing…" : "Sow Seeds"}
+											</button>
+											<button
+												type="button"
+												className="btn btn-ghost btn-sm"
+												onClick={() => setPendingSeeds(new Map())}
+												disabled={!hasPendingSeeds}
+											>
+												Discard
+											</button>
+										</div>
+									)}
 								</div>
-							</div>
-						</div>
-					) : (
-						<div className="py-6 text-center text-sm text-base-content/40">
-							{viewMode === "next" ? (
-								<p>Next month's distributions will be calculated from your time with creators.</p>
-							) : (
-								<>
-									<p>No distributions yet this cycle.</p>
-									<p className="mt-1">
-										Your Time Pool is distributed by watch-time — video, audio, text, and gameplay
-										all count equally.
-									</p>
-								</>
 							)}
 						</div>
+					</div>
+				) : (
+					<div className="py-6 text-center text-sm text-base-content/40">
+						<p>No time with creators yet this cycle.</p>
+						<p className="mt-1">
+							Your Time Pool is distributed by watch-time — video, audio, text, and gameplay all
+							count equally.
+						</p>
+					</div>
+				)}
+			</div>
+
+			{/* ── Creator earnings ── */}
+			{earnings && parseFloat(earnings.total) > 0 && (
+				<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
+					<div className="divider text-sm text-base-content/50 mt-0 mb-3">
+						Your Creator Earnings
+					</div>
+					<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Pool income</div>
+							<div className="text-xl font-bold text-success">{fmt(earnings.poolTotal)}</div>
+						</div>
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Seed income</div>
+							<div className="text-xl font-bold text-success">{fmt(earnings.seedTotal)}</div>
+						</div>
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Total</div>
+							<div className="text-xl font-bold">{fmt(earnings.total)}</div>
+						</div>
+						<div>
+							<div className="text-xs text-base-content/50 uppercase">Supporters</div>
+							<div className="text-xl font-bold">{earnings.subscriberCount}</div>
+						</div>
+					</div>
+					{earnings.cycle && (
+						<p className="text-xs text-base-content/50 mt-2">
+							Cycle:{" "}
+							{new Date(earnings.cycle).toLocaleDateString("en-US", {
+								month: "long",
+								year: "numeric",
+							})}
+						</p>
 					)}
 				</div>
+			)}
 
-				{/* ── COST BREAKDOWN ── */}
-				<div className="divider text-sm text-base-content/50 my-2">Cost Breakdown</div>
-				<div className="flex justify-center mb-4">
-					<div className="text-sm w-full max-w-lg">
-						{/* Spend header (badge basis) */}
-						<div className="flex items-center justify-between py-2 border-b border-base-content/10">
-							<span className="text-base-content/60">Usage + Boost</span>
-							<div className="flex items-baseline gap-1">
-								<span
-									className="text-xl font-bold"
-									style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
-								>
-									{fmt(effectiveSpend)}
-								</span>
-								<span className="text-base-content/40 text-xs">/mo</span>
-							</div>
-						</div>
-
-						{/* Line items */}
-						<div className="py-2 space-y-1.5">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div
-										className="w-2.5 h-2.5 rounded-sm"
-										style={{ backgroundColor: DOT_COLORS.timePool }}
-									/>
-									<span className="text-base-content/70">
-										Time Pool
-										{unallocatedBoost > 0 && (
-											<span className="text-base-content/40 text-xs ml-1">
-												(incl. {fmt(unallocatedBoost)} unallocated boost)
-											</span>
-										)}
-									</span>
-								</div>
-								<div className="flex items-center gap-1">
-									<strong className="text-success">
-										{fmt((totalPool > 0 ? totalPool : financials.timePool) + unallocatedBoost)}
-									</strong>
-									<InfoTip text="To creators, distributed by the watch-time you spend with their content. A minute of video, audio, reading, or gameplay all count equally. Funded per-GiB of Usage." />
-								</div>
-							</div>
-							{financials.boostPool > 0 && (
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-2">
-										<div
-											className="w-2.5 h-2.5 rounded-sm"
-											style={{ backgroundColor: DOT_COLORS.boost }}
-										/>
-										<span className="text-base-content/70">Boost</span>
-									</div>
-									<div className="flex items-center gap-1">
-										<strong className="text-primary">{fmt(allocatedBoost)}</strong>
-										<InfoTip text="Whole dollars you direct to specific creators — 100% to creators, no Foundation fee. Determines which gated content you can access." />
-									</div>
-								</div>
-							)}
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div
-										className="w-2.5 h-2.5 rounded-sm"
-										style={{ backgroundColor: DOT_COLORS.bandwidth }}
-									/>
-									<span className="text-base-content/70">Bandwidth (at cost)</span>
-								</div>
-								<div className="flex items-center gap-1">
-									<strong>{fmt(financials.bandwidth)}</strong>
-									<InfoTip text="The DigitalOcean egress cost of the Usage you buy ($0.01/GiB) — a pass-through, at cost. None of it is platform profit." />
-								</div>
-							</div>
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div
-										className="w-2.5 h-2.5 rounded-sm"
-										style={{ backgroundColor: DOT_COLORS.foundation }}
-									/>
-									<span className="text-base-content/70">Anthers Foundation</span>
-								</div>
-								<div className="flex items-center gap-1">
-									<strong>{fmt(financials.foundation)}</strong>
-									<InfoTip text="The Anthers Foundation charity fee — 50% of your bandwidth cost ($0.005/GiB). Funds free access, charitable programs, and operations." />
-								</div>
-							</div>
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div
-										className="w-2.5 h-2.5 rounded-sm"
-										style={{ backgroundColor: DOT_COLORS.salesTax }}
-									/>
-									<span className="text-base-content/70">Est. sales tax</span>
-								</div>
-								<strong>{fmt(salesTax)}</strong>
-							</div>
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<div
-										className="w-2.5 h-2.5 rounded-sm"
-										style={{ backgroundColor: DOT_COLORS.cardFee }}
-									/>
-									<span className="text-base-content/70">Card fee</span>
-								</div>
-								<strong>{fmt(cardFee)}</strong>
-							</div>
-						</div>
-
-						{/* To creators emphasis */}
-						<div className="flex items-center justify-between py-1 border-t border-base-content/10">
-							<span className="text-base-content/70 font-medium">To creators</span>
-							<strong className="text-success">{fmt(financials.toCreators)}</strong>
-						</div>
-						<p className="text-[10px] text-base-content/40 mb-1">
-							Anthers keeps $0 — every dollar is bandwidth (at cost), money to creators, the Anthers
-							Foundation fee, or card + tax.
-						</p>
-
-						{/* Total */}
-						<div className="flex items-center justify-between pt-2 border-t border-base-content/20">
-							<span className="font-bold">Total (all-in)</span>
-							<div className="flex items-baseline gap-1">
-								<span
-									className="text-xl font-bold"
-									style={hasPendingLevels ? { color: PENDING_COLOR } : undefined}
-								>
-									{fmt(totalWithFees)}
-								</span>
-								<span className="text-base-content/40 text-xs">/mo</span>
-							</div>
-						</div>
-
-						{account.currentPeriodEnd && viewMode === "current" && (
-							<p className="text-xs text-base-content/40 mt-1">
-								Next charge:{" "}
-								{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
-									month: "long",
-									day: "numeric",
-									year: "numeric",
-								})}
-							</p>
-						)}
-					</div>
-				</div>
-			</div>
-			{/* end main panel */}
-
-			{/* ── Confirmation dialogs ── */}
-			<ConfirmDialog
-				open={showConfirm}
-				title="Save Changes"
-				onConfirm={handleSave}
-				onCancel={() => setShowConfirm(false)}
-				confirmLabel="Confirm & Save"
-			>
-				{usageChanged && (
-					<div className="flex justify-between py-1">
-						<span>Usage</span>
-						<span>
-							{committedUsageGiB} GiB &rarr; <strong>{effectiveUsageGiB} GiB</strong>
-						</span>
-					</div>
-				)}
-				{boostTotalChanged && (
-					<div className="flex justify-between py-1">
-						<span>Total boost</span>
-						<span>
-							{fmt(committedBoostTotal)} &rarr; <strong>{fmt(effectiveBoostTotal)}</strong>
-						</span>
-					</div>
-				)}
-				{Array.from(pendingBoosts.entries()).map(([cid, amount]) => {
-					const row = rows.find((r) => r.creatorId === cid);
-					const committedVal = committedBoostMap.get(cid) ?? 0;
-					if (amount === committedVal) return null;
-					return (
-						<div key={cid} className="flex justify-between py-1">
-							<span>Boost to @{row?.displayName || row?.username}</span>
-							<span>
-								${committedVal} &rarr; <strong>${amount}</strong>
-							</span>
-						</div>
-					);
-				})}
-				{viewMode === "current" && pendingBoosts.size > 0 && (
-					<p className="text-xs text-base-content/40 mt-2 border-t border-base-content/10 pt-2">
-						These boost changes will also be applied to next month's allocations.
-					</p>
-				)}
-			</ConfirmDialog>
-
-			<ConfirmDialog
-				open={showRevertConfirm}
-				title="Revert to Current Month"
-				onConfirm={handleRevert}
-				onCancel={() => setShowRevertConfirm(false)}
-				confirmLabel="Revert"
-				confirmClass="btn-error"
-			>
-				<p>
-					This will reset all next-month boosts to match your current month's committed values. Any
-					changes you've made here will be lost.
+			{account.currentPeriodEnd && viewMode === "current" && (
+				<p className="text-xs text-base-content/40 text-center">
+					{isCanceling ? "Plan ends" : "Next renewal"}:{" "}
+					{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
+						month: "long",
+						day: "numeric",
+						year: "numeric",
+					})}
 				</p>
-			</ConfirmDialog>
+			)}
 		</div>
 	);
 }

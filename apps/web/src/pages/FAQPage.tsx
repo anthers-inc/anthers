@@ -58,42 +58,48 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					There's no fixed subscription. You make two independent, prepaid choices, and Anthers
-					keeps nothing—every dollar you pay is itemized:
+					Anthers keeps nothing—every dollar you pay is money to creators, bandwidth at cost, or a
+					small charitable Community Share. There are two ways to pay:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Usage</strong> — open, watch-anything access, bought per GiB. Every GiB is
-						$0.03: $0.01 bandwidth at cost, $0.005 to the Anthers Foundation, and $0.015 to creators
-						through the Time Pool. Sold in 100 GiB / $3.00 packs, with your first 3 GiB free.
+						<strong>Choose a Badge plan</strong> — Free, Root ($4), Sprout ($8), Petal ($16), or
+						Blossom ($32) a month. A plan's price is money to creators (the Time Pool, shared out by
+						the time you spend with each creator's work, plus included Seeds sent straight to
+						creators you pick) and a small Community Share to the Anthers Foundation. Your Badge is
+						simply the plan you hold—a point-in-time choice, not a rolling total of past spend.
 					</li>
 					<li>
-						<strong>Boost</strong> — $1 units you direct to specific creators, Patreon-style. 100%
-						goes to the creator, with no fee and nothing skimmed for processing.
+						<strong>Sow Seeds</strong> — $1 units you direct to specific creators, Patreon-style.
+						100% goes to the creator, with nothing skimmed for a fee or processing.
 					</li>
 				</ul>
 				<p>
-					Your combined Usage + Boost spend earns a rolling <strong>Anthers Badge</strong>—Root
-					(≥$3), Sprout (≥$7), Petal (≥$15), or Blossom (≥$30)—which unlocks platform-wide gated
-					content. There's no platform cut at any level: half of every usage dollar funds creators,
-					a third is real bandwidth, a sixth is the Foundation's charity fee, and every boost dollar
-					goes straight to a creator. Card processing and sales tax are added on top and leave the
-					system entirely.
+					Streaming and downloads draw from a separate <strong>bandwidth wallet</strong>—prepaid at
+					cost ($0.01/GiB)—and every plan includes a free monthly bandwidth allowance (5 GiB on
+					Free, up to 50 GiB on Blossom). There's no platform cut at any level. Card processing and
+					sales tax are added on top and leave the system entirely.
 				</p>
 			</div>
 		),
 	},
 	{
 		category: "Subscriptions & Payments",
+		question: "What is the bandwidth wallet?",
+		answer:
+			"Streaming and downloading content moves real data, which costs real money to deliver. On Anthers that cost is decoupled from creator funding: it's a prepaid wallet you top up at cost ($0.01/GiB, DigitalOcean's rate), and every Badge plan comes with a free monthly bandwidth allowance (5 GiB on Free, then 10 / 20 / 30 / 50 GiB up the ladder) that's drawn down first. Bandwidth is neutral—none of it is a platform cut, and it never changes what a creator earns.",
+	},
+	{
+		category: "Subscriptions & Payments",
 		question: "What is the Anthers Foundation?",
 		answer:
-			"The Anthers Foundation is funded by the Anthers Foundation Fee (AFF) — 50% of the bandwidth you use, plus 50% of a creator's storage cost — never a cut of anyone's earnings. Its revenue splits three ways: 10% to operations, 40% to charitable programs, and 50% to a shared subsidy pool that pays for everyone's free access (free usage for users, free storage for creators). Counting free access as the charitable program it is, roughly 90% of the fee is charitable.",
+			"The Anthers Foundation is funded by the Community Share built into each Badge plan, plus small Foundation fees on creator storage (half of a creator's storage cost) and on direct downloads (half of that download's bandwidth) — never a cut of anyone's earnings. Its revenue splits three ways: 10% to operations, 40% to charitable programs, and 50% to a shared subsidy pool that pays for everyone's free access — free bandwidth allowances, free-user Time Pool and Seeds, and free creator storage. Counting free access as the charitable program it is, roughly 90% of the fee is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"Direct purchases (a game, an album, a one-time download) sit outside the Usage and Boost system. The creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, the Anthers Foundation Fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Anthers keeps $0 — every line is a real cost or a charitable fee, never a platform cut.",
+			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut: the creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, a small Foundation fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Anthers keeps $0 — every line is a real cost or a charitable fee, never a platform cut.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -105,19 +111,19 @@ const FAQ_ITEMS: FAQItem[] = [
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Boost gates</strong> — per-creator gates based on how much you've boosted that
-						creator this month. Creators set the thresholds in $1 increments and name the tiers
+						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've sown to
+						that creator this month. Creators set the thresholds in $1 increments and name the tiers
 						themselves.
 					</li>
 					<li>
-						<strong>Anthers gates</strong> — based on your current Anthers Badge (Root, Sprout,
-						Petal, or Blossom), earned from your combined Usage + Boost spend. These unlock the same
-						content across every creator, regardless of which one you're viewing.
+						<strong>Anthers gates</strong> — based on the Badge plan you currently hold (Root,
+						Sprout, Petal, or Blossom). These unlock the same content across every creator,
+						regardless of which one you're viewing.
 					</li>
 				</ul>
 				<p>
-					This means a creator could gate content behind "Sprout badge OR $2/mo boost to me," giving
-					users multiple paths to access.
+					This means a creator could gate content behind "Sprout plan OR $2/mo in Seeds to me,"
+					giving users multiple paths to access.
 				</p>
 			</div>
 		),
@@ -126,7 +132,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"Anthers never takes a cut. Creators are funded by the Time Pool (from users' Usage, distributed by the time people spend with them) plus 100% of every Boost dollar directed to them. On direct purchases they keep 100% of their listed price. The only thing a creator pays is their own storage beyond a free 3 GiB -- DigitalOcean's rate plus the Foundation's storage fee -- which is entirely their choice.",
+			"Anthers never takes a cut. Creators are funded by the Time Pool (from subscribers' Badge plans, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
 	},
 	{
 		category: "Creators",

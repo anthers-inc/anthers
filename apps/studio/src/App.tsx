@@ -15,7 +15,7 @@ import StudioShell from "./components/StudioShell";
 /**
  * The Studio is the all-in-one creator management surface (E50 Phase 4): the creator
  * dashboard, the content library, analytics, post/project/jam authoring, itch.io import,
- * and creator settings (payouts, platform connections, boost tiers). Consumer/account
+ * and creator settings (payouts, platform connections, Seed tiers). Consumer/account
  * surfaces (profile, account settings, library, viewing) stay on anthers.org — every
  * non-creator path bounces there via ConsumerRedirect.
  */

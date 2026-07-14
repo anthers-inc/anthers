@@ -10,6 +10,13 @@
  * and removed without affecting real data.
  */
 
+import {
+	BADGE_PLANS,
+	BANDWIDTH_PER_GIB,
+	type Badge,
+	DELIVERY_GIB_PER_HOUR,
+} from "@anthers/shared/constants";
+import { badgePriceBreakdown } from "@anthers/shared/fees";
 import { eq, like, sql } from "drizzle-orm";
 import {
 	accountCycles,
@@ -17,7 +24,6 @@ import {
 	assets,
 	attentionEvents,
 	bookmarks,
-	boostAllocations,
 	comments,
 	contentItems,
 	creatorGates,
@@ -30,6 +36,7 @@ import {
 	projects,
 	purchases,
 	ratings,
+	seedAllocations,
 	users,
 } from "./index.js";
 
@@ -67,29 +74,43 @@ function daysAgo(n: number): Date {
 
 const ACCESS_TIERS = ["free", "root", "sprout", "petal", "blossom"] as const;
 
-/** The neutral Anthers table — every tier locked. */
+/** The neutral Anthers table — every badge tier locked. */
 function lockedAnthers() {
 	return ACCESS_TIERS.map((tier) => ({ tier, allow: false, price: "0" }));
 }
 
-/** Free to everyone: the $0 boost baseline is allowed at price 0. */
+/** Free to everyone: the $0 Seed baseline row is allowed at price 0. */
 function freeAccess() {
 	return {
 		anthersAccess: lockedAnthers(),
-		boostAccess: [{ threshold: 0, allow: true, price: "0" }],
+		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 	};
 }
 
-/** Purchasable by anyone at `price` (the $0 boost baseline, priced). */
+/** Purchasable by anyone at `price` (the $0 Seed baseline row, priced). */
 function paidAccess(price: string) {
-	return { anthersAccess: lockedAnthers(), boostAccess: [{ threshold: 0, allow: true, price }] };
+	return { anthersAccess: lockedAnthers(), seedAccess: [{ threshold: 0, allow: true, price }] };
 }
 
-/** Subscriber-gated: any paid Anthers tier streams it free; everyone else is locked out. */
-function subscriberGatedAccess() {
+/** Anthers-gated: any paid Anthers badge streams it free; everyone else is locked out. */
+function anthersGatedAccess() {
 	return {
 		anthersAccess: ACCESS_TIERS.map((tier) => ({ tier, allow: tier !== "free", price: "0" })),
-		boostAccess: [{ threshold: 0, allow: false, price: "0" }],
+		seedAccess: [{ threshold: 0, allow: false, price: "0" }],
+	};
+}
+
+/**
+ * Seed-gated: locked for everyone at the $0 baseline, then unlocked (free) once the
+ * viewer has sown `threshold` dollars of Seeds to the creator this cycle.
+ */
+function seedGatedAccess(threshold: number) {
+	return {
+		anthersAccess: lockedAnthers(),
+		seedAccess: [
+			{ threshold: 0, allow: false, price: "0" },
+			{ threshold, allow: true, price: "0" },
+		],
 	};
 }
 
@@ -97,6 +118,19 @@ let publicIdSeq = 100_000_001;
 function nextPublicId(): number {
 	return publicIdSeq++;
 }
+
+// A few posts exercise the non-free access paths (everything else streams free):
+// some behind the Anthers Gate (any paid badge), some behind a Seed Gate.
+const ANTHERS_GATED_POSTS = new Set<string>([
+	"The Myth of the Neutral Platform",
+	"Signal Return Postmortem — 72 Hours of Panic",
+]);
+const SEED_GATED_POSTS = new Set<string>([
+	"How I Design Pixel Art Tilesets",
+	"How I Build Reactive Visuals with Three.js",
+]);
+/** Dollars of Seeds a viewer must sow to a creator to clear a Seed-gated post. */
+const SEED_GATE_THRESHOLD = 3;
 
 // ---------------------------------------------------------------------------
 // Seed data definitions
@@ -436,7 +470,6 @@ interface SeedUser {
 	email: string;
 	displayName: string;
 	bio: string;
-	tier: "free" | "sprout";
 	/** Usernames of creators this user follows */
 	follows: string[];
 	/** Project titles this user has purchased */
@@ -453,7 +486,6 @@ const TEST_USERS: SeedUser[] = [
 		email: "casey@seed.anthers.dev",
 		displayName: "Casey Rivera",
 		bio: "Games, podcasts, and too many open tabs.",
-		tier: "sprout",
 		follows: [
 			`${SEED_PREFIX}novapixel`,
 			`${SEED_PREFIX}sagemoreno`,
@@ -481,7 +513,6 @@ const TEST_USERS: SeedUser[] = [
 		email: "jordan@seed.anthers.dev",
 		displayName: "Jordan Park",
 		bio: "Lurker turned listener. Mostly here for the music and the horror games.",
-		tier: "free",
 		follows: [
 			`${SEED_PREFIX}fluxbeats`,
 			`${SEED_PREFIX}marisol`,
@@ -503,6 +534,38 @@ const TEST_USERS: SeedUser[] = [
 		],
 	},
 ];
+
+// ---------------------------------------------------------------------------
+// V4 accounts — chosen Badge plan per seed user
+// ---------------------------------------------------------------------------
+
+/**
+ * The V4 Badge plan each seed user has CHOSEN (point-in-time, not derived from spend),
+ * spread across all five plans so the demo exercises free/root/sprout/petal/blossom.
+ * Creators also hold an account (they consume too). `seedExtra` models Seeds purchased
+ * on top of the plan's included Seeds; `walletBalance` is the prepaid bandwidth wallet ($).
+ */
+const ACCOUNT_CONFIG: Record<string, { badge: Badge; seedExtra?: number; walletBalance: number }> =
+	{
+		// Creators — spread to cover every badge.
+		[`${SEED_PREFIX}novapixel`]: { badge: "petal", walletBalance: 6 },
+		[`${SEED_PREFIX}sagemoreno`]: { badge: "root", walletBalance: 3 },
+		[`${SEED_PREFIX}fluxbeats`]: { badge: "sprout", walletBalance: 4 },
+		[`${SEED_PREFIX}marisol`]: { badge: "root", walletBalance: 3 },
+		[`${SEED_PREFIX}hexbound`]: { badge: "free", walletBalance: 1.5 },
+		// Test subscribers.
+		[`${SEED_PREFIX}casey`]: { badge: "blossom", seedExtra: 2, walletBalance: 12 },
+		[`${SEED_PREFIX}jordan`]: { badge: "free", walletBalance: 2 },
+	};
+
+/** Resolve a user's account config, defaulting to the Free plan. */
+function accountConfig(username: string): {
+	badge: Badge;
+	seedExtra?: number;
+	walletBalance: number;
+} {
+	return ACCOUNT_CONFIG[username] ?? { badge: "free", walletBalance: 2 };
+}
 
 // ---------------------------------------------------------------------------
 // Attention event generation helpers
@@ -567,6 +630,58 @@ function buildAttentionEvents(
 	return events;
 }
 
+/**
+ * Insert a user's V4 `account` (the chosen Badge plan, held point-in-time) and its
+ * current-cycle `account_cycle` snapshot. The cycle's plan-price/Time-Pool/Community-
+ * Share are derived from the plan via `badgePriceBreakdown`; stream bandwidth beyond
+ * the plan's free monthly allowance spills to the prepaid wallet (`walletSpend`).
+ */
+async function seedAccountAndCycle(params: {
+	userId: number;
+	badge: Badge;
+	seedTotal: number;
+	walletBalance: number;
+	bandwidthUsedGiB: number;
+	cycleStart: Date;
+	cycleEnd: Date;
+	billingCycle: string;
+}) {
+	const breakdown = badgePriceBreakdown(params.badge);
+	const freeBwGiB = BADGE_PLANS[params.badge].freeBwGiB;
+	const overageGiB = Math.max(0, params.bandwidthUsedGiB - freeBwGiB);
+	const walletSpend = Math.round(overageGiB * BANDWIDTH_PER_GIB * 100) / 100;
+
+	try {
+		await db.insert(accounts).values({
+			userId: params.userId,
+			badge: params.badge,
+			seedTotal: params.seedTotal.toFixed(2),
+			walletBalance: params.walletBalance.toFixed(2),
+			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
+			isActive: true,
+			currentPeriodStart: params.cycleStart,
+			currentPeriodEnd: params.cycleEnd,
+		});
+	} catch {
+		// unique constraint on userId
+	}
+	try {
+		await db.insert(accountCycles).values({
+			userId: params.userId,
+			billingCycle: params.billingCycle,
+			badge: params.badge,
+			planPrice: breakdown.price.toFixed(2),
+			timePool: breakdown.timePool.toFixed(2),
+			seedTotal: params.seedTotal.toFixed(2),
+			communityShare: breakdown.communityShare.toFixed(2),
+			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
+			walletSpend: walletSpend.toFixed(2),
+		});
+	} catch {
+		// unique constraint on (userId, billingCycle)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Seed logic
 // ---------------------------------------------------------------------------
@@ -605,6 +720,11 @@ async function seed() {
 	const postIdByTitle: Record<string, number> = {};
 	// Base purchase price per work title (works now express pricing via access tables).
 	const priceByTitle: Record<string, string> = {};
+
+	// Current cycle bounds — shared by every account/cycle/distribution row.
+	const cycleStart = billingCycleStart();
+	const cycleEnd = billingCycleEnd();
+	const billingCycle = currentBillingCycle();
 
 	const recordPost = (postId: number, slug: string, title: string, username: string) => {
 		createdPosts.push({ postId, creatorUsername: username });
@@ -645,6 +765,25 @@ async function seed() {
 
 		createdUserIds[creator.username] = inserted.id;
 		console.log(`  Created ${creator.username} (id: ${inserted.id})`);
+	}
+
+	// ---- 1b. Creator accounts (creators choose a Badge plan as consumers too) ----
+	console.log("Creating creator accounts...");
+	for (const creator of CREATORS) {
+		const userId = createdUserIds[creator.username];
+		if (!userId) continue;
+		const cfg = accountConfig(creator.username);
+		const seedTotal = BADGE_PLANS[cfg.badge].seeds + (cfg.seedExtra ?? 0);
+		await seedAccountAndCycle({
+			userId,
+			badge: cfg.badge,
+			seedTotal,
+			walletBalance: cfg.walletBalance,
+			bandwidthUsedGiB: 0, // creators' own consumption isn't modelled in the seed
+			cycleStart,
+			cycleEnd,
+			billingCycle,
+		});
 	}
 
 	// ---- 2. Create works (download/priced posts) ----
@@ -741,8 +880,8 @@ async function seed() {
 	}
 
 	// ---- 3. Create text/stream posts ----
-	// Former stream posts stay posts: stream-only, free. A non-"public" seed visibility
-	// becomes a subscriber (tier) gate to exercise the entitlement path.
+	// Former stream posts stay posts: stream-only. Most are free; a few named posts are
+	// Anthers-gated or Seed-gated (see the sets above) to exercise the entitlement paths.
 	console.log("Creating seed posts...");
 	for (const [username, creatorPosts] of Object.entries(POSTS_BY_CREATOR)) {
 		const creatorId = createdUserIds[username];
@@ -763,7 +902,11 @@ async function seed() {
 				continue;
 			}
 
-			const gated = post.visibility && post.visibility !== "public";
+			const access = ANTHERS_GATED_POSTS.has(post.title)
+				? anthersGatedAccess()
+				: SEED_GATED_POSTS.has(post.title)
+					? seedGatedAccess(SEED_GATE_THRESHOLD)
+					: freeAccess();
 
 			const [inserted] = await db
 				.insert(posts)
@@ -777,7 +920,7 @@ async function seed() {
 					publicId: nextPublicId(),
 					streamEnabled: true,
 					downloadEnabled: false,
-					...(gated ? subscriberGatedAccess() : freeAccess()),
+					...access,
 					isPublished: true,
 					estimatedReadMinutes: post.estimatedReadMinutes ?? null,
 					createdAt: daysAgo(randomInt(1, 60)),
@@ -884,32 +1027,35 @@ async function seed() {
 	// ---- 6. Create creator gates ----
 	console.log("Creating creator gates...");
 
-	// Gate definitions per creator: mix of Anthers Tier gates and Boost gates
+	// Gate definitions per creator: a mix of Anthers Gates (unlocked by holding a badge)
+	// and Seed Gates (unlocked by sowing Seeds to the creator this cycle).
+	//   - anthers_badge → threshold is a badge RANK: root=1, sprout=2, petal=3, blossom=4.
+	//   - seed         → threshold is dollars of Seeds sown to the creator this cycle.
 	const GATES_BY_CREATOR: Record<
 		string,
-		{ gateType: string; threshold: string; label: string; description: string }[]
+		{ gateType: "anthers_badge" | "seed"; threshold: string; label: string; description: string }[]
 	> = {
 		[`${SEED_PREFIX}novapixel`]: [
 			{
 				gateType: "anthers_badge",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Root",
 				description: "Early devlogs and behind-the-scenes screenshots",
 			},
 			{
 				gateType: "anthers_badge",
-				threshold: "7.00",
+				threshold: "2",
 				label: "Sprout",
 				description: "Beta access to in-progress builds",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "2.00",
 				label: "Pixel Pal",
 				description: "Weekly pixel art WIP threads",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "5.00",
 				label: "Playtester",
 				description: "Access to private playtesting branches and feedback channels",
@@ -918,24 +1064,24 @@ async function seed() {
 		[`${SEED_PREFIX}sagemoreno`]: [
 			{
 				gateType: "anthers_badge",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Root",
 				description: "Early access to essays (one week before public)",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "2.00",
 				label: "Reader",
 				description: "Extended footnotes and research notes",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "5.00",
 				label: "Inner Circle",
 				description: "Monthly AMA threads and draft previews",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "10.00",
 				label: "Patron",
 				description: "Annual long-form piece dedicated to patron questions",
@@ -944,18 +1090,18 @@ async function seed() {
 		[`${SEED_PREFIX}fluxbeats`]: [
 			{
 				gateType: "anthers_badge",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Root",
 				description: "Stems and project files for released tracks",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "3.00",
 				label: "Listener",
 				description: "Early access to new releases (48-hour window)",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "8.00",
 				label: "Collaborator",
 				description: "Unreleased demos, remix packs, and sample libraries",
@@ -964,24 +1110,24 @@ async function seed() {
 		[`${SEED_PREFIX}marisol`]: [
 			{
 				gateType: "anthers_badge",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Root",
 				description: "High-resolution art downloads",
 			},
 			{
 				gateType: "anthers_badge",
-				threshold: "15.00",
+				threshold: "3",
 				label: "Petal",
 				description: "Exclusive print-ready illustrations",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "2.00",
 				label: "Sketch Club",
 				description: "Weekly process videos and timelapse recordings",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "6.00",
 				label: "Studio Access",
 				description: "Full PSD/Procreate files and custom brush packs",
@@ -990,24 +1136,24 @@ async function seed() {
 		[`${SEED_PREFIX}hexbound`]: [
 			{
 				gateType: "anthers_badge",
-				threshold: "7.00",
+				threshold: "2",
 				label: "Sprout",
 				description: "Director's commentary audio tracks for all games",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "3.00",
 				label: "Insider",
 				description: "Monthly design documents and narrative outlines",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "7.00",
 				label: "Patron",
 				description: "Playable prototypes and experimental builds",
 			},
 			{
-				gateType: "boost",
+				gateType: "seed",
 				threshold: "15.00",
 				label: "Producer",
 				description: "Vote on next game concept, name in credits",
@@ -1101,7 +1247,7 @@ async function seed() {
 			const amount = parseFloat(priceByTitle[title] ?? "0");
 			if (amount <= 0) continue;
 
-			// Delivery bandwidth of the post's downloadable assets → V3 digital fees.
+			// Delivery bandwidth of the post's downloadable assets → digital-purchase fees.
 			const [sz] = await db
 				.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 				.from(assets)
@@ -1138,47 +1284,30 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Account (V3: prepaid Usage + Boost; Badge derived from spend) --
-		const cycleStart = billingCycleStart();
-		const cycleEnd = billingCycleEnd();
-		// Per-cycle prepaid levels for each Badge tier (seed profiles).
-		const V3_LEVELS: Record<string, { usageGiB: number; boostTotal: number }> = {
-			free: { usageGiB: 0, boostTotal: 0 },
-			root: { usageGiB: 100, boostTotal: 0 },
-			sprout: { usageGiB: 200, boostTotal: 4 }, // $6 usage + $4 boost = $10 → Sprout; boost demonstrates directed allocations
-			petal: { usageGiB: 300, boostTotal: 6 },
-			blossom: { usageGiB: 400, boostTotal: 18 },
-		};
-		const levels = V3_LEVELS[tu.tier] ?? V3_LEVELS.free;
-		const usageSpend = Math.round(levels.usageGiB * 0.03 * 100) / 100;
-		const totalSpend = Math.round((usageSpend + levels.boostTotal) * 100) / 100;
-		try {
-			await db.insert(accounts).values({
-				userId,
-				usageGiB: levels.usageGiB,
-				boostTotal: levels.boostTotal.toFixed(2),
-				isActive: true,
-				currentPeriodStart: cycleStart,
-				currentPeriodEnd: cycleEnd,
-			});
-		} catch {
-			// unique constraint on userId
-		}
-		try {
-			await db.insert(accountCycles).values({
-				userId,
-				billingCycle: currentBillingCycle(),
-				usageGiB: levels.usageGiB,
-				boostTotal: levels.boostTotal.toFixed(2),
-				usageSpend: usageSpend.toFixed(2),
-				boostSpend: levels.boostTotal.toFixed(2),
-				totalSpend: totalSpend.toFixed(2),
-			});
-		} catch {
-			// unique constraint on (userId, billingCycle)
-		}
+		// -- Account (V4: chosen Badge plan + prepaid bandwidth wallet) --
+		const cfg = accountConfig(tu.username);
+		const plan = BADGE_PLANS[cfg.badge];
+		// Seeds this cycle = the plan's included Seeds plus any purchased on top.
+		const seedTotal = plan.seeds + (cfg.seedExtra ?? 0);
+		// Stream bandwidth consumed this cycle ≈ total watch-hours × delivery rate.
+		const totalWatchSeconds = Object.values(tu.attentionTargets).reduce(
+			(sum, t) => sum + t.seconds,
+			0,
+		);
+		const bandwidthUsedGiB =
+			Math.round((totalWatchSeconds / 3600) * DELIVERY_GIB_PER_HOUR * 100) / 100;
+		await seedAccountAndCycle({
+			userId,
+			badge: cfg.badge,
+			seedTotal,
+			walletBalance: cfg.walletBalance,
+			bandwidthUsedGiB,
+			cycleStart,
+			cycleEnd,
+			billingCycle,
+		});
 		console.log(
-			`    account: ${tu.tier} (usage ${levels.usageGiB} GiB, boost $${levels.boostTotal})`,
+			`    account: ${cfg.badge} (seeds $${seedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
 		);
 
 		// -- Attention events --
@@ -1197,26 +1326,25 @@ async function seed() {
 		}
 		console.log(`    ${totalEvents} attention events`);
 
-		// -- Pool distributions (users with usage/boost only) --
-		if (levels.usageGiB > 0 || levels.boostTotal > 0) {
-			// V3: Time Pool = usageGiB × $0.015 (funded per-GiB), distributed by watch-time.
-			const timePool = Math.round(levels.usageGiB * 0.015 * 100) / 100;
-			const boostTotal = levels.boostTotal;
-
+		// -- Pool distributions + directed Seeds --
+		// V4: the Time Pool is the plan's fixed dollar budget, distributed to watched
+		// creators by watch-time; Seeds are the user's per-cycle Seed dollars, directed
+		// to creators in whole-$ units (the undirected remainder falls back to watch-time).
+		const timePool = plan.timePool;
+		if (timePool > 0 || seedTotal > 0) {
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
-			const cycle = currentBillingCycle();
 
-			// Directed boost in whole-$ units by watch-time; the undirected remainder by time.
+			// Directed Seeds in whole-$ units by watch-time; the undirected remainder by time.
 			const directed = new Map<string, number>();
 			let directedTotal = 0;
 			for (const [creatorUsername, target] of entries) {
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
-				const amt = Math.floor(boostTotal * proportion); // $1 increments
+				const amt = Math.floor(seedTotal * proportion); // $1 increments
 				directed.set(creatorUsername, amt);
 				directedTotal += amt;
 			}
-			const undirected = boostTotal - directedTotal;
+			const undirected = seedTotal - directedTotal;
 
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
@@ -1224,16 +1352,16 @@ async function seed() {
 
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
 				const poolAmt = Math.round(timePool * proportion * 100) / 100;
-				const boostAmt =
+				const seedAmt =
 					(directed.get(creatorUsername) ?? 0) + Math.round(undirected * proportion * 100) / 100;
 
 				try {
 					await db.insert(poolDistributions).values({
 						subscriberId: userId,
 						creatorId,
-						billingCycle: cycle,
+						billingCycle,
 						poolAmount: poolAmt.toFixed(2),
-						boostAmount: boostAmt.toFixed(2),
+						seedAmount: seedAmt.toFixed(2),
 						attentionSeconds: target.seconds,
 					});
 				} catch {
@@ -1241,7 +1369,7 @@ async function seed() {
 				}
 			}
 
-			// -- Boost allocations (directed whole-$ boosts) --
+			// -- Seed allocations (directed whole-$ Seeds) --
 			let allocationCount = 0;
 			for (const [creatorUsername] of entries) {
 				const cId = createdUserIds[creatorUsername];
@@ -1250,11 +1378,11 @@ async function seed() {
 				if (amt <= 0) continue;
 
 				try {
-					await db.insert(boostAllocations).values({
+					await db.insert(seedAllocations).values({
 						userId,
 						creatorId: cId,
 						amount: amt.toFixed(2),
-						billingCycle: cycle,
+						billingCycle,
 						isLocked: false,
 					});
 					allocationCount++;
@@ -1262,7 +1390,7 @@ async function seed() {
 					// unique constraint
 				}
 			}
-			console.log(`    ${allocationCount} boost allocations`);
+			console.log(`    ${allocationCount} seed allocations`);
 			console.log(`    ${entries.length} pool distributions`);
 		}
 
@@ -1312,14 +1440,17 @@ async function seed() {
 			Object.values(POSTS_BY_CREATOR).flat().length
 		} posts (works + stream), grouped into collections`,
 	);
+	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).badge !== "free");
 	console.log(
-		`  ${TEST_USERS.length} test users (${TEST_USERS.filter((u) => u.tier !== "free").length} paid, ${TEST_USERS.filter((u) => u.tier === "free").length} free)`,
+		`  ${TEST_USERS.length} test users (${paidTestUsers.length} paid, ${TEST_USERS.length - paidTestUsers.length} free)`,
 	);
 	console.log(`\n  All seed accounts have password: "${SEED_PASSWORD}"`);
 	console.log(`  All seed usernames start with "${SEED_PREFIX}" for easy identification.`);
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
-		console.log(`    ${tu.username} — ${tu.tier} profile — ${tu.displayName}`);
+		console.log(
+			`    ${tu.username} — ${accountConfig(tu.username).badge} plan — ${tu.displayName}`,
+		);
 	}
 	for (const c of CREATORS) {
 		console.log(`    ${c.username} — creator — ${c.displayName}`);

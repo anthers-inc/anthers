@@ -210,13 +210,13 @@ export default function SettingsPage() {
 			{/* Bluesky / ATProto */}
 			<BlueskySection />
 
-			{/* Creator tools live in the Studio (payouts, connections, boost tiers). */}
+			{/* Creator tools live in the Studio (payouts, connections, Seed tiers). */}
 			{isCreator && (
 				<div className="card bg-base-200 mt-6">
 					<div className="card-body">
 						<h3 className="card-title text-lg">Creator tools</h3>
 						<p className="text-sm text-base-content/60">
-							Manage payouts, platform connections, and boost tiers in your Studio.
+							Manage payouts, platform connections, and Seed tiers in your Studio.
 						</p>
 						<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
 							Open Studio settings

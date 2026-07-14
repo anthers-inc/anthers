@@ -25,16 +25,13 @@ const serif = { fontFamily: FONTS.fraunces };
 // Constants — from Anthers Infrastructure Cheat Sheet
 // ---------------------------------------------------------------------------
 
+// At-cost infrastructure rates (DigitalOcean retail). These are real pass-through
+// costs, not a funding lever — Anthers adds no markup on any of them.
 const BASE_COSTS = {
 	storageCostPerGb: 0.02,
 	deliveryCostPerGb: 0.01,
 	computeCostPerGb: 0.005,
 };
-
-// V3 Time Pool rate — $0.015 of every Usage GiB funds creators, distributed by
-// watch-time (spec §2). Usage is $0.03/GiB all-in: $0.01 bandwidth + $0.005
-// Foundation fee (AFF) + $0.015 Time Pool.
-const USAGE_TIME_POOL_PER_GIB = 0.015;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -498,16 +495,11 @@ function UnitCostCalculator() {
 							<span className="font-semibold text-base-content">
 								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
 							</span>{" "}
-							— a bandwidth pass-through the viewer's Usage covers at cost. That same Usage funds{" "}
-							<span className="font-semibold text-success">
-								{fmtCost(
-									(VIDEO_QUALITIES[videoQualityIdx].mbPerMin / 1024) * USAGE_TIME_POOL_PER_GIB,
-								)}
-								/min
-							</span>{" "}
-							to the Time Pool, paid to creators and distributed by watch-time. Usage is priced at
-							$0.03/GiB all-in — $0.01 bandwidth + $0.005 Foundation fee + $0.015 Time Pool — with
-							the first 3 GiB free.
+							— a bandwidth pass-through covered at cost by the viewer's separate bandwidth wallet
+							($0.01/GiB, after a free monthly allowance). Creator earnings are{" "}
+							<span className="font-semibold text-success">decoupled</span> from this: they come
+							from viewers' Badge-plan Time Pool, distributed by watch-time (equal-time), plus
+							directed Seeds. Anthers takes 0% — no per-GiB markup, no platform cut.
 						</p>
 					</div>
 				</div>
@@ -724,8 +716,8 @@ function ReferenceCreatorProfiles() {
 				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
 				fee. Anthers takes 0% — a zero-cut platform where only real infrastructure costs (shown
 				below) are deducted, at cost with no markup. The{" "}
-				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by the
-				usage fee, covers free access across the platform.
+				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by
+				users' Community Share, covers free access across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -833,15 +825,17 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
-						Anthers Sprout user: 200 GiB Usage + $1 Boost = $7 combined spend. The Foundation fee is
-						the usage AFF — 50% of bandwidth ($0.005/GiB) — not a flat 8%. Time Pool ($0.015/GiB) is
-						paid to creators and distributed by watch-time.
+						Anthers Sprout plan: $8/mo → $4 Time Pool + 2 Seeds ($2) to creators, with a $2
+						Community Share funding the Foundation. Time Pool is distributed to creators by
+						watch-time; Seeds go 100% to the chosen creator. Bandwidth is a separate at-cost wallet,
+						never a platform cut.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
 					<p>
-						The Anthers Foundation, funded by the AFF, covers free access — 3 GiB free Usage per
-						viewer and 3 GiB free storage per creator — from a shared subsidy pool.
+						The Anthers Foundation, funded by users' Community Share, covers free access — a free
+						monthly bandwidth allowance per viewer (5–50 GiB by plan) and 50 GiB free storage per
+						creator — from a shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>

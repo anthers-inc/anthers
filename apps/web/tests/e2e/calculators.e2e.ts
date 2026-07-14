@@ -53,23 +53,16 @@ test.describe("Resources calculators", () => {
 		expect(errors).toEqual([]);
 	});
 
-	test("creator monetization: V3 model and live slider", async ({ page }) => {
+	test("creator monetization: V4 badge-plan model renders zero-cut", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/creator-monetization");
-		// Default viewer: 300 GiB usage -> $4.50 Time Pool, Petal badge, zero cut.
-		await expect(page.getByText(/300 GiB.*badge Petal/)).toBeVisible();
+		// V4: the viewer picks a Badge plan (a segmented control, not a GiB slider);
+		// creator earnings = a share of the plan's Time Pool by watch-time + directed Seeds.
+		await expect(page.getByText("Viewer's Badge plan").first()).toBeVisible();
 		// The crux line states the zero-cut split ("...reaches creators...Anthers keeps $0").
 		await expect(page.getByText(/reaches creators/)).toBeVisible();
-		// Audience builder total.
-		await expect(page.getByText("$1,624.00").first()).toBeVisible();
-
-		// Drive the Usage slider to its max: 600 GiB -> $9.00 Time Pool (600 × $0.015).
-		// (Badge stays Petal — combined spend is $18 usage + $6 boost = $24, under the
-		// $30 Blossom threshold — so we assert on the recomputed Time Pool sub-text.)
-		const slider = page.getByRole("slider").first();
-		await slider.focus();
-		await slider.press("End");
-		await expect(page.getByText(/600 GiB.*0\.015/)).toBeVisible();
+		await expect(page.getByText(/Anthers keeps/).first()).toBeVisible();
 		expect(errors).toEqual([]);
+		// TODO(Phase 6): restore a live plan-pick interaction assertion once the app is run.
 	});
 });

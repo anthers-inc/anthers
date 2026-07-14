@@ -183,9 +183,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						},
 						{
 							id: "c-boost-income",
-							title: "Boost Pool Income",
+							title: "Seed Income",
 							description:
-								"Additional subscriber-directed funds via the Boost Pool, with manual or automatic allocation.",
+								"Additional subscriber-directed Seeds—100% to you—with manual or automatic allocation.",
 							status: "planned",
 							startQ: 1,
 							endQ: 3,
@@ -194,7 +194,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-gated-content",
 							title: "Gated Content",
 							description:
-								"Set boost thresholds to unlock exclusive content. Subscribers who boost enough get access.",
+								"Set Seed thresholds to unlock exclusive content. Subscribers who sow enough Seeds get access.",
 							status: "planned",
 							startQ: 2,
 							endQ: 3,
@@ -341,18 +341,18 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 					items: [
 						{
 							id: "u-sub-tiers",
-							title: "Usage, Boost & Badges",
+							title: "Badge Plans & Seeds",
 							description:
-								"Two independent prepaid choices—Usage (open per-GiB access) and Boost ($1 units to specific creators)—that earn a rolling Anthers Badge (Root, Sprout, Petal, Blossom) from combined spend. Zero platform cut: every dollar is bandwidth at cost, money to creators, or the Anthers Foundation fee.",
+								"Choose a Badge plan (Free, Root, Sprout, Petal, Blossom); its whole-dollar price funds creators through the Time Pool (shared by watch-time) and included Seeds (100% to creators you pick), and comes with a bandwidth-wallet allowance. Zero platform cut: every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
 						},
 						{
 							id: "u-boost-alloc",
-							title: "Boost Allocation",
+							title: "Seed Allocation",
 							description:
-								"Manually allocate Boost Pool funds to your favorite creators with sliders. Unlocks gated content.",
+								"Sow Seeds to your favorite creators with sliders. Unlocks gated content.",
 							status: "planned",
 							startQ: 1,
 							endQ: 2,

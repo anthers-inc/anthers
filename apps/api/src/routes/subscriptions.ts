@@ -551,7 +551,6 @@ const subscriptionRoutes = new Hono()
 			const cycle = requestedCycle ?? currentCycle;
 
 			// Only allow editing current or next month
-			const cycleDate = new Date(`${cycle}T00:00:00`);
 			const currentDate = new Date(`${currentCycle}T00:00:00`);
 			const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
 			const nextCycle = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;

@@ -53,7 +53,7 @@ const CALCULATORS: ResourceCard[] = [
 		to: "/resources/creator-monetization",
 		title: "Creator Monetization Calculator",
 		blurb:
-			"How watch-time becomes revenue under the V3 Time Pool + Boost model — from one viewer up to a creator's monthly earnings.",
+			"How watch-time becomes revenue under the Time Pool + Seed model — from one viewer up to a creator's monthly earnings.",
 		tag: "Economics",
 		icon: BanknotesIcon,
 	},
@@ -87,7 +87,7 @@ const RELATED: ResourceCard[] = [
 	{
 		to: "/demo-user",
 		title: "See where your money goes",
-		blurb: "A viewer's-eye view of Usage, Boost, the Time Pool, and the zero-cut split.",
+		blurb: "A viewer's-eye view of Badge plans, Seeds, the Time Pool, and the zero-cut split.",
 		tag: "Explainer",
 		icon: WalletIcon,
 	},

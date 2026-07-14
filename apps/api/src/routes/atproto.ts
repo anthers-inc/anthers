@@ -158,7 +158,6 @@ const atprotoRoutes = new Hono()
 
 		const code = c.req.query("code");
 		const state = c.req.query("state");
-		const iss = c.req.query("iss");
 
 		if (!code || !state) {
 			return c.redirect(`${callbackUrl}?error=missing_params`);

@@ -148,7 +148,7 @@ const paymentRoutes = new Hono()
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		// "Owns" = can consume it now: creator, free, a prior purchase, or an
-		// entitlement grant (subscriber/boost). resolveAccess unifies all four.
+		// entitlement grant (subscriber/Seed). resolveAccess unifies all four.
 		const access = await resolveAccess(post, user.id);
 		return c.json({ owns: access.canAccess });
 	})

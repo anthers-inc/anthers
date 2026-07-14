@@ -2,7 +2,7 @@
 /**
  * New / Edit Post builder. Four sections: Basics (title + body + timeline + project),
  * Content (an ordered list of text blocks + references to library content items),
- * Access (stream/download + the Boost and Anthers access tables), and Publish
+ * Access (stream/download + the Seed and Anthers access tables), and Publish
  * (pin + draft/publish).
  *
  * The post body is the always-visible rich text shown to anyone with visibility —
@@ -15,11 +15,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import RichTextEditor from "../components/editor/RichTextEditor";
 import AccessTables, {
 	type AnthersRowDraft,
-	type BoostRowDraft,
 	buildAnthersRows,
-	buildBoostRows,
+	buildSeedRows,
+	type SeedRowDraft,
 	serializeAnthersRows,
-	serializeBoostRows,
+	serializeSeedRows,
 } from "../components/post/AccessTables";
 import PostContentEditor, {
 	draftFromPostEntry,
@@ -67,7 +67,7 @@ export default function PostFormPage() {
 	// ── Access ──
 	const [streamEnabled, setStreamEnabled] = useState(true);
 	const [downloadEnabled, setDownloadEnabled] = useState(false);
-	const [boostRows, setBoostRows] = useState<BoostRowDraft[]>([]);
+	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>([]);
 	const [anthersRows, setAnthersRows] = useState<AnthersRowDraft[]>([]);
 
 	// ── Publish ──
@@ -90,16 +90,16 @@ export default function PostFormPage() {
 		}
 	}, [forceDownloadOnly]);
 
-	// Initial load: boost gates (for the Boost Access rows) + the post being edited.
+	// Initial load: Seed gates (for the Seed Access rows) + the post being edited.
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			let boostGates: CreatorGate[] = [];
+			let seedGates: CreatorGate[] = [];
 			try {
 				const gatesRes = await client.api.subscriptions.gates.$get();
 				if (gatesRes.ok) {
 					const data = (await gatesRes.json()) as { gates: CreatorGate[] };
-					boostGates = (data.gates ?? []).filter((g) => g.gateType === "boost");
+					seedGates = (data.gates ?? []).filter((g) => g.gateType === "seed");
 				}
 			} catch {
 				// non-creator or no gates — fall through with an empty ladder
@@ -123,13 +123,13 @@ export default function PostFormPage() {
 					setDownloadEnabled(post.downloadEnabled);
 					setIsPinned(post.isPinned);
 					setEntries((post.contents ?? []).map(draftFromPostEntry));
-					setBoostRows(buildBoostRows(boostGates, post.boostAccess));
+					setSeedRows(buildSeedRows(seedGates, post.seedAccess));
 					setAnthersRows(buildAnthersRows(post.anthersAccess));
 				} catch {
 					if (!cancelled) setError("Failed to load post.");
 				}
 			} else {
-				setBoostRows(buildBoostRows(boostGates, null));
+				setSeedRows(buildSeedRows(seedGates, null));
 				setAnthersRows(buildAnthersRows(null));
 			}
 			if (!cancelled) setLoading(false);
@@ -171,7 +171,7 @@ export default function PostFormPage() {
 			streamEnabled: stream,
 			downloadEnabled: download,
 			anthersAccess: serializeAnthersRows(anthersRows),
-			boostAccess: serializeBoostRows(boostRows),
+			seedAccess: serializeSeedRows(seedRows),
 			showOnTimeline,
 			isPinned,
 			tags: parseTags(body),
@@ -348,9 +348,9 @@ export default function PostFormPage() {
 					</div>
 
 					<AccessTables
-						boostRows={boostRows}
+						seedRows={seedRows}
 						anthersRows={anthersRows}
-						onBoostChange={setBoostRows}
+						onSeedChange={setSeedRows}
 						onAnthersChange={setAnthersRows}
 					/>
 				</section>

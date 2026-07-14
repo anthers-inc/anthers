@@ -5,14 +5,14 @@
  * price "0"). A price of $0 with Allow checked = free at that level; a positive
  * price is a minimum (itch.io style — buyers may pay more).
  */
-import type { AnthersAccessRow, BoostAccessRow, CreatorGate } from "../../lib/types";
+import type { AnthersAccessRow, CreatorGate, SeedAccessRow } from "../../lib/types";
 
 // ─── Row drafts ───
 
 /** The fixed Anthers Badge tiers, matching the API's tier enum. */
 export type AnthersTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
-export interface BoostRowDraft {
+export interface SeedRowDraft {
 	threshold: number;
 	label: string;
 	allow: boolean;
@@ -43,21 +43,21 @@ export function normalizeMoney(v: string): string {
 	return (Math.round(n * 100) / 100).toString();
 }
 
-/** Boost rows = fixed $0 baseline + one row per boost gate (sorted by threshold). */
-export function buildBoostRows(
+/** Seed rows = fixed $0 baseline + one row per Seed gate (sorted by threshold). */
+export function buildSeedRows(
 	gates: CreatorGate[],
-	existing?: BoostAccessRow[] | null,
-): BoostRowDraft[] {
-	const byThreshold = new Map<number, BoostAccessRow>();
+	existing?: SeedAccessRow[] | null,
+): SeedRowDraft[] {
+	const byThreshold = new Map<number, SeedAccessRow>();
 	for (const r of existing ?? []) byThreshold.set(r.threshold, r);
 
 	const base = byThreshold.get(0);
-	const rows: BoostRowDraft[] = [
+	const rows: SeedRowDraft[] = [
 		{ threshold: 0, label: "Everyone", allow: base?.allow ?? false, price: base?.price ?? "0" },
 	];
 
 	const rungs = gates
-		.filter((g) => g.gateType === "boost")
+		.filter((g) => g.gateType === "seed")
 		.map((g) => ({ threshold: Number(g.threshold), label: g.label }))
 		.sort((a, b) => a.threshold - b.threshold);
 
@@ -83,7 +83,7 @@ export function buildAnthersRows(existing?: AnthersAccessRow[] | null): AnthersR
 	});
 }
 
-export function serializeBoostRows(rows: BoostRowDraft[]): BoostAccessRow[] {
+export function serializeSeedRows(rows: SeedRowDraft[]): SeedAccessRow[] {
 	return rows.map((r) => ({
 		threshold: r.threshold,
 		allow: r.allow,
@@ -100,20 +100,20 @@ export function serializeAnthersRows(
 // ─── Component ───
 
 interface AccessTablesProps {
-	boostRows: BoostRowDraft[];
+	seedRows: SeedRowDraft[];
 	anthersRows: AnthersRowDraft[];
-	onBoostChange: (rows: BoostRowDraft[]) => void;
+	onSeedChange: (rows: SeedRowDraft[]) => void;
 	onAnthersChange: (rows: AnthersRowDraft[]) => void;
 }
 
 export default function AccessTables({
-	boostRows,
+	seedRows,
 	anthersRows,
-	onBoostChange,
+	onSeedChange,
 	onAnthersChange,
 }: AccessTablesProps) {
-	const patchBoost = (index: number, changes: Partial<BoostRowDraft>) =>
-		onBoostChange(boostRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
+	const patchSeed = (index: number, changes: Partial<SeedRowDraft>) =>
+		onSeedChange(seedRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 	const patchAnthers = (index: number, changes: Partial<AnthersRowDraft>) =>
 		onAnthersChange(anthersRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 
@@ -124,20 +124,20 @@ export default function AccessTables({
 				Allow checked is free at that level; a positive price is a minimum — buyers may pay more.
 			</p>
 
-			{/* Boost Access */}
+			{/* Seed Access */}
 			<div>
-				<h3 className="font-semibold text-sm mb-2">Boost Access</h3>
+				<h3 className="font-semibold text-sm mb-2">Seed Access</h3>
 				<div className="overflow-x-auto">
 					<table className="table table-sm">
 						<thead>
 							<tr>
-								<th>Boost level</th>
+								<th>Seed level</th>
 								<th className="w-20 text-center">Allow</th>
 								<th className="w-32">Price ($)</th>
 							</tr>
 						</thead>
 						<tbody>
-							{boostRows.map((row, i) => (
+							{seedRows.map((row, i) => (
 								<tr key={row.threshold}>
 									<td>
 										<span className="font-medium">{row.label}</span>{" "}
@@ -150,7 +150,7 @@ export default function AccessTables({
 											type="checkbox"
 											className="checkbox checkbox-sm checkbox-primary"
 											checked={row.allow}
-											onChange={(e) => patchBoost(i, { allow: e.target.checked })}
+											onChange={(e) => patchSeed(i, { allow: e.target.checked })}
 										/>
 									</td>
 									<td>
@@ -160,7 +160,7 @@ export default function AccessTables({
 											value={row.price}
 											min="0"
 											step="0.01"
-											onChange={(e) => patchBoost(i, { price: e.target.value })}
+											onChange={(e) => patchSeed(i, { price: e.target.value })}
 										/>
 									</td>
 								</tr>
@@ -168,9 +168,9 @@ export default function AccessTables({
 						</tbody>
 					</table>
 				</div>
-				{boostRows.length === 1 && (
+				{seedRows.length === 1 && (
 					<p className="text-xs text-base-content/50 mt-1">
-						Add boost rungs in Settings → Boost Ladder to gate by boost level.
+						Add Seed rungs in Settings → Seed Ladder to gate by Seeds sown.
 					</p>
 				)}
 			</div>

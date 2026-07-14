@@ -304,10 +304,10 @@ export default function AboutPage() {
 						<div className="h-full border-l-2 border-primary/30 pl-6">
 							<h3 className="mb-3 text-sm uppercase tracking-wider text-primary">For Creators</h3>
 							<p className="leading-relaxed text-base-content/65">
-								Every dollar a user spends is one of three things: bandwidth at cost, money to
-								creators, or the Anthers Foundation fee. There is no platform margin—Anthers keeps
-								nothing. Creators keep 100% of every Boost and every direct purchase, while the
-								shared Time Pool pays out to creators by watch-time.
+								Anthers takes no cut. Creators keep 100% of every Seed and every direct purchase,
+								and the shared Time Pool pays out to creators by watch-time. Every dollar a user
+								spends is money to creators, bandwidth at cost, or the Community Share to the
+								Anthers Foundation—there is no platform margin.
 							</p>
 						</div>
 					</Reveal>
@@ -332,10 +332,10 @@ export default function AboutPage() {
 							The Anthers Foundation
 						</h3>
 						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-							The Foundation is the operational heart of Anthers's mission, funded by the Anthers
-							Foundation fee—50% of the bandwidth each stream or download uses, plus 50% of creator
-							storage. Around 90% of that fee is charitable: it funds free access for everyone, plus
-							infrastructure equity, education, creation grants, and emergency assistance.
+							The Foundation is the operational heart of Anthers's mission, funded by the Community
+							Share built into each Badge plan, plus small fees on creator storage and on direct
+							downloads. Around 90% of that fee is charitable: it funds free access for everyone,
+							plus infrastructure equity, education, creation grants, and emergency assistance.
 						</p>
 					</Reveal>
 					<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -398,7 +398,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Usage, Boost, and direct purchases. Every dollar is bandwidth at cost, money to creators, or the Anthers Foundation fee—Anthers keeps no margin of its own. The fee itself is mostly charitable, funding free access and the Foundation's programs.",
+								text: "Money enters through Badge plans, Seeds, and direct purchases. Every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation—Anthers keeps no margin of its own. The fee itself is mostly charitable, funding free access and the Foundation's programs.",
 							},
 							{
 								num: "04",
