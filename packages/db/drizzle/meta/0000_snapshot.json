@@ -1,5 +1,5 @@
 {
-  "id": "24563b34-12ce-40ac-93cd-33769b31e47d",
+  "id": "7ced6396-106f-4849-8264-eed6f7535654",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1092,6 +1092,12 @@
           "notNull": false,
           "default": false
         },
+        "theme_preference": {
+          "name": "theme_preference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "atproto_did": {
           "name": "atproto_did",
           "type": "text",
@@ -1244,36 +1250,50 @@
           "primaryKey": false,
           "notNull": true
         },
-        "usage_gib": {
-          "name": "usage_gib",
-          "type": "integer",
+        "badge": {
+          "name": "badge",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "'free'"
         },
-        "boost_total": {
-          "name": "boost_total",
+        "plan_price": {
+          "name": "plan_price",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
           "default": "'0.00'"
         },
-        "usage_spend": {
-          "name": "usage_spend",
+        "time_pool": {
+          "name": "time_pool",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
           "default": "'0.00'"
         },
-        "boost_spend": {
-          "name": "boost_spend",
+        "seed_total": {
+          "name": "seed_total",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
           "default": "'0.00'"
         },
-        "total_spend": {
-          "name": "total_spend",
+        "community_share": {
+          "name": "community_share",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0.00'"
+        },
+        "bandwidth_used_gib": {
+          "name": "bandwidth_used_gib",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "wallet_spend": {
+          "name": "wallet_spend",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
@@ -1354,26 +1374,54 @@
           "primaryKey": false,
           "notNull": true
         },
-        "usage_gib": {
-          "name": "usage_gib",
-          "type": "integer",
+        "badge": {
+          "name": "badge",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "'free'"
         },
-        "boost_total": {
-          "name": "boost_total",
+        "wallet_balance": {
+          "name": "wallet_balance",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
           "default": "'0.00'"
         },
-        "redownload_balance": {
-          "name": "redownload_balance",
+        "bandwidth_used_gib": {
+          "name": "bandwidth_used_gib",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "seed_total": {
+          "name": "seed_total",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
           "default": "'0.00'"
+        },
+        "auto_topup_enabled": {
+          "name": "auto_topup_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "auto_topup_amount": {
+          "name": "auto_topup_amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'5.00'"
+        },
+        "auto_topup_threshold": {
+          "name": "auto_topup_threshold",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'2.00'"
         },
         "is_self_hosting": {
           "name": "is_self_hosting",
@@ -1599,139 +1647,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.boost_allocations": {
-      "name": "boost_allocations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "creator_id": {
-          "name": "creator_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount": {
-          "name": "amount",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "billing_cycle": {
-          "name": "billing_cycle",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "is_locked": {
-          "name": "is_locked",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "atproto_uri": {
-          "name": "atproto_uri",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_boost_user_creator_cycle": {
-          "name": "uq_boost_user_creator_cycle",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "creator_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "billing_cycle",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "boost_allocations_user_id_users_id_fk": {
-          "name": "boost_allocations_user_id_users_id_fk",
-          "tableFrom": "boost_allocations",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "boost_allocations_creator_id_users_id_fk": {
-          "name": "boost_allocations_creator_id_users_id_fk",
-          "tableFrom": "boost_allocations",
-          "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "boost_allocations_atproto_uri_unique": {
-          "name": "boost_allocations_atproto_uri_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "atproto_uri"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.creator_gates": {
       "name": "creator_gates",
       "schema": "",
@@ -1753,7 +1668,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'boost'"
+          "default": "'seed'"
         },
         "threshold": {
           "name": "threshold",
@@ -1875,8 +1790,8 @@
           "notNull": true,
           "default": "'0.00'"
         },
-        "boost_amount": {
-          "name": "boost_amount",
+        "seed_amount": {
+          "name": "seed_amount",
           "type": "numeric",
           "primaryKey": false,
           "notNull": true,
@@ -1967,8 +1882,141 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.redownload_ledger": {
-      "name": "redownload_ledger",
+    "public.seed_allocations": {
+      "name": "seed_allocations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creator_id": {
+          "name": "creator_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "billing_cycle": {
+          "name": "billing_cycle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_locked": {
+          "name": "is_locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "atproto_uri": {
+          "name": "atproto_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_seed_user_creator_cycle": {
+          "name": "uq_seed_user_creator_cycle",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "creator_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "billing_cycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "seed_allocations_user_id_users_id_fk": {
+          "name": "seed_allocations_user_id_users_id_fk",
+          "tableFrom": "seed_allocations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "seed_allocations_creator_id_users_id_fk": {
+          "name": "seed_allocations_creator_id_users_id_fk",
+          "tableFrom": "seed_allocations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "seed_allocations_atproto_uri_unique": {
+          "name": "seed_allocations_atproto_uri_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "atproto_uri"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.wallet_ledger": {
+      "name": "wallet_ledger",
       "schema": "",
       "columns": {
         "id": {
@@ -1995,12 +2043,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "post_id": {
-          "name": "post_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2010,8 +2052,8 @@
         }
       },
       "indexes": {
-        "idx_redownload_user_date": {
-          "name": "idx_redownload_user_date",
+        "idx_wallet_user_date": {
+          "name": "idx_wallet_user_date",
           "columns": [
             {
               "expression": "user_id",
@@ -2033,9 +2075,9 @@
         }
       },
       "foreignKeys": {
-        "redownload_ledger_user_id_users_id_fk": {
-          "name": "redownload_ledger_user_id_users_id_fk",
-          "tableFrom": "redownload_ledger",
+        "wallet_ledger_user_id_users_id_fk": {
+          "name": "wallet_ledger_user_id_users_id_fk",
+          "tableFrom": "wallet_ledger",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -2044,19 +2086,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "redownload_ledger_post_id_posts_id_fk": {
-          "name": "redownload_ledger_post_id_posts_id_fk",
-          "tableFrom": "redownload_ledger",
-          "tableTo": "posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -3182,8 +3211,8 @@
           "notNull": false,
           "default": "'[]'::jsonb"
         },
-        "boost_access": {
-          "name": "boost_access",
+        "seed_access": {
+          "name": "seed_access",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,

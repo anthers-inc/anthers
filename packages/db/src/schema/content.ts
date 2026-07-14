@@ -24,11 +24,11 @@ export interface AnthersAccessRow {
 }
 
 /**
- * A row in a post's **Boost Access** table — the $0 "everyone" baseline plus the
- * creator's boost-ladder rungs. `threshold` is dollars of boost to the creator.
+ * A row in a post's **Seed Access** table — the $0 "everyone" baseline plus the
+ * creator's Seed-ladder rungs. `threshold` is dollars of Seeds sown to the creator.
  */
-export interface BoostAccessRow {
-	threshold: number; // dollars of boost to this creator this cycle; 0 = everyone
+export interface SeedAccessRow {
+	threshold: number; // dollars of Seeds sown to this creator this cycle; 0 = everyone
 	allow: boolean;
 	price: string;
 }
@@ -70,7 +70,7 @@ export const posts = pgTable(
 		// ── Access tables (OR-gated — see services/access.ts) ──
 		// Default = "free but fully locked": every row allow=false, price "0".
 		anthersAccess: jsonb("anthers_access").$type<AnthersAccessRow[]>().default([]),
-		boostAccess: jsonb("boost_access").$type<BoostAccessRow[]>().default([]),
+		seedAccess: jsonb("seed_access").$type<SeedAccessRow[]>().default([]),
 
 		// ── Presentation ──
 		showOnTimeline: boolean("show_on_timeline").notNull().default(true),

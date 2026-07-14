@@ -130,6 +130,7 @@ CREATE TABLE "users" (
 	"website_url" text DEFAULT '',
 	"location" text DEFAULT '',
 	"email_verified" boolean DEFAULT false,
+	"theme_preference" text,
 	"atproto_did" text,
 	"atproto_handle" text DEFAULT '',
 	"atproto_pds_url" text DEFAULT '',
@@ -153,11 +154,13 @@ CREATE TABLE "account_cycles" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"billing_cycle" text NOT NULL,
-	"usage_gib" integer DEFAULT 0 NOT NULL,
-	"boost_total" numeric DEFAULT '0.00' NOT NULL,
-	"usage_spend" numeric DEFAULT '0.00' NOT NULL,
-	"boost_spend" numeric DEFAULT '0.00' NOT NULL,
-	"total_spend" numeric DEFAULT '0.00' NOT NULL,
+	"badge" text DEFAULT 'free' NOT NULL,
+	"plan_price" numeric DEFAULT '0.00' NOT NULL,
+	"time_pool" numeric DEFAULT '0.00' NOT NULL,
+	"seed_total" numeric DEFAULT '0.00' NOT NULL,
+	"community_share" numeric DEFAULT '0.00' NOT NULL,
+	"bandwidth_used_gib" numeric DEFAULT '0' NOT NULL,
+	"wallet_spend" numeric DEFAULT '0.00' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -165,9 +168,13 @@ CREATE TABLE "account_cycles" (
 CREATE TABLE "accounts" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
-	"usage_gib" integer DEFAULT 0 NOT NULL,
-	"boost_total" numeric DEFAULT '0.00' NOT NULL,
-	"redownload_balance" numeric DEFAULT '0.00' NOT NULL,
+	"badge" text DEFAULT 'free' NOT NULL,
+	"wallet_balance" numeric DEFAULT '0.00' NOT NULL,
+	"bandwidth_used_gib" numeric DEFAULT '0' NOT NULL,
+	"seed_total" numeric DEFAULT '0.00' NOT NULL,
+	"auto_topup_enabled" boolean DEFAULT false NOT NULL,
+	"auto_topup_amount" numeric DEFAULT '5.00' NOT NULL,
+	"auto_topup_threshold" numeric DEFAULT '2.00' NOT NULL,
 	"is_self_hosting" boolean DEFAULT false NOT NULL,
 	"stripe_customer_id" text DEFAULT '',
 	"is_active" boolean DEFAULT true,
@@ -189,23 +196,10 @@ CREATE TABLE "attention_events" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "boost_allocations" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" integer NOT NULL,
-	"creator_id" integer NOT NULL,
-	"amount" numeric NOT NULL,
-	"billing_cycle" text NOT NULL,
-	"is_locked" boolean DEFAULT false,
-	"atproto_uri" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "boost_allocations_atproto_uri_unique" UNIQUE("atproto_uri")
-);
---> statement-breakpoint
 CREATE TABLE "creator_gates" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"creator_id" integer NOT NULL,
-	"gate_type" text DEFAULT 'boost' NOT NULL,
+	"gate_type" text DEFAULT 'seed' NOT NULL,
 	"threshold" numeric NOT NULL,
 	"label" text NOT NULL,
 	"description" text DEFAULT '',
@@ -220,18 +214,30 @@ CREATE TABLE "pool_distributions" (
 	"creator_id" integer NOT NULL,
 	"billing_cycle" text NOT NULL,
 	"pool_amount" numeric DEFAULT '0.00' NOT NULL,
-	"boost_amount" numeric DEFAULT '0.00' NOT NULL,
+	"seed_amount" numeric DEFAULT '0.00' NOT NULL,
 	"attention_seconds" integer DEFAULT 0,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "redownload_ledger" (
+CREATE TABLE "seed_allocations" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"creator_id" integer NOT NULL,
+	"amount" numeric NOT NULL,
+	"billing_cycle" text NOT NULL,
+	"is_locked" boolean DEFAULT false,
+	"atproto_uri" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "seed_allocations_atproto_uri_unique" UNIQUE("atproto_uri")
+);
+--> statement-breakpoint
+CREATE TABLE "wallet_ledger" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"delta" numeric NOT NULL,
 	"reason" text NOT NULL,
-	"post_id" integer,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -357,7 +363,7 @@ CREATE TABLE "posts" (
 	"stream_enabled" boolean DEFAULT true NOT NULL,
 	"download_enabled" boolean DEFAULT false NOT NULL,
 	"anthers_access" jsonb DEFAULT '[]'::jsonb,
-	"boost_access" jsonb DEFAULT '[]'::jsonb,
+	"seed_access" jsonb DEFAULT '[]'::jsonb,
 	"show_on_timeline" boolean DEFAULT true NOT NULL,
 	"is_pinned" boolean DEFAULT false NOT NULL,
 	"tags" jsonb DEFAULT '[]'::jsonb,
@@ -446,13 +452,12 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attention_events" ADD CONSTRAINT "attention_events_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "boost_allocations" ADD CONSTRAINT "boost_allocations_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "creator_gates" ADD CONSTRAINT "creator_gates_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_subscriber_id_users_id_fk" FOREIGN KEY ("subscriber_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pool_distributions" ADD CONSTRAINT "pool_distributions_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "redownload_ledger" ADD CONSTRAINT "redownload_ledger_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "redownload_ledger" ADD CONSTRAINT "redownload_ledger_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "seed_allocations" ADD CONSTRAINT "seed_allocations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "seed_allocations" ADD CONSTRAINT "seed_allocations_creator_id_users_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wallet_ledger" ADD CONSTRAINT "wallet_ledger_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "assets" ADD CONSTRAINT "assets_content_item_id_content_items_id_fk" FOREIGN KEY ("content_item_id") REFERENCES "public"."content_items"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -482,10 +487,10 @@ CREATE UNIQUE INDEX "uq_follows_follower_creator" ON "follows" USING btree ("fol
 CREATE UNIQUE INDEX "uq_account_cycles_user_cycle" ON "account_cycles" USING btree ("user_id","billing_cycle");--> statement-breakpoint
 CREATE INDEX "idx_attention_user_date" ON "attention_events" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_attention_creator_date" ON "attention_events" USING btree ("creator_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_boost_user_creator_cycle" ON "boost_allocations" USING btree ("user_id","creator_id","billing_cycle");--> statement-breakpoint
 CREATE INDEX "idx_creator_gates_creator" ON "creator_gates" USING btree ("creator_id","sort_order");--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_pool_dist_sub_creator_cycle" ON "pool_distributions" USING btree ("subscriber_id","creator_id","billing_cycle");--> statement-breakpoint
-CREATE INDEX "idx_redownload_user_date" ON "redownload_ledger" USING btree ("user_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_seed_user_creator_cycle" ON "seed_allocations" USING btree ("user_id","creator_id","billing_cycle");--> statement-breakpoint
+CREATE INDEX "idx_wallet_user_date" ON "wallet_ledger" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_assets_content_item" ON "assets" USING btree ("content_item_id");--> statement-breakpoint
 CREATE INDEX "idx_bookmarks_user" ON "bookmarks" USING btree ("user_id","sort_order");--> statement-breakpoint
 CREATE INDEX "idx_content_items_creator" ON "content_items" USING btree ("creator_id");--> statement-breakpoint
