@@ -44,7 +44,7 @@ const TAX_TIP =
 // ─── Badge presentation. Every badge shares one round botanical frame
 // (`frame-round`) — a single, consistent wreath across all ranks; the emoji inside is
 // what differs. ───
-const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
+export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
 	free: { emoji: "🌰", wreath: "frame-round" },
 	root: { emoji: "🫚", wreath: "frame-round" },
 	sprout: { emoji: "🌱", wreath: "frame-round" },

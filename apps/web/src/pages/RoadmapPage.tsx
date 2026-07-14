@@ -1057,47 +1057,49 @@ export default function RoadmapPage() {
 				</Reveal>
 			</div>
 
-			{/* Tab selector */}
-			<div className="flex justify-center mb-6">
-				<div className="tabs tabs-boxed bg-base-200/60">
-					{ROADMAPS.map((rm, i) => (
-						<button
-							type="button"
-							key={rm.id}
-							className={`tab ${activeTab === i ? "tab-active" : ""}`}
-							onClick={() => handleTabChange(i)}
-						>
-							{rm.label.replace(" Roadmap", "")}
-						</button>
-					))}
+			<Reveal delay={150}>
+				{/* Tab selector */}
+				<div className="flex justify-center mb-6">
+					<div className="tabs tabs-boxed bg-base-200/60">
+						{ROADMAPS.map((rm, i) => (
+							<button
+								type="button"
+								key={rm.id}
+								className={`tab ${activeTab === i ? "tab-active" : ""}`}
+								onClick={() => handleTabChange(i)}
+							>
+								{rm.label.replace(" Roadmap", "")}
+							</button>
+						))}
+					</div>
 				</div>
-			</div>
 
-			{/* Roadmap description */}
-			<div className="max-w-3xl mx-auto mb-6">
-				<p className="text-sm text-base-content/60 text-center">{roadmap.description}</p>
-			</div>
-
-			{/* Legend + hint */}
-			<div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-				<StatusLegend />
-				<p className="text-xs text-base-content/30">Click any item for details.</p>
-			</div>
-
-			{/* Timeline chart */}
-			<Timeline roadmap={roadmap} selectedItem={selectedItem} onSelect={setSelectedItem} />
-
-			{/* Detail panel */}
-			{selectedData && (
-				<div className="mt-6 max-w-2xl">
-					<DetailPanel
-						item={selectedData.item}
-						lane={selectedData.lane}
-						quarters={roadmap.quarters}
-						onClose={() => setSelectedItem(null)}
-					/>
+				{/* Roadmap description */}
+				<div className="max-w-3xl mx-auto mb-6">
+					<p className="text-sm text-base-content/60 text-center">{roadmap.description}</p>
 				</div>
-			)}
+
+				{/* Legend + hint */}
+				<div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+					<StatusLegend />
+					<p className="text-xs text-base-content/30">Click any item for details.</p>
+				</div>
+
+				{/* Timeline chart */}
+				<Timeline roadmap={roadmap} selectedItem={selectedItem} onSelect={setSelectedItem} />
+
+				{/* Detail panel */}
+				{selectedData && (
+					<div className="mt-6 max-w-2xl">
+						<DetailPanel
+							item={selectedData.item}
+							lane={selectedData.lane}
+							quarters={roadmap.quarters}
+							onClose={() => setSelectedItem(null)}
+						/>
+					</div>
+				)}
+			</Reveal>
 
 			{/* Bottom section — Contributing */}
 			<Reveal className="mt-16 max-w-3xl mx-auto text-center pb-4">

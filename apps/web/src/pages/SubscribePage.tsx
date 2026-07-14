@@ -2,6 +2,9 @@
 
 import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Reveal } from "@anthers/web-shared/decor/Reveal";
+import { BADGE_ART } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccountResponse, Badge, BadgePlan } from "@anthers/web-shared/types";
 import { useEffect, useMemo, useState } from "react";
@@ -51,8 +54,19 @@ function PlanCard({
 			}`}
 		>
 			<div className="card-body p-5">
-				<div className="flex items-baseline justify-between">
-					<h3 className="text-lg font-bold">{plan.name}</h3>
+				<div className="flex items-center justify-between">
+					<div className="flex items-center gap-2">
+						<span className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center">
+							<BrandGlyph
+								name={BADGE_ART[plan.id].wreath}
+								className="absolute inset-0 h-full w-full text-primary/55"
+							/>
+							<span aria-hidden="true" className="text-base">
+								{BADGE_ART[plan.id].emoji}
+							</span>
+						</span>
+						<h3 className="text-lg font-bold">{plan.name}</h3>
+					</div>
 					{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
 				</div>
 
@@ -103,7 +117,7 @@ function PlanCard({
 					</p>
 				)}
 
-				<div className="card-actions mt-4">
+				<div className="card-actions mt-auto pt-4">
 					<button
 						type="button"
 						className={`btn btn-sm w-full ${isCurrent ? "btn-disabled btn-ghost" : "btn-primary"}`}
@@ -197,7 +211,7 @@ export default function SubscribePage() {
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
-			<div className="text-center mb-8">
+			<Reveal className="text-center mb-8">
 				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
 					501(c)(3) non-profit
 				</p>
@@ -205,10 +219,13 @@ export default function SubscribePage() {
 				<p className="text-base-content/70 max-w-2xl mx-auto">
 					Pick a Badge plan. Every whole dollar is itemized below — here's exactly where it goes:
 				</p>
-			</div>
+			</Reveal>
 
 			{/* Legend — what each line item on the cards means (so the cards stay clean) */}
-			<div className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4">
+			<Reveal
+				delay={120}
+				className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4"
+			>
 				<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 					<div>
 						<p className="font-semibold text-primary">Time Pool</p>
@@ -229,7 +246,7 @@ export default function SubscribePage() {
 						</p>
 					</div>
 				</div>
-			</div>
+			</Reveal>
 
 			{error && (
 				<div className="alert alert-error mb-6 max-w-lg mx-auto">
@@ -243,7 +260,10 @@ export default function SubscribePage() {
 			)}
 
 			{/* Plan cards */}
-			<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+			<Reveal
+				delay={240}
+				className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+			>
 				{sortedPlans.map((plan) => (
 					<PlanCard
 						key={plan.id}
@@ -253,7 +273,7 @@ export default function SubscribePage() {
 						onChoose={() => handleChoose(plan.id)}
 					/>
 				))}
-			</div>
+			</Reveal>
 
 			{!user && (
 				<p className="text-center text-sm text-base-content/50 mt-6">
