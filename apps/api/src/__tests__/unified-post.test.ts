@@ -105,8 +105,8 @@ describe("Unified Post vertical slice", () => {
 				body: "Hello from the unified model.",
 				streamEnabled: true,
 				downloadEnabled: false,
-				// Free to everyone: the $0 boost baseline is allowed at price 0.
-				boostAccess: [{ threshold: 0, allow: true, price: "0" }],
+				// Free to everyone: the $0 Seed baseline is allowed at price 0.
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 				isPublished: true,
 			}),
 		});
@@ -127,8 +127,8 @@ describe("Unified Post vertical slice", () => {
 				title: `Paid build ${id}`,
 				streamEnabled: false,
 				downloadEnabled: true,
-				// Purchasable by anyone at $5 (the $0 boost baseline, priced).
-				boostAccess: [{ threshold: 0, allow: true, price: "5.00" }],
+				// Purchasable by anyone at $5 (the $0 Seed baseline, priced).
+				seedAccess: [{ threshold: 0, allow: true, price: "5.00" }],
 				contents: [{ kind: "content", contentItemId: gameItemId }],
 				isPublished: true,
 			}),
@@ -151,7 +151,7 @@ describe("Unified Post vertical slice", () => {
 				title: `Steal ${id}`,
 				streamEnabled: false,
 				downloadEnabled: true,
-				boostAccess: [{ threshold: 0, allow: true, price: "0" }],
+				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 				contents: [{ kind: "content", contentItemId: gameItemId }],
 				isPublished: false,
 			}),

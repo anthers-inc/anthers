@@ -160,6 +160,7 @@ export const QUEUES = {
 	PACKAGE_VIDEO: "package-video", // Remux browser-encoded MP4 variants → HLS (no re-encode)
 	PROCESS_AUDIO: "process-audio",
 	DISTRIBUTE_POOL: "distribute-pool",
+	SETTLE_CYCLE: "settle-cycle", // Month-end wallet draw + Foundation inflows
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates Foundation subsidy allocations
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
