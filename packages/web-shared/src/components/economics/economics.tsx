@@ -76,24 +76,6 @@ export function InfoDot({ tip }: { tip: string }) {
 	);
 }
 
-/** The wreathed badge mark for the currently selected plan. */
-function BadgeMark({ badge }: { badge: Badge }) {
-	const art = BADGE_ART[badge];
-	return (
-		<div className="flex w-16 flex-col items-center text-center">
-			<div className="relative flex h-14 w-14 items-center justify-center">
-				<BrandGlyph name={art.wreath} className="absolute inset-0 h-full w-full text-primary/60" />
-				<span aria-hidden="true" className="text-2xl">
-					{art.emoji}
-				</span>
-			</div>
-			<span style={serif} className="mt-1 text-xs font-medium">
-				{badgeLabel(badge)}
-			</span>
-		</div>
-	);
-}
-
 type Seg = { label: string; desc: React.ReactNode; amount: number; bar: string; dot: string };
 
 function Breakdown({ segments, approxLast }: { segments: Seg[]; approxLast?: boolean }) {
@@ -160,7 +142,7 @@ function SplitRow({
 /** The five Badge plans as selectable chips: emoji + label + price. */
 function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) => void }) {
 	return (
-		<div className="mb-6 grid grid-cols-5 gap-1.5">
+		<div className="mb-6 grid grid-cols-5 gap-2">
 			{BADGE_ORDER.map((b) => {
 				const active = b === value;
 				const price = BADGE_PLANS[b].price;
@@ -170,22 +152,28 @@ function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) =>
 						type="button"
 						onClick={() => onChange(b)}
 						aria-pressed={active}
-						className={`flex flex-col items-center gap-0.5 rounded-xl border px-1 py-2 text-center transition-colors ${
+						className={`flex flex-col items-center gap-1 rounded-xl border px-1.5 py-3 text-center transition-colors ${
 							active
 								? "border-primary bg-primary/10"
 								: "border-base-content/10 bg-base-100 hover:border-primary/40"
 						}`}
 					>
-						<span aria-hidden="true" className="text-lg leading-none">
-							{BADGE_ART[b].emoji}
+						<span className="relative flex h-11 w-11 items-center justify-center">
+							<BrandGlyph
+								name={BADGE_ART[b].wreath}
+								className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/40"}`}
+							/>
+							<span aria-hidden="true" className="text-xl leading-none">
+								{BADGE_ART[b].emoji}
+							</span>
 						</span>
 						<span
 							style={serif}
-							className={`text-xs font-medium ${active ? "text-primary" : "text-base-content/80"}`}
+							className={`text-sm font-medium ${active ? "text-primary" : "text-base-content/80"}`}
 						>
 							{badgeLabel(b)}
 						</span>
-						<span className="font-mono text-[10px] text-base-content/50">
+						<span className="font-mono text-[11px] text-base-content/50">
 							{price === 0 ? "Free" : `$${price}`}
 						</span>
 					</button>
@@ -220,14 +208,11 @@ export function SubscriptionCalculator() {
 	const barTotal = total || 1;
 
 	return (
-		<div className="relative rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
-			<div className="absolute right-6 top-6">
-				<BadgeMark badge={badge} />
-			</div>
+		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
 			<h3 style={serif} className="mb-1 text-lg font-medium">
 				Where your subscription goes
 			</h3>
-			<p className="mb-5 max-w-[16rem] text-xs text-base-content/50">
+			<p className="mb-5 text-xs text-base-content/50">
 				Pick a Badge plan—everything updates live.
 			</p>
 
