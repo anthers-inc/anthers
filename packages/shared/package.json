@@ -6,10 +6,7 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./types": "./src/types.ts",
-		"./validators": "./src/validators.ts",
 		"./fees": "./src/fees.ts",
-		"./tiers": "./src/tiers.ts",
 		"./constants": "./src/constants.ts"
 	},
 	"dependencies": {
