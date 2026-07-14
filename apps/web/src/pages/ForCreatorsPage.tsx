@@ -709,6 +709,13 @@ const RECEIPT_INTRO: Record<ActionKey, string> = {
 const CS_NOTE = "community & charity";
 const PASSTHROUGH = "pure passthrough";
 
+// A representative engaged fan for the streaming comparison: a Sprout plan
+// ($8/mo, $4 Time Pool) who streams ~30 hrs/month. The creator earns the fan's
+// Time Pool ÷ their watch-hours per watch-hour — the SAME for every medium
+// (equal-time), and independent of resolution (pay is by time, not bytes).
+const STREAM_FAN_HOURS = 30;
+const STREAM_HR_PAY = `~$${(BADGE_PLANS.sprout.timePool / STREAM_FAN_HOURS).toFixed(2)}`; // ≈ $0.13
+
 /** The Anthers row for a combo. `platform` is the Community Share (a charitable
  * markup that funds free access + Foundation programs, never profit) — or $0 for
  * Seeds, a pure passthrough. It is NOT a platform profit cut. */
@@ -725,7 +732,7 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 // passthrough. Streaming isn't where Anthers competes on pay; the Time Pool share
 // is small and variable, and the real support comes from Seeds and sales.
 const streamReceipt: Line[] = [
-	{ label: "To you — a slice of the Time Pool, by watch-time", amount: "varies" },
+	{ label: "To you — a Sprout fan's Time Pool share, by watch-time", amount: STREAM_HR_PAY },
 	{ label: "Community Share — free access & charity", amount: "~$0.01" },
 	{ label: "Bandwidth — from the fan's wallet, at cost", amount: "~$0.02" },
 	{ label: "Anthers profit", amount: "$0.00" },
@@ -755,41 +762,41 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		video: {
 			scenario: "A fan watches an hour of your public HD video",
 			rows: [
-				anthers("varies", "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
 				{ name: "YouTube (Premium)", creator: "~$0.20", platform: "~$0.16" },
 			],
-			note: "Streaming pays little anywhere—and it's not where Anthers competes. Your public page makes your work discoverable and available effectively at cost, with no ads and no profit-taking. The real support comes from Seeds and sales.",
+			note: "A Sprout fan (~$8/mo, ~30 hrs/month) pays a creator about $0.13 for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes (and it climbs with the fan's plan). Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.",
 			breakdown: streamReceipt,
 		},
 		games: {
 			scenario: "A fan plays an hour of your public browser game",
 			rows: [
-				anthers("varies", "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
 				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
 				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
 			],
-			note: "Almost nowhere pays indie devs for play-time. On Anthers a browser game on your public page is discoverable and served effectively at cost—Seeds and sales are where fans actually pay you.",
+			note: "Almost nowhere pays indie devs for play-time — Anthers pays the same ~$0.13/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; Seeds and sales are where fans really pay you.",
 			breakdown: streamReceipt,
 		},
 		music: {
 			scenario: "A fan listens to an hour of your public tracks",
 			rows: [
-				anthers("varies", "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
 				{ name: "Spotify", creator: "~$0.02", platform: "rest to labels & Spotify" },
 				{ name: "Apple Music", creator: "~$0.04", platform: "skimmed" },
 			],
-			note: "Streaming pays fractions of a cent everywhere. On Anthers there are no ads and no profit-taking—your public tracks drive discovery, and devoted fans pay you through Seeds and album sales.",
+			note: "Everywhere else pays fractions of a cent — Spotify ~$0.02/hr. Anthers pays by time, not format, so an hour of your tracks earns the same ~$0.13 as an hour of video: several times better, with no ads. Devoted fans still pay most through Seeds and album sales.",
 			breakdown: streamReceipt,
 		},
 		writing: {
 			scenario: "A fan reads your public writing for an hour",
 			rows: [
-				anthers("varies", "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
 				{ name: "Medium", creator: "~$0.02", platform: "members only" },
 				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
 			],
-			note: "Most writing platforms don't pay per-read at all. On Anthers your public writing is free to discover and served at cost—Seeds and sales are the real support.",
+			note: "Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about $0.13 for an hour with your work — and your public writing stays free to discover, served at cost. Seeds and sales are the real support.",
 			breakdown: streamReceipt,
 		},
 	},
