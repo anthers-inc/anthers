@@ -201,14 +201,6 @@ export default function SubscribePage() {
 
 	const sortedPlans = useMemo(() => plans, [plans]);
 
-	if (loading) {
-		return (
-			<div className="flex justify-center py-16">
-				<span className="loading loading-spinner loading-lg" />
-			</div>
-		);
-	}
-
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
 			<Reveal className="text-center mb-8">
@@ -259,21 +251,30 @@ export default function SubscribePage() {
 				</div>
 			)}
 
-			{/* Plan cards */}
-			<Reveal
-				delay={240}
-				className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
-			>
-				{sortedPlans.map((plan) => (
-					<PlanCard
-						key={plan.id}
-						plan={plan}
-						isCurrent={currentBadge === plan.id}
-						saving={saving === plan.id}
-						onChoose={() => handleChoose(plan.id)}
-					/>
-				))}
-			</Reveal>
+			{/* Plan cards — skeletons hold the layout height while badges load, so the
+				grassy floor never jumps up into view then snaps back down. */}
+			{loading ? (
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+					{[0, 1, 2, 3, 4].map((i) => (
+						<div key={`plan-skeleton-${i}`} className="skeleton h-[31rem] rounded-2xl" />
+					))}
+				</div>
+			) : (
+				<Reveal
+					delay={240}
+					className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+				>
+					{sortedPlans.map((plan) => (
+						<PlanCard
+							key={plan.id}
+							plan={plan}
+							isCurrent={currentBadge === plan.id}
+							saving={saving === plan.id}
+							onChoose={() => handleChoose(plan.id)}
+						/>
+					))}
+				</Reveal>
+			)}
 
 			{!user && (
 				<p className="text-center text-sm text-base-content/50 mt-6">
