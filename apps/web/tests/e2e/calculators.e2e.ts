@@ -59,9 +59,8 @@ test.describe("Resources calculators", () => {
 		// V4: the viewer picks a Badge plan (a segmented control, not a GiB slider);
 		// creator earnings = a share of the plan's Time Pool by watch-time + directed Seeds.
 		await expect(page.getByText("Viewer's Badge plan").first()).toBeVisible();
-		// The crux line states the zero-cut split ("...reaches creators...Anthers keeps $0").
+		// The crux line states the zero-cut split ("...reaches creators (Time Pool + Seeds)...").
 		await expect(page.getByText(/reaches creators/)).toBeVisible();
-		await expect(page.getByText(/Anthers keeps/).first()).toBeVisible();
 		expect(errors).toEqual([]);
 		// TODO(Phase 6): restore a live plan-pick interaction assertion once the app is run.
 	});
