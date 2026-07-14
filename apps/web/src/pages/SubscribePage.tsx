@@ -67,17 +67,12 @@ function PlanCard({
 				</p>
 				<div className="space-y-1 text-sm">
 					<div className="flex items-center justify-between">
-						<span className="text-base-content/70">Time Pool → creators</span>
+						<span className="text-base-content/70">Time Pool</span>
 						<strong>{fmt(plan.timePool)}</strong>
 					</div>
 					<div className="flex items-center justify-between">
-						<span className="text-base-content/70">
-							Seeds → creators
-							<span className="text-base-content/40 text-xs ml-1">(you direct)</span>
-						</span>
-						<strong>
-							{plan.seeds} × $1 = {fmt(plan.seeds)}
-						</strong>
+						<span className="text-base-content/70">Seeds</span>
+						<strong>{fmt(plan.seeds)}</strong>
 					</div>
 					<div className="flex items-center justify-between">
 						<span className="text-base-content/70">Community Share</span>
@@ -208,11 +203,32 @@ export default function SubscribePage() {
 				</p>
 				<h1 className="text-3xl font-bold mb-2">Choose your plan</h1>
 				<p className="text-base-content/70 max-w-2xl mx-auto">
-					Pick a Badge plan and every whole dollar goes to work: a <strong>Time Pool</strong> split
-					across the creators you watch, <strong>Seeds</strong> you direct to specific creators ($1
-					each, 100% to them), and your <strong>Community Share</strong> to the Anthers Foundation.
-					Anthers keeps $0.
+					Pick a Badge plan. Every whole dollar is itemized below — here's exactly where it goes:
 				</p>
+			</div>
+
+			{/* Legend — what each line item on the cards means (so the cards stay clean) */}
+			<div className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4">
+				<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+					<div>
+						<p className="font-semibold text-primary">Time Pool</p>
+						<p className="text-xs text-base-content/70 leading-snug">
+							Split across the creators you watch, by time spent.
+						</p>
+					</div>
+					<div>
+						<p className="font-semibold text-primary">Seeds</p>
+						<p className="text-xs text-base-content/70 leading-snug">
+							$1 each — you direct them to specific creators, 100% to them.
+						</p>
+					</div>
+					<div>
+						<p className="font-semibold text-primary">Community Share</p>
+						<p className="text-xs text-base-content/70 leading-snug">
+							Your charitable contribution to the Anthers Foundation.
+						</p>
+					</div>
+				</div>
 			</div>
 
 			{error && (
