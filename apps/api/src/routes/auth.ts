@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { invalidBody } from "../middleware/validate.js";
 import {
 	createEmailVerificationToken,
 	createPasswordResetToken,
@@ -98,7 +99,7 @@ function setSessionCookie(c: any, token: string) {
 
 const authRoutes = new Hono()
 	// ── Sign Up ───────────────────────────────────────────────────────────────
-	.post("/sign-up", zValidator("json", signUpSchema), async (c) => {
+	.post("/sign-up", zValidator("json", signUpSchema, invalidBody), async (c) => {
 		const { username, email, password } = c.req.valid("json");
 
 		// Check for existing user (username or email)
@@ -138,7 +139,7 @@ const authRoutes = new Hono()
 	})
 
 	// ── Sign In (accepts username or email) ──────────────────────────────────
-	.post("/sign-in", zValidator("json", signInSchema), async (c) => {
+	.post("/sign-in", zValidator("json", signInSchema, invalidBody), async (c) => {
 		const { login, password } = c.req.valid("json");
 
 		// Look up by username or email
@@ -197,7 +198,7 @@ const authRoutes = new Hono()
 	})
 
 	// ── Email Verification ───────────────────────────────────────────────────
-	.post("/verify-email", zValidator("json", verifyEmailSchema), async (c) => {
+	.post("/verify-email", zValidator("json", verifyEmailSchema, invalidBody), async (c) => {
 		const { token } = c.req.valid("json");
 		const userId = await verifyEmailToken(token);
 
@@ -225,26 +226,30 @@ const authRoutes = new Hono()
 	})
 
 	// ── Request Password Reset ───────────────────────────────────────────────
-	.post("/request-password-reset", zValidator("json", requestPasswordResetSchema), async (c) => {
-		const { email } = c.req.valid("json");
+	.post(
+		"/request-password-reset",
+		zValidator("json", requestPasswordResetSchema, invalidBody),
+		async (c) => {
+			const { email } = c.req.valid("json");
 
-		// Always return success to prevent email enumeration
-		const [user] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.email, email))
-			.limit(1);
+			// Always return success to prevent email enumeration
+			const [user] = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.email, email))
+				.limit(1);
 
-		if (user) {
-			await createPasswordResetToken(user.id);
-			// In production, would send email here
-		}
+			if (user) {
+				await createPasswordResetToken(user.id);
+				// In production, would send email here
+			}
 
-		return c.json({ success: true });
-	})
+			return c.json({ success: true });
+		},
+	)
 
 	// ── Reset Password ───────────────────────────────────────────────────────
-	.post("/reset-password", zValidator("json", resetPasswordSchema), async (c) => {
+	.post("/reset-password", zValidator("json", resetPasswordSchema, invalidBody), async (c) => {
 		const { token, password } = c.req.valid("json");
 		const success = await resetPassword(token, password);
 
@@ -256,26 +261,31 @@ const authRoutes = new Hono()
 	})
 
 	// ── Change Password (authenticated) ──────────────────────────────────────
-	.post("/change-password", requireAuth, zValidator("json", changePasswordSchema), async (c) => {
-		const user = c.get("user");
-		const { currentPassword, newPassword } = c.req.valid("json");
+	.post(
+		"/change-password",
+		requireAuth,
+		zValidator("json", changePasswordSchema, invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const { currentPassword, newPassword } = c.req.valid("json");
 
-		// Get full user record with password hash
-		const [fullUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+			// Get full user record with password hash
+			const [fullUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
 
-		if (!fullUser?.passwordHash) {
-			return c.json({ error: "Cannot change password for ATProto-only accounts" }, 400);
-		}
+			if (!fullUser?.passwordHash) {
+				return c.json({ error: "Cannot change password for ATProto-only accounts" }, 400);
+			}
 
-		const valid = await verifyPassword(currentPassword, fullUser.passwordHash);
-		if (!valid) {
-			return c.json({ error: "Current password is incorrect" }, 401);
-		}
+			const valid = await verifyPassword(currentPassword, fullUser.passwordHash);
+			if (!valid) {
+				return c.json({ error: "Current password is incorrect" }, 401);
+			}
 
-		const passwordHash = await hashPassword(newPassword);
-		await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+			const passwordHash = await hashPassword(newPassword);
+			await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
 
-		return c.json({ success: true });
-	});
+			return c.json({ success: true });
+		},
+	);
 
 export { authRoutes };

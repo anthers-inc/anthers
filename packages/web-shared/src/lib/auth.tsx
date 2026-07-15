@@ -40,6 +40,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Pull a human-readable message out of an error response body. Business errors
+ * return `{ error: "message" }` (a string). Validation failures come back from
+ * @hono/zod-validator as `{ error: <ZodError> }` — an object that stringifies to
+ * "[object Object]" — so fall back to the first issue's message (e.g. "Invalid
+ * email"), then to a generic fallback if the body isn't shaped as expected.
+ */
+async function errorText(res: Response, fallback: string): Promise<string> {
+	try {
+		const body = (await res.json()) as {
+			error?: string | { issues?: { message?: unknown }[] };
+		};
+		const err = body?.error;
+		if (typeof err === "string") return err;
+		const issue = typeof err === "object" ? err?.issues?.[0]?.message : undefined;
+		if (typeof issue === "string") return issue;
+	} catch {
+		// Non-JSON / empty body — use the fallback.
+	}
+	return fallback;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
 	const [user, setUser] = useState<User | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
@@ -78,8 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			json: { login, password },
 		});
 		if (!res.ok) {
-			const data = await res.json();
-			throw new Error((data as any).error ?? "Sign in failed");
+			throw new Error(await errorText(res, "Sign in failed."));
 		}
 		const data = await res.json();
 		setUser(data.user as User);
@@ -90,8 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			json: { username, email, password },
 		});
 		if (!res.ok) {
-			const data = await res.json();
-			throw new Error((data as any).error ?? "Sign up failed");
+			throw new Error(await errorText(res, "Sign up failed."));
 		}
 		const data = await res.json();
 		setUser(data.user as User);
@@ -107,8 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			json: { handle, intent: "login" },
 		});
 		if (!res.ok) {
-			const data = await res.json();
-			throw new Error((data as any).error ?? "Bluesky auth failed");
+			throw new Error(await errorText(res, "Bluesky auth failed."));
 		}
 		const data = await res.json();
 		// Redirect to Bluesky authorization page
@@ -120,8 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			json: { handle, intent: "link" },
 		});
 		if (!res.ok) {
-			const data = await res.json();
-			throw new Error((data as any).error ?? "Bluesky link failed");
+			throw new Error(await errorText(res, "Bluesky link failed."));
 		}
 		const data = await res.json();
 		window.location.href = (data as any).authorization_url;
@@ -130,8 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const unlinkBluesky = useCallback(async () => {
 		const res = await client.api.atproto.unlink.$post();
 		if (!res.ok) {
-			const data = await res.json();
-			throw new Error((data as any).error ?? "Unlink failed");
+			throw new Error(await errorText(res, "Unlink failed."));
 		}
 		await refreshUser();
 	}, [refreshUser]);
