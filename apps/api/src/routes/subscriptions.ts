@@ -24,15 +24,8 @@ import {
 	users,
 	walletLedger,
 } from "@anthers/db/schema";
-import {
-	BADGE_ORDER,
-	BADGE_PLANS,
-	type Badge,
-	badgeLabel,
-	badgeRank,
-	SEED_PRICE,
-} from "@anthers/shared/constants";
-import { badgePriceBreakdown } from "@anthers/shared/fees";
+import { BADGE_PLANS, type Badge, badgeRank, SEED_PRICE } from "@anthers/shared/constants";
+import { badgePlanViews, badgePriceBreakdown } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -46,22 +39,9 @@ import { validateSession } from "../services/auth.js";
 
 const BADGE_IDS = ["free", "root", "sprout", "petal", "blossom"] as const;
 
-/** The Badge plans, each with its price decomposition + what's included. */
-const PLANS = BADGE_ORDER.map((b) => {
-	const bd = badgePriceBreakdown(b);
-	const plan = BADGE_PLANS[b];
-	return {
-		id: b,
-		name: badgeLabel(b),
-		price: plan.price,
-		timePool: bd.timePool.toFixed(2),
-		seeds: plan.seeds,
-		freeBwGiB: plan.freeBwGiB,
-		communityShare: bd.communityShare.toFixed(2),
-		toCreators: bd.toCreators.toFixed(2),
-		subsidised: bd.subsidised,
-	};
-});
+/** The Badge plans, each with its price decomposition + what's included. Shared
+ *  with the Subscribe page via `badgePlanViews()` so the two never drift. */
+const PLANS = badgePlanViews();
 
 /** Minimum wallet top-up — a few dollars so the card fee isn't outsized. */
 const MIN_WALLET_TOPUP = 2;

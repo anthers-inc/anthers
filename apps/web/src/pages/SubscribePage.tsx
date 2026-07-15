@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
+import { type BadgePlanView, badgePlanViews } from "@anthers/shared/fees";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { BADGE_ART } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
-import type { AccountResponse, Badge, BadgePlan } from "@anthers/web-shared/types";
-import { useEffect, useMemo, useState } from "react";
+import type { AccountResponse, Badge } from "@anthers/web-shared/types";
+import { useEffect, useState } from "react";
+
+// The five Badge plans are static — derived entirely from BADGE_PLANS — so we
+// render them synchronously instead of fetching /subscriptions/badges. That removes
+// the loading skeleton (and its empty-card flash on every remount); the only async
+// piece is a logged-in user's current badge, which just drives the "Your plan"
+// highlight and never blocks the cards. Same source of truth as the API route
+// (both call badgePlanViews()), so page and server can't drift.
+const PLANS: BadgePlanView[] = badgePlanViews();
 
 /* ------------------------------------------------------------------ */
 /*  V4 economics — non-profit, no profit-taking                        */
@@ -41,7 +50,7 @@ function PlanCard({
 	saving,
 	onChoose,
 }: {
-	plan: BadgePlan;
+	plan: BadgePlanView;
 	isCurrent: boolean;
 	saving: boolean;
 	onChoose: () => void;
@@ -153,33 +162,33 @@ function PlanCard({
 export default function SubscribePage() {
 	const { user } = useAuth();
 
-	const [plans, setPlans] = useState<BadgePlan[]>([]);
 	const [currentBadge, setCurrentBadge] = useState<Badge | null>(null);
-	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState<Badge | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
+	// The plans render immediately from PLANS; the only fetch is a logged-in user's
+	// current badge, which just highlights "Your plan". Logged-out visitors skip it,
+	// and a failure is non-fatal — the cards still render, just without the highlight.
 	useEffect(() => {
-		const fetchData = async () => {
+		if (!user) {
+			setCurrentBadge(null);
+			return;
+		}
+		let cancelled = false;
+		(async () => {
 			try {
-				const [badgeRes, meRes] = await Promise.all([
-					client.api.subscriptions.badges.$get(),
-					user ? client.api.subscriptions.me.$get() : Promise.resolve(null),
-				]);
-				const badgeData = (await badgeRes.json()) as { badges: BadgePlan[] };
-				setPlans(badgeData.badges);
-				if (meRes) {
-					const meData = (await meRes.json()) as AccountResponse;
-					setCurrentBadge(meData.badge);
-				}
+				const res = await client.api.subscriptions.me.$get();
+				if (!res.ok) return;
+				const data = (await res.json()) as AccountResponse;
+				if (!cancelled) setCurrentBadge(data.badge);
 			} catch {
-				setError("Failed to load the plans. Please try again.");
-			} finally {
-				setLoading(false);
+				// Non-fatal: leave the highlight off.
 			}
+		})();
+		return () => {
+			cancelled = true;
 		};
-		fetchData();
 	}, [user]);
 
 	const handleChoose = async (badge: Badge) => {
@@ -206,8 +215,6 @@ export default function SubscribePage() {
 			setSaving(null);
 		}
 	};
-
-	const sortedPlans = useMemo(() => plans, [plans]);
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
@@ -259,30 +266,22 @@ export default function SubscribePage() {
 				</div>
 			)}
 
-			{/* Plan cards — skeletons hold the layout height while badges load, so the
-				grassy floor never jumps up into view then snaps back down. */}
-			{loading ? (
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-					{[0, 1, 2, 3, 4].map((i) => (
-						<div key={`plan-skeleton-${i}`} className="skeleton h-[31rem] rounded-2xl" />
-					))}
-				</div>
-			) : (
-				<Reveal
-					delay={240}
-					className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
-				>
-					{sortedPlans.map((plan) => (
-						<PlanCard
-							key={plan.id}
-							plan={plan}
-							isCurrent={currentBadge === plan.id}
-							saving={saving === plan.id}
-							onChoose={() => handleChoose(plan.id)}
-						/>
-					))}
-				</Reveal>
-			)}
+			{/* Plan cards — rendered synchronously from the static plan table, so there's
+				no fetch, no loading skeleton, and no empty-card flash on remount. */}
+			<Reveal
+				delay={240}
+				className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+			>
+				{PLANS.map((plan) => (
+					<PlanCard
+						key={plan.id}
+						plan={plan}
+						isCurrent={currentBadge === plan.id}
+						saving={saving === plan.id}
+						onChoose={() => handleChoose(plan.id)}
+					/>
+				))}
+			</Reveal>
 
 			{!user && (
 				<p className="text-center text-sm text-base-content/50 mt-6">
@@ -298,11 +297,11 @@ export default function SubscribePage() {
 				<h2 className="text-xl font-bold mb-2 text-center">Bandwidth is separate — and at cost</h2>
 				<p className="text-sm text-base-content/60 leading-relaxed text-center">
 					Your plan is about funding creators, not buying gigabytes. Every plan includes a free
-					monthly bandwidth allowance (from {plans[0]?.freeBwGiB ?? 5} GiB on Free up to{" "}
-					{plans[plans.length - 1]?.freeBwGiB ?? 50} GiB on Blossom). If you stream past it,
-					bandwidth is billed from a small prepaid <strong>wallet</strong> at DigitalOcean's
-					pass-through cost of <strong>{fmt(BANDWIDTH_PER_GIB)}/GiB</strong> — no markup, no
-					platform margin. Top up the wallet and manage auto-top-up from{" "}
+					monthly bandwidth allowance (from {PLANS[0].freeBwGiB} GiB on Free up to{" "}
+					{PLANS[PLANS.length - 1].freeBwGiB} GiB on Blossom). If you stream past it, bandwidth is
+					billed from a small prepaid <strong>wallet</strong> at DigitalOcean's pass-through cost of{" "}
+					<strong>{fmt(BANDWIDTH_PER_GIB)}/GiB</strong> — no markup, no platform margin. Top up the
+					wallet and manage auto-top-up from{" "}
 					<a href="/subscription" className="link link-primary">
 						Your Anthers
 					</a>
