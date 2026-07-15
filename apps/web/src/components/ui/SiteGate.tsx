@@ -89,36 +89,42 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 			<MeadowDecor floor={false} className="flex flex-1 flex-col justify-center">
 				{/* Hero content */}
 				<div className="mx-auto w-full max-w-3xl px-4 py-12 text-center">
+					{/* The logo sits on the bare pollen surface, above the card. */}
 					<div className="mb-8 mt-8 flex justify-center">
 						<Logo variant="full" className="h-24 sm:h-28" />
 					</div>
 
-					<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
-						A new non-profit building a uniquely nurturing ecosystem for creators and their
-						communities.
-					</p>
+					{/* Everything below the logo lives in an off-white (base-200) card so it
+						reads as a distinct panel above the pollen page surface (base-100). */}
+					<div className="card border border-base-content/5 bg-base-200 shadow-xl">
+						<div className="card-body gap-6 sm:p-10">
+							{/* Intro copy */}
+							<div>
+								<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
+									A new non-profit building a uniquely nurturing ecosystem for creators and their
+									communities.
+								</p>
 
-					<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-						Games, videos, music, writing, and more, on an open, distributed network. No intrusive
-						ads, no manipulative algorithms, just your direct line to a creative internet worth
-						loving again.
-					</p>
+								<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
+									Games, videos, music, writing, and more, on an open, distributed network. No
+									intrusive ads, no manipulative algorithms, just your direct line to a creative
+									internet worth loving again.
+								</p>
 
-					<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-						Supporting it all: a charitable foundation dedicated to lifting new and marginalized
-						creators; building a more honest, healthy connection between creators and their
-						audiences; and sharing openly the tools to build creative community without corporate
-						interference or middlemen.
-					</p>
+								<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
+									Supporting it all: a charitable foundation dedicated to lifting new and
+									marginalized creators; building a more honest, healthy connection between creators
+									and their audiences; and sharing openly the tools to build creative community
+									without corporate interference or middlemen.
+								</p>
 
-					<p className="text-lg text-base-content/65 leading-relaxed mb-10 text-justify">
-						It's not a crazy idea. We've done this before. All it takes is for someone to put people
-						first, and keep profit out of their the equation.
-					</p>
+								<p className="text-lg text-base-content/65 leading-relaxed text-justify">
+									It's not a crazy idea. We've done this before. All it takes is for someone to put
+									people first, and keep profit out of their the equation.
+								</p>
+							</div>
 
-					{/* Waitlist form */}
-					<div className="card bg-base-100/80 backdrop-blur-sm shadow-xl">
-						<div className="card-body gap-5">
+							{/* Waitlist form */}
 							{submitState === "success" ? (
 								<div className="py-4">
 									<p className="text-xl font-medium text-success">You're on the list.</p>
@@ -189,37 +195,41 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 									</button>
 								</form>
 							)}
-						</div>
-					</div>
 
-					{/* Password bypass link */}
-					<div className="mt-8">
-						{showPassword ? (
-							<form onSubmit={handlePasswordSubmit} className="flex gap-2 max-w-xs mx-auto">
-								<input
-									type="password"
-									className={`input input-bordered input-sm flex-1 ${passwordError ? "input-error" : ""}`}
-									placeholder="Password"
-									value={password}
-									onChange={(e) => {
-										setPassword(e.target.value);
-										setPasswordError(false);
-									}}
-									autoFocus
-								/>
-								<button type="submit" className="btn btn-ghost btn-sm" disabled={passwordLoading}>
-									{passwordLoading ? "..." : "Enter"}
-								</button>
-							</form>
-						) : (
-							<button
-								type="button"
-								className="text-sm text-base-content/40 hover:text-base-content/60 transition-colors"
-								onClick={() => setShowPassword(true)}
-							>
-								Team access
-							</button>
-						)}
+							{/* Password bypass link */}
+							<div>
+								{showPassword ? (
+									<form onSubmit={handlePasswordSubmit} className="flex gap-2 max-w-xs mx-auto">
+										<input
+											type="password"
+											className={`input input-bordered input-sm flex-1 ${passwordError ? "input-error" : ""}`}
+											placeholder="Password"
+											value={password}
+											onChange={(e) => {
+												setPassword(e.target.value);
+												setPasswordError(false);
+											}}
+											autoFocus
+										/>
+										<button
+											type="submit"
+											className="btn btn-ghost btn-sm"
+											disabled={passwordLoading}
+										>
+											{passwordLoading ? "..." : "Enter"}
+										</button>
+									</form>
+								) : (
+									<button
+										type="button"
+										className="text-sm text-base-content/40 hover:text-base-content/60 transition-colors"
+										onClick={() => setShowPassword(true)}
+									>
+										Team access
+									</button>
+								)}
+							</div>
+						</div>
 					</div>
 				</div>
 			</MeadowDecor>
