@@ -2,9 +2,11 @@
 import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
+	BADGE_ORDER,
 	BADGE_PLANS,
 	BANDWIDTH_PER_GIB,
 	type Badge,
+	badgeLabel,
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
@@ -51,6 +53,44 @@ export function badgePriceBreakdown(badge: Badge): {
 	// Free is fully subsidised — the user contributes nothing, so no Community Share.
 	const communityShare = plan.price === 0 ? new Decimal(0) : price.minus(toCreators);
 	return { price, timePool, seeds, communityShare, toCreators, subsidised: plan.price === 0 };
+}
+
+/** A Badge plan as a display view model — the price decomposition + what's included.
+ *  Money fields are pre-rounded to 2dp strings, ready to render. */
+export interface BadgePlanView {
+	id: Badge;
+	name: string;
+	price: number;
+	timePool: string;
+	seeds: number;
+	freeBwGiB: number;
+	communityShare: string;
+	toCreators: string;
+	subsidised: boolean;
+}
+
+/**
+ * The Badge plans as view models, low → high. Derived entirely from the frozen
+ * `BADGE_PLANS` table — pure and static, no per-user data. Shared by the
+ * `/subscriptions/badges` route and the Subscribe page so the two can't drift
+ * (and so the page can render synchronously with no fetch / loading skeleton).
+ */
+export function badgePlanViews(): BadgePlanView[] {
+	return BADGE_ORDER.map((badge) => {
+		const bd = badgePriceBreakdown(badge);
+		const plan = BADGE_PLANS[badge];
+		return {
+			id: badge,
+			name: badgeLabel(badge),
+			price: plan.price,
+			timePool: bd.timePool.toFixed(2),
+			seeds: plan.seeds,
+			freeBwGiB: plan.freeBwGiB,
+			communityShare: bd.communityShare.toFixed(2),
+			toCreators: bd.toCreators.toFixed(2),
+			subsidised: bd.subsidised,
+		};
+	});
 }
 
 // ── Bandwidth: at-cost wallet + free monthly allowance ────────────────────────

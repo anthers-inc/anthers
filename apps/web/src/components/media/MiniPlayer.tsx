@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { Link } from "@anthers/web-shared/router";
 import { PauseIcon, PlayIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { Link } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 
 function formatTime(seconds: number): string {

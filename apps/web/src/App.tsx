@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Navigate, Route, Routes } from "react-router-dom";
-import Layout from "./components/layout/Layout";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
-import LoggedOutLayout from "./components/layout/LoggedOutLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
+import PublicShell from "./components/layout/PublicShell";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
@@ -50,9 +49,12 @@ export default function App() {
 			{/*
 				Marketing / logged-out layout
 				These pages always show the marketing chrome (sign up/log in buttons,
-				marketing nav links).         Authenticated users hitting / get redirected to /feed.
+				marketing nav links) — `forceMarketing` keeps it that way even for
+				logged-in users. Authenticated users hitting / get redirected to /feed.
+				Shares the PublicShell component with the shared-content group below so
+				the botanical decor never remounts as you navigate between them.
 			*/}
-			<Route element={<LoggedOutLayout />}>
+			<Route element={<PublicShell forceMarketing />}>
 				{/* The For Users page is the homepage (RootRedirect renders it for logged-out
 					visitors; authed users go to /feed). It renders its own <MeadowDecor>. */}
 				<Route path="/" element={<RootRedirect />} />
@@ -153,10 +155,13 @@ export default function App() {
 
 			{/*
 				Shared content routes
-				These use the auth-switching Layout: logged-in users see LoggedInLayout,
-				logged-out users see LoggedOutLayout. Content is accessible to everyone.
+				These use the auth-switching PublicShell: logged-in users see
+				LoggedInLayout, logged-out users see LoggedOutLayout. Content is
+				accessible to everyone. Same component as the marketing group above
+				(there with `forceMarketing`), so the logged-out shell + decor stay
+				mounted when navigating across the whole public surface.
 			*/}
-			<Route element={<Layout />}>
+			<Route element={<PublicShell />}>
 				<Route path="/verify-email" element={<VerifyEmailPage />} />
 				<Route path="/discover/:slug" element={<ProjectRedirect />} />
 				<Route path="/posts/:slug" element={<PostPage />} />

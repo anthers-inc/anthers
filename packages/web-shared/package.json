@@ -6,6 +6,7 @@
 	"type": "module",
 	"exports": {
 		"./types": "./src/lib/types.ts",
+		"./router": "./src/lib/router.tsx",
 		"./rpc": "./src/lib/rpc.ts",
 		"./auth": "./src/lib/auth.tsx",
 		"./theme": "./src/lib/theme.ts",

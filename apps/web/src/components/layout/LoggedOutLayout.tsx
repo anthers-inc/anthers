@@ -2,9 +2,10 @@
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { Link, Outlet } from "@anthers/web-shared/router";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
-import { Link, Outlet } from "react-router-dom";
+import { useEffect } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
 
@@ -54,6 +55,16 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 
 export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
+
+	// The marketing surface scrolls the document, so reserve the scrollbar gutter
+	// while this shell is mounted — pages that scroll and pages that don't then stay
+	// the same width (no left/right shift on navigation). Scoped to this shell so the
+	// inner-scrolling app shell / Studio don't get an empty gutter strip. See theme.css.
+	useEffect(() => {
+		const root = document.documentElement;
+		root.classList.add("gutter-stable");
+		return () => root.classList.remove("gutter-stable");
+	}, []);
 
 	return (
 		// `relative isolate` scopes the decor z-order: content + footer (z-10) sit

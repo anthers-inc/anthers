@@ -4,10 +4,10 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Lede } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { Link } from "@anthers/web-shared/router";
 import { LinkIcon, MapPinIcon, MusicalNoteIcon, StarIcon } from "@heroicons/react/24/outline";
 import { PlayIcon as PlaySolid, StarIcon as StarSolid } from "@heroicons/react/24/solid";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 const serif = { fontFamily: FONTS.fraunces };
 

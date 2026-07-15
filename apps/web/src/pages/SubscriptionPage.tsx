@@ -15,6 +15,7 @@
  */
 
 import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
+import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
 	Account,
@@ -29,7 +30,6 @@ import type {
 	WalletBalance,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */

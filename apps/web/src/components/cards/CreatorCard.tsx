@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 export default function CreatorCard({ creator }: { creator: PublicUser }) {
 	const { isAuthenticated, user } = useAuth();

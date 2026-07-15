@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
 import { studioUrl } from "../lib/studio";
 
 const apiBase =

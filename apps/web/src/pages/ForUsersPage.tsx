@@ -25,7 +25,7 @@ import {
 	SubscriptionCalculator,
 } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { Link } from "react-router-dom";
+import { Link } from "@anthers/web-shared/router";
 
 const serif = { fontFamily: FONTS.fraunces };
 

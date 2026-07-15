@@ -3,6 +3,7 @@
 import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover, UnlockPanel } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type {
 	Comment,
@@ -15,7 +16,6 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ClockIcon, FilmIcon, MusicalNoteIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";

@@ -4,8 +4,8 @@ import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 const serif = { fontFamily: FONTS.fraunces };
 

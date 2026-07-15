@@ -13,6 +13,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowPathIcon,
 	CodeBracketIcon,
@@ -29,7 +30,6 @@ import {
 	TrophyIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
-import { Link } from "react-router-dom";
 
 const serif = { fontFamily: FONTS.fraunces };
 

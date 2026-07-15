@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
+import { Link } from "@anthers/web-shared/router";
 import { type ReactNode, useState } from "react";
-import { Link } from "react-router-dom";
 
 interface FAQItem {
 	question: string;

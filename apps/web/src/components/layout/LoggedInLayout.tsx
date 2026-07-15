@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { Link, NavLink, Outlet, useNavigate } from "@anthers/web-shared/router";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	Bars3Icon,
@@ -11,7 +12,6 @@ import {
 	TrophyIcon,
 	UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import MiniPlayer from "../media/MiniPlayer";
@@ -153,8 +153,11 @@ function LoggedInLayoutInner() {
 					</div>
 				</aside>
 
-				{/* Main content area */}
-				<main className={`flex-1 min-w-0 overflow-y-auto ${currentTrack ? "pb-16" : ""}`}>
+				{/* Main content area — reserve the scrollbar gutter so short and tall pages
+					keep the same width (no content shift when the scrollbar appears). */}
+				<main
+					className={`flex-1 min-w-0 overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+				>
 					<Outlet />
 
 					{/* Footer */}
