@@ -84,59 +84,70 @@ export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
 
 	return (
 		// The pre-launch gate wears the same Meadow decor as the logged-out site.
-		// `relative isolate` scopes the z-order. The gate is a single-viewport panel:
-		// `h-dvh overflow-hidden` pins it to exactly the viewport so it never scrolls
-		// and the grassy floor stays visible at the bottom. <MeadowDecor> supplies the
-		// pollen surface and centers the content in the space above the grass; it bakes
-		// in its own `min-h-screen`, which we override to `minHeight: 0` (inline beats
-		// the class) so it fills only the flex-1 middle instead of forcing a scroll.
+		// `relative isolate` scopes the z-order. The panel is pinned to the viewport
+		// (`h-dvh overflow-hidden`) with the grassy floor always a flex item at the
+		// bottom. The content area (<MeadowDecor>) is the flex-1 middle and scrolls
+		// INTERNALLY (overflow-y:auto) when the card is taller than the space above the
+		// grass — so on small phones / short windows the card scrolls with the grass
+		// staying put, and on roomy screens the card just centers (my-auto) with no
+		// scrollbar. MeadowDecor bakes in its own `min-h-screen`, overridden to
+		// `minHeight: 0` (inline beats the class) so it fills only the flex-1 middle.
 		//
 		// z-order: the pollen sits at the back; the climbing side vines + drifting bees
-		// ride a z-[5] layer above the pollen but BEHIND the card (MeadowDecor wraps the
-		// hero content at z-10) so no bees land on the card; the grassy floor (z-30) caps
-		// the very bottom, in front of everything.
+		// ride a z-[5] layer above the pollen but BEHIND the card (z-10) so no bees land
+		// on the card; the grassy floor (z-30) caps the very bottom, in front of it all.
 		<div
 			className="relative isolate flex h-dvh flex-col overflow-hidden"
 			style={{ fontFamily: FONTS.nunito }}
 		>
 			<MeadowDecor
 				floor={false}
-				className="flex flex-1 flex-col justify-center overflow-hidden"
-				style={{ minHeight: 0 }}
+				className="flex flex-1 flex-col [&>div]:my-auto"
+				style={{ minHeight: 0, overflowX: "hidden", overflowY: "auto" }}
 			>
-				{/* Hero content, vertically centered in the space above the grass. */}
-				<div className="mx-auto w-full max-w-3xl px-4 py-2 text-center">
-					{/* The logo sits on the bare pollen surface, above the card. */}
-					<div className="mt-18 mb-6 flex justify-center">
+				{/* Hero content. MeadowDecor centers its content wrapper with auto margins
+					(the `[&>div]:my-auto` above): it sits centered when it fits the space
+					above the grass (desktop, tall phones) and top-aligns + scrolls when it
+					doesn't (small phones, short windows), with no clipped top. */}
+				<div className="mx-auto w-full max-w-3xl px-4 py-6 text-center sm:py-2">
+					{/* The logo sits on the bare pollen surface, above the card. The big top
+						margin is desktop-only (it centers nicely there); on mobile the hero's
+						own top padding handles the spacing. */}
+					<div className="mb-6 flex justify-center sm:mt-8">
 						<Logo variant="full" className="h-20 sm:h-28" />
 					</div>
 
 					{/* Everything below the logo lives in an off-white (base-200) card so it
 						reads as a distinct panel above the pollen page surface (base-100). */}
 					<div className="card border border-base-content/5 bg-base-200 shadow-lg">
-						<div className="card-body gap-4 sm:p-12">
+						<div className="card-body gap-4 p-6 sm:p-10">
 							{/* Intro copy */}
 							<div>
-								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
 									<b>Anthers</b> is a new non-profit building a creative garden for everyone: a
 									peaceful place for videos, games, music, writing, crafts, services, and more, all
 									on an open, distributed network.
 								</p>
 
-								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
-									No more intrusive advertisements or data brokers. No more manipulative algorithms.
-									Just a harmonious ecosystem where we can all nurture a creative internet worth
-									loving again.
-								</p>
+								{/* The middle two paragraphs are desktop-only (`hidden sm:block`): on phones
+									we drop them so the gate stays short and the waitlist form is reachable
+									with minimal scrolling. */}
+								<div className="hidden sm:block">
+									<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
+										No more intrusive advertisements or data brokers. No more manipulative
+										algorithms. Just a harmonious ecosystem where we can all nurture a creative
+										internet worth loving again.
+									</p>
 
-								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
-									Supporting it all: a charitable foundation dedicated to lifting up new and
-									marginalized creators; building a more honest, healthy connection between creators
-									and their audiences without corporate interference or middlemen; and making great
-									creative and educational content is available to all, for free, forever
-								</p>
+									<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
+										Supporting it all: a charitable foundation dedicated to lifting up new and
+										marginalized creators; building honest, healthy connection between creators and
+										their audiences without corporate interference or middlemen; and making great
+										creative and educational content is available to all, for free, forever.
+									</p>
+								</div>
 
-								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
 									We can make the creative internet a better place. <b>Let's do it together.</b>
 								</p>
 							</div>
@@ -152,9 +163,8 @@ export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
 							) : (
 								<form onSubmit={handleWaitlistSubmit} className="flex flex-col gap-4">
 									<p className="text-base text-base-content/50">
-										We're excited to share Anthers with you but aren't quite ready yet.
-										<br />
-										Leave your email and we'll let you know when we're ready for you.
+										We're excited to share Anthers with you but aren't quite ready yet. Leave your
+										email and we'll let you know when we're ready for you.
 									</p>
 
 									{/* Email input */}
@@ -239,10 +249,10 @@ export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
 								) : (
 									<button
 										type="button"
-										className="text-sm text-base-content/40 hover:text-base-content/60 transition-colors"
+										className="mt-2 text-xs text-base-content/40 hover:text-base-content/90 transition-colors"
 										onClick={() => setShowPassword(true)}
 									>
-										Team access
+										Click Here for Early Access (Password Required)
 									</button>
 								)}
 							</div>
