@@ -19,7 +19,16 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 
 export default function SiteGate({ children }: { children: ReactNode }) {
 	const [authorized, setAuthorized] = useState(() => localStorage.getItem(STORAGE_KEY) === "true");
+	if (authorized) return <>{children}</>;
+	return <SiteGatePanel onAuthorized={() => setAuthorized(true)} />;
+}
 
+// The pre-launch gate's presentation and its password/waitlist forms, kept
+// self-contained so it can render in two places: as the wall (mounted by
+// <SiteGate> above when unauthorized) and on its own /site-gate route, so the
+// look can be tinkered with locally without clearing the anthers_site_access
+// flag. `onAuthorized` fires only in the wall case — on the route it's a no-op.
+export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
 	// Password bypass
 	const [showPassword, setShowPassword] = useState(false);
 	const [password, setPassword] = useState("");
@@ -30,8 +39,6 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 	const [email, setEmail] = useState("");
 	const [interest, setInterest] = useState<Interest>("both");
 	const [submitState, setSubmitState] = useState<SubmitState>("idle");
-
-	if (authorized) return <>{children}</>;
 
 	const handlePasswordSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -45,7 +52,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 			});
 			if (res.ok) {
 				localStorage.setItem(STORAGE_KEY, "true");
-				setAuthorized(true);
+				onAuthorized?.();
 			} else {
 				setPasswordError(true);
 			}
@@ -76,51 +83,61 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 	};
 
 	return (
-		// The pre-launch gate wears the same Meadow decor as the logged-out site:
-		// `relative isolate` scopes the z-order so the hero (z-10) sits below the
-		// climbing side vines (z-20), which sit below the grassy floor (z-30) — the
-		// exact layering LoggedOutLayout uses. <MeadowDecor> supplies the pollen
-		// surface (all three pieces track the live theme via useDecorMode; the
-		// pre-paint script in index.html seeds data-theme before this renders).
+		// The pre-launch gate wears the same Meadow decor as the logged-out site.
+		// `relative isolate` scopes the z-order. The gate is a single-viewport panel:
+		// `h-dvh overflow-hidden` pins it to exactly the viewport so it never scrolls
+		// and the grassy floor stays visible at the bottom. <MeadowDecor> supplies the
+		// pollen surface and centers the content in the space above the grass; it bakes
+		// in its own `min-h-screen`, which we override to `minHeight: 0` (inline beats
+		// the class) so it fills only the flex-1 middle instead of forcing a scroll.
+		//
+		// z-order: the pollen sits at the back; the climbing side vines + drifting bees
+		// ride a z-[5] layer above the pollen but BEHIND the card (MeadowDecor wraps the
+		// hero content at z-10) so no bees land on the card; the grassy floor (z-30) caps
+		// the very bottom, in front of everything.
 		<div
-			className="relative isolate flex min-h-screen flex-col"
+			className="relative isolate flex h-dvh flex-col overflow-hidden"
 			style={{ fontFamily: FONTS.nunito }}
 		>
-			<MeadowDecor floor={false} className="flex flex-1 flex-col justify-center">
-				{/* Hero content */}
-				<div className="mx-auto w-full max-w-3xl px-4 py-12 text-center">
+			<MeadowDecor
+				floor={false}
+				className="flex flex-1 flex-col justify-center overflow-hidden"
+				style={{ minHeight: 0 }}
+			>
+				{/* Hero content, vertically centered in the space above the grass. */}
+				<div className="mx-auto w-full max-w-3xl px-4 py-2 text-center">
 					{/* The logo sits on the bare pollen surface, above the card. */}
-					<div className="mb-8 mt-8 flex justify-center">
-						<Logo variant="full" className="h-24 sm:h-28" />
+					<div className="mt-18 mb-6 flex justify-center">
+						<Logo variant="full" className="h-20 sm:h-28" />
 					</div>
 
 					{/* Everything below the logo lives in an off-white (base-200) card so it
 						reads as a distinct panel above the pollen page surface (base-100). */}
-					<div className="card border border-base-content/5 bg-base-200 shadow-xl">
-						<div className="card-body gap-6 sm:p-10">
+					<div className="card border border-base-content/5 bg-base-200 shadow-lg">
+						<div className="card-body gap-4 sm:p-12">
 							{/* Intro copy */}
 							<div>
-								<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
-									A new non-profit building a uniquely nurturing ecosystem for creators and their
-									communities.
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+									<b>Anthers</b> is a new non-profit building a creative garden for everyone: a
+									peaceful place for videos, games, music, writing, crafts, services, and more, all
+									on an open, distributed network.
 								</p>
 
-								<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-									Games, videos, music, writing, and more, on an open, distributed network. No
-									intrusive ads, no manipulative algorithms, just your direct line to a creative
-									internet worth loving again.
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+									No more intrusive advertisements or data brokers. No more manipulative algorithms.
+									Just a harmonious ecosystem where we can all nurture a creative internet worth
+									loving again.
 								</p>
 
-								<p className="text-lg text-base-content/65 leading-relaxed mb-4 text-justify">
-									Supporting it all: a charitable foundation dedicated to lifting new and
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+									Supporting it all: a charitable foundation dedicated to lifting up new and
 									marginalized creators; building a more honest, healthy connection between creators
-									and their audiences; and sharing openly the tools to build creative community
-									without corporate interference or middlemen.
+									and their audiences without corporate interference or middlemen; and making great
+									creative and educational content is available to all, for free, forever
 								</p>
 
-								<p className="text-lg text-base-content/65 leading-relaxed text-justify">
-									It's not a crazy idea. We've done this before. All it takes is for someone to put
-									people first, and keep profit out of their the equation.
+								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-justify">
+									We can make the creative internet a better place. <b>Let's do it together.</b>
 								</p>
 							</div>
 
@@ -134,7 +151,7 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 								</div>
 							) : (
 								<form onSubmit={handleWaitlistSubmit} className="flex flex-col gap-4">
-									<p className="text-base text-base-content/70">
+									<p className="text-base text-base-content/50">
 										We're excited to share Anthers with you but aren't quite ready yet.
 										<br />
 										Leave your email and we'll let you know when we're ready for you.
@@ -234,14 +251,19 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 				</div>
 			</MeadowDecor>
 
-			{/* Climbing side vines spanning the whole gate, in front of the hero (z-20)
-				but behind the grassy floor below (z-30). The gate's content is narrow
-				(max-w-3xl), so it opts into showing vines from lg — the marketing shell
+			{/* Climbing side vines + drifting bees spanning the whole gate. Wrapped in a
+				z-[5] layer so they sit above the pollen but BEHIND the card (z-10) — the
+				gate's card is narrow, so bees would otherwise drift over its text. The
+				gate opts into showing vines from lg (narrow content); the marketing shell
 				keeps the default xl to avoid crowding its wider text. */}
-			<MeadowVines from="lg" />
+			<div className="pointer-events-none absolute inset-0 z-[5]">
+				<MeadowVines from="lg" />
+			</div>
 
-			{/* The grassy meadow the gate ends on, same as every logged-out page. */}
-			<MeadowFloor />
+			{/* The grassy meadow the gate ends on, same as every logged-out page — a
+				slightly shorter band here so the single-viewport panel fits standard
+				monitors without scrolling. */}
+			<MeadowFloor heightClass="h-36" />
 		</div>
 	);
 }

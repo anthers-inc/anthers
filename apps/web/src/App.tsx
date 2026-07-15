@@ -7,6 +7,7 @@ import PublicShell from "./components/layout/PublicShell";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
+import { SiteGatePanel } from "./components/ui/SiteGate";
 import StudioRedirect from "./components/ui/StudioRedirect";
 import AboutPage from "./pages/AboutPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
@@ -46,6 +47,15 @@ import WikiPage from "./pages/WikiPage";
 export default function App() {
 	return (
 		<Routes>
+			{/*
+				Preview route for the pre-launch SiteGate. The gate normally renders as a
+				wall outside the router (see index.tsx), so once you're past it locally its
+				look can't be revisited without clearing the anthers_site_access flag. This
+				mounts the same panel on its own URL so it's easy to tinker with. Reaching
+				it at all means you're already authorized, so the panel is just a preview.
+			*/}
+			<Route path="/site-gate" element={<SiteGatePanel />} />
+
 			{/*
 				Marketing / logged-out layout
 				These pages always show the marketing chrome (sign up/log in buttons,
