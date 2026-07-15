@@ -77,7 +77,7 @@ export default function ForUsersPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<p className="text-justify [text-align-last:center] mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
-							Anthers is a creative garden for everyone—a peaceful place for videos, games, music,
+							Anthers is a creative garden for everyone: a peaceful place for videos, games, music,
 							writing, crafts, services, and more, all on an open, distributed network. A harmonious
 							ecosystem supported by a new non-profit foundation, where we can all nurture a
 							creative internet worth loving again.
