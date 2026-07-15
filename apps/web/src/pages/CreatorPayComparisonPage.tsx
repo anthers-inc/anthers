@@ -34,8 +34,8 @@
 // it reads as one set with the rest of Resources.
 
 import { BADGE_PLANS } from "@anthers/shared/constants";
+import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ─── Comparison data ─────────────────────────────────────────────────────────

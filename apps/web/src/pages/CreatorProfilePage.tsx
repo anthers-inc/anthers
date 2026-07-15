@@ -2,6 +2,7 @@
 
 import { BADGE_ORDER, BADGE_PLANS, badgeLabel } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
+import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type {
 	Badge,
@@ -24,7 +25,6 @@ import {
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
 

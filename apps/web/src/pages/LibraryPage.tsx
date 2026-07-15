@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Purchase } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
@@ -14,7 +15,6 @@ import {
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
 
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
-import { Link } from "react-router-dom";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 

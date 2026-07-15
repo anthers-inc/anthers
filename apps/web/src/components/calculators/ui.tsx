@@ -4,8 +4,8 @@
 // DaisyUI-native so the three calculators read as one consistent set and follow
 // the site's light/dark theme.
 
+import { Link } from "@anthers/web-shared/router";
 import { ChevronLeftIcon } from "@heroicons/react/24/outline";
-import { Link } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Page header

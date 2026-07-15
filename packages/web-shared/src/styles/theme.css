@@ -154,6 +154,27 @@
 	}
 }
 
+/* Page cross-fade for client-side navigations. Links opt into the View Transitions
+   API (via @anthers/web-shared/router), so the browser snapshots the outgoing and
+   incoming pages and fades between them — a soft crossfade instead of an instant
+   cut — while the persistent shell (sticky nav + botanical decor) stays put beneath.
+   Same easing as the reveals above. Browsers without the API navigate instantly. */
+@media (prefers-reduced-motion: no-preference) {
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation-duration: 0.32s;
+		animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+	}
+}
+/* Reduced motion: skip the crossfade entirely (the swap is instant). */
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation: none !important;
+	}
+}
+
 /* Flat Meadow base surface. The reference page layers a subtle pollen texture and
    botanical decor on top (shipping as shared decor in the migration's next phase);
    the body itself is just the darkest base tone so raised bg-base-200/300 surfaces

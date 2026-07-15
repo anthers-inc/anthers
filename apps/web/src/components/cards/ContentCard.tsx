@@ -2,10 +2,10 @@
 
 import { LockedCover, UnlockModal, unlockLabel } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 

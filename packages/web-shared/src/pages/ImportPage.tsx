@@ -7,9 +7,9 @@ import {
 	MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 
 const apiBase =

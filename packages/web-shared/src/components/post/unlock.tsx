@@ -6,9 +6,9 @@
  */
 import { LockClosedIcon } from "@heroicons/react/24/solid";
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { postUrl } from "../../lib/postUrl";
+import { Link } from "../../lib/router";
 import type { AccessResult, PostListItem } from "../../lib/types";
 
 /** Short call-to-action label for a locked post, by access reason. */

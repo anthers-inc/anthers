@@ -2,13 +2,13 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { postUrl } from "@anthers/web-shared/postUrl";
+import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { LockClosedIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import { Link, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { useAttentionTracker } from "@/lib/attention";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";

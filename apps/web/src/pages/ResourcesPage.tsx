@@ -10,6 +10,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowRightIcon,
 	BanknotesIcon,
@@ -20,7 +21,6 @@ import {
 	UserGroupIcon,
 	WalletIcon,
 } from "@heroicons/react/24/outline";
-import { Link } from "react-router-dom";
 
 const serif = { fontFamily: FONTS.fraunces };
 
