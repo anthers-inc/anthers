@@ -182,3 +182,46 @@
 body {
 	background-color: var(--color-base-100);
 }
+
+/* Scrollbar — two jobs.
+
+   1. Reserve the gutter so the page doesn't shift left/right when a scrollbar
+      appears on tall pages and vanishes on short ones. This only matters where the
+      *document* scrolls, which on the consumer site is exactly the marketing shell
+      (LoggedOutLayout), so it opts in via `html.gutter-stable` (toggled on mount).
+      The app shell and Studio scroll an inner <main> instead, so a blanket
+      `html { scrollbar-gutter: stable }` would just leave an empty strip down their
+      right edge — hence the scoping.
+   2. Dress the bar to match the Meadow palette instead of the raw OS chrome —
+      applied globally so every scroller (document, app <main>, dropdowns) matches.
+
+   Firefox reads scrollbar-width/-color (both inherit, so one <html> declaration
+   styles every scroller); Chromium/WebKit read the ::-webkit-scrollbar pseudos.
+   The thumb is a soft base-content tint that warms toward primary on hover; the
+   track is transparent so it blends into the reserved gutter. Theme-aware via the
+   palette vars, so it recolors with the light/dark toggle. */
+html {
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in oklch, var(--color-base-content) 22%, transparent) transparent;
+}
+html.gutter-stable {
+	scrollbar-gutter: stable;
+}
+*::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+	background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+	background-color: color-mix(in oklch, var(--color-base-content) 22%, transparent);
+	background-clip: padding-box;
+	/* transparent border pads the thumb in, so it reads as a slim floating bar */
+	border: 3px solid transparent;
+	border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+	background-color: color-mix(in oklch, var(--color-primary) 45%, transparent);
+}

@@ -153,8 +153,11 @@ function LoggedInLayoutInner() {
 					</div>
 				</aside>
 
-				{/* Main content area */}
-				<main className={`flex-1 min-w-0 overflow-y-auto ${currentTrack ? "pb-16" : ""}`}>
+				{/* Main content area — reserve the scrollbar gutter so short and tall pages
+					keep the same width (no content shift when the scrollbar appears). */}
+				<main
+					className={`flex-1 min-w-0 overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+				>
 					<Outlet />
 
 					{/* Footer */}
