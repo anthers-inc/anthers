@@ -40,7 +40,7 @@ export function H2({ children }: { children: React.ReactNode }) {
 /** The intro paragraph under a heading. */
 export function Lede({ children }: { children: React.ReactNode }) {
 	return (
-		<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/65">
+		<p className="text-justify [text-align-last:center] mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/65">
 			{children}
 		</p>
 	);

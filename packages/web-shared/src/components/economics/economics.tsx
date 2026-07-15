@@ -247,7 +247,7 @@ export function SubscriptionCalculator() {
 						<SplitRow
 							dot="bg-primary"
 							label="Time Pool"
-							desc="to creators, by time spent"
+							desc="distributed 100% to the creators you enjoy, by time spent"
 							amount={timePool}
 						/>
 						<SplitRow
@@ -255,15 +255,19 @@ export function SubscriptionCalculator() {
 							label="Seeds"
 							desc={
 								plan.seeds > 0
-									? `${plan.seeds}× $1, 100% to creators you pick`
-									: "included on paid plans"
+									? `${plan.seeds}× boosts, $1 each, given to the creators you choose`
+									: "boosts included on paid plans; can be purchased on free plans"
 							}
 							amount={seeds}
 						/>
 						<SplitRow
 							dot="bg-info"
 							label="Community Share"
-							desc={b.subsidised ? "subsidised on Free" : "free access + charity"}
+							desc={
+								b.subsidised
+									? "free access for all is supported by paid users"
+									: "supports free access for all  + charitable programs"
+							}
 							amount={community}
 						/>
 					</div>
@@ -330,14 +334,14 @@ export function PurchaseExample({
 		},
 		{
 			label: "Delivery",
-			desc: "the literal data transfer, at cost",
+			desc: "the literal download transfer, provided at cost",
 			amount: delivery,
-			bar: "bg-base-content/30",
-			dot: "bg-base-content/30",
+			bar: "bg-secondary",
+			dot: "bg-secondary",
 		},
 		{
 			label: "Community Share",
-			desc: "free-tier access + charitable programs",
+			desc: "supports free access for all  + charitable programs",
 			amount: community,
 			bar: "bg-info",
 			dot: "bg-info",

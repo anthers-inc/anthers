@@ -62,13 +62,13 @@ export default function ForUsersPage() {
 					<Reveal>
 						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
 						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-							For Players, Listeners, Viewers, Readers, &amp; Fans
+							For the Players, Listeners, Viewers, Readers, &amp; Fans
 						</p>
 						<h1
 							style={serif}
 							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
 						>
-							Someplace that's ours,
+							Someplace ours,
 							<br />
 							<em className="font-medium text-primary not-italic">
 								where we can all grow together
@@ -76,33 +76,36 @@ export default function ForUsersPage() {
 						</h1>
 					</Reveal>
 					<Reveal delay={150}>
-						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
+						<p className="text-justify [text-align-last:center] mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is a creative garden for everyone—a peaceful place for videos, games, music,
 							writing, crafts, services, and more, all on an open, distributed network. A harmonious
 							ecosystem supported by a new non-profit foundation, where we can all nurture a
 							creative internet worth loving again.
 						</p>
-						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
+						<p className="text-justify [text-align-last:center] mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Here, your relationship with the creators and content you love belongs to you. Not to
 							advertisers, data brokers, or billionaire edgelords. This is the place where we open
 							the gates, and let you and the artists and artisans who inspire you be free.
 						</p>
-						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
+						<p className="text-justify [text-align-last:center] mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							No ads, ever. No shareholders, ever. Just freedom to see and be seen, to listen and be
 							heard, and to understand and be understood.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
-							<Link to="/signup" className={`btn btn-primary rounded-full px-8 ${ctaMotion}`}>
-								Start your adventures
+							<Link to="/signup" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
+								Start Exploring
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
 							No payment required to use Anthers, ever. All accounts have an allowance of free
 							access every month, forever, no strings attached.
 						</p>
-						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+						<BrandGlyph
+							name="divider-botanical"
+							className="-mb-20 -mt-5 h-24 w-52 text-primary/45"
+						/>
 					</Reveal>
 				</div>
 			</header>
@@ -246,7 +249,7 @@ export default function ForUsersPage() {
 						secrets:
 					</p>
 				</Reveal>
-				<Reveal delay={120} className="mx-auto mt-12 block max-w-4xl">
+				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl">
 					<SubscriptionCalculator />
 				</Reveal>
 			</Section>
@@ -355,8 +358,8 @@ export default function ForUsersPage() {
 							catalog free with an account you can create in seconds.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
-							<Link to="/signup" className={`btn btn-primary rounded-full px-7 ${ctaMotion}`}>
-								Start your adventures
+							<Link to="/signup" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
+								Start Exploring
 							</Link>
 						</div>
 					</Reveal>
@@ -389,7 +392,7 @@ function SignpostCard({
 			<h3 style={serif} className="mb-2 text-xl font-medium">
 				{title}
 			</h3>
-			<p className="text-sm leading-relaxed text-base-content/70">{children}</p>
+			<p className="text-justify text-sm leading-relaxed text-base-content/70">{children}</p>
 		</Card>
 	);
 }

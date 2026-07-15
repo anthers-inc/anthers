@@ -620,7 +620,10 @@ export default function CreatorDemoPage() {
 							Choose your layout, colors, and typography. Pin featured work. Organize your content
 							your way. Below are three examples of what's possible.
 						</Lede>
-						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+						<BrandGlyph
+							name="divider-botanical"
+							className="-mb-20 -mt-5 h-24 w-52 text-primary/45"
+						/>
 					</Reveal>
 				</div>
 			</header>

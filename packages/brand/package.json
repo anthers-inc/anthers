@@ -7,11 +7,13 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./svg/*": "./svg/*"
+		"./svg/*": "./svg/*",
+		"./logo/*": "./logo/*"
 	},
 	"files": [
 		"src",
-		"svg"
+		"svg",
+		"logo"
 	],
 	"scripts": {
 		"build": "bun run scripts/build-icons.ts",

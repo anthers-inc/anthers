@@ -57,7 +57,7 @@ const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2
 
 /** Badge glyphs, low → high (matches the economics widget's ladder emoji). */
 const BADGE_EMOJI: Record<string, string> = {
-	free: "🌰",
+	// free: "🌰",
 	root: "🫚",
 	sprout: "🌱",
 	petal: "🌷",
@@ -96,7 +96,7 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
-							<Link to={startHref} className="btn btn-primary rounded-full px-8">
+							<Link to={startHref} className="btn btn-primary lg px-8">
 								Start Creating
 							</Link>
 							<Link
@@ -106,7 +106,10 @@ export default function ForCreatorsPage() {
 								See What Others Built
 							</Link>
 						</div>
-						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+						<BrandGlyph
+							name="divider-botanical"
+							className="-mb-20 -mt-5 h-24 w-52 text-primary/45"
+						/>
 					</Reveal>
 				</div>
 			</header>
@@ -157,11 +160,15 @@ export default function ForCreatorsPage() {
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The solution</Eyebrow>
-					<H2>Every way fans pay you, see what reaches you</H2>
+					<H2>When someone pays you, that's what you get paid.</H2>
 					<Lede>
-						Anthers is Patreon, Bandcamp, Steam, and itch—at a 0% cut. Seeds and purchases reach you
-						in full; public streaming makes your work available effectively at cost. Pick how a fan
-						supports you and see exactly what reaches the creator versus the middleman.
+						Anthers is Patreon, Bandcamp, Steam, and itch, at a 0% cut. Direct purchases and
+						channel-supporting Seeds are paid 100% to you; streaming makes your work discoverable to
+						users at-cost.
+					</Lede>
+					<Lede>
+						Try out all the ways a fan can support you, and see what happens when you cut out the
+						for-profit middlemen.
 					</Lede>
 				</Reveal>
 				<Reveal delay={80} className="mt-12">

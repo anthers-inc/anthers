@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link, NavLink, Outlet, useNavigate } from "@anthers/web-shared/router";
+import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	Bars3Icon,
@@ -58,8 +59,8 @@ function LoggedInLayoutInner() {
 					>
 						<Bars3Icon className="w-5 h-5" />
 					</button>
-					<Link to="/feed" className="btn btn-ghost text-lg font-bold px-2">
-						Anthers
+					<Link to="/feed" className="btn btn-ghost px-2">
+						<Logo variant="oneline" className="h-9" />
 					</Link>
 				</div>
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import Logo from "@anthers/web-shared/ui/Logo";
 import { type ReactNode, useState } from "react";
 
 const STORAGE_KEY = "anthers_site_access";
@@ -74,7 +75,9 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 		<div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
 			{/* Hero content */}
 			<div className="max-w-3xl w-full text-center">
-				<h1 className="text-6xl sm:text-7xl font-bold tracking-tight mb-8 mt-8">Anthers</h1>
+				<div className="mb-8 mt-8 flex justify-center">
+					<Logo variant="full" className="h-24 sm:h-28" />
+				</div>
 
 				<p className="text-xl sm:text-2xl text-base-content/80 leading-relaxed mb-4 text-justify">
 					A new non-profit building a uniquely nurturing ecosystem for creators and their
