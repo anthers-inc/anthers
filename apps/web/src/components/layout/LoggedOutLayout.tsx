@@ -3,6 +3,7 @@ import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, Outlet } from "@anthers/web-shared/router";
+import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect } from "react";
@@ -71,11 +72,11 @@ export default function LoggedOutLayout() {
 		// below the side vines (z-20), which sit below the grassy floor (z-30). The
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
-			<header className="nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
+			<header className="py-1 nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
 				{/* Theme + language utilities, floated into the page's top-right corner —
 					deliberately outside the centered nav. Desktop only; on mobile the theme
 					toggle drops into the hamburger menu below. */}
-				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-6 lg:flex">
+				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-8 lg:flex">
 					{/* Language picker — localization is a TODO; the menu is inert for now. */}
 					<div className="dropdown dropdown-end">
 						<label
@@ -103,7 +104,7 @@ export default function LoggedOutLayout() {
 
 				{/* Main nav — brand on the left, page links centered, a single CTA on the
 					right. The mirrored flex-1 side clusters keep the links dead-center. */}
-				<div className="navbar mx-auto w-full max-w-5xl px-4">
+				<div className="navbar mx-auto w-full max-w-6xl px-4">
 					{/* Left: brand (+ mobile menu) */}
 					<div className="flex flex-1 items-center gap-1">
 						{/* Mobile menu */}
@@ -141,13 +142,13 @@ export default function LoggedOutLayout() {
 						</div>
 
 						{/* Brand — links to the homepage (the For Users link does too, intentionally) */}
-						<Link to="/" className="btn btn-ghost text-lg font-bold px-2">
-							Anthers
+						<Link to="/" className="btn btn-ghost px-2">
+							<Logo variant="oneline" className="h-8 sm:h-10 lg:h-15" />
 						</Link>
 					</div>
 
 					{/* Center: page links */}
-					<ul className="menu menu-horizontal hidden gap-1 px-1 lg:flex">
+					<ul className="translate-y-0.5 scale-105 menu menu-horizontal hidden gap-8 lg:flex">
 						<li>
 							<Link to="/">For Users</Link>
 						</li>
@@ -172,7 +173,7 @@ export default function LoggedOutLayout() {
 					<div className="flex flex-1 items-center justify-end">
 						<Link
 							to="/signup"
-							className="btn btn-primary btn-sm text-sm shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
+							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
 						>
 							Start Exploring
 						</Link>
@@ -197,12 +198,7 @@ export default function LoggedOutLayout() {
 			>
 				<div className="mx-auto max-w-6xl">
 					<div className="mb-8 flex flex-col items-center text-center">
-						<p style={serif} className="text-2xl font-medium text-primary">
-							Anthers
-						</p>
-						<p className="mt-1.5 max-w-md text-xs leading-relaxed text-base-content/55">
-							A non-profit home for creative work, planted by the people who use it.
-						</p>
+						<Logo className="h-24 -translate-x-4" />
 					</div>
 					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-6">
 						{FOOTER_NAV.map((col) => (
@@ -226,7 +222,7 @@ export default function LoggedOutLayout() {
 						))}
 					</div>
 					<p className="mt-9 text-center text-xs text-base-content/45">
-						© Anthers Foundation · Free to browse, always.
+						© 2026 The Anthers Foundation · growing a creative garden for free, forever
 					</p>
 				</div>
 			</footer>

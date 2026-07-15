@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { useAuth } from "@anthers/web-shared/auth";
+import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	ArrowTopRightOnSquareIcon,
@@ -44,10 +45,8 @@ export default function StudioShell({ children }: { children: ReactNode }) {
 				<div className="max-w-5xl mx-auto px-4">
 					<div className="h-14 flex items-center justify-between gap-4">
 						<Link to="/" className="flex items-center gap-2 font-bold shrink-0">
-							<span className="text-xl">🌻</span>
-							<span>
-								Anthers <span className="text-primary">Studio</span>
-							</span>
+							<Logo variant="oneline" className="h-8" />
+							<span className="text-lg text-primary">Studio</span>
 						</Link>
 						<div className="flex items-center gap-4 text-sm">
 							{user?.username && (

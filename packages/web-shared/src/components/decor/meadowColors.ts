@@ -40,10 +40,10 @@ export const DARK: DecorColors = {
 export const LIGHT: DecorColors = {
 	pollen: "oklch(72% 0.12 92)",
 	pollenScale: 1.4,
-	stem: "oklch(49% 0.11 152)",
+	stem: "oklch(0.486 0.106 152.671)",
 	flower: "oklch(84% 0.13 92)",
 	accent: "oklch(69% 0.14 74)",
-	grass: "oklch(60% 0.12 152)",
+	grass: "oklch(0.486 0.106 152.671)",
 	casing: "oklch(98.6% 0.012 96)",
 	vineOpacity: 0.62,
 	floorOpacity: 1,

@@ -35,6 +35,20 @@ icons.bee;                                    // { viewBox, inner } — build yo
 - **Compose into generated SVG backgrounds** (e.g. the lab's tiled vine): splice `iconGroup(...)` into the SVG string.
 
 
+# Logo lockups (raster)
+
+The Anthers wordmark lockup lives in `logo/` as full-colour PNGs — a raster placeholder for now, deliberately outside the recolor-ready SVG pipeline above (a full-colour logo can't recolor from a single value). Four cuts, exported by path (`./logo/*`) so any surface's bundler emits them as hashed assets:
+
+- `anthers-lockup.png` / `anthers-lockup-dark.png` — full lockup with the "Our Creative Garden" tagline, for light / dark backgrounds.
+- `anthers-lockup-oneline.png` / `anthers-lockup-oneline-dark.png` — wordmark only (no tagline), the compact navbar cut.
+
+```ts
+import lockup from "@anthers/brand/logo/anthers-lockup.png"; // → hashed URL string
+```
+
+On web surfaces, prefer the shared `<Logo>` component (`@anthers/web-shared/ui/Logo`), which wraps these four and swaps light/dark live off the active theme. Swap the files here to reship the mark everywhere at once.
+
+
 # Licensing
 
 The package's own code is AGPL-3.0-or-later. **Icon artwork in `svg/` may be third-party** (e.g. The Noun Project) under its own license — those files are exempt from the repo's AGPL SPDX-header convention. Every asset's source and license is recorded in `THIRD-PARTY.md`. Before committing third-party assets to this public repo, confirm the source's license permits redistributing the raw files.

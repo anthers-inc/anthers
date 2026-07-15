@@ -728,7 +728,10 @@ export default function UserDemoPage() {
 							check your dashboard to see exactly how your money is split across the creators you
 							engage with.
 						</Lede>
-						<BrandGlyph name="divider-botanical" className="mt-10 h-14 w-52 text-primary/45" />
+						<BrandGlyph
+							name="divider-botanical"
+							className="-mb-20 -mt-5 h-24 w-52 text-primary/45"
+						/>
 					</Reveal>
 				</div>
 			</header>
