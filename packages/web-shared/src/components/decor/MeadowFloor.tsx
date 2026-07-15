@@ -15,10 +15,18 @@ import { useDecorMode } from "./useDecorMode";
 export function MeadowFloor({
 	mode,
 	className = "",
+	heightClass = "h-56",
 }: {
 	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
 	mode?: "light" | "dark";
 	className?: string;
+	/**
+	 * Tailwind height utility for the floor band (default `h-56`). Kept as a prop
+	 * rather than hardcoded so a caller can run a shorter band where vertical space
+	 * is tight (e.g. the single-viewport SiteGate). The grass tile scales to the band
+	 * height (`background-size: auto 100%`), so a shorter band just yields shorter grass.
+	 */
+	heightClass?: string;
 }) {
 	const observed = useDecorMode();
 	const c = decorColors(mode ?? observed);
@@ -34,7 +42,10 @@ export function MeadowFloor({
 		opacity: c.floorOpacity,
 	};
 	return (
-		<div aria-hidden="true" className={`pointer-events-none relative z-30 h-56 ${className}`}>
+		<div
+			aria-hidden="true"
+			className={`pointer-events-none relative z-30 ${heightClass} ${className}`}
+		>
 			<div className="absolute inset-0" style={floorStyle} />
 			<BrandGlyph
 				name="bee-flying"
