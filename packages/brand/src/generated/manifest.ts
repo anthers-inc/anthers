@@ -4,6 +4,36 @@
 export type BrandAsset = { id: string; path: string; collection: string; viewBox: string };
 export const manifest: BrandAsset[] = [
 	{
+		"id": "anthers/anthers-logo-temp-cleanup/anthers-flower",
+		"path": "anthers/anthers-logo-temp-cleanup/anthers-flower.svg",
+		"collection": "anthers/anthers-logo-temp-cleanup",
+		"viewBox": "96 -70 828 828"
+	},
+	{
+		"id": "anthers/anthers-logo-temp-cleanup/anthers-mark-flat-green",
+		"path": "anthers/anthers-logo-temp-cleanup/anthers-mark-flat-green.svg",
+		"collection": "anthers/anthers-logo-temp-cleanup",
+		"viewBox": "96 -70 828 828"
+	},
+	{
+		"id": "anthers/anthers-logo-temp-cleanup/anthers-mark-reversed",
+		"path": "anthers/anthers-logo-temp-cleanup/anthers-mark-reversed.svg",
+		"collection": "anthers/anthers-logo-temp-cleanup",
+		"viewBox": "96 -70 828 828"
+	},
+	{
+		"id": "anthers/anthers-logo-temp-cleanup/anthers-mark",
+		"path": "anthers/anthers-logo-temp-cleanup/anthers-mark.svg",
+		"collection": "anthers/anthers-logo-temp-cleanup",
+		"viewBox": "96 -70 828 828"
+	},
+	{
+		"id": "anthers/anthers-logo-temp/anthers-logo-rough-trace",
+		"path": "anthers/anthers-logo-temp/anthers-logo-rough-trace.svg",
+		"collection": "anthers/anthers-logo-temp",
+		"viewBox": "0 0 2160 1080"
+	},
+	{
 		"id": "nature/animals-38481-(bees)/noun-bee-1248041",
 		"path": "nature/animals-38481-(bees)/noun-bee-1248041.svg",
 		"collection": "nature/animals-38481-(bees)",
