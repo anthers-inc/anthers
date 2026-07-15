@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import FormField from "@anthers/web-shared/ui/FormField";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -85,122 +86,144 @@ export default function AuthPage({ initialMode = "login" }: { initialMode?: Mode
 		// viewport height — percentage heights can't do this because the layout's
 		// outer container uses min-h-screen (indefinite) rather than a fixed height.
 		<div className="flex flex-1 items-center justify-center px-4 py-10">
-			{/* Fixed height so login/signup are the same size (no resize on toggle);
-				keyed on mode so each toggle remounts and fades the card in. */}
-			<div
-				key={mode}
-				data-auth-fade
-				className="card bg-base-200 shadow-lg h-[32rem] w-full max-w-md"
-			>
-				<div className="card-body justify-center">
-					{mode === "login" ? (
-						<>
-							<h1 className="card-title justify-center text-2xl">Log In</h1>
-							{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain
+			{/* Positioning context sized to the card, so the botanical corner flourishes
+				can be placed around it. They're stable siblings of the keyed card, so they
+				stay put while the card cross-fades on login↔signup. */}
+			<div className="relative w-full max-w-md">
+				{/* Botanical leaf flourishes bracketing the card's four corners — one asset
+					rotated to each corner, so it frames the card without distortion. Purely
+					decorative (pointer-events-none) and theme-reactive via currentColor;
+					hidden on the smallest screens where they'd crowd the edges. */}
+				{[
+					{ corner: "-top-9 -left-9", rot: 0 },
+					{ corner: "-top-9 -right-9", rot: 90 },
+					{ corner: "-bottom-9 -right-9", rot: 180 },
+					{ corner: "-bottom-9 -left-9", rot: 270 },
+				].map(({ corner, rot }) => (
+					<BrandGlyph
+						key={rot}
+						name="corner-leafy"
+						className={`pointer-events-none absolute z-20 hidden h-36 w-36 text-primary/70 sm:block ${corner}`}
+						style={{ transform: `rotate(${rot}deg)` }}
+					/>
+				))}
+				{/* Fixed height so login/signup are the same size (no resize on toggle);
+					keyed on mode so each toggle remounts and fades the card in. */}
+				<div
+					key={mode}
+					data-auth-fade
+					className="card relative z-10 h-[32rem] w-full bg-base-200 shadow-lg"
+				>
+					<div className="card-body justify-center">
+						{mode === "login" ? (
+							<>
+								<h1 className="card-title justify-center text-2xl">Log In</h1>
+								{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain
 								div, not <p>, so DaisyUI's card-body `p { flex-grow: 1 }` doesn't
 								balloon it and shove the form down. */}
-							<div className="text-center text-sm text-base-content/70">
-								New to Anthers?{" "}
-								<button
-									type="button"
-									className="link link-primary"
-									onClick={() => switchMode("signup")}
-								>
-									Sign up
-								</button>
-							</div>
-							{errors.general && (
-								<div className="alert alert-error text-sm mt-2">
-									<span>{errors.general}</span>
+								<div className="text-center text-sm text-base-content/70">
+									New to Anthers?{" "}
+									<button
+										type="button"
+										className="link link-primary"
+										onClick={() => switchMode("signup")}
+									>
+										Sign up
+									</button>
 								</div>
-							)}
-							<form onSubmit={handleLogin} className="mt-2 flex flex-col gap-3">
-								<FormField label="Username or Email" required>
-									<input
-										type="text"
-										className="input input-bordered w-full"
-										value={login}
-										onChange={(e) => setLogin(e.target.value)}
-										required
-									/>
-								</FormField>
-								<FormField label="Password" required>
-									<input
-										type="password"
-										className="input input-bordered w-full"
-										value={loginPassword}
-										onChange={(e) => setLoginPassword(e.target.value)}
-										required
-									/>
-								</FormField>
-								<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
-									{loading ? <span className="loading loading-spinner loading-sm" /> : "Log In"}
-								</button>
-							</form>
-						</>
-					) : (
-						<>
-							<h1 className="card-title justify-center text-2xl">Create Account</h1>
-							{/* Log-in prompt sits at the top of the card (YNAB-style). Plain div,
+								{errors.general && (
+									<div className="alert alert-error text-sm mt-2">
+										<span>{errors.general}</span>
+									</div>
+								)}
+								<form onSubmit={handleLogin} className="mt-2 flex flex-col gap-3">
+									<FormField label="Username or Email" required>
+										<input
+											type="text"
+											className="input input-bordered w-full"
+											value={login}
+											onChange={(e) => setLogin(e.target.value)}
+											required
+										/>
+									</FormField>
+									<FormField label="Password" required>
+										<input
+											type="password"
+											className="input input-bordered w-full"
+											value={loginPassword}
+											onChange={(e) => setLoginPassword(e.target.value)}
+											required
+										/>
+									</FormField>
+									<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
+										{loading ? <span className="loading loading-spinner loading-sm" /> : "Log In"}
+									</button>
+								</form>
+							</>
+						) : (
+							<>
+								<h1 className="card-title justify-center text-2xl">Create Account</h1>
+								{/* Log-in prompt sits at the top of the card (YNAB-style). Plain div,
 								not <p>, so DaisyUI's card-body `p { flex-grow: 1 }` doesn't balloon it. */}
-							<div className="text-center text-sm text-base-content/70">
-								Already have an account?{" "}
-								<button
-									type="button"
-									className="link link-primary"
-									onClick={() => switchMode("login")}
-								>
-									Log in
-								</button>
-							</div>
-							{errors.general && (
-								<div className="alert alert-error text-sm mt-2">
-									<span>{errors.general}</span>
+								<div className="text-center text-sm text-base-content/70">
+									Already have an account?{" "}
+									<button
+										type="button"
+										className="link link-primary"
+										onClick={() => switchMode("login")}
+									>
+										Log in
+									</button>
 								</div>
-							)}
-							<form onSubmit={handleSignup} className="mt-2 flex flex-col gap-3">
-								<FormField label="Username" required error={errors.username}>
-									<input
-										type="text"
-										className="input input-bordered w-full"
-										value={username}
-										onChange={(e) => setUsername(e.target.value)}
-										required
-									/>
-								</FormField>
-								<FormField label="Email" required error={errors.email}>
-									<input
-										type="email"
-										className="input input-bordered w-full"
-										value={email}
-										onChange={(e) => setEmail(e.target.value)}
-										required
-									/>
-								</FormField>
-								<FormField label="Password" required error={errors.password}>
-									<input
-										type="password"
-										className="input input-bordered w-full"
-										value={password}
-										onChange={(e) => setPassword(e.target.value)}
-										required
-									/>
-								</FormField>
-								<FormField label="Confirm password" required error={errors.password_confirm}>
-									<input
-										type="password"
-										className="input input-bordered w-full"
-										value={passwordConfirm}
-										onChange={(e) => setPasswordConfirm(e.target.value)}
-										required
-									/>
-								</FormField>
-								<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
-									{loading ? <span className="loading loading-spinner loading-sm" /> : "Sign Up"}
-								</button>
-							</form>
-						</>
-					)}
+								{errors.general && (
+									<div className="alert alert-error text-sm mt-2">
+										<span>{errors.general}</span>
+									</div>
+								)}
+								<form onSubmit={handleSignup} className="mt-2 flex flex-col gap-3">
+									<FormField label="Username" required error={errors.username}>
+										<input
+											type="text"
+											className="input input-bordered w-full"
+											value={username}
+											onChange={(e) => setUsername(e.target.value)}
+											required
+										/>
+									</FormField>
+									<FormField label="Email" required error={errors.email}>
+										<input
+											type="email"
+											className="input input-bordered w-full"
+											value={email}
+											onChange={(e) => setEmail(e.target.value)}
+											required
+										/>
+									</FormField>
+									<FormField label="Password" required error={errors.password}>
+										<input
+											type="password"
+											className="input input-bordered w-full"
+											value={password}
+											onChange={(e) => setPassword(e.target.value)}
+											required
+										/>
+									</FormField>
+									<FormField label="Confirm password" required error={errors.password_confirm}>
+										<input
+											type="password"
+											className="input input-bordered w-full"
+											value={passwordConfirm}
+											onChange={(e) => setPasswordConfirm(e.target.value)}
+											required
+										/>
+									</FormField>
+									<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
+										{loading ? <span className="loading loading-spinner loading-sm" /> : "Sign Up"}
+									</button>
+								</form>
+							</>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>

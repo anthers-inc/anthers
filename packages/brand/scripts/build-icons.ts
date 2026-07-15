@@ -67,6 +67,14 @@ const CURATED: { id: string; path: string }[] = [
 		id: "wreath-blossom",
 		path: "nature/botanical-borders-and-frames-228479/noun-leafy-circle-border-7366620.svg",
 	},
+	// An L-shaped trailing-leaf corner flourish. Placed at all four corners (rotated)
+	// to frame the auth (login/signup) card — adapts to any card aspect without
+	// distortion. (An arch-frame was tried first but its tall crown clips behind the
+	// header on the vertically-centered auth card, so corners it is.)
+	{
+		id: "corner-leafy",
+		path: "nature/botanical-borders-and-frames-228479/noun-corner-leafy-frame-7366617.svg",
+	},
 ];
 
 // Short, human descriptions per collection folder for ASSETS.md.
