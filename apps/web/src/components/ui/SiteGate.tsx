@@ -224,9 +224,11 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 				</div>
 			</MeadowDecor>
 
-			{/* Climbing side vines spanning the whole gate (wide screens), in front of
-				the hero (z-20) but behind the grassy floor below (z-30). */}
-			<MeadowVines />
+			{/* Climbing side vines spanning the whole gate, in front of the hero (z-20)
+				but behind the grassy floor below (z-30). The gate's content is narrow
+				(max-w-3xl), so it opts into showing vines from lg — the marketing shell
+				keeps the default xl to avoid crowding its wider text. */}
+			<MeadowVines from="lg" />
 
 			{/* The grassy meadow the gate ends on, same as every logged-out page. */}
 			<MeadowFloor />

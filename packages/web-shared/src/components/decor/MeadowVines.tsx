@@ -78,12 +78,22 @@ const BEES = buildBees();
 export function MeadowVines({
 	mode,
 	vine = "triple",
+	from = "xl",
 }: {
 	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
 	mode?: "light" | "dark";
 	/** single meandering strand, or a woven preset (braid/helix/triple/twin) */
 	vine?: VineStyle;
+	/**
+	 * Breakpoint at which the vines appear (default "xl"). The site shell keeps the
+	 * default so the wider marketing content isn't crowded; the narrower SiteGate opts
+	 * into "lg". Both literal classes below keep Tailwind emitting each variant.
+	 */
+	from?: "lg" | "xl";
 }) {
+	// `show` must resolve to a LITERAL class string (not `${from}:block`) or Tailwind's
+	// scanner won't generate the variant.
+	const show = from === "lg" ? "lg:block" : "xl:block";
 	const observed = useDecorMode();
 	const c = decorColors(mode ?? observed);
 	const vineColors = { stem: c.stem, flower: c.flower };
@@ -102,15 +112,18 @@ export function MeadowVines({
 		<>
 			<div
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-28 xl:block"
+				className={`pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-28 ${show}`}
 				style={style}
 			/>
 			<div
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-28 -scale-x-100 xl:block"
+				className={`pointer-events-none absolute inset-y-0 right-0 z-20 hidden w-28 -scale-x-100 ${show}`}
 				style={style}
 			/>
-			<div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 hidden xl:block">
+			<div
+				aria-hidden="true"
+				className={`pointer-events-none absolute inset-0 z-20 hidden ${show}`}
+			>
 				{BEES.map((b) => (
 					<BrandGlyph
 						key={b.id}
