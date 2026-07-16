@@ -1,4 +1,4 @@
-![Anthers Logo](./.github/assets/anthers-logo-concept-placeholder.png)
+![Anthers Logo](./packages/brand/svg/anthers/anthers-logo-temp-cleanup/anthers-hlock-reverse.png)
 # Anthers
 
 ---
