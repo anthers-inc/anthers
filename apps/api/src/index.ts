@@ -17,6 +17,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { isLocalStorage } from "./services/storage/index.js";
+import { matchesInviteKey, matchesSitePassword } from "./site-gate.js";
 
 const app = new Hono()
 	.use(logger())
@@ -34,13 +35,19 @@ const app = new Hono()
 		return serveStatic({ root: "../../" })(c, next);
 	})
 	.get("/health", (c) => c.json({ status: "ok" }))
+	// Authorizes a visitor past the pre-launch SiteGate. Two ways in, same result
+	// (the client's anthers_site_access flag): `password` is typed into the gate,
+	// `invite` rides in on a ?invite= link we handed out.
 	.post("/health/gate", async (c) => {
-		const expected = process.env.SITE_PASSWORD ?? "";
-		if (!expected) return c.json({ ok: false }, 403);
 		const data = await c.req.json().catch(() => null);
 		if (!data) return c.json({ ok: false }, 400);
-		if (data.password !== expected) return c.json({ ok: false }, 403);
-		return c.json({ ok: true });
+		if (typeof data.password === "string" && matchesSitePassword(data.password)) {
+			return c.json({ ok: true });
+		}
+		if (typeof data.invite === "string" && matchesInviteKey(data.invite)) {
+			return c.json({ ok: true });
+		}
+		return c.json({ ok: false }, 403);
 	})
 	.route("/api/auth", authRoutes)
 	.route("/api/atproto", atprotoRoutes)

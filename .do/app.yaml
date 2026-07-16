@@ -7,7 +7,8 @@
 #   - worker     worker    — pg-boss job worker (transcode/audio/cross-publish + crons)
 #   - migrate    PRE_DEPLOY job — runs Drizzle migrations before each release
 #   - web        static site — the React SPA on the CDN
-# The whole site sits behind SiteGate (SITE_PASSWORD) until public launch.
+# The whole site sits behind SiteGate (SITE_PASSWORD) until public launch;
+# SITE_ACCESS_KEYS holds the invite keys for ?invite= links that skip it.
 #
 # Deploys from the `release` branch on push. Apply with:
 #   doctl apps create --spec .do/app.yaml         (first time)
@@ -67,6 +68,9 @@ envs:
     scope: RUN_TIME
     type: SECRET
   - key: SITE_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
+  - key: SITE_ACCESS_KEYS
     scope: RUN_TIME
     type: SECRET
   - key: RESEND_API_KEY

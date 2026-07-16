@@ -49,6 +49,8 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+# Snapshots/console logs an agent's Tier 1 MCP browser drops here
+.playwright-mcp/
 
 # ─── Legacy (Python) ───
 __pycache__/
