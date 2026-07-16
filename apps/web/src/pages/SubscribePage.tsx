@@ -321,18 +321,18 @@ export default function SubscribePage() {
 			{/* Legend — what each line item on the cards means (so the cards stay clean) */}
 			<Reveal
 				delay={120}
-				className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4"
+				className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-10 py-4"
 			>
 				{/* The wider gap from `sm` up is what the vine dividers stand in — at gap-4 the
 					vine is fractionally wider than the gap itself and crowds the next column. */}
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
-					<div>
+				<div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-10">
+					<div className="relative">
+						<LegendDivider />
 						<p className="font-semibold text-primary">Time Pool</p>
 						<p className="text-xs text-base-content/70 leading-snug">
 							Split across the creators you watch, by time spent.
 						</p>
 					</div>
-					{/* Columns 2 and 3 each carry the vine that precedes them (see LegendDivider). */}
 					<div className="relative">
 						<LegendDivider />
 						<p className="font-semibold text-primary">Seeds</p>
