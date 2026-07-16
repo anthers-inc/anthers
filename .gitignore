@@ -39,10 +39,6 @@ coverage/
 # ─── Local content storage (dev) ───
 /content/
 
-# ─── Agent files (contributor-specific) ───
-AGENTS.md
-CLAUDE.md
-
 # ─── Playwright / browser testing ───
 .screenshots/
 test-results/
