@@ -62,10 +62,17 @@ function PlanCard({
 				isCurrent ? "ring-2 ring-primary border-primary" : "border-base-300"
 			}`}
 		>
-			<div className="card-body p-5">
+			{/* [&>p]:grow-0 undoes daisyUI's `.card-body :where(p) { flex-grow: 1 }`. The grid
+				stretches every card to the tallest one (Free, which carries the extra subsidised
+				note), and that rule would spend each shorter card's leftover height by inflating
+				its paragraphs — so the same line sat at a different y on every card. Let the prose
+				keep its natural height; card-actions' mt-auto absorbs the slack instead. */}
+			<div className="card-body p-5 [&>p]:grow-0">
 				{isFree ? (
 					// Free has no badge — center the label so it's clear it's badgeless.
-					<div className="flex items-center justify-center gap-2">
+					// min-h-9 matches the badge glyph's height so every card's header row is
+					// the same height and the content below stays aligned across the grid.
+					<div className="flex min-h-9 items-center justify-center gap-2">
 						<h3 className="text-lg font-bold">{plan.name}</h3>
 						{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
 					</div>
