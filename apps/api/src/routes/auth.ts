@@ -8,6 +8,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
+import { isReservedUsername } from "../reserved-usernames.js";
 import {
 	createEmailVerificationToken,
 	createPasswordResetToken,
@@ -28,7 +29,10 @@ const signUpSchema = z.object({
 		.string()
 		.min(3)
 		.max(150)
-		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores"),
+		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
+		// A name the router already answers to would sign up fine and then strand
+		// the profile at an unreachable URL — see reserved-usernames.ts.
+		.refine((name) => !isReservedUsername(name), "That username is reserved"),
 	email: z.string().email().max(254),
 	password: z.string().min(8).max(128),
 });
