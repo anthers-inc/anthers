@@ -4,9 +4,10 @@ import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import Logo from "@anthers/web-shared/ui/Logo";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 const STORAGE_KEY = "anthers_site_access";
+const INVITE_PARAM = "invite";
 
 const baseUrl =
 	typeof location !== "undefined" &&
@@ -17,10 +18,68 @@ const baseUrl =
 type Interest = "user" | "creator" | "both";
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
+// Lift the invite key out of the URL and rewrite the address bar without it.
+// The key is a shared secret we mail out in links, so it shouldn't linger where
+// it can be screenshotted, bookmarked, or pasted back to someone else — it has
+// done its job the moment we've read it. Runs at module load, before
+// <BrowserRouter> mounts and reads location, so the router only ever sees the
+// cleaned URL and the rest of the app can ignore the param entirely.
+function takeInviteKeyFromUrl(): string | null {
+	if (typeof location === "undefined") return null;
+	const url = new URL(location.href);
+	const key = url.searchParams.get(INVITE_PARAM);
+	if (key === null) return null;
+	url.searchParams.delete(INVITE_PARAM);
+	history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+	return key;
+}
+
+const inviteKey = takeInviteKeyFromUrl();
+
+async function redeemInviteKey(key: string): Promise<boolean> {
+	try {
+		const res = await fetch(`${baseUrl}/health/gate`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ invite: key }),
+		});
+		return res.ok;
+	} catch {
+		return false;
+	}
+}
+
 export default function SiteGate({ children }: { children: ReactNode }) {
 	const [authorized, setAuthorized] = useState(() => localStorage.getItem(STORAGE_KEY) === "true");
+	// An invite key can only be checked by the server, so hold everything back
+	// while that's in flight — rendering the gate first would flash the wall at
+	// someone whose link is about to open it.
+	const [redeeming, setRedeeming] = useState(() => !authorized && inviteKey !== null);
+	const [inviteRejected, setInviteRejected] = useState(false);
+
+	useEffect(() => {
+		if (!redeeming || inviteKey === null) return;
+		let cancelled = false;
+		redeemInviteKey(inviteKey).then((ok) => {
+			if (cancelled) return;
+			// A redeemed key writes the same flag the password does, so the visitor
+			// stays in on later visits without the link.
+			if (ok) {
+				localStorage.setItem(STORAGE_KEY, "true");
+				setAuthorized(true);
+			} else {
+				setInviteRejected(true);
+			}
+			setRedeeming(false);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [redeeming]);
+
 	if (authorized) return <>{children}</>;
-	return <SiteGatePanel onAuthorized={() => setAuthorized(true)} />;
+	if (redeeming) return null;
+	return <SiteGatePanel onAuthorized={() => setAuthorized(true)} inviteRejected={inviteRejected} />;
 }
 
 // The pre-launch gate's presentation and its password/waitlist forms, kept
@@ -28,9 +87,17 @@ export default function SiteGate({ children }: { children: ReactNode }) {
 // <SiteGate> above when unauthorized) and on its own /site-gate route, so the
 // look can be tinkered with locally without clearing the anthers_site_access
 // flag. `onAuthorized` fires only in the wall case — on the route it's a no-op.
-export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
-	// Password bypass
-	const [showPassword, setShowPassword] = useState(false);
+export function SiteGatePanel({
+	onAuthorized,
+	inviteRejected,
+}: {
+	onAuthorized?: () => void;
+	inviteRejected?: boolean;
+}) {
+	// Password bypass. Someone who arrived on a dead invite link was expecting to
+	// be let in, so open the password field for them rather than making them hunt
+	// for it behind the early-access link.
+	const [showPassword, setShowPassword] = useState(!!inviteRejected);
 	const [password, setPassword] = useState("");
 	const [passwordError, setPasswordError] = useState(false);
 	const [passwordLoading, setPasswordLoading] = useState(false);
@@ -225,6 +292,9 @@ export function SiteGatePanel({ onAuthorized }: { onAuthorized?: () => void }) {
 
 							{/* Password bypass link */}
 							<div>
+								{inviteRejected && (
+									<p className="mb-3 text-sm text-warning">That early-access link isn't valid.</p>
+								)}
 								{showPassword ? (
 									<form onSubmit={handlePasswordSubmit} className="flex gap-2 max-w-xs mx-auto">
 										<input
