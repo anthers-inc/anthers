@@ -234,7 +234,7 @@ function PlanCard({
 							: saving
 								? "Saving…"
 								: isDefault
-									? "Start free, stay free"
+									? "Free forever"
 									: isFree
 										? "Switch to Free"
 										: `Choose ${plan.name}`}
