@@ -41,33 +41,120 @@ function watchHours(gib: number): number {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Legend divider                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The vine separating the legend's columns — `divider-botanical`, the same
+ * flourish used as a horizontal rule across the marketing pages, stood on end.
+ *
+ * It's positioned absolutely rather than rendered between the columns for two
+ * reasons: the legend is a `sm:grid-cols-3`, so a real element there would land
+ * in a fourth cell and break the layout; and a rotated element keeps its
+ * *unrotated* layout box, which would reserve a square of dead space as wide as
+ * the vine is tall. Out of flow, it costs nothing.
+ *
+ * `left-0` sits the box's left edge on the column's, so `-50%` centres it on
+ * that edge and the extra `-1rem` walks it out to the middle of the `sm:gap-8`
+ * (2rem) between columns — keep the two in step if the gap changes. Hidden below
+ * `sm`, where the columns stack and a vertical rule would divide nothing.
+ *
+ * The positioning and `hidden sm:block` live on a wrapper rather than on the
+ * glyph itself: <BrandGlyph> sets `display:inline-block` as an *inline style*,
+ * which outranks any display utility, so `hidden` on a glyph silently does
+ * nothing and it shows up on mobile anyway.
+ */
+function LegendDivider() {
+	return (
+		<span
+			aria-hidden="true"
+			className="pointer-events-none absolute top-1/2 left-0 hidden h-16 w-16 sm:block"
+			style={{ transform: "translate(calc(-50% - 1rem), -50%) rotate(90deg)" }}
+		>
+			<BrandGlyph name="divider-botanical" className="h-full w-full text-primary/30" />
+		</span>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper tip                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * An (i) carrying a line of helper text. daisyUI's `.tooltip` handles hover and
+ * keyboard (it opens on `:focus-visible`) by itself; the click toggle is here for
+ * touch, where neither fires — without it the text is simply unreachable on a
+ * phone. `aria-label` carries the text too, since the tooltip itself is CSS
+ * `content:` that screen readers can't be relied on to announce.
+ *
+ * Opens to the right, not daisyUI's default centre-above: its only home is the
+ * Free card, leftmost in the grid at every breakpoint, so a centred tooltip runs
+ * off the left of the viewport and loses the first characters of every line.
+ * daisyUI has no auto-flip. Revisit the placement if this ever sits somewhere
+ * with room on both sides.
+ */
+function InfoTip({ text }: { text: string }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<span
+			className={`tooltip tooltip-primary tooltip-right ${open ? "tooltip-open" : ""}`}
+			data-tip={text}
+		>
+			<button
+				type="button"
+				aria-label={text}
+				className="flex h-4 w-4 items-center justify-center rounded-full border border-base-content/25 text-[9px] font-semibold text-base-content/50 leading-none transition-colors hover:border-primary hover:text-primary"
+				onClick={() => setOpen((v) => !v)}
+				onBlur={() => setOpen(false)}
+			>
+				i
+			</button>
+		</span>
+	);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Plan card                                                         */
 /* ------------------------------------------------------------------ */
 
 function PlanCard({
 	plan,
 	isCurrent,
+	isDefault,
 	saving,
 	onChoose,
 }: {
 	plan: BadgePlanView;
 	isCurrent: boolean;
+	/** Free, shown to a logged-out visitor — the plan they'll land on by default. */
+	isDefault: boolean;
 	saving: boolean;
 	onChoose: () => void;
 }) {
 	const isFree = plan.id === "free";
+	// Both states wear the ring, but only a real current plan disables the button:
+	// a logged-out visitor still needs it live to reach signup.
+	const highlighted = isCurrent || isDefault;
+	const tag = isCurrent ? "Your plan" : isDefault ? "Default" : null;
 	return (
 		<div
 			className={`card bg-base-200/60 shadow-xl border-2 transition-all ${
-				isCurrent ? "ring-2 ring-primary border-primary" : "border-base-300"
+				highlighted ? "ring-2 ring-primary border-primary" : "border-base-300"
 			}`}
 		>
-			<div className="card-body p-5">
+			{/* [&>p]:grow-0 undoes daisyUI's `.card-body :where(p) { flex-grow: 1 }`. The grid
+				stretches every card to the tallest one, and that rule would spend each shorter
+				card's leftover height by inflating its paragraphs — so the same line sat at a
+				different y on every card. Let the prose keep its natural height; card-actions'
+				mt-auto absorbs the slack instead. */}
+			<div className="card-body p-5 [&>p]:grow-0">
 				{isFree ? (
 					// Free has no badge — center the label so it's clear it's badgeless.
-					<div className="flex items-center justify-center gap-2">
+					// min-h-9 matches the badge glyph's height so every card's header row is
+					// the same height and the content below stays aligned across the grid.
+					<div className="flex min-h-9 items-center justify-center gap-2">
 						<h3 className="text-lg font-bold">{plan.name}</h3>
-						{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
+						{tag && <span className="badge badge-primary badge-sm">{tag}</span>}
 					</div>
 				) : (
 					<div className="flex items-center justify-between">
@@ -83,7 +170,7 @@ function PlanCard({
 							</span>
 							<h3 className="text-lg font-bold">{plan.name}</h3>
 						</div>
-						{isCurrent && <span className="badge badge-primary badge-sm">Your plan</span>}
+						{tag && <span className="badge badge-primary badge-sm">{tag}</span>}
 					</div>
 				)}
 
@@ -98,7 +185,14 @@ function PlanCard({
 				</p>
 				<div className="space-y-1 text-sm">
 					<div className="flex items-center justify-between">
-						<span className="text-base-content/70">Time Pool</span>
+						<span className="flex items-center gap-1 text-base-content/70">
+							Time Pool
+							{/* Free's Time Pool is the one line item that needs explaining — it's the
+								only plan where money reaches creators without the user paying any. */}
+							{isFree && plan.subsidised && (
+								<InfoTip text="Free forever. The Anthers Foundation subsidises this plan's Time Pool, so creators are still paid for your time while you pay $0." />
+							)}
+						</span>
 						<strong>{fmt(plan.timePool)}</strong>
 					</div>
 					<div className="flex items-center justify-between">
@@ -121,18 +215,12 @@ function PlanCard({
 					Includes
 				</p>
 				<p className="text-sm text-base-content/70">
-					<strong>{plan.freeBwGiB} GiB</strong> of free bandwidth each month
+					<strong>{plan.freeBwGiB} GiB</strong>/month of free bandwidth
 				</p>
 				<p className="text-[11px] text-base-content/40 leading-tight">
 					≈ {watchHours(plan.freeBwGiB)} hrs of 1080p60 video (much more for audio, text, and
-					images). Beyond that, bandwidth is billed at cost from your wallet.
+					images). Beyond that, bandwidth is billed at-cost.
 				</p>
-
-				{isFree && plan.subsidised && (
-					<p className="text-[11px] text-base-content/40 mt-1">
-						The free plan's small Time Pool is subsidised by the Anthers Foundation — you pay $0.
-					</p>
-				)}
 
 				<div className="card-actions mt-auto pt-4">
 					<button
@@ -145,9 +233,11 @@ function PlanCard({
 							? "Current plan"
 							: saving
 								? "Saving…"
-								: isFree
-									? "Switch to Free"
-									: `Choose ${plan.name}`}
+								: isDefault
+									? "Free forever"
+									: isFree
+										? "Switch to Free"
+										: `Choose ${plan.name}`}
 					</button>
 				</div>
 			</div>
@@ -233,20 +323,25 @@ export default function SubscribePage() {
 				delay={120}
 				className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4"
 			>
-				<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+				{/* The wider gap from `sm` up is what the vine dividers stand in — at gap-4 the
+					vine is fractionally wider than the gap itself and crowds the next column. */}
+				<div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
 					<div>
 						<p className="font-semibold text-primary">Time Pool</p>
 						<p className="text-xs text-base-content/70 leading-snug">
 							Split across the creators you watch, by time spent.
 						</p>
 					</div>
-					<div>
+					{/* Columns 2 and 3 each carry the vine that precedes them (see LegendDivider). */}
+					<div className="relative">
+						<LegendDivider />
 						<p className="font-semibold text-primary">Seeds</p>
 						<p className="text-xs text-base-content/70 leading-snug">
 							$1 each — you direct them to specific creators, 100% to them.
 						</p>
 					</div>
-					<div>
+					<div className="relative">
+						<LegendDivider />
 						<p className="font-semibold text-primary">Community Share</p>
 						<p className="text-xs text-base-content/70 leading-snug">
 							Your charitable contribution to the Anthers Foundation.
@@ -277,6 +372,9 @@ export default function SubscribePage() {
 						key={plan.id}
 						plan={plan}
 						isCurrent={currentBadge === plan.id}
+						// Signing up puts you on Free unless you pick otherwise, so a logged-out
+						// visitor sees it highlighted as where they'll land.
+						isDefault={!user && plan.id === "free"}
 						saving={saving === plan.id}
 						onChoose={() => handleChoose(plan.id)}
 					/>
@@ -294,19 +392,34 @@ export default function SubscribePage() {
 
 			{/* Bandwidth is a separate cheap wallet */}
 			<div className="mt-12 card bg-base-200/60 shadow-xl p-6 max-w-3xl mx-auto">
-				<h2 className="text-xl font-bold mb-2 text-center">Bandwidth is separate — and at cost</h2>
-				<p className="text-sm text-base-content/60 leading-relaxed text-center">
-					Your plan is about funding creators, not buying gigabytes. Every plan includes a free
-					monthly bandwidth allowance (from {PLANS[0].freeBwGiB} GiB on Free up to{" "}
-					{PLANS[PLANS.length - 1].freeBwGiB} GiB on Blossom). If you stream past it, bandwidth is
-					billed from a small prepaid <strong>wallet</strong> at DigitalOcean's pass-through cost of{" "}
-					<strong>{fmt(BANDWIDTH_PER_GIB)}/GiB</strong> — no markup, no platform margin. Top up the
-					wallet and manage auto-top-up from{" "}
-					<a href="/subscription" className="link link-primary">
-						Your Anthers
-					</a>
-					.
+				<h2 className="text-xl font-bold mb-4 text-center">
+					Pay only for the bandwidth you use, at cost
+				</h2>
+				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
+					We care about supporting creators and their audiences, not turning a profit on usage.
 				</p>
+				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
+					Every plan, even the Free tier, includes a free monthly bandwidth allowance. If you stream
+					past it, bandwidth is billed from a small prepaid wallet at our pass-through cost of{" "}
+					<strong>{fmt(BANDWIDTH_PER_GIB)}/GiB</strong>. There's no markup and no profit margin, and
+					if it ever becomes cheaper for us, those savings go to you.
+				</p>
+				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
+					To put things in perspective: The average YouTube user streams ~25 hours/month. With
+					1080p30 video, you could put <strong>$5.00</strong> in your bandwidth wallet and cover
+					that for <strong>well over a year</strong>.
+				</p>
+				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
+					Turns out, it's really not that expensive to give everyone access to great media.
+				</p>
+				{/*<p className="mb-2 text-base-content/60 leading-relaxed text-center">*/}
+				{/*	Top up the*/}
+				{/*	wallet and manage auto-top-up from{" "}*/}
+				{/*	<a href="/subscription" className="link link-primary">*/}
+				{/*		Your Anthers*/}
+				{/*	</a>*/}
+				{/*	.*/}
+				{/*</p>*/}
 			</div>
 
 			{/* Why non-profit */}
