@@ -17,10 +17,19 @@ function trackErrors(page: Page): string[] {
 }
 
 test.describe("Resources calculators", () => {
-	test("landing lists the calculators and cards navigate", async ({ page }) => {
+	test("landing groups its resources and cards navigate", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources");
-		await expect(page.getByRole("heading", { name: "Tools & calculators" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Check our math" })).toBeVisible();
+
+		// The three groups the page is organized into. Section = format, tag = subject;
+		// these headings are the structure, so guard them against a silent regression.
+		// (<Reveal> only fades content in on scroll, but it animates opacity — which
+		// Playwright still counts as visible — so below-fold assertions hold here.)
+		await expect(page.getByRole("heading", { name: "How the model works" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Run the numbers yourself" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "How we stack up" })).toBeVisible();
+
 		await expect(page.getByRole("heading", { name: "Video Storage Calculator" })).toBeVisible();
 		await expect(page.getByRole("heading", { name: "Video Bandwidth Calculator" })).toBeVisible();
 		await expect(
