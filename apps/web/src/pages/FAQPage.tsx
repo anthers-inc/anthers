@@ -207,8 +207,8 @@ export default function FAQPage() {
 					<Link to="/about" className="btn btn-ghost btn-sm">
 						About Anthers
 					</Link>
-					<Link to="/wiki" className="btn btn-ghost btn-sm">
-						Wiki
+					<Link to="/resources" className="btn btn-ghost btn-sm">
+						Resources
 					</Link>
 				</div>
 			</Reveal>

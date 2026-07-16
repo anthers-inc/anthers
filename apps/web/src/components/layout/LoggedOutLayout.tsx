@@ -42,7 +42,6 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		links: [
 			["FAQ", "/faq"],
 			["Resources", "/resources"],
-			["Wiki", "/wiki"],
 		],
 	},
 	{

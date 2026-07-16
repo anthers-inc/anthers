@@ -202,9 +202,6 @@ function LoggedInLayoutInner() {
 									<Link to="/resources" className="link link-hover">
 										Resources
 									</Link>
-									<Link to="/wiki" className="link link-hover">
-										Wiki
-									</Link>
 								</nav>
 							</div>
 						</div>
