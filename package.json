@@ -24,7 +24,9 @@
 		"db:studio": "bunx drizzle-kit studio",
 		"db:seed": "bun run packages/db/src/seed.ts",
 		"db:seed:reset": "bun run packages/db/src/seed.ts --reset",
-		"db:dev-account": "bun run packages/db/src/ensure-dev-account.ts"
+		"db:dev-account": "bun run packages/db/src/ensure-dev-account.ts",
+		"db:gauntlet": "bun run packages/db/src/seed-gauntlet.ts",
+		"db:gauntlet:clean": "bun run packages/db/src/seed-gauntlet.ts --clean"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",
