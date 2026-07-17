@@ -7,6 +7,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
+		"./gauntlet": "./src/gauntlet.ts",
 		"./schema": "./src/schema/index.ts"
 	},
 	"scripts": {

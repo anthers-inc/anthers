@@ -2,6 +2,7 @@
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
+        gauntlet-reset gauntlet-clean \
         typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui
 
@@ -133,6 +134,12 @@ db-studio: ## Open Drizzle Studio (database GUI)
 
 db-seed: ## Seed dev database with fake creators/projects/posts
 	bun run db:seed
+
+gauntlet-reset: db-ready ## Reset the User Gauntlet fixture and put the dev account back on the floor
+	bun run db:gauntlet
+
+gauntlet-clean: db-ready ## Remove the User Gauntlet fixture entirely
+	bun run db:gauntlet:clean
 
 db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipes data)
 	docker compose down -v
