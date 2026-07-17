@@ -102,7 +102,7 @@ function anthersGatedAccess() {
 
 /**
  * Seed-gated: locked for everyone at the $0 baseline, then unlocked (free) once the
- * viewer has sown `threshold` dollars of Seeds to the creator this cycle.
+ * viewer has given `threshold` dollars of Seeds to the creator this cycle.
  */
 function seedGatedAccess(threshold: number) {
 	return {
@@ -129,7 +129,7 @@ const SEED_GATED_POSTS = new Set<string>([
 	"How I Design Pixel Art Tilesets",
 	"How I Build Reactive Visuals with Three.js",
 ]);
-/** Dollars of Seeds a viewer must sow to a creator to clear a Seed-gated post. */
+/** Dollars of Seeds a viewer must give a creator to clear a Seed-gated post. */
 const SEED_GATE_THRESHOLD = 3;
 
 // ---------------------------------------------------------------------------
@@ -1028,9 +1028,9 @@ async function seed() {
 	console.log("Creating creator gates...");
 
 	// Gate definitions per creator: a mix of Anthers Gates (unlocked by holding a badge)
-	// and Seed Gates (unlocked by sowing Seeds to the creator this cycle).
+	// and Seed Gates (unlocked by giving Seeds to the creator this cycle).
 	//   - anthers_badge → threshold is a badge RANK: root=1, sprout=2, petal=3, blossom=4.
-	//   - seed         → threshold is dollars of Seeds sown to the creator this cycle.
+	//   - seed         → threshold is dollars of Seeds given to the creator this cycle.
 	const GATES_BY_CREATOR: Record<
 		string,
 		{ gateType: "anthers_badge" | "seed"; threshold: string; label: string; description: string }[]

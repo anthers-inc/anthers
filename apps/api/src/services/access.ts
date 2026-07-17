@@ -44,7 +44,7 @@ export interface AccessContext {
 	userId: number | null;
 	/** The viewer's *currently held* Badge plan (point-in-time). */
 	badge: Badge;
-	/** creatorId → dollars of Seeds the viewer has sown to that creator this cycle */
+	/** creatorId → dollars of Seeds the viewer has given to that creator this cycle */
 	seedByCreator: Map<number, number>;
 	/** post ids the viewer has a completed purchase for */
 	purchasedPostIds: Set<number>;
@@ -115,7 +115,7 @@ function anthersOffers(rows: AnthersAccessRow[], viewerBadge: Badge): Offer[] {
 	return offers;
 }
 
-/** Seed-table offers the viewer qualifies for (Seeds sown to this creator ≥ the rung threshold). */
+/** Seed-table offers the viewer qualifies for (Seeds given to this creator ≥ the rung threshold). */
 function seedOffers(rows: SeedAccessRow[], viewerSeeds: number): Offer[] {
 	const offers: Offer[] = [];
 	for (const row of rows) {

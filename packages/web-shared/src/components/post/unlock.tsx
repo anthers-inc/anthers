@@ -44,7 +44,7 @@ export function LockedCover({
 }
 
 /**
- * Reason-aware unlock panel for the post page (login / join-or-sow-Seeds). The
+ * Reason-aware unlock panel for the post page (login / join-or-give-Seeds). The
  * one-time-purchase case is handled by ProjectPricing, which has the checkout flow.
  */
 export function UnlockPanel({
@@ -59,8 +59,10 @@ export function UnlockPanel({
 	const isLogin = access.reason === "login_required";
 	const message = isLogin
 		? `Log in to check your access to this post from ${creatorName}.`
-		: `Join or sow Seeds for ${creatorName} to unlock this post and their other members-only work.`;
-	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}` : "/subscribe";
+		: `Join or give Seeds to ${creatorName} to unlock this post and their other members-only work.`;
+	// Land on the tiers tab, where the ladder and the Give Seeds control actually are —
+	// the profile's default tab drops the intent the viewer arrived with.
+	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}?tab=tiers` : "/subscribe";
 	return (
 		<div className="card bg-base-200 border border-base-300">
 			<div className="card-body items-center text-center gap-3">
@@ -136,10 +138,10 @@ export function UnlockModal({
 		body = (
 			<>
 				<p className="text-sm text-base-content/60">
-					Join or sow Seeds for {creatorName} to unlock this and their members-only work.
+					Join or give Seeds to {creatorName} to unlock this and their members-only work.
 				</p>
 				<Link
-					to={post.creator?.username ? `/${post.creator.username}` : "/subscribe"}
+					to={post.creator?.username ? `/${post.creator.username}?tab=tiers` : "/subscribe"}
 					className="btn btn-primary btn-block"
 				>
 					Join to unlock

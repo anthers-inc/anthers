@@ -25,10 +25,10 @@ export interface AnthersAccessRow {
 
 /**
  * A row in a post's **Seed Access** table — the $0 "everyone" baseline plus the
- * creator's Seed-ladder rungs. `threshold` is dollars of Seeds sown to the creator.
+ * creator's Seed-ladder rungs. `threshold` is dollars of Seeds given to the creator.
  */
 export interface SeedAccessRow {
-	threshold: number; // dollars of Seeds sown to this creator this cycle; 0 = everyone
+	threshold: number; // dollars of Seeds given to this creator this cycle; 0 = everyone
 	allow: boolean;
 	price: string;
 }

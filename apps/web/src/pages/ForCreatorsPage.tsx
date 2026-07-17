@@ -468,7 +468,7 @@ export default function ForCreatorsPage() {
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
 						A Badge is the plan a user holds right now—a point-in-time choice, not a rolling total
-						of past spend. Every Seed is $1 and goes 100% to the creator it's sown for, nothing
+						of past spend. Every Seed is $1 and goes 100% to the creator it's given to, nothing
 						skimmed. The Time Pool pays creators by the time people spend with their work. Bandwidth
 						lives in a separate at-cost wallet ($0.01/GiB) with a free monthly allowance on every
 						plan (5/10/20/30/50 GiB), and creators get 50 GiB of free storage. Coming soon.

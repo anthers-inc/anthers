@@ -25,7 +25,7 @@ const PLANS: BadgePlanView[] = badgePlanViews();
  * A user CHOOSES a Badge plan (free/root/sprout/petal/blossom). The plan's
  * whole-dollar price decomposes into:
  *   Time Pool  → to creators, distributed by watch-time
- *   Seeds      → $1 units, 100% direct to the creators you sow them on
+ *   Seeds      → $1 units, 100% direct to the creators you give them to
  *   Community Share → the derived remainder, to the Anthers Foundation
  * Bandwidth is NOT part of the plan — it's a separate, at-cost prepaid wallet
  * ($0.01/GiB) with a per-tier free monthly allowance drawn down first.
