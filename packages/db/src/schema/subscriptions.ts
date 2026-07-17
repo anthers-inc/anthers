@@ -173,7 +173,7 @@ export const poolDistributions = pgTable(
 
 /**
  * Creator-defined gate ladder. `seed` rungs populate the Seed Access table
- * (`threshold` = dollars of Seeds sown to the creator this cycle); `anthers_badge`
+ * (`threshold` = dollars of Seeds given to the creator this cycle); `anthers_badge`
  * rungs are the Anthers Gate, unlocked by the viewer *currently holding* the
  * required badge (`threshold` = badge rank, 1 = root … 4 = blossom).
  */

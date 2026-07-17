@@ -70,7 +70,7 @@ const FAQ_ITEMS: FAQItem[] = [
 						simply the plan you hold—a point-in-time choice, not a rolling total of past spend.
 					</li>
 					<li>
-						<strong>Sow Seeds</strong> — $1 units you direct to specific creators, Patreon-style.
+						<strong>Give Seeds</strong> — $1 units you direct to specific creators, Patreon-style.
 						100% goes to the creator, with nothing skimmed for a fee or processing.
 					</li>
 				</ul>
@@ -111,7 +111,7 @@ const FAQ_ITEMS: FAQItem[] = [
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've sown to
+						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've given to
 						that creator this month. Creators set the thresholds in $1 increments and name the tiers
 						themselves.
 					</li>

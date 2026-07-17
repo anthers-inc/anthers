@@ -170,7 +170,7 @@ export default function AccessTables({
 				</div>
 				{seedRows.length === 1 && (
 					<p className="text-xs text-base-content/50 mt-1">
-						Add Seed rungs in Settings → Seed Ladder to gate by Seeds sown.
+						Add Seed rungs in Settings → Seed Ladder to gate by Seeds given.
 					</p>
 				)}
 			</div>

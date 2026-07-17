@@ -15,6 +15,7 @@
  */
 
 import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
+import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
@@ -213,61 +214,6 @@ function TimePoolPie({ rows, totalTime }: { rows: CreatorRow[]; totalTime: numbe
 					total time
 				</text>
 			</svg>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Whole-dollar Seed stepper                                          */
-/* ------------------------------------------------------------------ */
-
-function SeedStepper({
-	value,
-	min,
-	max,
-	onChange,
-	disabled,
-}: {
-	value: number;
-	min: number;
-	max: number;
-	onChange: (v: number) => void;
-	disabled: boolean;
-}) {
-	const set = (v: number) => onChange(Math.max(min, Math.min(max, Math.floor(v))));
-	return (
-		<div className="flex items-center gap-1">
-			<button
-				type="button"
-				className="btn btn-xs btn-circle btn-ghost"
-				onClick={() => set(value - 1)}
-				disabled={disabled || value <= min}
-				aria-label="Fewer seeds"
-			>
-				−
-			</button>
-			<div className="join">
-				<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
-				<input
-					type="number"
-					min={min}
-					max={max}
-					step={1}
-					value={value}
-					onChange={(e) => set(Number(e.target.value) || 0)}
-					disabled={disabled}
-					className="join-item input input-xs input-bordered w-14 text-center"
-				/>
-			</div>
-			<button
-				type="button"
-				className="btn btn-xs btn-circle btn-ghost"
-				onClick={() => set(value + 1)}
-				disabled={disabled || value >= max}
-				aria-label="More seeds"
-			>
-				+
-			</button>
 		</div>
 	);
 }
@@ -523,15 +469,15 @@ export default function SubscriptionPage() {
 				});
 				if (!res.ok) {
 					const data = (await res.json()) as { error?: string };
-					setError(data.error ?? "Failed to sow Seeds.");
+					setError(data.error ?? "Failed to give Seeds.");
 					break;
 				}
 			}
-			setSuccess("Your Seeds are sown.");
+			setSuccess("Your Seeds are given.");
 			setPendingSeeds(new Map());
 			await fetchCycleData(selectedCycle);
 		} catch {
-			setError("Failed to sow Seeds.");
+			setError("Failed to give Seeds.");
 		} finally {
 			setActionLoading(null);
 		}
@@ -751,7 +697,7 @@ export default function SubscriptionPage() {
 						<div className="text-lg font-bold text-success">
 							{plan.seeds} <span className="text-sm font-normal">× $1</span>
 						</div>
-						<div className="text-[11px] text-base-content/40">direct, you sow them</div>
+						<div className="text-[11px] text-base-content/40">direct, you give them</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Community Share</div>
@@ -956,7 +902,7 @@ export default function SubscriptionPage() {
 								<div className="flex items-center justify-between text-xs text-base-content/60 mb-1">
 									<span>{fmt(seedBudget)} total</span>
 									<span>
-										{fmt(allocatedSeed)} sown · {fmt(remainingSeed)} left
+										{fmt(allocatedSeed)} given · {fmt(remainingSeed)} left
 									</span>
 								</div>
 								<div className="relative h-2 bg-base-300 rounded-full overflow-hidden">
@@ -973,7 +919,7 @@ export default function SubscriptionPage() {
 								<div className="text-sm text-base-content/50 text-center py-4">
 									<p>Your plan includes no Seeds this cycle.</p>
 									<Link to="/subscribe" className="link link-primary text-sm">
-										Upgrade to sow Seeds
+										Upgrade to give Seeds
 									</Link>
 								</div>
 							) : (
@@ -1051,7 +997,7 @@ export default function SubscriptionPage() {
 												onClick={handleSaveSeeds}
 												disabled={!hasPendingSeeds || !!actionLoading}
 											>
-												{actionLoading === "seeds" ? "Sowing…" : "Sow Seeds"}
+												{actionLoading === "seeds" ? "Giving…" : "Give Seeds"}
 											</button>
 											<button
 												type="button"

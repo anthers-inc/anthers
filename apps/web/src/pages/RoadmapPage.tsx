@@ -194,7 +194,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-gated-content",
 							title: "Gated Content",
 							description:
-								"Set Seed thresholds to unlock exclusive content. Subscribers who sow enough Seeds get access.",
+								"Set Seed thresholds to unlock exclusive content. Subscribers who give enough Seeds get access.",
 							status: "planned",
 							startQ: 2,
 							endQ: 3,
@@ -352,7 +352,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "u-boost-alloc",
 							title: "Seed Allocation",
 							description:
-								"Sow Seeds to your favorite creators with sliders. Unlocks gated content.",
+								"Give Seeds to your favorite creators with sliders. Unlocks gated content.",
 							status: "planned",
 							startQ: 1,
 							endQ: 2,

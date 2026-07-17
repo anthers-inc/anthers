@@ -127,7 +127,7 @@ export default function SeedLadderEditor() {
 			<div className="card-body">
 				<h3 className="card-title text-lg">Seed Ladder</h3>
 				<p className="text-sm text-base-content/60 mb-2">
-					Seed rungs let supporters unlock content by sowing Seeds for you past a dollar threshold.
+					Seed rungs let supporters unlock content by giving you Seeds past a dollar threshold.
 					These rungs appear as rows in every post's Seed Access table.
 				</p>
 

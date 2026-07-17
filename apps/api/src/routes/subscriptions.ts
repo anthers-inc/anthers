@@ -546,7 +546,7 @@ const subscriptionRoutes = new Hono()
 			const budget = Number(acct?.seedTotal ?? 0);
 
 			if (budget <= 0) {
-				return c.json({ error: "You have no Seeds to sow this cycle" }, 400);
+				return c.json({ error: "You have no Seeds to give this cycle" }, 400);
 			}
 
 			// Current month: allocation locks — can only increase a creator, not decrease.
@@ -564,7 +564,7 @@ const subscriptionRoutes = new Hono()
 					.limit(1);
 
 				if (existing && amountNum < Number(existing.amount)) {
-					return c.json({ error: "Cannot reduce Seeds sown in the current billing cycle" }, 400);
+					return c.json({ error: "Cannot reduce Seeds given in the current billing cycle" }, 400);
 				}
 			}
 
@@ -803,7 +803,7 @@ const subscriptionRoutes = new Hono()
 
 		const seedAmount = seed?.amount ?? "0.00";
 
-		// Anthers Gate unlocks when the held badge rank clears the gate's rank; Seed Gate by Seeds sown.
+		// Anthers Gate unlocks when the held badge rank clears the gate's rank; Seed Gate by Seeds given.
 		const unlockedGates = gates
 			.filter((g) => {
 				if (g.gateType === "anthers_badge") {

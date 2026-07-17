@@ -149,7 +149,7 @@ export default function ForUsersPage() {
 							—Root $4, Sprout $8, Petal $16, or Blossom $32 a month. Your plan pays creators
 							automatically for the time you spend with their work (the Time Pool), sends its
 							included Seeds straight to creators you pick, and comes with a monthly bandwidth
-							allowance <InfoDot tip={GIB_TIP} />. To go even deeper with one creator, sow extra
+							allowance <InfoDot tip={GIB_TIP} />. To go even deeper with one creator, give extra
 							Seeds—$1 each, 100% to them.
 						</SignpostCard>
 					</Reveal>
@@ -207,7 +207,7 @@ export default function ForUsersPage() {
 									much more.
 								</FreeItem>
 								<FreeItem>
-									Content that creators have gated behind Seeds ($1 increments sown directly to
+									Content that creators have gated behind Seeds ($1 increments given directly to
 									them) and Badges (the plan you choose).
 								</FreeItem>
 							</ul>

@@ -2,7 +2,8 @@
 
 import { BADGE_ORDER, BADGE_PLANS, badgeLabel } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
-import { Link, useParams } from "@anthers/web-shared/router";
+import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
+import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type {
 	Badge,
@@ -24,7 +25,7 @@ import {
 	MapPinIcon,
 	PencilIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
 
@@ -38,6 +39,131 @@ type Tab = "all" | "games" | "videos" | "audio" | "writing" | "tiers" | "about";
 function tierNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
 	return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Give Seeds                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Give Seeds to this creator — the entry point where the intent actually forms.
+ *
+ * The subscription dashboard can only list creators it already knows about (settled pool
+ * distributions unioned with existing allocations), so a creator you just followed can't be
+ * reached from there at all. This is the door for that case.
+ *
+ * Two API rules shape the control rather than being discovered as errors:
+ *   - allocations RATCHET within a cycle (a decrease is rejected), so the committed amount
+ *     is the stepper's floor;
+ *   - the total across all creators can't exceed the Seeds your plan includes, so the
+ *     ceiling is what you've already given this creator plus what's still unallocated.
+ *
+ * `amount` is the creator's new TOTAL, not a delta — the endpoint upserts it.
+ */
+function GiveSeedsCard({
+	creatorId,
+	creatorName,
+	given,
+	onGiven,
+}: {
+	creatorId: number;
+	creatorName: string;
+	/** Dollars already given to this creator this cycle (the ratchet floor). */
+	given: string;
+	onGiven: () => void | Promise<void>;
+}) {
+	const committed = Math.round(Number(given) || 0);
+	const [budget, setBudget] = useState<number | null>(null);
+	const [remaining, setRemaining] = useState(0);
+	const [pending, setPending] = useState(committed);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	/** The viewer's Seed budget and what's still unallocated across all creators. */
+	const loadBudget = useCallback(async () => {
+		const res = await client.api.subscriptions.seeds.$get();
+		if (!res.ok) return;
+		const data = await res.json();
+		setBudget(Number(data.budget));
+		setRemaining(Number(data.remaining));
+	}, []);
+
+	useEffect(() => {
+		loadBudget();
+	}, [loadBudget]);
+
+	// Re-sync when the committed amount changes underneath us (after a successful give).
+	useEffect(() => setPending(committed), [committed]);
+
+	// Only the Free plan carries no Seeds, and the tab's upgrade prompt already makes that
+	// case — rendering our own "pick a plan" CTA here would just duplicate it.
+	if (budget === null || budget <= 0) return null;
+
+	const max = committed + Math.floor(remaining);
+	const dirty = pending !== committed;
+
+	const give = async () => {
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.seeds.$post({
+				json: { creatorId, amount: pending.toFixed(2) },
+			});
+			if (!res.ok) {
+				const body = (await res.json()) as { error?: string };
+				throw new Error(body.error ?? "Could not give Seeds.");
+			}
+			// Both halves have to move: `onGiven` re-reads the gate ladder (so a tier flips to
+			// Unlocked), and `loadBudget` re-reads what's left to give. Refreshing only the
+			// ladder leaves the budget line stating a total the viewer has already spent.
+			await Promise.all([onGiven(), loadBudget()]);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not give Seeds.");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body py-4 px-5 gap-3">
+				<div className="flex items-center justify-between gap-4 flex-wrap">
+					<div>
+						<h4 className="font-medium">Give Seeds to {creatorName}</h4>
+						<p className="text-xs text-base-content/50 mt-0.5">
+							$1 each, 100% to {creatorName}. You have ${remaining.toFixed(2)} of $
+							{budget.toFixed(2)} left to give this month.
+						</p>
+					</div>
+					<SeedStepper
+						value={pending}
+						min={committed}
+						max={max}
+						onChange={setPending}
+						disabled={saving}
+					/>
+				</div>
+
+				{committed > 0 && (
+					<p className="text-xs text-base-content/50">
+						You've given {creatorName} ${committed.toFixed(2)} this month. Seeds can be added
+						mid-month but not taken back — next month's are yours to redirect.
+					</p>
+				)}
+
+				{error && <p className="text-xs text-error">{error}</p>}
+
+				<button
+					type="button"
+					className="btn btn-primary btn-sm w-fit"
+					disabled={!dirty || saving}
+					onClick={give}
+				>
+					{saving ? "Giving…" : dirty ? `Give $${(pending - committed).toFixed(2)}` : "Give Seeds"}
+				</button>
+			</div>
+		</div>
+	);
 }
 
 /** An Anthers Gate's threshold is a Badge rank (1 = Root … 4 = Blossom). */
@@ -129,12 +255,19 @@ function TiersTab({
 	userTier,
 	userSeed,
 	creatorName,
+	creatorId,
+	canGiveSeeds,
+	onGiven,
 }: {
 	gates: CreatorGate[];
 	unlockedGates: number[];
 	userTier: string;
 	userSeed: string;
 	creatorName: string;
+	creatorId: number;
+	/** Signed in, and not looking at your own profile — you can't give Seeds to yourself. */
+	canGiveSeeds: boolean;
+	onGiven: () => void | Promise<void>;
 }) {
 	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_badge");
 	const seedGates = gates.filter((g) => g.gateType === "seed");
@@ -224,8 +357,18 @@ function TiersTab({
 				<div>
 					<h3 className="text-lg font-bold mb-1">Seed Tiers</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Custom tiers set by {creatorName}. Sow Seeds to this creator to unlock.
+						Custom tiers set by {creatorName}. Give them Seeds to unlock.
 					</p>
+					{canGiveSeeds && (
+						<div className="mb-3">
+							<GiveSeedsCard
+								creatorId={creatorId}
+								creatorName={creatorName}
+								given={userSeed}
+								onGiven={onGiven}
+							/>
+						</div>
+					)}
 					<div className="space-y-2">
 						{seedGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
@@ -294,20 +437,46 @@ function TiersTab({
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
+const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "tiers", "about"];
+
 export default function CreatorProfilePage() {
 	const { username } = useParams<{ username: string }>();
 	const { isAuthenticated, user: currentUser, refreshUser } = useAuth();
+	const [searchParams, setSearchParams] = useSearchParams();
 
 	const [creator, setCreator] = useState<PublicUser | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [posts, setPosts] = useState<PostListItem[]>([]);
-	const [tab, setTab] = useState<Tab>("all");
+	// ?tab=tiers is a real entry point, not a nicety: a locked post's unlock panel sends the
+	// viewer here to act, and dropping them on the default tab loses the intent they arrived with.
+	const tabParam = searchParams.get("tab") as Tab | null;
+	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const setTab = (next: Tab) => {
+		const params = new URLSearchParams(searchParams);
+		if (next === "all") params.delete("tab");
+		else params.set("tab", next);
+		setSearchParams(params, { replace: true });
+	};
 	const [loading, setLoading] = useState(true);
 	const [isFollowing, setIsFollowing] = useState(false);
 	const [followerCount, setFollowerCount] = useState(0);
 	const [creatorStatus, setCreatorStatus] = useState<CreatorStatus | null>(null);
 
 	const isOwnProfile = currentUser?.username === username;
+
+	/**
+	 * Re-read the viewer's standing with this creator. Giving Seeds changes which gates are
+	 * unlocked, and the whole point of the control is watching a tier flip to Unlocked — so
+	 * the ladder has to reflect it without a reload.
+	 */
+	const refreshCreatorStatus = useCallback(async () => {
+		if (!username) return;
+		const res = await fetch(`${apiBase}/api/subscriptions/creator-status/${username}`, {
+			credentials: "include",
+		});
+		if (!res.ok) return;
+		setCreatorStatus((await res.json()) as CreatorStatus);
+	}, [username]);
 
 	// Edit mode state
 	const [editing, setEditing] = useState(false);
@@ -868,6 +1037,9 @@ export default function CreatorProfilePage() {
 							userTier={creatorStatus?.badge ?? "free"}
 							userSeed={creatorStatus?.seedAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.username}
+							creatorId={creator.id}
+							canGiveSeeds={isAuthenticated && !isOwnProfile}
+							onGiven={refreshCreatorStatus}
 						/>
 					)}
 
