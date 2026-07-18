@@ -31,6 +31,7 @@ import type {
 	WalletBalance,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import OneTimePaymentModal from "../components/subscribe/OneTimePaymentModal";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -279,6 +280,11 @@ export default function SubscriptionPage() {
 
 	// Wallet form state
 	const [topupAmount, setTopupAmount] = useState(5);
+	const [topupPay, setTopupPay] = useState<{
+		clientSecret: string;
+		savedCard: { id: string; brand: string; last4: string } | null;
+		buyerTotal: string;
+	} | null>(null);
 	const [autoEnabled, setAutoEnabled] = useState(false);
 	const [autoAmount, setAutoAmount] = useState(5);
 	const [autoThreshold, setAutoThreshold] = useState(2);
@@ -489,7 +495,6 @@ export default function SubscriptionPage() {
 		setActionLoading("topup");
 		setError(null);
 		try {
-			// TODO: In production this charges the top-up via Stripe.
 			const res = await client.api.subscriptions.wallet.topup.$post({
 				json: { amount: topupAmount },
 			});
@@ -498,8 +503,13 @@ export default function SubscriptionPage() {
 				setError(data.error ?? "Failed to add funds.");
 				return;
 			}
-			setSuccess(`Added ${fmt(topupAmount)} to your bandwidth wallet.`);
-			await fetchAccount();
+			// Open the payment modal to confirm the charge; the webhook credits the wallet.
+			const data = (await res.json()) as {
+				clientSecret: string;
+				savedCard: { id: string; brand: string; last4: string } | null;
+				buyerTotal: string;
+			};
+			setTopupPay(data);
 		} catch {
 			setError("Failed to add funds.");
 		} finally {
@@ -600,6 +610,25 @@ export default function SubscriptionPage() {
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "72rem" }}>
+			{topupPay && (
+				<OneTimePaymentModal
+					title={`Add ${fmt(topupAmount)} to your wallet`}
+					blurb={`You'll be charged $${topupPay.buyerTotal} (includes card processing); ${fmt(topupAmount)} is credited to your bandwidth wallet.`}
+					clientSecret={topupPay.clientSecret}
+					savedCard={topupPay.savedCard}
+					confirmLabel={`Pay $${topupPay.buyerTotal}`}
+					onComplete={async () => {
+						setTopupPay(null);
+						setSuccess(`Added ${fmt(topupAmount)} to your bandwidth wallet.`);
+						// The webhook credits asynchronously — refetch a few times so the balance lands.
+						for (let i = 0; i < 8; i++) {
+							await fetchAccount();
+							await new Promise((r) => setTimeout(r, 800));
+						}
+					}}
+					onClose={() => setTopupPay(null)}
+				/>
+			)}
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>
@@ -608,19 +637,6 @@ export default function SubscriptionPage() {
 			{success && (
 				<div className="alert alert-success mb-4">
 					<span>{success}</span>
-				</div>
-			)}
-
-			{viewMode === "next" && (
-				<div className="alert alert-info text-sm mb-4">
-					<span>
-						Preview for {cycleLabel(selectedCycle)}. You can direct next month's Seeds now.
-					</span>
-				</div>
-			)}
-			{viewMode === "past" && (
-				<div className="alert text-sm bg-base-200 mb-4">
-					<span>Historical view — read-only summary for {cycleLabel(selectedCycle)}.</span>
 				</div>
 			)}
 
@@ -672,6 +688,14 @@ export default function SubscriptionPage() {
 							)}
 						</p>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+						{/* Fixed-height so switching months changes the text without shifting the layout. */}
+						<p className="text-xs text-base-content/50 mt-1.5 min-h-[1rem]">
+							{viewMode === "past"
+								? "Read-only view of a closed cycle."
+								: viewMode === "next"
+									? "Preview — you can direct next month's Seeds now."
+									: ""}
+						</p>
 					</div>
 
 					<div className="md:w-40 flex md:justify-end order-3">

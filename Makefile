@@ -2,7 +2,7 @@
 
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
-        gauntlet-reset gauntlet-clean \
+        gauntlet-reset gauntlet-clean stripe-webhooks \
         typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui
 
@@ -140,6 +140,13 @@ gauntlet-reset: db-ready ## Reset the User Gauntlet fixture and put the dev acco
 
 gauntlet-clean: db-ready ## Remove the User Gauntlet fixture entirely
 	bun run db:gauntlet:clean
+
+stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI)
+	@command -v stripe >/dev/null 2>&1 || { echo "  Stripe CLI not found — install it (and optionally run 'stripe login')."; exit 1; }
+	@KEY=$$(grep -E '^STRIPE_SECRET_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"); \
+	if [ -n "$$KEY" ]; then export STRIPE_API_KEY="$$KEY"; fi; \
+	echo "  Forwarding Stripe webhooks -> localhost:$(API_PORT)/api/payments/stripe/webhook"; \
+	stripe listen --forward-to localhost:$(API_PORT)/api/payments/stripe/webhook
 
 db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipes data)
 	docker compose down -v

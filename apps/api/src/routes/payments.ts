@@ -28,7 +28,7 @@ import type Stripe from "stripe";
 import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
-import { syncSubscriptionToAccount } from "../services/billing.js";
+import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the post, confirm it's
@@ -349,12 +349,17 @@ const paymentRoutes = new Hono()
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
 				.returning();
 			if (completed) {
-				// Record the Foundation Fee (Digital AFF) to the ledger.
-				await db.insert(crfLedger).values({
-					amount: completed.crfFee,
-					purchaseId: completed.id,
-					description: `Digital AFF — purchase #${completed.id}`,
-				});
+				if (completed.type === "wallet" || completed.type === "seeds") {
+					// Wallet top-up / Seed buy → credit the account (not a post purchase).
+					await applyCreditForPurchase(completed);
+				} else {
+					// Post purchase → record the Foundation Fee (Digital AFF) to the ledger.
+					await db.insert(crfLedger).values({
+						amount: completed.crfFee,
+						purchaseId: completed.id,
+						description: `Digital AFF — purchase #${completed.id}`,
+					});
+				}
 			}
 		} else if (event.type === "payment_intent.payment_failed") {
 			const pi = event.data.object as Stripe.PaymentIntent;
