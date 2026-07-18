@@ -44,6 +44,7 @@ export const accounts = pgTable("accounts", {
 	autoTopupThreshold: numeric("auto_topup_threshold").notNull().default("2.00"), // top up when wallet < this
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage AFF
 	stripeCustomerId: text("stripe_customer_id").default(""),
+	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Billing subscription
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),

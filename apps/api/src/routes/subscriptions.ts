@@ -30,10 +30,13 @@ import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
+import type Stripe from "stripe";
 import { z } from "zod";
+import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { heldBadge, resolveAccess } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
+import { ensureStripeCustomer, priceIdForBadge } from "../services/billing.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -151,43 +154,65 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { badge } = c.req.valid("json");
-			const cycle = getCurrentBillingCycle();
+			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
-			// TODO: Charge the plan price (or the delta on a change) via Stripe before applying.
-			const existing = await getAccount(user.id);
-			const { start, end } = currentPeriod();
+			const acct = await ensureAccount(user.id);
 
-			// Preserve any extra Seeds the user bought on top of their old plan's included Seeds.
-			const oldPlan = BADGE_PLANS[(existing?.badge as Badge) ?? "free"];
-			const purchasedExtra = Math.max(0, Number(existing?.seedTotal ?? 0) - oldPlan.seeds);
-			const nextSeedTotal = BADGE_PLANS[badge].seeds + purchasedExtra;
-
-			if (existing) {
-				await db
-					.update(accounts)
-					.set({
-						badge,
-						seedTotal: money(nextSeedTotal),
-						isActive: true,
-						canceledAt: null,
-						currentPeriodStart: existing.currentPeriodStart ?? start,
-						currentPeriodEnd: existing.currentPeriodEnd ?? end,
-						updatedAt: new Date(),
-					})
-					.where(eq(accounts.id, existing.id));
-			} else {
-				await db.insert(accounts).values({
-					userId: user.id,
-					badge,
-					seedTotal: money(nextSeedTotal),
-					currentPeriodStart: start,
-					currentPeriodEnd: end,
-				});
+			// Downgrade to Free → cancel the subscription at period end (webhook reverts).
+			if (badge === "free") {
+				if (acct.stripeSubscriptionId) {
+					await stripe.subscriptions.update(acct.stripeSubscriptionId, {
+						cancel_at_period_end: true,
+					});
+					await db
+						.update(accounts)
+						.set({ canceledAt: new Date(), updatedAt: new Date() })
+						.where(eq(accounts.id, acct.id));
+				}
+				return c.json({ pending: false, account: await getAccount(user.id) });
 			}
 
-			await upsertAccountCycle(user.id, cycle, badge, nextSeedTotal);
-			const acct = await getAccount(user.id);
-			return c.json({ account: acct, badge, plan: PLANS[badgeRank(badge)] });
+			const priceId = priceIdForBadge(badge);
+			if (!priceId) return c.json({ error: `No Stripe price configured for ${badge}` }, 500);
+			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
+
+			// Changing plans on an active subscription → swap the price with proration; the
+			// saved card is charged for the difference and the webhook syncs the new badge.
+			if (acct.stripeSubscriptionId) {
+				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
+				if (sub.status === "active" || sub.status === "trialing") {
+					await stripe.subscriptions.update(sub.id, {
+						items: [{ id: sub.items.data[0].id, price: priceId }],
+						proration_behavior: "always_invoice",
+						cancel_at_period_end: false,
+					});
+					return c.json({ pending: false, account: await getAccount(user.id) });
+				}
+			}
+
+			// New subscription → create it incomplete and hand back the confirmation secret so
+			// the user confirms the first payment inline; the webhook applies the badge on success.
+			const sub = await stripe.subscriptions.create({
+				customer: customerId,
+				items: [{ price: priceId }],
+				payment_behavior: "default_incomplete",
+				payment_settings: { save_default_payment_method: "on_subscription" },
+				expand: ["latest_invoice.confirmation_secret"],
+				metadata: { userId: String(user.id), badge },
+			});
+			await db
+				.update(accounts)
+				.set({ stripeSubscriptionId: sub.id, updatedAt: new Date() })
+				.where(eq(accounts.id, acct.id));
+
+			const invoice = sub.latest_invoice as
+				| (Stripe.Invoice & { confirmation_secret?: { client_secret?: string } })
+				| null;
+			return c.json({
+				pending: true,
+				subscriptionId: sub.id,
+				clientSecret: invoice?.confirmation_secret?.client_secret ?? null,
+			});
 		},
 	)
 
@@ -241,7 +266,11 @@ const subscriptionRoutes = new Hono()
 		if (!acct || acct.badge === "free") {
 			return c.json({ error: "No paid plan to cancel" }, 400);
 		}
-		// TODO: Cancel any Stripe renewal at period end (plan reverts to Free then).
+		// Cancel at period end — the plan keeps working until the cycle ends, then the
+		// subscription.deleted webhook reverts to Free.
+		if (stripe && acct.stripeSubscriptionId) {
+			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: true });
+		}
 		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
@@ -254,7 +283,9 @@ const subscriptionRoutes = new Hono()
 		if (!acct?.canceledAt) {
 			return c.json({ error: "No canceled plan to resume" }, 400);
 		}
-		// TODO: Undo cancellation via Stripe.
+		if (stripe && acct.stripeSubscriptionId) {
+			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: false });
+		}
 		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });

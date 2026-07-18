@@ -9,6 +9,7 @@ import { BADGE_ART } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccountResponse, Badge } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
+import SubscriptionPaymentModal from "../components/subscribe/SubscriptionPaymentModal";
 
 // The five Badge plans are static — derived entirely from BADGE_PLANS — so we
 // render them synchronously instead of fetching /subscriptions/badges. That removes
@@ -262,6 +263,12 @@ export default function SubscribePage() {
 	const [saving, setSaving] = useState<Badge | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	const [pendingPay, setPendingPay] = useState<{
+		clientSecret: string;
+		planName: string;
+		priceLabel: string;
+		badge: Badge;
+	} | null>(null);
 
 	// The plans render immediately from PLANS; the only fetch is a logged-in user's
 	// current badge, which just highlights "Your plan". Logged-out visitors skip it,
@@ -287,6 +294,24 @@ export default function SubscribePage() {
 		};
 	}, [user]);
 
+	// Re-read the account, optionally polling until the badge reaches `expected` — the
+	// subscription webhook applies the badge asynchronously after payment confirms.
+	const refreshAccount = async (expected?: Badge) => {
+		for (let i = 0; i < (expected ? 12 : 1); i++) {
+			try {
+				const res = await client.api.subscriptions.me.$get();
+				if (res.ok) {
+					const data = (await res.json()) as AccountResponse;
+					setCurrentBadge(data.badge);
+					if (!expected || data.badge === expected) return;
+				}
+			} catch {
+				// transient — keep polling
+			}
+			await new Promise((r) => setTimeout(r, 800));
+		}
+	};
+
 	const handleChoose = async (badge: Badge) => {
 		if (!user) {
 			window.location.href = "/login?next=/subscribe";
@@ -296,15 +321,33 @@ export default function SubscribePage() {
 		setError(null);
 		setNotice(null);
 		try {
-			// TODO: Stripe charges the plan price (or the delta on a change) before this applies.
 			const res = await client.api.subscriptions.account.$post({ json: { badge } });
 			if (!res.ok) {
 				setError("Failed to change your plan. Please try again.");
 				return;
 			}
-			const data = (await res.json()) as AccountResponse;
-			setCurrentBadge(data.badge);
-			setNotice(`You're on the ${data.plan.name} plan.`);
+			const data = (await res.json()) as { pending?: boolean; clientSecret?: string | null };
+			const pv = badgePlanViews().find((p) => p.id === badge);
+
+			// New paid plan → confirm the first payment inline; the webhook applies the badge.
+			if (data.pending && data.clientSecret) {
+				setPendingPay({
+					clientSecret: data.clientSecret,
+					planName: pv?.name ?? badge,
+					priceLabel: (pv?.price ?? 0).toFixed(2),
+					badge,
+				});
+				return;
+			}
+
+			if (badge === "free") {
+				await refreshAccount();
+				setNotice("Your plan will revert to Free when the current period ends.");
+			} else {
+				// Plan change on an existing subscription — the saved card is charged.
+				await refreshAccount(badge);
+				setNotice(`You're on the ${pv?.name ?? badge} plan.`);
+			}
 		} catch {
 			setError("Failed to change your plan. Please try again.");
 		} finally {
@@ -314,6 +357,20 @@ export default function SubscribePage() {
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
+			{pendingPay && (
+				<SubscriptionPaymentModal
+					clientSecret={pendingPay.clientSecret}
+					planName={pendingPay.planName}
+					priceLabel={pendingPay.priceLabel}
+					onDone={async () => {
+						const p = pendingPay;
+						setPendingPay(null);
+						setNotice(`You're on the ${p.planName} plan.`);
+						await refreshAccount(p.badge);
+					}}
+					onClose={() => setPendingPay(null)}
+				/>
+			)}
 			<Reveal className="text-center mb-8">
 				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
 					501(c)(3) non-profit

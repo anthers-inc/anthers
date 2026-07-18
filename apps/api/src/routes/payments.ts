@@ -28,6 +28,7 @@ import type Stripe from "stripe";
 import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
+import { syncSubscriptionToAccount } from "../services/billing.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the post, confirm it's
@@ -372,6 +373,12 @@ const paymentRoutes = new Hono()
 					updatedAt: new Date(),
 				})
 				.where(eq(stripeAccounts.stripeAccountId, acct.id));
+		} else if (
+			event.type === "customer.subscription.created" ||
+			event.type === "customer.subscription.updated" ||
+			event.type === "customer.subscription.deleted"
+		) {
+			await syncSubscriptionToAccount(event.data.object as Stripe.Subscription);
 		}
 
 		return c.json({ received: true });
