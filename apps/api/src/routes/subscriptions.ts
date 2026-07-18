@@ -14,7 +14,6 @@
 
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
 	accounts,
 	attentionEvents,
 	creatorGates,
@@ -22,10 +21,9 @@ import {
 	posts,
 	seedAllocations,
 	users,
-	walletLedger,
 } from "@anthers/db/schema";
 import { BADGE_PLANS, type Badge, badgeRank, SEED_PRICE } from "@anthers/shared/constants";
-import { badgePlanViews, badgePriceBreakdown } from "@anthers/shared/fees";
+import { badgePlanViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -36,7 +34,12 @@ import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { heldBadge, resolveAccess } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
-import { ensureStripeCustomer, priceIdForBadge } from "../services/billing.js";
+import {
+	createOneTimeCharge,
+	ensureStripeCustomer,
+	priceIdForBadge,
+	savedCardFor,
+} from "../services/billing.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -66,25 +69,6 @@ function currentPeriod() {
 
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
-}
-
-/** Record this cycle's plan snapshot (badge + its price decomposition + Seeds). */
-async function upsertAccountCycle(userId: number, cycle: string, badge: Badge, seedTotal: number) {
-	const bd = badgePriceBreakdown(badge);
-	const values = {
-		badge,
-		planPrice: bd.price.toFixed(2),
-		timePool: bd.timePool.toFixed(2),
-		seedTotal: money(seedTotal),
-		communityShare: bd.communityShare.toFixed(2),
-	};
-	await db
-		.insert(accountCycles)
-		.values({ userId, billingCycle: cycle, ...values })
-		.onConflictDoUpdate({
-			target: [accountCycles.userId, accountCycles.billingCycle],
-			set: { ...values, updatedAt: new Date() },
-		});
 }
 
 async function getAccount(userId: number) {
@@ -308,20 +292,17 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { quantity } = c.req.valid("json");
-			// TODO: Charge quantity × SEED_PRICE via Stripe before crediting.
-			const acct = await ensureAccount(user.id);
-			const next = money(Number(acct.seedTotal ?? 0) + quantity * SEED_PRICE);
-			await db
-				.update(accounts)
-				.set({ seedTotal: next, updatedAt: new Date() })
-				.where(eq(accounts.id, acct.id));
-			await upsertAccountCycle(
-				user.id,
-				getCurrentBillingCycle(),
-				acct.badge as Badge,
-				Number(next),
-			);
-			return c.json({ seedTotal: next });
+			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+			await ensureAccount(user.id);
+			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
+			// Charge quantity × $1 (+ card processing) via Stripe; the webhook credits on success.
+			const charge = await createOneTimeCharge({
+				userId: user.id,
+				customerId,
+				type: "seeds",
+				base: quantity * SEED_PRICE,
+			});
+			return c.json({ ...charge, savedCard: await savedCardFor(customerId) });
 		},
 	)
 
@@ -406,17 +387,17 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { amount } = c.req.valid("json");
-			// TODO: Charge the top-up via Stripe (min a few dollars so the card fee isn't outsized).
-			const acct = await ensureAccount(user.id);
-			const next = money(Number(acct.walletBalance ?? 0) + amount);
-			await db
-				.update(accounts)
-				.set({ walletBalance: next, updatedAt: new Date() })
-				.where(eq(accounts.id, acct.id));
-			await db
-				.insert(walletLedger)
-				.values({ userId: user.id, delta: money(amount), reason: "topup" });
-			return c.json({ balance: next });
+			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+			await ensureAccount(user.id);
+			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
+			// Charge the top-up (+ card processing) via Stripe; the webhook credits on success.
+			const charge = await createOneTimeCharge({
+				userId: user.id,
+				customerId,
+				type: "wallet",
+				base: amount,
+			});
+			return c.json({ ...charge, savedCard: await savedCardFor(customerId) });
 		},
 	)
 

@@ -236,7 +236,10 @@ export async function buildAccessContext(
 		userId,
 		badge,
 		seedByCreator,
-		purchasedPostIds: new Set(purchaseRows.map((p) => p.postId)),
+		// Wallet/Seed one-time charges have a null postId — only real post purchases unlock.
+		purchasedPostIds: new Set(
+			purchaseRows.map((p) => p.postId).filter((id): id is number => id !== null),
+		),
 	};
 }
 
