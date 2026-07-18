@@ -2,16 +2,22 @@
 export const APP_NAME = "Anthers";
 
 /**
- * V4 economics constants — the "Big Rethink" model (frozen 2026-07-14, Phase 0).
+ * V4 economics constants — the "Big Rethink" model (badge prices + Payments bucket
+ * revised 2026-07-17; see PAYMENTS REVAMP/Anthers Payment Architecture).
  *
  * Anthers keeps $0: every dollar a user pays is bandwidth (at cost), money to
  * creators (Time Pool + Seeds), the user's Community Share to the Anthers
- * Foundation, or unavoidable card + sales tax. There is no platform margin.
+ * Foundation, or the at-cost **Payments** bucket — card, Stripe Tax, Connect
+ * payouts, disputes, refunds, reserve: the cost of moving money, folded into the
+ * price rather than surcharged. There is no platform margin.
  *
  * The user's streaming decision is a CHOSEN Badge plan, not a quantity of
- * bandwidth. Each plan's whole-dollar Price decomposes into Time Pool + Seeds +
- * Community Share (the derived remainder). Bandwidth is decoupled into an at-cost
- * prepaid wallet with a per-tier free monthly allowance.
+ * bandwidth. Each plan's whole-dollar Price decomposes into Payments + Time Pool +
+ * Seeds + Community Share, with Seeds and Community Share held at their prior
+ * values and **Time Pool the derived remainder** after Payments. The Payments
+ * bucket is a reconciled, conservative figure (surplus → subsidy); the model
+ * behind it is PAYMENTS REVAMP/threshold_model.py. Bandwidth is decoupled into an
+ * at-cost prepaid wallet with a per-tier free monthly allowance.
  *
  * Supersedes the V3 model (bandwidth-as-purchase-lever, rolling badges, "Boost").
  */
@@ -30,33 +36,92 @@ export const BADGE_ORDER = ["free", "root", "sprout", "petal", "blossom"] as con
  */
 export const SEED_PRICE = 1;
 
-/** A single Badge plan's frozen dials. Community Share is derived, not stored. */
+/** A single Badge plan's frozen dials. Time Pool is the derived remainder. */
 export interface BadgePlan {
 	badge: Badge;
 	/** Whole-dollar monthly plan price (Free = 0). */
 	price: number;
-	/** Time Pool budget ($), distributed to watched creators by watch-time. */
+	/**
+	 * Payments bucket ($): the at-cost overhead of moving money — card, Stripe Tax,
+	 * Connect payouts, disputes, refunds, reserve — folded into the price, never
+	 * surcharged. A reconciled, conservative launch figure (surplus → subsidy); see
+	 * PAYMENTS REVAMP/threshold_model.py. Free is 0 (no charge fires).
+	 */
+	payments: number;
+	/**
+	 * Time Pool budget ($), distributed to watched creators by watch-time. For paid
+	 * plans this is the derived remainder: price − payments − seeds − communityShare.
+	 * Free's is subsidised by the Foundation (the user pays $0).
+	 */
 	timePool: number;
 	/** Included Seeds (quantity × SEED_PRICE), direct to creators, user-directed. */
 	seeds: number;
+	/** Community Share ($) to the Anthers Foundation. Held at prior values; Free = 0. */
+	communityShare: number;
 	/** Free monthly bandwidth allowance (GiB), subsidised, drawn down first. */
 	freeBwGiB: number;
 }
 
 /**
- * The frozen V4 badge-plan table (Phase 0, 2026-07-14).
+ * The frozen badge-plan table (badge prices + Payments revised 2026-07-17).
  *
- * Community Share = Price − Time Pool − (seeds × SEED_PRICE):
- *   Root $1 · Sprout $2 · Petal $4 · Blossom $10.
- * Free pays $0; its small Time Pool is subsidised from the pool, not paid by the
- * user, so Free contributes no Community Share (see `communityShare` in fees.ts).
+ * Price = Payments + Time Pool + Seeds + Community Share, with Seeds and Community
+ * Share held at their prior dollars (Root $1 · Sprout $2 · Petal $4 · Blossom $10)
+ * and Time Pool absorbing the remainder. Every paid tier delivers more to creators
+ * (Time Pool + Seeds) than the prior $4/$8/$16/$32 model. Payments assumes a
+ * conservative $20 launch payout threshold and a pessimistic creator ratio (see
+ * PAYMENTS REVAMP/threshold_model.py); it over-collects on purpose and the surplus
+ * returns to the subsidy pool.
+ *
+ * Free pays $0 (no Payments); its small Time Pool is subsidised from the pool, not
+ * paid by the user, so Free contributes no Community Share.
  */
 export const BADGE_PLANS: Record<Badge, BadgePlan> = {
-	free: { badge: "free", price: 0, timePool: 0.05, seeds: 0, freeBwGiB: 5 },
-	root: { badge: "root", price: 4, timePool: 2, seeds: 1, freeBwGiB: 10 },
-	sprout: { badge: "sprout", price: 8, timePool: 4, seeds: 2, freeBwGiB: 20 },
-	petal: { badge: "petal", price: 16, timePool: 9, seeds: 3, freeBwGiB: 30 },
-	blossom: { badge: "blossom", price: 32, timePool: 18, seeds: 4, freeBwGiB: 50 },
+	free: {
+		badge: "free",
+		price: 0,
+		payments: 0,
+		timePool: 0.05,
+		seeds: 0,
+		communityShare: 0,
+		freeBwGiB: 5,
+	},
+	root: {
+		badge: "root",
+		price: 5,
+		payments: 0.93,
+		timePool: 2.07,
+		seeds: 1,
+		communityShare: 1,
+		freeBwGiB: 10,
+	},
+	sprout: {
+		badge: "sprout",
+		price: 10,
+		payments: 1.19,
+		timePool: 4.81,
+		seeds: 2,
+		communityShare: 2,
+		freeBwGiB: 20,
+	},
+	petal: {
+		badge: "petal",
+		price: 20,
+		payments: 1.7,
+		timePool: 11.3,
+		seeds: 3,
+		communityShare: 4,
+		freeBwGiB: 30,
+	},
+	blossom: {
+		badge: "blossom",
+		price: 40,
+		payments: 2.73,
+		timePool: 23.27,
+		seeds: 4,
+		communityShare: 10,
+		freeBwGiB: 50,
+	},
 } as const;
 
 /** Rank of a badge (0 = free … 4 = blossom), for point-in-time gate comparison. */
@@ -110,6 +175,15 @@ export const CARD_RATE = 0.029;
 export const CARD_FLAT = 0.3;
 /** US average combined state+local sales tax, illustrative. */
 export const SALES_TAX_RATE = 0.065;
+
+// ── Payouts ──────────────────────────────────────────────────────────────────
+/**
+ * Minimum accrued creator balance before a Connect payout fires ($). The dial
+ * that sets Connect cost: higher → fewer payout events → cheaper, but the smallest
+ * creators wait longer. Launch value; ratchet down as the creator ratio matures,
+ * and → 0 once direct-ACH payouts land. See PAYMENTS REVAMP/threshold_model.py.
+ */
+export const PAYOUT_THRESHOLD = 20;
 
 // ── Delivery assumption (AV1 1080p60) ────────────────────────────────────────
 /** Delivered GiB per stream-hour — converts watch-hours to allowance/wallet draw. */

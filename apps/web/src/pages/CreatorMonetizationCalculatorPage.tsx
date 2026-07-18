@@ -26,11 +26,8 @@ const PAID_PLANS: Badge[] = ["root", "sprout", "petal", "blossom"];
 
 const timePoolOf = (badge: Badge) => BADGE_PLANS[badge].timePool;
 const seedsOf = (badge: Badge) => BADGE_PLANS[badge].seeds;
-/** The plan price's charitable remainder = price − Time Pool − Seeds ($). Free = 0. */
-const communityShareOf = (badge: Badge) => {
-	const p = BADGE_PLANS[badge];
-	return p.price === 0 ? 0 : p.price - p.timePool - p.seeds * SEED_PRICE;
-};
+/** The plan's Community Share to the Foundation ($), held at its frozen value. Free = 0. */
+const communityShareOf = (badge: Badge) => BADGE_PLANS[badge].communityShare;
 
 // ---------------------------------------------------------------------------
 // Formatters
