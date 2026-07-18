@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
-import { LockedCover, UnlockPanel } from "@anthers/web-shared/post/unlock";
+import { LockedCover } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
+import InlineUnlock from "../components/post/InlineUnlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
@@ -447,13 +448,7 @@ export default function PostPage() {
 									onPurchaseComplete={refetchPost}
 								/>
 							) : (
-								<UnlockPanel
-									access={access}
-									creatorName={
-										post.creator?.displayName || post.creator?.username || "this creator"
-									}
-									creatorUsername={post.creator?.username}
-								/>
+								<InlineUnlock post={post} access={access} onUnlocked={refetchPost} />
 							)}
 						</div>
 					)
