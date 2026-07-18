@@ -640,19 +640,6 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{viewMode === "next" && (
-				<div className="alert alert-info text-sm mb-4">
-					<span>
-						Preview for {cycleLabel(selectedCycle)}. You can direct next month's Seeds now.
-					</span>
-				</div>
-			)}
-			{viewMode === "past" && (
-				<div className="alert text-sm bg-base-200 mb-4">
-					<span>Historical view — read-only summary for {cycleLabel(selectedCycle)}.</span>
-				</div>
-			)}
-
 			{/* ── Header ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -701,6 +688,14 @@ export default function SubscriptionPage() {
 							)}
 						</p>
 						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+						{/* Fixed-height so switching months changes the text without shifting the layout. */}
+						<p className="text-xs text-base-content/50 mt-1.5 min-h-[1rem]">
+							{viewMode === "past"
+								? "Read-only view of a closed cycle."
+								: viewMode === "next"
+									? "Preview — you can direct next month's Seeds now."
+									: ""}
+						</p>
 					</div>
 
 					<div className="md:w-40 flex md:justify-end order-3">
