@@ -3,7 +3,7 @@ import { CARD_FLAT, CARD_RATE, SALES_TAX_RATE } from "@anthers/shared/constants"
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { stripePromise } from "../../lib/stripe";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
@@ -31,6 +31,27 @@ function buildReceipt(price: number) {
 			{ label: "Sales tax", amount: tax, note: "est." },
 		],
 	};
+}
+
+interface Quote {
+	amount: string;
+	processingFee: string;
+	deliveryFee: string;
+	crfFee: string;
+	salesTax: string;
+	buyerTotal: string;
+}
+
+/** The exact server-computed receipt — the total here matches what Stripe charges. */
+function receiptFromQuote(q: Quote) {
+	const n = (s: string) => Number(s);
+	const lines: { label: string; amount: number; note?: string }[] = [];
+	if (n(q.deliveryFee) > 0)
+		lines.push({ label: "Delivery", amount: n(q.deliveryFee), note: "at cost" });
+	if (n(q.crfFee) > 0) lines.push({ label: "Foundation Fee", amount: n(q.crfFee) });
+	lines.push({ label: "Payment processing", amount: n(q.processingFee), note: "card" });
+	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est." });
+	return { price: n(q.amount), buyerTotal: n(q.buyerTotal), lines };
 }
 
 /**
@@ -67,8 +88,26 @@ function CheckoutForm({
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
+	const [quote, setQuote] = useState<Quote | null>(null);
 
-	const receipt = buildReceipt(price);
+	// Pull the exact fees from the server so the shown total matches the charge — the
+	// client estimate can't know the byte-based delivery fee. Fall back until it loads.
+	useEffect(() => {
+		let cancelled = false;
+		client.api.payments.quote[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as Quote;
+				if (!cancelled) setQuote(data);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [slug]);
+
+	const receipt = quote ? receiptFromQuote(quote) : buildReceipt(price);
 
 	// Resolve the themed card colors once; Stripe rejects oklch()/var().
 	const cardStyle = useMemo(

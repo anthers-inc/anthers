@@ -29,6 +29,51 @@ import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 
+/**
+ * Shared purchase resolution for checkout and quote: find the post, confirm it's
+ * purchasable by this viewer, and compute the fee breakdown — so both endpoints
+ * quote identical numbers. Returns an error shape (with an HTTP status) or the
+ * resolved post + amount + fees.
+ */
+async function resolvePurchase(slug: string, userId: number) {
+	const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
+	if (!post) return { ok: false as const, status: 404 as const, error: "Post not found" };
+
+	// resolveAccess is the source of truth: owner / free / entitled / already-purchased
+	// all mean "nothing to buy"; a hard gate with no price path isn't purchasable.
+	const access = await resolveAccess(post, userId);
+	if (access.canAccess)
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "You already have access to this post",
+		};
+	if (!access.requiresPurchase || !access.price)
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "This post is not available for direct purchase",
+		};
+
+	const amount = new Decimal(access.price);
+	if (amount.lte(0))
+		return { ok: false as const, status: 400 as const, error: "This post is free" };
+
+	// Delivery (bandwidth) scales with the total size of the downloadable assets on the
+	// content items this post references (assets now belong to items, not the post).
+	const [assetSize] = await db
+		.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
+		.from(assets)
+		.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
+		.where(eq(postContents.postId, post.id));
+
+	// Pass-through model: the creator receives the full listed price; the Foundation Fee,
+	// delivery bandwidth, and card + tax are added on top and paid by the buyer.
+	// Digital download → Digital AFF (50% of the download's bandwidth).
+	const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
+	return { ok: true as const, post, amount, fees };
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const paymentRoutes = new Hono()
@@ -109,41 +154,28 @@ const paymentRoutes = new Hono()
 		return c.json({ url: link.url });
 	})
 
+	// ── Quote (accurate fee preview, no charge) ──────────────────────────────
+	.get("/quote/:slug", requireAuth, async (c) => {
+		const user = c.get("user");
+		const q = await resolvePurchase(c.req.param("slug"), user.id);
+		if (!q.ok) return c.json({ error: q.error }, q.status);
+		const { amount, fees } = q;
+		return c.json({
+			amount: amount.toFixed(2),
+			processingFee: fees.processingFee.toFixed(2),
+			deliveryFee: fees.deliveryFee.toFixed(2),
+			crfFee: fees.crfFee.toFixed(2),
+			salesTax: fees.salesTax.toFixed(2),
+			buyerTotal: fees.buyerTotal.toFixed(2),
+		});
+	})
+
 	// ── Checkout ─────────────────────────────────────────────────────────────
 	.post("/checkout/:slug", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
-		const { slug } = c.req.param();
-
-		const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
-
-		// resolveAccess is the source of truth: owner / free / entitled / already-purchased
-		// all mean "nothing to buy"; a hard gate with no price path isn't purchasable.
-		const access = await resolveAccess(post, user.id);
-		if (access.canAccess) {
-			return c.json({ error: "You already have access to this post" }, 400);
-		}
-		if (!access.requiresPurchase || !access.price) {
-			return c.json({ error: "This post is not available for direct purchase" }, 400);
-		}
-
-		const amount = new Decimal(access.price);
-		if (amount.lte(0)) {
-			return c.json({ error: "This post is free" }, 400);
-		}
-
-		// Delivery (bandwidth) scales with the total size of the downloadable assets on the
-		// content items this post references (assets now belong to items, not the post).
-		const [assetSize] = await db
-			.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
-			.from(assets)
-			.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
-			.where(eq(postContents.postId, post.id));
-
-		// Pass-through model: the creator receives the full listed price; the Foundation
-		// Fee, delivery bandwidth, and card + tax are added on top and paid by the buyer.
-		// Digital download → Digital AFF (50% of the download's bandwidth).
-		const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
+		const q = await resolvePurchase(c.req.param("slug"), user.id);
+		if (!q.ok) return c.json({ error: q.error }, q.status);
+		const { post, amount, fees } = q;
 
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
