@@ -242,7 +242,7 @@ function PlanCard({
 						{isCurrent
 							? "Current plan"
 							: saving
-								? "Saving…"
+								? "Confirming…"
 								: isDefault
 									? "Free forever"
 									: isFree
