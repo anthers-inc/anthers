@@ -213,12 +213,12 @@ function GatedContentWrapper({
 	return (
 		<div className="relative group">
 			{/* Content (blurred if locked) */}
-			<div className={isLocked ? "blur-[2px] opacity-60 pointer-events-none select-none" : ""}>
+			<div className={isLocked ? "blur-[2px] opacity-60 select-none" : ""}>
 				{children}
 			</div>
 
 			{/* Badge overlay */}
-			<div className="absolute top-2 right-2 z-10">
+			<div className="absolute top-2 right-2 z-10 pointer-events-none">
 				{isLocked ? (
 					<div className="badge badge-sm gap-1 bg-base-300/90 border-base-content/20">
 						<LockClosedIcon className="w-3 h-3" />
@@ -234,7 +234,7 @@ function GatedContentWrapper({
 
 			{/* Click-through overlay for locked content */}
 			{isLocked && (
-				<div className="absolute inset-0 flex items-center justify-center z-10 cursor-default">
+				<div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
 					<div className="bg-base-300/90 rounded-lg px-4 py-2 text-center">
 						<LockClosedIcon className="w-5 h-5 mx-auto mb-1 text-base-content/50" />
 						<p className="text-xs text-base-content/60">{lockLabel || "Locked content"}</p>

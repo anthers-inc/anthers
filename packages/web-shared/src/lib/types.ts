@@ -39,6 +39,8 @@ export interface Creator {
 	username: string;
 	displayName: string | null;
 	avatar?: string | null;
+	/** Whether this creator can receive direct-purchase payouts (connected + payouts enabled). */
+	hasStripe?: boolean;
 }
 
 // ─── Access & pricing ───
@@ -328,8 +330,8 @@ export interface CheckoutResponse {
 	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
 	creatorEarnings: string;
 	buyerTotal: string; // price + fees — what the buyer is charged
-	clientSecret: string;
-	message: string;
+	salesTax: string;
+	clientSecret: string | null; // Stripe PaymentIntent client secret (null only on error)
 }
 
 export interface Purchase {

@@ -9,6 +9,10 @@ import { BADGE_ART } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccountResponse, Badge } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
+import CancelConfirmModal from "../components/subscribe/CancelConfirmModal";
+import SubscriptionPaymentModal, {
+	type SubscriptionPreview,
+} from "../components/subscribe/SubscriptionPaymentModal";
 
 // The five Badge plans are static — derived entirely from BADGE_PLANS — so we
 // render them synchronously instead of fetching /subscriptions/badges. That removes
@@ -238,7 +242,7 @@ function PlanCard({
 						{isCurrent
 							? "Current plan"
 							: saving
-								? "Saving…"
+								? "Confirming…"
 								: isDefault
 									? "Free forever"
 									: isFree
@@ -262,6 +266,16 @@ export default function SubscribePage() {
 	const [saving, setSaving] = useState<Badge | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	const [pendingPay, setPendingPay] = useState<{
+		badge: Badge;
+		planName: string;
+		preview: SubscriptionPreview;
+	} | null>(null);
+	const [cancelInfo, setCancelInfo] = useState<{
+		planName: string;
+		revertUnix: number | null;
+	} | null>(null);
+	const [canceling, setCanceling] = useState(false);
 
 	// The plans render immediately from PLANS; the only fetch is a logged-in user's
 	// current badge, which just highlights "Your plan". Logged-out visitors skip it,
@@ -287,26 +301,70 @@ export default function SubscribePage() {
 		};
 	}, [user]);
 
+	// Re-read the account, optionally polling until the badge reaches `expected` — the
+	// subscription webhook applies the badge asynchronously after payment confirms.
+	const refreshAccount = async (expected?: Badge) => {
+		for (let i = 0; i < (expected ? 12 : 1); i++) {
+			try {
+				const res = await client.api.subscriptions.me.$get();
+				if (res.ok) {
+					const data = (await res.json()) as AccountResponse;
+					setCurrentBadge(data.badge);
+					if (!expected || data.badge === expected) return;
+				}
+			} catch {
+				// transient — keep polling
+			}
+			await new Promise((r) => setTimeout(r, 800));
+		}
+	};
+
+	// Confirm a cancellation (→ Free at period end) from the cancel modal.
+	const confirmCancel = async () => {
+		setCanceling(true);
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.account.$post({ json: { badge: "free" } });
+			if (!res.ok) {
+				setError("Couldn't cancel your plan. Please try again.");
+				return;
+			}
+			await refreshAccount();
+			setCancelInfo(null);
+			setNotice("Your plan is set to cancel — you'll revert to Free when the period ends.");
+		} catch {
+			setError("Couldn't cancel your plan. Please try again.");
+		} finally {
+			setCanceling(false);
+		}
+	};
+
 	const handleChoose = async (badge: Badge) => {
 		if (!user) {
 			window.location.href = "/login?next=/subscribe";
 			return;
 		}
-		setSaving(badge);
 		setError(null);
 		setNotice(null);
+		setSaving(badge);
 		try {
-			// TODO: Stripe charges the plan price (or the delta on a change) before this applies.
-			const res = await client.api.subscriptions.account.$post({ json: { badge } });
+			// Every choice — subscribe, change, or cancel — is previewed, then confirmed in a modal.
+			const res = await client.api.subscriptions.preview[":badge"].$get({ param: { badge } });
 			if (!res.ok) {
-				setError("Failed to change your plan. Please try again.");
+				setError("Couldn't load plan details. Please try again.");
 				return;
 			}
-			const data = (await res.json()) as AccountResponse;
-			setCurrentBadge(data.badge);
-			setNotice(`You're on the ${data.plan.name} plan.`);
+			const preview = (await res.json()) as
+				| ({ isCancel: false } & SubscriptionPreview)
+				| { isCancel: true; currentPlanName: string; nextBillingUnix: number | null };
+			if (preview.isCancel) {
+				setCancelInfo({ planName: preview.currentPlanName, revertUnix: preview.nextBillingUnix });
+			} else {
+				const pv = badgePlanViews().find((p) => p.id === badge);
+				setPendingPay({ badge, planName: pv?.name ?? badge, preview });
+			}
 		} catch {
-			setError("Failed to change your plan. Please try again.");
+			setError("Couldn't load plan details. Please try again.");
 		} finally {
 			setSaving(null);
 		}
@@ -314,6 +372,29 @@ export default function SubscribePage() {
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
+			{pendingPay && (
+				<SubscriptionPaymentModal
+					badge={pendingPay.badge}
+					planName={pendingPay.planName}
+					preview={pendingPay.preview}
+					onComplete={async () => {
+						const p = pendingPay;
+						setPendingPay(null);
+						setNotice(`You're on the ${p.planName} plan.`);
+						await refreshAccount(p.badge);
+					}}
+					onClose={() => setPendingPay(null)}
+				/>
+			)}
+			{cancelInfo && (
+				<CancelConfirmModal
+					planName={cancelInfo.planName}
+					revertUnix={cancelInfo.revertUnix}
+					processing={canceling}
+					onConfirm={confirmCancel}
+					onClose={() => setCancelInfo(null)}
+				/>
+			)}
 			<Reveal className="text-center mb-8">
 				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
 					501(c)(3) non-profit

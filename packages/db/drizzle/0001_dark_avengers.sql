@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "stripe_subscription_id" text DEFAULT '';

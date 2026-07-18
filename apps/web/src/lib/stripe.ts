@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { loadStripe } from "@stripe/stripe-js";
+import { client } from "@anthers/web-shared/rpc";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const publishableKey: string = (globalThis as any).__STRIPE_PUBLISHABLE_KEY__ || "";
-
-export const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+/**
+ * Stripe.js, loaded from the publishable key the API serves at `/payments/stripe/config`.
+ * Resolving the key at runtime (rather than a build-time define) matches how the rest of
+ * the app resolves config, and keeps the key in one place — the server's `.env`.
+ * Resolves to null when payments aren't configured, so `<Elements>` simply stays inert.
+ */
+export const stripePromise: Promise<Stripe | null> = (async () => {
+	try {
+		const res = await client.api.payments.stripe.config.$get();
+		const { publishableKey } = (await res.json()) as { publishableKey: string };
+		return publishableKey ? await loadStripe(publishableKey) : null;
+	} catch {
+		return null;
+	}
+})();

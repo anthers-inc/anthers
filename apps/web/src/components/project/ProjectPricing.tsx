@@ -3,7 +3,7 @@ import { CARD_FLAT, CARD_RATE, SALES_TAX_RATE } from "@anthers/shared/constants"
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { stripePromise } from "../../lib/stripe";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
@@ -33,6 +33,47 @@ function buildReceipt(price: number) {
 	};
 }
 
+interface Quote {
+	amount: string;
+	processingFee: string;
+	deliveryFee: string;
+	crfFee: string;
+	salesTax: string;
+	buyerTotal: string;
+}
+
+/** The exact server-computed receipt — the total here matches what Stripe charges. */
+function receiptFromQuote(q: Quote) {
+	const n = (s: string) => Number(s);
+	const lines: { label: string; amount: number; note?: string }[] = [];
+	if (n(q.deliveryFee) > 0)
+		lines.push({ label: "Delivery", amount: n(q.deliveryFee), note: "at cost" });
+	if (n(q.crfFee) > 0) lines.push({ label: "Foundation Fee", amount: n(q.crfFee) });
+	lines.push({ label: "Payment processing", amount: n(q.processingFee), note: "card" });
+	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est." });
+	return { price: n(q.amount), buyerTotal: n(q.buyerTotal), lines };
+}
+
+/**
+ * Stripe Elements only accepts concrete colors (hex/rgb) — not `oklch()` or CSS
+ * vars. Resolve a themed color to an `rgb(a)` string by rasterising one pixel, so
+ * the card input still tracks the active light/dark theme.
+ */
+function toRgb(cssColor: string): string {
+	if (typeof document === "undefined") return "#111111";
+	const probe = document.createElement("span");
+	probe.style.color = cssColor;
+	document.body.appendChild(probe);
+	const computed = getComputedStyle(probe).color;
+	probe.remove();
+	const ctx = document.createElement("canvas").getContext("2d");
+	if (!ctx) return computed;
+	ctx.fillStyle = computed;
+	ctx.fillRect(0, 0, 1, 1);
+	const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+	return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(2)})`;
+}
+
 function CheckoutForm({
 	slug,
 	price,
@@ -47,8 +88,38 @@ function CheckoutForm({
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
+	const [quote, setQuote] = useState<Quote | null>(null);
 
-	const receipt = buildReceipt(price);
+	// Pull the exact fees from the server so the shown total matches the charge — the
+	// client estimate can't know the byte-based delivery fee. Fall back until it loads.
+	useEffect(() => {
+		let cancelled = false;
+		client.api.payments.quote[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as Quote;
+				if (!cancelled) setQuote(data);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [slug]);
+
+	const receipt = quote ? receiptFromQuote(quote) : buildReceipt(price);
+
+	// Resolve the themed card colors once; Stripe rejects oklch()/var().
+	const cardStyle = useMemo(
+		() => ({
+			base: {
+				fontSize: "16px",
+				color: toRgb("oklch(var(--bc))"),
+				"::placeholder": { color: toRgb("oklch(var(--bc) / 0.4)") },
+			},
+		}),
+		[],
+	);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -62,6 +133,11 @@ function CheckoutForm({
 				param: { slug },
 			});
 			const checkout = (await res.json()) as CheckoutResponse;
+			if (!checkout.clientSecret) {
+				setError("Couldn't start checkout. Please try again.");
+				setProcessing(false);
+				return;
+			}
 
 			const cardElement = elements.getElement(CardElement);
 			if (!cardElement) {
@@ -101,17 +177,7 @@ function CheckoutForm({
 
 			<div className="form-control">
 				<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-					<CardElement
-						options={{
-							style: {
-								base: {
-									fontSize: "16px",
-									color: "oklch(var(--bc))",
-									"::placeholder": { color: "oklch(var(--bc) / 0.4)" },
-								},
-							},
-						}}
-					/>
+					<CardElement options={{ style: cardStyle }} />
 				</div>
 			</div>
 
@@ -162,10 +228,6 @@ export default function ProjectPricing({
 					<p className="text-sm text-base-content/60">
 						Payments not available yet—the creator hasn't connected Stripe.
 					</p>
-				</div>
-			) : !stripePromise ? (
-				<div className="p-3 bg-base-200 rounded-lg">
-					<p className="text-sm text-base-content/60">Payments are not configured.</p>
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
