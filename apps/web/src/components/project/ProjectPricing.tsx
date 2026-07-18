@@ -3,7 +3,7 @@ import { CARD_FLAT, CARD_RATE, SALES_TAX_RATE } from "@anthers/shared/constants"
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { stripePromise } from "../../lib/stripe";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
@@ -33,6 +33,26 @@ function buildReceipt(price: number) {
 	};
 }
 
+/**
+ * Stripe Elements only accepts concrete colors (hex/rgb) — not `oklch()` or CSS
+ * vars. Resolve a themed color to an `rgb(a)` string by rasterising one pixel, so
+ * the card input still tracks the active light/dark theme.
+ */
+function toRgb(cssColor: string): string {
+	if (typeof document === "undefined") return "#111111";
+	const probe = document.createElement("span");
+	probe.style.color = cssColor;
+	document.body.appendChild(probe);
+	const computed = getComputedStyle(probe).color;
+	probe.remove();
+	const ctx = document.createElement("canvas").getContext("2d");
+	if (!ctx) return computed;
+	ctx.fillStyle = computed;
+	ctx.fillRect(0, 0, 1, 1);
+	const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+	return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(2)})`;
+}
+
 function CheckoutForm({
 	slug,
 	price,
@@ -49,6 +69,18 @@ function CheckoutForm({
 	const [succeeded, setSucceeded] = useState(false);
 
 	const receipt = buildReceipt(price);
+
+	// Resolve the themed card colors once; Stripe rejects oklch()/var().
+	const cardStyle = useMemo(
+		() => ({
+			base: {
+				fontSize: "16px",
+				color: toRgb("oklch(var(--bc))"),
+				"::placeholder": { color: toRgb("oklch(var(--bc) / 0.4)") },
+			},
+		}),
+		[],
+	);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -106,17 +138,7 @@ function CheckoutForm({
 
 			<div className="form-control">
 				<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-					<CardElement
-						options={{
-							style: {
-								base: {
-									fontSize: "16px",
-									color: "oklch(var(--bc))",
-									"::placeholder": { color: "oklch(var(--bc) / 0.4)" },
-								},
-							},
-						}}
-					/>
+					<CardElement options={{ style: cardStyle }} />
 				</div>
 			</div>
 
