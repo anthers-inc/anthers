@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { LockedCover, UnlockModal, unlockLabel } from "@anthers/web-shared/post/unlock";
+import { LockedCover, unlockLabel } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
-import { useState } from "react";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
 export default function ContentCard({ post }: { post: PostListItem }) {
-	const [showUnlock, setShowUnlock] = useState(false);
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
 		month: "short",
 		day: "numeric",
 		year: "numeric",
 	});
 
-	// Locked to the viewer → the card is a gated preview (blurred cover, visible title)
-	// and clicking opens the unlock modal instead of navigating into the post.
+	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
+	// Clicking still navigates into the post, where the unlock options live.
 	const locked = post.access ? !post.access.canAccess : false;
 
 	const content = (
@@ -112,19 +110,6 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 
 	const cardClass =
 		"card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left";
-
-	if (locked && post.access) {
-		return (
-			<>
-				<button type="button" className={`${cardClass} w-full`} onClick={() => setShowUnlock(true)}>
-					{content}
-				</button>
-				{showUnlock && (
-					<UnlockModal post={post} access={post.access} onClose={() => setShowUnlock(false)} />
-				)}
-			</>
-		);
-	}
 
 	return (
 		<Link to={postUrl(post)} className={cardClass}>
