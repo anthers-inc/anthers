@@ -145,6 +145,66 @@ const subscriptionRoutes = new Hono()
 		return c.json({ account: acct, badge, plan: PLANS[badgeRank(badge)] });
 	})
 
+	// ── Preview a plan choice (no charge) — powers the confirmation modal ──────
+	.get("/preview/:badge", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeParam = c.req.param("badge");
+		if (badgeParam === "free" || !BADGE_IDS.includes(badgeParam as (typeof BADGE_IDS)[number])) {
+			return c.json({ error: "Invalid plan" }, 400);
+		}
+		const badge = badgeParam as Badge;
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+
+		const acct = await ensureAccount(user.id);
+		const price = BADGE_PLANS[badge].price;
+		const recurring = { amount: price.toFixed(2), interval: "month" as const };
+
+		// The card on file — attached to the customer when a subscription's first
+		// payment is confirmed (save_default_payment_method).
+		let savedCard: { id: string; brand: string; last4: string } | null = null;
+		if (acct.stripeCustomerId) {
+			const pms = await stripe.paymentMethods.list({
+				customer: acct.stripeCustomerId,
+				type: "card",
+				limit: 1,
+			});
+			const pm = pms.data[0];
+			if (pm?.card) savedCard = { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 };
+		}
+
+		// A change to an active subscription → ask Stripe for the exact proration owed now.
+		let isChange = false;
+		let chargeNow = price.toFixed(2);
+		let nextBillingUnix: number | null = null;
+		if (acct.stripeSubscriptionId) {
+			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
+			if (sub && (sub.status === "active" || sub.status === "trialing")) {
+				isChange = true;
+				const priceId = priceIdForBadge(badge);
+				if (priceId) {
+					const preview = await stripe.invoices.createPreview({
+						customer: acct.stripeCustomerId ?? undefined,
+						subscription: sub.id,
+						subscription_details: {
+							items: [{ id: sub.items.data[0].id, price: priceId }],
+							proration_behavior: "always_invoice",
+						},
+					});
+					chargeNow = Math.max(0, preview.amount_due / 100).toFixed(2);
+					nextBillingUnix = sub.items.data[0]?.current_period_end ?? null;
+				}
+			}
+		}
+		if (!isChange) {
+			// New subscription: charged now, then again in a month.
+			const next = new Date();
+			next.setMonth(next.getMonth() + 1);
+			nextBillingUnix = Math.floor(next.getTime() / 1000);
+		}
+
+		return c.json({ badge, isChange, recurring, chargeNow, nextBillingUnix, savedCard });
+	})
+
 	// ── Subscribe to a Badge plan ────────────────────────────────────────────
 	.post(
 		"/account",
