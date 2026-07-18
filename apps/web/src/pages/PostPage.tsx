@@ -424,7 +424,11 @@ export default function PostPage() {
 						<div className="mb-8">
 							<LockedCover thumbnail={post.thumbnail} className="aspect-video rounded-lg mb-6" />
 							{access.requiresPurchase ? (
-								<ProjectPricing slug={post.slug} access={access} creatorHasStripe={false} />
+								<ProjectPricing
+									slug={post.slug}
+									access={access}
+									creatorHasStripe={post.creator?.hasStripe ?? false}
+								/>
 							) : (
 								<UnlockPanel
 									access={access}

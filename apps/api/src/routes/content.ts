@@ -31,6 +31,7 @@ import {
 	projectPosts,
 	projects,
 	ratings,
+	stripeAccounts,
 	transcodingJobs,
 	users,
 } from "@anthers/db/schema";
@@ -1005,6 +1006,18 @@ const contentRoutes = new Hono()
 			.where(eq(users.id, post.creatorId))
 			.limit(1);
 
+		// Can the creator receive a direct-purchase payout? (Connected account, onboarded
+		// and payouts-enabled.) Drives whether the buyer sees a live checkout.
+		const [creatorStripe] = await db
+			.select({
+				payoutsEnabled: stripeAccounts.payoutsEnabled,
+				onboardingComplete: stripeAccounts.onboardingComplete,
+			})
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, post.creatorId))
+			.limit(1);
+		const creatorHasStripe = !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled;
+
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
@@ -1031,7 +1044,7 @@ const contentRoutes = new Hono()
 			post: {
 				...post,
 				...gatedBody,
-				creator,
+				creator: { ...creator, hasStripe: creatorHasStripe },
 				ratingAverage: agg.average ? Number(agg.average) : null,
 				ratingCount: Number(agg.count),
 				contents,

@@ -2,8 +2,11 @@
 /**
  * Payment routes — Stripe Connect onboarding, checkout, purchases, Foundation Fee.
  *
- * Note: Actual Stripe API calls are stubbed with TODO markers.
- * Stripe SDK will be integrated when payment processing is fully wired up.
+ * Direct purchases run as Stripe destination charges: the buyer is charged the
+ * full total, the creator's connected account receives 100% of the listed price
+ * as the transfer destination, and the platform keeps the rest (Foundation Fee,
+ * at-cost bandwidth, sales tax) as the application fee. When the creator has no
+ * connected account yet, it falls back to a plain charge held on the platform.
  */
 
 import { db } from "@anthers/db/client";
@@ -21,12 +24,21 @@ import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import type Stripe from "stripe";
+import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const paymentRoutes = new Hono()
+	// ── Public config ────────────────────────────────────────────────────────
+	// The publishable key is meant to be public (it ships in client JS); serving it
+	// keeps the key in one place (server env) with no build-time injection to maintain.
+	.get("/stripe/config", (c) => {
+		return c.json({ publishableKey: process.env.STRIPE_PUBLISHABLE_KEY?.trim() ?? "" });
+	})
+
 	// ── Stripe Connect Onboarding ────────────────────────────────────────────
 	.get("/stripe/onboard", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -57,6 +69,7 @@ const paymentRoutes = new Hono()
 
 	.post("/stripe/onboard", requireAuth, async (c) => {
 		const user = c.get("user");
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Check for existing Stripe account
 		const [existing] = await db
@@ -69,16 +82,31 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "Stripe account already onboarded" }, 400);
 		}
 
-		// TODO: Create or retrieve Stripe Connect Express account
-		// TODO: Generate AccountLink URL for onboarding
-		// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-		// const account = await stripe.accounts.create({ type: "express", ... });
-		// const link = await stripe.accountLinks.create({ account: account.id, ... });
+		// Reuse an in-progress account; otherwise create a payouts-only Express account
+		// (destination charges route money to it — it needs `transfers`, not to accept cards).
+		let accountId = existing?.stripeAccountId;
+		if (!accountId) {
+			const account = await stripe.accounts.create({
+				type: "express",
+				email: user.email ?? undefined,
+				capabilities: { transfers: { requested: true } },
+				metadata: { userId: String(user.id) },
+			});
+			accountId = account.id;
+			await db.insert(stripeAccounts).values({ userId: user.id, stripeAccountId: accountId });
+		}
 
-		return c.json({
-			url: "https://connect.stripe.com/setup/placeholder",
-			message: "Stripe Connect onboarding not yet implemented",
+		// Return here after the hosted flow; the account.updated webhook syncs enablement.
+		const base =
+			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
+		const link = await stripe.accountLinks.create({
+			account: accountId,
+			refresh_url: `${base}/studio/payouts?refresh=1`,
+			return_url: `${base}/studio/payouts?onboarded=1`,
+			type: "account_onboarding",
 		});
+
+		return c.json({ url: link.url });
 	})
 
 	// ── Checkout ─────────────────────────────────────────────────────────────
@@ -117,14 +145,50 @@ const paymentRoutes = new Hono()
 		// Digital download → Digital AFF (50% of the download's bandwidth).
 		const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
 
-		// TODO: Create Stripe PaymentIntent
-		// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-		// const paymentIntent = await stripe.paymentIntents.create({
-		//   amount: Math.round(fees.buyerTotal.toNumber() * 100), // buyer pays price + fees
-		//   currency: "usd",
-		//   application_fee_amount: Math.round(fees.processingFee.plus(fees.crfFee).toNumber() * 100), // fees only; creator keeps 100%
-		//   transfer_data: { destination: creatorStripeAccountId },
-		// });
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+
+		// Route 100% of the listed price to the creator when they're set up to receive it;
+		// the application fee is everything else the buyer pays (Foundation Fee + at-cost
+		// bandwidth + processing + sales tax). No connected account yet → a plain charge
+		// held on the platform, so the plumbing is testable before Connect onboarding.
+		const [creatorAccount] = await db
+			.select()
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, post.creatorId))
+			.limit(1);
+		const creatorConnected =
+			!!creatorAccount?.onboardingComplete && !!creatorAccount.payoutsEnabled;
+
+		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
+		const applicationFeeCents = Math.round(fees.buyerTotal.minus(amount).toNumber() * 100);
+
+		const params: Stripe.PaymentIntentCreateParams = {
+			amount: totalCents,
+			currency: "usd",
+			payment_method_types: ["card"],
+			metadata: { kind: "direct_purchase", postId: String(post.id), buyerId: String(user.id) },
+		};
+		if (creatorConnected && applicationFeeCents < totalCents) {
+			params.application_fee_amount = applicationFeeCents;
+			params.transfer_data = { destination: creatorAccount.stripeAccountId };
+		}
+
+		const paymentIntent = await stripe.paymentIntents.create(params);
+
+		// Record the purchase as pending; the webhook flips it to completed on success,
+		// and access unlocks the moment a completed row exists.
+		await db.insert(purchases).values({
+			buyerId: user.id,
+			postId: post.id,
+			type: "digital",
+			amount: amount.toFixed(2),
+			processingFee: fees.processingFee.toFixed(2),
+			deliveryFee: fees.deliveryFee.toFixed(2),
+			crfFee: fees.crfFee.toFixed(2),
+			creatorEarnings: fees.creatorEarnings.toFixed(2),
+			stripePaymentIntentId: paymentIntent.id,
+			status: "pending",
+		});
 
 		return c.json({
 			amount: amount.toFixed(2), // listed price — what the creator receives
@@ -134,8 +198,7 @@ const paymentRoutes = new Hono()
 			salesTax: fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2), // == amount (pass-through)
 			buyerTotal: fees.buyerTotal.toFixed(2), // price + fees + tax — what the buyer is charged
-			clientSecret: "placeholder_client_secret",
-			message: "Stripe checkout not yet fully implemented",
+			clientSecret: paymentIntent.client_secret,
 		});
 	})
 
@@ -228,12 +291,57 @@ const paymentRoutes = new Hono()
 
 	// ── Stripe Webhook ───────────────────────────────────────────────────────
 	.post("/stripe/webhook", async (c) => {
-		// TODO: Verify Stripe webhook signature
-		// TODO: Handle payment_intent.succeeded → complete purchase, record Foundation Fee
-		// TODO: Handle account.updated → sync onboarding state
-		// TODO: read the raw body + Stripe-Signature header to verify the event
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Placeholder — will be implemented with Stripe SDK
+		const sig = c.req.header("stripe-signature");
+		const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+		if (!sig || !secret) return c.json({ error: "Missing signature or webhook secret." }, 400);
+
+		// Verify against the raw body — constructEvent recomputes the HMAC, so the bytes
+		// must be untouched (no c.req.json() before this).
+		const raw = await c.req.text();
+		let event: Stripe.Event;
+		try {
+			event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
+		} catch {
+			return c.json({ error: "Signature verification failed." }, 400);
+		}
+
+		if (event.type === "payment_intent.succeeded") {
+			const pi = event.data.object as Stripe.PaymentIntent;
+			// Idempotent: only a still-pending row flips, so redelivered events are no-ops.
+			const [completed] = await db
+				.update(purchases)
+				.set({ status: "completed", updatedAt: new Date() })
+				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
+				.returning();
+			if (completed) {
+				// Record the Foundation Fee (Digital AFF) to the ledger.
+				await db.insert(crfLedger).values({
+					amount: completed.crfFee,
+					purchaseId: completed.id,
+					description: `Digital AFF — purchase #${completed.id}`,
+				});
+			}
+		} else if (event.type === "payment_intent.payment_failed") {
+			const pi = event.data.object as Stripe.PaymentIntent;
+			await db
+				.update(purchases)
+				.set({ status: "failed", updatedAt: new Date() })
+				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")));
+		} else if (event.type === "account.updated") {
+			const acct = event.data.object as Stripe.Account;
+			await db
+				.update(stripeAccounts)
+				.set({
+					chargesEnabled: acct.charges_enabled,
+					payoutsEnabled: acct.payouts_enabled,
+					onboardingComplete: acct.details_submitted && acct.charges_enabled,
+					updatedAt: new Date(),
+				})
+				.where(eq(stripeAccounts.stripeAccountId, acct.id));
+		}
+
 		return c.json({ received: true });
 	});
 

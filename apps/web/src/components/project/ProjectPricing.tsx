@@ -62,6 +62,11 @@ function CheckoutForm({
 				param: { slug },
 			});
 			const checkout = (await res.json()) as CheckoutResponse;
+			if (!checkout.clientSecret) {
+				setError("Couldn't start checkout. Please try again.");
+				setProcessing(false);
+				return;
+			}
 
 			const cardElement = elements.getElement(CardElement);
 			if (!cardElement) {
@@ -162,10 +167,6 @@ export default function ProjectPricing({
 					<p className="text-sm text-base-content/60">
 						Payments not available yet—the creator hasn't connected Stripe.
 					</p>
-				</div>
-			) : !stripePromise ? (
-				<div className="p-3 bg-base-200 rounded-lg">
-					<p className="text-sm text-base-content/60">Payments are not configured.</p>
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
