@@ -10,13 +10,15 @@
 		"./constants": "./src/constants.ts"
 	},
 	"scripts": {
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"decimal.js": "10.6.0",
 		"zod": "^3.25.0"
 	},
 	"devDependencies": {
+		"@types/bun": "latest",
 		"typescript": "^5.8.0"
 	}
 }

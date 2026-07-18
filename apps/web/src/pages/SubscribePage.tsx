@@ -203,6 +203,12 @@ function PlanCard({
 						<span className="text-base-content/70">Community Share</span>
 						<strong>{fmt(plan.communityShare)}</strong>
 					</div>
+					{Number(plan.payments) > 0 && (
+						<div className="flex items-center justify-between">
+							<span className="text-base-content/70">Payments</span>
+							<strong>{fmt(plan.payments)}</strong>
+						</div>
+					)}
 				</div>
 
 				<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2 text-success">

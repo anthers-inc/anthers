@@ -29,16 +29,19 @@ export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 /**
  * Decompose a Badge plan's whole-dollar price into its parts (full precision):
  *
- *   Price = Time Pool + Seeds + Community Share
+ *   Price = Payments + Time Pool + Seeds + Community Share
  *
- * where Time Pool (by watch-time) and Seeds (× $1, direct) both go 100% to
- * creators, and Community Share is the derived remainder funding the Foundation.
+ * Time Pool (by watch-time) and Seeds (× $1, direct) both go 100% to creators;
+ * Community Share funds the Foundation; Payments is the at-cost overhead of moving
+ * money (card, tax, Connect, disputes, refunds, reserve), folded into the price.
+ * Seeds and Community Share are held; Time Pool is the derived remainder.
  *
- * Free is special: it pays $0, so its Community Share is $0 and its small Time
- * Pool is subsidised from the pool (still `toCreators`, but not user-funded).
+ * Free is special: it pays $0, so Payments and Community Share are $0 and its small
+ * Time Pool is subsidised from the pool (still `toCreators`, but not user-funded).
  */
 export function badgePriceBreakdown(badge: Badge): {
 	price: Decimal;
+	payments: Decimal;
 	timePool: Decimal;
 	seeds: Decimal;
 	communityShare: Decimal;
@@ -47,12 +50,20 @@ export function badgePriceBreakdown(badge: Badge): {
 } {
 	const plan = BADGE_PLANS[badge];
 	const price = new Decimal(plan.price);
+	const payments = new Decimal(plan.payments);
 	const timePool = new Decimal(plan.timePool);
 	const seeds = new Decimal(plan.seeds).mul(SEED_PRICE);
+	const communityShare = new Decimal(plan.communityShare);
 	const toCreators = timePool.plus(seeds);
-	// Free is fully subsidised — the user contributes nothing, so no Community Share.
-	const communityShare = plan.price === 0 ? new Decimal(0) : price.minus(toCreators);
-	return { price, timePool, seeds, communityShare, toCreators, subsidised: plan.price === 0 };
+	return {
+		price,
+		payments,
+		timePool,
+		seeds,
+		communityShare,
+		toCreators,
+		subsidised: plan.price === 0,
+	};
 }
 
 /** A Badge plan as a display view model — the price decomposition + what's included.
@@ -61,6 +72,7 @@ export interface BadgePlanView {
 	id: Badge;
 	name: string;
 	price: number;
+	payments: string;
 	timePool: string;
 	seeds: number;
 	freeBwGiB: number;
@@ -83,6 +95,7 @@ export function badgePlanViews(): BadgePlanView[] {
 			id: badge,
 			name: badgeLabel(badge),
 			price: plan.price,
+			payments: bd.payments.toFixed(2),
 			timePool: bd.timePool.toFixed(2),
 			seeds: plan.seeds,
 			freeBwGiB: plan.freeBwGiB,
