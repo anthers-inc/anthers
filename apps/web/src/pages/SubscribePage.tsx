@@ -9,6 +9,7 @@ import { BADGE_ART } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccountResponse, Badge } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
+import CancelConfirmModal from "../components/subscribe/CancelConfirmModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
@@ -270,6 +271,11 @@ export default function SubscribePage() {
 		planName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
+	const [cancelInfo, setCancelInfo] = useState<{
+		planName: string;
+		revertUnix: number | null;
+	} | null>(null);
+	const [canceling, setCanceling] = useState(false);
 
 	// The plans render immediately from PLANS; the only fetch is a logged-in user's
 	// current badge, which just highlights "Your plan". Logged-out visitors skip it,
@@ -313,6 +319,26 @@ export default function SubscribePage() {
 		}
 	};
 
+	// Confirm a cancellation (→ Free at period end) from the cancel modal.
+	const confirmCancel = async () => {
+		setCanceling(true);
+		setError(null);
+		try {
+			const res = await client.api.subscriptions.account.$post({ json: { badge: "free" } });
+			if (!res.ok) {
+				setError("Couldn't cancel your plan. Please try again.");
+				return;
+			}
+			await refreshAccount();
+			setCancelInfo(null);
+			setNotice("Your plan is set to cancel — you'll revert to Free when the period ends.");
+		} catch {
+			setError("Couldn't cancel your plan. Please try again.");
+		} finally {
+			setCanceling(false);
+		}
+	};
+
 	const handleChoose = async (badge: Badge) => {
 		if (!user) {
 			window.location.href = "/login?next=/subscribe";
@@ -320,37 +346,23 @@ export default function SubscribePage() {
 		}
 		setError(null);
 		setNotice(null);
-
-		// Free → cancel at period end (reversible via Resume); no charge, so no modal.
-		if (badge === "free") {
-			setSaving(badge);
-			try {
-				const res = await client.api.subscriptions.account.$post({ json: { badge } });
-				if (!res.ok) {
-					setError("Failed to change your plan. Please try again.");
-					return;
-				}
-				await refreshAccount();
-				setNotice("Your plan will revert to Free when the current period ends.");
-			} catch {
-				setError("Failed to change your plan. Please try again.");
-			} finally {
-				setSaving(null);
-			}
-			return;
-		}
-
-		// Paid plan → load the charge preview and confirm in the modal (new or change).
 		setSaving(badge);
 		try {
+			// Every choice — subscribe, change, or cancel — is previewed, then confirmed in a modal.
 			const res = await client.api.subscriptions.preview[":badge"].$get({ param: { badge } });
 			if (!res.ok) {
 				setError("Couldn't load plan details. Please try again.");
 				return;
 			}
-			const preview = (await res.json()) as SubscriptionPreview;
-			const pv = badgePlanViews().find((p) => p.id === badge);
-			setPendingPay({ badge, planName: pv?.name ?? badge, preview });
+			const preview = (await res.json()) as
+				| ({ isCancel: false } & SubscriptionPreview)
+				| { isCancel: true; currentPlanName: string; nextBillingUnix: number | null };
+			if (preview.isCancel) {
+				setCancelInfo({ planName: preview.currentPlanName, revertUnix: preview.nextBillingUnix });
+			} else {
+				const pv = badgePlanViews().find((p) => p.id === badge);
+				setPendingPay({ badge, planName: pv?.name ?? badge, preview });
+			}
 		} catch {
 			setError("Couldn't load plan details. Please try again.");
 		} finally {
@@ -372,6 +384,15 @@ export default function SubscribePage() {
 						await refreshAccount(p.badge);
 					}}
 					onClose={() => setPendingPay(null)}
+				/>
+			)}
+			{cancelInfo && (
+				<CancelConfirmModal
+					planName={cancelInfo.planName}
+					revertUnix={cancelInfo.revertUnix}
+					processing={canceling}
+					onConfirm={confirmCancel}
+					onClose={() => setCancelInfo(null)}
 				/>
 			)}
 			<Reveal className="text-center mb-8">

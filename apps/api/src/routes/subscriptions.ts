@@ -149,13 +149,28 @@ const subscriptionRoutes = new Hono()
 	.get("/preview/:badge", requireAuth, async (c) => {
 		const user = c.get("user");
 		const badgeParam = c.req.param("badge");
-		if (badgeParam === "free" || !BADGE_IDS.includes(badgeParam as (typeof BADGE_IDS)[number])) {
+		if (!BADGE_IDS.includes(badgeParam as (typeof BADGE_IDS)[number])) {
 			return c.json({ error: "Invalid plan" }, 400);
 		}
-		const badge = badgeParam as Badge;
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		const acct = await ensureAccount(user.id);
+
+		// Cancel preview (→ Free): what you keep, and until when.
+		if (badgeParam === "free") {
+			if (!acct.stripeSubscriptionId || acct.badge === "free") {
+				return c.json({ error: "No paid plan to cancel" }, 400);
+			}
+			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
+			return c.json({
+				isCancel: true,
+				badge: "free",
+				currentPlanName: PLANS[badgeRank(acct.badge as Badge)].name,
+				nextBillingUnix: sub?.items.data[0]?.current_period_end ?? null,
+			});
+		}
+
+		const badge = badgeParam as Badge;
 		const price = BADGE_PLANS[badge].price;
 		const recurring = { amount: price.toFixed(2), interval: "month" as const };
 
@@ -202,7 +217,15 @@ const subscriptionRoutes = new Hono()
 			nextBillingUnix = Math.floor(next.getTime() / 1000);
 		}
 
-		return c.json({ badge, isChange, recurring, chargeNow, nextBillingUnix, savedCard });
+		return c.json({
+			isCancel: false,
+			badge,
+			isChange,
+			recurring,
+			chargeNow,
+			nextBillingUnix,
+			savedCard,
+		});
 	})
 
 	// ── Subscribe to a Badge plan ────────────────────────────────────────────
