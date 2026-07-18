@@ -14,7 +14,7 @@ import type {
 } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ClockIcon, FilmIcon, MusicalNoteIcon, PhotoIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
@@ -93,6 +93,22 @@ export default function PostPage() {
 	const [loading, setLoading] = useState(true);
 	const [commentBody, setCommentBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
+
+	// After a purchase, the webhook grants access asynchronously — poll the post until
+	// access lands (or a few seconds pass), so the page reveals the unlocked content
+	// on its own rather than making the buyer refresh.
+	const refetchPost = useCallback(async () => {
+		if (!slug) return;
+		for (let i = 0; i < 10; i++) {
+			const res = await client.api.content.posts[":slug"].$get({ param: { slug } });
+			if (res.ok) {
+				const data = (await res.json()) as unknown as { post: Post };
+				setPost(data.post);
+				if (data.post.access?.canAccess) return;
+			}
+			await new Promise((r) => setTimeout(r, 800));
+		}
+	}, [slug]);
 
 	useEffect(() => {
 		if (!slug) return;
@@ -428,6 +444,7 @@ export default function PostPage() {
 									slug={post.slug}
 									access={access}
 									creatorHasStripe={post.creator?.hasStripe ?? false}
+									onPurchaseComplete={refetchPost}
 								/>
 							) : (
 								<UnlockPanel
