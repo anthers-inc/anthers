@@ -16,7 +16,13 @@
 // medium) showing what reaches the creator vs. the platform on Anthers and
 // elsewhere.
 
-import { BADGE_ORDER, badgeLabel, badgeRank, seedCost, timePoolFor } from "@anthers/shared/constants";
+import {
+	BADGE_ORDER,
+	badgeLabel,
+	badgeRank,
+	seedCost,
+	timePoolFor,
+} from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";

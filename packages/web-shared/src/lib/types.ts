@@ -384,15 +384,12 @@ export interface BadgePlan {
 export interface Account {
 	id?: number;
 	userId?: number;
-	badge: Badge;
-	walletBalance: string;
+	anthersSeeds: number;
+	creatorSeedTotal: string;
 	bandwidthUsedGiB: string;
-	seedTotal: string;
-	autoTopupEnabled: boolean | null;
-	autoTopupAmount?: string;
-	autoTopupThreshold?: string;
 	isSelfHosting: boolean;
 	stripeCustomerId?: string | null;
+	stripeSubscriptionId?: string | null;
 	isActive: boolean | null;
 	currentPeriodStart: string | null;
 	currentPeriodEnd: string | null;
@@ -401,21 +398,12 @@ export interface Account {
 	updatedAt?: string;
 }
 
-/** Response of GET /subscriptions/me — the account plus its held Badge + plan. */
+/** Response of GET /subscriptions/me — the account plus its held rank + plan. */
 export interface AccountResponse {
 	account: Account;
-	badge: Badge;
+	anthersSeeds: number;
+	rank: Badge;
 	plan: BadgePlan;
-}
-
-/** Response of GET /subscriptions/wallet/balance — the bandwidth wallet state. */
-export interface WalletBalance {
-	balance: string;
-	freeAllowanceGiB: number;
-	usedGiB: string;
-	autoTopupEnabled: boolean;
-	autoTopupAmount: string;
-	autoTopupThreshold: string;
 }
 
 export interface AttentionSummary {

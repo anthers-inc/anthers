@@ -14,7 +14,6 @@
  * Plan changes happen on /subscribe; here we manage the wallet and direct Seeds.
  */
 
-import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -28,10 +27,8 @@ import type {
 	CreatorGate,
 	PoolDistribution,
 	SeedListResponse,
-	WalletBalance,
 } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import OneTimePaymentModal from "../components/subscribe/OneTimePaymentModal";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -259,7 +256,6 @@ export default function SubscriptionPage() {
 	const [account, setAccount] = useState<Account | null>(null);
 	const [badge, setBadge] = useState<Badge>("free");
 	const [plan, setPlan] = useState<BadgePlan | null>(null);
-	const [wallet, setWallet] = useState<WalletBalance | null>(null);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 
 	// Per-cycle data
@@ -278,17 +274,6 @@ export default function SubscriptionPage() {
 	// Pending Seed edits (creatorId → whole dollars)
 	const [pendingSeeds, setPendingSeeds] = useState<Map<number, number>>(new Map());
 
-	// Wallet form state
-	const [topupAmount, setTopupAmount] = useState(5);
-	const [topupPay, setTopupPay] = useState<{
-		clientSecret: string;
-		savedCard: { id: string; brand: string; last4: string } | null;
-		buyerTotal: string;
-	} | null>(null);
-	const [autoEnabled, setAutoEnabled] = useState(false);
-	const [autoAmount, setAutoAmount] = useState(5);
-	const [autoThreshold, setAutoThreshold] = useState(2);
-
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
 	const canEdit = viewMode === "current" || viewMode === "next";
@@ -297,20 +282,11 @@ export default function SubscriptionPage() {
 
 	const fetchAccount = useCallback(async () => {
 		try {
-			const [meRes, walletRes] = await Promise.all([
-				client.api.subscriptions.me.$get(),
-				client.api.subscriptions.wallet.balance.$get(),
-			]);
+			const meRes = await client.api.subscriptions.me.$get();
 			const me = (await meRes.json()) as AccountResponse;
 			setAccount(me.account);
-			setBadge(me.badge);
+			setBadge(me.rank);
 			setPlan(me.plan);
-			const w = (await walletRes.json()) as WalletBalance;
-			setWallet(w);
-			setTopupAmount(5);
-			setAutoEnabled(w.autoTopupEnabled);
-			setAutoAmount(Math.max(2, Math.round(Number(w.autoTopupAmount))));
-			setAutoThreshold(Math.max(0, Math.round(Number(w.autoTopupThreshold))));
 		} catch {
 			setError("Failed to load your account.");
 		} finally {
@@ -489,60 +465,6 @@ export default function SubscriptionPage() {
 		}
 	};
 
-	// ── Wallet handlers ──
-
-	const handleTopup = async () => {
-		setActionLoading("topup");
-		setError(null);
-		try {
-			const res = await client.api.subscriptions.wallet.topup.$post({
-				json: { amount: topupAmount },
-			});
-			if (!res.ok) {
-				const data = (await res.json()) as { error?: string };
-				setError(data.error ?? "Failed to add funds.");
-				return;
-			}
-			// Open the payment modal to confirm the charge; the webhook credits the wallet.
-			const data = (await res.json()) as {
-				clientSecret: string;
-				savedCard: { id: string; brand: string; last4: string } | null;
-				buyerTotal: string;
-			};
-			setTopupPay(data);
-		} catch {
-			setError("Failed to add funds.");
-		} finally {
-			setActionLoading(null);
-		}
-	};
-
-	const handleAutoTopup = async (enabled: boolean) => {
-		setActionLoading("auto-topup");
-		setError(null);
-		try {
-			const res = await client.api.subscriptions.wallet["auto-topup"].$post({
-				json: { enabled, amount: autoAmount, threshold: autoThreshold },
-			});
-			if (!res.ok) {
-				setError("Failed to update auto-top-up.");
-				return;
-			}
-			const data = (await res.json()) as {
-				autoTopupEnabled: boolean;
-				autoTopupAmount: string;
-				autoTopupThreshold: string;
-			};
-			setAutoEnabled(data.autoTopupEnabled);
-			setSuccess(enabled ? "Auto-top-up on." : "Auto-top-up off.");
-			await fetchAccount();
-		} catch {
-			setError("Failed to update auto-top-up.");
-		} finally {
-			setActionLoading(null);
-		}
-	};
-
 	// ── Account actions ──
 
 	const handleCancel = async () => {
@@ -550,8 +472,10 @@ export default function SubscriptionPage() {
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.cancel.$post();
-			setAccount(((await res.json()) as { account: Account }).account);
-			setSuccess("Your plan will revert to Free at the end of the current billing period.");
+			setAccount(((await res.json()) as unknown as { account: Account }).account);
+			setSuccess(
+				"Your Anthers-Seeds will revert to Free at the end of the current billing period.",
+			);
 		} catch {
 			setError("Failed to cancel.");
 		} finally {
@@ -564,8 +488,8 @@ export default function SubscriptionPage() {
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.resume.$post();
-			setAccount(((await res.json()) as { account: Account }).account);
-			setSuccess("Plan renewal resumed.");
+			setAccount(((await res.json()) as unknown as { account: Account }).account);
+			setSuccess("Subscription renewal resumed.");
 		} catch {
 			setError("Failed to resume.");
 		} finally {
@@ -604,31 +528,8 @@ export default function SubscriptionPage() {
 			</div>
 		);
 
-	const usedGiB = Number(wallet?.usedGiB ?? 0);
-	const freeAllowanceGiB = wallet?.freeAllowanceGiB ?? plan.freeBwGiB;
-	const walletLow = wallet ? Number(wallet.balance) < autoThreshold : false;
-
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "72rem" }}>
-			{topupPay && (
-				<OneTimePaymentModal
-					title={`Add ${fmt(topupAmount)} to your wallet`}
-					blurb={`You'll be charged $${topupPay.buyerTotal} (includes card processing); ${fmt(topupAmount)} is credited to your bandwidth wallet.`}
-					clientSecret={topupPay.clientSecret}
-					savedCard={topupPay.savedCard}
-					confirmLabel={`Pay $${topupPay.buyerTotal}`}
-					onComplete={async () => {
-						setTopupPay(null);
-						setSuccess(`Added ${fmt(topupAmount)} to your bandwidth wallet.`);
-						// The webhook credits asynchronously — refetch a few times so the balance lands.
-						for (let i = 0; i < 8; i++) {
-							await fetchAccount();
-							await new Promise((r) => setTimeout(r, 800));
-						}
-					}}
-					onClose={() => setTopupPay(null)}
-				/>
-			)}
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>
@@ -707,160 +608,26 @@ export default function SubscriptionPage() {
 
 				{/* Plan decomposition */}
 				<div className="divider text-sm text-base-content/50 my-3">
-					What your plan funds
-					<InfoTip text="Your plan price is money to creators (Time Pool + Seeds) plus your Community Share to the Anthers Foundation. Bandwidth is separate — see your wallet below." />
+					What your Anthers-Seeds fund
+					<InfoTip text="Each Anthers-Seed ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the Foundation). The card fee rides on top; there's no wallet." />
 				</div>
-				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Time Pool</div>
 						<div className="text-lg font-bold text-success">{fmt(plan.timePool)}</div>
 						<div className="text-[11px] text-base-content/40">to creators, by watch-time</div>
 					</div>
 					<div>
-						<div className="text-xs text-base-content/50 uppercase">Included Seeds</div>
-						<div className="text-lg font-bold text-success">
-							{plan.seeds} <span className="text-sm font-normal">× $1</span>
-						</div>
-						<div className="text-[11px] text-base-content/40">direct, you give them</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50 uppercase">Community Share</div>
-						<div className="text-lg font-bold">{fmt(plan.communityShare)}</div>
-						<div className="text-[11px] text-base-content/40">to the Foundation</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50 uppercase">Free bandwidth</div>
-						<div className="text-lg font-bold">{plan.freeBwGiB} GiB</div>
-						<div className="text-[11px] text-base-content/40">per month, then at cost</div>
-					</div>
-				</div>
-			</div>
-
-			{/* ── Bandwidth wallet ── */}
-			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
-				<div className="divider text-sm text-base-content/50 mt-0 mb-3">
-					Bandwidth Wallet
-					<InfoTip text="Bandwidth is decoupled from your plan: a prepaid balance charged at DigitalOcean's pass-through cost ($0.01/GiB). Your plan's free monthly allowance is drawn down first; the wallet covers anything beyond it." />
-				</div>
-
-				<div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-					<div>
-						<div className="text-xs text-base-content/50 uppercase">Wallet balance</div>
-						<div className={`text-2xl font-bold ${walletLow ? "text-warning" : ""}`}>
-							{fmt(wallet?.balance ?? 0)}
-						</div>
+						<div className="text-xs text-base-content/50 uppercase">Supports Anthers</div>
+						<div className="text-lg font-bold">{fmt(plan.supportsAnthers)}</div>
 						<div className="text-[11px] text-base-content/40">
-							≈ {Math.round(Number(wallet?.balance ?? 0) / BANDWIDTH_PER_GIB)} GiB at{" "}
-							{fmt(BANDWIDTH_PER_GIB)}/GiB
+							your bandwidth (at cost) + Foundation
 						</div>
 					</div>
 					<div>
-						<div className="text-xs text-base-content/50 uppercase">Free allowance</div>
-						<div className="text-2xl font-bold">{freeAllowanceGiB} GiB</div>
-						<div className="text-[11px] text-base-content/40">
-							≈ {Math.round(freeAllowanceGiB / DELIVERY_GIB_PER_HOUR)} hrs of 1080p video / mo
-						</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50 uppercase">Used this cycle</div>
-						<div className="text-2xl font-bold">{usedGiB.toFixed(1)} GiB</div>
-						<div className="text-[11px] text-base-content/40">
-							{usedGiB <= freeAllowanceGiB
-								? `${(freeAllowanceGiB - usedGiB).toFixed(1)} GiB of allowance left`
-								: `${(usedGiB - freeAllowanceGiB).toFixed(1)} GiB billed to wallet`}
-						</div>
-					</div>
-				</div>
-
-				{/* Top-up */}
-				<div className="flex flex-col sm:flex-row sm:items-end gap-3 border-t border-base-content/10 pt-4">
-					<div>
-						<label className="text-xs text-base-content/50 uppercase block mb-1">Add funds</label>
-						<div className="join">
-							<span className="join-item btn btn-sm btn-disabled no-animation">$</span>
-							<input
-								type="number"
-								min={2}
-								step={1}
-								value={topupAmount}
-								onChange={(e) =>
-									setTopupAmount(Math.max(2, Math.floor(Number(e.target.value) || 0)))
-								}
-								className="join-item input input-sm input-bordered w-24 text-center"
-							/>
-						</div>
-					</div>
-					<button
-						type="button"
-						className={`btn btn-sm btn-primary ${actionLoading === "topup" ? "btn-disabled" : ""}`}
-						onClick={handleTopup}
-						disabled={!!actionLoading || topupAmount < 2}
-					>
-						{actionLoading === "topup" ? "Adding…" : "Add to wallet"}
-					</button>
-					<span className="text-[11px] text-base-content/40 sm:ml-1">
-						Minimum $2 so the card fee stays small.
-					</span>
-				</div>
-
-				{/* Auto top-up */}
-				<div className="flex flex-col gap-2 border-t border-base-content/10 pt-4 mt-4">
-					<label className="flex items-center gap-2 cursor-pointer">
-						<input
-							type="checkbox"
-							className="toggle toggle-primary toggle-sm"
-							checked={autoEnabled}
-							onChange={(e) => handleAutoTopup(e.target.checked)}
-							disabled={actionLoading === "auto-topup"}
-						/>
-						<span className="text-sm font-medium">Auto-top-up</span>
-						<InfoTip text="When your wallet dips below the threshold, we automatically add the top-up amount so streaming never stops." />
-					</label>
-					<div className="flex flex-wrap items-end gap-3 pl-1">
-						<div>
-							<label className="text-[11px] text-base-content/50 block mb-1">Add</label>
-							<div className="join">
-								<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
-								<input
-									type="number"
-									min={2}
-									step={1}
-									value={autoAmount}
-									onChange={(e) =>
-										setAutoAmount(Math.max(2, Math.floor(Number(e.target.value) || 0)))
-									}
-									className="join-item input input-xs input-bordered w-20 text-center"
-									disabled={!autoEnabled}
-								/>
-							</div>
-						</div>
-						<div>
-							<label className="text-[11px] text-base-content/50 block mb-1">When below</label>
-							<div className="join">
-								<span className="join-item btn btn-xs btn-disabled no-animation">$</span>
-								<input
-									type="number"
-									min={0}
-									step={1}
-									value={autoThreshold}
-									onChange={(e) =>
-										setAutoThreshold(Math.max(0, Math.floor(Number(e.target.value) || 0)))
-									}
-									className="join-item input input-xs input-bordered w-20 text-center"
-									disabled={!autoEnabled}
-								/>
-							</div>
-						</div>
-						{autoEnabled && (
-							<button
-								type="button"
-								className={`btn btn-xs btn-outline ${actionLoading === "auto-topup" ? "btn-disabled" : ""}`}
-								onClick={() => handleAutoTopup(true)}
-								disabled={actionLoading === "auto-topup"}
-							>
-								Save settings
-							</button>
-						)}
+						<div className="text-xs text-base-content/50 uppercase">Streaming allowance</div>
+						<div className="text-lg font-bold">{plan.allowanceGiB} GiB</div>
+						<div className="text-[11px] text-base-content/40">per month, folded in</div>
 					</div>
 				</div>
 			</div>

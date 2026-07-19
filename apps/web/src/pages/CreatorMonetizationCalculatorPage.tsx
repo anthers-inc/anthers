@@ -4,8 +4,8 @@ import {
 	type Badge,
 	badgeLabel,
 	badgeRank,
-	seedCost,
 	SEED_PRICE,
+	seedCost,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -105,7 +105,12 @@ function ConversionEngine() {
 	// separate at-cost wallet and is deliberately not shown here).
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
-		{ label: "Supports Anthers", note: "at cost + programs", v: m.supportsAnthers, color: "#a78bfa" },
+		{
+			label: "Supports Anthers",
+			note: "at cost + programs",
+			v: m.supportsAnthers,
+			color: "#a78bfa",
+		},
 	];
 
 	return (
@@ -748,13 +753,15 @@ export default function CreatorMonetizationCalculatorPage() {
 					</div>
 					<div className="collapse-content text-sm text-base-content/60 space-y-3">
 						<div>
-							<h4 className="font-semibold text-base-content/80 mb-1">The support-model mechanic</h4>
+							<h4 className="font-semibold text-base-content/80 mb-1">
+								The support-model mechanic
+							</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
 									A viewer holds <b>Anthers-Seeds</b> — a flat <b>$3 each</b> (their rank, Root →
 									Blossom). Each Anthers-Seed's $3 splits into a <b>Time Pool</b> ($1.50, to
-									creators by watch-time) and <b>Supports Anthers</b> (their bandwidth at cost +
-									the Foundation remainder). Directed <b>Seeds</b> ($3 each, 100% to a creator) are
+									creators by watch-time) and <b>Supports Anthers</b> (their bandwidth at cost + the
+									Foundation remainder). Directed <b>Seeds</b> ($3 each, 100% to a creator) are
 									given on top.
 								</li>
 								<li>

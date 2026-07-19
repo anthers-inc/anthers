@@ -13,18 +13,16 @@ import type { BrandIconName } from "@anthers/brand";
 import {
 	AFF_INFRA_RATE,
 	BADGE_ORDER,
+	BANDWIDTH_PER_GIB,
 	type Badge,
 	badgeLabel,
 	badgeRank,
-	BANDWIDTH_PER_GIB,
 	CARD_FLAT,
 	CARD_RATE,
-	rankForSeeds,
 	SALES_TAX_RATE,
 	seedCost,
 	timePoolFor,
 } from "@anthers/shared/constants";
-import { anthersSeedBreakdown } from "@anthers/shared/fees";
 import { InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
 import { FONTS } from "../../styles/fonts";
