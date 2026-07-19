@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /*
- * Account dashboard — V4 (the "Big Rethink" badge-plan model).
+ * Account dashboard — the support model.
  *
- * The user holds a chosen Badge plan (free/root/sprout/petal/blossom). This page
- * surfaces four things:
- *   1. The held plan (price decomposition: Time Pool + Seeds + Community Share).
- *   2. The bandwidth WALLET — a separate, at-cost prepaid balance ($0.01/GiB) with
- *      a per-tier free monthly allowance; top-up + auto-top-up live here.
- *   3. The Seed budget + per-creator Seed allocations (directed, $1 units).
- *   4. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
+ * The user holds a count of Anthers-Seeds (their rank, free/root/sprout/petal/
+ * blossom = 0…4+). This page surfaces:
+ *   1. The rank (each Anthers-Seed: Time Pool + Supports Anthers; streaming allowance).
+ *   2. The creator-Seed budget + per-creator Seed allocations (directed, $3 units).
+ *   3. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
  *
- * Plan changes happen on /subscribe; here we manage the wallet and direct Seeds.
+ * Rank changes happen on /subscribe; here we direct Seeds. Bandwidth is folded into
+ * the Anthers-Seeds (no wallet).
  */
 
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";

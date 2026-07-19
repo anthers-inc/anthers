@@ -297,8 +297,8 @@ export default function VideoBandwidthCalculatorPage() {
 						<strong className="text-base-content/70">Allowance.</strong> A tier burns bitrate ×
 						3600s ÷ 8 per hour — one Mbps for an hour is 0.419 GiB — so stream time = allowance ÷
 						that rate. At the current framerate the lowest tier stretches the same allowance about{" "}
-						{stretch.toFixed(0)}× further than 2160p. On Anthers a viewer's at-cost bandwidth wallet
-						covers this egress at cost ($0.01/GiB); the companion{" "}
+						{stretch.toFixed(0)}× further than 2160p. On Anthers a viewer's Anthers-Seeds fold in
+						and cover this egress at cost ($0.01/GiB); the companion{" "}
 						<em className="text-base-content/60 not-italic font-semibold">storage calculator</em>{" "}
 						charges the whole transcode ladder every month instead. DigitalOcean Spaces bills per GB
 						(10⁹); multiply by 1.074 for $/GiB. Planning model, not for invoicing.

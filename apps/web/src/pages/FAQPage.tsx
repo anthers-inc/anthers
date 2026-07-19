@@ -58,42 +58,44 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					Every dollar you pay goes to creators, to bandwidth at cost, or to a small charitable
-					Community Share. There are two ways to pay:
+					Support on Anthers is all in the form of <strong>Seeds</strong> — a flat{" "}
+					<strong>$3/month</strong> each — and every dollar goes to creators, to your bandwidth at
+					cost, or to the Anthers Foundation. A Seed goes one of two ways:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Choose a Badge plan</strong> — Free, Root ($4), Sprout ($8), Petal ($16), or
-						Blossom ($32) a month. A plan's price is money to creators (the Time Pool, shared out by
-						the time you spend with each creator's work, plus included Seeds sent straight to
-						creators you pick) and a small Community Share to the Anthers Foundation. Your Badge is
-						simply the plan you hold—a point-in-time choice, not a rolling total of past spend.
+						<strong>Give Seeds to a creator</strong> — $3/month each, sent straight to creators you
+						pick, Patreon-style. 100% goes to the creator, with nothing skimmed for a fee or
+						processing.
 					</li>
 					<li>
-						<strong>Give Seeds</strong> — $1 units you direct to specific creators, Patreon-style.
-						100% goes to the creator, with nothing skimmed for a fee or processing.
+						<strong>Hold Anthers-Seeds</strong> — $3/month each, pointed at Anthers. Each one covers
+						your streaming (at cost), funds the Time Pool (shared out by the time you spend with
+						each creator's work), and leaves a remainder for the Foundation. Your count is your rank
+						(Root → Blossom, and a "+" beyond) — a point-in-time choice, not a rolling total of past
+						spend.
 					</li>
 				</ul>
 				<p>
-					Streaming and downloads draw from a separate <strong>bandwidth wallet</strong>—prepaid at
-					cost ($0.01/GiB)—and every plan includes a free monthly bandwidth allowance (5 GiB on
-					Free, up to 50 GiB on Blossom). Bandwidth is billed at cost, with no markup. Card
-					processing and sales tax are added on top and leave the system entirely.
+					Bandwidth is folded into your Anthers-Seeds and billed at cost ($0.01/GiB)—there's no
+					separate wallet. Every account gets a free monthly streaming floor (15 GiB), and each
+					Anthers-Seed adds a generous allowance on top. Card processing and sales tax are added on
+					top of your Seeds and leave the system entirely.
 				</p>
 			</div>
 		),
 	},
 	{
 		category: "Subscriptions & Payments",
-		question: "What is the bandwidth wallet?",
+		question: "How does bandwidth work?",
 		answer:
-			"Streaming and downloading content moves real data, which costs real money to deliver. On Anthers that cost is decoupled from creator funding: it's a prepaid wallet you top up at cost ($0.01/GiB, DigitalOcean's rate), and every Badge plan comes with a free monthly bandwidth allowance (5 GiB on Free, then 10 / 20 / 30 / 50 GiB up the ladder) that's drawn down first. Bandwidth is neutral—none of it is a platform cut, and it never changes what a creator earns.",
+			"Streaming and downloading content moves real data, which costs real money to deliver. On Anthers that cost is folded into your Anthers-Seeds and billed at cost ($0.01/GiB, DigitalOcean's rate) — there's no separate wallet. Every account gets a free monthly streaming floor (15 GiB), and each Anthers-Seed you hold adds a generous allowance on top, so for all but the heaviest streamer a single Seed covers a month's viewing. Bandwidth is neutral—none of it is a platform cut, and it never changes what a creator earns.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "What is the Anthers Foundation?",
 		answer:
-			"The Anthers Foundation is funded by the Community Share built into each Badge plan, plus small Foundation fees on creator storage (half of a creator's storage cost) and on direct downloads (half of that download's bandwidth) — never a cut of anyone's earnings. Its revenue splits three ways: 10% to operations, 40% to charitable programs, and 50% to a shared subsidy pool that pays for everyone's free access — free bandwidth allowances, free-user Time Pool and Seeds, and free creator storage. Counting free access as the charitable program it is, roughly 90% of the fee is charitable.",
+			"The Anthers Foundation is funded by the remainder of each Anthers-Seed (what's left after your bandwidth at cost and the Time Pool), plus small Foundation fees on creator storage (half of a creator's storage cost) and on direct downloads (half of that download's bandwidth) — never a cut of anyone's earnings. Its budget is read obligations-first: its lean operating overhead and everyone's free access come off the top, and whatever remains funds charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -107,23 +109,24 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					There are two types of gates on Anthers, and creators can combine them with AND/OR logic:
+					There are two types of gates on Anthers, and when a creator sets both on one piece of
+					content they combine with OR — clear either and you're in:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
 						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've given to
-						that creator this month. Creators set the thresholds in $1 increments and name the tiers
-						themselves.
+						that creator this month. Creators set the thresholds in $3 increments (whole Seeds) and
+						name the tiers themselves.
 					</li>
 					<li>
-						<strong>Anthers gates</strong> — based on the Badge plan you currently hold (Root,
-						Sprout, Petal, or Blossom). These unlock the same content across every creator,
-						regardless of which one you're viewing.
+						<strong>Anthers gates</strong> — based on your current rank, i.e. how many Anthers-Seeds
+						you hold (Root, Sprout, Petal, or Blossom). These unlock the same content across every
+						creator, regardless of which one you're viewing.
 					</li>
 				</ul>
 				<p>
-					This means a creator could gate content behind "Sprout plan OR $2/mo in Seeds to me,"
-					giving users multiple paths to access.
+					This means a creator could gate content behind "Sprout rank OR $6 in Seeds to me," giving
+					users multiple paths to access.
 				</p>
 			</div>
 		),
@@ -132,7 +135,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from subscribers' Badge plans, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
+			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from viewers' Anthers-Seeds, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
 	},
 	{
 		category: "Creators",

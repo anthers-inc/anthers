@@ -131,7 +131,7 @@ function GiveSeedsCard({
 					<div>
 						<h4 className="font-medium">Give Seeds to {creatorName}</h4>
 						<p className="text-xs text-base-content/50 mt-0.5">
-							$1 each, 100% to {creatorName}. You have ${remaining.toFixed(2)} of $
+							$3 each, 100% to {creatorName}. You have ${remaining.toFixed(2)} of $
 							{budget.toFixed(2)} left to give this month.
 						</p>
 					</div>
@@ -213,9 +213,7 @@ function GatedContentWrapper({
 	return (
 		<div className="relative group">
 			{/* Content (blurred if locked) */}
-			<div className={isLocked ? "blur-[2px] opacity-60 select-none" : ""}>
-				{children}
-			</div>
+			<div className={isLocked ? "blur-[2px] opacity-60 select-none" : ""}>{children}</div>
 
 			{/* Badge overlay */}
 			<div className="absolute top-2 right-2 z-10 pointer-events-none">

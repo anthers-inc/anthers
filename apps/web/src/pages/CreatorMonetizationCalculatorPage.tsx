@@ -13,17 +13,17 @@ import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ---------------------------------------------------------------------------
-// V4 economics ("Big Rethink"). A viewer CHOOSES a Badge plan — Free $0 / Root
-// $4 / Sprout $8 / Petal $16 / Blossom $32. Each plan's price splits into a
-// Time Pool (to creators, by watch-time), included Seeds ($1 units, 100% to a
-// creator, user-directed), and the Community Share (the charitable remainder).
-// Money to creators = Time Pool + Seeds. The Time Pool is distributed across
-// the creators a viewer watches, in proportion to watch-time (equal-time
-// principle — a minute is a minute across every medium). Bandwidth is a
-// separate at-cost wallet with a free monthly allowance; it is NOT the
-// creator-funding lever, so it never appears in these earnings figures.
+// Support-model economics. A viewer holds Anthers-Seeds — $3 each; the count is
+// their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
+// ($1.50, to creators by watch-time) and "Supports Anthers" (their bandwidth at
+// cost + the Foundation remainder). Money to creators = the Time Pool + Seeds a
+// viewer gives directly to a creator ($3 each, 100% to them). The Time Pool is
+// distributed across the creators a viewer watches, in proportion to watch-time
+// (equal-time principle — a minute is a minute across every medium). Bandwidth is
+// folded into the Anthers-Seeds, at cost — never the creator-funding lever, so it
+// never appears in these earnings figures.
 //
-// Rates/plans come from @anthers/shared/constants (BADGE_PLANS, SEED_PRICE) —
+// Rates/dials come from @anthers/shared/constants (SEED_PRICE, timePoolFor, …) —
 // the same source of truth the API charges against.
 // ---------------------------------------------------------------------------
 
@@ -120,9 +120,9 @@ function ConversionEngine() {
 					1 · The conversion engine — one viewer
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
-					Pick the Badge plan a viewer chose, then how they spend their month. Their Time Pool is
-					split across everyone they watch, by time; your slice of their watch-time — plus any Seeds
-					they direct to you — is what you take home from them. Anthers is a 501(c)(3) non-profit—no
+					Pick the rank a viewer chose, then how they spend their month. Their Time Pool is split
+					across everyone they watch, by time; your slice of their watch-time — plus any Seeds they
+					direct to you — is what you take home from them. Anthers is a 501(c)(3) non-profit—no
 					profit-taking.
 				</p>
 
@@ -131,14 +131,14 @@ function ConversionEngine() {
 					<div className="space-y-5">
 						<div>
 							<div className="flex justify-between items-baseline text-sm text-base-content/70 mb-2">
-								<span>Viewer's Badge plan</span>
+								<span>Viewer's rank</span>
 								<span className="font-mono text-sm">
 									{usd0(m.price)}
 									<span className="text-base-content/40">/mo</span>
 								</span>
 							</div>
 							<SegControl
-								ariaLabel="Viewer's Badge plan"
+								ariaLabel="Viewer's rank"
 								value={badge}
 								onChange={setBadge}
 								options={PLANS.map((b) => ({ value: b, label: badgeLabel(b) }))}
@@ -261,7 +261,7 @@ function ConversionEngine() {
 						{/* Split bar */}
 						<div>
 							<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-base-content/40 mb-1.5">
-								<span>where their plan price goes</span>
+								<span>where their Anthers-Seeds go</span>
 								<span>
 									{usd2(m.price)}/mo · {usd2(m.toCreators)} to creators
 								</span>
@@ -293,8 +293,8 @@ function ConversionEngine() {
 								))}
 							</div>
 							<p className="mt-2 text-[11px] text-base-content/40">
-								Bandwidth is a separate at-cost wallet (free monthly allowance, then $0.01/GiB) —
-								not part of the plan price and never a creator-funding lever.
+								Bandwidth is folded into each Anthers-Seed at cost (a free floor + per-Seed
+								allowance, $0.01/GiB) — no wallet, and never a creator-funding lever.
 							</p>
 						</div>
 
@@ -367,8 +367,8 @@ function ValueMatrix() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					The same hour of content pays wildly different amounts depending on who's watching. Each
 					cell is <b className="text-base-content">$ per view-hour</b> = that viewer's Time Pool ÷
-					their total monthly watch-time. Rows are the paid Badge plans; edit the consumption
-					columns to explore.
+					their total monthly watch-time. Rows are the paid ranks; edit the consumption columns to
+					explore.
 				</p>
 				<div className="overflow-x-auto">
 					<table className="w-full text-sm border-collapse">
@@ -522,9 +522,9 @@ function AudienceBuilder() {
 					3 · A creator's monthly revenue
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
-					Build an audience from segments. For each, set the subscriber count, the Badge plan they
-					chose, total monthly watch-time, hours spent with you, and any Seeds they direct to you.
-					Revenue per subscriber = (your share of their time × their Time Pool) + directed Seeds.
+					Build an audience from segments. For each, set the subscriber count, the rank they chose,
+					total monthly watch-time, hours spent with you, and any Seeds they direct to you. Revenue
+					per subscriber = (your share of their time × their Time Pool) + directed Seeds.
 				</p>
 
 				<div className="overflow-x-auto">
@@ -733,7 +733,7 @@ export default function CreatorMonetizationCalculatorPage() {
 					lede={
 						<>
 							On Anthers, a viewer's <b className="text-base-content">Time Pool</b> — set by the
-							Badge plan they chose — is split across every creator they engage with,{" "}
+							rank they chose — is split across every creator they engage with,{" "}
 							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
@@ -772,8 +772,8 @@ export default function CreatorMonetizationCalculatorPage() {
 								</li>
 								<li>
 									<b>Equal-time principle:</b> a minute counts the same across all media types.
-									Delivery cost differs by medium, but that's billed on the viewer's side (a
-									separate at-cost bandwidth wallet) and never touches the creator share.
+									Delivery cost differs by medium, but that's billed on the viewer's side (a folded
+									into their Anthers-Seeds, at cost) and never touches the creator share.
 								</li>
 								<li>
 									The <b>Badge</b> is a chosen point-in-time plan, not a rolling spend total.

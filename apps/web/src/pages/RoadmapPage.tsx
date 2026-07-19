@@ -341,9 +341,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 					items: [
 						{
 							id: "u-sub-tiers",
-							title: "Badge Plans & Seeds",
+							title: "Anthers-Seeds & Seeds",
 							description:
-								"Choose a Badge plan (Free, Root, Sprout, Petal, Blossom); its whole-dollar price funds creators through the Time Pool (shared by watch-time) and included Seeds (100% to creators you pick), and comes with a bandwidth-wallet allowance. Every dollar is money to creators, bandwidth at cost, or the Community Share to the Anthers Foundation.",
+								"Hold Anthers-Seeds ($3 each — your count is your rank, Root to Blossom) and give Seeds straight to creators (100% to them). Each Anthers-Seed funds the Time Pool (shared by watch-time), your streaming (at cost, folded in — no wallet), and a remainder for the Anthers Foundation. Every dollar is money to creators, bandwidth at cost, or the Foundation remainder.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,

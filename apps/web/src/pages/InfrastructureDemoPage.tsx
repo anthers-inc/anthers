@@ -495,12 +495,12 @@ function UnitCostCalculator() {
 							<span className="font-semibold text-base-content">
 								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
 							</span>{" "}
-							— a bandwidth pass-through covered at cost by the viewer's separate bandwidth wallet
-							($0.01/GiB, after a free monthly allowance). Creator earnings are{" "}
+							— a bandwidth pass-through folded into the viewer's Anthers-Seeds, at cost ($0.01/GiB,
+							after a free monthly allowance). Creator earnings are{" "}
 							<span className="font-semibold text-success">decoupled</span> from this: they come
-							from viewers' Badge-plan Time Pool, distributed by watch-time (equal-time), plus
-							directed Seeds. The Time Pool and Seeds reach creators in full; the bandwidth wallet
-							is billed at cost.
+							from viewers' Anthers-Seed Time Pool ($1.50 each), distributed by watch-time
+							(equal-time), plus directed Seeds. The Time Pool and Seeds reach creators in full; the
+							folded-in bandwidth is billed at cost.
 						</p>
 					</div>
 				</div>
@@ -717,8 +717,8 @@ function ReferenceCreatorProfiles() {
 				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
 				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
 				at cost with no markup. The{" "}
-				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by
-				users' Community Share, covers free access across the platform.
+				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by the
+				Anthers-Seed remainder, covers free access across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -826,16 +826,16 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
-						Anthers Sprout plan: $8/mo → $4 Time Pool + 2 Seeds ($2) to creators, with a $2
-						Community Share funding the Foundation. Time Pool is distributed to creators by
-						watch-time; Seeds go 100% to the chosen creator. Bandwidth is a separate at-cost wallet.
+						Anthers Sprout rank: 2 Anthers-Seeds ($6) → $3 Time Pool to creators, with the remainder
+						(~$2.52) funding the Foundation; Seeds given straight to a creator are 100% theirs. Time
+						Pool is distributed by watch-time. Bandwidth is folded into each Anthers-Seed, at cost.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
 					<p>
-						The Anthers Foundation, funded by users' Community Share, covers free access — a free
-						monthly bandwidth allowance per viewer (5–50 GiB by plan) and 50 GiB free storage per
-						creator — from a shared subsidy pool.
+						The Anthers Foundation, funded by the Anthers-Seed remainder, covers free access — a
+						free monthly streaming floor per viewer (15 GiB) plus a per-Seed allowance, and 50 GiB
+						free storage per creator — from a shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>

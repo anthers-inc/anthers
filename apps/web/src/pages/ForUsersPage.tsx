@@ -144,7 +144,7 @@ export default function ForUsersPage() {
 					<Reveal delay={0}>
 						<SignpostCard step="1" title="Support creators directly">
 							Give a creator <strong className="font-semibold text-base-content/85">Seeds</strong>
-							—$1 each, as often as you like—or{" "}
+							—$3 each, as often as you like—or{" "}
 							<strong className="font-semibold text-base-content/85">buy</strong> their games,
 							albums, books, art, even merch and services. Either way the creator keeps 100%; the
 							most you'll ever pay on top is standard card fees and tax. Direct support, with no

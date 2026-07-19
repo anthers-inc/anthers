@@ -55,19 +55,20 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // Demo data
 // ---------------------------------------------------------------------------
 
-// V4: a user CHOOSES a Badge plan. This demo user is on Petal ($16/mo). Its price
-// splits into a $9 Time Pool (to creators, by watch-time), 3 included Seeds ($3, $1
-// units, 100% to a chosen creator), and a $4 Community Share (the charitable
-// remainder). Bandwidth is a SEPARATE at-cost wallet with a free monthly allowance
-// (Petal = 30 GiB), not part of the plan price. See @anthers/shared/constants.
+// A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
+// Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
+// creators, by watch-time) and $1.50 "Supports Anthers" (their bandwidth at cost +
+// the Foundation remainder). Directed Seeds ($3 each, 100% to a creator) are on top.
+// Bandwidth is folded in — a free floor plus a per-Seed allowance, no wallet.
 const DEMO_PLAN = {
 	badge: "Petal",
-	price: 16.0,
-	timePool: 9.0, // to creators, distributed by watch-time
-	seeds: 3, // included Seeds (count, $1 each)
-	seedPool: 3.0, // $ value of the included Seeds
-	communityShare: 4.0, // price − Time Pool − Seeds — charitable, funds the Foundation
-	freeBwGiB: 30, // free monthly bandwidth allowance (separate at-cost wallet)
+	anthersSeeds: 3,
+	price: 9.0, // 3 Anthers-Seeds × $3
+	timePool: 4.5, // to creators, distributed by watch-time ($1.50 × 3)
+	seeds: 3, // directed creator-Seeds (count, $3 each)
+	seedPool: 9.0, // $ value of the directed Seeds
+	supportsAnthers: 4.5, // price − Time Pool = your bandwidth (at cost) + the Foundation remainder
+	allowanceGiB: 195, // streaming allowance (15 floor + 60 × 3), folded in — no wallet
 	month: "February 2026",
 };
 
@@ -431,8 +432,8 @@ function SubscriptionDashboardDemo() {
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
 	// V4 plan price (pre card/tax): Time Pool + Seeds + Community Share = the chosen
-	// Badge plan. Bandwidth is a separate at-cost wallet, billed apart from this.
-	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.communityShare;
+	// Anthers-Seeds + directed Seeds. Bandwidth is folded into the Anthers-Seeds, at cost.
+	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.supportsAnthers;
 
 	const handleSlider = (idx: number, value: number) => {
 		const next = [...seedAllocs];
@@ -469,7 +470,8 @@ function SubscriptionDashboardDemo() {
 					Your Anther—{DEMO_PLAN.month}
 				</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.badge} plan — ${DEMO_PLAN.price.toFixed(2)}/mo · {DEMO_PLAN.seeds} Seeds
+					{DEMO_PLAN.badge} rank — {DEMO_PLAN.anthersSeeds} Anthers-Seeds ($
+					{DEMO_PLAN.price.toFixed(2)}/mo)
 				</p>
 			</div>
 
@@ -487,15 +489,15 @@ function SubscriptionDashboardDemo() {
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Seed Pool</p>
 						<p className="text-xl font-bold text-primary">${totalSeeds.toFixed(2)}</p>
 						<p className="text-xs text-base-content/40">
-							{DEMO_PLAN.seeds} × $1 &middot; drag to adjust
+							{DEMO_PLAN.seeds} × $3 &middot; drag to adjust
 						</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Community Share</p>
-						<p className="text-xl font-bold">${DEMO_PLAN.communityShare.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">Charity &middot; free access + programs</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">Supports Anthers</p>
+						<p className="text-xl font-bold">${DEMO_PLAN.supportsAnthers.toFixed(2)}</p>
+						<p className="text-xs text-base-content/40">Your bandwidth (at cost) + Foundation</p>
 					</div>
 				</div>
 			</div>
@@ -585,20 +587,20 @@ function SubscriptionDashboardDemo() {
 						<span className="text-primary">${totalSeeds.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Community Share (charity)</span>
-						<span>${DEMO_PLAN.communityShare.toFixed(2)}</span>
+						<span className="text-base-content/70">Supports Anthers</span>
+						<span>${DEMO_PLAN.supportsAnthers.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
 						<span className="text-base-content/70">Time Pool</span>
 						<span className="text-success">${totalPool.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Bandwidth wallet (at cost, separate)</span>
-						<span className="text-base-content/50">{DEMO_PLAN.freeBwGiB} GiB free / mo</span>
+						<span className="text-base-content/70">Streaming (at cost, folded in)</span>
+						<span className="text-base-content/50">{DEMO_PLAN.allowanceGiB} GiB / mo</span>
 					</div>
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">
-						<span>{DEMO_PLAN.badge} plan total</span>
+						<span>{DEMO_PLAN.badge} rank total</span>
 						<span>${monthlyTotal.toFixed(2)}</span>
 					</div>
 					<p className="text-xs text-base-content/40 mt-1">

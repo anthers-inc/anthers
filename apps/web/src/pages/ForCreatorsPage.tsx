@@ -204,7 +204,7 @@ export default function ForCreatorsPage() {
 									label="Download bandwidth (2 GiB @ $0.01/GiB, at cost)"
 									amount="$0.02"
 								/>
-								<ReceiptLine label="Community Share (50% of bandwidth)" amount="$0.01" />
+								<ReceiptLine label="Foundation fee (50% of bandwidth)" amount="$0.01" />
 								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
 								<div className="my-1 border-t border-base-content/10" />
 								<ReceiptLine label="You pay" amount="$10.62" bold />
@@ -223,10 +223,7 @@ export default function ForCreatorsPage() {
 								Every fee is itemized and explained. Buyers understand what they're paying for.
 								Creators understand what they're earning.
 							</PricePoint>
-							<PricePoint
-								icon={<ServerStackIcon className="h-5 w-5" />}
-								title="The Community Share"
-							>
+							<PricePoint icon={<ServerStackIcon className="h-5 w-5" />} title="The Foundation fee">
 								Anthers' one markup rides on the infrastructure a transaction actually uses—50% of
 								the bandwidth a download or stream needs, plus 50% of creator storage. It funds free
 								access, charitable programs, and lean operations. It's a community investment, not a
@@ -414,11 +411,10 @@ export default function ForCreatorsPage() {
 					<Eyebrow>How users pay you</Eyebrow>
 					<H2>Users fund creators, not platforms</H2>
 					<Lede>
-						A user chooses a Badge plan. Its whole-dollar price is money to creators—the Time Pool,
-						shared out by watch-time, plus included Seeds sent straight to the creators they
-						pick—and a small Community Share to the Anthers Foundation. Bandwidth is separate: an
-						at-cost wallet, not a funding lever. Anthers is a 501(c)(3) non-profit—no investors, no
-						profit-taking.
+						A user holds Anthers-Seeds—$3 each. Each one is money to creators—the Time Pool, shared
+						out by watch-time—plus their own bandwidth at cost (folded in), and a remainder that
+						supports the Anthers Foundation. Seeds you give a creator reach them 100%. There's no
+						separate wallet. Anthers is a 501(c)(3) non-profit—no investors, no profit-taking.
 					</Lede>
 				</Reveal>
 				<Reveal className="mx-auto mt-12 block max-w-3xl">
@@ -426,7 +422,7 @@ export default function ForCreatorsPage() {
 						<table className="table">
 							<thead>
 								<tr className="border-base-content/10">
-									{["Badge", "Price", "Time Pool", "Seeds", "Community Share", "To creators"].map(
+									{["Rank", "Price", "Time Pool", "Seeds", "Supports Anthers", "To creators"].map(
 										(h, i) => (
 											<th
 												key={h}
@@ -474,11 +470,12 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
-						A Badge is the plan a user holds right now—a point-in-time choice, not a rolling total
-						of past spend. Every Seed is $1 and goes 100% to the creator it's given to, nothing
-						skimmed. The Time Pool pays creators by the time people spend with their work. Bandwidth
-						lives in a separate at-cost wallet ($0.01/GiB) with a free monthly allowance on every
-						plan (5/10/20/30/50 GiB), and creators get 50 GiB of free storage. Coming soon.
+						A user's rank is how many Anthers-Seeds they hold right now—a point-in-time choice, not
+						a rolling total of past spend. Every Seed is $3 and, when given to a creator, goes 100%
+						to them, nothing skimmed. The Time Pool pays creators by the time people spend with
+						their work. Bandwidth is folded into each Anthers-Seed at cost ($0.01/GiB)—a free
+						monthly floor (15 GiB) plus a per-Seed allowance, no wallet—and creators get 50 GiB of
+						free storage. Coming soon.
 					</p>
 				</Reveal>
 			</Section>
@@ -730,7 +727,7 @@ const PASSTHROUGH = "pure passthrough";
 const STREAM_FAN_HOURS = 30;
 const STREAM_HR_PAY = `~$${(timePoolFor(badgeRank("sprout")) / STREAM_FAN_HOURS).toFixed(2)}`;
 
-/** The Anthers row for a combo. `platform` is the Community Share (a charitable
+/** The Anthers row for a combo. `platform` is the Foundation fee (a charitable
  * markup that funds free access + Foundation programs, never profit) — or $0 for
  * Seeds, a pure passthrough. It is NOT a platform profit cut. */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
@@ -742,29 +739,29 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit
-// is always $0 — the Community Share is charity, and bandwidth is an at-cost
+// is always $0 — the Foundation fee is charity, and bandwidth is an at-cost
 // passthrough. Streaming isn't where Anthers competes on pay; the Time Pool share
 // is small and variable, and the real support comes from Seeds and sales.
 const streamReceipt: Line[] = [
 	{ label: "To you — a Sprout fan's Time Pool share, by watch-time", amount: STREAM_HR_PAY },
-	{ label: "Community Share — free access & charity", amount: "~$0.01" },
-	{ label: "Bandwidth — from the fan's wallet, at cost", amount: "~$0.02" },
+	{ label: "Foundation fee — free access & charity", amount: "~$0.01" },
+	{ label: "Bandwidth — folded into the fan's Anthers-Seeds, at cost", amount: "~$0.02" },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const purchaseReceipt = (price: string, cs: string, bw: string): Line[] => [
 	{ label: "To you — your price, in full", amount: price },
-	{ label: "Community Share — free access & charity", amount: cs },
+	{ label: "Foundation fee — free access & charity", amount: cs },
 	{ label: "Bandwidth — delivery, at cost", amount: bw },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
 	{ label: "To you — your price, in full", amount: "$25.00" },
-	{ label: "Community Share — 1%, free access & charity", amount: "$0.25" },
+	{ label: "Foundation fee — 1%, free access & charity", amount: "$0.25" },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const seedReceipt: Line[] = [
 	{ label: "To you — every cent", amount: "$5.00" },
-	{ label: "Community Share", amount: "$0.00" },
+	{ label: "Foundation fee", amount: "$0.00" },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 
@@ -1017,7 +1014,7 @@ function SolutionExplorer() {
 						</div>
 						{combo.note && <p className="mt-3 text-sm text-base-content/55">{combo.note}</p>}
 						{/* The honest Anthers breakdown — the comparison's "to the Platform" is the
-							Community Share (charity), not profit; this itemizes where the rest goes and
+							Foundation fee (charity), not profit; this itemizes where the rest goes and
 							lands on the line the table can't show: Anthers profit is always $0. */}
 						<div className="mt-4 rounded-2xl border border-base-content/10 bg-base-200/40 p-4">
 							<p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-primary/70">
@@ -1073,7 +1070,7 @@ function SolutionExplorer() {
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
 				Anthers never profits: beyond your share and delivery at cost, the only markup is the
-				Community Share—a small charitable fee that funds free access for everyone and Anthers
+				Foundation fee—a small charitable fee that funds free access for everyone and Anthers
 				Foundation programs (Seeds are a pure passthrough). Scenario figures are illustrative;
 				competitor rates are rough public estimates.
 			</p>
