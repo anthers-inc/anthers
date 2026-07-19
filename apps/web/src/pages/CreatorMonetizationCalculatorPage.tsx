@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { BADGE_PLANS, type Badge, badgeLabel, SEED_PRICE } from "@anthers/shared/constants";
+import {
+	type Badge,
+	badgeLabel,
+	badgeRank,
+	seedCost,
+	SEED_PRICE,
+	timePoolFor,
+} from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
@@ -24,10 +31,12 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 const PLANS: Badge[] = ["free", "root", "sprout", "petal", "blossom"];
 const PAID_PLANS: Badge[] = ["root", "sprout", "petal", "blossom"];
 
-const timePoolOf = (badge: Badge) => BADGE_PLANS[badge].timePool;
-const seedsOf = (badge: Badge) => BADGE_PLANS[badge].seeds;
-/** The plan's Community Share to the Foundation ($), held at its frozen value. Free = 0. */
-const communityShareOf = (badge: Badge) => BADGE_PLANS[badge].communityShare;
+const timePoolOf = (badge: Badge) => timePoolFor(badgeRank(badge));
+/** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
+const seedsOf = (badge: Badge) => badgeRank(badge);
+/** "Supports Anthers" — the non-Time-Pool half of each Anthers-Seed (bandwidth + Foundation). */
+const supportsAnthersOf = (badge: Badge) =>
+	Math.max(0, seedCost(badgeRank(badge)) - timePoolFor(badgeRank(badge)));
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -65,8 +74,8 @@ function ConversionEngine() {
 
 		const tp = timePoolOf(badge);
 		const seeds = planSeeds * SEED_PRICE;
-		const community = communityShareOf(badge);
-		const price = BADGE_PLANS[badge].price;
+		const supportsAnthers = supportsAnthersOf(badge);
+		const price = seedCost(badgeRank(badge));
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;
@@ -81,7 +90,7 @@ function ConversionEngine() {
 			planSeeds,
 			tp,
 			seeds,
-			community,
+			supportsAnthers,
 			price,
 			share,
 			tpEarn,
@@ -96,8 +105,7 @@ function ConversionEngine() {
 	// separate at-cost wallet and is deliberately not shown here).
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
-		{ label: "Seeds", note: "to creators", v: m.seeds, color: "#22d3ee" },
-		{ label: "Community Share", note: "charity", v: m.community, color: "#a78bfa" },
+		{ label: "Supports Anthers", note: "at cost + programs", v: m.supportsAnthers, color: "#a78bfa" },
 	];
 
 	return (
@@ -740,13 +748,14 @@ export default function CreatorMonetizationCalculatorPage() {
 					</div>
 					<div className="collapse-content text-sm text-base-content/60 space-y-3">
 						<div>
-							<h4 className="font-semibold text-base-content/80 mb-1">The V4 mechanic</h4>
+							<h4 className="font-semibold text-base-content/80 mb-1">The support-model mechanic</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
-									A viewer <b>chooses a Badge plan</b> — Free $0 / Root $4 / Sprout $8 / Petal $16 /
-									Blossom $32. Each plan's price splits into a <b>Time Pool</b> (to creators, by
-									watch-time), included <b>Seeds</b> ($1 units, 100% to a creator, user-directed),
-									and the <b>Community Share</b> (the charitable remainder).
+									A viewer holds <b>Anthers-Seeds</b> — a flat <b>$3 each</b> (their rank, Root →
+									Blossom). Each Anthers-Seed's $3 splits into a <b>Time Pool</b> ($1.50, to
+									creators by watch-time) and <b>Supports Anthers</b> (their bandwidth at cost +
+									the Foundation remainder). Directed <b>Seeds</b> ($3 each, 100% to a creator) are
+									given on top.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

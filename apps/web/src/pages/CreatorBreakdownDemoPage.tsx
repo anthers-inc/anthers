@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { BADGE_PLANS, SEED_PRICE } from "@anthers/shared/constants";
+import { badgeRank, seedCost, timePoolFor } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -126,13 +126,14 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {
-		const p = BADGE_PLANS[b];
+		const n = badgeRank(b);
+		const timePool = timePoolFor(n);
 		return {
 			badge: b.charAt(0).toUpperCase() + b.slice(1),
-			price: p.price,
-			timePool: p.timePool,
-			seeds: p.seeds,
-			toCreators: p.timePool + p.seeds * SEED_PRICE,
+			price: seedCost(n),
+			timePool,
+			seeds: 0, // no plan-included Seeds in the support model; directed Seeds are separate
+			toCreators: timePool,
 		};
 	},
 );

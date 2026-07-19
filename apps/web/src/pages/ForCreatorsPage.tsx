@@ -16,7 +16,7 @@
 // medium) showing what reaches the creator vs. the platform on Anthers and
 // elsewhere.
 
-import { BADGE_ORDER, BADGE_PLANS, badgeLabel, SEED_PRICE } from "@anthers/shared/constants";
+import { BADGE_ORDER, badgeLabel, badgeRank, seedCost, timePoolFor } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -435,9 +435,10 @@ export default function ForCreatorsPage() {
 							</thead>
 							<tbody>
 								{BADGE_ORDER.map((b) => {
-									const plan = BADGE_PLANS[b];
-									const toCreators = plan.timePool + plan.seeds * SEED_PRICE;
-									const community = plan.price - toCreators;
+									const n = badgeRank(b);
+									const plan = { price: seedCost(n), timePool: timePoolFor(n), seeds: 0 };
+									const toCreators = plan.timePool;
+									const community = plan.price - toCreators; // "Supports Anthers": bandwidth + Foundation
 									const isFree = b === "free";
 									return (
 										<tr
@@ -721,7 +722,7 @@ const PASSTHROUGH = "pure passthrough";
 // Time Pool ÷ their watch-hours per watch-hour — the SAME for every medium
 // (equal-time), and independent of resolution (pay is by time, not bytes).
 const STREAM_FAN_HOURS = 30;
-const STREAM_HR_PAY = `~$${(BADGE_PLANS.sprout.timePool / STREAM_FAN_HOURS).toFixed(2)}`; // ≈ $0.13
+const STREAM_HR_PAY = `~$${(timePoolFor(badgeRank("sprout")) / STREAM_FAN_HOURS).toFixed(2)}`;
 
 /** The Anthers row for a combo. `platform` is the Community Share (a charitable
  * markup that funds free access + Foundation programs, never profit) — or $0 for

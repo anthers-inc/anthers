@@ -33,7 +33,7 @@
 // Styled like the calculators (dense, DaisyUI-native, plain — no Meadow decor), so
 // it reads as one set with the rest of Resources.
 
-import { BADGE_PLANS } from "@anthers/shared/constants";
+import { badgeRank, timePoolFor } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
@@ -77,8 +77,8 @@ interface Platform {
 // $4 · Petal $9 · Blossom $18). Split across everyone they watch by watch-time, that
 // lands roughly $0.05–0.60 per view-hour depending on plan and how much they watch —
 // the same rate for every medium (equal-time). 100% of it reaches creators.
-const PAID_POOLS = (["root", "sprout", "petal", "blossom"] as const).map(
-	(b) => BADGE_PLANS[b].timePool,
+const PAID_POOLS = (["root", "sprout", "petal", "blossom"] as const).map((b) =>
+	timePoolFor(badgeRank(b)),
 );
 const POOL_RANGE = `$${PAID_POOLS[0]}–$${PAID_POOLS[PAID_POOLS.length - 1]}`;
 
