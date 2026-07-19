@@ -62,15 +62,15 @@ test.describe("Resources calculators", () => {
 		expect(errors).toEqual([]);
 	});
 
-	test("creator monetization: V4 badge-plan model renders zero-cut", async ({ page }) => {
+	test("creator monetization: support model renders zero-cut", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/creator-monetization");
-		// V4: the viewer picks a Badge plan (a segmented control, not a GiB slider);
-		// creator earnings = a share of the plan's Time Pool by watch-time + directed Seeds.
-		await expect(page.getByText("Viewer's Badge plan").first()).toBeVisible();
+		// The viewer picks a rank (their Anthers-Seed count, a segmented control — not a GiB
+		// slider); creator earnings = a share of the Time Pool by watch-time + directed Seeds.
+		await expect(page.getByText("Viewer's rank").first()).toBeVisible();
 		// The crux line states the zero-cut split ("...reaches creators (Time Pool + Seeds)...").
 		await expect(page.getByText(/reaches creators/)).toBeVisible();
 		expect(errors).toEqual([]);
-		// TODO(Phase 6): restore a live plan-pick interaction assertion once the app is run.
+		// TODO(Phase 6): restore a live rank-pick interaction assertion once the app is run.
 	});
 });
