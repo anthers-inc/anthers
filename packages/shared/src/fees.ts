@@ -2,20 +2,22 @@
 import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
+	allowanceGiB,
 	BADGE_ORDER,
-	BADGE_PLANS,
-	BANDWIDTH_PER_GIB,
 	type Badge,
 	badgeLabel,
+	badgeRank,
+	BANDWIDTH_PER_GIB,
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
 	FREE_STORAGE_GIB,
 	PHYSICAL_AFF_RATE,
 	SALES_TAX_RATE,
-	SEED_PRICE,
+	seedCost,
 	SELF_HOST_FEE,
 	STORAGE_PER_GIB_MONTH,
+	timePoolFor,
 } from "./constants.js";
 
 /** Bytes per GiB (binary). */
@@ -25,145 +27,184 @@ const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 /** Maximum discretionary Foundation subsidy per creator per month. */
 export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 
-// ── Badge plan price decomposition ───────────────────────────────────────────
+// ── Payments (the at-cost card fee, added ON TOP of the charge) ───────────────
 /**
- * Decompose a Badge plan's whole-dollar price into its parts (full precision):
- *
- *   Price = Payments + Time Pool + Seeds + Community Share
- *
- * Time Pool (by watch-time) and Seeds (× $1, direct) both go 100% to creators;
- * Community Share funds the Foundation; Payments is the at-cost overhead of moving
- * money (card, tax, Connect, disputes, refunds, reserve), folded into the price.
- * Seeds and Community Share are held; Time Pool is the derived remainder.
- *
- * Free is special: it pays $0, so Payments and Community Share are $0 and its small
- * Time Pool is subsidised from the pool (still `toCreators`, but not user-funded).
+ * The at-cost **Payments** line for a whole batched charge: card + processing,
+ * 2.9% + $0.30. Added on top of the user's Seeds (like sales tax) — never carved
+ * out of a Seed, so every $3 reaches its destination in full. $0 when nothing is
+ * charged. ACH is cheaper to process, so its Payments line is smaller.
  */
-export function badgePriceBreakdown(badge: Badge): {
-	price: Decimal;
-	payments: Decimal;
+export function cardFee(amount: Decimal | number): Decimal {
+	const a = new Decimal(amount);
+	return a.gt(0) ? CENTS(a.mul(CARD_RATE).plus(CARD_FLAT)) : new Decimal(0);
+}
+
+// ── Anthers-Seed decomposition ────────────────────────────────────────────────
+/**
+ * Decompose a user's Anthers-Seeds into where each $3 goes. The full $3 per Seed
+ * reaches its destination — the at-cost Payments line rides on top of the whole
+ * charge (see `cardFee`), never inside a Seed:
+ *
+ *   Anthers-Seed value ($3 × n) = bandwidth (at cost) + Time Pool + Foundation
+ *
+ * Time Pool ($1.50/Seed) is a fixed target to creators; bandwidth is the user's
+ * own at-cost usage; the **Foundation is the remainder** (the shock absorber —
+ * lighter streamers leave more for the mission). Free (n = 0) pays $0: its small
+ * Time Pool and in-floor bandwidth are subsidised, and it funds no Foundation.
+ */
+export function anthersSeedBreakdown(
+	anthersSeeds: number,
+	opts: { bandwidthGiB?: Decimal | number } = {},
+): {
+	anthersSeeds: number;
+	seedValue: Decimal;
 	timePool: Decimal;
-	seeds: Decimal;
-	communityShare: Decimal;
-	toCreators: Decimal;
+	bandwidth: Decimal;
+	foundation: Decimal;
 	subsidised: boolean;
 } {
-	const plan = BADGE_PLANS[badge];
-	const price = new Decimal(plan.price);
-	const payments = new Decimal(plan.payments);
-	const timePool = new Decimal(plan.timePool);
-	const seeds = new Decimal(plan.seeds).mul(SEED_PRICE);
-	const communityShare = new Decimal(plan.communityShare);
-	const toCreators = timePool.plus(seeds);
+	const n = Math.max(0, Math.floor(anthersSeeds));
+	const seedValue = new Decimal(seedCost(n));
+	const timePool = new Decimal(timePoolFor(n));
+	const bandwidth = bandwidthCost(opts.bandwidthGiB ?? 0);
+	if (n === 0) {
+		return {
+			anthersSeeds: 0,
+			seedValue: new Decimal(0),
+			timePool,
+			bandwidth,
+			foundation: new Decimal(0),
+			subsidised: true,
+		};
+	}
+	const foundation = seedValue.minus(timePool).minus(bandwidth);
+	return { anthersSeeds: n, seedValue, timePool, bandwidth, foundation, subsidised: false };
+}
+
+/**
+ * The full monthly support breakdown for a user holding `anthersSeeds` Anthers-
+ * Seeds and `creatorSeeds` directed Seeds, given their actual `bandwidthGiB`.
+ *
+ * Directed Seeds reach creators 100%; Anthers-Seeds decompose as above; the
+ * at-cost Payments line is one card fee on the whole Seed subtotal, ON TOP.
+ */
+export function supportBreakdown(params: {
+	anthersSeeds: number;
+	creatorSeeds: number;
+	bandwidthGiB?: Decimal | number;
+}): {
+	creatorDirect: Decimal;
+	timePool: Decimal;
+	bandwidth: Decimal;
+	foundation: Decimal;
+	toCreators: Decimal;
+	seedsSubtotal: Decimal;
+	payments: Decimal;
+	total: Decimal;
+} {
+	const anthers = anthersSeedBreakdown(params.anthersSeeds, { bandwidthGiB: params.bandwidthGiB });
+	const creatorDirect = new Decimal(seedCost(Math.max(0, Math.floor(params.creatorSeeds))));
+	const seedsSubtotal = creatorDirect.plus(anthers.seedValue);
+	const payments = cardFee(seedsSubtotal);
 	return {
-		price,
+		creatorDirect,
+		timePool: anthers.timePool,
+		bandwidth: anthers.bandwidth,
+		foundation: anthers.foundation,
+		toCreators: creatorDirect.plus(anthers.timePool),
+		seedsSubtotal,
 		payments,
-		timePool,
-		seeds,
-		communityShare,
-		toCreators,
-		subsidised: plan.price === 0,
+		total: seedsSubtotal.plus(payments),
 	};
 }
 
-/** A Badge plan as a display view model — the price decomposition + what's included.
- *  Money fields are pre-rounded to 2dp strings, ready to render. */
-export interface BadgePlanView {
+/** A rank rung as a display view model — money fields pre-rounded to 2dp strings. */
+export interface RankView {
 	id: Badge;
 	name: string;
+	/** Anthers-Seeds required for this rank (0 = free … 4 = blossom). */
+	anthersSeeds: number;
+	/** Monthly $ to hold this rank ($3 × anthersSeeds). */
 	price: number;
-	payments: string;
+	/** Time Pool $ at this rank (to creators, by watch-time). */
 	timePool: string;
-	seeds: number;
-	freeBwGiB: number;
-	communityShare: string;
-	toCreators: string;
+	/** "Supports Anthers" — your bandwidth (at cost) + the Foundation remainder. */
+	supportsAnthers: string;
+	/** Streaming allowance (GiB) at this rank. */
+	allowanceGiB: number;
 	subsidised: boolean;
 }
 
 /**
- * The Badge plans as view models, low → high. Derived entirely from the frozen
- * `BADGE_PLANS` table — pure and static, no per-user data. Shared by the
- * `/subscriptions/badges` route and the Subscribe page so the two can't drift
- * (and so the page can render synchronously with no fetch / loading skeleton).
+ * The rank ladder as view models, low → high (free … blossom). Pure and static —
+ * derived from the Seed dials, no per-user data — so the Subscribe page, the
+ * `/subscriptions/ranks` route, and inline-unlock all render the same numbers and
+ * can't drift. "Supports Anthers" bundles bandwidth (at cost) + the Foundation
+ * remainder into one line (as the Subscribe page shows it).
  */
-export function badgePlanViews(): BadgePlanView[] {
+export function rankViews(): RankView[] {
 	return BADGE_ORDER.map((badge) => {
-		const bd = badgePriceBreakdown(badge);
-		const plan = BADGE_PLANS[badge];
+		const n = badgeRank(badge);
+		const price = seedCost(n);
+		const timePool = new Decimal(timePoolFor(n));
+		const supportsAnthers = n === 0 ? new Decimal(0) : new Decimal(price).minus(timePool);
 		return {
 			id: badge,
 			name: badgeLabel(badge),
-			price: plan.price,
-			payments: bd.payments.toFixed(2),
-			timePool: bd.timePool.toFixed(2),
-			seeds: plan.seeds,
-			freeBwGiB: plan.freeBwGiB,
-			communityShare: bd.communityShare.toFixed(2),
-			toCreators: bd.toCreators.toFixed(2),
-			subsidised: bd.subsidised,
+			anthersSeeds: n,
+			price,
+			timePool: timePool.toFixed(2),
+			supportsAnthers: supportsAnthers.toFixed(2),
+			allowanceGiB: allowanceGiB(n),
+			subsidised: n === 0,
 		};
 	});
 }
 
-// ── Bandwidth: at-cost wallet + free monthly allowance ────────────────────────
+// ── Bandwidth: at-cost, folded into Anthers-Seeds (free floor + per-Seed allowance)
 /** At-cost bandwidth cost for a number of GiB (a pass-through, no fee). */
 export function bandwidthCost(gib: Decimal | number): Decimal {
 	return CENTS(new Decimal(gib).mul(BANDWIDTH_PER_GIB));
 }
 
 /**
- * Apply a month's stream bandwidth against the free allowance first, then the
- * prepaid wallet. The allowance is drawn down before any wallet dollars, does not
- * roll over, and whatever is unused returns to the subsidy pool at month-end.
- *
- * `walletBalance` is in dollars. A positive `shortfall` is bandwidth the wallet
- * couldn't cover (drives low-balance warnings / the free-allowance floor).
+ * Apply a month's stream bandwidth against the free floor + per-Seed allowance.
+ * The allowance is drawn down first and does not roll over; whatever is unused
+ * returns to the subsidy pool at month-end. A positive `overage` is bandwidth
+ * beyond the allowance (which, in the support model, is a nudge to hold another
+ * Anthers-Seed — there is no wallet).
  */
 export function drawBandwidth(params: {
 	consumedGiB: Decimal | number;
-	freeAllowanceGiB: Decimal | number;
-	walletBalance: Decimal | number;
+	allowanceGiB: Decimal | number;
 }): {
 	fromAllowanceGiB: Decimal;
-	fromWalletGiB: Decimal;
-	walletCost: Decimal;
-	walletDebit: Decimal;
-	shortfall: Decimal;
+	overageGiB: Decimal;
+	overageCost: Decimal;
 	remainingAllowanceGiB: Decimal;
-	remainingWallet: Decimal;
 } {
 	const consumed = new Decimal(params.consumedGiB);
-	const allowance = new Decimal(params.freeAllowanceGiB);
-	const wallet = new Decimal(params.walletBalance);
-
+	const allowance = new Decimal(params.allowanceGiB);
 	const fromAllowanceGiB = Decimal.min(consumed, allowance);
-	const fromWalletGiB = consumed.minus(fromAllowanceGiB);
-	const walletCost = bandwidthCost(fromWalletGiB);
-	const walletDebit = Decimal.min(wallet, walletCost);
-	const shortfall = walletCost.minus(walletDebit);
-
+	const overageGiB = Decimal.max(0, consumed.minus(allowance));
 	return {
 		fromAllowanceGiB,
-		fromWalletGiB,
-		walletCost,
-		walletDebit,
-		shortfall,
+		overageGiB,
+		overageCost: bandwidthCost(overageGiB),
 		remainingAllowanceGiB: allowance.minus(fromAllowanceGiB),
-		remainingWallet: wallet.minus(walletDebit),
 	};
 }
 
 /**
- * The at-cost value of a free allowance left unused at month-end, which returns
- * to the subsidy pool (it was budgeted as a potential cost the pool didn't incur).
+ * The at-cost value of allowance left unused at month-end, which returns to the
+ * subsidy pool (it was budgeted as a potential cost the pool didn't incur).
  */
 export function unusedAllowanceValue(remainingAllowanceGiB: Decimal | number): Decimal {
 	return bandwidthCost(remainingAllowanceGiB);
 }
 
-// ── Foundation fee split ──────────────────────────────────────────────────────
-/** Split a Foundation-fee amount into Admin / Programs / Subsidy (see FOUNDATION_SPLIT). */
+// ── Foundation fee split (coarse accounting view; see FOUNDATION_SPLIT) ────────
+/** Split a Foundation-fee amount into Admin / Programs / Subsidy. */
 export function foundationSplit(feeAmount: Decimal | number): {
 	admin: Decimal;
 	programs: Decimal;
@@ -190,7 +231,7 @@ export type PurchaseType = "digital" | "physical" | "service";
  *
  * - `digital`: the AFF is the **Digital AFF** — 50% of the download's bandwidth —
  *   and the buyer also pays that bandwidth at cost (folded into the price, never
- *   drawn from the streaming wallet).
+ *   drawn from the streaming allowance).
  * - `physical` / `service`: no bytes are delivered, so the AFF is a nominal
  *   **Physical & Service AFF** of 1% of the price, and there is no delivery fee.
  *

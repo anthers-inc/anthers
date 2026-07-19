@@ -1,74 +1,101 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Coverage for the two most load-bearing functions in the money model —
-// `badgePriceBreakdown` and `calculateFees`. The badge model's central invariant
-// after the 2026-07-17 revision is that Price decomposes exactly into five
-// destinations (Payments + Time Pool + Seeds + Community Share), so a stray edit
-// to any frozen dial that breaks the sum is caught here.
+// Coverage for the support-model money functions. The central invariant is that
+// each Anthers-Seed's $3 conserves exactly into bandwidth + Time Pool + Foundation
+// (Payments rides on top, never inside a Seed), so a stray edit to a dial that
+// breaks the sum — or that lets Payments leak into a Seed — is caught here.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { BADGE_ORDER, BADGE_PLANS, type Badge, SEED_PRICE } from "./constants.js";
-import { badgePlanViews, badgePriceBreakdown, calculateFees } from "./fees.js";
+import {
+	BADGE_ORDER,
+	SEED_PRICE,
+	TIME_POOL_PER_SEED,
+	timePoolFor,
+} from "./constants.js";
+import {
+	anthersSeedBreakdown,
+	calculateFees,
+	cardFee,
+	rankViews,
+	supportBreakdown,
+} from "./fees.js";
 
-const PAID: Badge[] = ["root", "sprout", "petal", "blossom"];
+const PAID_SEEDS = [1, 2, 3, 4];
 
-/** V4 baseline dollars to creators (Time Pool + Seeds) that the revision must beat. */
-const V4_TO_CREATORS: Record<string, number> = { root: 3, sprout: 6, petal: 12, blossom: 22 };
-
-describe("badgePriceBreakdown", () => {
-	test("price = payments + timePool + seeds + communityShare, to the cent, every paid tier", () => {
-		for (const badge of PAID) {
-			const b = badgePriceBreakdown(badge);
-			const sum = b.payments.plus(b.timePool).plus(b.seeds).plus(b.communityShare);
-			expect(sum.toFixed(2)).toBe(b.price.toFixed(2));
+describe("anthersSeedBreakdown", () => {
+	test("seed value + Time Pool + bandwidth + Foundation conserve exactly, every count", () => {
+		for (const n of PAID_SEEDS) {
+			const b = anthersSeedBreakdown(n, { bandwidthGiB: 30 * n });
+			expect(b.seedValue.toFixed(2)).toBe((SEED_PRICE * n).toFixed(2));
+			const sum = b.timePool.plus(b.bandwidth).plus(b.foundation);
+			expect(sum.toFixed(2)).toBe(b.seedValue.toFixed(2));
 		}
 	});
 
-	test("free pays $0 — no payments, no Community Share, but a subsidised Time Pool", () => {
-		const b = badgePriceBreakdown("free");
-		expect(b.price.toNumber()).toBe(0);
-		expect(b.payments.toNumber()).toBe(0);
-		expect(b.communityShare.toNumber()).toBe(0);
+	test("Time Pool is $1.50 per Anthers-Seed", () => {
+		for (const n of PAID_SEEDS) {
+			expect(anthersSeedBreakdown(n).timePool.toNumber()).toBe(TIME_POOL_PER_SEED * n);
+		}
+	});
+
+	test("Foundation is the remainder — it shrinks as bandwidth grows (shock absorber)", () => {
+		const light = anthersSeedBreakdown(1, { bandwidthGiB: 10 });
+		const heavy = anthersSeedBreakdown(1, { bandwidthGiB: 60 });
+		expect(heavy.foundation.lt(light.foundation)).toBe(true);
+		expect(heavy.timePool.toFixed(2)).toBe(light.timePool.toFixed(2)); // Time Pool stays fixed
+	});
+
+	test("free rank (0 Seeds) pays $0 and funds no Foundation, but has a subsidised Time Pool", () => {
+		const b = anthersSeedBreakdown(0);
+		expect(b.seedValue.toNumber()).toBe(0);
+		expect(b.foundation.toNumber()).toBe(0);
 		expect(b.subsidised).toBe(true);
 		expect(b.timePool.toNumber()).toBeGreaterThan(0);
 	});
+});
 
-	test("every paid tier delivers more to creators than V4", () => {
-		for (const badge of PAID) {
-			const b = badgePriceBreakdown(badge);
-			expect(b.toCreators.toNumber()).toBeGreaterThan(V4_TO_CREATORS[badge]);
-		}
-	});
-
-	test("toCreators is exactly timePool + seeds", () => {
-		for (const badge of BADGE_ORDER) {
-			const b = badgePriceBreakdown(badge);
-			expect(b.toCreators.toFixed(2)).toBe(b.timePool.plus(b.seeds).toFixed(2));
-		}
-	});
-
-	test("seeds = plan.seeds × SEED_PRICE", () => {
-		for (const badge of PAID) {
-			const b = badgePriceBreakdown(badge);
-			expect(b.seeds.toNumber()).toBe(BADGE_PLANS[badge].seeds * SEED_PRICE);
-		}
+describe("cardFee (Payments, on top)", () => {
+	test("is 2.9% + $0.30 on the charge, and $0 when nothing is charged", () => {
+		expect(cardFee(3).toFixed(2)).toBe("0.39");
+		expect(cardFee(0).toNumber()).toBe(0);
 	});
 });
 
-describe("badgePlanViews", () => {
-	test("exposes payments, and money fields render to two decimals", () => {
-		const views = badgePlanViews();
+describe("supportBreakdown", () => {
+	test("directed Seeds reach creators 100%; Payments is one card fee on top of the whole subtotal", () => {
+		// 2 creator-Seeds + 1 Anthers-Seed, light streaming.
+		const s = supportBreakdown({ anthersSeeds: 1, creatorSeeds: 2, bandwidthGiB: 20 });
+		expect(s.creatorDirect.toFixed(2)).toBe("6.00"); // 2 × $3, 100%
+		expect(s.seedsSubtotal.toFixed(2)).toBe("9.00"); // (2 + 1) × $3
+		expect(s.payments.toFixed(2)).toBe(cardFee(9).toFixed(2)); // one fee on $9, on top
+		expect(s.total.toFixed(2)).toBe(s.seedsSubtotal.plus(s.payments).toFixed(2));
+		expect(s.toCreators.toFixed(2)).toBe(s.creatorDirect.plus(s.timePool).toFixed(2));
+	});
+
+	test("a pure-direct user (no Anthers-Seed) still pays only Seeds + on-top Payments", () => {
+		const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
+		expect(s.creatorDirect.toFixed(2)).toBe("3.00");
+		expect(s.foundation.toNumber()).toBe(0);
+		expect(s.payments.toFixed(2)).toBe("0.39");
+		expect(s.total.toFixed(2)).toBe("3.39"); // matches the Subscribe page
+	});
+});
+
+describe("rankViews", () => {
+	test("one row per rank; price = $3 × Anthers-Seed count; money renders to 2dp", () => {
+		const views = rankViews();
 		expect(views).toHaveLength(BADGE_ORDER.length);
-		for (const v of views) {
-			expect(v.payments).toMatch(/^\d+\.\d{2}$/);
+		views.forEach((v, i) => {
+			expect(v.anthersSeeds).toBe(i);
+			expect(v.price).toBe(SEED_PRICE * i);
 			expect(v.timePool).toMatch(/^\d+\.\d{2}$/);
-			expect(v.communityShare).toMatch(/^\d+\.\d{2}$/);
-			expect(v.toCreators).toMatch(/^\d+\.\d{2}$/);
-		}
+			expect(v.supportsAnthers).toMatch(/^\d+\.\d{2}$/);
+			expect(Number(v.timePool)).toBe(timePoolFor(i));
+		});
 	});
 });
 
-describe("calculateFees — direct purchase, zero-cut pass-through", () => {
+describe("calculateFees — direct purchase, zero-cut pass-through (unchanged)", () => {
 	test("creator receives the full listed price", () => {
 		const f = calculateFees(new Decimal("10.00"), { type: "service" });
 		expect(f.creatorEarnings.toFixed(2)).toBe("10.00");
