@@ -365,19 +365,18 @@ export interface OwnershipResponse {
 /** The Anthers Badge / plan vocabulary (per-post access rows include "free"). */
 export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A user's chosen Badge plan (point-in-time). */
+/** A user's rank (= Anthers-Seed count), held point-in-time. */
 export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A Badge plan (GET /subscriptions/badges) — price decomposition + what's included. */
+/** A rank rung (GET /subscriptions/badges) — Anthers-Seed count + its decomposition. */
 export interface BadgePlan {
 	id: Badge;
 	name: string;
+	anthersSeeds: number;
 	price: number;
 	timePool: string;
-	seeds: number;
-	freeBwGiB: number;
-	communityShare: string;
-	toCreators: string;
+	supportsAnthers: string;
+	allowanceGiB: number;
 	subsidised: boolean;
 }
 

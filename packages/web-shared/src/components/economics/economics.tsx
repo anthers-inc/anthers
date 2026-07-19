@@ -1,27 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The two Meadow economics cards — the interactive "Where your subscription goes"
-// Badge-plan picker and the one-time-purchase example — plus the badge ladder and
-// the hover-tooltip (i). All numbers derive from the V4 "Big Rethink" model (see
-// @anthers/shared/constants + fees): a user CHOOSES a Badge plan whose whole-dollar
-// price decomposes into Time Pool + Seeds + Community Share. A Seed is $1, 100% to
-// creators. Bandwidth is decoupled into a separate at-cost wallet ($0.01/GiB) with a
-// per-tier free monthly allowance. Card 2.9%+$0.30 and sales tax ~6.5% ride on top
-// and leave the system; Anthers keeps $0.
+// The two Meadow economics cards — the interactive "Where your Anthers-Seeds go"
+// rank picker and the one-time-purchase example — plus the badge ladder and the
+// hover-tooltip (i). All numbers derive from the support model (see
+// @anthers/shared/constants + fees): a Seed is a flat $3, pointed at a creator
+// (100% to them) or at Anthers (an Anthers-Seed). Each Anthers-Seed splits into
+// your bandwidth (at cost, folded in) + Time Pool ($1.50) + the Foundation
+// remainder. The at-cost Payments line (card 2.9%+$0.30) and sales tax ~6.5% ride
+// ON TOP and leave the system; Anthers keeps $0.
 
 import type { BrandIconName } from "@anthers/brand";
 import {
 	AFF_INFRA_RATE,
 	BADGE_ORDER,
-	BADGE_PLANS,
-	BANDWIDTH_PER_GIB,
 	type Badge,
 	badgeLabel,
+	badgeRank,
+	BANDWIDTH_PER_GIB,
 	CARD_FLAT,
 	CARD_RATE,
+	rankForSeeds,
 	SALES_TAX_RATE,
+	seedCost,
+	timePoolFor,
 } from "@anthers/shared/constants";
-import { badgePriceBreakdown } from "@anthers/shared/fees";
+import { anthersSeedBreakdown } from "@anthers/shared/fees";
 import { InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
 import { FONTS } from "../../styles/fonts";
@@ -29,9 +32,8 @@ import { BrandGlyph } from "../decor/BrandGlyph";
 
 const serif = { fontFamily: FONTS.fraunces };
 
-// ─── V4 rates — single source of truth: @anthers/shared (the same numbers the API
-// charges). Only the presentation (badge emoji/wreaths, which share of a plan-dollar
-// each part is) lives here. ───
+// ─── Rates — single source of truth: @anthers/shared (the same numbers the API
+// charges). Only the presentation (badge emoji/wreaths) lives here. ───
 const DIGITAL_AFF_PER_GIB = BANDWIDTH_PER_GIB * AFF_INFRA_RATE; // digital-purchase Foundation fee (= 50% of bandwidth)
 const CARD_PCT = CARD_RATE;
 const TAX_PCT = SALES_TAX_RATE;
@@ -41,7 +43,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 const TAX_TIP =
 	"An average U.S. combined sales-tax rate. Your actual rate depends on your state and may be higher or lower.";
 
-// ─── Badge presentation. Every badge shares one round botanical frame
+// ─── Badge presentation. Every rank shares one round botanical frame
 // (`frame-round`) — a single, consistent wreath across all ranks; the emoji inside is
 // what differs. ───
 export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
@@ -52,7 +54,7 @@ export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> 
 	blossom: { emoji: "🌼", wreath: "frame-round" },
 };
 
-/** Ascending ladder (Root → Blossom, the paid plans) for the badges section: wreath + emoji + $/mo. */
+/** Ascending ladder (Root → Blossom) for the ranks section: wreath + emoji + $/mo (= $3 × Seeds). */
 export const BADGE_LADDER: {
 	name: string;
 	emoji: string;
@@ -61,7 +63,7 @@ export const BADGE_LADDER: {
 }[] = BADGE_ORDER.filter((b) => b !== "free").map((b) => ({
 	name: badgeLabel(b),
 	emoji: BADGE_ART[b].emoji,
-	threshold: `$${BADGE_PLANS[b].price}/mo`,
+	threshold: `$${seedCost(badgeRank(b))}/mo`,
 	wreath: BADGE_ART[b].wreath,
 }));
 
@@ -112,7 +114,7 @@ function Breakdown({ segments, approxLast }: { segments: Seg[]; approxLast?: boo
 	);
 }
 
-/** An indented sub-line showing part of where the plan dollar goes. */
+/** An indented sub-line showing part of where each Seed goes. */
 function SplitRow({
 	dot,
 	label,
@@ -137,15 +139,15 @@ function SplitRow({
 	);
 }
 
-// ─── (2) Subscriptions & Seeds — interactive Badge-plan picker ───
+// ─── (2) Anthers-Seeds — interactive rank picker ───
 
-/** The five Badge plans as selectable chips: emoji + label + price. */
+/** The five ranks as selectable chips: emoji + label + $/mo (= $3 × Anthers-Seeds). */
 function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) => void }) {
 	return (
 		<div className="mb-6 grid grid-cols-5 gap-2">
 			{BADGE_ORDER.map((b) => {
 				const active = b === value;
-				const price = BADGE_PLANS[b].price;
+				const price = seedCost(badgeRank(b));
 				return (
 					<button
 						key={b}
@@ -195,15 +197,14 @@ function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) =>
 
 export function SubscriptionCalculator() {
 	const [badge, setBadge] = useState<Badge>("root");
-	const plan = BADGE_PLANS[badge];
-	const b = badgePriceBreakdown(badge);
-	const price = b.price.toNumber();
-	const timePool = b.timePool.toNumber();
-	const seeds = b.seeds.toNumber();
-	const community = b.communityShare.toNumber();
-	const toCreators = b.toCreators.toNumber();
+	const n = badgeRank(badge);
+	const price = seedCost(n);
+	const timePool = timePoolFor(n);
+	// "Supports Anthers" bundles your bandwidth (at cost) + the Foundation remainder.
+	const supportsAnthers = n === 0 ? 0 : price - timePool;
+	const toCreators = n === 0 ? 0 : timePool;
 
-	// Card + tax ride on the plan price and leave the system. Free costs $0, so none.
+	// The at-cost Payments line + tax ride ON TOP of the Seeds. Free ($0) has none.
 	const card = price > 0 ? price * CARD_PCT + CARD_FLAT : 0;
 	const tax = price * TAX_PCT;
 	const processing = card + tax;
@@ -211,8 +212,7 @@ export function SubscriptionCalculator() {
 
 	const barParts = [
 		{ key: "timePool", amount: timePool, cls: "bg-primary" },
-		{ key: "seeds", amount: seeds, cls: "bg-secondary" },
-		{ key: "community", amount: community, cls: "bg-info" },
+		{ key: "supports", amount: supportsAnthers, cls: "bg-info" },
 		{ key: "processing", amount: processing, cls: "bg-base-content/15" },
 	];
 	const barTotal = total || 1;
@@ -220,10 +220,10 @@ export function SubscriptionCalculator() {
 	return (
 		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
 			<h3 style={serif} className="mb-1 text-lg font-medium">
-				Where your subscription goes
+				Where your Anthers-Seeds go
 			</h3>
 			<p className="mb-5 text-xs text-base-content/50">
-				Pick a Badge plan—everything updates live.
+				Pick a rank — each Anthers-Seed is $3. Everything updates live.
 			</p>
 
 			<PlanPicker value={badge} onChange={setBadge} />
@@ -238,8 +238,11 @@ export function SubscriptionCalculator() {
 				<div>
 					<div className="flex items-center justify-between gap-3 text-sm">
 						<div className="min-w-0">
-							<span className="font-medium text-base-content/90">{badgeLabel(badge)} plan</span>
-							<span className="text-base-content/55"> — your monthly price</span>
+							<span className="font-medium text-base-content/90">{badgeLabel(badge)} rank</span>
+							<span className="text-base-content/55">
+								{" "}
+								— {n} Anthers-Seed{n === 1 ? "" : "s"}
+							</span>
 						</div>
 						<span className="w-14 text-right font-mono tabular-nums">{money(price)}</span>
 					</div>
@@ -247,36 +250,26 @@ export function SubscriptionCalculator() {
 						<SplitRow
 							dot="bg-primary"
 							label="Time Pool"
-							desc="distributed 100% to the creators you enjoy, by time spent"
+							desc="to the creators you watch, by time spent — 100% to them"
 							amount={timePool}
 						/>
 						<SplitRow
-							dot="bg-secondary"
-							label="Seeds"
-							desc={
-								plan.seeds > 0
-									? `${plan.seeds}× boosts, $1 each, given to the creators you choose`
-									: "boosts included on paid plans; can be purchased on free plans"
-							}
-							amount={seeds}
-						/>
-						<SplitRow
 							dot="bg-info"
-							label="Community Share"
+							label="Supports Anthers"
 							desc={
-								b.subsidised
-									? "free access for all is supported by paid users"
-									: "supports free access for all  + charitable programs"
+								n === 0
+									? "free access for all is supported by paying users"
+									: "your bandwidth (at cost) + free access & charitable programs"
 							}
-							amount={community}
+							amount={supportsAnthers}
 						/>
 					</div>
 				</div>
 
 				<div className="flex items-center justify-between gap-3 text-sm">
 					<span className="text-base-content/75">
-						<span className="font-medium text-base-content/90">Processing</span>
-						<span className="text-base-content/55"> — card fees + est. sales tax </span>
+						<span className="font-medium text-base-content/90">Payments</span>
+						<span className="text-base-content/55"> — card fees (on top) + est. sales tax </span>
 						<InfoDot tip={TAX_TIP} />
 					</span>
 					<span className="shrink-0 font-mono tabular-nums">~{money(processing)}</span>
@@ -296,12 +289,12 @@ export function SubscriptionCalculator() {
 				<p className="mt-1 text-sm text-base-content/65">
 					of which{" "}
 					<span className="font-semibold text-primary tabular-nums">{money(toCreators)}</span> goes
-					directly to creators, in full.
+					to the creators you watch — plus every Seed you give a creator directly, at 100%.
 				</p>
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
-				Bandwidth is separate: your first {plan.freeBwGiB} GiB each month are free, then it's just{" "}
-				{money(BANDWIDTH_PER_GIB)}/GiB from a prepaid wallet. No hidden fees, ever.
+				Bandwidth is folded in: every account streams a free floor each month, and each Anthers-Seed
+				adds more — all at cost ({money(BANDWIDTH_PER_GIB)}/GiB), no wallet, no hidden fees.
 			</p>
 		</div>
 	);
@@ -317,8 +310,8 @@ export function PurchaseExample({
 	sizeGiB?: number;
 }) {
 	const delivery = sizeGiB * BANDWIDTH_PER_GIB; // $0.01/GiB, at cost
-	const community = sizeGiB * DIGITAL_AFF_PER_GIB; // Digital AFF = 50% of bandwidth
-	const base = price + delivery + community;
+	const foundation = sizeGiB * DIGITAL_AFF_PER_GIB; // Digital AFF = 50% of bandwidth
+	const base = price + delivery + foundation;
 	const card = base * CARD_PCT + CARD_FLAT;
 	const tax = base * TAX_PCT;
 	const processing = card + tax;
@@ -340,9 +333,9 @@ export function PurchaseExample({
 			dot: "bg-secondary",
 		},
 		{
-			label: "Community Share",
+			label: "Foundation fee",
 			desc: "supports free access for all  + charitable programs",
-			amount: community,
+			amount: foundation,
 			bar: "bg-info",
 			dot: "bg-info",
 		},

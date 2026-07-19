@@ -6,7 +6,7 @@
  * lowest Seed rung — right on the post.
  */
 import { type Badge, badgeLabel, badgeRank } from "@anthers/shared/constants";
-import { badgePlanViews } from "@anthers/shared/fees";
+import { rankViews } from "@anthers/shared/fees";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, Post } from "@anthers/web-shared/types";
@@ -26,7 +26,7 @@ export default function InlineUnlock({
 	onUnlocked: () => void;
 }) {
 	const [pending, setPending] = useState<{
-		badge: Badge;
+		anthersSeeds: number;
 		planName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
@@ -56,22 +56,22 @@ export default function InlineUnlock({
 	const minSeeds = (post.seedAccess ?? [])
 		.filter((r) => r.allow && r.threshold > 0)
 		.sort((a, b) => a.threshold - b.threshold)[0]?.threshold;
-	const badgePrice = minBadge ? badgePlanViews().find((p) => p.id === minBadge)?.price : undefined;
+	const badgePrice = minBadge ? rankViews().find((p) => p.id === minBadge)?.price : undefined;
 
 	const unlockWithBadge = async () => {
 		if (!minBadge) return;
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.preview[":badge"].$get({
-				param: { badge: minBadge },
+			const res = await client.api.subscriptions.preview[":seeds"].$get({
+				param: { seeds: String(badgeRank(minBadge)) },
 			});
 			if (!res.ok) {
 				setError("Couldn't load plan details. Please try again.");
 				return;
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
-			setPending({ badge: minBadge, planName: badgeLabel(minBadge), preview });
+			setPending({ anthersSeeds: badgeRank(minBadge), planName: badgeLabel(minBadge), preview });
 		} catch {
 			setError("Couldn't load plan details. Please try again.");
 		} finally {
@@ -115,7 +115,7 @@ export default function InlineUnlock({
 
 			{pending && (
 				<SubscriptionPaymentModal
-					badge={pending.badge}
+					anthersSeeds={pending.anthersSeeds}
 					planName={pending.planName}
 					preview={pending.preview}
 					onComplete={() => {

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { client } from "@anthers/web-shared/rpc";
-import type { Badge } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeCardElement } from "@stripe/stripe-js";
 import { useMemo, useState } from "react";
@@ -17,10 +16,11 @@ export interface SubscriptionPreview {
 }
 
 interface Props {
-	badge: Badge;
+	/** The target Anthers-Seed count to subscribe to (the subscription quantity). */
+	anthersSeeds: number;
 	planName: string;
 	preview: SubscriptionPreview;
-	/** Called after the change is confirmed — the webhook then applies the badge. */
+	/** Called after the change is confirmed — the webhook then applies the Seed count. */
 	onComplete: () => void;
 	onClose: () => void;
 }
@@ -34,7 +34,7 @@ function formatDate(unix: number | null): string | null {
 	});
 }
 
-function PaymentForm({ badge, planName, preview, onComplete, onClose }: Props) {
+function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: Props) {
 	const stripe = useStripe();
 	const elements = useElements();
 	const [processing, setProcessing] = useState(false);
@@ -52,7 +52,7 @@ function PaymentForm({ badge, planName, preview, onComplete, onClose }: Props) {
 		setProcessing(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.account.$post({ json: { badge } });
+			const res = await client.api.subscriptions.account.$post({ json: { anthersSeeds } });
 			if (!res.ok) {
 				setError("Couldn't update your plan. Please try again.");
 				setProcessing(false);
