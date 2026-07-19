@@ -23,7 +23,7 @@
 import { db } from "@anthers/db/client";
 import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { type Badge, badgeRank } from "@anthers/shared/constants";
+import { type Badge, badgeRank, rankForSeeds } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** Anthers Badge tiers, low → high. */
@@ -81,14 +81,14 @@ export function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** A user's currently held Badge plan (point-in-time; defaults to "free"). */
+/** A user's currently held rank (point-in-time), derived from their Anthers-Seed count. */
 export async function heldBadge(userId: number): Promise<Badge> {
 	const [row] = await db
-		.select({ badge: accounts.badge })
+		.select({ anthersSeeds: accounts.anthersSeeds })
 		.from(accounts)
 		.where(eq(accounts.userId, userId))
 		.limit(1);
-	return (row?.badge as Badge | undefined) ?? "free";
+	return rankForSeeds(Number(row?.anthersSeeds ?? 0));
 }
 
 function money(n: number): string {
