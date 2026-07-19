@@ -3,11 +3,17 @@
 // The For Users marketing page — the production Meadow design (ported from the
 // Meadow design-lab reference, since removed; see git history). Airy editorial
 // forest-green over a soft-yellow accent, Fraunces display serif over Nunito Sans.
-// Renders inside the
-// shared LoggedOutLayout (site nav + footer); the shared <MeadowDecor> supplies
-// the pollen surface, woven climbing side vines, and grassy flowered floor around
-// the content. Copy is Parker's rewrite; every economics number derives from the
-// V4 model via @anthers/shared/constants (through the shared economics cards).
+// Renders inside the shared LoggedOutLayout (site nav + footer); the shared
+// <MeadowDecor> supplies the pollen surface, woven climbing side vines, and grassy
+// flowered floor around the content.
+//
+// SKETCH (support-model keystone): the page is sequenced as TWO products, not three
+// ways. It LEADS with direct creator support (Seeds + purchases, 100% to the creator —
+// the wedge), then introduces the Anthers commons (a Badge that supports Anthers itself,
+// funds free public content via the Time Pool, and unlocks Anthers-gated content) with
+// the free tier folded in as the commons' subsidized floor. Gates are framed as one
+// primitive with two directions: support a creator (Seed Gate) or support the commons
+// (Anthers Gate). Badge numbers derive from the V4 model ($5/$10/$20/$40).
 //
 // Motion: content fades up on load (hero) and as it scrolls into view (sections),
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
@@ -18,12 +24,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
-import {
-	BADGE_LADDER,
-	InfoDot,
-	PurchaseExample,
-	SubscriptionCalculator,
-} from "@anthers/web-shared/economics";
+import { BADGE_LADDER, InfoDot, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 
@@ -32,13 +33,12 @@ const serif = { fontFamily: FONTS.fraunces };
 // Shared hover/press affordance for the primary CTA buttons (motion-safe lift).
 const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
 
-// What a plan's monthly bandwidth allowance roughly buys — the (i) helper in the
-// signpost card. Free plans include 5 GiB; paid plans scale up to 50 GiB.
+// What a plan's monthly bandwidth allowance roughly buys — the (i) helper.
 const GIB_TIP =
 	"Bandwidth covers streaming and downloads. As a rough guide, 10 GiB is several hours of FHD video, far more of music, or effectively unlimited reading each month.";
 
-// Creator-defined per-creator Seed ladder (illustrative rungs) vs. the platform-wide
-// Badge ladder — the two ways a creator can gate exclusive content.
+// Two ways a creator can gate exclusive content, under one idea: a level of support,
+// pointed at a creator (Seed Gate) or at the commons (Anthers Gate). Illustrative rungs.
 const SEED_GATES = [
 	{ amount: "$1", name: "Follow+", perk: "Chat access, community polls" },
 	{ amount: "$2", name: "Insider", perk: "Early access, community posts" },
@@ -47,10 +47,10 @@ const SEED_GATES = [
 ] as const;
 
 const BADGE_GATES = [
-	{ amount: "$4", name: "Root", perk: "Root-level content, platform-wide" },
-	{ amount: "$8", name: "Sprout", perk: "Sprout-level content, platform-wide" },
-	{ amount: "$16", name: "Petal", perk: "Petal-level content, platform-wide" },
-	{ amount: "$32", name: "Blossom", perk: "Blossom-level content, platform-wide" },
+	{ amount: "$5", name: "Root", perk: "Root-level content, across the platform" },
+	{ amount: "$10", name: "Sprout", perk: "Sprout-level content, across the platform" },
+	{ amount: "$20", name: "Petal", perk: "Petal-level content, across the platform" },
+	{ amount: "$40", name: "Blossom", perk: "Blossom-level content, across the platform" },
 ] as const;
 
 export default function ForUsersPage() {
@@ -110,73 +110,138 @@ export default function ForUsersPage() {
 				</div>
 			</header>
 
-			{/* How it works — three ways */}
+			{/* How it works — two products, direct support first */}
 			<Section>
 				<Reveal>
 					<Eyebrow>How it works</Eyebrow>
-					<H2>Three ways to explore the garden</H2>
+					<H2>Back the people you love — the garden grows from there</H2>
 					<Lede>
-						When you're ready for more than what we provide for free, there are two ways to get it:
-						you can{" "}
-						<strong className="font-semibold text-base-content/80">choose a Badge plan</strong> to
-						fund creators and unlock a bigger bandwidth allowance and gated content, and you can{" "}
-						<strong className="font-semibold text-base-content/80">purchase</strong> games, albums,
-						books, merch, even services—100% to the creator, every time.
+						Everything on Anthers starts{" "}
+						<strong className="font-semibold text-base-content/80">free</strong>. When you want to
+						go further, there are two ways—and they're not the same thing. You can{" "}
+						<strong className="font-semibold text-base-content/80">
+							support creators directly
+						</strong>
+						— Seeds and purchases that reach them 100%—and you can{" "}
+						<strong className="font-semibold text-base-content/80">join the Anthers commons</strong>
+						, a Badge that keeps public content free for everyone and unlocks a growing library
+						across creators.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Whatever path you walk through Anthers, every dollar of your plans and purchases goes to
-						the people who make what you love, to free access for new and small users and creators,
-						or to Anthers Foundation charitable programs like educational ventures and content
-						bounties—never to a platform's bottom line. Curious where your money goes? See our{" "}
+						Direct support is the one we're proudest of, and the reason to start: when you back a
+						creator here, they keep all of it. The commons is what makes the garden worth
+						wandering—and it gets better the more creators plant here. Either way, every dollar goes
+						to the people who make what you love, to free access for others, or to the Anthers
+						Foundation's charitable programs—never to a platform's bottom line. Curious where it all
+						goes? See our{" "}
 						<Link to="/resources" className="link text-primary decoration-primary/40">
 							financial transparency page
 						</Link>
 						.
 					</p>
 				</Reveal>
-				<div className="mt-14 grid gap-8 text-left sm:grid-cols-3">
+				<div className="mt-14 grid gap-8 text-left sm:grid-cols-2">
 					<Reveal delay={0}>
-						<SignpostCard step="1" title="Free Use">
-							Browse, stream, interact, and download any content made public by any creator within a
-							generous free allowance. You might end up wanting more, but let's put it this way: if
-							you want to watch 1–2 hours of HD video from a creator's public page every week, you
-							can do that for free, with no ads, forever.
+						<SignpostCard step="1" title="Support creators directly">
+							Give a creator <strong className="font-semibold text-base-content/85">Seeds</strong>
+							—$1 each, as often as you like—or{" "}
+							<strong className="font-semibold text-base-content/85">buy</strong> their games,
+							albums, books, art, even merch and services. Either way the creator keeps 100%; the
+							most you'll ever pay on top is standard card fees and tax. Direct support, with no
+							middleman taking a slice.
 						</SignpostCard>
 					</Reveal>
 					<Reveal delay={110}>
-						<SignpostCard step="2" title="Subscriptions &amp; Seeds">
-							Choose a <strong className="font-semibold text-base-content/85">Badge plan</strong>
-							—Root $4, Sprout $8, Petal $16, or Blossom $32 a month. Your plan pays creators
-							automatically for the time you spend with their work (the Time Pool), sends its
-							included Seeds straight to creators you pick, and comes with a monthly bandwidth
-							allowance <InfoDot tip={GIB_TIP} />. To go even deeper with one creator, give extra
-							Seeds—$1 each, 100% to them.
-						</SignpostCard>
-					</Reveal>
-					<Reveal delay={220}>
-						<SignpostCard step="3" title="One-Time Purchases">
-							Buy games, albums, films, books, or anything else you like, and receive digital
-							content that's yours to download and own forever. You can even buy real-world stuff
-							like physical media, merch, and services. Creators receive 100% of the purchase price,
-							and the biggest fees you'll ever pay on top are the standard card fees and taxes.
+						<SignpostCard step="2" title="Join the Anthers commons">
+							A <strong className="font-semibold text-base-content/85">Badge</strong>—Root $5,
+							Sprout $10, Petal $20, or Blossom $40 a month—supports Anthers itself: it funds the
+							free public content everyone enjoys (creators earn from the Time Pool for the time you
+							spend with their public work) and unlocks Anthers-gated content across every creator.
+							And every account, Badge or not, gets a free bandwidth allowance{" "}
+							<InfoDot tip={GIB_TIP} /> each month, forever.
 						</SignpostCard>
 					</Reveal>
 				</div>
 			</Section>
 
-			{/* (1) Free use */}
+			{/* ① Support creators directly — the wedge */}
 			<Section tint>
 				<Reveal>
-					<Eyebrow>① Free Use</Eyebrow>
-					<H2>Free, and always will be</H2>
+					<Eyebrow>① Support creators directly</Eyebrow>
+					<H2>When you pay a creator, that's what they get</H2>
 					<Lede>
-						Every account on Anthers receives a bandwidth allowance of free access every
-						month—enough for a few hours of HD video, far more of music, or thousands of articles
-						with media. This isn't a trial or a trick (we're a non-profit; there's not much
-						incentive for either), it's an attempt to fulfill what we believe is a common right for
-						everyone to share and experience creativity and community with their neighbors around
-						the world.
+						We all deserve a way to support the people we love without tossing more money onto a
+						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
+						give creators crumbs even if we start paying. Our favorite game stores take 30% of every
+						sale. Our favorite music apps pay less than a cent per stream. The problem is
+						straightforward: these are for-profit companies. It doesn't{" "}
+						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
 					</Lede>
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+						On Anthers there are two ways to back a creator directly, and both reach them in full:
+					</p>
+				</Reveal>
+				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
+					<Reveal delay={0} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🌱&nbsp; Give Seeds
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								A Seed is $1 of direct support you give to a creator—give one, or a handful,
+								whenever you like. It reaches them 100%, with no fee and no processing skim, and it
+								keeps going each month until you change it. Giving Seeds is also how you unlock that
+								creator's own gated content.
+							</p>
+						</Card>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🎁&nbsp; Buy their work
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
+								keep. The creator receives 100% of the listed price. The biggest thing you'll ever
+								pay on top is standard card fees and tax (and card fees drop to near-zero if you pay
+								by bank transfer).
+							</p>
+						</Card>
+					</Reveal>
+				</div>
+				<Reveal delay={120} className="mx-auto mt-10 block max-w-3xl">
+					<PurchaseExample />
+				</Reveal>
+				<Reveal>
+					<p
+						style={serif}
+						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
+					>
+						0% cut. 100% to the creator. We're a non-profit—there's no margin for us to take.
+					</p>
+				</Reveal>
+			</Section>
+
+			{/* ② The Anthers commons — free floor + the Badge + Time Pool */}
+			<Section>
+				<Reveal>
+					<Eyebrow>② The Anthers commons</Eyebrow>
+					<H2>A garden that stays free for everyone</H2>
+					<Lede>
+						Every account receives a bandwidth allowance of free access every month—enough for a few
+						hours of 1080p video, far more of music, or thousands of articles. This isn't a trial or
+						a trick (we're a non-profit; there's little incentive for either), it's an attempt to
+						fulfill what we believe is a common right: for everyone to share and experience
+						creativity and community with their neighbors around the world.
+					</Lede>
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+						A Badge is how you help keep it that way. Supporting Anthers funds the free public
+						content everyone enjoys—creators earn from the{" "}
+						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
+						people spend with their public work—and it unlocks a growing library of Anthers-gated
+						content across every creator. The more the garden fills in, the more one Badge gives
+						you.
+					</p>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
 					<Reveal delay={0} className="h-full">
@@ -185,101 +250,36 @@ export default function ForUsersPage() {
 								🌿&nbsp; How free stays free
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Every free tier is paid for by your fellow community members. On most of the
-								internet, advertisers own the roads and make you the product. But it doesn't have to
-								be that complicated. Here on Anthers, a free viewer's small bandwidth cost is
-								subsidized by the Anthers Foundation from a pool that all paying members support.
+								On most of the internet, advertisers own the roads and make you the product. Here, a
+								free viewer's small bandwidth cost is subsidized by the Anthers Foundation, from a
+								pool that every Badge holder supports. By sharing the load together, mountains
+								diffuse into pebbles—and we all get a healthier internet for it.
 							</p>
 						</Card>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
 							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🎁&nbsp; What free access includes
+								🎋&nbsp; What a Badge adds
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
 								<FreeItem yes>
-									5 GiB of content delivery each month—your free bandwidth allowance, covered by the
-									Foundation.
+									A larger monthly bandwidth allowance, scaling with your Badge.
 								</FreeItem>
 								<FreeItem yes>
-									Everything that creators have made public, including posts, videos, games, and
-									much more.
+									A Time Pool that pays creators for the time you spend with their public work.
 								</FreeItem>
-								<FreeItem>
-									Content that creators have gated behind Seeds ($1 increments given directly to
-									them) and Badges (the plan you choose).
+								<FreeItem yes>
+									A growing library of Anthers-gated content, opened across every creator.
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
-								Choose a plan from $4/month to unlock gated content, a bigger bandwidth allowance,
-								and Seeds for your favorite creators.
+								Badges run $5–$40/month. Supporting Anthers is separate from supporting a creator
+								directly—one keeps the commons free, the other reaches a creator in full.
 							</p>
 						</Card>
 					</Reveal>
 				</div>
-				<Reveal>
-					<p
-						style={serif}
-						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
-					>
-						By sharing the load together, mountains diffuse into pebbles—and we all get a healthier,
-						better internet for it.
-					</p>
-				</Reveal>
-			</Section>
-
-			{/* (2) Subscriptions & Seeds */}
-			<Section>
-				<Reveal>
-					<Eyebrow>② Subscriptions &amp; Seeds</Eyebrow>
-					<H2>Support creators, not middlemen</H2>
-					<Lede>
-						We all deserve a way to support the creators we love without tossing more money onto a
-						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
-						give creators crumbs even if we start paying. Our favorite game platforms take 30% of
-						the developers' revenue from every sale. And our favorite music platforms pay less than
-						a cent for every song streamed. The problem is straightforward: these are for-profit
-						companies. It doesn't{" "}
-						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
-					</Lede>
-					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						On Anthers, your subscription goes as directly as possible to the things that really
-						matter, and we stay as out of the way as possible. Here's what it looks like, no
-						secrets:
-					</p>
-				</Reveal>
-				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl">
-					<SubscriptionCalculator />
-				</Reveal>
-			</Section>
-
-			{/* (3) One-time purchases */}
-			<Section tint>
-				<Reveal>
-					<Eyebrow>③ One-Time Purchases</Eyebrow>
-					<H2>Buy once, own forever</H2>
-					<Lede>
-						Whether you're buying a new game, an album of music, an e-book, or even a hoodie, the
-						creator receives 100% of the listed price, period. The biggest fees you pay on top of
-						that are standard card fees and taxes.
-					</Lede>
-				</Reveal>
-				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl">
-					<PurchaseExample />
-				</Reveal>
-			</Section>
-
-			{/* The Anthers Badges (+ gates) */}
-			<Section>
-				<Reveal>
-					<Eyebrow>The Anthers Badges</Eyebrow>
-					<H2>Show your support and unlock exclusive content</H2>
-					<Lede>
-						Choose a Badge plan and you'll wear its Badge—Root, Sprout, Petal, or Blossom—for as
-						long as you hold it. It's the plan you pick, not a rolling total of past spend.
-					</Lede>
-				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl grid-cols-2 gap-6 md:grid-cols-4">
 					{BADGE_LADDER.map((b, i) => (
 						<Reveal key={b.name} delay={i * 90}>
@@ -306,35 +306,48 @@ export default function ForUsersPage() {
 						</Reveal>
 					))}
 				</div>
+			</Section>
+
+			{/* ③ Unlocking more — one gating primitive, two directions */}
+			<Section tint>
 				<Reveal>
-					<p className="mx-auto mt-10 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						The more your support grows, the more special content and perks you'll receive. Creators
-						can gate exclusive content in one of two ways:
-					</p>
+					<Eyebrow>③ Unlocking more</Eyebrow>
+					<H2>One idea, two directions</H2>
+					<Lede>
+						Creators can reserve special content for their supporters—and "support" means one simple
+						thing: a level of backing, pointed either at that creator or at the commons. Clear
+						either one and you're in. It's the same mechanism, just aimed two different ways.
+					</Lede>
 				</Reveal>
-				<div className="mx-auto mt-8 grid max-w-4xl gap-6 text-left md:grid-cols-2">
+				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
 					<Reveal delay={0} className="h-full">
 						<Card className="card-lift h-full">
-							<p className="text-xs font-semibold uppercase tracking-wider text-accent">
-								Across the platform
+							<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
+								Support a creator
 							</p>
-							<h3 style={serif} className="mb-4 text-xl font-medium">
-								Anthers Gates
+							<h3 style={serif} className="mb-1 text-xl font-medium">
+								Seed Gates
 							</h3>
-							{BADGE_GATES.map((g) => (
+							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
+								Unlocked by the Seeds you've given that creator—100% to them.
+							</p>
+							{SEED_GATES.map((g) => (
 								<GateRow key={g.name} {...g} />
 							))}
 						</Card>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
-							<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
-								For one creator
+							<p className="text-xs font-semibold uppercase tracking-wider text-accent">
+								Support the commons
 							</p>
-							<h3 style={serif} className="mb-4 text-xl font-medium">
-								Seed Gates
+							<h3 style={serif} className="mb-1 text-xl font-medium">
+								Anthers Gates
 							</h3>
-							{SEED_GATES.map((g) => (
+							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
+								Unlocked by the Badge you currently hold—across every creator.
+							</p>
+							{BADGE_GATES.map((g) => (
 								<GateRow key={g.name} {...g} />
 							))}
 						</Card>
@@ -354,8 +367,8 @@ export default function ForUsersPage() {
 							Plant something worth growing
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Support the creators you love, on terms you can see and trust. Browse the whole
-							catalog free with an account you can create in seconds.
+							Support the creators you love, on terms you can see and trust. Start now with a free
+							account you can create in seconds. No ads, no data brokers, free forever.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to="/signup" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
@@ -371,7 +384,7 @@ export default function ForUsersPage() {
 
 // ─── Local building blocks ───
 
-/** A numbered signpost card for the "three ways" section. */
+/** A numbered signpost card for the "how it works" section. */
 function SignpostCard({
 	step,
 	title,
@@ -397,7 +410,7 @@ function SignpostCard({
 	);
 }
 
-/** A ✓ / – line in the "what free access includes" list. */
+/** A ✓ / – line in the "what a Badge adds" list. */
 function FreeItem({ yes, children }: { yes?: boolean; children: React.ReactNode }) {
 	return (
 		<li className="flex gap-2.5">

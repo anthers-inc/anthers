@@ -113,7 +113,7 @@ const PLATFORMS: Platform[] = [
 		blurb: "Ad-supported video. Creators get 45% of the ad/Premium revenue their views generate.",
 		matchups: [
 			{
-				scenario: "A fan streams 1 hour of your HD video",
+				scenario: "A fan streams 1 hour of your 1080p video",
 				kind: "Streaming",
 				anthers: A_STREAM,
 				rival: {

@@ -767,7 +767,7 @@ const seedReceipt: Line[] = [
 const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 	stream: {
 		video: {
-			scenario: "A fan watches an hour of your public HD video",
+			scenario: "A fan watches an hour of your public 1080p video",
 			rows: [
 				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },

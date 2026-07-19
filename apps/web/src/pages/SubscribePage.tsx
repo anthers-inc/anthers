@@ -1,42 +1,65 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// The Support page (route: /subscribe) — SKETCH of the "Anthers is a creator you
+// Seed" model. It's all one primitive: a Seed, $3/month, pointed one of two ways,
+// shown as two symmetrical interactive cards wrapped in one outer card:
+//
+//   • Back the ANTHERS COMMONS (left) — the same Seed, pointed at Anthers. Each Seed
+//     scales your streaming allowance, Time Pool, and Anthers-gate access rank.
+//   • Back a CREATOR (right) — Seeds, $3/mo each, 100% to the creator. Each Seed level
+//     unlocks more of their world, and each is branded with the creator's own Badge —
+//     the same mechanic as Anthers's ranks, so users can collect badges across creators.
+//
+// Both cards share the BadgeLadder (Anthers renders its botanical rank wreaths; a creator
+// renders their own cute emblems). Seeds run 0–10; past 4 you keep the top badge with a
+// "+" (Blossom+, Legend+) while benefits keep scaling — the rank for gating stays the top.
+// The outer card sums BOTH steppers into one monthly-spend breakdown. Dollar figures are
+// ILLUSTRATIVE placeholders (pending the financial model); the backend is still the
+// fixed-badge system, so the steppers are interactive front-end sketches, not wired to
+// checkout.
 
-import { BANDWIDTH_PER_GIB, DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
-import { type BadgePlanView, badgePlanViews } from "@anthers/shared/fees";
+import { DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { BADGE_ART } from "@anthers/web-shared/economics";
-import { client } from "@anthers/web-shared/rpc";
-import type { AccountResponse, Badge } from "@anthers/web-shared/types";
-import { useEffect, useState } from "react";
-import CancelConfirmModal from "../components/subscribe/CancelConfirmModal";
-import SubscriptionPaymentModal, {
-	type SubscriptionPreview,
-} from "../components/subscribe/SubscriptionPaymentModal";
+import type { Badge } from "@anthers/web-shared/types";
+import { useState } from "react";
 
-// The five Badge plans are static — derived entirely from BADGE_PLANS — so we
-// render them synchronously instead of fetching /subscriptions/badges. That removes
-// the loading skeleton (and its empty-card flash on every remount); the only async
-// piece is a logged-in user's current badge, which just drives the "Your plan"
-// highlight and never blocks the cards. Same source of truth as the API route
-// (both call badgePlanViews()), so page and server can't drift.
-const PLANS: BadgePlanView[] = badgePlanViews();
+/* ── Illustrative model (SKETCH — pending the financial model) ──────────────── */
+const SEED_PRICE = 3; // $/month per Seed
+const FREE_GIB = 15; // free streaming floor at 0 Seeds (generous, to avoid a paywall cliff)
+const GIB_PER_SEED = 60; // added streaming allowance per Seed (never binds for ~anyone past Seed 1)
+const TIMEPOOL_PER_SEED = 1.5; // $/month to creators, per Seed
+const MAX_SEEDS = 10; // stepper cap; past 4 the top badge gains a "+"
 
-/* ------------------------------------------------------------------ */
-/*  V4 economics — non-profit, no profit-taking                        */
-/* ------------------------------------------------------------------ */
-/*
- * A user CHOOSES a Badge plan (free/root/sprout/petal/blossom). The plan's
- * whole-dollar price decomposes into:
- *   Time Pool  → to creators, distributed by watch-time
- *   Seeds      → $1 units, 100% direct to the creators you give them to
- *   Community Share → the derived remainder, to the Anthers Foundation
- * Bandwidth is NOT part of the plan — it's a separate, at-cost prepaid wallet
- * ($0.01/GiB) with a per-tier free monthly allowance drawn down first.
- */
+// Anthers ranks map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
+const RANK_ORDER: Badge[] = ["root", "sprout", "petal", "blossom"];
+const LADDER: { label: string; badge: Badge }[] = [
+	{ label: "Free", badge: "free" },
+	{ label: "Root", badge: "root" },
+	{ label: "Sprout", badge: "sprout" },
+	{ label: "Petal", badge: "petal" },
+	{ label: "Blossom", badge: "blossom" },
+];
 
-function fmt(n: number | string): string {
-	return `$${Number(n).toFixed(2)}`;
+// A generic example creator's Badges (one per Seed level) + what each unlocks. Cute and
+// deliberately NOT botanical, so they read as the creator's own brand, distinct from
+// Anthers's flower ranks. Gate i unlocks at i+1 Seeds ($(i+1)*3).
+const CREATOR_BADGES = [
+	{ emoji: "🐣", name: "New Friend", perk: "Early access to everything new" },
+	{ emoji: "🌟", name: "Regular", perk: "Behind-the-scenes & extras" },
+	{ emoji: "🎉", name: "Superfan", perk: "Community space + monthly livestream" },
+	{ emoji: "👑", name: "Legend", perk: "A thank-you in the credits" },
+];
+
+function money(n: number): string {
+	return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
+}
+
+/** Illustrative at-cost card fee on a monthly charge (~2.9% + $0.30, batched). */
+function cardFee(cost: number): number {
+	return cost > 0 ? 0.3 + 0.029 * cost : 0;
 }
 
 /** Rough watch-hours a GiB figure buys at the 1080p60 AV1 reference throughput. */
@@ -44,475 +67,488 @@ function watchHours(gib: number): number {
 	return Math.round(gib / DELIVERY_GIB_PER_HOUR);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Legend divider                                                    */
-/* ------------------------------------------------------------------ */
-
-/**
- * The vine separating the legend's columns — `divider-botanical`, the same
- * flourish used as a horizontal rule across the marketing pages, stood on end.
- *
- * It's positioned absolutely rather than rendered between the columns for two
- * reasons: the legend is a `sm:grid-cols-3`, so a real element there would land
- * in a fourth cell and break the layout; and a rotated element keeps its
- * *unrotated* layout box, which would reserve a square of dead space as wide as
- * the vine is tall. Out of flow, it costs nothing.
- *
- * `left-0` sits the box's left edge on the column's, so `-50%` centres it on
- * that edge and the extra `-1rem` walks it out to the middle of the `sm:gap-8`
- * (2rem) between columns — keep the two in step if the gap changes. Hidden below
- * `sm`, where the columns stack and a vertical rule would divide nothing.
- *
- * The positioning and `hidden sm:block` live on a wrapper rather than on the
- * glyph itself: <BrandGlyph> sets `display:inline-block` as an *inline style*,
- * which outranks any display utility, so `hidden` on a glyph silently does
- * nothing and it shows up on mobile anyway.
- */
-function LegendDivider() {
-	return (
-		<span
-			aria-hidden="true"
-			className="pointer-events-none absolute top-1/2 left-0 hidden h-16 w-16 sm:block"
-			style={{ transform: "translate(calc(-50% - 1rem), -50%) rotate(90deg)" }}
-		>
-			<BrandGlyph name="divider-botanical" className="h-full w-full text-primary/30" />
-		</span>
-	);
+/** The Anthers rank a given Seed count reaches (null at 0). */
+function rankFor(seeds: number): Badge | null {
+	return seeds <= 0 ? null : RANK_ORDER[Math.min(seeds, RANK_ORDER.length) - 1];
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helper tip                                                        */
-/* ------------------------------------------------------------------ */
+/* ── Small pieces ───────────────────────────────────────────────────────────── */
 
-/**
- * An (i) carrying a line of helper text. daisyUI's `.tooltip` handles hover and
- * keyboard (it opens on `:focus-visible`) by itself; the click toggle is here for
- * touch, where neither fires — without it the text is simply unreachable on a
- * phone. `aria-label` carries the text too, since the tooltip itself is CSS
- * `content:` that screen readers can't be relied on to announce.
- *
- * Opens to the right, not daisyUI's default centre-above: its only home is the
- * Free card, leftmost in the grid at every breakpoint, so a centred tooltip runs
- * off the left of the viewport and loses the first characters of every line.
- * daisyUI has no auto-flip. Revisit the placement if this ever sits somewhere
- * with room on both sides.
- */
-function InfoTip({ text }: { text: string }) {
-	const [open, setOpen] = useState(false);
+/** A −/+ integer stepper for a number of Seeds. */
+function SeedCountStepper({
+	value,
+	min,
+	max,
+	onChange,
+}: {
+	value: number;
+	min: number;
+	max: number;
+	onChange: (v: number) => void;
+}) {
+	const set = (v: number) => onChange(Math.max(min, Math.min(max, v)));
 	return (
-		<span
-			className={`tooltip tooltip-primary tooltip-right ${open ? "tooltip-open" : ""}`}
-			data-tip={text}
-		>
+		<div className="flex items-center gap-4">
 			<button
 				type="button"
-				aria-label={text}
-				className="flex h-4 w-4 items-center justify-center rounded-full border border-base-content/25 text-[9px] font-semibold text-base-content/50 leading-none transition-colors hover:border-primary hover:text-primary"
-				onClick={() => setOpen((v) => !v)}
-				onBlur={() => setOpen(false)}
+				className="btn btn-circle btn-outline"
+				onClick={() => set(value - 1)}
+				disabled={value <= min}
+				aria-label="Fewer Seeds"
 			>
-				i
+				−
 			</button>
-		</span>
+			<div className="min-w-[4.5rem] text-center">
+				<div className="text-3xl font-bold tabular-nums leading-none">{value}</div>
+				<div className="mt-1 text-xs text-base-content/50">Seed{value === 1 ? "" : "s"}</div>
+			</div>
+			<button
+				type="button"
+				className="btn btn-circle btn-outline"
+				onClick={() => set(value + 1)}
+				disabled={value >= max}
+				aria-label="More Seeds"
+			>
+				+
+			</button>
+		</div>
 	);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Plan card                                                         */
-/* ------------------------------------------------------------------ */
-
-function PlanCard({
-	plan,
-	isCurrent,
-	isDefault,
-	saving,
-	onChoose,
-}: {
-	plan: BadgePlanView;
-	isCurrent: boolean;
-	/** Free, shown to a logged-out visitor — the plan they'll land on by default. */
-	isDefault: boolean;
-	saving: boolean;
-	onChoose: () => void;
-}) {
-	const isFree = plan.id === "free";
-	// Both states wear the ring, but only a real current plan disables the button:
-	// a logged-out visitor still needs it live to reach signup.
-	const highlighted = isCurrent || isDefault;
-	const tag = isCurrent ? "Your plan" : isDefault ? "Default" : null;
+/** The one-line status under a stepper. Fixed min-height so a 1- vs 2-line message
+ *  (e.g. "Following for free" vs a priced line) never changes the card height. */
+function StepperStatus({ children }: { children: React.ReactNode }) {
 	return (
-		<div
-			className={`card bg-base-200/60 shadow-xl border-2 transition-all ${
-				highlighted ? "ring-2 ring-primary border-primary" : "border-base-300"
-			}`}
-		>
-			{/* [&>p]:grow-0 undoes daisyUI's `.card-body :where(p) { flex-grow: 1 }`. The grid
-				stretches every card to the tallest one, and that rule would spend each shorter
-				card's leftover height by inflating its paragraphs — so the same line sat at a
-				different y on every card. Let the prose keep its natural height; card-actions'
-				mt-auto absorbs the slack instead. */}
-			<div className="card-body p-5 [&>p]:grow-0">
-				{isFree ? (
-					// Free has no badge — center the label so it's clear it's badgeless.
-					// min-h-9 matches the badge glyph's height so every card's header row is
-					// the same height and the content below stays aligned across the grid.
-					<div className="flex min-h-9 items-center justify-center gap-2">
-						<h3 className="text-lg font-bold">{plan.name}</h3>
-						{tag && <span className="badge badge-primary badge-sm">{tag}</span>}
-					</div>
-				) : (
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-2">
-							<span className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center">
-								<BrandGlyph
-									name={BADGE_ART[plan.id].wreath}
-									className="absolute inset-0 h-full w-full text-primary/55"
-								/>
-								<span aria-hidden="true" className="text-base">
-									{BADGE_ART[plan.id].emoji}
-								</span>
-							</span>
-							<h3 className="text-lg font-bold">{plan.name}</h3>
+		<div className="flex min-h-[3rem] items-center justify-center text-center text-sm text-base-content/60">
+			{children}
+		</div>
+	);
+}
+
+/** A line in the "what it gives you" benefits list. Reserves two lines of height so
+ *  the free-tier vs paid text (which wrap differently) don't resize the card. */
+function BenefitRow({
+	icon,
+	label,
+	children,
+}: {
+	icon: string;
+	label: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<li className="flex min-h-[2.75rem] items-center gap-2.5">
+			<span aria-hidden="true" className="shrink-0">
+				{icon}
+			</span>
+			<span className="leading-snug">
+				<span className="text-base-content/80">{label}: </span>
+				<span className="text-base-content/70">{children}</span>
+			</span>
+		</li>
+	);
+}
+
+/** A creator Seed-gate line — unlocked (✓) or locked (🔒) at the current Seed count. */
+function GateRow({
+	threshold,
+	unlocked,
+	perk,
+}: {
+	threshold: number;
+	unlocked: boolean;
+	perk: string;
+}) {
+	return (
+		<div className={`flex min-h-[2.25rem] items-center gap-2 ${unlocked ? "" : "opacity-45"}`}>
+			<span aria-hidden="true" className="shrink-0 text-sm">
+				{unlocked ? "✓" : "🔒"}
+			</span>
+			<span className="text-sm leading-snug">
+				<span className="font-mono text-[11px] text-primary">{money(threshold)}</span>{" "}
+				<span className="text-base-content/75">{perk}</span>
+			</span>
+		</div>
+	);
+}
+
+/** A dotted line in the "where your money goes" breakdown. */
+function BreakdownRow({
+	dot,
+	label,
+	desc,
+	amount,
+	strong,
+}: {
+	dot: string;
+	label: string;
+	desc: string;
+	amount: number;
+	strong?: boolean;
+}) {
+	return (
+		<div className="flex items-start justify-between gap-2">
+			<span className="flex items-start gap-1.5 text-left">
+				<span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+				<span className="leading-tight">
+					<span className={`font-medium ${strong ? "text-success" : "text-base-content/80"}`}>
+						{label}
+					</span>
+					<span className="block text-[11px] text-base-content/45">{desc}</span>
+				</span>
+			</span>
+			<strong className={`shrink-0 tabular-nums ${strong ? "text-success" : ""}`}>
+				{money(amount)}
+			</strong>
+		</div>
+	);
+}
+
+/* ── Badge ladder (shared) ──────────────────────────────────────────────────── */
+
+/** The "no badge" rung — an empty dashed ring (Anthers Free, or a creator you only follow). */
+const freeRing = (active: boolean) => (
+	<span
+		className={`inline-block h-10 w-10 rounded-full border-2 border-dashed bg-base-content/5 ${
+			active ? "border-base-content/30" : "border-base-content/20"
+		}`}
+	/>
+);
+
+/** A ladder of badges — the current one lit and enlarged, the rest small. Each sits in a
+ *  FIXED slot and scales via transform, so stepping animates without reflowing the card.
+ *  `plus` appends a "+" to the active (top) badge, for supporting beyond the top tier. */
+function BadgeLadder({
+	rungs,
+	activeIndex,
+	plus,
+}: {
+	rungs: { label: string; render: (active: boolean) => React.ReactNode }[];
+	activeIndex: number;
+	plus?: boolean;
+}) {
+	return (
+		<div className="flex items-end justify-center gap-2">
+			{rungs.map((rung, i) => {
+				const active = i === activeIndex;
+				const label = active && plus && i === rungs.length - 1 ? `${rung.label}+` : rung.label;
+				return (
+					<div key={rung.label} className="flex flex-col items-center gap-1">
+						<div className="flex h-16 w-16 items-center justify-center">
+							<div
+								className={`relative flex h-16 w-16 items-center justify-center transition-transform duration-300 ease-out ${
+									active ? "scale-100" : "scale-[0.6] opacity-40"
+								}`}
+							>
+								{rung.render(active)}
+							</div>
 						</div>
-						{tag && <span className="badge badge-primary badge-sm">{tag}</span>}
-					</div>
-				)}
-
-				<div className="flex items-baseline gap-1 mt-1 mb-3">
-					<span className="text-3xl font-bold">{fmt(plan.price)}</span>
-					<span className="text-base-content/40 text-sm">/mo</span>
-				</div>
-
-				{/* Where the price goes */}
-				<p className="text-[11px] uppercase tracking-wider text-base-content/40 mb-1">
-					Where it goes
-				</p>
-				<div className="space-y-1 text-sm">
-					<div className="flex items-center justify-between">
-						<span className="flex items-center gap-1 text-base-content/70">
-							Time Pool
-							{/* Free's Time Pool is the one line item that needs explaining — it's the
-								only plan where money reaches creators without the user paying any. */}
-							{isFree && plan.subsidised && (
-								<InfoTip text="Free forever. The Anthers Foundation subsidises this plan's Time Pool, so creators are still paid for your time while you pay $0." />
-							)}
+						<span
+							className={`text-[11px] transition-colors ${
+								active ? "font-semibold text-primary" : "text-base-content/40"
+							}`}
+						>
+							{label}
 						</span>
-						<strong>{fmt(plan.timePool)}</strong>
 					</div>
-					<div className="flex items-center justify-between">
-						<span className="text-base-content/70">Seeds</span>
-						<strong>{fmt(plan.seeds)}</strong>
-					</div>
-					<div className="flex items-center justify-between">
-						<span className="text-base-content/70">Community Share</span>
-						<strong>{fmt(plan.communityShare)}</strong>
-					</div>
-					{Number(plan.payments) > 0 && (
-						<div className="flex items-center justify-between">
-							<span className="text-base-content/70">Payments</span>
-							<strong>{fmt(plan.payments)}</strong>
-						</div>
+				);
+			})}
+		</div>
+	);
+}
+
+// Anthers ranks render the botanical wreath + emoji from the brand package.
+const ANTHERS_RUNGS = LADDER.map((rung) => ({
+	label: rung.label,
+	render: (active: boolean) =>
+		rung.badge === "free" ? (
+			freeRing(active)
+		) : (
+			<>
+				{active && (
+					<span className="absolute inset-1 rounded-full bg-primary/10 ring-2 ring-primary/30" />
+				)}
+				<BrandGlyph
+					name={BADGE_ART[rung.badge].wreath}
+					className={`absolute inset-0 h-full w-full ${
+						active ? "text-primary/60" : "text-base-content/45"
+					}`}
+				/>
+				<span aria-hidden="true" className="relative text-2xl">
+					{BADGE_ART[rung.badge].emoji}
+				</span>
+			</>
+		),
+}));
+
+// A creator's badges render their own cute emblem in a simple disc.
+const CREATOR_RUNGS = [
+	{ label: "Following", render: (active: boolean) => freeRing(active) },
+	...CREATOR_BADGES.map((b) => ({
+		label: b.name,
+		render: (active: boolean) => (
+			<span
+				className={`flex h-full w-full items-center justify-center rounded-full text-2xl transition-colors ${
+					active ? "bg-primary/15 ring-2 ring-primary/40" : "bg-primary/5 ring-1 ring-primary/20"
+				}`}
+			>
+				{b.emoji}
+			</span>
+		),
+	})),
+];
+
+/* ── The two symmetrical support cards (controlled — parent owns the Seed counts) ── */
+
+function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number) => void }) {
+	const cost = SEED_PRICE * seeds;
+	const gib = FREE_GIB + GIB_PER_SEED * seeds;
+	const timePool = TIMEPOOL_PER_SEED * seeds;
+	const rank = rankFor(seeds);
+	const rankName = rank ? rank[0].toUpperCase() + rank.slice(1) : null;
+
+	return (
+		<div className="flex h-full flex-col rounded-2xl border-2 border-accent/30 bg-base-200/60 p-6 shadow-sm">
+			<p className="mb-1 text-xs font-semibold uppercase tracking-wider text-accent">
+				Back Anthers · your streaming + access
+			</p>
+			<h2 className="mb-4 text-2xl font-bold">Support the Anthers commons</h2>
+
+			<p className="mb-2 mx-auto max-w-2xl leading-relaxed text-base-content/70">
+				When you give a Seed to Anthers, you get additional streaming bandwidth across the platform,
+				and a larger payment pool spread among the creators you stream. You also unlock special
+				Anthers-gated content across all creators on the platform.
+			</p>
+
+			<div className="my-4 border-t border-base-content/10 pt-4">
+				<BadgeLadder
+					rungs={ANTHERS_RUNGS}
+					activeIndex={Math.min(seeds, LADDER.length - 1)}
+					plus={seeds > RANK_ORDER.length}
+				/>
+			</div>
+
+			<div className="my-4 flex flex-col items-center gap-2">
+				<SeedCountStepper value={seeds} min={0} max={MAX_SEEDS} onChange={onChange} />
+				<StepperStatus>
+					{seeds === 0 ? (
+						"Free — backing Anthers with nothing yet"
+					) : (
+						<span>
+							<span className="text-lg font-bold text-base-content/90">{money(cost)}</span>/month ·{" "}
+							{seeds} Seed{seeds === 1 ? "" : "s"} to Anthers
+						</span>
 					)}
-				</div>
+				</StepperStatus>
+			</div>
 
-				<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2 text-success">
-					<span className="font-medium">To creators</span>
-					<strong>{fmt(plan.toCreators)}</strong>
-				</div>
+			<div className="border-t border-base-content/10 pt-4">
+				<p className="mb-2 text-[11px] uppercase tracking-wider text-base-content/40">
+					What it gives you
+				</p>
+				<ul>
+					<BenefitRow icon="📶" label="Streaming">
+						<strong>{gib} GiB</strong>/mo of streaming (≈{watchHours(gib)}hrs 1080p),
+						{seeds === 0 ? " free forever" : " always at-cost"}
+					</BenefitRow>
+					<BenefitRow icon="🌻" label="Time Pool">
+						{seeds === 0 ? (
+							<span>
+								<strong>$0.05</strong>/mo → creators, subsidized by the Foundation
+							</span>
+						) : (
+							<span>
+								<strong>{money(timePool)}</strong>/mo → creators, for the free content you stream
+							</span>
+						)}
+					</BenefitRow>
+					<BenefitRow icon="🔓" label="Access">
+						{rankName ? (
+							<>
+								<strong>{rankName}</strong>-gated content, across every creator
+							</>
+						) : (
+							<span className="text-base-content/50">Free public content only</span>
+						)}
+					</BenefitRow>
+				</ul>
+			</div>
+		</div>
+	);
+}
 
-				{/* What's included (bandwidth allowance is separate from the price) */}
-				<p className="text-[11px] uppercase tracking-wider text-base-content/40 mt-3 mb-1">
-					Includes
-				</p>
-				<p className="text-sm text-base-content/70">
-					<strong>{plan.freeBwGiB} GiB</strong>/month of free bandwidth
-				</p>
-				<p className="text-[11px] text-base-content/40 leading-tight">
-					≈ {watchHours(plan.freeBwGiB)} hrs of 1080p60 video (much more for audio, text, and
-					images). Beyond that, bandwidth is billed at-cost.
-				</p>
+function CreatorCard({ seeds, onChange }: { seeds: number; onChange: (v: number) => void }) {
+	const cost = SEED_PRICE * seeds;
 
-				<div className="card-actions mt-auto pt-4">
-					<button
-						type="button"
-						className={`btn btn-sm w-full ${isCurrent ? "btn-disabled btn-ghost" : "btn-primary"}`}
-						onClick={onChoose}
-						disabled={isCurrent || saving}
-					>
-						{isCurrent
-							? "Current plan"
-							: saving
-								? "Confirming…"
-								: isDefault
-									? "Free forever"
-									: isFree
-										? "Switch to Free"
-										: `Choose ${plan.name}`}
-					</button>
+	return (
+		<div className="flex h-full flex-col rounded-2xl border-2 border-primary/25 bg-primary/5 p-6 shadow-sm">
+			<p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">
+				Back a creator · 0% cut
+			</p>
+			<h2 className="mb-4 text-2xl font-bold">Support the creators you love</h2>
+
+			<p className="mb-2 mx-auto max-w-2xl leading-relaxed text-base-content/70">
+				When you give a Seed to a creator, it reaches them in full: 100%, no cut, no processing
+				skim. It's recurring support, like a membership, and each Seed level unlocks more of what
+				they make based on Creator Badges they define and design just for their community.
+			</p>
+
+			<div className="my-4 border-t border-base-content/10 pt-4">
+				<BadgeLadder
+					rungs={CREATOR_RUNGS}
+					activeIndex={Math.min(seeds, CREATOR_RUNGS.length - 1)}
+					plus={seeds > CREATOR_BADGES.length}
+				/>
+			</div>
+
+			<div className="my-4 flex flex-col items-center gap-2">
+				<SeedCountStepper value={seeds} min={0} max={MAX_SEEDS} onChange={onChange} />
+				<StepperStatus>
+					{seeds === 0 ? (
+						"Following for free"
+					) : (
+						<span>
+							<span className="text-lg font-bold text-base-content/90">{money(cost)}</span>/month ·
+							100% to the creator
+						</span>
+					)}
+				</StepperStatus>
+			</div>
+
+			<div className="border-t border-base-content/10 pt-4">
+				<p className="mb-2 text-[11px] uppercase tracking-wider text-base-content/40">
+					What you unlock
+				</p>
+				<div>
+					{CREATOR_BADGES.map((b, i) => (
+						<GateRow
+							key={b.name}
+							threshold={(i + 1) * SEED_PRICE}
+							unlocked={seeds >= i + 1}
+							perk={b.perk}
+						/>
+					))}
 				</div>
 			</div>
 		</div>
 	);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Page                                                              */
-/* ------------------------------------------------------------------ */
+/* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function SubscribePage() {
 	const { user } = useAuth();
+	const signedIn = !!user;
 
-	const [currentBadge, setCurrentBadge] = useState<Badge | null>(null);
-	const [saving, setSaving] = useState<Badge | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [notice, setNotice] = useState<string | null>(null);
-	const [pendingPay, setPendingPay] = useState<{
-		badge: Badge;
-		planName: string;
-		preview: SubscriptionPreview;
-	} | null>(null);
-	const [cancelInfo, setCancelInfo] = useState<{
-		planName: string;
-		revertUnix: number | null;
-	} | null>(null);
-	const [canceling, setCanceling] = useState(false);
+	const [anthersSeeds, setAnthersSeeds] = useState(1);
+	const [creatorSeeds, setCreatorSeeds] = useState(1);
 
-	// The plans render immediately from PLANS; the only fetch is a logged-in user's
-	// current badge, which just highlights "Your plan". Logged-out visitors skip it,
-	// and a failure is non-fatal — the cards still render, just without the highlight.
-	useEffect(() => {
-		if (!user) {
-			setCurrentBadge(null);
-			return;
-		}
-		let cancelled = false;
-		(async () => {
-			try {
-				const res = await client.api.subscriptions.me.$get();
-				if (!res.ok) return;
-				const data = (await res.json()) as AccountResponse;
-				if (!cancelled) setCurrentBadge(data.badge);
-			} catch {
-				// Non-fatal: leave the highlight off.
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [user]);
-
-	// Re-read the account, optionally polling until the badge reaches `expected` — the
-	// subscription webhook applies the badge asynchronously after payment confirms.
-	const refreshAccount = async (expected?: Badge) => {
-		for (let i = 0; i < (expected ? 12 : 1); i++) {
-			try {
-				const res = await client.api.subscriptions.me.$get();
-				if (res.ok) {
-					const data = (await res.json()) as AccountResponse;
-					setCurrentBadge(data.badge);
-					if (!expected || data.badge === expected) return;
-				}
-			} catch {
-				// transient — keep polling
-			}
-			await new Promise((r) => setTimeout(r, 800));
-		}
-	};
-
-	// Confirm a cancellation (→ Free at period end) from the cancel modal.
-	const confirmCancel = async () => {
-		setCanceling(true);
-		setError(null);
-		try {
-			const res = await client.api.subscriptions.account.$post({ json: { badge: "free" } });
-			if (!res.ok) {
-				setError("Couldn't cancel your plan. Please try again.");
-				return;
-			}
-			await refreshAccount();
-			setCancelInfo(null);
-			setNotice("Your plan is set to cancel — you'll revert to Free when the period ends.");
-		} catch {
-			setError("Couldn't cancel your plan. Please try again.");
-		} finally {
-			setCanceling(false);
-		}
-	};
-
-	const handleChoose = async (badge: Badge) => {
-		if (!user) {
-			window.location.href = "/login?next=/subscribe";
-			return;
-		}
-		setError(null);
-		setNotice(null);
-		setSaving(badge);
-		try {
-			// Every choice — subscribe, change, or cancel — is previewed, then confirmed in a modal.
-			const res = await client.api.subscriptions.preview[":badge"].$get({ param: { badge } });
-			if (!res.ok) {
-				setError("Couldn't load plan details. Please try again.");
-				return;
-			}
-			const preview = (await res.json()) as
-				| ({ isCancel: false } & SubscriptionPreview)
-				| { isCancel: true; currentPlanName: string; nextBillingUnix: number | null };
-			if (preview.isCancel) {
-				setCancelInfo({ planName: preview.currentPlanName, revertUnix: preview.nextBillingUnix });
-			} else {
-				const pv = badgePlanViews().find((p) => p.id === badge);
-				setPendingPay({ badge, planName: pv?.name ?? badge, preview });
-			}
-		} catch {
-			setError("Couldn't load plan details. Please try again.");
-		} finally {
-			setSaving(null);
-		}
-	};
+	// Combined monthly spend, summed across both steppers. Payments is a single at-cost
+	// card fee on the whole batched charge, added ON TOP — never carved out of a Seed.
+	const creatorCost = SEED_PRICE * creatorSeeds;
+	const anthersCost = SEED_PRICE * anthersSeeds;
+	const anthersTimePool = TIMEPOOL_PER_SEED * anthersSeeds;
+	// Supports Anthers = your bandwidth (at cost) + the Foundation remainder. No payments inside.
+	const anthersSupportsAnthers = anthersCost - anthersTimePool;
+	const totalPayments = cardFee(creatorCost + anthersCost);
+	const toCreators = creatorCost + anthersTimePool;
+	const totalMonthly = creatorCost + anthersCost + totalPayments;
 
 	return (
-		<div className="mx-auto px-4 py-8" style={{ maxWidth: "88rem" }}>
-			{pendingPay && (
-				<SubscriptionPaymentModal
-					badge={pendingPay.badge}
-					planName={pendingPay.planName}
-					preview={pendingPay.preview}
-					onComplete={async () => {
-						const p = pendingPay;
-						setPendingPay(null);
-						setNotice(`You're on the ${p.planName} plan.`);
-						await refreshAccount(p.badge);
-					}}
-					onClose={() => setPendingPay(null)}
-				/>
-			)}
-			{cancelInfo && (
-				<CancelConfirmModal
-					planName={cancelInfo.planName}
-					revertUnix={cancelInfo.revertUnix}
-					processing={canceling}
-					onConfirm={confirmCancel}
-					onClose={() => setCancelInfo(null)}
-				/>
-			)}
-			<Reveal className="text-center mb-8">
-				<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
-					501(c)(3) non-profit
+		<div className="mx-auto px-4 py-8" style={{ maxWidth: "80rem" }}>
+			<Reveal className="mb-8 text-center">
+				<p className="my-2 text-xs uppercase tracking-wider text-base-content/40">
+					Non-profit · no profit-taking
 				</p>
-				<h1 className="text-3xl font-bold mb-2">Choose your plan</h1>
-				<p className="text-base-content/70 max-w-2xl mx-auto">
-					Pick a Badge plan. Every whole dollar is itemized below — here's exactly where it goes:
+				<h1 className="mb-4 text-3xl font-bold">Help grow what you love</h1>
+				<p className="mb-4 mx-auto max-w-2xl leading-relaxed text-base-content/70">
+					Basic access to Anthers is <strong>free for everyone, forever, no ads.</strong>
+				</p>
+				<p className="mx-auto max-w-2xl leading-relaxed text-base-content/70">
+					When you're ready for more, support on Anthers is all in the form of Seeds, each a
+					$3/month boost used to support Anthers or individual creators. Wherever they go, know that
+					you're directly supporting a non-profit platform and its creators, not shareholders or
+					data brokers.
 				</p>
 			</Reveal>
 
-			{/* Legend — what each line item on the cards means (so the cards stay clean) */}
+			{/* Outer card: the two support cards + one combined spend summary. */}
 			<Reveal
 				delay={120}
-				className="max-w-4xl mx-auto mb-8 rounded-xl border border-primary/25 bg-primary/5 px-10 py-4"
+				className="rounded-3xl border border-base-300 bg-base-100 p-4 shadow-lg sm:p-6"
 			>
-				{/* The wider gap from `sm` up is what the vine dividers stand in — at gap-4 the
-					vine is fractionally wider than the gap itself and crowds the next column. */}
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-10">
-					<div className="relative">
-						<LegendDivider />
-						<p className="font-semibold text-primary">Time Pool</p>
-						<p className="text-xs text-base-content/70 leading-snug">
-							Split across the creators you watch, by time spent.
-						</p>
+				<div className="grid items-stretch gap-4 lg:grid-cols-2">
+					<AnthersCard seeds={anthersSeeds} onChange={setAnthersSeeds} />
+					<CreatorCard seeds={creatorSeeds} onChange={setCreatorSeeds} />
+				</div>
+
+				{/* Combined monthly-spend breakdown (both steppers, summed) */}
+				<div className="mt-6 border-t border-base-300 pt-5">
+					<p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-base-content/50">
+						Your monthly support
+					</p>
+					<div className="mx-auto max-w-md space-y-1.5">
+						<BreakdownRow
+							dot="bg-success"
+							label="Direct to creators"
+							desc="Seeds you give creators — 100% to them"
+							amount={creatorCost}
+							strong
+						/>
+						<BreakdownRow
+							dot="bg-success"
+							label="Time Pool"
+							desc="via your Anthers Seeds, to creators by watch-time"
+							amount={anthersTimePool}
+							strong
+						/>
+						<BreakdownRow
+							dot="bg-info"
+							label="Supports Anthers"
+							desc="your bandwidth (at cost) + free access & programs"
+							amount={anthersSupportsAnthers}
+						/>
+						<BreakdownRow
+							dot="bg-base-content/30"
+							label="Payments"
+							desc="card & processing, at cost"
+							amount={totalPayments}
+						/>
 					</div>
-					<div className="relative">
-						<LegendDivider />
-						<p className="font-semibold text-primary">Seeds</p>
-						<p className="text-xs text-base-content/70 leading-snug">
-							$1 each — you direct them to specific creators, 100% to them.
-						</p>
+					<div className="mx-auto mt-3 flex max-w-md items-baseline justify-between border-t border-base-content/10 pt-3">
+						<span className="font-bold">Total</span>
+						<span className="text-xl font-bold tabular-nums">
+							{money(totalMonthly)}
+							<span className="text-sm font-normal text-base-content/50">/mo</span>
+						</span>
 					</div>
-					<div className="relative">
-						<LegendDivider />
-						<p className="font-semibold text-primary">Community Share</p>
-						<p className="text-xs text-base-content/70 leading-snug">
-							Your charitable contribution to the Anthers Foundation.
-						</p>
-					</div>
+					<p className="mx-auto mt-1 max-w-md text-center text-xs text-base-content/55">
+						<span className="font-semibold text-success">{money(toCreators)}</span> of that reaches
+						creators.
+					</p>
 				</div>
 			</Reveal>
 
-			{error && (
-				<div className="alert alert-error mb-6 max-w-lg mx-auto">
-					<span>{error}</span>
-				</div>
-			)}
-			{notice && (
-				<div className="alert alert-success mb-6 max-w-lg mx-auto">
-					<span>{notice}</span>
-				</div>
-			)}
-
-			{/* Plan cards — rendered synchronously from the static plan table, so there's
-				no fetch, no loading skeleton, and no empty-card flash on remount. */}
-			<Reveal
-				delay={240}
-				className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
-			>
-				{PLANS.map((plan) => (
-					<PlanCard
-						key={plan.id}
-						plan={plan}
-						isCurrent={currentBadge === plan.id}
-						// Signing up puts you on Free unless you pick otherwise, so a logged-out
-						// visitor sees it highlighted as where they'll land.
-						isDefault={!user && plan.id === "free"}
-						saving={saving === plan.id}
-						onChoose={() => handleChoose(plan.id)}
-					/>
-				))}
+			{/* One shared sign-up CTA below the outer card */}
+			<Reveal delay={200} className="mx-auto mt-10 max-w-xl text-center">
+				{signedIn ? (
+					<a href="/discover" className="btn btn-primary btn-lg px-8">
+						Find creators to support
+					</a>
+				) : (
+					<a href="/signup" className="btn btn-primary btn-lg px-8">
+						Create your free account
+					</a>
+				)}
+				<p className="mt-3 text-sm text-base-content/50">
+					Free forever — set up your support whenever you like.
+				</p>
 			</Reveal>
-
-			{!user && (
-				<p className="text-center text-sm text-base-content/50 mt-6">
-					<a href="/login?next=/subscribe" className="link link-primary">
-						Sign in
-					</a>{" "}
-					to choose a plan.
-				</p>
-			)}
-
-			{/* Bandwidth is a separate cheap wallet */}
-			<div className="mt-12 card bg-base-200/60 shadow-xl p-6 max-w-3xl mx-auto">
-				<h2 className="text-xl font-bold mb-4 text-center">
-					Pay only for the bandwidth you use, at cost
-				</h2>
-				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
-					We care about supporting creators and their audiences, not turning a profit on usage.
-				</p>
-				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
-					Every plan, even the Free tier, includes a free monthly bandwidth allowance. If you stream
-					past it, bandwidth is billed from a small prepaid wallet at our pass-through cost of{" "}
-					<strong>{fmt(BANDWIDTH_PER_GIB)}/GiB</strong>. There's no markup and no profit margin, and
-					if it ever becomes cheaper for us, those savings go to you.
-				</p>
-				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
-					To put things in perspective: The average YouTube user streams ~25 hours/month. With
-					1080p30 video, you could put <strong>$5.00</strong> in your bandwidth wallet and cover
-					that for <strong>well over a year</strong>.
-				</p>
-				<p className="mb-2 text-base-content/60 leading-relaxed text-center">
-					Turns out, it's really not that expensive to give everyone access to great media.
-				</p>
-				{/*<p className="mb-2 text-base-content/60 leading-relaxed text-center">*/}
-				{/*	Top up the*/}
-				{/*	wallet and manage auto-top-up from{" "}*/}
-				{/*	<a href="/subscription" className="link link-primary">*/}
-				{/*		Your Anthers*/}
-				{/*	</a>*/}
-				{/*	.*/}
-				{/*</p>*/}
-			</div>
 
 			{/* Why non-profit */}
-			<div className="mt-12 max-w-3xl mx-auto text-center pb-4">
-				<h2 className="text-xl font-bold mb-3">Why non-profit</h2>
-				<p className="text-sm text-base-content/60 leading-relaxed max-w-2xl mx-auto">
+			<div className="mx-auto mt-14 max-w-3xl pb-4 text-center">
+				<h2 className="mb-3 text-xl font-bold">Why non-profit</h2>
+				<p className="mx-auto max-w-2xl text-sm leading-relaxed text-base-content/60">
 					Anthers is a non-profit because the only way to guarantee that our platform always serves
 					creators is to make it legally impossible for it to act otherwise. Anthers cannot
 					distribute profits to insiders, cannot be acquired, and cannot have its mission diluted by
