@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * V4 economics schema (the "Big Rethink" model). A user holds an `account` and
- * *chooses* a Badge plan (free/root/sprout/petal/blossom) — the badge is stored
- * point-in-time, not derived from spend. Bandwidth is a separate at-cost wallet
- * with a per-tier free monthly allowance. This file also holds the shared
- * economics tables: time (attention) events, Seed allocations, pool
- * distributions, the bandwidth-wallet ledger, and creator gates.
+ * Support-model economics schema. A user holds an `account` with a count of
+ * **Anthers-Seeds** (`anthersSeeds`) — that count IS their rank (0 = free … 4 =
+ * blossom, "+" beyond) and, at $3 each, their Anthers subscription. Each
+ * Anthers-Seed covers the user's streaming (at cost, folded in — no wallet),
+ * funds the Time Pool, and leaves a remainder for the Foundation. Directed
+ * (creator) Seeds are tracked per-creator in `seed_allocations`. This file also
+ * holds the shared economics tables: time (attention) events, pool
+ * distributions, and creator gates.
  */
 import {
 	boolean,
@@ -22,12 +24,12 @@ import { users } from "./auth.js";
 import { posts } from "./content.js";
 
 /**
- * A user's standing account (one per user). `badge` is the *chosen* plan, held
- * point-in-time. `walletBalance` is the prepaid bandwidth wallet (dollars);
- * `bandwidthUsedGiB` is the running stream consumption this cycle, drawn against
- * the badge's free monthly allowance first and then the wallet. `seedTotal` is
- * the user's Seeds this cycle (badge-included + purchased). The per-tier free
- * allowance is derived from the badge (`BADGE_PLANS[badge].freeBwGiB`), not stored.
+ * A user's standing account (one per user). `anthersSeeds` is the count of
+ * Anthers-Seeds held (rank = min(anthersSeeds, 4); count also drives billing at
+ * $3/Seed). `creatorSeedTotal` is the $ of directed creator-Seeds this cycle
+ * (denormalised sum of `seed_allocations`). `bandwidthUsedGiB` is the running
+ * stream consumption this cycle, drawn at cost against the Seed allowance
+ * (15 GiB floor + 60 GiB per Anthers-Seed). There is no bandwidth wallet.
  */
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
@@ -35,16 +37,12 @@ export const accounts = pgTable("accounts", {
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	badge: text("badge").notNull().default("free"), // chosen plan: free|root|sprout|petal|blossom
-	walletBalance: numeric("wallet_balance").notNull().default("0.00"), // prepaid bandwidth wallet ($)
+	anthersSeeds: integer("anthers_seeds").notNull().default(0), // count → rank + $3/Seed billing
+	creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators this cycle
 	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed this cycle
-	seedTotal: numeric("seed_total").notNull().default("0.00"), // total Seeds this cycle ($ = qty × $1)
-	autoTopupEnabled: boolean("auto_topup_enabled").notNull().default(false),
-	autoTopupAmount: numeric("auto_topup_amount").notNull().default("5.00"), // $ added per auto top-up
-	autoTopupThreshold: numeric("auto_topup_threshold").notNull().default("2.00"), // top up when wallet < this
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage AFF
 	stripeCustomerId: text("stripe_customer_id").default(""),
-	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Billing subscription
+	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Anthers-Seed subscription
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
@@ -55,8 +53,8 @@ export const accounts = pgTable("accounts", {
 
 /**
  * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
- * consumption history/analytics. In V4 the badge is chosen, so this no longer
- * drives it; it simply records the plan the user held and what flowed that cycle.
+ * consumption history/analytics. Records the Anthers-Seeds held and what flowed:
+ * Time Pool (to creators), the Foundation remainder, and stream consumption.
  */
 export const accountCycles = pgTable(
 	"account_cycles",
@@ -66,37 +64,16 @@ export const accountCycles = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(), // YYYY-MM-01
-		badge: text("badge").notNull().default("free"), // badge held this cycle
-		planPrice: numeric("plan_price").notNull().default("0.00"), // badge price paid this cycle
+		anthersSeeds: integer("anthers_seeds").notNull().default(0), // Anthers-Seeds held this cycle
+		anthersSpend: numeric("anthers_spend").notNull().default("0.00"), // $ on Anthers-Seeds (count × $3)
+		creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
-		seedTotal: numeric("seed_total").notNull().default("0.00"), // Seeds this cycle ($)
-		communityShare: numeric("community_share").notNull().default("0.00"), // to the Foundation
+		foundation: numeric("foundation").notNull().default("0.00"), // Foundation remainder this cycle
 		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed
-		walletSpend: numeric("wallet_spend").notNull().default("0.00"), // bandwidth $ charged to wallet
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [uniqueIndex("uq_account_cycles_user_cycle").on(table.userId, table.billingCycle)],
-);
-
-/**
- * The bandwidth-wallet ledger. The wallet is a prepaid, at-cost balance that
- * covers streaming beyond the badge's free monthly allowance. `delta` is + on a
- * top-up/refund, − on a stream debit. Direct-download bandwidth is folded into
- * the purchase price (Digital AFF) and never touches this wallet.
- */
-export const walletLedger = pgTable(
-	"wallet_ledger",
-	{
-		id: serial("id").primaryKey(),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		delta: numeric("delta").notNull(), // + top-up/refund, − stream debit
-		reason: text("reason").notNull(), // "topup" | "auto_topup" | "stream" | "refund"
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [index("idx_wallet_user_date").on(table.userId, table.createdAt)],
 );
 
 export const attentionEvents = pgTable(
@@ -121,9 +98,8 @@ export const attentionEvents = pgTable(
 );
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
-// The DIRECTED portion of a user's Seeds — badge-included and purchased Seeds the
-// user has assigned to a creator (unlocking that creator's Seed Gates). Undirected
-// Seeds = account.seedTotal − Σ directed.
+// A user's DIRECTED Seeds — $3 Seeds the user has given to a creator (unlocking
+// that creator's Seed Gates). The account's `creatorSeedTotal` is the sum of these.
 export const seedAllocations = pgTable(
 	"seed_allocations",
 	{
@@ -158,7 +134,7 @@ export const poolDistributions = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
-		seedAmount: numeric("seed_amount").notNull().default("0.00"), // Seeds share
+		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-Seed share
 		attentionSeconds: integer("attention_seconds").default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -174,9 +150,10 @@ export const poolDistributions = pgTable(
 
 /**
  * Creator-defined gate ladder. `seed` rungs populate the Seed Access table
- * (`threshold` = dollars of Seeds given to the creator this cycle); `anthers_badge`
- * rungs are the Anthers Gate, unlocked by the viewer *currently holding* the
- * required badge (`threshold` = badge rank, 1 = root … 4 = blossom).
+ * (`threshold` = dollars of Seeds directed to the creator this cycle, in $3
+ * increments); `anthers_badge` rungs are the Anthers Gate, unlocked by the viewer
+ * *currently holding* the required rank (`threshold` = rank 1 = root … 4 = blossom,
+ * i.e. that many Anthers-Seeds).
  */
 export const creatorGates = pgTable(
 	"creator_gates",
@@ -186,7 +163,7 @@ export const creatorGates = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		gateType: text("gate_type").notNull().default("seed"), // "seed" | "anthers_badge"
-		threshold: numeric("threshold").notNull(), // seed: $ of Seeds; anthers_badge: badge rank 1–4
+		threshold: numeric("threshold").notNull(), // seed: $ of Seeds; anthers_badge: rank 1–4
 		label: text("label").notNull(),
 		description: text("description").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),
