@@ -4,18 +4,18 @@
  *
  * For each active account:
  * 1. Sum watch-time seconds per creator during the billing cycle.
- * 2. Time Pool = the chosen badge's Time Pool budget (BADGE_PLANS[badge].timePool),
- *    distributed proportionally by watch-time. A higher badge = a bigger pool, so
- *    all of that viewer's watch-time pays creators more — no per-item multiplier.
- * 3. Seeds: directed Seeds go 100% to the named creators. Undirected Seeds do NOT
- *    flow automatically in V4 — the user must direct them; the undirected remainder
- *    is settled to the subsidy pool at cycle end (see settle-cycle.ts).
+ * 2. Time Pool = $1.50 per Anthers-Seed the viewer holds, distributed
+ *    proportionally by watch-time. A higher rank = a bigger pool, so all of that
+ *    viewer's watch-time pays creators more — no per-item multiplier.
+ * 3. Seeds: directed Seeds go 100% to the named creators. There are no undirected
+ *    creator-Seeds — a Seed is either directed to a creator or held as an
+ *    Anthers-Seed (which funds the Time Pool + Foundation, settled in settle-cycle).
  * 4. Create/update PoolDistribution ledger entries.
  */
 
 import { db } from "@anthers/db";
 import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
-import { BADGE_PLANS, type Badge } from "@anthers/shared/constants";
+import { timePoolFor } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sum } from "drizzle-orm";
 
@@ -24,9 +24,9 @@ export interface DistributePoolData {
 	accountId?: number;
 }
 
-/** The Time Pool a user funds this cycle = their chosen badge's Time Pool budget. */
-function computeTimePoolAmount(badge: Badge): Decimal {
-	return new Decimal(BADGE_PLANS[badge]?.timePool ?? 0);
+/** The Time Pool a user funds this cycle = $1.50 per Anthers-Seed (subsidised at rank 0). */
+function computeTimePoolAmount(anthersSeeds: number): Decimal {
+	return new Decimal(timePoolFor(anthersSeeds));
 }
 
 function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
@@ -56,7 +56,7 @@ interface Dist {
 async function distributeForAccount(acct: {
 	id: number;
 	userId: number;
-	badge: string;
+	anthersSeeds: number;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
@@ -114,7 +114,7 @@ async function distributeForAccount(acct: {
 	}
 
 	// 3. Distribute the Time Pool proportionally by watch-time.
-	const timePool = computeTimePoolAmount(acct.badge as Badge);
+	const timePool = computeTimePoolAmount(acct.anthersSeeds);
 	if (totalAttention > 0 && timePool.gt(0)) {
 		for (const [creatorId, seconds] of attentionByCreator) {
 			const proportion = new Decimal(seconds).div(totalAttention);

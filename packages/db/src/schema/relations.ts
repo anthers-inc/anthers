@@ -28,7 +28,6 @@ import {
 	creatorGates,
 	poolDistributions,
 	seedAllocations,
-	walletLedger,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -59,7 +58,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Accounts & economics
 	account: one(accounts),
 	accountCycles: many(accountCycles),
-	walletLedger: many(walletLedger),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
 	seedAllocationsAsUser: many(seedAllocations, { relationName: "seedUser" }),
@@ -217,10 +215,6 @@ export const accountsRelations = relations(accounts, ({ one }) => ({
 
 export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({
 	user: one(users, { fields: [accountCycles.userId], references: [users.id] }),
-}));
-
-export const walletLedgerRelations = relations(walletLedger, ({ one }) => ({
-	user: one(users, { fields: [walletLedger.userId], references: [users.id] }),
 }));
 
 export const attentionEventsRelations = relations(attentionEvents, ({ one }) => ({

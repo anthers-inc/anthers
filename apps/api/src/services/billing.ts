@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Stripe Billing helpers for badge subscriptions: the price↔badge mapping, customer
- * creation, and webhook-driven reconciliation of a subscription's state onto the
- * user's account. The DB follows Stripe — subscription webhooks are the source of
- * truth for which badge is active.
+ * Stripe Billing helpers for the support model. A user's Anthers subscription is a
+ * single **$3 Anthers-Seed** price with a **quantity** = how many Anthers-Seeds
+ * they hold (their rank; unbounded, so Blossom+ works). The DB follows Stripe —
+ * subscription webhooks are the source of truth for the held Seed count. Directed
+ * creator-Seeds are a separate one-time "seeds" charge that tops up the user's
+ * creator-Seed balance (which they then direct to creators).
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, purchases, walletLedger } from "@anthers/db/schema";
-import { BADGE_PLANS, type Badge, CARD_FLAT, CARD_RATE } from "@anthers/shared/constants";
-import { badgePriceBreakdown } from "@anthers/shared/fees";
+import { accountCycles, accounts, purchases } from "@anthers/db/schema";
+import { CARD_FLAT, CARD_RATE, seedCost } from "@anthers/shared/constants";
+import { anthersSeedBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -19,15 +21,19 @@ function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Record this cycle's plan snapshot (badge + price decomposition + Seeds) for pool accounting. */
-async function snapshotCycle(userId: number, badge: Badge, seedTotal: number): Promise<void> {
-	const bd = badgePriceBreakdown(badge);
+/** Record this cycle's snapshot (Anthers-Seeds + their decomposition + creator-Seeds). */
+async function snapshotCycle(
+	userId: number,
+	anthersSeeds: number,
+	creatorSeedTotal: number,
+): Promise<void> {
+	const bd = anthersSeedBreakdown(anthersSeeds);
 	const values = {
-		badge,
-		planPrice: bd.price.toFixed(2),
+		anthersSeeds,
+		anthersSpend: new Decimal(seedCost(anthersSeeds)).toFixed(2),
 		timePool: bd.timePool.toFixed(2),
-		seedTotal: seedTotal.toFixed(2),
-		communityShare: bd.communityShare.toFixed(2),
+		creatorSeedTotal: creatorSeedTotal.toFixed(2),
+		foundation: Decimal.max(0, bd.foundation).toFixed(2),
 	};
 	await db
 		.insert(accountCycles)
@@ -38,25 +44,14 @@ async function snapshotCycle(userId: number, badge: Badge, seedTotal: number): P
 		});
 }
 
-const BADGE_PRICE_ENV: Record<Exclude<Badge, "free">, string> = {
-	root: "STRIPE_PRICE_ROOT",
-	sprout: "STRIPE_PRICE_SPROUT",
-	petal: "STRIPE_PRICE_PETAL",
-	blossom: "STRIPE_PRICE_BLOSSOM",
-};
-
-/** The configured recurring Stripe price for a paid badge (null for free/unset). */
-export function priceIdForBadge(badge: Badge): string | null {
-	if (badge === "free") return null;
-	return process.env[BADGE_PRICE_ENV[badge]]?.trim() || null;
+/** The configured recurring Stripe price for a single $3 Anthers-Seed (null if unset). */
+export function seedPriceId(): string | null {
+	return process.env.STRIPE_PRICE_SEED?.trim() || null;
 }
 
-/** Reverse of priceIdForBadge — names the badge from a subscription's price id. */
-export function badgeForPriceId(priceId: string): Badge | null {
-	for (const [badge, envKey] of Object.entries(BADGE_PRICE_ENV)) {
-		if (process.env[envKey]?.trim() === priceId) return badge as Badge;
-	}
-	return null;
+/** The Anthers-Seed count from a subscription's line item (its quantity). */
+export function anthersSeedsFromSub(sub: Stripe.Subscription): number {
+	return Math.max(0, sub.items.data[0]?.quantity ?? 0);
 }
 
 /** Create (once) and persist the user's Stripe customer id. */
@@ -86,20 +81,20 @@ export async function savedCardFor(
 }
 
 /**
- * Create a one-time charge that isn't a post purchase — a wallet top-up or a Seed buy.
- * The buyer pays the base amount plus card processing (Anthers keeps $0); a pending
- * `purchases` row is keyed by the PaymentIntent so the webhook can credit exactly once
- * on success. Returns the client secret to confirm inline.
+ * Create a one-time charge to buy directed creator-Seeds — the buyer pays the base
+ * amount plus card processing (on top, Anthers keeps $0). A pending `purchases`
+ * row is keyed by the PaymentIntent so the webhook credits exactly once on success.
+ * Returns the client secret to confirm inline.
  */
 export async function createOneTimeCharge(opts: {
 	userId: number;
 	customerId: string;
-	type: "wallet" | "seeds";
+	type: "seeds";
 	base: number;
 }): Promise<{ clientSecret: string | null; buyerTotal: string; processingFee: string }> {
 	if (!stripe) throw new Error("Stripe not configured");
 	const base = new Decimal(opts.base);
-	const processing = base.mul(CARD_RATE).plus(CARD_FLAT); // buyer covers the card fee
+	const processing = base.mul(CARD_RATE).plus(CARD_FLAT); // buyer covers the card fee, on top
 	const buyerTotal = base.plus(processing);
 	const pi = await stripe.paymentIntents.create({
 		amount: Math.round(buyerTotal.toNumber() * 100),
@@ -127,7 +122,7 @@ export async function createOneTimeCharge(opts: {
 }
 
 /**
- * Credit a completed non-post charge to the account (wallet balance or Seed total).
+ * Credit a completed creator-Seed purchase to the account's creator-Seed balance.
  * Called from the webhook after the pending purchase flips to completed, so it runs
  * exactly once per PaymentIntent.
  */
@@ -136,35 +131,26 @@ export async function applyCreditForPurchase(purchase: {
 	type: string;
 	amount: string;
 }): Promise<void> {
+	if (purchase.type !== "seeds") return;
 	const [acct] = await db
 		.select()
 		.from(accounts)
 		.where(eq(accounts.userId, purchase.buyerId))
 		.limit(1);
 	if (!acct) return;
-	if (purchase.type === "wallet") {
-		const next = (Number(acct.walletBalance) + Number(purchase.amount)).toFixed(2);
-		await db
-			.update(accounts)
-			.set({ walletBalance: next, updatedAt: new Date() })
-			.where(eq(accounts.id, acct.id));
-		await db
-			.insert(walletLedger)
-			.values({ userId: purchase.buyerId, delta: purchase.amount, reason: "topup" });
-	} else if (purchase.type === "seeds") {
-		const next = (Number(acct.seedTotal) + Number(purchase.amount)).toFixed(2);
-		await db
-			.update(accounts)
-			.set({ seedTotal: next, updatedAt: new Date() })
-			.where(eq(accounts.id, acct.id));
-		await snapshotCycle(purchase.buyerId, acct.badge as Badge, Number(next));
-	}
+	const next = (Number(acct.creatorSeedTotal) + Number(purchase.amount)).toFixed(2);
+	await db
+		.update(accounts)
+		.set({ creatorSeedTotal: next, updatedAt: new Date() })
+		.where(eq(accounts.id, acct.id));
+	await snapshotCycle(purchase.buyerId, acct.anthersSeeds, Number(next));
 }
 
 /**
  * Reconcile the account row to a subscription's current state — called from the
- * webhook on customer.subscription.created/updated/deleted. Applies the badge only
- * while the subscription is live; a canceled/expired subscription reverts to Free.
+ * webhook on customer.subscription.created/updated/deleted. The subscription's
+ * quantity is the user's Anthers-Seed count; a canceled/expired subscription
+ * reverts to 0 (Free).
  */
 export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promise<void> {
 	const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
@@ -182,7 +168,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		await db
 			.update(accounts)
 			.set({
-				badge: "free",
+				anthersSeeds: 0,
 				stripeSubscriptionId: "",
 				isActive: true,
 				canceledAt: null,
@@ -192,25 +178,14 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		return;
 	}
 
-	const priceId = sub.items.data[0]?.price?.id;
-	const badge = priceId ? badgeForPriceId(priceId) : null;
 	const active = sub.status === "active" || sub.status === "trialing";
+	const anthersSeeds = anthersSeedsFromSub(sub);
 	const periodEndUnix = sub.items.data[0]?.current_period_end;
-
-	// When a paid badge becomes active, set the plan's included Seeds — preserving any
-	// extra Seeds the user bought on top of their previous plan's included count.
-	let nextSeedTotal: number | null = null;
-	if (active && badge) {
-		const oldPlan = BADGE_PLANS[acct.badge as Badge];
-		const extras = Math.max(0, Number(acct.seedTotal) - oldPlan.seeds);
-		nextSeedTotal = BADGE_PLANS[badge].seeds + extras;
-	}
 
 	await db
 		.update(accounts)
 		.set({
-			...(active && badge ? { badge } : {}),
-			...(nextSeedTotal !== null ? { seedTotal: nextSeedTotal.toFixed(2) } : {}),
+			...(active ? { anthersSeeds } : {}),
 			stripeSubscriptionId: sub.id,
 			isActive: active,
 			...(periodEndUnix ? { currentPeriodEnd: new Date(periodEndUnix * 1000) } : {}),
@@ -219,7 +194,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		})
 		.where(eq(accounts.id, acct.id));
 
-	if (active && badge && nextSeedTotal !== null) {
-		await snapshotCycle(acct.userId, badge, nextSeedTotal);
+	if (active) {
+		await snapshotCycle(acct.userId, anthersSeeds, Number(acct.creatorSeedTotal));
 	}
 }

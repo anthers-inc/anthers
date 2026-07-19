@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Account & economics routes — V4 (the "Big Rethink" badge-plan model).
+ * Account & economics routes — the support model.
  *
- * A user holds an account and *chooses* a Badge plan (free/root/sprout/petal/
- * blossom). The plan's price decomposes into Time Pool + Seeds + Community Share.
- * Bandwidth is a separate at-cost wallet with a per-tier free monthly allowance.
- * This file also serves time (attention) tracking, pool distributions, Seed
- * allocation, the bandwidth wallet, creator gates, and content access.
- *
- * Note: Stripe payment movement is stubbed with TODO markers — the endpoints set
- * plans/balances directly until Stripe is wired.
+ * A user's account holds a count of **Anthers-Seeds** (`anthersSeeds`) — that
+ * count is their rank and, at $3 each, their Anthers subscription (a single $3
+ * Seed price × quantity in Stripe). Directed creator-Seeds are tracked in
+ * `seed_allocations`; `creatorSeedTotal` is the balance the user directs.
+ * Bandwidth is folded into the Anthers-Seeds — there is no wallet. This file also
+ * serves time (attention) tracking, pool distributions, creator gates, and access.
  */
 
 import { db } from "@anthers/db/client";
@@ -22,8 +20,8 @@ import {
 	seedAllocations,
 	users,
 } from "@anthers/db/schema";
-import { BADGE_PLANS, type Badge, badgeRank, SEED_PRICE } from "@anthers/shared/constants";
-import { badgePlanViews } from "@anthers/shared/fees";
+import { badgeRank, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
+import { rankViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -37,20 +35,23 @@ import { validateSession } from "../services/auth.js";
 import {
 	createOneTimeCharge,
 	ensureStripeCustomer,
-	priceIdForBadge,
 	savedCardFor,
+	seedPriceId,
 } from "../services/billing.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BADGE_IDS = ["free", "root", "sprout", "petal", "blossom"] as const;
+/** Max Anthers-Seeds a single subscription can hold (a sane upper bound; Blossom+ well within). */
+const MAX_ANTHERS_SEEDS = 100;
 
-/** The Badge plans, each with its price decomposition + what's included. Shared
- *  with the Subscribe page via `badgePlanViews()` so the two never drift. */
-const PLANS = badgePlanViews();
+/** The rank ladder (free … blossom), each with its Seed count + decomposition. Shared
+ *  with the Subscribe page via `rankViews()` so the two never drift. */
+const PLANS = rankViews();
 
-/** Minimum wallet top-up — a few dollars so the card fee isn't outsized. */
-const MIN_WALLET_TOPUP = 2;
+/** The plan view for an Anthers-Seed count (rank-capped at blossom for display). */
+function planFor(anthersSeeds: number) {
+	return PLANS[badgeRank(rankForSeeds(anthersSeeds))];
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,10 +66,6 @@ function currentPeriod() {
 		start: new Date(now.getFullYear(), now.getMonth(), 1),
 		end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
 	};
-}
-
-function money(n: number): string {
-	return (Math.round(n * 100) / 100).toFixed(2);
 }
 
 async function getAccount(userId: number) {
@@ -98,68 +95,68 @@ async function getOptionalUserId(c: any): Promise<number | null> {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const subscriptionRoutes = new Hono()
-	// ── Badge Plans ─────────────────────────────────────────────────────────────
+	// ── Rank ladder ─────────────────────────────────────────────────────────────
 	.get("/badges", (c) => c.json({ badges: PLANS }))
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		const badge: Badge = (acct?.badge as Badge) ?? "free";
 
 		if (!acct) {
 			return c.json({
 				account: {
-					badge: "free",
-					walletBalance: "0.00",
+					anthersSeeds: 0,
+					creatorSeedTotal: "0.00",
 					bandwidthUsedGiB: "0",
-					seedTotal: "0.00",
-					autoTopupEnabled: false,
 					isSelfHosting: false,
 					isActive: true,
 					currentPeriodStart: null,
 					currentPeriodEnd: null,
 					canceledAt: null,
 				},
-				badge: "free",
+				anthersSeeds: 0,
+				rank: "free",
 				plan: PLANS[0],
 			});
 		}
 
-		return c.json({ account: acct, badge, plan: PLANS[badgeRank(badge)] });
+		return c.json({
+			account: acct,
+			anthersSeeds: acct.anthersSeeds,
+			rank: rankForSeeds(acct.anthersSeeds),
+			plan: planFor(acct.anthersSeeds),
+		});
 	})
 
-	// ── Preview a plan choice (no charge) — powers the confirmation modal ──────
-	.get("/preview/:badge", requireAuth, async (c) => {
+	// ── Preview an Anthers-Seed count (no charge) — powers the confirmation modal ──
+	.get("/preview/:seeds", requireAuth, async (c) => {
 		const user = c.get("user");
-		const badgeParam = c.req.param("badge");
-		if (!BADGE_IDS.includes(badgeParam as (typeof BADGE_IDS)[number])) {
-			return c.json({ error: "Invalid plan" }, 400);
+		const target = Number(c.req.param("seeds"));
+		if (!Number.isInteger(target) || target < 0 || target > MAX_ANTHERS_SEEDS) {
+			return c.json({ error: "Invalid Anthers-Seed count" }, 400);
 		}
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		const acct = await ensureAccount(user.id);
 
-		// Cancel preview (→ Free): what you keep, and until when.
-		if (badgeParam === "free") {
-			if (!acct.stripeSubscriptionId || acct.badge === "free") {
-				return c.json({ error: "No paid plan to cancel" }, 400);
+		// Cancel preview (→ 0 / Free): what you keep, and until when.
+		if (target === 0) {
+			if (!acct.stripeSubscriptionId || acct.anthersSeeds === 0) {
+				return c.json({ error: "No Anthers-Seeds to cancel" }, 400);
 			}
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			return c.json({
 				isCancel: true,
-				badge: "free",
-				currentPlanName: PLANS[badgeRank(acct.badge as Badge)].name,
+				anthersSeeds: 0,
+				currentSeeds: acct.anthersSeeds,
 				nextBillingUnix: sub?.items.data[0]?.current_period_end ?? null,
 			});
 		}
 
-		const badge = badgeParam as Badge;
-		const price = BADGE_PLANS[badge].price;
-		const recurring = { amount: price.toFixed(2), interval: "month" as const };
+		const price = SEED_PRICE * target;
 
-		// The card on file — attached to the customer when a subscription's first
-		// payment is confirmed (save_default_payment_method).
+		// The card on file — attached when a subscription's first payment is confirmed.
 		let savedCard: { id: string; brand: string; last4: string } | null = null;
 		if (acct.stripeCustomerId) {
 			const pms = await stripe.paymentMethods.list({
@@ -179,13 +176,13 @@ const subscriptionRoutes = new Hono()
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			if (sub && (sub.status === "active" || sub.status === "trialing")) {
 				isChange = true;
-				const priceId = priceIdForBadge(badge);
+				const priceId = seedPriceId();
 				if (priceId) {
 					const preview = await stripe.invoices.createPreview({
 						customer: acct.stripeCustomerId ?? undefined,
 						subscription: sub.id,
 						subscription_details: {
-							items: [{ id: sub.items.data[0].id, price: priceId }],
+							items: [{ id: sub.items.data[0].id, price: priceId, quantity: target }],
 							proration_behavior: "always_invoice",
 						},
 					});
@@ -195,7 +192,6 @@ const subscriptionRoutes = new Hono()
 			}
 		}
 		if (!isChange) {
-			// New subscription: charged now, then again in a month.
 			const next = new Date();
 			next.setMonth(next.getMonth() + 1);
 			nextBillingUnix = Math.floor(next.getTime() / 1000);
@@ -203,30 +199,30 @@ const subscriptionRoutes = new Hono()
 
 		return c.json({
 			isCancel: false,
-			badge,
+			anthersSeeds: target,
 			isChange,
-			recurring,
+			recurring: { amount: price.toFixed(2), interval: "month" as const },
 			chargeNow,
 			nextBillingUnix,
 			savedCard,
 		});
 	})
 
-	// ── Subscribe to a Badge plan ────────────────────────────────────────────
+	// ── Set the Anthers-Seed count (subscribe / change / cancel) ─────────────
 	.post(
 		"/account",
 		requireAuth,
 		requireVerified,
-		zValidator("json", z.object({ badge: z.enum(BADGE_IDS) })),
+		zValidator("json", z.object({ anthersSeeds: z.number().int().min(0).max(MAX_ANTHERS_SEEDS) })),
 		async (c) => {
 			const user = c.get("user");
-			const { badge } = c.req.valid("json");
+			const { anthersSeeds } = c.req.valid("json");
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
 
-			// Downgrade to Free → cancel the subscription at period end (webhook reverts).
-			if (badge === "free") {
+			// Drop to 0 (Free) → cancel the subscription at period end (webhook reverts).
+			if (anthersSeeds === 0) {
 				if (acct.stripeSubscriptionId) {
 					await stripe.subscriptions.update(acct.stripeSubscriptionId, {
 						cancel_at_period_end: true,
@@ -239,17 +235,16 @@ const subscriptionRoutes = new Hono()
 				return c.json({ pending: false, account: await getAccount(user.id) });
 			}
 
-			const priceId = priceIdForBadge(badge);
-			if (!priceId) return c.json({ error: `No Stripe price configured for ${badge}` }, 500);
+			const priceId = seedPriceId();
+			if (!priceId) return c.json({ error: "No Stripe price configured for Anthers-Seeds" }, 500);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
 
-			// Changing plans on an active subscription → swap the price with proration; the
-			// saved card is charged for the difference and the webhook syncs the new badge.
+			// Changing the count on an active subscription → set the quantity with proration.
 			if (acct.stripeSubscriptionId) {
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
 				if (sub.status === "active" || sub.status === "trialing") {
 					await stripe.subscriptions.update(sub.id, {
-						items: [{ id: sub.items.data[0].id, price: priceId }],
+						items: [{ id: sub.items.data[0].id, price: priceId, quantity: anthersSeeds }],
 						proration_behavior: "always_invoice",
 						cancel_at_period_end: false,
 					});
@@ -258,14 +253,14 @@ const subscriptionRoutes = new Hono()
 			}
 
 			// New subscription → create it incomplete and hand back the confirmation secret so
-			// the user confirms the first payment inline; the webhook applies the badge on success.
+			// the user confirms the first payment inline; the webhook applies the count on success.
 			const sub = await stripe.subscriptions.create({
 				customer: customerId,
-				items: [{ price: priceId }],
+				items: [{ price: priceId, quantity: anthersSeeds }],
 				payment_behavior: "default_incomplete",
 				payment_settings: { save_default_payment_method: "on_subscription" },
 				expand: ["latest_invoice.confirmation_secret"],
-				metadata: { userId: String(user.id), badge },
+				metadata: { userId: String(user.id), anthersSeeds: String(anthersSeeds) },
 			});
 			await db
 				.update(accounts)
@@ -283,7 +278,7 @@ const subscriptionRoutes = new Hono()
 		},
 	)
 
-	// ── Buy additional Seeds (on top of the plan's included Seeds) ────────────
+	// ── Buy directed creator-Seeds (to give to creators) ─────────────────────
 	.post(
 		"/seeds/buy",
 		requireAuth,
@@ -295,7 +290,7 @@ const subscriptionRoutes = new Hono()
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 			await ensureAccount(user.id);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
-			// Charge quantity × $1 (+ card processing) via Stripe; the webhook credits on success.
+			// Charge quantity × $3 (+ card processing on top) via Stripe; the webhook credits on success.
 			const charge = await createOneTimeCharge({
 				userId: user.id,
 				customerId,
@@ -323,15 +318,15 @@ const subscriptionRoutes = new Hono()
 		},
 	)
 
-	// ── Cancel plan (revert to Free at period end) ───────────────────────────
+	// ── Cancel (revert to 0 / Free at period end) ────────────────────────────
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		if (!acct || acct.badge === "free") {
-			return c.json({ error: "No paid plan to cancel" }, 400);
+		if (!acct || acct.anthersSeeds === 0) {
+			return c.json({ error: "No Anthers-Seeds to cancel" }, 400);
 		}
-		// Cancel at period end — the plan keeps working until the cycle ends, then the
-		// subscription.deleted webhook reverts to Free.
+		// Cancel at period end — the Seeds keep working until the cycle ends, then the
+		// subscription.deleted webhook reverts to 0.
 		if (stripe && acct.stripeSubscriptionId) {
 			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: true });
 		}
@@ -340,12 +335,12 @@ const subscriptionRoutes = new Hono()
 		return c.json({ account: updated });
 	})
 
-	// ── Resume plan ──────────────────────────────────────────────────────────
+	// ── Resume ───────────────────────────────────────────────────────────────
 	.post("/resume", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
 		if (!acct?.canceledAt) {
-			return c.json({ error: "No canceled plan to resume" }, 400);
+			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
 		if (stripe && acct.stripeSubscriptionId) {
 			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: false });
@@ -363,76 +358,6 @@ const subscriptionRoutes = new Hono()
 			message: "Stripe billing portal not yet implemented",
 		});
 	})
-
-	// ── Bandwidth wallet ─────────────────────────────────────────────────────
-	.get("/wallet/balance", requireAuth, async (c) => {
-		const user = c.get("user");
-		const acct = await getAccount(user.id);
-		const badge: Badge = (acct?.badge as Badge) ?? "free";
-		return c.json({
-			balance: acct?.walletBalance ?? "0.00",
-			freeAllowanceGiB: BADGE_PLANS[badge].freeBwGiB,
-			usedGiB: acct?.bandwidthUsedGiB ?? "0",
-			autoTopupEnabled: acct?.autoTopupEnabled ?? false,
-			autoTopupAmount: acct?.autoTopupAmount ?? "5.00",
-			autoTopupThreshold: acct?.autoTopupThreshold ?? "2.00",
-		});
-	})
-
-	.post(
-		"/wallet/topup",
-		requireAuth,
-		requireVerified,
-		zValidator("json", z.object({ amount: z.number().min(MIN_WALLET_TOPUP) })),
-		async (c) => {
-			const user = c.get("user");
-			const { amount } = c.req.valid("json");
-			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
-			await ensureAccount(user.id);
-			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
-			// Charge the top-up (+ card processing) via Stripe; the webhook credits on success.
-			const charge = await createOneTimeCharge({
-				userId: user.id,
-				customerId,
-				type: "wallet",
-				base: amount,
-			});
-			return c.json({ ...charge, savedCard: await savedCardFor(customerId) });
-		},
-	)
-
-	.post(
-		"/wallet/auto-topup",
-		requireAuth,
-		zValidator(
-			"json",
-			z.object({
-				enabled: z.boolean(),
-				amount: z.number().min(MIN_WALLET_TOPUP).optional(),
-				threshold: z.number().min(0).optional(),
-			}),
-		),
-		async (c) => {
-			const user = c.get("user");
-			const { enabled, amount, threshold } = c.req.valid("json");
-			const acct = await ensureAccount(user.id);
-			await db
-				.update(accounts)
-				.set({
-					autoTopupEnabled: enabled,
-					...(amount != null ? { autoTopupAmount: money(amount) } : {}),
-					...(threshold != null ? { autoTopupThreshold: money(threshold) } : {}),
-					updatedAt: new Date(),
-				})
-				.where(eq(accounts.id, acct.id));
-			const updated = await getAccount(user.id);
-			return c.json({
-				autoTopupEnabled: updated?.autoTopupEnabled ?? false,
-				autoTopupAmount: updated?.autoTopupAmount ?? "5.00",
-				autoTopupThreshold: updated?.autoTopupThreshold ?? "2.00",
-			});
-		},
-	)
 
 	// ── Time (Attention) Events ──────────────────────────────────────────────
 	.post(
@@ -568,9 +493,8 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Seed Allocations ─────────────────────────────────────────────────────
-	// Budget is the total Seeds the user holds this cycle (included + purchased);
-	// 100% goes to creators. Included Seeds must be directed here — nothing flows
-	// automatically; undirected Seeds are settled to the subsidy pool at cycle end.
+	// The budget is the creator-Seed balance the user holds this cycle; 100% goes to
+	// creators. Directing a Seed to a creator clears that creator's Seed Gates.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
@@ -586,7 +510,7 @@ const subscriptionRoutes = new Hono()
 			.where(and(eq(seedAllocations.userId, user.id), eq(seedAllocations.billingCycle, cycle)));
 
 		const acct = await getAccount(user.id);
-		const budget = Number(acct?.seedTotal ?? 0);
+		const budget = Number(acct?.creatorSeedTotal ?? 0);
 		const allocated = result.reduce((sum, r) => sum + Number(r.seed.amount), 0);
 
 		return c.json({
@@ -638,7 +562,7 @@ const subscriptionRoutes = new Hono()
 			}
 
 			const acct = await getAccount(user.id);
-			const budget = Number(acct?.seedTotal ?? 0);
+			const budget = Number(acct?.creatorSeedTotal ?? 0);
 
 			if (budget <= 0) {
 				return c.json({ error: "You have no Seeds to give this cycle" }, 400);
@@ -757,7 +681,7 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				// seed gate: dollars of Seeds. anthers_badge gate: badge rank (1=root … 4=blossom).
+				// seed gate: dollars of Seeds ($3 increments). anthers_badge gate: rank (1=root … 4=blossom).
 				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
@@ -852,7 +776,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for creator page Badge/Seed display) ────────────────
+	// ── Creator Status (for creator page rank/Seed display) ─────────────────
 	.get("/creator-status/:username", async (c) => {
 		const { username } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -881,7 +805,7 @@ const subscriptionRoutes = new Hono()
 			});
 		}
 
-		// The viewer's held Badge (point-in-time) and their Seeds to this creator this cycle.
+		// The viewer's held rank (point-in-time) and their Seeds to this creator this cycle.
 		const badge = await heldBadge(currentUserId);
 		const cycle = getCurrentBillingCycle();
 		const [seed] = await db
@@ -898,7 +822,7 @@ const subscriptionRoutes = new Hono()
 
 		const seedAmount = seed?.amount ?? "0.00";
 
-		// Anthers Gate unlocks when the held badge rank clears the gate's rank; Seed Gate by Seeds given.
+		// Anthers Gate unlocks when the held rank clears the gate's rank; Seed Gate by Seeds given.
 		const unlockedGates = gates
 			.filter((g) => {
 				if (g.gateType === "anthers_badge") {
@@ -919,8 +843,7 @@ const subscriptionRoutes = new Hono()
 	// ── Payment Webhook ──────────────────────────────────────────────────────
 	.post("/webhook", async (c) => {
 		// TODO: Verify Stripe webhook signature
-		// TODO: Handle checkout.session.completed for plan subscription / Seed / wallet top-ups
-		// TODO: Handle payment_intent.succeeded/failed
+		// TODO: Handle subscription lifecycle (quantity = Anthers-Seeds) + Seed-buy PaymentIntents
 
 		return c.json({ received: true });
 	});

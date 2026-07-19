@@ -11,12 +11,13 @@
  */
 
 import {
-	BADGE_PLANS,
-	BANDWIDTH_PER_GIB,
-	type Badge,
 	DELIVERY_GIB_PER_HOUR,
+	rankLabel,
+	SEED_PRICE,
+	seedCost,
+	timePoolFor,
 } from "@anthers/shared/constants";
-import { badgePriceBreakdown } from "@anthers/shared/fees";
+import { anthersSeedBreakdown } from "@anthers/shared/fees";
 import { eq, like, sql } from "drizzle-orm";
 import {
 	accountCycles,
@@ -540,31 +541,26 @@ const TEST_USERS: SeedUser[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * The V4 Badge plan each seed user has CHOSEN (point-in-time, not derived from spend),
- * spread across all five plans so the demo exercises free/root/sprout/petal/blossom.
- * Creators also hold an account (they consume too). `seedExtra` models Seeds purchased
- * on top of the plan's included Seeds; `walletBalance` is the prepaid bandwidth wallet ($).
+ * Each seed user's Anthers-Seed count (their rank, held point-in-time) and the
+ * directed creator-Seeds they hold ($3 each) — spread to exercise the ranks
+ * free (0) / root (1) / sprout (2) / petal (3) / blossom (4). Creators also hold
+ * an account (they consume too).
  */
-const ACCOUNT_CONFIG: Record<string, { badge: Badge; seedExtra?: number; walletBalance: number }> =
-	{
-		// Creators — spread to cover every badge.
-		[`${SEED_PREFIX}novapixel`]: { badge: "petal", walletBalance: 6 },
-		[`${SEED_PREFIX}sagemoreno`]: { badge: "root", walletBalance: 3 },
-		[`${SEED_PREFIX}fluxbeats`]: { badge: "sprout", walletBalance: 4 },
-		[`${SEED_PREFIX}marisol`]: { badge: "root", walletBalance: 3 },
-		[`${SEED_PREFIX}hexbound`]: { badge: "free", walletBalance: 1.5 },
-		// Test subscribers.
-		[`${SEED_PREFIX}casey`]: { badge: "blossom", seedExtra: 2, walletBalance: 12 },
-		[`${SEED_PREFIX}jordan`]: { badge: "free", walletBalance: 2 },
-	};
+const ACCOUNT_CONFIG: Record<string, { anthersSeeds: number; creatorSeeds?: number }> = {
+	// Creators — spread to cover every rank.
+	[`${SEED_PREFIX}novapixel`]: { anthersSeeds: 3, creatorSeeds: 3 },
+	[`${SEED_PREFIX}sagemoreno`]: { anthersSeeds: 1, creatorSeeds: 1 },
+	[`${SEED_PREFIX}fluxbeats`]: { anthersSeeds: 2, creatorSeeds: 2 },
+	[`${SEED_PREFIX}marisol`]: { anthersSeeds: 1, creatorSeeds: 1 },
+	[`${SEED_PREFIX}hexbound`]: { anthersSeeds: 0 },
+	// Test subscribers.
+	[`${SEED_PREFIX}casey`]: { anthersSeeds: 4, creatorSeeds: 6 },
+	[`${SEED_PREFIX}jordan`]: { anthersSeeds: 0, creatorSeeds: 1 },
+};
 
-/** Resolve a user's account config, defaulting to the Free plan. */
-function accountConfig(username: string): {
-	badge: Badge;
-	seedExtra?: number;
-	walletBalance: number;
-} {
-	return ACCOUNT_CONFIG[username] ?? { badge: "free", walletBalance: 2 };
+/** Resolve a user's account config, defaulting to Free (0 Anthers-Seeds). */
+function accountConfig(username: string): { anthersSeeds: number; creatorSeeds?: number } {
+	return ACCOUNT_CONFIG[username] ?? { anthersSeeds: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -631,32 +627,27 @@ function buildAttentionEvents(
 }
 
 /**
- * Insert a user's V4 `account` (the chosen Badge plan, held point-in-time) and its
- * current-cycle `account_cycle` snapshot. The cycle's plan-price/Time-Pool/Community-
- * Share are derived from the plan via `badgePriceBreakdown`; stream bandwidth beyond
- * the plan's free monthly allowance spills to the prepaid wallet (`walletSpend`).
+ * Insert a user's `account` (their Anthers-Seed count, held point-in-time) and its
+ * current-cycle `account_cycle` snapshot. The cycle's Time Pool and Foundation
+ * remainder are derived from the Anthers-Seed count and stream usage via
+ * `anthersSeedBreakdown`. Bandwidth is folded into the Anthers-Seeds — no wallet.
  */
 async function seedAccountAndCycle(params: {
 	userId: number;
-	badge: Badge;
-	seedTotal: number;
-	walletBalance: number;
+	anthersSeeds: number;
+	creatorSeedTotal: number;
 	bandwidthUsedGiB: number;
 	cycleStart: Date;
 	cycleEnd: Date;
 	billingCycle: string;
 }) {
-	const breakdown = badgePriceBreakdown(params.badge);
-	const freeBwGiB = BADGE_PLANS[params.badge].freeBwGiB;
-	const overageGiB = Math.max(0, params.bandwidthUsedGiB - freeBwGiB);
-	const walletSpend = Math.round(overageGiB * BANDWIDTH_PER_GIB * 100) / 100;
+	const bd = anthersSeedBreakdown(params.anthersSeeds, { bandwidthGiB: params.bandwidthUsedGiB });
 
 	try {
 		await db.insert(accounts).values({
 			userId: params.userId,
-			badge: params.badge,
-			seedTotal: params.seedTotal.toFixed(2),
-			walletBalance: params.walletBalance.toFixed(2),
+			anthersSeeds: params.anthersSeeds,
+			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
 			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
 			isActive: true,
 			currentPeriodStart: params.cycleStart,
@@ -669,13 +660,12 @@ async function seedAccountAndCycle(params: {
 		await db.insert(accountCycles).values({
 			userId: params.userId,
 			billingCycle: params.billingCycle,
-			badge: params.badge,
-			planPrice: breakdown.price.toFixed(2),
-			timePool: breakdown.timePool.toFixed(2),
-			seedTotal: params.seedTotal.toFixed(2),
-			communityShare: breakdown.communityShare.toFixed(2),
+			anthersSeeds: params.anthersSeeds,
+			anthersSpend: seedCost(params.anthersSeeds).toFixed(2),
+			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
+			timePool: bd.timePool.toFixed(2),
+			foundation: Math.max(0, bd.foundation.toNumber()).toFixed(2),
 			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
-			walletSpend: walletSpend.toFixed(2),
 		});
 	} catch {
 		// unique constraint on (userId, billingCycle)
@@ -767,18 +757,16 @@ async function seed() {
 		console.log(`  Created ${creator.username} (id: ${inserted.id})`);
 	}
 
-	// ---- 1b. Creator accounts (creators choose a Badge plan as consumers too) ----
+	// ---- 1b. Creator accounts (creators hold Anthers-Seeds as consumers too) ----
 	console.log("Creating creator accounts...");
 	for (const creator of CREATORS) {
 		const userId = createdUserIds[creator.username];
 		if (!userId) continue;
 		const cfg = accountConfig(creator.username);
-		const seedTotal = BADGE_PLANS[cfg.badge].seeds + (cfg.seedExtra ?? 0);
 		await seedAccountAndCycle({
 			userId,
-			badge: cfg.badge,
-			seedTotal,
-			walletBalance: cfg.walletBalance,
+			anthersSeeds: cfg.anthersSeeds,
+			creatorSeedTotal: (cfg.creatorSeeds ?? 0) * SEED_PRICE,
 			bandwidthUsedGiB: 0, // creators' own consumption isn't modelled in the seed
 			cycleStart,
 			cycleEnd,
@@ -1284,11 +1272,9 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Account (V4: chosen Badge plan + prepaid bandwidth wallet) --
+		// -- Account (Anthers-Seeds; bandwidth folded in, no wallet) --
 		const cfg = accountConfig(tu.username);
-		const plan = BADGE_PLANS[cfg.badge];
-		// Seeds this cycle = the plan's included Seeds plus any purchased on top.
-		const seedTotal = plan.seeds + (cfg.seedExtra ?? 0);
+		const creatorSeedTotal = (cfg.creatorSeeds ?? 0) * SEED_PRICE;
 		// Stream bandwidth consumed this cycle ≈ total watch-hours × delivery rate.
 		const totalWatchSeconds = Object.values(tu.attentionTargets).reduce(
 			(sum, t) => sum + t.seconds,
@@ -1298,16 +1284,15 @@ async function seed() {
 			Math.round((totalWatchSeconds / 3600) * DELIVERY_GIB_PER_HOUR * 100) / 100;
 		await seedAccountAndCycle({
 			userId,
-			badge: cfg.badge,
-			seedTotal,
-			walletBalance: cfg.walletBalance,
+			anthersSeeds: cfg.anthersSeeds,
+			creatorSeedTotal,
 			bandwidthUsedGiB,
 			cycleStart,
 			cycleEnd,
 			billingCycle,
 		});
 		console.log(
-			`    account: ${cfg.badge} (seeds $${seedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
+			`    account: ${rankLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
 		);
 
 		// -- Attention events --
@@ -1327,24 +1312,24 @@ async function seed() {
 		console.log(`    ${totalEvents} attention events`);
 
 		// -- Pool distributions + directed Seeds --
-		// V4: the Time Pool is the plan's fixed dollar budget, distributed to watched
-		// creators by watch-time; Seeds are the user's per-cycle Seed dollars, directed
-		// to creators in whole-$ units (the undirected remainder falls back to watch-time).
-		const timePool = plan.timePool;
-		if (timePool > 0 || seedTotal > 0) {
+		// The Time Pool is $1.50 per Anthers-Seed, distributed to watched creators by
+		// watch-time; directed creator-Seeds are the user's creator-Seed dollars, spread
+		// to creators in whole-$3 units by watch-time (any remainder to the top creator).
+		const timePool = timePoolFor(cfg.anthersSeeds);
+		if (timePool > 0 || creatorSeedTotal > 0) {
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 
-			// Directed Seeds in whole-$ units by watch-time; the undirected remainder by time.
+			// Directed Seeds in whole-$3 units by watch-time; the remainder spread by time.
 			const directed = new Map<string, number>();
 			let directedTotal = 0;
 			for (const [creatorUsername, target] of entries) {
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
-				const amt = Math.floor(seedTotal * proportion); // $1 increments
+				const amt = Math.floor((creatorSeedTotal * proportion) / SEED_PRICE) * SEED_PRICE; // $3 units
 				directed.set(creatorUsername, amt);
 				directedTotal += amt;
 			}
-			const undirected = seedTotal - directedTotal;
+			const undirected = creatorSeedTotal - directedTotal;
 
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
@@ -1440,7 +1425,7 @@ async function seed() {
 			Object.values(POSTS_BY_CREATOR).flat().length
 		} posts (works + stream), grouped into collections`,
 	);
-	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).badge !== "free");
+	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).anthersSeeds > 0);
 	console.log(
 		`  ${TEST_USERS.length} test users (${paidTestUsers.length} paid, ${TEST_USERS.length - paidTestUsers.length} free)`,
 	);
@@ -1449,7 +1434,7 @@ async function seed() {
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
 		console.log(
-			`    ${tu.username} — ${accountConfig(tu.username).badge} plan — ${tu.displayName}`,
+			`    ${tu.username} — ${rankLabel(accountConfig(tu.username).anthersSeeds)} rank — ${tu.displayName}`,
 		);
 	}
 	for (const c of CREATORS) {
