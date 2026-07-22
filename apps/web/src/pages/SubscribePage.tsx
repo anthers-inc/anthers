@@ -465,8 +465,8 @@ export default function SubscribePage() {
 					Basic access to Anthers is <strong>free for everyone, forever, no ads.</strong>
 				</p>
 				<p className="mx-auto max-w-2xl leading-relaxed text-base-content/70">
-					When you're ready for more, support on Anthers is all in the form of Seeds, each a
-					$3/month boost used to support Anthers or individual creators. Wherever they go, know that
+					When you're ready for more, support on Anthers is all in the form of Seeds, each
+					$3/month, used to support Anthers or individual creators. Wherever they go, know that
 					you're directly supporting a non-profit platform and its creators, not shareholders or
 					data brokers.
 				</p>
