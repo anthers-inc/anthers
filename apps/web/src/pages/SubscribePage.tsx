@@ -31,6 +31,7 @@ const SEED_PRICE = 3; // $/month per Seed
 const FREE_GIB = 15; // free streaming floor at 0 Seeds (generous, to avoid a paywall cliff)
 const GIB_PER_SEED = 60; // added streaming allowance per Seed (never binds for ~anyone past Seed 1)
 const TIMEPOOL_PER_SEED = 1.5; // $/month to creators, per Seed
+const FREE_TIMEPOOL = 0.05; // $/month to creators at 0 Seeds, subsidized by the Foundation
 const MAX_SEEDS = 10; // stepper cap; past 4 the top badge gains a "+"
 
 // Anthers ranks map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
@@ -354,7 +355,7 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 					<BenefitRow icon="🌻" label="Time Pool">
 						{seeds === 0 ? (
 							<span>
-								<strong>$0.05</strong>/mo → creators, subsidized by the Foundation
+								<strong>{money(FREE_TIMEPOOL)}</strong>/mo → creators, subsidized by the Foundation
 							</span>
 						) : (
 							<span>
@@ -464,11 +465,11 @@ export default function SubscribePage() {
 				<p className="mb-4 mx-auto max-w-2xl leading-relaxed text-base-content/70">
 					Basic access to Anthers is <strong>free for everyone, forever, no ads.</strong>
 				</p>
-				<p className="mx-auto max-w-2xl leading-relaxed text-base-content/70">
-					When you're ready for more, support on Anthers is all in the form of Seeds, each
-					$3/month, used to support Anthers or individual creators. Wherever they go, know that
-					you're directly supporting a non-profit platform and its creators, not shareholders or
-					data brokers.
+				<p className="mx-auto max-w-5xl leading-relaxed text-base-content/70">
+					When you're ready for more, support on Anthers is all in the form of Seeds, each $3/month,
+					used to support Anthers or individual creators. Wherever they go, know that you're
+					directly supporting a non-profit platform and its creators, not shareholders or data
+					brokers.
 				</p>
 			</Reveal>
 
@@ -498,7 +499,11 @@ export default function SubscribePage() {
 						<BreakdownRow
 							dot="bg-success"
 							label="Time Pool"
-							desc="via your Anthers Seeds, to creators by watch-time"
+							desc={
+								anthersSeeds === 0
+									? `the Foundation sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
+									: "via your Anthers Seeds, to creators by watch-time"
+							}
 							amount={anthersTimePool}
 							strong
 						/>
@@ -523,8 +528,18 @@ export default function SubscribePage() {
 						</span>
 					</div>
 					<p className="mx-auto mt-1 max-w-md text-center text-xs text-base-content/55">
-						<span className="font-semibold text-success">{money(toCreators)}</span> of that reaches
-						creators.
+						{totalMonthly > 0 ? (
+							<>
+								<span className="font-semibold text-success">{money(toCreators)}</span> of that
+								reaches creators.
+							</>
+						) : (
+							<>
+								You pay $0 — the Foundation still sends{" "}
+								<span className="font-semibold text-success">{money(FREE_TIMEPOOL)}</span>/mo to
+								creators for you.
+							</>
+						)}
 					</p>
 				</div>
 			</Reveal>
