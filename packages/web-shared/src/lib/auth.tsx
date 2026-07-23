@@ -14,6 +14,7 @@ export interface User {
 	displayName: string | null;
 	bio: string | null;
 	isCreator: boolean | null;
+	isAdmin: boolean | null;
 	avatar: string | null;
 	headerImage: string | null;
 	websiteUrl: string | null;

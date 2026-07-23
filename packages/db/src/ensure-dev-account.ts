@@ -15,6 +15,7 @@
  *   DEV_ACCOUNT_EMAIL      your prod email
  *   DEV_ACCOUNT_PASSWORD   your prod password
  *   DEV_ACCOUNT_CREATOR    optional, "true"/"false" (default true)
+ *   DEV_ACCOUNT_ADMIN      optional, "true"/"false" (default false) — ops console
  *
  * If any of the three required vars are unset, this is a silent no-op so a fresh
  * clone without them configured still runs `make dev` cleanly. It also never
@@ -37,6 +38,8 @@ async function main() {
 	// Default the bootstrap account to a creator so it can exercise creator
 	// tooling; set DEV_ACCOUNT_CREATOR=false for a plain consumer account.
 	const isCreator = (process.env.DEV_ACCOUNT_CREATOR ?? "true").toLowerCase() !== "false";
+	// Admin (the ops console) is opt-in — off unless you set DEV_ACCOUNT_ADMIN=true.
+	const isAdmin = (process.env.DEV_ACCOUNT_ADMIN ?? "false").toLowerCase() === "true";
 
 	if (!username || !email || !password) {
 		console.log(
@@ -65,11 +68,12 @@ async function main() {
 		passwordHash,
 		displayName: username,
 		isCreator,
+		isAdmin,
 		emailVerified: true, // skip the verification wall for a login you actually use
 	});
 
 	console.log(
-		`${TAG} created "${username}" (${email}) — email pre-verified, creator=${isCreator}.`,
+		`${TAG} created "${username}" (${email}) — email pre-verified, creator=${isCreator}, admin=${isAdmin}.`,
 	);
 }
 

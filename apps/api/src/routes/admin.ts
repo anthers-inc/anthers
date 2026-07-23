@@ -1,0 +1,208 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Admin / operations console API — read-only platform telemetry for operators.
+ *
+ * Every route is gated by requireAuth + requireAdmin (a 404 to non-admins, so
+ * the surface isn't advertised). Data comes from our own Postgres: activity
+ * counts + a 14-day series, media transcode state, and pg-boss queue health
+ * (the `pgboss` schema). Live-log tailing and DigitalOcean spend deliberately
+ * live in the DO dashboard, deep-linked from the frontend rather than proxied
+ * here — a thin console over DO's own monitoring, per the task's steer.
+ *
+ * Read-only by design. Mutating controls (retry/cancel a job) and alerting are
+ * follow-ons; nothing here writes.
+ */
+
+import { db } from "@anthers/db/client";
+import { sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { QUEUES } from "../jobs/queue.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
+
+// pg-boss job states (v12). We surface the live ones that signal health;
+// `completed` rows are pruned by keep_until, so their count is only ever recent.
+const JOB_STATES = ["created", "retry", "active", "completed", "cancelled", "failed"] as const;
+type JobState = (typeof JOB_STATES)[number];
+
+// postgres-js returns the rows array directly from db.execute(); other drivers
+// wrap them in { rows }. Normalize so this is driver-agnostic.
+function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
+	if (Array.isArray(res)) return res as T[];
+	const maybe = (res as { rows?: T[] } | null)?.rows;
+	return Array.isArray(maybe) ? maybe : [];
+}
+
+const adminRoutes = new Hono()
+	.use("*", requireAuth)
+	.use("*", requireAdmin)
+
+	// ── Activity ────────────────────────────────────────────────────────────
+	// Platform counts + a 14-day sign-up/post series for the chart. One round
+	// trip: every figure is a scalar subquery. `::int` keeps them JS numbers.
+	.get("/activity", async (c) => {
+		const summaryRes = await db.execute(sql`
+			SELECT
+				(SELECT count(*) FROM users)::int AS users_total,
+				(SELECT count(*) FROM users WHERE is_creator)::int AS users_creators,
+				(SELECT count(*) FROM users WHERE is_admin)::int AS users_admins,
+				(SELECT count(*) FROM users WHERE created_at >= now() - interval '24 hours')::int AS users_new_24h,
+				(SELECT count(*) FROM users WHERE created_at >= now() - interval '7 days')::int AS users_new_7d,
+				(SELECT count(*) FROM posts)::int AS posts_total,
+				(SELECT count(*) FROM posts WHERE is_published)::int AS posts_published,
+				(SELECT count(*) FROM posts WHERE created_at >= now() - interval '24 hours')::int AS posts_new_24h,
+				(SELECT count(*) FROM posts WHERE created_at >= now() - interval '7 days')::int AS posts_new_7d,
+				(SELECT count(*) FROM comments WHERE created_at >= now() - interval '24 hours')::int AS comments_new_24h,
+				(SELECT count(*) FROM comments WHERE created_at >= now() - interval '7 days')::int AS comments_new_7d,
+				(SELECT count(*) FROM content_items)::int AS uploads_total
+		`);
+		const s = rowsOf<Record<string, number>>(summaryRes)[0] ?? {};
+
+		const seriesRes = await db.execute(sql`
+			SELECT
+				to_char(d.day, 'YYYY-MM-DD') AS date,
+				COALESCE(u.n, 0)::int AS signups,
+				COALESCE(p.n, 0)::int AS posts
+			FROM generate_series((now() - interval '13 days')::date, now()::date, interval '1 day') AS d(day)
+			LEFT JOIN (SELECT created_at::date AS day, count(*) AS n FROM users GROUP BY 1) u ON u.day = d.day
+			LEFT JOIN (SELECT created_at::date AS day, count(*) AS n FROM posts GROUP BY 1) p ON p.day = d.day
+			ORDER BY d.day
+		`);
+		const series = rowsOf<{ date: string; signups: number; posts: number }>(seriesRes);
+
+		return c.json({
+			users: {
+				total: s.users_total ?? 0,
+				creators: s.users_creators ?? 0,
+				admins: s.users_admins ?? 0,
+				new24h: s.users_new_24h ?? 0,
+				new7d: s.users_new_7d ?? 0,
+			},
+			posts: {
+				total: s.posts_total ?? 0,
+				published: s.posts_published ?? 0,
+				new24h: s.posts_new_24h ?? 0,
+				new7d: s.posts_new_7d ?? 0,
+			},
+			comments: {
+				new24h: s.comments_new_24h ?? 0,
+				new7d: s.comments_new_7d ?? 0,
+			},
+			uploads: { total: s.uploads_total ?? 0 },
+			series,
+		});
+	})
+
+	// ── Jobs & queue health ─────────────────────────────────────────────────
+	// pg-boss queue state (the `pgboss` schema) + our own media transcodes.
+	.get("/jobs", async (c) => {
+		// pg-boss creates its schema on first start; guard so a DB that has never
+		// run the worker (e.g. a fresh test DB) returns unavailable, not a 500.
+		const existsRes = await db.execute(
+			sql`SELECT to_regclass('pgboss.job') IS NOT NULL AS present`,
+		);
+		const pgbossPresent = rowsOf<{ present: boolean }>(existsRes)[0]?.present === true;
+
+		// Seed the queue list from our known queues so an idle-but-healthy queue
+		// (all jobs completed + pruned → zero rows) still shows up.
+		const queues = new Map<string, Record<JobState, number>>();
+		const blank = (): Record<JobState, number> =>
+			Object.fromEntries(JOB_STATES.map((st) => [st, 0])) as Record<JobState, number>;
+		for (const name of Object.values(QUEUES)) queues.set(name, blank());
+
+		let failures: { queue: string; state: string; createdOn: string; error: string }[] = [];
+
+		if (pgbossPresent) {
+			const stateRes = await db.execute(sql`
+				SELECT name, state::text AS state, count(*)::int AS n
+				FROM pgboss.job
+				GROUP BY name, state
+			`);
+			for (const row of rowsOf<{ name: string; state: string; n: number }>(stateRes)) {
+				if (!queues.has(row.name)) queues.set(row.name, blank());
+				const bucket = queues.get(row.name);
+				if (bucket && (JOB_STATES as readonly string[]).includes(row.state)) {
+					bucket[row.state as JobState] = row.n;
+				}
+			}
+
+			const failRes = await db.execute(sql`
+				SELECT name, state::text AS state, created_on, output
+				FROM pgboss.job
+				WHERE state IN ('failed', 'cancelled')
+				ORDER BY COALESCE(completed_on, created_on) DESC
+				LIMIT 25
+			`);
+			failures = rowsOf<{
+				name: string;
+				state: string;
+				created_on: string;
+				output: unknown;
+			}>(failRes).map((r) => ({
+				queue: r.name,
+				state: r.state,
+				createdOn: r.created_on,
+				error: extractError(r.output),
+			}));
+		}
+
+		const queueHealth = [...queues.entries()]
+			.map(([name, counts]) => ({ name, ...counts }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+
+		// Our own media transcode table (video/audio processing).
+		const transcodeStateRes = await db.execute(sql`
+			SELECT status, count(*)::int AS n FROM transcoding_jobs GROUP BY status
+		`);
+		const transcodeCounts: Record<string, number> = {};
+		for (const r of rowsOf<{ status: string; n: number }>(transcodeStateRes)) {
+			transcodeCounts[r.status] = r.n;
+		}
+
+		const stuckRes = await db.execute(sql`
+			SELECT id, media_type, status, error_message, updated_at
+			FROM transcoding_jobs
+			WHERE status = 'failed'
+			   OR (status = 'processing' AND updated_at < now() - interval '30 minutes')
+			ORDER BY updated_at DESC
+			LIMIT 25
+		`);
+		const transcodeProblems = rowsOf<{
+			id: number;
+			media_type: string;
+			status: string;
+			error_message: string | null;
+			updated_at: string;
+		}>(stuckRes).map((r) => ({
+			id: r.id,
+			mediaType: r.media_type,
+			status: r.status,
+			// A processing row this old hasn't heartbeat in 30m — flag it as stuck.
+			stuck: r.status === "processing",
+			error: r.error_message ?? "",
+			updatedAt: r.updated_at,
+		}));
+
+		return c.json({
+			pgboss: { available: pgbossPresent, queues: queueHealth, failures },
+			transcodes: { counts: transcodeCounts, problems: transcodeProblems },
+		});
+	});
+
+/** Pull a readable message out of a pg-boss job's `output` jsonb (shape varies). */
+function extractError(output: unknown): string {
+	if (!output) return "";
+	if (typeof output === "string") return output;
+	if (typeof output === "object") {
+		const o = output as Record<string, unknown>;
+		if (typeof o.message === "string") return o.message;
+		if (typeof o.value === "string") return o.value;
+		try {
+			return JSON.stringify(output).slice(0, 500);
+		} catch {
+			return "";
+		}
+	}
+	return String(output);
+}
+
+export { adminRoutes };

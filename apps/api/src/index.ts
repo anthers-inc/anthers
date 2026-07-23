@@ -8,6 +8,7 @@ import { ensureQueueReady } from "./jobs/queue.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { allowedOrigins } from "./origins.js";
 import { accountRoutes } from "./routes/accounts.js";
+import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
@@ -57,7 +58,8 @@ const app = new Hono()
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/jams", jamRoutes)
-	.route("/api/waitlist", waitlistRoutes);
+	.route("/api/waitlist", waitlistRoutes)
+	.route("/api/admin", adminRoutes);
 
 // Start the job queue when running as the server (not when imported by tests).
 // import.meta.main is true only when this file is the entry point.

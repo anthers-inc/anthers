@@ -4,12 +4,14 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import PublicShell from "./components/layout/PublicShell";
+import AdminRoute from "./components/ui/AdminRoute";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
 import { SiteGatePanel } from "./components/ui/SiteGate";
 import StudioRedirect from "./components/ui/StudioRedirect";
 import AboutPage from "./pages/AboutPage";
+import AdminPage from "./pages/AdminPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
 // Authenticated home page
 import AuthenticatedHomePage from "./pages/AuthenticatedHomePage";
@@ -159,6 +161,16 @@ export default function App() {
 						<ProtectedRoute>
 							<SettingsPage />
 						</ProtectedRoute>
+					}
+				/>
+				{/* Admin / operations console — platform operators only (AdminRoute
+					mirrors the API's requireAdmin; non-admins are bounced home). */}
+				<Route
+					path="/admin"
+					element={
+						<AdminRoute>
+							<AdminPage />
+						</AdminRoute>
 					}
 				/>
 			</Route>
