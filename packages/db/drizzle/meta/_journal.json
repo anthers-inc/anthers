@@ -29,6 +29,13 @@
       "when": 1784467928664,
       "tag": "0003_black_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784844499595,
+      "tag": "0004_past_valkyrie",
+      "breakpoints": true
     }
   ]
 }

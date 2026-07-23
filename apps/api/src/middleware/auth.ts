@@ -9,6 +9,7 @@ type SessionUser = {
 	email: string;
 	displayName: string | null;
 	isCreator: boolean | null;
+	isAdmin: boolean | null;
 	emailVerified: boolean | null;
 };
 
@@ -43,6 +44,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 		email: result.user.email,
 		displayName: result.user.displayName,
 		isCreator: result.user.isCreator,
+		isAdmin: result.user.isAdmin,
 		emailVerified: result.user.emailVerified,
 	});
 	c.set("sessionToken", token);
@@ -74,6 +76,19 @@ export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {
 	const user = c.get("user");
 	if (!user?.isCreator) {
 		return c.json({ error: "Creator account required" }, 403);
+	}
+	await next();
+});
+
+/**
+ * Middleware that requires the authenticated user to be a platform admin.
+ * Must be used AFTER requireAuth. Gates the admin/ops console — a 404 (not 403)
+ * so the very existence of admin surfaces isn't advertised to non-admins.
+ */
+export const requireAdmin = createMiddleware<AuthEnv>(async (c, next) => {
+	const user = c.get("user");
+	if (!user?.isAdmin) {
+		return c.json({ error: "Not found" }, 404);
 	}
 	await next();
 });

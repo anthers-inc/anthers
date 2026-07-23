@@ -6,6 +6,7 @@ import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	Bars3Icon,
+	ChartBarSquareIcon,
 	MagnifyingGlassIcon,
 	RectangleStackIcon,
 	RssIcon,
@@ -140,6 +141,17 @@ function LoggedInLayoutInner() {
 										<Squares2X2Icon className="w-5 h-5 shrink-0" />
 										Studio
 									</a>
+								</>
+							)}
+
+							{/* Admin section — platform operators only (the ops console). */}
+							{user?.isAdmin && (
+								<>
+									<div className="divider my-1 px-1 text-xs text-base-content/30">Admin</div>
+									<NavLink to="/admin" className={navLinkClass}>
+										<ChartBarSquareIcon className="w-5 h-5 shrink-0" />
+										Operations
+									</NavLink>
 								</>
 							)}
 						</nav>

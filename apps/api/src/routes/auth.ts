@@ -71,6 +71,7 @@ function serializeUser(user: typeof users.$inferSelect) {
 		displayName: user.displayName,
 		bio: user.bio,
 		isCreator: user.isCreator,
+		isAdmin: user.isAdmin,
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,

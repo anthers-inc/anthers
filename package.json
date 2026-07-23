@@ -25,6 +25,7 @@
 		"db:seed": "bun run packages/db/src/seed.ts",
 		"db:seed:reset": "bun run packages/db/src/seed.ts --reset",
 		"db:dev-account": "bun run packages/db/src/ensure-dev-account.ts",
+		"db:admin": "bun run packages/db/src/set-admin.ts",
 		"db:gauntlet": "bun run packages/db/src/seed-gauntlet.ts",
 		"db:gauntlet:clean": "bun run packages/db/src/seed-gauntlet.ts --clean",
 		"db:gauntlet:state": "bun run packages/db/src/gauntlet-state.ts"

@@ -18,6 +18,9 @@ export const users = pgTable("users", {
 	displayName: text("display_name").default(""),
 	bio: text("bio").default(""),
 	isCreator: boolean("is_creator").default(false),
+	// Platform operator flag — gates the admin/ops console (requireAdmin). Set out
+	// of band (db:admin CLI or DEV_ACCOUNT_ADMIN), never self-serve at sign-up.
+	isAdmin: boolean("is_admin").default(false),
 	avatar: text("avatar").default(""),
 	headerImage: text("header_image").default(""),
 	websiteUrl: text("website_url").default(""),
