@@ -333,7 +333,7 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 				<SeedCountStepper value={seeds} min={0} max={MAX_SEEDS} onChange={onChange} />
 				<StepperStatus>
 					{seeds === 0 ? (
-						"Free — backing Anthers with nothing yet"
+						"Forever-free access to the Anthers platform"
 					) : (
 						<span>
 							<span className="text-lg font-bold text-base-content/90">{money(cost)}</span>/month ·{" "}
@@ -406,7 +406,7 @@ function CreatorCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 				<SeedCountStepper value={seeds} min={0} max={MAX_SEEDS} onChange={onChange} />
 				<StepperStatus>
 					{seeds === 0 ? (
-						"Following for free"
+						"Following but not supporting, only public-access content"
 					) : (
 						<span>
 							<span className="text-lg font-bold text-base-content/90">{money(cost)}</span>/month ·
@@ -441,8 +441,10 @@ export default function SubscribePage() {
 	const { user } = useAuth();
 	const signedIn = !!user;
 
-	const [anthersSeeds, setAnthersSeeds] = useState(1);
-	const [creatorSeeds, setCreatorSeeds] = useState(1);
+	// Default both steppers to 0 so the page opens on the fully-free view (no Seeds to
+	// either Anthers or a creator) — a visitor sees $0/mo first, then opts up if they like.
+	const [anthersSeeds, setAnthersSeeds] = useState(0);
+	const [creatorSeeds, setCreatorSeeds] = useState(0);
 
 	// Combined monthly spend, summed across both steppers. Payments is a single at-cost
 	// card fee on the whole batched charge, added ON TOP — never carved out of a Seed.
