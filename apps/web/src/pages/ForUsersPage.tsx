@@ -8,13 +8,14 @@
 // flowered floor around the content.
 //
 // SKETCH (support-model keystone): the page is sequenced as TWO products, not three
-// ways. It LEADS with direct creator support (Seeds + purchases, 100% to the creator —
-// the wedge), then introduces the Anthers commons (Anthers-Seeds that support Anthers
-// itself, fund free public content via the Time Pool, and set the rank that unlocks
-// Anthers-gated content) with the free rank folded in as the commons' subsidized floor.
-// Gates are framed as one primitive with two directions: support a creator (Seed Gate)
-// or support the commons (Anthers Gate). All numbers derive from the support model:
-// a Seed is $3/month, and rank = Anthers-Seed count (Root–Blossom = 1–4, "+" beyond).
+// ways — always Anthers-Seeds first, creator Seeds second. It LEADS with the Anthers
+// commons (Anthers-Seeds that support Anthers itself, fund free public content via the
+// Time Pool, and set the rank that unlocks Anthers-gated content — with the free rank
+// folded in as the commons' subsidized floor), then direct creator support (Seeds +
+// purchases, 100% to the creator — the wedge). Gates are framed as one primitive with
+// two directions: support the commons (Anthers Gate) or support a creator (Seed Gate).
+// All numbers derive from the support model: a Seed is $3/month, and rank =
+// Anthers-Seed count (Root–Blossom = 1–4, "+" beyond).
 //
 // Motion: content fades up on load (hero) and as it scrolls into view (sections),
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
@@ -112,7 +113,7 @@ export default function ForUsersPage() {
 				</div>
 			</header>
 
-			{/* How it works — two products, direct support first */}
+			{/* How it works — two products, the Anthers commons first */}
 			<Section>
 				<Reveal>
 					<Eyebrow>How it works</Eyebrow>
@@ -129,8 +130,8 @@ export default function ForUsersPage() {
 					</Lede>
 					<div className="my-6 grid gap-8 text-left sm:grid-cols-2">
 						<Reveal delay={0}>
-							<SignpostCard step="2" title="Join the Anthers commons">
-								Point Seeds at Anthers instead—
+							<SignpostCard step="1" title="Join the Anthers commons">
+								Point Seeds at Anthers—
 								<strong className="font-semibold text-base-content/85">Anthers-Seeds</strong>, $3
 								each—to fund the free public content everyone enjoys (creators earn from the Time
 								Pool for the time you spend with their public work). The count you hold is your{" "}
@@ -141,7 +142,7 @@ export default function ForUsersPage() {
 							</SignpostCard>
 						</Reveal>
 						<Reveal delay={110}>
-							<SignpostCard step="1" title="Support creators directly">
+							<SignpostCard step="2" title="Support creators directly">
 								Give a creator <strong className="font-semibold text-base-content/85">Seeds</strong>
 								—$3 each, as often as you like—or{" "}
 								<strong className="font-semibold text-base-content/85">buy</strong> their games,
@@ -152,12 +153,12 @@ export default function ForUsersPage() {
 						</Reveal>
 					</div>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Direct support is the one we're proudest of, and the reason to start: when you back a
-						creator here, they keep all of it. The commons is what makes the garden worth
-						wandering—and it gets better the more creators plant here. Either way, every dollar goes
-						to the people who make what you love, to delivering your streams at cost, or to free
-						access and the Anthers Foundation's charitable programs—never to a platform's bottom
-						line. Curious where it all goes? See our{" "}
+						The commons is what makes the garden worth wandering—and it gets better the more
+						creators plant here. Direct support is the one we're proudest of: when you back a
+						creator here, they keep all of it. Either way, every dollar goes to the people who make
+						what you love, to delivering your streams at cost, or to free access and the Anthers
+						Foundation's charitable programs—never to a platform's bottom line. Curious where it all
+						goes? See our{" "}
 						<Link to="/resources" className="link text-primary decoration-primary/40">
 							financial transparency page
 						</Link>
@@ -166,68 +167,10 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* ① Support creators directly — the wedge */}
+			{/* ① The Anthers commons — free floor + Anthers-Seeds + Time Pool */}
 			<Section tint>
 				<Reveal>
-					<Eyebrow>① Support creators directly</Eyebrow>
-					<H2>When you pay a creator, that's what they get</H2>
-					<Lede>
-						We all deserve a way to support the people we love without tossing more money onto a
-						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
-						give creators crumbs even if we start paying. Our favorite game stores take 30% of every
-						sale. Our favorite music apps pay less than a cent per stream. The problem is
-						straightforward: these are for-profit companies. It doesn't{" "}
-						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
-					</Lede>
-					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						On Anthers there are two ways to back a creator directly, and both reach them in full:
-					</p>
-				</Reveal>
-				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
-					<Reveal delay={0} className="h-full">
-						<Card className="card-lift h-full">
-							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🌱&nbsp; Give Seeds
-							</h3>
-							<p className="text-sm leading-relaxed text-base-content/70">
-								A Seed is $3 of direct support you give to a creator—give one, or a handful,
-								whenever you like. It reaches them 100%, with no fee and no processing skim, and it
-								keeps going each month until you change it. Giving Seeds is also how you unlock that
-								creator's own gated content.
-							</p>
-						</Card>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
-						<Card className="card-lift h-full">
-							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🎁&nbsp; Buy their work
-							</h3>
-							<p className="text-sm leading-relaxed text-base-content/70">
-								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
-								keep. The creator receives 100% of the listed price. The biggest thing you'll ever
-								pay on top is standard card fees and tax (and card fees drop to near-zero if you pay
-								by bank transfer).
-							</p>
-						</Card>
-					</Reveal>
-				</div>
-				<Reveal delay={120} className="mx-auto mt-10 block max-w-3xl">
-					<PurchaseExample />
-				</Reveal>
-				<Reveal>
-					<p
-						style={serif}
-						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
-					>
-						0% cut. 100% to the creator. We're a non-profit—there's no margin for us to take.
-					</p>
-				</Reveal>
-			</Section>
-
-			{/* ② The Anthers commons — free floor + Anthers-Seeds + Time Pool */}
-			<Section>
-				<Reveal>
-					<Eyebrow>② The Anthers commons</Eyebrow>
+					<Eyebrow>① The Anthers commons</Eyebrow>
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
 						Every account receives a bandwidth allowance of free access every month—enough for a few
@@ -316,6 +259,64 @@ export default function ForUsersPage() {
 				</div>
 			</Section>
 
+			{/* ② Support creators directly — the wedge */}
+			<Section>
+				<Reveal>
+					<Eyebrow>② Support creators directly</Eyebrow>
+					<H2>When you pay a creator, that's what they get</H2>
+					<Lede>
+						We all deserve a way to support the people we love without tossing more money onto a
+						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
+						give creators crumbs even if we start paying. Our favorite game stores take 30% of every
+						sale. Our favorite music apps pay less than a cent per stream. The problem is
+						straightforward: these are for-profit companies. It doesn't{" "}
+						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
+					</Lede>
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+						On Anthers there are two ways to back a creator directly, and both reach them in full:
+					</p>
+				</Reveal>
+				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
+					<Reveal delay={0} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🌱&nbsp; Give Seeds
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								A Seed is $3 of direct support you give to a creator—give one, or a handful,
+								whenever you like. It reaches them 100%, with no fee and no processing skim, and it
+								keeps going each month until you change it. Giving Seeds is also how you unlock that
+								creator's own gated content.
+							</p>
+						</Card>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🎁&nbsp; Buy their work
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
+								keep. The creator receives 100% of the listed price. The biggest thing you'll ever
+								pay on top is standard card fees and tax (and card fees drop to near-zero if you pay
+								by bank transfer).
+							</p>
+						</Card>
+					</Reveal>
+				</div>
+				<Reveal delay={120} className="mx-auto mt-10 block max-w-3xl">
+					<PurchaseExample />
+				</Reveal>
+				<Reveal>
+					<p
+						style={serif}
+						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
+					>
+						0% cut. 100% to the creator. We're a non-profit—there's no margin for us to take.
+					</p>
+				</Reveal>
+			</Section>
+
 			{/* ③ Unlocking more — one gating primitive, two directions */}
 			<Section tint>
 				<Reveal>
@@ -323,28 +324,12 @@ export default function ForUsersPage() {
 					<H2>One idea, two directions</H2>
 					<Lede>
 						Creators can reserve special content for their supporters—and "support" means one simple
-						thing: a level of backing, pointed either at that creator or at the commons. Clear
+						thing: a level of backing, pointed either at the commons or at that creator. Clear
 						either one and you're in. It's the same mechanism, just aimed two different ways.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
 					<Reveal delay={0} className="h-full">
-						<Card className="card-lift h-full">
-							<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
-								Support a creator
-							</p>
-							<h3 style={serif} className="mb-1 text-xl font-medium">
-								Seed Gates
-							</h3>
-							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
-								Unlocked by the Seeds you've given that creator—100% to them.
-							</p>
-							{SEED_GATES.map((g) => (
-								<GateRow key={g.name} {...g} />
-							))}
-						</Card>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
 							<p className="text-xs font-semibold uppercase tracking-wider text-accent">
 								Support the commons
@@ -356,6 +341,22 @@ export default function ForUsersPage() {
 								Unlocked by the Anthers-Seeds you currently hold—across every creator.
 							</p>
 							{ANTHERS_GATES.map((g) => (
+								<GateRow key={g.name} {...g} />
+							))}
+						</Card>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<Card className="card-lift h-full">
+							<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
+								Support a creator
+							</p>
+							<h3 style={serif} className="mb-1 text-xl font-medium">
+								Seed Gates
+							</h3>
+							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
+								Unlocked by the Seeds you've given that creator—100% to them.
+							</p>
+							{SEED_GATES.map((g) => (
 								<GateRow key={g.name} {...g} />
 							))}
 						</Card>
