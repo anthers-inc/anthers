@@ -61,8 +61,37 @@ only Playwright does.
 ```
 make test-e2e           # headless, builds + serves automatically
 make test-e2e-ui        # Playwright UI mode
+make test-gauntlet      # just the User Gauntlet walk (fixture reset + staircase)
 ```
 
-The calculators are the first covered flow: they're pure client-side, so the
-tests need no Postgres/API — just the static SPA. CI runs the suite on push/PR
-via `.github/workflows/e2e.yml`.
+Two kinds of spec live here, split into Playwright projects:
+
+- **`chromium`** — the static suite (calculators): pure client-side, no API/DB.
+  Its error tracker deliberately filters `/api/` noise, because there's no
+  backend behind the static preview by design.
+- **`gauntlet`** — the User Gauntlet walk (`user-gauntlet.e2e.ts`): authenticated,
+  serial, and stateful. Its `setup` dependency resets the fixture through
+  `db:gauntlet --ensure-viewer` and signs `gauntlet_viewer` in for real,
+  persisting the session as `tests/e2e/.auth/` storageState. It asserts every
+  cell of the expected-access staircase from `@anthers/db/gauntlet` after every
+  transition, with **strict** error tracking (`trackErrorsStrict` — no `/api/`
+  filter). Spec: the vault's `70-79 Testing & QA/70 - User Gauntlet.md`.
+
+**The suite now needs the real API + Postgres.** The config's second `webServer`
+entry reuses a running `make dev` API on :8000, or brings the dev database up
+itself (`make db-ready`, docker) and starts one. Pages served from localhost
+resolve their API base to `localhost:8000` (see `web-shared`'s `rpc.ts`), so
+there's no proxy — `origins.ts` allowlists the preview origin (:4173) outside
+production. In CI, Postgres is a service container (`.github/workflows/e2e.yml`).
+
+**Billing is hybrid in the walk.** The support model made badge/Seed billing
+real Stripe flows (503 unconfigured, webhook-synced when configured), so the
+spec UI-walks everything that doesn't bill and hops billing state through the
+canonical `db:gauntlet:state` script. The observational pass covers the real
+billing UI; a `GAUNTLET_STRIPE` full-fidelity mode is a known follow-up.
+
+**Playwright-under-Bun gotcha:** any `request`/`page.request` call whose
+response carries a `Set-Cookie` header crashes in Playwright's cookie parser
+(it receives a path where Node hands it a full URL). The gauntlet setup signs
+in via plain `fetch` and writes the storageState by hand for exactly this
+reason — don't "simplify" it back to `request.post`.

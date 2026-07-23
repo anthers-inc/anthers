@@ -4,7 +4,7 @@
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         typecheck test lint lint-fix format \
-        e2e-install screenshots test-e2e test-e2e-ui
+        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
@@ -187,5 +187,8 @@ test-e2e: ## Run the Playwright e2e suite (builds + serves automatically)
 
 test-e2e-ui: ## Run the Playwright e2e suite in UI mode
 	cd apps/web && bunx playwright test --ui
+
+test-gauntlet: ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
+	cd apps/web && bunx playwright test --project=gauntlet
 
 .DEFAULT_GOAL := help

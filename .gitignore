@@ -45,6 +45,12 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+# Signed-in storage state the gauntlet setup project mints (session cookie)
+.auth/
+
+# ─── Claude Code ───
+# Repo slash commands (.claude/commands/) are tracked; personal settings are not
+.claude/settings.local.json
 # Snapshots/console logs an agent's Tier 1 MCP browser drops here
 .playwright-mcp/
 
