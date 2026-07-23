@@ -21,13 +21,12 @@
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
 // Both are motion-safe — a visitor who prefers reduced motion sees neither.
 
-import { FREE_FLOOR_GIB, GIB_PER_SEED } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
-import { BADGE_LADDER, InfoDot, PurchaseExample } from "@anthers/web-shared/economics";
+import { BADGE_LADDER, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 
@@ -35,26 +34,6 @@ const serif = { fontFamily: FONTS.fraunces };
 
 // Shared hover/press affordance for the primary CTA buttons (motion-safe lift).
 const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
-
-// What the monthly streaming allowance roughly buys — the (i) helper.
-const GIB_TIP = `Every account streams ${FREE_FLOOR_GIB} GiB free each month, and each Anthers-Seed adds ${GIB_PER_SEED} GiB — all at cost. As a rough guide, ${FREE_FLOOR_GIB} GiB is several hours of 1080p video, far more of music, or effectively unlimited reading.`;
-
-// Two ways a creator can gate exclusive content, under one idea: a level of support,
-// pointed at a creator (Seed Gate) or at the commons (Anthers Gate). Illustrative rungs,
-// in whole $3 Seeds — the creator names their own levels; Anthers ranks have fixed names.
-const SEED_GATES = [
-	{ amount: "$3", name: "Follow+", perk: "Chat access, community polls" },
-	{ amount: "$6", name: "Insider", perk: "Early access, community posts" },
-	{ amount: "$9", name: "Supporter", perk: "Behind-the-scenes, extended cuts" },
-	{ amount: "$12", name: "Champion", perk: "Monthly Q&A, name in credits" },
-] as const;
-
-const ANTHERS_GATES = [
-	{ amount: "$3", name: "Root", perk: "Root-level content, across the platform" },
-	{ amount: "$6", name: "Sprout", perk: "Sprout-level content, across the platform" },
-	{ amount: "$9", name: "Petal", perk: "Petal-level content, across the platform" },
-	{ amount: "$12", name: "Blossom", perk: "Blossom-level content, across the platform" },
-] as const;
 
 export default function ForUsersPage() {
 	return (
@@ -71,7 +50,7 @@ export default function ForUsersPage() {
 							style={serif}
 							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
 						>
-							our creative garden,
+							Our creative garden,
 							<br />
 							<em className="font-medium text-primary not-italic">
 								where we can all grow together
@@ -117,7 +96,7 @@ export default function ForUsersPage() {
 			<Section>
 				<Reveal>
 					<Eyebrow>How it works</Eyebrow>
-					<H2>Back the people you love — the garden grows from there</H2>
+					<H2>Support the creators you love, and grow the garden for all</H2>
 					<Lede>
 						Everything on Anthers starts{" "}
 						<strong className="font-semibold text-base-content/80">free</strong>, with no ads or
@@ -125,40 +104,47 @@ export default function ForUsersPage() {
 						be available to the community with no obligations or ulterior motives.
 					</Lede>
 					<Lede>
-						When you want to go past free public access, use Seeds to increase your support in one
-						of two ways:
+						When you want to go past free public access, use
+						<strong className="font-semibold text-base-content/80"> Seeds </strong>
+						to increase your support in one of two ways:
 					</Lede>
 					<div className="my-6 grid gap-8 text-left sm:grid-cols-2">
-						<Reveal delay={0}>
-							<SignpostCard step="1" title="Join the Anthers commons">
-								Point Seeds at Anthers—
-								<strong className="font-semibold text-base-content/85">Anthers-Seeds</strong>, $3
-								each—to fund the free public content everyone enjoys (creators earn from the Time
-								Pool for the time you spend with their public work). The count you hold is your{" "}
-								<strong className="font-semibold text-base-content/85">rank</strong>—Root, Sprout,
-								Petal, or Blossom—unlocking Anthers-gated content across every creator. And every
-								account, Seeds or none, gets a free streaming allowance <InfoDot tip={GIB_TIP} />{" "}
-								each month, forever.
+						<Reveal delay={0} className="h-full">
+							<SignpostCard step="1" title="Support Anthers" tone="anthers">
+								Each $3/month Seed you direct to Anthers does the following:
+								<ul>
+									<li>Raise your included streaming bandwidth allowance</li>
+									<li>Increase the pool of money distributed to creators you stream</li>
+									<li>Fund Anthers' free public access and charitable programs for all</li>
+								</ul>
+								As you increase your monthly Anthers contribution, you'll also level up your
+								<strong className="font-semibold text-base-content/85"> Anthers Badge</strong>, from
+								Root all the way to Blossom, unlocking Anthers-gated content across every creator.
 							</SignpostCard>
 						</Reveal>
-						<Reveal delay={110}>
-							<SignpostCard step="2" title="Support creators directly">
-								Give a creator <strong className="font-semibold text-base-content/85">Seeds</strong>
-								—$3 each, as often as you like—or{" "}
-								<strong className="font-semibold text-base-content/85">buy</strong> their games,
-								albums, books, art, even merch and services. Either way the creator keeps 100%; the
-								most you'll ever pay on top is standard card fees and tax. Direct support, with no
-								middleman taking a slice.
+						<Reveal delay={110} className="h-full">
+							<SignpostCard step="2" title="Support Creators" tone="creator">
+								Each $3/month Seed you direct to a Creator does the following:
+								<ul>
+									<li>Give that creator 100% of that $3 monthly support</li>
+									<li>Unlock new creator-gated content and interactions</li>
+									<li>Receive special discounts and early access on direct purchases</li>
+								</ul>
+								And remember: Whether supporting a creator with monthly Seeds or with direct
+								purchases, the creator keeps 100% of the listed price, and the most you'll ever pay
+								on top is standard card fees and tax.
 							</SignpostCard>
 						</Reveal>
 					</div>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						The commons is what makes the garden worth wandering—and it gets better the more
-						creators plant here. Direct support is the one we're proudest of: when you back a
-						creator here, they keep all of it. Either way, every dollar goes to the people who make
-						what you love, to delivering your streams at cost, or to free access and the Anthers
-						Foundation's charitable programs—never to a platform's bottom line. Curious where it all
-						goes? See our{" "}
+						No matter where you direct your Seeds each month, you can rest assured that you're
+						supporting amazing creators and free public access to their work. No shareholders, no
+						advertisers, no data brokers. Every dollar goes to the real people who make what you
+						love, to delivering streaming content at cost, or to always-free public access and the
+						Anthers Foundation's other charitable programs.
+					</p>
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+						Still curious about where exactly it all goes? See our{" "}
 						<Link to="/resources" className="link text-primary decoration-primary/40">
 							financial transparency page
 						</Link>
@@ -312,56 +298,9 @@ export default function ForUsersPage() {
 						style={serif}
 						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
 					>
-						0% cut. 100% to the creator. We're a non-profit—there's no margin for us to take.
+						0% cut. 100% to the creator. That's why Anthers is a non-profit; it's not about us.
 					</p>
 				</Reveal>
-			</Section>
-
-			{/* ③ Unlocking more — one gating primitive, two directions */}
-			<Section tint>
-				<Reveal>
-					<Eyebrow>③ Unlocking more</Eyebrow>
-					<H2>One idea, two directions</H2>
-					<Lede>
-						Creators can reserve special content for their supporters—and "support" means one simple
-						thing: a level of backing, pointed either at the commons or at that creator. Clear
-						either one and you're in. It's the same mechanism, just aimed two different ways.
-					</Lede>
-				</Reveal>
-				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
-					<Reveal delay={0} className="h-full">
-						<Card className="card-lift h-full">
-							<p className="text-xs font-semibold uppercase tracking-wider text-accent">
-								Support the commons
-							</p>
-							<h3 style={serif} className="mb-1 text-xl font-medium">
-								Anthers Gates
-							</h3>
-							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
-								Unlocked by the Anthers-Seeds you currently hold—across every creator.
-							</p>
-							{ANTHERS_GATES.map((g) => (
-								<GateRow key={g.name} {...g} />
-							))}
-						</Card>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
-						<Card className="card-lift h-full">
-							<p className="text-xs font-semibold uppercase tracking-wider text-primary/80">
-								Support a creator
-							</p>
-							<h3 style={serif} className="mb-1 text-xl font-medium">
-								Seed Gates
-							</h3>
-							<p className="mb-4 text-xs leading-relaxed text-base-content/55">
-								Unlocked by the Seeds you've given that creator—100% to them.
-							</p>
-							{SEED_GATES.map((g) => (
-								<GateRow key={g.name} {...g} />
-							))}
-						</Card>
-					</Reveal>
-				</div>
 			</Section>
 
 			{/* Closing */}
@@ -393,29 +332,50 @@ export default function ForUsersPage() {
 
 // ─── Local building blocks ───
 
-/** A numbered signpost card for the "how it works" section. */
+/** A numbered signpost card for the "how it works" section. `tone` tints the card
+ *  in the same color language as the two Subscribe cards — amber for backing the
+ *  Anthers commons, green for backing a creator — via a colored border, a soft wash,
+ *  the numbered chip, and the list bullets. */
 function SignpostCard({
 	step,
 	title,
+	tone,
 	children,
 }: {
 	step: string;
 	title: React.ReactNode;
+	tone: "anthers" | "creator";
 	children: React.ReactNode;
 }) {
+	const t =
+		tone === "anthers"
+			? {
+					card: "border-accent/30 bg-accent/10",
+					chip: "bg-accent/15 text-accent",
+					marker: "marker:text-accent/70",
+				}
+			: {
+					card: "border-primary/25 bg-primary/5",
+					chip: "bg-primary/10 text-primary",
+					marker: "marker:text-primary/70",
+				};
 	return (
-		<Card className="card-lift h-full">
+		<div className={`card-lift flex h-full flex-col rounded-3xl border-2 p-7 shadow-sm ${t.card}`}>
 			<div
 				style={serif}
-				className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-xl font-semibold text-primary"
+				className={`mb-4 flex h-11 w-11 items-center justify-center rounded-full text-xl font-semibold ${t.chip}`}
 			>
 				{step}
 			</div>
 			<h3 style={serif} className="mb-2 text-xl font-medium">
 				{title}
 			</h3>
-			<p className="text-justify text-sm leading-relaxed text-base-content/70">{children}</p>
-		</Card>
+			<div
+				className={`text-sm leading-relaxed text-base-content/70 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 ${t.marker}`}
+			>
+				{children}
+			</div>
+		</div>
 	);
 }
 
@@ -430,17 +390,5 @@ function FreeItem({ yes, children }: { yes?: boolean; children: React.ReactNode 
 			</span>
 			<span className="text-base-content/70">{children}</span>
 		</li>
-	);
-}
-
-function GateRow({ amount, name, perk }: { amount: string; name: string; perk: string }) {
-	return (
-		<div className="flex items-center gap-3 border-t border-base-content/10 py-2.5 first:border-t-0">
-			<span className="w-10 shrink-0 font-mono text-xs text-primary">{amount}</span>
-			<span style={serif} className="w-24 shrink-0 font-medium">
-				{name}
-			</span>
-			<span className="text-xs text-base-content/55">{perk}</span>
-		</div>
 	);
 }
