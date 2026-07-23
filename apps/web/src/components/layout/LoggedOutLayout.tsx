@@ -12,6 +12,10 @@ import MiniPlayer from "../media/MiniPlayer";
 
 const serif = { fontFamily: FONTS.fraunces };
 
+// Localization isn't implemented yet, so the header's language picker is hidden for now.
+// Flip this to true (and wire up the picker's buttons) once localization actually ships.
+const LOCALIZATION_ENABLED = false;
+
 // The Meadow footer nav — mirrors the header, plus a Support column. label → href.
 const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
@@ -76,28 +80,32 @@ export default function LoggedOutLayout() {
 					deliberately outside the centered nav. Desktop only; on mobile the theme
 					toggle drops into the hamburger menu below. */}
 				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-8 lg:flex">
-					{/* Language picker — localization is a TODO; the menu is inert for now. */}
-					<div className="dropdown dropdown-end">
-						<label
-							tabIndex={0}
-							className="btn btn-ghost btn-sm btn-circle"
-							aria-label="Select language"
-							title="Select language"
-						>
-							<GlobeAltIcon className="w-5 h-5" />
-						</label>
-						<ul
-							tabIndex={0}
-							className="menu menu-sm dropdown-content mt-3 z-50 w-36 p-2 shadow bg-base-200 rounded-box"
-						>
-							<li>
-								<button type="button">English</button>
-							</li>
-							<li>
-								<button type="button">Español</button>
-							</li>
-						</ul>
-					</div>
+					{/* Language picker — hidden until localization is actually implemented
+						(the menu is inert). Gated by LOCALIZATION_ENABLED, not deleted, so it
+						can be restored by flipping the flag once localization ships. */}
+					{LOCALIZATION_ENABLED && (
+						<div className="dropdown dropdown-end">
+							<label
+								tabIndex={0}
+								className="btn btn-ghost btn-sm btn-circle"
+								aria-label="Select language"
+								title="Select language"
+							>
+								<GlobeAltIcon className="w-5 h-5" />
+							</label>
+							<ul
+								tabIndex={0}
+								className="menu menu-sm dropdown-content mt-3 z-50 w-36 p-2 shadow bg-base-200 rounded-box"
+							>
+								<li>
+									<button type="button">English</button>
+								</li>
+								<li>
+									<button type="button">Español</button>
+								</li>
+							</ul>
+						</div>
+					)}
 					<ThemeToggle />
 				</div>
 
