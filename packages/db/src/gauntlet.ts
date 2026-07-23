@@ -28,6 +28,18 @@ export const GAUNTLET_CREATOR_EMAIL = `${GAUNTLET_PREFIX}creator@example.test`;
 /** Not security-sensitive — a local fixture account that never exists outside dev. */
 export const GAUNTLET_CREATOR_PASSWORD = "gauntletpassword123";
 
+/**
+ * The harness's own viewer, for automated walks. The observational pass defaults to the
+ * dev account (`DEV_ACCOUNT_USERNAME`), but the e2e spec needs an account whose password
+ * it knows and whose state it may freely reset — so it owns both ends of the walk.
+ * Created on demand by `seed-gauntlet.ts --ensure-viewer`; email pre-verified because
+ * checkout and Seed-giving carry `requireVerified`.
+ */
+export const GAUNTLET_VIEWER_USERNAME = `${GAUNTLET_PREFIX}viewer`;
+export const GAUNTLET_VIEWER_EMAIL = `${GAUNTLET_PREFIX}viewer@example.test`;
+/** Not security-sensitive — a local fixture account that never exists outside dev. */
+export const GAUNTLET_VIEWER_PASSWORD = "gauntletpassword123";
+
 /** Post slugs share this prefix so the fixture can find and replace exactly its own rows. */
 export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
 
@@ -212,6 +224,144 @@ export function gauntletPost(key: string): GauntletPost {
 	if (!found) throw new Error(`No gauntlet post "${key}"`);
 	return found;
 }
+
+/**
+ * The reason strings `GET /api/subscriptions/access/:postId` can answer for a gauntlet
+ * post. A subset of the API's `AccessReason` — restated here (rather than imported) so
+ * this module stays dependency-free of the API package; the staircase unit test bridges
+ * the two, so a drift would fail there.
+ */
+export type GauntletReason = "free" | "entitled" | "gated" | "payment_required" | "purchased";
+
+/** One viewer state of the staircase and the reason it expects for every post. */
+export interface StaircaseState {
+	/** Display name, matching the spec table's row label. */
+	state: string;
+	/** Whether the viewer follows the creator. MUST NOT affect any reason — that's the point. */
+	following: boolean;
+	/** The viewer's Anthers-Seed count; rank (badge) derives from it (`rankForSeeds`). */
+	anthersSeeds: number;
+	/** Dollars of Seeds given to the gauntlet creator this cycle. */
+	seedDollars: number;
+	/** Keys of posts the viewer has a completed purchase for. */
+	purchased: string[];
+	/** Expected access reason per post key (G1…G9). */
+	reasons: Record<string, GauntletReason>;
+}
+
+const FREE = "free" as const;
+const ENT = "entitled" as const;
+const GATE = "gated" as const;
+const PAY = "payment_required" as const;
+const BOUGHT = "purchased" as const;
+
+function reasons(
+	g2: GauntletReason,
+	g3: GauntletReason,
+	g4: GauntletReason,
+	g5: GauntletReason,
+	g6: GauntletReason,
+	g7: GauntletReason,
+	g8: GauntletReason,
+	g9: GauntletReason,
+): Record<string, GauntletReason> {
+	// G1 is free in every state — the baseline that proves the floor never moves.
+	return { G1: FREE, G2: g2, G3: g3, G4: g4, G5: g5, G6: g6, G7: g7, G8: g8, G9: g9 };
+}
+
+/**
+ * The expected-access staircase — the spec's table, one definition for every consumer.
+ * `access-staircase.test.ts` proves it against the pure resolver (no DB, no browser);
+ * `user-gauntlet.e2e.ts` walks the real app into each state and asserts the same cells
+ * through the live access endpoint. Sharing the table is the same discipline as sharing
+ * `GAUNTLET_POSTS`: neither consumer can quietly drift from what the other proved.
+ *
+ * The two "Free" rows differ only by `following` — identical reasons on purpose, since
+ * following must never grant access. The resolver can't even see a follow (no such field
+ * in `AccessContext`); the e2e row exists to prove the *app* honors that too.
+ */
+export const EXPECTED_STAIRCASE: StaircaseState[] = [
+	{
+		state: "Free, unfollowed",
+		following: false,
+		anthersSeeds: 0,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(GATE, GATE, GATE, GATE, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Free, following",
+		following: true,
+		anthersSeeds: 0,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(GATE, GATE, GATE, GATE, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Root",
+		following: true,
+		anthersSeeds: 1,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(ENT, GATE, GATE, GATE, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Sprout",
+		following: true,
+		anthersSeeds: 2,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(ENT, ENT, GATE, GATE, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Petal",
+		following: true,
+		anthersSeeds: 3,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(ENT, ENT, ENT, GATE, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Blossom",
+		following: true,
+		anthersSeeds: 4,
+		seedDollars: 0,
+		purchased: [],
+		reasons: reasons(ENT, ENT, ENT, ENT, GATE, GATE, GATE, PAY),
+	},
+	{
+		state: "Blossom + $1 given",
+		following: true,
+		anthersSeeds: 4,
+		seedDollars: 1,
+		purchased: [],
+		reasons: reasons(ENT, ENT, ENT, ENT, ENT, GATE, GATE, PAY),
+	},
+	{
+		state: "Blossom + $2 given",
+		following: true,
+		anthersSeeds: 4,
+		seedDollars: 2,
+		purchased: [],
+		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, GATE, PAY),
+	},
+	{
+		state: "Blossom + $4 given",
+		following: true,
+		anthersSeeds: 4,
+		seedDollars: 4,
+		purchased: [],
+		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, ENT, PAY),
+	},
+	{
+		state: "+ purchased",
+		following: true,
+		anthersSeeds: 4,
+		seedDollars: 4,
+		purchased: ["G9"],
+		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, ENT, BOUGHT),
+	},
+];
 
 /**
  * The creator's advertised gate ladder — the named rungs a visitor sees on the profile.

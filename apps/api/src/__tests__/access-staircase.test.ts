@@ -15,8 +15,13 @@
  * follow really happens and the feed really changes.
  */
 import { describe, expect, it } from "bun:test";
-import { DOWNLOAD_PRICE, GAUNTLET_POSTS, gauntletPost } from "@anthers/db/gauntlet";
-import type { Badge } from "@anthers/shared/constants";
+import {
+	DOWNLOAD_PRICE,
+	EXPECTED_STAIRCASE,
+	GAUNTLET_POSTS,
+	gauntletPost,
+} from "@anthers/db/gauntlet";
+import { type Badge, rankForSeeds } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessiblePost,
@@ -61,124 +66,26 @@ function ctx(badge: Badge, seeds: number, purchased: number[] = []): AccessConte
 	};
 }
 
-const FREE: AccessReason = "free";
-const ENT: AccessReason = "entitled";
 const GATE: AccessReason = "gated";
 const PAY: AccessReason = "payment_required";
-const BOUGHT: AccessReason = "purchased";
 
-/** The staircase, exactly as the spec's table reads. Each row: one viewer state, nine reasons. */
-const STAIRCASE: Array<{
-	state: string;
-	ctx: AccessContext;
-	reasons: Record<PostKey, AccessReason>;
-}> = [
-	{
-		state: "Free",
-		ctx: ctx("free", 0),
-		reasons: {
-			G1: FREE,
-			G2: GATE,
-			G3: GATE,
-			G4: GATE,
-			G5: GATE,
-			G6: GATE,
-			G7: GATE,
-			G8: GATE,
-			G9: PAY,
-		},
-	},
-	{
-		state: "Root",
-		ctx: ctx("root", 0),
-		reasons: {
-			G1: FREE,
-			G2: ENT,
-			G3: GATE,
-			G4: GATE,
-			G5: GATE,
-			G6: GATE,
-			G7: GATE,
-			G8: GATE,
-			G9: PAY,
-		},
-	},
-	{
-		state: "Sprout",
-		ctx: ctx("sprout", 0),
-		reasons: {
-			G1: FREE,
-			G2: ENT,
-			G3: ENT,
-			G4: GATE,
-			G5: GATE,
-			G6: GATE,
-			G7: GATE,
-			G8: GATE,
-			G9: PAY,
-		},
-	},
-	{
-		state: "Petal",
-		ctx: ctx("petal", 0),
-		reasons: {
-			G1: FREE,
-			G2: ENT,
-			G3: ENT,
-			G4: ENT,
-			G5: GATE,
-			G6: GATE,
-			G7: GATE,
-			G8: GATE,
-			G9: PAY,
-		},
-	},
-	{
-		state: "Blossom",
-		ctx: ctx("blossom", 0),
-		reasons: {
-			G1: FREE,
-			G2: ENT,
-			G3: ENT,
-			G4: ENT,
-			G5: ENT,
-			G6: GATE,
-			G7: GATE,
-			G8: GATE,
-			G9: PAY,
-		},
-	},
-	{
-		state: "Blossom + $1 given",
-		ctx: ctx("blossom", 1),
-		reasons: { G1: FREE, G2: ENT, G3: ENT, G4: ENT, G5: ENT, G6: ENT, G7: GATE, G8: GATE, G9: PAY },
-	},
-	{
-		state: "Blossom + $2 given",
-		ctx: ctx("blossom", 2),
-		reasons: { G1: FREE, G2: ENT, G3: ENT, G4: ENT, G5: ENT, G6: ENT, G7: ENT, G8: GATE, G9: PAY },
-	},
-	{
-		state: "Blossom + $4 given",
-		ctx: ctx("blossom", 4),
-		reasons: { G1: FREE, G2: ENT, G3: ENT, G4: ENT, G5: ENT, G6: ENT, G7: ENT, G8: ENT, G9: PAY },
-	},
-	{
-		state: "Blossom + $4 given + purchased",
-		ctx: ctx("blossom", 4, [POSTS.G9.id]),
-		reasons: {
-			G1: FREE,
-			G2: ENT,
-			G3: ENT,
-			G4: ENT,
-			G5: ENT,
-			G6: ENT,
-			G7: ENT,
-			G8: ENT,
-			G9: BOUGHT,
-		},
-	},
-];
+/**
+ * The staircase itself lives in `@anthers/db/gauntlet` (`EXPECTED_STAIRCASE`) — ONE table
+ * shared with the e2e walk, for the same reason the posts are shared: neither consumer can
+ * quietly drift from what the other proved. Each row is realized as a resolver context here;
+ * the `following` field is untestable at this layer (see the header note) and rides along
+ * as documentation. The viewer's badge derives from the row's Anthers-Seed count exactly as
+ * the app derives it (`rankForSeeds`) — the support-model linkage, pinned.
+ */
+const STAIRCASE = EXPECTED_STAIRCASE.map((row) => ({
+	state: row.state,
+	ctx: ctx(
+		rankForSeeds(row.anthersSeeds),
+		row.seedDollars,
+		row.purchased.map((key) => POSTS[key].id),
+	),
+	reasons: row.reasons as Record<PostKey, AccessReason>,
+}));
 
 const POST_KEYS = Object.keys(POSTS) as PostKey[];
 

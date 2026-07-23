@@ -10,5 +10,14 @@ export function allowedOrigins(): string[] {
 		(o): o is string => !!o,
 	);
 	if (process.env.NODE_ENV === "production") return [...new Set(configured)];
-	return [...new Set([...configured, "http://localhost:3000", "http://localhost:3001"])];
+	return [
+		...new Set([
+			...configured,
+			"http://localhost:3000",
+			"http://localhost:3001",
+			// The Playwright e2e preview (apps/web build + serve) — the SPA client targets
+			// localhost:8000 from any localhost page, so e2e needs CORS/CSRF passage too.
+			"http://localhost:4173",
+		]),
+	];
 }
