@@ -500,6 +500,12 @@ export default function SubscriptionPage() {
 		setActionLoading("portal");
 		try {
 			const res = await client.api.subscriptions["billing-portal"].$post();
+			if (!res.ok) {
+				const data = (await res.json()) as { error?: string };
+				setError(data.error ?? "Failed to open billing portal.");
+				setActionLoading(null);
+				return;
+			}
 			window.location.href = ((await res.json()) as { portalUrl: string }).portalUrl;
 		} catch {
 			setError("Failed to open billing portal.");
