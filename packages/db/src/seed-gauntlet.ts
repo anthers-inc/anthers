@@ -15,6 +15,7 @@
  * Usage:
  *   bun run db:gauntlet                 # reset to the floor (make gauntlet-reset)
  *   bun run db:gauntlet --user alice    # use a viewer other than DEV_ACCOUNT_USERNAME
+ *   bun run db:gauntlet --ensure-viewer # create + use the harness's own gauntlet_viewer
  *   bun run db:gauntlet --clean         # remove the fixture entirely, then stop
  *
  * The viewer defaults to your dev account (`DEV_ACCOUNT_USERNAME` in `.env`). Its rows are
@@ -22,9 +23,16 @@
  * Only this fixture's own footprint (the `gauntlet_` creator + `gauntlet-` posts, and the
  * viewer's relationship to them) is touched.
  *
+ * `--ensure-viewer` is the e2e harness's entry point: it creates the fixture-owned
+ * `gauntlet_viewer` account if missing (email pre-verified, not a creator) and resets THAT
+ * viewer — so the automated walk never touches the dev account, and works where no dev
+ * account exists at all (CI).
+ *
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
+import { mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { and, eq, inArray, like } from "drizzle-orm";
 import {
 	GAUNTLET_CREATOR_EMAIL,
@@ -33,6 +41,9 @@ import {
 	GAUNTLET_GATES,
 	GAUNTLET_POSTS,
 	GAUNTLET_SLUG_PREFIX,
+	GAUNTLET_VIEWER_EMAIL,
+	GAUNTLET_VIEWER_PASSWORD,
+	GAUNTLET_VIEWER_USERNAME,
 	type GauntletPost,
 } from "./gauntlet.js";
 import {
@@ -54,17 +65,56 @@ import {
 
 const TAG = "[gauntlet]";
 
+/**
+ * Local content root, mirroring the API's LocalStorageService (repo root /content/).
+ * Only used when the storage backend is local — which is every place this fixture runs.
+ */
+const CONTENT_ROOT = join(import.meta.dir, "../../../content");
+
 /** Resolve the viewer whose relationship with the creator the gauntlet walks. */
 function resolveViewerUsername(): string {
 	const flagIndex = process.argv.indexOf("--user");
 	const fromFlag = flagIndex !== -1 ? process.argv[flagIndex + 1]?.trim() : undefined;
+	if (process.argv.includes("--ensure-viewer")) {
+		// The harness's own account; --user may still override which viewer gets reset.
+		return fromFlag || GAUNTLET_VIEWER_USERNAME;
+	}
 	const username = fromFlag || process.env.DEV_ACCOUNT_USERNAME?.trim();
 	if (!username) {
 		throw new Error(
-			"No viewer to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), or pass --user <username>.",
+			"No viewer to reset. Set DEV_ACCOUNT_USERNAME in .env (the account `make dev` bootstraps), pass --user <username>, or pass --ensure-viewer for the harness's own account.",
 		);
 	}
 	return username;
+}
+
+/** Create the harness-owned viewer account if it doesn't exist yet. */
+async function ensureViewer(): Promise<void> {
+	const [existing] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.username, GAUNTLET_VIEWER_USERNAME))
+		.limit(1);
+	if (existing) return;
+
+	const passwordHash = await Bun.password.hash(GAUNTLET_VIEWER_PASSWORD, {
+		algorithm: "argon2id",
+	});
+	const [created] = await db
+		.insert(users)
+		.values({
+			username: GAUNTLET_VIEWER_USERNAME,
+			email: GAUNTLET_VIEWER_EMAIL,
+			passwordHash,
+			displayName: "Gauntlet Viewer",
+			bio: "The harness's viewer for automated User Gauntlet walks.",
+			isCreator: false,
+			// Pre-verified: checkout and Seed-giving carry requireVerified, and there is no
+			// email loop to click through in a headless run.
+			emailVerified: true,
+		})
+		.returning({ id: users.id });
+	console.log(`${TAG} created viewer "${GAUNTLET_VIEWER_USERNAME}" (id ${created.id})`);
 }
 
 /** Create the fixture creator if absent; return its id either way. */
@@ -156,18 +206,36 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 		await db
 			.insert(postContents)
 			.values({ postId: inserted.id, position: 0, kind: "content", contentItemId: item.id });
+		const fileKey = `creators/${creatorId}/assets/${spec.slug}.zip`;
 		await db.insert(assets).values({
 			contentItemId: item.id,
-			file: `creators/${creatorId}/assets/${spec.slug}.zip`,
+			file: fileKey,
 			filename: `${spec.slug}.zip`,
 			// Fixed, not random: the delivery fee is derived from this, so a stable size
-			// keeps the quoted price stable across runs.
+			// keeps the quoted price stable across runs. The fee math reads THIS number,
+			// not the bytes on disk, so the real object below can stay tiny.
 			fileSize: 64 * 1024 * 1024,
 			mimeType: "application/zip",
 			platform: "windows",
 		});
+		await writeDownloadObject(fileKey);
 	}
 	return inserted.id;
+}
+
+/**
+ * Put a real object behind the downloadable asset so the post-purchase download actually
+ * serves. Local storage only (which is everywhere this fixture runs); the content is a
+ * minimal valid EMPTY zip — the 22-byte end-of-central-directory record — so whatever
+ * fetches it can even open it.
+ */
+async function writeDownloadObject(fileKey: string): Promise<void> {
+	if ((process.env.STORAGE_BACKEND ?? "local") !== "local") return;
+	const target = join(CONTENT_ROOT, fileKey);
+	await mkdir(dirname(target), { recursive: true });
+	const eocd = new Uint8Array(22);
+	eocd.set([0x50, 0x4b, 0x05, 0x06]); // "PK\x05\x06", all remaining fields zero
+	await Bun.write(target, eocd);
 }
 
 /** Rebuild the creator's advertised gate ladder from scratch. */
@@ -194,7 +262,9 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 			.set({ anthersSeeds: 0, creatorSeedTotal: "0.00", updatedAt: new Date() })
 			.where(eq(accounts.userId, viewerId));
 	} else {
-		await db.insert(accounts).values({ userId: viewerId, anthersSeeds: 0, creatorSeedTotal: "0.00" });
+		await db
+			.insert(accounts)
+			.values({ userId: viewerId, anthersSeeds: 0, creatorSeedTotal: "0.00" });
 	}
 
 	await db
@@ -244,6 +314,10 @@ async function clean(): Promise<void> {
 	await deleteGauntletPosts(creator.id);
 	// Everything else the creator owns (gates, follows, allocations) cascades from the user.
 	await db.delete(users).where(eq(users.id, creator.id));
+	// The download object under the fixture creator's storage prefix goes with it.
+	if ((process.env.STORAGE_BACKEND ?? "local") === "local") {
+		await rm(join(CONTENT_ROOT, `creators/${creator.id}`), { recursive: true, force: true });
+	}
 	console.log(`${TAG} removed the fixture creator and all its rows.`);
 }
 
@@ -251,6 +325,10 @@ async function main(): Promise<void> {
 	if (process.argv.includes("--clean")) {
 		await clean();
 		return;
+	}
+
+	if (process.argv.includes("--ensure-viewer")) {
+		await ensureViewer();
 	}
 
 	const viewerUsername = resolveViewerUsername();
