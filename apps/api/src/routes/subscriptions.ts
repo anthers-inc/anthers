@@ -352,11 +352,16 @@ const subscriptionRoutes = new Hono()
 
 	// ── Billing Portal ───────────────────────────────────────────────────────
 	.post("/billing-portal", requireAuth, async (c) => {
-		// TODO: Create Stripe Billing Portal session
-		return c.json({
-			portalUrl: "https://billing.stripe.com/placeholder",
-			message: "Stripe billing portal not yet implemented",
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+		const user = c.get("user");
+		const customerId = await ensureStripeCustomer(user.id, user.email);
+		const base =
+			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
+		const session = await stripe.billingPortal.sessions.create({
+			customer: customerId,
+			return_url: `${base}/subscription`,
 		});
+		return c.json({ portalUrl: session.url });
 	})
 
 	// ── Time (Attention) Events ──────────────────────────────────────────────
@@ -838,14 +843,6 @@ const subscriptionRoutes = new Hono()
 			gates,
 			unlockedGates,
 		});
-	})
-
-	// ── Payment Webhook ──────────────────────────────────────────────────────
-	.post("/webhook", async (c) => {
-		// TODO: Verify Stripe webhook signature
-		// TODO: Handle subscription lifecycle (quantity = Anthers-Seeds) + Seed-buy PaymentIntents
-
-		return c.json({ received: true });
 	});
 
 export { subscriptionRoutes };
