@@ -28,6 +28,7 @@ import ProjectRating from "../components/project/ProjectRating";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionTracker } from "../lib/attention";
 import { useMediaPlayer } from "../lib/media-player";
+import { studioEditPostUrl } from "../lib/studio";
 
 /** Whether a transcoding job is still in-flight (show a status card, not a player). */
 function isJobPending(status: string): boolean {
@@ -94,6 +95,15 @@ export default function PostPage() {
 	const [loading, setLoading] = useState(true);
 	const [commentBody, setCommentBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
+
+	// ── Owner actions (edit / unpublish / delete) ──
+	const [showHistory, setShowHistory] = useState(false);
+	const [showDelete, setShowDelete] = useState(false);
+	const [orphanMedia, setOrphanMedia] = useState<
+		{ id: number; title: string | null; type: string; thumbnail: string | null }[]
+	>([]);
+	const [purgeMedia, setPurgeMedia] = useState(false);
+	const [actioning, setActioning] = useState(false);
 
 	// After a purchase, the webhook grants access asynchronously — poll the post until
 	// access lands (or a few seconds pass), so the page reveals the unlocked content
@@ -253,6 +263,57 @@ export default function PostPage() {
 	const canAccess = !access || access.canAccess;
 	const contents = post.contents ?? [];
 
+	const isOwner = isAuthenticated && user?.id === post.creatorId;
+	const edits = post.edits ?? [];
+
+	// Load which library items would be orphaned, then open the delete confirmation.
+	const openDelete = async () => {
+		setPurgeMedia(false);
+		setOrphanMedia([]);
+		setShowDelete(true);
+		try {
+			const res = await client.api.content.posts[":slug"]["orphaned-media"].$get({
+				param: { slug: post.slug },
+			});
+			if (res.ok) {
+				const data = (await res.json()) as {
+					items: { id: number; title: string | null; type: string; thumbnail: string | null }[];
+				};
+				setOrphanMedia(data.items ?? []);
+			}
+		} catch {
+			// Preview is best-effort — delete still works without it.
+		}
+	};
+
+	const confirmDelete = async () => {
+		setActioning(true);
+		try {
+			const res = await client.api.content.posts[":slug"].$delete({
+				param: { slug: post.slug },
+				query: purgeMedia ? { purgeMedia: "true" } : {},
+			});
+			if (res.status === 204 || res.ok) {
+				navigate(post.creator?.username ? `/${post.creator.username}` : "/");
+			}
+		} finally {
+			setActioning(false);
+		}
+	};
+
+	const handleUnpublish = async () => {
+		setActioning(true);
+		try {
+			const res = await client.api.content.posts[":slug"].$patch({
+				param: { slug: post.slug },
+				json: { isPublished: false },
+			});
+			if (res.ok) setPost((prev) => (prev ? { ...prev, isPublished: false } : prev));
+		} finally {
+			setActioning(false);
+		}
+	};
+
 	const playAudioInMiniPlayer = (item: ContentItem, src: string) => {
 		mediaPlayer.playTrack({
 			src,
@@ -393,7 +454,26 @@ export default function PostPage() {
 						<Link to={`/${post.creator?.username}`} className="font-medium link link-hover">
 							{post.creator?.displayName || post.creator?.username}
 						</Link>
-						<p className="text-base-content/50 text-xs">{date}</p>
+						<p className="text-base-content/50 text-xs">
+							{date}
+							{edits.length > 0 && (
+								<>
+									{" · "}
+									<button
+										type="button"
+										className="link link-hover"
+										onClick={() => setShowHistory((v) => !v)}
+									>
+										Edited{" "}
+										{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
+											month: "short",
+											day: "numeric",
+											year: "numeric",
+										})}
+									</button>
+								</>
+							)}
+						</p>
 					</div>
 					{post.estimatedReadMinutes && (
 						<div className="flex items-center gap-2 ml-auto">
@@ -404,6 +484,71 @@ export default function PostPage() {
 						</div>
 					)}
 				</div>
+
+				{/* Owner status + controls (only the creator reaches an unpublished post). */}
+				{isOwner && (
+					<div className="flex flex-wrap items-center gap-2 mb-6">
+						{post.isPublished === false && (
+							<span className="badge badge-warning gap-1">
+								{post.scheduledFor
+									? `Scheduled for ${new Date(post.scheduledFor).toLocaleString("en-US", {
+											month: "short",
+											day: "numeric",
+											hour: "numeric",
+											minute: "2-digit",
+										})}`
+									: "Draft"}
+							</span>
+						)}
+						<a href={studioEditPostUrl(post.slug)} className="btn btn-sm btn-outline">
+							Edit
+						</a>
+						{post.isPublished && (
+							<button
+								type="button"
+								className="btn btn-sm btn-ghost"
+								onClick={handleUnpublish}
+								disabled={actioning}
+							>
+								Unpublish
+							</button>
+						)}
+						<button
+							type="button"
+							className="btn btn-sm btn-ghost text-error"
+							onClick={openDelete}
+							disabled={actioning}
+						>
+							Delete
+						</button>
+					</div>
+				)}
+
+				{/* Edit history (public — the "Edited …" link toggles it). */}
+				{showHistory && edits.length > 0 && (
+					<div className="rounded-lg border border-base-300 bg-base-200/50 p-4 mb-6 text-sm">
+						<h3 className="font-semibold mb-2">Edit history</h3>
+						<ul className="flex flex-col gap-1">
+							{edits.map((e) => (
+								<li
+									key={e.editedAt}
+									className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
+								>
+									<span>
+										{new Date(e.editedAt).toLocaleString("en-US", {
+											month: "short",
+											day: "numeric",
+											year: "numeric",
+											hour: "numeric",
+											minute: "2-digit",
+										})}
+									</span>
+									{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
+								</li>
+							))}
+						</ul>
+					</div>
+				)}
 
 				{canAccess ? (
 					<>
@@ -454,6 +599,64 @@ export default function PostPage() {
 					)
 				)}
 			</article>
+
+			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
+			{showDelete && (
+				<div className="modal modal-open">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Delete this post?</h3>
+						<p className="py-3 text-sm text-base-content/70">
+							This permanently removes the post along with its comments and ratings. It can't be
+							undone.
+						</p>
+						{orphanMedia.length > 0 && (
+							<label className="label cursor-pointer items-start justify-start gap-3 rounded-lg border border-base-300 p-3">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm mt-0.5"
+									checked={purgeMedia}
+									onChange={(e) => setPurgeMedia(e.target.checked)}
+								/>
+								<span className="label-text">
+									Also delete {orphanMedia.length} unused media item
+									{orphanMedia.length === 1 ? "" : "s"} from your library
+									<span className="block text-xs text-base-content/50">
+										{orphanMedia.map((m) => m.title || `Untitled ${m.type}`).join(", ")}
+									</span>
+									<span className="block text-xs text-base-content/50">
+										No other post uses {orphanMedia.length === 1 ? "it" : "them"}. Leave unchecked
+										to keep {orphanMedia.length === 1 ? "it" : "them"} in your library.
+									</span>
+								</span>
+							</label>
+						)}
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setShowDelete(false)}
+								disabled={actioning}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={confirmDelete}
+								disabled={actioning}
+							>
+								{actioning ? "Deleting..." : "Delete post"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setShowDelete(false)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
 
 			{/* Comments */}
 			<div className="border-t border-base-300 pt-6">

@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { processingState } from "../components/content/contentItems";
 import RichTextEditor from "../components/editor/RichTextEditor";
 import AccessTables, {
 	type AnthersRowDraft,
@@ -37,6 +38,15 @@ function parseTags(text: string): string[] {
 	const set = new Set<string>();
 	for (const m of text.matchAll(/#([\p{L}0-9_-]+)/gu)) set.add(m[1]);
 	return [...set];
+}
+
+/** ISO datetime → the local value an `<input type="datetime-local">` expects (no seconds). */
+function isoToLocalInput(iso: string | null | undefined): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** Best-effort extraction of an { error } message from a non-ok JSON response. */
@@ -72,6 +82,8 @@ export default function PostFormPage() {
 
 	// ── Publish ──
 	const [isPinned, setIsPinned] = useState(false);
+	// Optional auto-publish time (datetime-local string). Non-empty = scheduled draft.
+	const [scheduledFor, setScheduledFor] = useState<string>("");
 
 	// ── UI ──
 	const [loading, setLoading] = useState(true);
@@ -82,6 +94,16 @@ export default function PostFormPage() {
 	const forceDownloadOnly = entries.some(
 		(e) => e.item?.type === "physical" || e.item?.type === "service",
 	);
+
+	// Referenced media that isn't ready yet blocks an immediate publish (mirrors the server
+	// gate). Scheduling and saving a draft stay available — a scheduled post publishes once
+	// its media finishes, at or after the chosen time.
+	const hasUnreadyMedia = entries.some((e) => {
+		if (!e.item) return false;
+		const state = processingState(e.item);
+		return state === "processing" || state === "failed";
+	});
+	const isScheduling = scheduledFor.trim() !== "";
 
 	useEffect(() => {
 		if (forceDownloadOnly) {
@@ -122,6 +144,7 @@ export default function PostFormPage() {
 					setStreamEnabled(post.streamEnabled);
 					setDownloadEnabled(post.downloadEnabled);
 					setIsPinned(post.isPinned);
+					setScheduledFor(isoToLocalInput(post.scheduledFor));
 					setEntries((post.contents ?? []).map(draftFromPostEntry));
 					setSeedRows(buildSeedRows(seedGates, post.seedAccess));
 					setAnthersRows(buildAnthersRows(post.anthersAccess));
@@ -176,6 +199,8 @@ export default function PostFormPage() {
 			isPinned,
 			tags: parseTags(body),
 			isPublished: publish,
+			// Publishing now clears any schedule; otherwise persist the chosen auto-publish time.
+			scheduledFor: publish || !scheduledFor ? null : new Date(scheduledFor).toISOString(),
 			contents: entries
 				.map(serializePostEntry)
 				.filter((e): e is NonNullable<typeof e> => e !== null),
@@ -369,6 +394,42 @@ export default function PostFormPage() {
 						<span className="label-text">Pin Post</span>
 					</label>
 
+					<FormField label="Schedule publish (optional)">
+						<div className="flex flex-wrap items-center gap-2">
+							<input
+								type="datetime-local"
+								className="input input-bordered"
+								value={scheduledFor}
+								onChange={(e) => setScheduledFor(e.target.value)}
+							/>
+							{scheduledFor && (
+								<button
+									type="button"
+									className="btn btn-ghost btn-sm"
+									onClick={() => setScheduledFor("")}
+									disabled={saving}
+								>
+									Clear
+								</button>
+							)}
+						</div>
+						<p className="text-xs text-base-content/50 mt-1">
+							{isScheduling
+								? "Saved as a draft now; it publishes automatically at this time."
+								: "Leave empty to publish immediately or keep as a plain draft."}
+						</p>
+					</FormField>
+
+					{hasUnreadyMedia && (
+						<div className="alert alert-warning">
+							<span>
+								{isScheduling
+									? "Some referenced media is still processing — this post will publish once it's ready, at or after your scheduled time."
+									: "Some referenced media is still processing. You can save a draft or schedule it, but it can't be published until processing finishes."}
+							</span>
+						</div>
+					)}
+
 					<div className="flex flex-wrap gap-2 mt-2">
 						<button
 							type="button"
@@ -386,14 +447,26 @@ export default function PostFormPage() {
 						>
 							{saving ? "Saving..." : "Save as Draft"}
 						</button>
-						<button
-							type="button"
-							className="btn btn-primary"
-							onClick={() => handleSubmit(true)}
-							disabled={saving}
-						>
-							{saving ? "Saving..." : "Publish Post"}
-						</button>
+						{isScheduling ? (
+							<button
+								type="button"
+								className="btn btn-primary"
+								onClick={() => handleSubmit(false)}
+								disabled={saving}
+							>
+								{saving ? "Saving..." : "Schedule"}
+							</button>
+						) : (
+							<button
+								type="button"
+								className="btn btn-primary"
+								onClick={() => handleSubmit(true)}
+								disabled={saving || hasUnreadyMedia}
+								title={hasUnreadyMedia ? "Referenced media is still processing" : undefined}
+							>
+								{saving ? "Saving..." : "Publish Post"}
+							</button>
+						)}
 					</div>
 				</section>
 			</form>

@@ -268,6 +268,9 @@ const createPostSchema = postBaseSchema.refine((d) => d.streamEnabled || d.downl
 
 const updatePostSchema = postBaseSchema.partial();
 
+/** Query flags for DELETE /posts/:slug — purgeMedia opts into removing orphaned library media. */
+const deletePostQuerySchema = z.object({ purgeMedia: z.enum(["true", "1"]).optional() });
+
 const createProjectSchema = z.object({
 	title: z.string().min(1).max(255),
 	slug: z
@@ -1018,6 +1021,7 @@ const contentRoutes = new Hono()
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
+					scheduledFor: p.scheduledFor,
 					viewCount: p.viewCount,
 					downloadCount: p.downloadCount,
 					estimatedReadMinutes: p.estimatedReadMinutes,
@@ -1381,16 +1385,17 @@ const contentRoutes = new Hono()
 		return c.json({ items });
 	})
 
-	.delete("/posts/:slug", requireAuth, async (c) => {
+	.delete("/posts/:slug", requireAuth, zValidator("query", deletePostQuerySchema), async (c) => {
 		const user = c.get("user");
 		const { slug } = c.req.param();
+		const { purgeMedia } = c.req.valid("query");
 		const existing = await findPostRow(slug);
 		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
 		// Optionally purge library media left orphaned by this delete (opt-in via ?purgeMedia=1).
 		// Media lives on reusable content items, not the post, so purging is deliberately explicit.
 		// Compute orphans BEFORE deleting the post (the query reads its post_contents rows).
-		const purge = c.req.query("purgeMedia") === "true" || c.req.query("purgeMedia") === "1";
+		const purge = purgeMedia === "true" || purgeMedia === "1";
 		const orphanIds = purge ? await orphanedItemIds(existing.id) : [];
 
 		await db.delete(posts).where(eq(posts.id, existing.id));

@@ -210,6 +210,8 @@ export interface Post {
 	sourceUrl: string | null;
 	estimatedReadMinutes: number | null;
 	isPublished: boolean | null;
+	/** ISO datetime a draft is scheduled to auto-publish at; null when not scheduled. */
+	scheduledFor: string | null;
 	viewCount: number;
 	downloadCount: number;
 	atprotoUri: string | null;
@@ -222,6 +224,15 @@ export interface Post {
 	ratingCount?: number;
 	contents?: PostEntry[];
 	access?: AccessResult;
+	/** Transparent edit history (newest first), present on the detail endpoint. */
+	edits?: PostEdit[];
+}
+
+/** One timestamped entry in a post's edit history. */
+export interface PostEdit {
+	editedAt: string;
+	summary: string;
+	changedFields: string[] | null;
 }
 
 /** Lighter serialization returned by the timeline endpoint (GET /posts). */
@@ -239,6 +250,7 @@ export interface PostListItem {
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
+	scheduledFor?: string | null;
 	viewCount: number;
 	downloadCount: number;
 	estimatedReadMinutes: number | null;
