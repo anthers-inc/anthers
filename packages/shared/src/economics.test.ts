@@ -6,12 +6,7 @@
 // breaks the sum — or that lets Payments leak into a Seed — is caught here.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import {
-	BADGE_ORDER,
-	SEED_PRICE,
-	TIME_POOL_PER_SEED,
-	timePoolFor,
-} from "./constants.js";
+import { BADGE_ORDER, SEED_PRICE, TIME_POOL_PER_SEED, timePoolFor } from "./constants.js";
 import {
 	anthersSeedBreakdown,
 	calculateFees,
