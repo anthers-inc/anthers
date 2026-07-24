@@ -27,6 +27,7 @@ import {
 	contentItems,
 	inlineImages,
 	postContents,
+	postEdits,
 	posts,
 	projectPosts,
 	projects,
@@ -36,7 +37,7 @@ import {
 	users,
 } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, avg, count, desc, eq, inArray, like, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, avg, count, desc, eq, inArray, like, ne, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
@@ -252,6 +253,9 @@ const postBaseSchema = z.object({
 	websiteUrl: z.string().max(500).optional().default(""),
 	sourceUrl: z.string().max(500).optional().default(""),
 	isPublished: z.boolean().optional().default(false),
+	// ISO datetime at which a still-unpublished draft should auto-publish; null clears the
+	// schedule. Publishing now (isPublished=true) supersedes and clears any schedule.
+	scheduledFor: z.string().datetime().nullable().optional(),
 
 	// Optionally attach to a project (collection) on create.
 	projectId: z.number().int().optional(),
@@ -263,6 +267,9 @@ const createPostSchema = postBaseSchema.refine((d) => d.streamEnabled || d.downl
 });
 
 const updatePostSchema = postBaseSchema.partial();
+
+/** Query flags for DELETE /posts/:slug — purgeMedia opts into removing orphaned library media. */
+const deletePostQuerySchema = z.object({ purgeMedia: z.enum(["true", "1"]).optional() });
 
 const createProjectSchema = z.object({
 	title: z.string().min(1).max(255),
@@ -473,6 +480,124 @@ async function purgeItemMedia(
 			console.error(`[content-item delete] delete failed for ${key}:`, err);
 		}
 	}
+}
+
+// ─── Publish / edit / delete helpers ────────────────────────────────────────────
+
+/** Distinct content-item IDs referenced by a set of validated post entries. */
+function entryItemIds(entries: PostEntryInput[]): number[] {
+	return [
+		...new Set(
+			entries
+				.filter(
+					(e): e is Extract<PostEntryInput, { kind: "content" }> =>
+						e.kind === "content" && e.contentItemId != null,
+				)
+				.map((e) => e.contentItemId),
+		),
+	];
+}
+
+/**
+ * The publish-readiness gate: given referenced content-item IDs, return the ones whose
+ * latest transcoding job hasn't reached "completed" (still pending/processing, or failed).
+ * Items with no transcoding job (images, games, software) are always ready and never
+ * appear here. Publish is blocked while this is non-empty; save/draft is not.
+ */
+async function unreadyItems(itemIds: number[]): Promise<Array<{ itemId: number; status: string }>> {
+	if (itemIds.length === 0) return [];
+	const jobs = await db
+		.select({
+			itemId: transcodingJobs.contentItemId,
+			status: transcodingJobs.status,
+			createdAt: transcodingJobs.createdAt,
+		})
+		.from(transcodingJobs)
+		.where(inArray(transcodingJobs.contentItemId, itemIds))
+		.orderBy(desc(transcodingJobs.createdAt));
+	const latest = new Map<number, string>();
+	for (const j of jobs) if (!latest.has(j.itemId)) latest.set(j.itemId, j.status);
+	const unready: Array<{ itemId: number; status: string }> = [];
+	for (const [itemId, status] of latest)
+		if (status !== "completed") unready.push({ itemId, status });
+	return unready;
+}
+
+/**
+ * Which content-bearing fields a PATCH actually changed, as human labels — this drives a
+ * post's edit history. Publish/unpublish and schedule changes are actions, not content
+ * edits, so they're deliberately excluded and never produce a history entry.
+ */
+function changedPostFields(
+	existing: typeof posts.$inferSelect,
+	data: z.infer<typeof updatePostSchema>,
+	contentsChanged: boolean,
+): string[] {
+	const changed: string[] = [];
+	if (data.title !== undefined && data.title !== (existing.title ?? "")) changed.push("title");
+	if (data.slug !== undefined && data.slug !== existing.slug) changed.push("slug");
+	const bodyChanged =
+		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
+		(data.bodyHtml !== undefined && sanitizePostHtml(data.bodyHtml) !== (existing.bodyHtml ?? ""));
+	if (bodyChanged) changed.push("body");
+	if (contentsChanged) changed.push("content");
+	if (
+		(data.streamEnabled !== undefined && data.streamEnabled !== existing.streamEnabled) ||
+		(data.downloadEnabled !== undefined && data.downloadEnabled !== existing.downloadEnabled)
+	)
+		changed.push("delivery");
+	if (
+		(data.anthersAccess !== undefined &&
+			JSON.stringify(data.anthersAccess) !== JSON.stringify(existing.anthersAccess ?? [])) ||
+		(data.seedAccess !== undefined &&
+			JSON.stringify(data.seedAccess) !== JSON.stringify(existing.seedAccess ?? []))
+	)
+		changed.push("access");
+	if (data.showOnTimeline !== undefined && data.showOnTimeline !== existing.showOnTimeline)
+		changed.push("timeline visibility");
+	if (data.isPinned !== undefined && data.isPinned !== existing.isPinned) changed.push("pin");
+	if (data.tags !== undefined && JSON.stringify(data.tags) !== JSON.stringify(existing.tags ?? []))
+		changed.push("tags");
+	if (data.websiteUrl !== undefined && data.websiteUrl !== (existing.websiteUrl ?? ""))
+		changed.push("website link");
+	if (data.sourceUrl !== undefined && data.sourceUrl !== (existing.sourceUrl ?? ""))
+		changed.push("source link");
+	return changed;
+}
+
+/** A stable signature of a post's ordered entries, for cheap change detection. */
+function entriesSignature(
+	entries: {
+		kind: string;
+		contentItemId?: number | null;
+		bodyHtml?: string | null;
+		caption?: string | null;
+	}[],
+): string {
+	return entries
+		.map((e) =>
+			e.kind === "content" ? `c:${e.contentItemId}:${e.caption ?? ""}` : `t:${e.bodyHtml ?? ""}`,
+		)
+		.join("|");
+}
+
+/**
+ * Content-item IDs referenced by this post and by no other post — i.e. those left orphaned
+ * if the post is deleted. Storage/media live on the item, so purging them is opt-in.
+ */
+async function orphanedItemIds(postId: number): Promise<number[]> {
+	const mine = await db
+		.select({ itemId: postContents.contentItemId })
+		.from(postContents)
+		.where(and(eq(postContents.postId, postId), eq(postContents.kind, "content")));
+	const ids = [...new Set(mine.map((r) => r.itemId).filter((x): x is number => x != null))];
+	if (ids.length === 0) return [];
+	const others = await db
+		.select({ itemId: postContents.contentItemId })
+		.from(postContents)
+		.where(and(inArray(postContents.contentItemId, ids), ne(postContents.postId, postId)));
+	const stillUsed = new Set(others.map((r) => r.itemId));
+	return ids.filter((id) => !stillUsed.has(id));
 }
 
 // ─── Post entry persistence ─────────────────────────────────────────────────────
@@ -896,6 +1021,7 @@ const contentRoutes = new Hono()
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
+					scheduledFor: p.scheduledFor,
 					viewCount: p.viewCount,
 					downloadCount: p.downloadCount,
 					estimatedReadMinutes: p.estimatedReadMinutes,
@@ -922,6 +1048,22 @@ const contentRoutes = new Hono()
 		const { ok, itemsById } = await loadOwnedItemsForEntries(data.contents, user.id);
 		if (!ok) {
 			return c.json({ error: "A referenced content item was not found in your library." }, 400);
+		}
+
+		// Publish is gated on media readiness: a post can't go live while a referenced item is
+		// still transcoding (it would render with no playable media). Draft/save stays free.
+		if (data.isPublished) {
+			const unready = await unreadyItems(entryItemIds(data.contents));
+			if (unready.length > 0) {
+				return c.json(
+					{
+						error: "Can't publish yet — referenced media is still processing.",
+						code: "media_not_ready",
+						unready,
+					},
+					409,
+				);
+			}
 		}
 
 		// Explicit slug must be free; otherwise derive a unique one from the title.
@@ -967,6 +1109,12 @@ const contentRoutes = new Hono()
 				sourceUrl: data.sourceUrl,
 				estimatedReadMinutes,
 				isPublished: data.isPublished,
+				// Publishing now clears any schedule; otherwise store the requested publish time.
+				scheduledFor: data.isPublished
+					? null
+					: data.scheduledFor
+						? new Date(data.scheduledFor)
+						: null,
 			})
 			.returning();
 
@@ -1000,6 +1148,13 @@ const contentRoutes = new Hono()
 		const post = await findPostRow(slug);
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
+		// An unpublished post (draft / scheduled / unpublished) is visible only to its creator —
+		// the permalink 404s for everyone else, matching how drafts are hidden from feeds.
+		const viewerId = await getOptionalUserId(c);
+		if (!post.isPublished && viewerId !== post.creatorId) {
+			return c.json({ error: "Post not found" }, 404);
+		}
+
 		const [creator] = await db
 			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
 			.from(users)
@@ -1029,7 +1184,6 @@ const contentRoutes = new Hono()
 			.where(eq(posts.id, post.id))
 			.execute();
 
-		const viewerId = await getOptionalUserId(c);
 		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
 		const access = resolveAccessSync(post as AccessiblePost, ctx);
 
@@ -1040,6 +1194,17 @@ const contentRoutes = new Hono()
 		// thumbnail, and meta remain so the client can render a "locked post" preview.
 		const gatedBody = access.canAccess ? {} : { bodyHtml: "", body: "" };
 
+		// Transparent edit history — every content edit is logged with a timestamp.
+		const edits = await db
+			.select({
+				editedAt: postEdits.editedAt,
+				summary: postEdits.summary,
+				changedFields: postEdits.changedFields,
+			})
+			.from(postEdits)
+			.where(eq(postEdits.postId, post.id))
+			.orderBy(desc(postEdits.editedAt));
+
 		return c.json({
 			post: {
 				...post,
@@ -1049,6 +1214,7 @@ const contentRoutes = new Hono()
 				ratingCount: Number(agg.count),
 				contents,
 				access,
+				edits,
 			},
 		});
 	})
@@ -1068,6 +1234,51 @@ const contentRoutes = new Hono()
 			const { ok } = await loadOwnedItemsForEntries(data.contents, user.id);
 			if (!ok) {
 				return c.json({ error: "A referenced content item was not found in your library." }, 400);
+			}
+		}
+
+		// Capture whether this edit actually changes the content list (before reconcile) so the
+		// edit-history entry below only records real content changes, not no-op re-saves.
+		let contentsChanged = false;
+		if (data.contents !== undefined) {
+			const before = await db
+				.select({
+					kind: postContents.kind,
+					contentItemId: postContents.contentItemId,
+					bodyHtml: postContents.bodyHtml,
+					caption: postContents.caption,
+				})
+				.from(postContents)
+				.where(eq(postContents.postId, existing.id))
+				.orderBy(asc(postContents.position));
+			contentsChanged = entriesSignature(before) !== entriesSignature(data.contents);
+		}
+
+		// Publish-readiness gate: block going (or staying) published while a referenced item is
+		// still transcoding. Save/draft and scheduling stay free.
+		const willPublish = data.isPublished ?? existing.isPublished;
+		if (willPublish) {
+			const intendedItemIds =
+				data.contents !== undefined
+					? entryItemIds(data.contents)
+					: (
+							await db
+								.select({ itemId: postContents.contentItemId })
+								.from(postContents)
+								.where(and(eq(postContents.postId, existing.id), eq(postContents.kind, "content")))
+						)
+							.map((r) => r.itemId)
+							.filter((x): x is number => x != null);
+			const unready = await unreadyItems(intendedItemIds);
+			if (unready.length > 0) {
+				return c.json(
+					{
+						error: "Can't publish yet — referenced media is still processing.",
+						code: "media_not_ready",
+						unready,
+					},
+					409,
+				);
 			}
 		}
 
@@ -1119,6 +1330,10 @@ const contentRoutes = new Hono()
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
 		if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
+		if (data.scheduledFor !== undefined)
+			updates.scheduledFor = data.scheduledFor ? new Date(data.scheduledFor) : null;
+		// Publishing now supersedes and clears any pending schedule.
+		if (data.isPublished === true) updates.scheduledFor = null;
 
 		// Keep the denormalized type/thumbnail + read time in sync.
 		updates.contentType = deriveContentType(currentEntries, currentItemsById);
@@ -1135,17 +1350,71 @@ const contentRoutes = new Hono()
 			.where(eq(posts.id, existing.id))
 			.returning();
 
+		// Record a timestamped edit-history entry when the post's content actually changed
+		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
+		const editedFields = changedPostFields(existing, data, contentsChanged);
+		if (editedFields.length > 0) {
+			await db.insert(postEdits).values({
+				postId: existing.id,
+				summary: editedFields.join(", "),
+				changedFields: editedFields,
+			});
+		}
+
 		const contents = await loadPostContents(updated.id, true, hlsStreamCtxFor(updated));
 		return c.json({ post: { ...updated, contents } });
 	})
 
-	.delete("/posts/:slug", requireAuth, async (c) => {
+	// Preview which library items would be orphaned by deleting this post — powers the
+	// "also remove now-unused media?" prompt on the delete confirmation. Owner-only.
+	.get("/posts/:slug/orphaned-media", requireAuth, async (c) => {
+		const user = c.get("user");
+		const existing = await findPostRow(c.req.param("slug"));
+		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
+		const ids = await orphanedItemIds(existing.id);
+		if (ids.length === 0) return c.json({ items: [] });
+		const items = await db
+			.select({
+				id: contentItems.id,
+				title: contentItems.title,
+				type: contentItems.type,
+				thumbnail: contentItems.thumbnail,
+			})
+			.from(contentItems)
+			.where(inArray(contentItems.id, ids));
+		return c.json({ items });
+	})
+
+	.delete("/posts/:slug", requireAuth, zValidator("query", deletePostQuerySchema), async (c) => {
 		const user = c.get("user");
 		const { slug } = c.req.param();
+		const { purgeMedia } = c.req.valid("query");
 		const existing = await findPostRow(slug);
 		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
+		// Optionally purge library media left orphaned by this delete (opt-in via ?purgeMedia=1).
+		// Media lives on reusable content items, not the post, so purging is deliberately explicit.
+		// Compute orphans BEFORE deleting the post (the query reads its post_contents rows).
+		const purge = purgeMedia === "true" || purgeMedia === "1";
+		const orphanIds = purge ? await orphanedItemIds(existing.id) : [];
+
 		await db.delete(posts).where(eq(posts.id, existing.id));
+
+		if (orphanIds.length > 0) {
+			const [orphanRows, orphanAssets, orphanJobs] = await Promise.all([
+				db.select().from(contentItems).where(inArray(contentItems.id, orphanIds)),
+				db.select().from(assets).where(inArray(assets.contentItemId, orphanIds)),
+				db.select().from(transcodingJobs).where(inArray(transcodingJobs.contentItemId, orphanIds)),
+			]);
+			for (const item of orphanRows) {
+				await purgeItemMedia(
+					item,
+					orphanAssets.filter((a) => a.contentItemId === item.id),
+					orphanJobs.filter((j) => j.contentItemId === item.id),
+				);
+			}
+			await db.delete(contentItems).where(inArray(contentItems.id, orphanIds));
+		}
 		return c.body(null, 204);
 	})
 

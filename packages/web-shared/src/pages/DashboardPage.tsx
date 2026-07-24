@@ -3,8 +3,10 @@
 import {
 	ArrowDownTrayIcon,
 	ChartBarIcon,
+	EyeSlashIcon,
 	PencilSquareIcon,
 	PlusIcon,
+	TrashIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
@@ -21,6 +23,14 @@ export default function DashboardPage() {
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 	const [loading, setLoading] = useState(true);
+
+	// ── Delete / unpublish ──
+	const [deleteTarget, setDeleteTarget] = useState<PostListItem | null>(null);
+	const [orphanMedia, setOrphanMedia] = useState<
+		{ id: number; title: string | null; type: string; thumbnail: string | null }[]
+	>([]);
+	const [purgeMedia, setPurgeMedia] = useState(false);
+	const [actioning, setActioning] = useState(false);
 
 	useEffect(() => {
 		Promise.all([
@@ -42,6 +52,61 @@ export default function DashboardPage() {
 				.catch(() => {});
 		}
 	}, [user?.isCreator]);
+
+	const openDelete = async (post: PostListItem) => {
+		setDeleteTarget(post);
+		setPurgeMedia(false);
+		setOrphanMedia([]);
+		try {
+			const res = await client.api.content.posts[":slug"]["orphaned-media"].$get({
+				param: { slug: post.slug },
+			});
+			if (res.ok) {
+				const data = (await res.json()) as {
+					items: { id: number; title: string | null; type: string; thumbnail: string | null }[];
+				};
+				setOrphanMedia(data.items ?? []);
+			}
+		} catch {
+			// Preview is best-effort — delete still works without it.
+		}
+	};
+
+	const confirmDelete = async () => {
+		if (!deleteTarget) return;
+		setActioning(true);
+		try {
+			const res = await client.api.content.posts[":slug"].$delete({
+				param: { slug: deleteTarget.slug },
+				query: purgeMedia ? { purgeMedia: "true" } : {},
+			});
+			if (res.status === 204 || res.ok) {
+				setPosts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+				setDeleteTarget(null);
+			}
+		} finally {
+			setActioning(false);
+		}
+	};
+
+	const unpublish = async (post: PostListItem) => {
+		setActioning(true);
+		try {
+			const res = await client.api.content.posts[":slug"].$patch({
+				param: { slug: post.slug },
+				json: { isPublished: false },
+			});
+			if (res.ok) {
+				setPosts((prev) =>
+					prev.map((p) =>
+						p.id === post.id ? { ...p, isPublished: false, scheduledFor: null } : p,
+					),
+				);
+			}
+		} finally {
+			setActioning(false);
+		}
+	};
 
 	if (loading) {
 		return (
@@ -222,11 +287,18 @@ export default function DashboardPage() {
 											</Link>
 										</td>
 										<td>
-											<span
-												className={`badge badge-sm ${post.isPublished ? "badge-success" : "badge-warning"}`}
-											>
-												{post.isPublished ? "Published" : "Draft"}
-											</span>
+											{post.isPublished ? (
+												<span className="badge badge-sm badge-success">Published</span>
+											) : post.scheduledFor ? (
+												<span
+													className="badge badge-sm badge-info"
+													title={`Scheduled for ${new Date(post.scheduledFor).toLocaleString()}`}
+												>
+													Scheduled
+												</span>
+											) : (
+												<span className="badge badge-sm badge-warning">Draft</span>
+											)}
 										</td>
 										<td className="text-sm text-base-content/50">
 											{new Date(post.createdAt).toLocaleDateString()}
@@ -239,6 +311,26 @@ export default function DashboardPage() {
 											>
 												<PencilSquareIcon className="w-4 h-4" />
 											</Link>
+											{post.isPublished && (
+												<button
+													type="button"
+													className="btn btn-ghost btn-xs"
+													title="Unpublish"
+													onClick={() => unpublish(post)}
+													disabled={actioning}
+												>
+													<EyeSlashIcon className="w-4 h-4" />
+												</button>
+											)}
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs text-error"
+												title="Delete"
+												onClick={() => openDelete(post)}
+												disabled={actioning}
+											>
+												<TrashIcon className="w-4 h-4" />
+											</button>
 										</td>
 									</tr>
 								))}
@@ -259,6 +351,64 @@ export default function DashboardPage() {
 					/>
 				)}
 			</section>
+
+			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
+			{deleteTarget && (
+				<div className="modal modal-open">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Delete "{deleteTarget.title || "Untitled"}"?</h3>
+						<p className="py-3 text-sm text-base-content/70">
+							This permanently removes the post along with its comments and ratings. It can't be
+							undone.
+						</p>
+						{orphanMedia.length > 0 && (
+							<label className="label cursor-pointer items-start justify-start gap-3 rounded-lg border border-base-300 p-3">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm mt-0.5"
+									checked={purgeMedia}
+									onChange={(e) => setPurgeMedia(e.target.checked)}
+								/>
+								<span className="label-text">
+									Also delete {orphanMedia.length} unused media item
+									{orphanMedia.length === 1 ? "" : "s"} from your library
+									<span className="block text-xs text-base-content/50">
+										{orphanMedia.map((m) => m.title || `Untitled ${m.type}`).join(", ")}
+									</span>
+									<span className="block text-xs text-base-content/50">
+										No other post uses {orphanMedia.length === 1 ? "it" : "them"}. Leave unchecked
+										to keep {orphanMedia.length === 1 ? "it" : "them"} in your library.
+									</span>
+								</span>
+							</label>
+						)}
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setDeleteTarget(null)}
+								disabled={actioning}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={confirmDelete}
+								disabled={actioning}
+							>
+								{actioning ? "Deleting..." : "Delete post"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setDeleteTarget(null)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
 		</div>
 	);
 }
