@@ -164,6 +164,7 @@ export const QUEUES = {
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates Foundation subsidy allocations
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
+	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -198,5 +199,9 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.FETCH_METRICS]: {
 		retryLimit: 1,
 		expireInMinutes: 15,
+	},
+	[QUEUES.PUBLISH_SCHEDULED]: {
+		retryLimit: 1,
+		expireInMinutes: 5,
 	},
 };

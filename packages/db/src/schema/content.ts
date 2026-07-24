@@ -82,6 +82,9 @@ export const posts = pgTable(
 		sourceUrl: text("source_url").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
 		isPublished: boolean("is_published").notNull().default(false),
+		// When set, a still-unpublished (draft) post auto-publishes at this time via the
+		// publish-scheduled cron sweep. Cleared once the post publishes. Null = not scheduled.
+		scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
 
 		// ── Counters (bigint — views/downloads can exceed int4 at scale) ──
 		viewCount: bigint("view_count", { mode: "number" }).notNull().default(0),
@@ -99,6 +102,27 @@ export const posts = pgTable(
 		index("idx_posts_created").on(table.createdAt),
 		uniqueIndex("uq_posts_public_id").on(table.publicId),
 	],
+);
+
+/**
+ * Append-only log of post edits — one row per PATCH that changed a post's content, so an
+ * edited post can show a transparent "Edited {date}" history. Stores a short summary of
+ * which fields changed (not full diffs). Cascades with the post.
+ */
+export const postEdits = pgTable(
+	"post_edits",
+	{
+		id: serial("id").primaryKey(),
+		postId: integer("post_id")
+			.notNull()
+			.references(() => posts.id, { onDelete: "cascade" }),
+		// Short human-readable summary of what changed, e.g. "body, title, access".
+		summary: text("summary").notNull().default(""),
+		// The changed field keys, for potential richer display later.
+		changedFields: jsonb("changed_fields").$type<string[]>().default([]),
+		editedAt: timestamp("edited_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_post_edits_post").on(table.postId, table.editedAt)],
 );
 
 /**

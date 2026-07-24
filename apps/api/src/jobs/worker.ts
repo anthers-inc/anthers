@@ -15,6 +15,7 @@ import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { fetchExternalMetrics } from "./fetch-metrics.js";
 import { type PackageVideoData, packageVideo } from "./package-video.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
+import { publishScheduled } from "./publish-scheduled.js";
 import { ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
@@ -127,6 +128,13 @@ async function start() {
 		}
 	});
 
+	await queue.work(QUEUES.PUBLISH_SCHEDULED, async (jobs) => {
+		for (const job of jobs) {
+			const n = await publishScheduled();
+			if (n > 0) console.log(`[publish-scheduled] job ${job.id}: published ${n} scheduled post(s)`);
+		}
+	});
+
 	// ── Cron schedules ────────────────────────────────────────────────
 
 	await queue.schedule(QUEUES.DISTRIBUTE_POOL, "0 0 * * *", {}); // midnight daily
@@ -134,6 +142,7 @@ async function start() {
 	// Foundation subsidy calculation (legacy queue name: calculate-crf)
 	await queue.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
 	await queue.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
+	await queue.schedule(QUEUES.PUBLISH_SCHEDULED, "* * * * *", {}); // every minute — publishes due drafts
 
 	// Recover any transcodes interrupted by the previous worker's shutdown.
 	// Best-effort: recovery must never crash the worker, so failures are logged,
@@ -146,7 +155,7 @@ async function start() {
 
 	console.log("Worker ready. Listening for jobs...");
 	console.log(
-		"Scheduled: distribute-pool (daily), settle-cycle (monthly), calculate-crf (daily), fetch-metrics (6h)",
+		"Scheduled: distribute-pool (daily), settle-cycle (monthly), calculate-crf (daily), fetch-metrics (6h), publish-scheduled (1m)",
 	);
 }
 
