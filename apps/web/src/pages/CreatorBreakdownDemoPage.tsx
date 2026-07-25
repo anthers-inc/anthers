@@ -28,12 +28,10 @@ interface SubscriberMilestone {
 
 interface RevenueByPlan {
 	badge: string;
-	/** Whole-dollar monthly plan price. */
+	/** Whole-dollar monthly cost of holding this many Anthers-Seeds. */
 	price: number;
 	/** Time Pool ($) — to creators, by watch-time. */
 	timePool: number;
-	/** Included Seeds (count, $1 each) — 100% to the chosen creator. */
-	seeds: number;
 	/** Money to creators from this plan = Time Pool + Seeds. */
 	toCreators: number;
 }
@@ -69,7 +67,7 @@ interface DemoCreatorBreakdown {
 	anthers: PlatformComparison;
 	/** Subscriber milestones to hit key revenue targets */
 	milestones: SubscriberMilestone[];
-	/** Per-subscriber funding by Anthers Badge plan */
+	/** Per-supporter funding by the fan's Anthers-Seed rank */
 	revenueByTier: RevenueByPlan[];
 	/** Key insight text */
 	insight: string;
@@ -117,12 +115,13 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
 // ---------------------------------------------------------------------------
 
 /**
- * V4 Anthers Badge plans. A viewer CHOOSES a plan (Root $4 / Sprout $8 / Petal
- * $16 / Blossom $32); its price splits into a Time Pool (to creators, by
- * watch-time), included Seeds ($1 units, 100% to a chosen creator), and the
- * Community Share (the charitable remainder). "toCreators" = Time Pool + Seeds,
- * shared across creators; each creator's actual take is their watch-time share of
- * the Time Pool plus any directed Seeds. Derived from @anthers/shared/constants.
+ * The Anthers-Seed rank ladder (support model). A fan holds N Anthers-Seeds at $3
+ * each — Root 1 … Blossom 4, and up from there — and each Seed puts $1.50 into their
+ * Time Pool (to creators, by watch-time), covers their own streaming at cost, and
+ * leaves the remainder to the Foundation. "toCreators" here is the Time Pool only,
+ * shared across everyone they watch; a creator's actual take is their watch-time
+ * share of it plus any Seeds directed straight to them (those are separate, and
+ * 100% theirs). Derived from @anthers/shared/constants.
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {
@@ -132,7 +131,6 @@ const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] a
 			badge: b.charAt(0).toUpperCase() + b.slice(1),
 			price: seedCost(n),
 			timePool,
-			seeds: 0, // no plan-included Seeds in the support model; directed Seeds are separate
 			toCreators: timePool,
 		};
 	},
@@ -735,16 +733,13 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				<thead>
 					<tr className="border-base-content/10">
 						<th style={serif} className="font-medium">
-							Plan
+							Rank
 						</th>
 						<th style={serif} className="text-right font-medium">
-							Price
+							They pay
 						</th>
 						<th style={serif} className="text-right font-medium">
 							Time Pool
-						</th>
-						<th style={serif} className="text-right font-medium">
-							Seeds
 						</th>
 						<th style={serif} className="text-right font-medium">
 							To creators
@@ -760,9 +755,6 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 							</td>
 							<td className="text-sm text-right tabular-nums text-base-content/60">
 								${row.timePool.toFixed(2)}
-							</td>
-							<td className="text-sm text-right tabular-nums text-primary">
-								{row.seeds > 0 ? `${row.seeds} × $1` : "—"}
 							</td>
 							<td className="text-sm text-right tabular-nums font-semibold text-success">
 								${row.toCreators.toFixed(2)}
@@ -881,7 +873,7 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 				</div>
 				<div>
 					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
-						Per-Subscriber Funding by Badge
+						Per-Supporter Funding by Rank
 					</h4>
 					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4">

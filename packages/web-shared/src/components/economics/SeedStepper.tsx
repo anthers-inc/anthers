@@ -2,8 +2,9 @@
 /**
  * Whole-dollar Seed stepper.
  *
- * Seeds are $1 units, so the control is deliberately integer-only — `set` floors and
- * clamps, which keeps a typed value inside [min, max] as well as the buttons do.
+ * A Seed is an indivisible $3 unit, so the control is deliberately integer-only — `set`
+ * floors and clamps, which keeps a typed value inside [min, max] as well as the buttons do.
+ * `value`/`min`/`max` are in whole dollars, stepping one Seed at a time.
  *
  * `min` is doing real work at both call sites: within a billing cycle a Seed allocation
  * can only ever increase (the API rejects a decrease), so callers pass the already-committed

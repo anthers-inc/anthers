@@ -42,7 +42,7 @@ export interface AccessiblePost {
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of posts. */
 export interface AccessContext {
 	userId: number | null;
-	/** The viewer's *currently held* Badge plan (point-in-time). */
+	/** The viewer's *currently held* rank — their Anthers-Seed count (point-in-time). */
 	badge: Badge;
 	/** creatorId → dollars of Seeds the viewer has given to that creator this cycle */
 	seedByCreator: Map<number, number>;

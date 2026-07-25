@@ -3,24 +3,43 @@
 // The For Creators marketing page — restyled into the Meadow design (matching
 // /for-users). Airy editorial forest-green, Fraunces display serif over Nunito
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
-// shared LoggedOutLayout supplies the Meadow footer + grassy floor. Copy tracks the
-// V4 "Big Rethink" model: users choose a Badge plan (Free/Root/Sprout/Petal/Blossom),
-// Seeds are $1 direct-to-creator units, bandwidth is a separate at-cost wallet. The
-// lead pitch is the 0% cut on Seeds and direct sales — Patreon/Bandcamp/Steam/itch, first;
-// public streaming is a secondary benefit (discovery + at-cost reach). Anthers plan
-// figures come from @anthers/shared/constants; competitor figures are rough public
-// estimates (illustrative).
+// shared LoggedOutLayout supplies the Meadow footer + grassy floor.
+//
+// Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one
+// primitive, a Seed at $3/month, pointed either at a creator (a directed Seed —
+// 100% theirs, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
+// (an Anthers-Seed — the fan's streaming at cost, $1.50 into the Time Pool, and the
+// remainder to the Foundation). A fan's rank IS their Anthers-Seed count (Root →
+// Blossom = 1 → 4, "+" beyond). Bandwidth is folded in — no wallet.
+//
+// The creator-side through-line, and why the page is sequenced the way it is:
+// ① direct support (Seeds given to you + direct sales) reaches you in full — the
+// wedge, and where the 0%-cut claim is unconditionally true; ② the commons (the
+// Time Pool, by watch-time) pays for the work Anthers distributes for you. The
+// distributor-pays rule ties them together: whoever distributes a piece of work is
+// who pays for it. Streaming is deliberately NOT pitched as out-earning YouTube or
+// Spotify per hour — its value is at-cost reach.
+//
+// Anthers figures derive from @anthers/shared/constants (never hardcoded); competitor
+// figures are rough public estimates (illustrative). Claims follow the Copy Style
+// Guide (63.01): "0% cut / 100%" only where it is unconditionally true (directed
+// Seeds and direct sales), "non-profit" never "501(c)(3)" until the IRS letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
 // sets up "The solution" — an interactive matrix (how a fan supports you × the
 // medium) showing what reaches the creator vs. the platform on Anthers and
-// elsewhere.
+// elsewhere — then "How you get paid" spells out the two channels.
 
 import {
 	BADGE_ORDER,
+	BANDWIDTH_PER_GIB,
 	badgeLabel,
 	badgeRank,
+	DELIVERY_GIB_PER_HOUR,
+	FREE_STORAGE_GIB,
+	SEED_PRICE,
 	seedCost,
+	TIME_POOL_PER_SEED,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -28,7 +47,8 @@ import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
-import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
+import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
+import { BADGE_ART } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import {
@@ -58,17 +78,8 @@ import { useState } from "react";
 
 const serif = { fontFamily: FONTS.fraunces };
 
-/** Whole dollars render bare ($4); fractional plans keep cents ($0.05). */
+/** Whole dollars render bare ($6); fractional amounts keep cents ($1.50). */
 const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
-
-/** Badge glyphs, low → high (matches the economics widget's ladder emoji). */
-const BADGE_EMOJI: Record<string, string> = {
-	// free: "🌰",
-	root: "🫚",
-	sprout: "🌱",
-	petal: "🌷",
-	blossom: "🌼",
-};
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
@@ -95,9 +106,9 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
-							Anthers is Patreon, Bandcamp, Steam, and itch—at a 0% cut. Games, videos, music, and
-							writing under one roof, one identity, one audience. Seeds and sales reach you in full,
-							with no hidden fees.
+							Anthers is Patreon, Bandcamp, Steam, and itch in one place—games, videos, music, and
+							writing under one roof, one identity, one audience. Every Seed given to you and every
+							sale reaches you in full: 0% cut, no fee, no processing skim.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -162,15 +173,15 @@ export default function ForCreatorsPage() {
 				</div>
 			</Section>
 
-			{/* The solution — one home, 0% cut on Seeds and sales; explore the economics live */}
+			{/* The solution — 0% cut on Seeds and sales; explore the economics live */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The solution</Eyebrow>
 					<H2>When someone pays you, that's what you get paid.</H2>
 					<Lede>
-						Anthers is Patreon, Bandcamp, Steam, and itch, at a 0% cut. Direct purchases and
-						channel-supporting Seeds are paid 100% to you; streaming makes your work discoverable to
-						users at-cost.
+						Seeds a fan gives you and anything they buy from you are paid to you 100%—no cut, no
+						fee, no processing skim. Streaming is the other side: it makes your work discoverable,
+						served at cost, and pays you from the Time Pool for the time people spend with it.
 					</Lede>
 					<Lede>
 						Try out all the ways a fan can support you, and see what happens when you cut out the
@@ -210,7 +221,8 @@ export default function ForCreatorsPage() {
 								<ReceiptLine label="You pay" amount="$10.62" bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								Creator receives $10.00—every time. Costs are added on top, never subtracted.
+								Creator receives $10.00—every time. Costs are added on top, never subtracted (plus
+								sales tax where it applies).
 							</p>
 						</Card>
 					</Reveal>
@@ -224,10 +236,12 @@ export default function ForCreatorsPage() {
 								Creators understand what they're earning.
 							</PricePoint>
 							<PricePoint icon={<ServerStackIcon className="h-5 w-5" />} title="The Foundation fee">
-								Anthers' one markup rides on the infrastructure a transaction actually uses—50% of
-								the bandwidth a download or stream needs, plus 50% of creator storage. It funds free
-								access, charitable programs, and lean operations. It's a community investment, not a
-								platform tax—Anthers itself never profits.
+								On a sale, Anthers' one markup rides on the infrastructure the transaction actually
+								uses—half of a download's bandwidth (a fraction of a cent), or a nominal 1% where
+								nothing is delivered—plus half of your storage cost past the free {FREE_STORAGE_GIB}{" "}
+								GiB. On streaming there's no markup at all: the Foundation simply receives what's
+								left of a fan's Anthers-Seed after their bandwidth and the Time Pool. It funds free
+								access, charitable programs, and lean operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -405,42 +419,106 @@ export default function ForCreatorsPage() {
 				</div>
 			</Section>
 
-			{/* Badge plans — how users fund you (V4: chosen plans, not rolling spend) */}
+			{/* How you get paid — the support model's two channels, creator-side */}
 			<Section>
 				<Reveal>
-					<Eyebrow>How users pay you</Eyebrow>
-					<H2>Users fund creators, not platforms</H2>
+					<Eyebrow>How you get paid</Eyebrow>
+					<H2>Two ways money reaches you</H2>
 					<Lede>
-						A user holds Anthers-Seeds—$3 each. Each one is money to creators—the Time Pool, shared
-						out by watch-time—plus their own bandwidth at cost (folded in), and a remainder that
-						supports the Anthers Foundation. Seeds you give a creator reach them 100%. There's no
-						separate wallet. Anthers is a 501(c)(3) non-profit—no investors, no profit-taking.
+						There's one thing to support on Anthers: a{" "}
+						<strong className="font-semibold text-base-content/80">Seed</strong>,{" "}
+						{fmtMoney(SEED_PRICE)} a month. A fan points it at you—and it's yours in full—or at
+						Anthers, where part of it becomes the Time Pool that pays for the work Anthers hands out
+						on your behalf. Both reach creators; neither is a cut of your earnings.
 					</Lede>
 				</Reveal>
-				<Reveal className="mx-auto mt-12 block max-w-3xl">
+				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
+					<Reveal delay={0} className="h-full">
+						<SignpostCard step="1" title="Direct support — 100% yours" tone="creator">
+							The wedge, and the part we'll state flatly: nothing is taken.
+							<ul>
+								<li>
+									<strong className="font-semibold text-base-content/85">Seeds given to you</strong>{" "}
+									— {fmtMoney(SEED_PRICE)}/month each, recurring like a membership, 100% to you with
+									no fee and no payout processing
+								</li>
+								<li>
+									<strong className="font-semibold text-base-content/85">Anything you sell</strong>{" "}
+									— games, albums, books, prints, merch, services: you receive the full listed
+									price, always
+								</li>
+								<li>
+									Your buyer covers the real costs on top—delivery at cost, the Foundation fee on
+									the bytes, card processing and tax—never subtracted from your side
+								</li>
+							</ul>
+							This is where "0% cut" is simply true, with nothing to qualify.
+						</SignpostCard>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<SignpostCard step="2" title="The Anthers commons — the Time Pool" tone="anthers">
+							Fans also hold{" "}
+							<strong className="font-semibold text-base-content/85">Anthers-Seeds</strong> pointed
+							at the platform itself. Each one:
+							<ul>
+								<li>
+									puts {fmtMoney(TIME_POOL_PER_SEED)} into that fan's{" "}
+									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
+									across the creators they spend time with, by time
+								</li>
+								<li>
+									counts every medium equally—an hour of reading, listening, playing, and watching
+									are the same hour
+								</li>
+								<li>
+									raises their rank (Root → Blossom), which opens Anthers-gated work across every
+									creator, including yours
+								</li>
+							</ul>
+							A fan's own streaming is covered at cost inside the same Seed, and whatever is left
+							over supports the Foundation—not Anthers' pocket. Anthers is a non-profit: no
+							investors, no profit-taking.
+						</SignpostCard>
+					</Reveal>
+				</div>
+
+				{/* The rule that ties the two channels together */}
+				<Reveal delay={140} className="mx-auto mt-10 block max-w-3xl">
+					<Card className="border-primary/20 bg-primary/[0.04] text-left">
+						<h3 style={serif} className="mb-2 text-lg font-medium">
+							Whoever hands out the work is who pays you for it
+						</h3>
+						<p className="text-sm leading-relaxed text-base-content/70">
+							Work <em className="not-italic font-medium">you</em> hand out—behind your own Seed
+							Gate, or sold—is paid by direct support, in full, and draws nothing from the Time
+							Pool. Work <em className="not-italic font-medium">Anthers</em> hands out—free to the
+							public, or behind an Anthers Gate—is paid from the Time Pool, funded by everyone
+							backing the commons. Every piece of work pays you exactly once, from the side that
+							carried it.
+						</p>
+					</Card>
+				</Reveal>
+
+				{/* What a fan brings to the Time Pool at each rank (derived from constants) */}
+				<Reveal className="mx-auto mt-12 block max-w-2xl">
 					<Card className="overflow-x-auto">
 						<table className="table">
 							<thead>
 								<tr className="border-base-content/10">
-									{["Rank", "Price", "Time Pool", "Seeds", "Supports Anthers", "To creators"].map(
-										(h, i) => (
-											<th
-												key={h}
-												style={serif}
-												className={`font-medium ${i === 0 ? "" : "text-right"}`}
-											>
-												{h}
-											</th>
-										),
-									)}
+									{["Rank", "Anthers-Seeds", "They pay", "Their Time Pool"].map((h, i) => (
+										<th
+											key={h}
+											style={serif}
+											className={`font-medium ${i === 0 ? "" : "text-right"}`}
+										>
+											{h}
+										</th>
+									))}
 								</tr>
 							</thead>
 							<tbody>
 								{BADGE_ORDER.map((b) => {
 									const n = badgeRank(b);
-									const plan = { price: seedCost(n), timePool: timePoolFor(n), seeds: 0 };
-									const toCreators = plan.timePool;
-									const community = plan.price - toCreators; // "Supports Anthers": bandwidth + Foundation
 									const isFree = b === "free";
 									return (
 										<tr
@@ -448,18 +526,15 @@ export default function ForCreatorsPage() {
 											className={`border-base-content/10 ${isFree ? "text-base-content/45" : ""}`}
 										>
 											<td className={isFree ? "" : "font-medium"}>
-												{BADGE_EMOJI[b]} {badgeLabel(b)}
+												{!isFree && BADGE_ART[b].emoji} {badgeLabel(b)}
 											</td>
-											<td className="text-right text-base-content/70">{fmtMoney(plan.price)}</td>
-											<td className="text-right text-base-content/70">{fmtMoney(plan.timePool)}</td>
+											<td className="text-right text-base-content/70">{n}</td>
 											<td className="text-right text-base-content/70">
-												{plan.seeds === 0 ? "—" : plan.seeds}
-											</td>
-											<td className="text-right text-base-content/70">
-												{isFree ? "—" : fmtMoney(community)}
+												{isFree ? "$0" : fmtMoney(seedCost(n))}
 											</td>
 											<td className="text-right font-medium text-primary">
-												{fmtMoney(toCreators)}
+												${timePoolFor(n).toFixed(2)}
+												{isFree ? "*" : ""}
 											</td>
 										</tr>
 									);
@@ -470,14 +545,68 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
-						A user's rank is how many Anthers-Seeds they hold right now—a point-in-time choice, not
-						a rolling total of past spend. Every Seed is $3 and, when given to a creator, goes 100%
-						to them, nothing skimmed. The Time Pool pays creators by the time people spend with
-						their work. Bandwidth is folded into each Anthers-Seed at cost ($0.01/GiB)—a free
-						monthly floor (15 GiB) plus a per-Seed allowance, no wallet—and creators get 50 GiB of
-						free storage. Coming soon.
+						A fan's rank is how many Anthers-Seeds they hold right now—a point-in-time choice, not a
+						rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is split
+						across every creator they spend time with, so what reaches you is your share of their
+						month, not the whole figure. Seeds they give you directly are separate, and 100% yours.
+						*A free account pays nothing; the Foundation funds its small Time Pool and its streaming
+						floor, so even a free viewer pays the creators they watch. Bandwidth is folded into each
+						Anthers-Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you get{" "}
+						{FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
+			</Section>
+
+			{/* Your ladder — Seed Gates, Anthers Gates, and your own Badges */}
+			<Section tint>
+				<Reveal>
+					<Eyebrow>Your ladder</Eyebrow>
+					<H2>Build your own levels, name them, draw them</H2>
+					<Lede>
+						Gating on Anthers is one idea in two directions: a threshold of support pointed at you,
+						or at the commons. You choose which of your work sits behind which—and a fan gets in by
+						clearing <em className="not-italic underline decoration-primary/40">either</em> one.
+					</Lede>
+				</Reveal>
+				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-3">
+					<Reveal delay={0} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-2 text-lg font-medium">
+								🌱&nbsp; Seed Gates
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Your own rungs, set in whole Seeds—{fmtMoney(SEED_PRICE)},{" "}
+								{fmtMoney(SEED_PRICE * 2)}, {fmtMoney(SEED_PRICE * 3)} a month and up. You write the
+								names and pick what each one opens. Because Seeds are given deliberately, nobody
+								backs into your inner circle by watching.
+							</p>
+						</Card>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-2 text-lg font-medium">
+								🌼&nbsp; Anthers Gates
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Or gate on a fan's rank—Root through Blossom—and reach everyone already backing the
+								commons, including people who've never heard of you. That work is paid from the Time
+								Pool, so it earns without asking a newcomer for anything extra.
+							</p>
+						</Card>
+					</Reveal>
+					<Reveal delay={220} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-2 text-lg font-medium">
+								👑&nbsp; Your Badges
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Every Seed level of yours carries a Badge you design—a small collectible emblem your
+								supporters wear, the way Anthers' ranks have their botanical wreaths. The Foundation
+								sponsors emerging illustrators to help creators make them.
+							</p>
+						</Card>
+					</Reveal>
+				</div>
 			</Section>
 
 			{/* Your identity & work — profile + project-page previews, one section */}
@@ -696,7 +825,7 @@ type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] 
 
 const ACTIONS = [
 	{ key: "purchase", label: "Purchases your work" },
-	{ key: "seed", label: "Plants Seeds for you" },
+	{ key: "seed", label: "Gives you Seeds" },
 	{ key: "stream", label: "Streams your work" },
 ] as const;
 type ActionKey = (typeof ACTIONS)[number]["key"];
@@ -713,23 +842,47 @@ type MediaKey = (typeof MEDIA)[number]["key"];
 // Header intro for the per-combo Anthers mini-receipt (below the comparison).
 const RECEIPT_INTRO: Record<ActionKey, string> = {
 	purchase: "the price plus delivery",
-	seed: "your $5 in Seeds",
-	stream: "when a fan streams your public work",
+	seed: "the Seeds a fan gives you",
+	stream: "an hour a fan spends with your public work",
 };
 
-const CS_NOTE = "community & charity";
+const CS_NOTE = "funds free access & programs";
 const PASSTHROUGH = "pure passthrough";
 
-// A representative engaged fan for the streaming comparison: a Sprout plan
-// ($8/mo, $4 Time Pool) who streams ~30 hrs/month. The creator earns the fan's
-// Time Pool ÷ their watch-hours per watch-hour — the SAME for every medium
-// (equal-time), and independent of resolution (pay is by time, not bytes).
-const STREAM_FAN_HOURS = 30;
-const STREAM_HR_PAY = `~$${(timePoolFor(badgeRank("sprout")) / STREAM_FAN_HOURS).toFixed(2)}`;
+// A representative engaged fan for the streaming comparison: Sprout rank — 2
+// Anthers-Seeds ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
+// reference streamer the economics doc uses. Everything below is derived, never
+// typed: the creator earns the fan's Time Pool ÷ their watch-hours per watch-hour —
+// the SAME for every medium (equal-time), and independent of resolution (pay is by
+// time, not bytes). The rest of that $6 is the fan's own bandwidth at cost and the
+// Foundation remainder, which shrinks per hour the more they watch.
+const STREAM_FAN_SEEDS = badgeRank("sprout");
+const STREAM_FAN_HOURS = 28;
+const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
+const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
+const STREAM_FAN_BANDWIDTH = STREAM_FAN_HOURS * DELIVERY_GIB_PER_HOUR * BANDWIDTH_PER_GIB;
+const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
+const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
+const STREAM_HR_BANDWIDTH = perHour(STREAM_FAN_BANDWIDTH);
+const STREAM_HR_FOUNDATION = perHour(STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_BANDWIDTH);
+/** "a Sprout fan ($6/mo, ~28 hrs/month)" — the shared preamble for the stream notes. */
+const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Anthers-Seeds, ~${STREAM_FAN_HOURS} hrs/month)`;
 
-/** The Anthers row for a combo. `platform` is the Foundation fee (a charitable
- * markup that funds free access + Foundation programs, never profit) — or $0 for
- * Seeds, a pure passthrough. It is NOT a platform profit cut. */
+// The Seed scenario: Seeds come in whole $3 units, so the comparison uses two of
+// them — $6/month — and the rival rows are scaled to the same $6.
+const SEED_COUNT = 2;
+const SEED_SPEND = seedCost(SEED_COUNT);
+const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
+/** What a rival keeps of the same $6 after its stated cut. */
+const rivalKeeps = (cutRate: number) => `$${(SEED_SPEND * (1 - cutRate)).toFixed(2)}`;
+const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
+const SEED_SCENARIO = `A fan gives you ${SEED_COUNT} Seeds a month (${SEED_SPEND_STR})`;
+const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and every cent reaches you — the card cost is paid on top, not out of your share. The rival figures are their headline percentage only; their payment processing comes out of the creator's remainder too.`;
+
+/** The Anthers row for a combo. `platform` is what the Anthers Foundation receives —
+ * the fee on a sale's infrastructure, or the remainder of a fan's Anthers-Seeds on a
+ * stream; $0 on a Seed, which is a pure passthrough. It funds free access + Foundation
+ * programs and is NOT a platform profit cut. */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
 	creator,
@@ -738,30 +891,37 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 });
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
-// closing line makes the honest point the comparison table can't: Anthers profit
-// is always $0 — the Foundation fee is charity, and bandwidth is an at-cost
-// passthrough. Streaming isn't where Anthers competes on pay; the Time Pool share
-// is small and variable, and the real support comes from Seeds and sales.
+// closing line makes the honest point the comparison table can't: Anthers profit is
+// always $0 — the Foundation fee funds free access and programs, and bandwidth is an
+// at-cost passthrough. Streaming isn't where Anthers competes on pay; the Time Pool
+// share is small and variable, and the real support comes from Seeds and sales.
 const streamReceipt: Line[] = [
-	{ label: "To you — a Sprout fan's Time Pool share, by watch-time", amount: STREAM_HR_PAY },
-	{ label: "Foundation fee — free access & charity", amount: "~$0.01" },
-	{ label: "Bandwidth — folded into the fan's Anthers-Seeds, at cost", amount: "~$0.02" },
+	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
+	{
+		label: "Their bandwidth — folded into their Anthers-Seeds, at cost",
+		amount: STREAM_HR_BANDWIDTH,
+	},
+	{
+		label: "The Foundation — what's left of their Anthers-Seeds, spread across the month",
+		amount: STREAM_HR_FOUNDATION,
+	},
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const purchaseReceipt = (price: string, cs: string, bw: string): Line[] => [
 	{ label: "To you — your price, in full", amount: price },
-	{ label: "Foundation fee — free access & charity", amount: cs },
+	{ label: "Foundation fee — free access & programs", amount: cs },
 	{ label: "Bandwidth — delivery, at cost", amount: bw },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
 	{ label: "To you — your price, in full", amount: "$25.00" },
-	{ label: "Foundation fee — 1%, free access & charity", amount: "$0.25" },
+	{ label: "Foundation fee — 1%, free access & programs", amount: "$0.25" },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 const seedReceipt: Line[] = [
-	{ label: "To you — every cent", amount: "$5.00" },
+	{ label: "To you — every cent", amount: SEED_SPEND_STR },
 	{ label: "Foundation fee", amount: "$0.00" },
+	{ label: "Card + processing — the fan pays it on top, never out of your Seeds", amount: "$0.00" },
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 
@@ -773,41 +933,41 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		video: {
 			scenario: "A fan watches an hour of your public 1080p video",
 			rows: [
-				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, STREAM_HR_FOUNDATION, CS_NOTE),
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
-				{ name: "YouTube (Premium)", creator: "~$0.20", platform: "~$0.16" },
+				{ name: "YouTube (Premium)", creator: "~$0.05–0.20", platform: "~55%" },
 			],
-			note: "A Sprout fan (~$8/mo, ~30 hrs/month) pays a creator about $0.13 for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes (and it climbs with the fan's plan). Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.",
+			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Anthers-Seed they add. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
 			breakdown: streamReceipt,
 		},
 		games: {
 			scenario: "A fan plays an hour of your public browser game",
 			rows: [
-				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, STREAM_HR_FOUNDATION, CS_NOTE),
 				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
 				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
 			],
-			note: "Almost nowhere pays indie devs for play-time — Anthers pays the same ~$0.13/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; Seeds and sales are where fans really pay you.",
+			note: `Almost nowhere pays indie devs for play-time at all — Anthers pays the same ${STREAM_HR_PAY}/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; Seeds and sales are where fans really pay you.`,
 			breakdown: streamReceipt,
 		},
 		music: {
 			scenario: "A fan listens to an hour of your public tracks",
 			rows: [
-				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
-				{ name: "Spotify", creator: "~$0.02", platform: "rest to labels & Spotify" },
-				{ name: "Apple Music", creator: "~$0.04", platform: "skimmed" },
+				anthers(STREAM_HR_PAY, STREAM_HR_FOUNDATION, CS_NOTE),
+				{ name: "Spotify", creator: "~$0.07", platform: "~30% + labels" },
+				{ name: "Apple Music", creator: "~$0.17", platform: "~30% + labels" },
 			],
-			note: "Everywhere else pays fractions of a cent — Spotify ~$0.02/hr. Anthers pays by time, not format, so an hour of your tracks earns the same ~$0.13 as an hour of video: several times better, with no ads. Devoted fans still pay most through Seeds and album sales.",
+			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through Seeds and album sales, at 100%.`,
 			breakdown: streamReceipt,
 		},
 		writing: {
 			scenario: "A fan reads your public writing for an hour",
 			rows: [
-				anthers(STREAM_HR_PAY, "~$0.01", CS_NOTE),
+				anthers(STREAM_HR_PAY, STREAM_HR_FOUNDATION, CS_NOTE),
 				{ name: "Medium", creator: "~$0.02", platform: "members only" },
 				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
 			],
-			note: "Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about $0.13 for an hour with your work — and your public writing stays free to discover, served at cost. Seeds and sales are the real support.",
+			note: `Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about ${STREAM_HR_PAY.replace("~", "")} for an hour with your work — and your public writing stays free to discover, served at cost. Seeds and sales are the real support.`,
 			breakdown: streamReceipt,
 		},
 	},
@@ -861,49 +1021,53 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 	},
 	seed: {
 		video: {
-			scenario: "A fan plants $5 of Seeds a month",
+			scenario: SEED_SCENARIO,
 			rows: [
-				anthers("$5.00", "$0.00", PASSTHROUGH),
-				{ name: "YouTube Memberships", creator: "$3.50", platform: "$1.50" },
-				{ name: "Twitch (sub)", creator: "$2.50", platform: "$2.50" },
+				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
+				{ name: "YouTube Memberships", creator: rivalKeeps(0.3), platform: rivalTakes(0.3) },
+				{ name: "Twitch (sub)", creator: rivalKeeps(0.5), platform: rivalTakes(0.5) },
 			],
+			note: SEED_NOTE,
 			breakdown: seedReceipt,
 		},
 		games: {
-			scenario: "A fan plants $5 of Seeds a month",
+			scenario: SEED_SCENARIO,
 			rows: [
-				anthers("$5.00", "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
-				{ name: "Ko-fi", creator: "$4.75", platform: "$0.25" },
+				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
+				{ name: "Ko-fi", creator: rivalKeeps(0.05), platform: rivalTakes(0.05) },
 			],
+			note: SEED_NOTE,
 			breakdown: seedReceipt,
 		},
 		music: {
-			scenario: "A fan plants $5 of Seeds a month",
+			scenario: SEED_SCENARIO,
 			rows: [
-				anthers("$5.00", "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
-				{ name: "Bandcamp (subscription)", creator: "$4.25", platform: "$0.75" },
+				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
+				{ name: "Bandcamp (subscription)", creator: rivalKeeps(0.15), platform: rivalTakes(0.15) },
 			],
+			note: SEED_NOTE,
 			breakdown: seedReceipt,
 		},
 		writing: {
-			scenario: "A fan plants $5 of Seeds a month",
+			scenario: SEED_SCENARIO,
 			rows: [
-				anthers("$5.00", "$0.00", PASSTHROUGH),
-				{ name: "Substack", creator: "$4.50", platform: "$0.50" },
-				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
+				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
+				{ name: "Substack", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
+				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
 			],
+			note: SEED_NOTE,
 			breakdown: seedReceipt,
 		},
 		merch: {
-			scenario: "A fan plants $5 of Seeds a month",
+			scenario: SEED_SCENARIO,
 			rows: [
-				anthers("$5.00", "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: "$4.35", platform: "$0.65" },
-				{ name: "Buy Me a Coffee", creator: "$4.75", platform: "$0.25" },
+				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
+				{ name: "Buy Me a Coffee", creator: rivalKeeps(0.05), platform: rivalTakes(0.05) },
 			],
-			note: "Seeds support the creator directly—whatever they make. Each $1 is 100% yours.",
+			note: `${SEED_NOTE} Seeds back you, not one thing you made — whatever you turn out next is already covered.`,
 			breakdown: seedReceipt,
 		},
 	},
@@ -1069,10 +1233,11 @@ function SolutionExplorer() {
 			</div>
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
-				Anthers never profits: beyond your share and delivery at cost, the only markup is the
-				Foundation fee—a small charitable fee that funds free access for everyone and Anthers
-				Foundation programs (Seeds are a pure passthrough). Scenario figures are illustrative;
-				competitor rates are rough public estimates.
+				Anthers never profits. On a sale, beyond your price and delivery at cost, the only markup is
+				the Foundation fee, which funds free access for everyone and the Foundation's programs; on a
+				stream the Foundation simply receives what's left of the fan's Anthers-Seeds; a Seed given
+				to you is a pure passthrough. Scenario figures are illustrative; competitor rates are rough
+				public estimates.
 			</p>
 		</Card>
 	);

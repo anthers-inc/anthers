@@ -537,7 +537,7 @@ const TEST_USERS: SeedUser[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// V4 accounts — chosen Badge plan per seed user
+// Accounts — the Anthers-Seed count (rank) each seed user holds
 // ---------------------------------------------------------------------------
 
 /**

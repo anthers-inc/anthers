@@ -5,18 +5,19 @@
 // tab per platform (YouTube, Spotify, Steam, Bandcamp, Patreon, Substack); each
 // tab shows the relevant transaction(s) side by side.
 //
-// Framing (V4 "Big Rethink"): lead with the 0% cut. Anthers takes NOTHING out of
-// what reaches a creator — 100% of every Seed and every direct sale is theirs, and
-// the Time Pool (funded by viewers' chosen Badge plans) is distributed to creators
-// by watch-time. The one thing added is the Foundation fee: a
-// small charitable contribution the fan chooses on top as part of their plan price,
-// funding free access + creator programs. It is NOT skimmed from creator earnings.
-//   • On a direct sale the creator receives the full listed price; the Community
-//     Share is a charitable markup on that download's bandwidth (≈50% of it), added
-//     on top for the buyer — a fraction of a cent — never subtracted.
-//   • On a Seed there is no fee at all — $1, 100% to the creator.
+// Framing (the support model): lead with the 0% cut. Anthers takes NOTHING out of
+// what reaches a creator — 100% of every Seed given to them and every direct sale is
+// theirs, and the Time Pool (funded by the Anthers-Seeds fans point at the platform)
+// is distributed to creators by watch-time. The only non-creator, non-cost dollars
+// are the Foundation's, and they never come out of creator earnings.
+//   • On a direct sale the creator receives the full listed price; the Foundation fee
+//     is a markup on that download's bandwidth (≈50% of it), added on top for the
+//     buyer — a fraction of a cent — never subtracted.
+//   • On a Seed there is no fee at all — $3, 100% to the creator, with the card cost
+//     paid by the supporter on top of their monthly total.
 //   • On streaming the creator earns their watch-time share of every viewer's Time
-//     Pool, the same rate for every medium (equal-time). Anthers profits $0.
+//     Pool ($1.50 per Anthers-Seed), the same rate for every medium (equal-time).
+//     Anthers profits $0.
 //
 // Positioning (important): streaming is a secondary financial benefit, not the
 // headline. Under equal-time a music hour earns the same Time Pool share as a video
@@ -26,22 +27,31 @@
 // effectively at cost, with no ads and no profit-taking. The earnings levers are
 // Seeds and direct sales, and those are 100% yours.
 //
-// Anthers figures derive from packages/shared/src/constants.ts (BADGE_PLANS Time
-// Pool + Seeds, BANDWIDTH_PER_GIB $0.01 at cost, Digital AFF = 50% of a download's
-// bandwidth, Physical & Service AFF 1%). Competitor figures are their public rates.
+// Anthers figures derive from packages/shared/src/constants.ts (SEED_PRICE $3,
+// TIME_POOL_PER_SEED $1.50, BANDWIDTH_PER_GIB $0.01 at cost, Digital AFF = 50% of a
+// download's bandwidth, Physical & Service AFF 1%). Competitor figures are their
+// public rates.
 //
 // Styled like the calculators (dense, DaisyUI-native, plain — no Meadow decor), so
 // it reads as one set with the rest of Resources.
 
-import { badgeRank, timePoolFor } from "@anthers/shared/constants";
+import {
+	badgeRank,
+	CARD_FLAT,
+	CARD_RATE,
+	SEED_PRICE,
+	TIME_POOL_PER_SEED,
+	timePoolFor,
+} from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ─── Comparison data ─────────────────────────────────────────────────────────
 
-/** How a "cut" reads: charitable Foundation fee, for-profit skim, or nothing. */
-type CutKind = "charity" | "profit" | "none";
+/** How a "cut" reads: the Foundation fee (program revenue, on top), a for-profit
+ * skim (out of the creator's share), or nothing at all. */
+type CutKind = "foundation" | "profit" | "none";
 
 interface Side {
 	/** Headline: what reaches the creator (a $ figure or a share). */
@@ -73,35 +83,49 @@ interface Platform {
 	matchups: Matchup[];
 }
 
-// The paid Badge plans set the Time Pool a fan brings each month (Root $2 · Sprout
-// $4 · Petal $9 · Blossom $18). Split across everyone they watch by watch-time, that
-// lands roughly $0.05–0.60 per view-hour depending on plan and how much they watch —
-// the same rate for every medium (equal-time). 100% of it reaches creators.
-const PAID_POOLS = (["root", "sprout", "petal", "blossom"] as const).map((b) =>
-	timePoolFor(badgeRank(b)),
-);
-const POOL_RANGE = `$${PAID_POOLS[0]}–$${PAID_POOLS[PAID_POOLS.length - 1]}`;
+// A fan's Anthers-Seed count sets the Time Pool they bring each month ($1.50 per
+// Seed: Root $1.50 · Sprout $3 · Petal $4.50 · Blossom $6, and it keeps climbing past
+// Blossom). Split across everyone they watch by watch-time, that lands roughly
+// $0.03–0.60 per view-hour depending on how many Seeds they hold and how much they
+// watch — the same rate for every medium (equal-time). 100% of it reaches creators.
+const RANKS = ["root", "sprout", "petal", "blossom"] as const;
+const PAID_POOLS = RANKS.map((b) => timePoolFor(badgeRank(b)));
+const money = (n: number) => `$${n.toFixed(2)}`;
+const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
+/** The reference streamer both this page and /for-creators quote: Sprout (2 Anthers-
+ *  Seeds), ~28 watch-hours a month → their Time Pool ÷ those hours. */
+const REF_HOURS = 28;
+const REF_HR_PAY = money(timePoolFor(badgeRank("sprout")) / REF_HOURS);
+
+// The Seed scenario: Seeds are whole $3 units, so the membership matchups use two of
+// them ($6/month) and the rival rows are scaled to the same $6.
+const SEED_COUNT = 2;
+const SEED_SPEND = SEED_PRICE * SEED_COUNT;
+/** What a rival keeps of the same $6 after its headline cut, and its card cost. */
+const rivalKeeps = (cutRate: number) => money(SEED_SPEND * (1 - cutRate));
+const CARD_ON_SEEDS = money(SEED_SPEND * CARD_RATE + CARD_FLAT);
+const SEED_NET = money(SEED_SPEND * 0.9 - (SEED_SPEND * CARD_RATE + CARD_FLAT));
 
 // Anthers's per-transaction facts, reused across tabs. Streaming and Seeds take a
-// literal $0 from the creator; a sale's only add is the charitable Foundation fee,
+// literal $0 from the creator; a sale's only add is the Foundation fee,
 // a markup on delivery bandwidth added on top for the buyer — never subtracted.
 const A_STREAM: Side = {
-	keep: "~$0.05–0.60 / hr",
-	keepSub: "your watch-time share of the fan's monthly Time Pool — the same rate for every medium",
+	keep: "~$0.03–0.60 / hr",
+	keepSub: `your watch-time share of the fan's monthly Time Pool — the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
 	cut: "$0",
 	cutKind: "none",
 };
 /** A direct sale: creator keeps the full listed price; the Foundation fee is the
- * (small) charitable markup on the delivery, added on top for the buyer. */
+ * (small) markup on the delivery, added on top for the buyer. */
 const aPrice = (amount: string, share: string): Side => ({
 	keep: amount,
 	keepSub: "100% — your listed price, in full",
 	cut: share,
-	cutKind: "charity",
+	cutKind: "foundation",
 });
 const A_SEED: Side = {
-	keep: "$5.00",
-	keepSub: "100% — five $3 Seeds, no fee and no payout processing",
+	keep: money(SEED_SPEND),
+	keepSub: `100% — ${SEED_COUNT} × $${SEED_PRICE} Seeds, no fee and no payout processing`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -140,7 +164,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "$0.004/stream × ~17 songs (3:30 each); an artist keeps less after their label",
 					cut: "~30% + labels",
 				},
-				note: "Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on the fan's plan that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.",
+				note: `Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on how many Anthers-Seeds the fan holds that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.`,
 			},
 		],
 	},
@@ -154,7 +178,7 @@ const PLATFORMS: Platform[] = [
 				kind: "Digital purchase",
 				anthers: aPrice("$10.00", "~$0.01 · on top"),
 				rival: { keep: "$7.00", keepSub: "70%", cut: "30% (≈ $3.00)" },
-				note: "Anthers's only add here is the Foundation fee on the download bandwidth — about a cent, a charitable contribution added on top for the buyer, so your $10 reaches you whole. Steam's 30% comes out of your sale.",
+				note: "Anthers's only add here is the Foundation fee on the download bandwidth — about a cent, added on top for the buyer and funding free access, so your $10 reaches you whole. Steam's 30% comes out of your sale.",
 			},
 		],
 	},
@@ -173,7 +197,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "85%, before payment processing",
 					cut: "15% (→ 10% after $5k/yr)",
 				},
-				note: "Our only add is the Foundation fee on delivery — pennies of charity added on top; your $10 is untouched. Bandcamp takes 15% of your sale and also deducts payment processing from your cut.",
+				note: "Our only add is the Foundation fee on delivery — pennies, added on top; your $10 is untouched. Bandcamp takes 15% of your sale and also deducts payment processing from your cut.",
 			},
 			{
 				scenario: "A fan buys your $25 vinyl",
@@ -191,15 +215,15 @@ const PLATFORMS: Platform[] = [
 			"Membership platform. 10% on subscriptions, 5–12% on one-time purchases, plus payment processing.",
 		matchups: [
 			{
-				scenario: "A fan supports you $5 / month",
+				scenario: `A fan supports you $${SEED_SPEND} / month`,
 				kind: "Seeds",
 				anthers: A_SEED,
 				rival: {
-					keep: "$4.50",
-					keepSub: "90% before processing → nets ~$4.05",
+					keep: rivalKeeps(0.1),
+					keepSub: `90% before processing → nets ~${SEED_NET}`,
 					cut: "10% + processing",
 				},
-				note: "A Seed is $3 sent straight to a creator — no fee, no payout processing; the supporter covers the card fee on top (~$15.74 charged for five). Patreon takes 10%, then card processing comes out of what's left.",
+				note: `A Seed is $${SEED_PRICE} sent straight to a creator — no fee, no payout processing; the supporter covers the card cost on top (~${CARD_ON_SEEDS} on a $${SEED_SPEND} charge). Patreon takes 10%, then card processing comes out of what's left.`,
 			},
 			{
 				scenario: "A fan buys a $10 one-time item",
@@ -219,15 +243,15 @@ const PLATFORMS: Platform[] = [
 		blurb: "Paid-newsletter platform. 10% on all subscriptions, plus Stripe payment processing.",
 		matchups: [
 			{
-				scenario: "A fan subscribes at $5 / month",
+				scenario: `A fan subscribes at $${SEED_SPEND} / month`,
 				kind: "Seeds",
 				anthers: A_SEED,
 				rival: {
-					keep: "$4.50",
-					keepSub: "90% before processing → nets ~$4.05",
+					keep: rivalKeeps(0.1),
+					keepSub: `90% before processing → nets ~${SEED_NET}`,
 					cut: "10% + processing",
 				},
-				note: "Five $3 Seeds reach you in full — no fee and no payout processing; the supporter covers the card fee on top. Substack takes 10%, then Stripe processing (~$0.45 on $5) comes out of your cut.",
+				note: `${SEED_COUNT} × $${SEED_PRICE} Seeds reach you in full — no fee and no payout processing; the supporter covers the card cost on top. Substack takes 10%, then Stripe processing (~${CARD_ON_SEEDS} on $${SEED_SPEND}) comes out of your cut.`,
 			},
 		],
 	},
@@ -299,21 +323,22 @@ export default function CreatorPayComparisonPage() {
 					watch-time), the fan's own bandwidth (at cost, folded in — no wallet), and the{" "}
 					<b className="text-base-content/70">Foundation remainder</b> that funds free access and
 					creator programs. On a direct sale the creator receives the full listed price; the only
-					add is a small Foundation fee — a charitable markup on that download's bandwidth (about
-					half of it) or a flat 1% on physical goods, added on top for the buyer.
+					add is a small Foundation fee — a markup on that download's bandwidth (about half of it)
+					or a flat 1% on physical goods, added on top for the buyer.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
-					their monthly watch-time, the same rate for every medium (equal-time). The paid plans
-					bring{" "}
-					{PAID_POOLS.map((p, i) => `${["Root", "Sprout", "Petal", "Blossom"][i]} $${p}`).join(
-						" · ",
-					)}{" "}
-					of Time Pool, so an engaged fan lands roughly {POOL_RANGE} of pool per month → about
-					$0.05–0.60 per view-hour. <b className="text-base-content/70">Competitor figures</b> are
-					each platform's public fee and payout structure on the same transaction — rough estimates,
-					not quotes, and before their own payment-processing deductions except where noted. A
-					planning comparison, not an offer or guarantee.
+					their monthly watch-time, the same rate for every medium (equal-time). Each Anthers-Seed
+					adds ${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
+					{PAID_POOLS.map(
+						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
+					).join(" · ")}
+					, and up from there — so a fan lands roughly {POOL_RANGE} of pool per month → about
+					$0.03–0.60 per view-hour, with our reference streamer (Sprout, ~{REF_HOURS} hrs) at ~
+					{REF_HR_PAY}. <b className="text-base-content/70">Competitor figures</b> are each
+					platform's public fee and payout structure on the same transaction — rough estimates, not
+					quotes, and before their own payment-processing deductions except where noted. A planning
+					comparison, not an offer or guarantee.
 				</p>
 				<p>
 					Want to model your own audience?{" "}
@@ -356,16 +381,16 @@ function MatchupCard({ m, rivalName }: { m: Matchup; rivalName: string }) {
 // How each cut renders: tone for the amount + a plain-language tag for its nature.
 const CUT_STYLE: Record<CutKind, { tone: string; tag: string; tagTone: string }> = {
 	profit: { tone: "text-error/80", tag: "to the platform", tagTone: "text-error/50" },
-	charity: {
+	foundation: {
 		tone: "text-base-content/70",
-		tag: "Foundation fee · charity, on top",
+		tag: "Foundation fee · on top, not a cut",
 		tagTone: "text-primary/70",
 	},
 	none: { tone: "text-success/80", tag: "no cut — 100% to creators", tagTone: "text-success/60" },
 };
 
 /** One side of a matchup: who, the take-home headline, its basis, and the cut —
- * with the cut's nature (charity / profit / none) named, never hidden as "$0". */
+ * with the cut's nature (Foundation fee / profit / none) named, never hidden as "$0". */
 function SideCell({ name, side, highlight }: { name: string; side: Side; highlight?: boolean }) {
 	const style = CUT_STYLE[side.cutKind ?? "profit"];
 	return (

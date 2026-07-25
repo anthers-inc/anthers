@@ -101,8 +101,8 @@ function ConversionEngine() {
 		};
 	}, [badge, total, you, seedsToYou]);
 
-	// Split bar over the viewer's whole monthly plan price (bandwidth is a
-	// separate at-cost wallet and is deliberately not shown here).
+	// Split bar over what the viewer's Anthers-Seeds cost them (their own at-cost
+	// bandwidth is folded into the "Supports Anthers" slice, not broken out here).
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
 		{
@@ -122,8 +122,7 @@ function ConversionEngine() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the rank a viewer chose, then how they spend their month. Their Time Pool is split
 					across everyone they watch, by time; your slice of their watch-time — plus any Seeds they
-					direct to you — is what you take home from them. Anthers is a 501(c)(3) non-profit—no
-					profit-taking.
+					direct to you — is what you take home from them. Anthers is a non-profit—no profit-taking.
 				</p>
 
 				<div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-6">
