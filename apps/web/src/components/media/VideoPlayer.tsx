@@ -1,15 +1,66 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAttentionClaim } from "../../lib/attention";
 
 interface VideoPlayerProps {
 	src: string;
 	poster?: string;
 	autoPlay?: boolean;
+	/**
+	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
+	 * shouldn't be credited (previews, the Studio); the player then just plays.
+	 */
+	attention?: { creatorId: number | null; postId: number | null };
 }
 
-export default function VideoPlayer({ src, poster, autoPlay = false }: VideoPlayerProps) {
+export default function VideoPlayer({
+	src,
+	poster,
+	autoPlay = false,
+	attention,
+}: VideoPlayerProps) {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const hlsRef = useRef<any>(null);
+	const [isPlaying, setIsPlaying] = useState(false);
+
+	// Video credits time only while it is actually playing — a paused player on an
+	// open tab earns nothing, whatever else is on the page.
+	useAttentionClaim({
+		creatorId: attention?.creatorId ?? null,
+		postId: attention?.postId ?? null,
+		contentType: "video",
+		playing: isPlaying,
+		active: !!attention,
+	});
+
+	// Playback state drives attention, so it's tracked on the element itself
+	// rather than from our own play()/pause() calls — that way controls, keyboard
+	// shortcuts, picture-in-picture, and stalls are all reflected honestly.
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!video) return;
+
+		const onPlay = () => setIsPlaying(true);
+		const onPause = () => setIsPlaying(false);
+		const onEnded = () => setIsPlaying(false);
+		const onWaiting = () => setIsPlaying(false);
+		const onPlaying = () => setIsPlaying(true);
+
+		video.addEventListener("play", onPlay);
+		video.addEventListener("pause", onPause);
+		video.addEventListener("ended", onEnded);
+		video.addEventListener("waiting", onWaiting);
+		video.addEventListener("playing", onPlaying);
+
+		return () => {
+			video.removeEventListener("play", onPlay);
+			video.removeEventListener("pause", onPause);
+			video.removeEventListener("ended", onEnded);
+			video.removeEventListener("waiting", onWaiting);
+			video.removeEventListener("playing", onPlaying);
+			setIsPlaying(false);
+		};
+	}, []);
 
 	useEffect(() => {
 		const video = videoRef.current;

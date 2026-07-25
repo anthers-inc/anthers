@@ -835,9 +835,19 @@ async function seed() {
 				})
 				.returning({ id: posts.id });
 
-			// Media works become a library content item the post references; text works
-			// stay post-native (body only). Download works get a build asset on the item.
-			if (work.mediaType !== "text") {
+			// Media works become a library content item the post references. A text WORK
+			// becomes a post-native text content element rather than living in the body
+			// alone: the body is connective tissue and earns no Time Pool minutes, so a
+			// published essay has to be an actual content element to be eligible. See
+			// 40.05 Attention and Time Pool Eligibility. Download works get a build asset.
+			if (work.mediaType === "text") {
+				await db.insert(postContents).values({
+					postId: inserted.id,
+					position: 0,
+					kind: "text",
+					bodyHtml: `<p>${work.description.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+				});
+			} else {
 				const [item] = await db
 					.insert(contentItems)
 					.values({
