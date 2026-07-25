@@ -500,6 +500,9 @@ const subscriptionRoutes = new Hono()
 	// ── Seed Allocations ─────────────────────────────────────────────────────
 	// The budget is the creator-Seed balance the user holds this cycle; 100% goes to
 	// creators. Directing a Seed to a creator clears that creator's Seed Gates.
+	// Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is
+	// always a multiple of SEED_PRICE — the API rejects anything else rather than
+	// silently storing a fraction of a Seed.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
@@ -540,7 +543,12 @@ const subscriptionRoutes = new Hono()
 			"json",
 			z.object({
 				creatorId: z.number().int(),
-				amount: z.string().regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format"),
+				amount: z
+					.string()
+					.regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format")
+					.refine((v) => Number(v) % SEED_PRICE === 0, {
+						message: `Seeds are $${SEED_PRICE} each — the amount must be a whole number of Seeds`,
+					}),
 				cycle: z
 					.string()
 					.regex(/^\d{4}-\d{2}-01$/)
