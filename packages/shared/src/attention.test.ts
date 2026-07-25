@@ -12,7 +12,9 @@ import { describe, expect, test } from "bun:test";
 import {
 	type AttentionClaim,
 	type AttentionContext,
+	CREDIT_WINDOW_SECONDS,
 	claimKey,
+	clampToWindow,
 	consumptionModeFor,
 	creditableClaims,
 	eventTypeFor,
@@ -196,5 +198,73 @@ describe("equal-time conservation", () => {
 
 	test("an empty claim set is handled", () => {
 		expect(creditableClaims([], ATTENTIVE)).toEqual([]);
+	});
+});
+
+describe("wall-clock clamp", () => {
+	const ev = (durationSeconds: number, tag = "x") => ({ durationSeconds, tag });
+
+	test("passes a batch through untouched when the window has room", () => {
+		const events = [ev(30), ev(30)];
+		const result = clampToWindow(events, 0);
+		expect(result.granted).toBe(60);
+		expect(result.refused).toBe(0);
+		expect(result.events).toEqual(events);
+	});
+
+	test("refuses everything once the window is full", () => {
+		const result = clampToWindow([ev(30), ev(30)], CREDIT_WINDOW_SECONDS);
+		expect(result.granted).toBe(0);
+		expect(result.refused).toBe(60);
+		expect(result.events.map((e) => e.durationSeconds)).toEqual([0, 0]);
+	});
+
+	test("trims the batch at the boundary rather than dropping it", () => {
+		// 40 seconds left in the window, 100 claimed.
+		const result = clampToWindow([ev(30), ev(30), ev(40)], CREDIT_WINDOW_SECONDS - 40);
+		expect(result.granted).toBe(40);
+		expect(result.refused).toBe(60);
+		expect(result.events.map((e) => e.durationSeconds)).toEqual([30, 10, 0]);
+	});
+
+	test("a single oversized claim cannot exceed the window", () => {
+		const result = clampToWindow([ev(999_999)], 0);
+		expect(result.granted).toBe(CREDIT_WINDOW_SECONDS);
+		expect(result.events[0]?.durationSeconds).toBe(CREDIT_WINDOW_SECONDS);
+	});
+
+	test("five tabs claiming the same hour are clamped to one hour", () => {
+		// Each "tab" honestly reports a full hour; only an hour's worth survives.
+		const tabs = Array.from({ length: 5 }, () => ev(CREDIT_WINDOW_SECONDS));
+		const result = clampToWindow(tabs, 0);
+		expect(result.granted).toBe(CREDIT_WINDOW_SECONDS);
+		expect(result.refused).toBe(CREDIT_WINDOW_SECONDS * 4);
+	});
+
+	test("zero-duration visit pings survive a full window", () => {
+		const result = clampToWindow([ev(0, "visit"), ev(0, "visit")], CREDIT_WINDOW_SECONDS);
+		expect(result.events).toHaveLength(2);
+		expect(result.granted).toBe(0);
+		expect(result.refused).toBe(0);
+	});
+
+	test("preserves order and every non-duration field", () => {
+		const result = clampToWindow([ev(30, "a"), ev(30, "b")], CREDIT_WINDOW_SECONDS - 30);
+		expect(result.events.map((e) => e.tag)).toEqual(["a", "b"]);
+	});
+
+	test("treats an over-full window as full, not as negative budget", () => {
+		const result = clampToWindow([ev(30)], CREDIT_WINDOW_SECONDS + 500);
+		expect(result.granted).toBe(0);
+		expect(result.refused).toBe(30);
+	});
+
+	test("ignores a negative already-credited total", () => {
+		const result = clampToWindow([ev(30)], -100);
+		expect(result.granted).toBe(30);
+	});
+
+	test("an empty batch is handled", () => {
+		expect(clampToWindow([], 0)).toEqual({ events: [], granted: 0, refused: 0 });
 	});
 });
