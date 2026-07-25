@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { SEED_PRICE } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -14,7 +15,7 @@ const serif = { fontFamily: FONTS.fraunces };
 // ---------------------------------------------------------------------------
 
 interface CreatorGate {
-	/** Dollar threshold to unlock this gate */
+	/** Dollar threshold to unlock this gate — always a whole number of $3 Seeds */
 	threshold: number;
 	/** Creator-chosen name for this tier */
 	label: string;
@@ -47,8 +48,9 @@ interface DemoPurchase {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** All possible gate thresholds—used as the universal scale for every bar */
-const ALL_GATE_THRESHOLDS = [2, 4, 8, 16, 32];
+/** All possible gate thresholds—used as the universal scale for every bar. Seed
+ *  Gates are set in whole $3 Seeds, so every threshold is a multiple of $3. */
+const ALL_GATE_THRESHOLDS = [3, 6, 12, 24, 30];
 const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10% headroom
 
 // ---------------------------------------------------------------------------
@@ -78,31 +80,31 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "bugfishhhh",
 		avatar: "BF",
 		watchHours: 8.2,
-		poolAmount: 2.95,
-		seedAmount: 1.71,
+		poolAmount: 1.48, // 8.2 hrs × $0.18/hr
+		seedAmount: 6, // 2 Seeds
 		gates: [
 			{
-				threshold: 2,
+				threshold: 3,
 				label: "Insider",
 				description: "Early devlog access, behind-the-scenes screenshots",
 			},
 			{
-				threshold: 4,
+				threshold: 6,
 				label: "Playtester",
 				description: "Beta build downloads, bug-report channel access",
 			},
 			{
-				threshold: 8,
+				threshold: 12,
 				label: "Collaborator",
 				description: "Monthly Q&A streams, vote on feature priorities",
 			},
 			{
-				threshold: 16,
+				threshold: 24,
 				label: "Co-Designer",
 				description: "Submit feature requests, name an NPC, credits listing",
 			},
 			{
-				threshold: 32,
+				threshold: 30,
 				label: "Patron",
 				description: "Private Discord, signed prints, annual gift box",
 			},
@@ -113,16 +115,16 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "LifeOfRiza",
 		avatar: "LR",
 		watchHours: 6.5,
-		poolAmount: 2.34,
-		seedAmount: 0.6,
+		poolAmount: 1.17,
+		seedAmount: 3, // 1 Seed
 		gates: [
 			{
-				threshold: 2,
+				threshold: 3,
 				label: "Follow+",
 				description: "Bonus episodes and extended interviews",
 			},
 			{
-				threshold: 8,
+				threshold: 12,
 				label: "Inner Circle",
 				description: "Private community, reading-list drops, early drafts",
 			},
@@ -133,21 +135,21 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "RaceDayCafe",
 		avatar: "RC",
 		watchHours: 5.1,
-		poolAmount: 1.84,
-		seedAmount: 0.43,
+		poolAmount: 0.91,
+		seedAmount: 0,
 		gates: [
 			{
-				threshold: 2,
+				threshold: 3,
 				label: "Pitstop",
 				description: "Ad-free race recaps and highlights",
 			},
 			{
-				threshold: 4,
+				threshold: 6,
 				label: "Paddock",
 				description: "Full on-board camera archives, strategy breakdowns",
 			},
 			{
-				threshold: 16,
+				threshold: 24,
 				label: "Team Radio",
 				description: "Live commentary chat during races, telemetry overlays",
 			},
@@ -158,21 +160,21 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "Amaiguri",
 		avatar: "AM",
 		watchHours: 3.0,
-		poolAmount: 1.08,
-		seedAmount: 0.19,
+		poolAmount: 0.54,
+		seedAmount: 0,
 		gates: [
 			{
-				threshold: 4,
+				threshold: 6,
 				label: "Taste Tester",
 				description: "Full recipes with notes and substitutions",
 			},
 			{
-				threshold: 8,
+				threshold: 12,
 				label: "Kitchen Pass",
 				description: "Video walkthroughs, seasonal meal plans",
 			},
 			{
-				threshold: 32,
+				threshold: 30,
 				label: "Chef's Table",
 				description: "Monthly live cook-along, signed cookbook lottery",
 			},
@@ -183,21 +185,21 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "MAPHRA",
 		avatar: "MA",
 		watchHours: 1.5,
-		poolAmount: 0.54,
-		seedAmount: 0.07,
+		poolAmount: 0.27,
+		seedAmount: 0,
 		gates: [
 			{
-				threshold: 2,
+				threshold: 3,
 				label: "Listener",
 				description: "Bonus tracks and stems download",
 			},
 			{
-				threshold: 4,
+				threshold: 6,
 				label: "Studio",
 				description: "Sample packs, project files, production breakdowns",
 			},
 			{
-				threshold: 8,
+				threshold: 12,
 				label: "Backstage",
 				description: "Unreleased demos, remix stems, live session recordings",
 			},
@@ -208,8 +210,8 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		displayName: "4 others",
 		avatar: "..",
 		watchHours: 0.7,
-		poolAmount: 0.25,
-		seedAmount: 0.0,
+		poolAmount: 0.13,
+		seedAmount: 0,
 		gates: [],
 	},
 ];
@@ -431,34 +433,30 @@ function SubscriptionDashboardDemo() {
 
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
-	// V4 plan price (pre card/tax): Time Pool + Seeds + Community Share = the chosen
-	// Anthers-Seeds + directed Seeds. Bandwidth is folded into the Anthers-Seeds, at cost.
+	// Monthly total (pre card/tax): the Time Pool + directed Seeds + "Supports Anthers"
+	// — i.e. the Anthers-Seeds plus the directed Seeds. Bandwidth is folded into the
+	// Anthers-Seeds, at cost. The at-cost Payments line rides on top, like sales tax.
 	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.supportsAnthers;
 
-	const handleSlider = (idx: number, value: number) => {
+	// Seeds are indivisible $3 units, so directing them is a whole-Seed move: give one
+	// creator another Seed and it comes off whoever currently holds the most.
+	const handleSeedChange = (idx: number, seeds: number) => {
 		const next = [...seedAllocs];
-		const diff = value - next[idx];
-		next[idx] = value;
-
-		// Redistribute the difference proportionally among other sliders
-		const othersTotal = next.reduce((s, b, i) => (i !== idx ? s + b : s), 0);
-		if (othersTotal > 0) {
+		const budget = DEMO_PLAN.seedPool;
+		const wanted = Math.max(0, Math.min(budget, seeds * SEED_PRICE));
+		let owed = wanted - next[idx];
+		next[idx] = wanted;
+		// Take (or return) whole Seeds from the largest other allocations first.
+		while (owed > 0) {
+			let from = -1;
 			for (let i = 0; i < next.length; i++) {
-				if (i !== idx) {
-					next[i] = Math.max(0, next[i] - diff * (next[i] / othersTotal));
-				}
+				if (i !== idx && next[i] > 0 && (from === -1 || next[i] > next[from])) from = i;
 			}
+			if (from === -1) break; // nothing left to reclaim — clamp instead
+			next[from] -= SEED_PRICE;
+			owed -= SEED_PRICE;
 		}
-
-		// Normalize to the Seed pool
-		const sum = next.reduce((s, b) => s + b, 0);
-		if (sum > 0) {
-			const scale = DEMO_PLAN.seedPool / sum;
-			for (let i = 0; i < next.length; i++) {
-				next[i] = Math.round(next[i] * scale * 100) / 100;
-			}
-		}
-
+		if (owed > 0) next[idx] -= owed; // budget exhausted: don't overspend
 		setSeedAllocs(next);
 	};
 
@@ -531,6 +529,8 @@ function SubscriptionDashboardDemo() {
 						</thead>
 						<tbody>
 							{DEMO_ALLOCATIONS.map((alloc, idx) => {
+								// A Seed Gate opens on directed Seeds alone — time spent (the Time Pool)
+								// never unlocks one, so the access bar tracks the Seeds, not the row total.
 								const rowTotal = alloc.poolAmount + seedAllocs[idx];
 								return (
 									<tr key={alloc.username} className="hover">
@@ -549,10 +549,12 @@ function SubscriptionDashboardDemo() {
 												<input
 													type="range"
 													min={0}
-													max={DEMO_PLAN.seedPool * 100}
-													value={Math.round(seedAllocs[idx] * 100)}
-													onChange={(e) => handleSlider(idx, parseInt(e.target.value, 10) / 100)}
+													max={DEMO_PLAN.seedPool / SEED_PRICE}
+													step={1}
+													value={seedAllocs[idx] / SEED_PRICE}
+													onChange={(e) => handleSeedChange(idx, parseInt(e.target.value, 10))}
 													className="range range-xs range-primary flex-1"
+													aria-label={`Seeds to @${alloc.displayName}`}
 												/>
 												<span className="text-sm text-primary font-medium w-12 flex-shrink-0">
 													${seedAllocs[idx].toFixed(2)}
@@ -563,7 +565,7 @@ function SubscriptionDashboardDemo() {
 											<div className="flex items-start gap-2">
 												<div className="flex-1 pt-0.5">
 													{alloc.gates.length > 0 && (
-														<AccessBar total={rowTotal} gates={alloc.gates} />
+														<AccessBar total={seedAllocs[idx]} gates={alloc.gates} />
 													)}
 												</div>
 												<span className="text-sm font-medium w-12 flex-shrink-0">
@@ -828,7 +830,7 @@ export default function UserDemoPage() {
 						Full transparency. No hidden fees. Every dollar accounted for.
 					</p>
 					<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
-						Choose a plan
+						Set up your Seeds
 					</Link>
 				</Reveal>
 			</div>

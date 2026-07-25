@@ -392,7 +392,8 @@ export interface BadgePlan {
 	subsidised: boolean;
 }
 
-/** A user's account holding a chosen Badge plan + the bandwidth wallet (V4). */
+/** A user's account: the Anthers-Seeds they hold (their rank) + the Seeds they've
+ *  directed to creators. Bandwidth is folded into the Anthers-Seeds — there is no wallet. */
 export interface Account {
 	id?: number;
 	userId?: number;

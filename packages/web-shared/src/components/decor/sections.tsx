@@ -2,9 +2,10 @@
 //
 // The Meadow editorial section primitives — the shared building blocks the
 // marketing pages compose (For Users, For Creators, …): alternating tinted
-// section bands, the eyebrow/heading/lede rhythm, and the rounded card. Fraunces
-// display serif over the airy layout. Page-specific pieces (signpost cards, gate
-// rows, media cards, …) stay in their pages; these five are the common ones.
+// section bands, the eyebrow/heading/lede rhythm, the rounded card, and the
+// two-tone signpost card that presents the support model's two directions.
+// Fraunces display serif over the airy layout. Page-specific pieces (gate rows,
+// media cards, …) stay in their pages; these six are the common ones.
 
 import { FONTS } from "../../styles/fonts";
 
@@ -43,6 +44,55 @@ export function Lede({ children }: { children: React.ReactNode }) {
 		<p className="text-justify [text-align-last:center] mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/65">
 			{children}
 		</p>
+	);
+}
+
+/** A signpost card for the support model's two directions. `tone` tints the card in
+ *  the same color language as the two Subscribe cards — amber for backing the Anthers
+ *  commons, green for backing a creator — via a colored border, a soft wash, the
+ *  numbered chip, and the list bullets. `step` is optional (omit for an unnumbered pair). */
+export function SignpostCard({
+	step,
+	title,
+	tone,
+	children,
+}: {
+	step?: string;
+	title: React.ReactNode;
+	tone: "anthers" | "creator";
+	children: React.ReactNode;
+}) {
+	const t =
+		tone === "anthers"
+			? {
+					card: "border-accent/30 bg-accent/10",
+					chip: "bg-accent/15 text-accent",
+					marker: "marker:text-accent/70",
+				}
+			: {
+					card: "border-primary/25 bg-primary/5",
+					chip: "bg-primary/10 text-primary",
+					marker: "marker:text-primary/70",
+				};
+	return (
+		<div className={`card-lift flex h-full flex-col rounded-3xl border-2 p-7 shadow-sm ${t.card}`}>
+			{step && (
+				<div
+					style={serif}
+					className={`mb-4 flex h-11 w-11 items-center justify-center rounded-full text-xl font-semibold ${t.chip}`}
+				>
+					{step}
+				</div>
+			)}
+			<h3 style={serif} className="mb-2 text-xl font-medium">
+				{title}
+			</h3>
+			<div
+				className={`text-sm leading-relaxed text-base-content/70 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 ${t.marker}`}
+			>
+				{children}
+			</div>
+		</div>
 	);
 }
 

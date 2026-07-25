@@ -199,8 +199,8 @@ export default function AboutPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is a federated, open content network for video, audio, text, games, and
-							interactive experiences—built and operated as a 501(c)(3) non-profit so that it is
-							structurally incapable of prioritizing profit over people.
+							interactive experiences—built and operated as a non-profit so that it is structurally
+							incapable of prioritizing profit over people.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -310,7 +310,7 @@ export default function AboutPage() {
 								Creators keep 100% of every Seed and every direct purchase, and the shared Time Pool
 								pays out to creators by watch-time. Every dollar a user spends is money to creators,
 								bandwidth at cost, or the remainder of each Anthers-Seed that supports the Anthers
-								Foundation—a 501(c)(3) non-profit, so no investors and no profit-taking.
+								Foundation—a non-profit, so no investors and no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -401,12 +401,12 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Seeds (given to creators, or held as Anthers-Seeds) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Anthers-Seed that supports the Anthers Foundation. As a 501(c)(3) non-profit, Anthers takes no profit—the remainder it collects is mostly charitable, funding free access and the Foundation's programs.",
+								text: "Money enters through Seeds (given to creators, or held as Anthers-Seeds) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Anthers-Seed that supports the Anthers Foundation. As a non-profit, Anthers takes no profit—the remainder it collects funds free access and the Foundation's programs.",
 							},
 							{
 								num: "04",
 								title: "The Profit Motive Is Structurally Eliminated",
-								text: "Not voluntarily set aside—legally removed. A 501(c)(3) cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Anthers dissolves, its assets go to another exempt organization.",
+								text: "Not voluntarily set aside—legally removed. A non-profit of the kind Anthers is being formed as cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Anthers dissolves, its assets go to another exempt organization.",
 							},
 							{
 								num: "05",

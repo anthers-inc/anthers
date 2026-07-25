@@ -25,7 +25,7 @@ import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
-import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
+import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
 import { BADGE_LADDER, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
@@ -331,53 +331,6 @@ export default function ForUsersPage() {
 }
 
 // ─── Local building blocks ───
-
-/** A numbered signpost card for the "how it works" section. `tone` tints the card
- *  in the same color language as the two Subscribe cards — amber for backing the
- *  Anthers commons, green for backing a creator — via a colored border, a soft wash,
- *  the numbered chip, and the list bullets. */
-function SignpostCard({
-	step,
-	title,
-	tone,
-	children,
-}: {
-	step: string;
-	title: React.ReactNode;
-	tone: "anthers" | "creator";
-	children: React.ReactNode;
-}) {
-	const t =
-		tone === "anthers"
-			? {
-					card: "border-accent/30 bg-accent/10",
-					chip: "bg-accent/15 text-accent",
-					marker: "marker:text-accent/70",
-				}
-			: {
-					card: "border-primary/25 bg-primary/5",
-					chip: "bg-primary/10 text-primary",
-					marker: "marker:text-primary/70",
-				};
-	return (
-		<div className={`card-lift flex h-full flex-col rounded-3xl border-2 p-7 shadow-sm ${t.card}`}>
-			<div
-				style={serif}
-				className={`mb-4 flex h-11 w-11 items-center justify-center rounded-full text-xl font-semibold ${t.chip}`}
-			>
-				{step}
-			</div>
-			<h3 style={serif} className="mb-2 text-xl font-medium">
-				{title}
-			</h3>
-			<div
-				className={`text-sm leading-relaxed text-base-content/70 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 ${t.marker}`}
-			>
-				{children}
-			</div>
-		</div>
-	);
-}
 
 /** A ✓ / – line in the "What Anthers-Seeds add" list. */
 function FreeItem({ yes, children }: { yes?: boolean; children: React.ReactNode }) {

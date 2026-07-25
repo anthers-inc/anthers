@@ -349,8 +349,8 @@ const paymentRoutes = new Hono()
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
 				.returning();
 			if (completed) {
-				if (completed.type === "wallet" || completed.type === "seeds") {
-					// Wallet top-up / Seed buy → credit the account (not a post purchase).
+				if (completed.type === "seeds") {
+					// A Seed buy → credit the account (not a post purchase).
 					await applyCreditForPurchase(completed);
 				} else {
 					// Post purchase → record the Foundation Fee (Digital AFF) to the ledger.

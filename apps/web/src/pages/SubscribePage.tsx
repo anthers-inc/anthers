@@ -13,12 +13,21 @@
 // Both cards share the BadgeLadder (Anthers renders its botanical rank wreaths; a creator
 // renders their own cute emblems). Seeds run 0–10; past 4 you keep the top badge with a
 // "+" (Blossom+, Legend+) while benefits keep scaling — the rank for gating stays the top.
-// The outer card sums BOTH steppers into one monthly-spend breakdown. Dollar figures are
-// ILLUSTRATIVE placeholders (pending the financial model); the backend is still the
-// fixed-badge system, so the steppers are interactive front-end sketches, not wired to
-// checkout.
+// The outer card sums BOTH steppers into one monthly-spend breakdown. Every dollar figure
+// comes from @anthers/shared/constants — the same dials the API charges against — so this
+// page can't drift from the model; the creator-Badge names/perks are the only invented
+// part. The steppers are still front-end only: they aren't wired to checkout.
 
-import { DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
+import {
+	CARD_FLAT,
+	CARD_RATE,
+	DELIVERY_GIB_PER_HOUR,
+	FREE_FLOOR_GIB,
+	FREE_TIME_POOL,
+	GIB_PER_SEED,
+	SEED_PRICE,
+	TIME_POOL_PER_SEED,
+} from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -26,13 +35,11 @@ import { BADGE_ART } from "@anthers/web-shared/economics";
 import type { Badge } from "@anthers/web-shared/types";
 import { useState } from "react";
 
-/* ── Illustrative model (SKETCH — pending the financial model) ──────────────── */
-const SEED_PRICE = 3; // $/month per Seed
-const FREE_GIB = 15; // free streaming floor at 0 Seeds (generous, to avoid a paywall cliff)
-const GIB_PER_SEED = 60; // added streaming allowance per Seed (never binds for ~anyone past Seed 1)
-const TIMEPOOL_PER_SEED = 1.5; // $/month to creators, per Seed
-const FREE_TIMEPOOL = 0.05; // $/month to creators at 0 Seeds, subsidized by the Foundation
-const MAX_SEEDS = 10; // stepper cap; past 4 the top badge gains a "+"
+/* ── Model dials — all from @anthers/shared/constants, never re-typed here ───── */
+const FREE_GIB = FREE_FLOOR_GIB; // free streaming floor at 0 Seeds (avoids a paywall cliff)
+const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Anthers-Seed
+const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, Foundation-subsidized
+const MAX_SEEDS = 10; // stepper cap (a page choice, not a model dial); past 4 the badge gains a "+"
 
 // Anthers ranks map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
 const RANK_ORDER: Badge[] = ["root", "sprout", "petal", "blossom"];
@@ -58,9 +65,9 @@ function money(n: number): string {
 	return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
 }
 
-/** Illustrative at-cost card fee on a monthly charge (~2.9% + $0.30, batched). */
+/** The at-cost card fee on a monthly charge (2.9% + $0.30 on the whole batch). */
 function cardFee(cost: number): number {
-	return cost > 0 ? 0.3 + 0.029 * cost : 0;
+	return cost > 0 ? CARD_FLAT + CARD_RATE * cost : 0;
 }
 
 /** Rough watch-hours a GiB figure buys at the 1080p60 AV1 reference throughput. */
@@ -468,10 +475,10 @@ export default function SubscribePage() {
 					Basic access to Anthers is <strong>free for everyone, forever, no ads.</strong>
 				</p>
 				<p className="mx-auto max-w-5xl leading-relaxed text-base-content/70">
-					When you're ready for more, support on Anthers is all in the form of Seeds, each $3/month,
-					used to support Anthers or individual creators. Wherever they go, know that you're
-					directly supporting a non-profit platform and its creators, not shareholders or data
-					brokers.
+					When you're ready for more, support on Anthers is all in the form of Seeds, each{" "}
+					{money(SEED_PRICE)}/month, used to support Anthers or individual creators. Wherever they
+					go, know that you're directly supporting a non-profit platform and its creators, not
+					shareholders or data brokers.
 				</p>
 			</Reveal>
 

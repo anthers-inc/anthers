@@ -428,7 +428,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 	id: "foundation",
 	label: "Foundation Roadmap",
 	description:
-		"Milestones and initiatives for the Anthers Foundation — a 501(c)(3) non-profit. From incorporation to charitable programs at scale.",
+		"Milestones and initiatives for the Anthers Foundation — a non-profit. From incorporation to charitable programs at scale.",
 	quarters: QUARTERS,
 	sections: [
 		{
@@ -505,7 +505,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-infra-equity",
 							title: "Pillar 1: Infrastructure Equity",
 							description:
-								"Small creator subsidies, viral surge protection, free-tier infrastructure access for new creators.",
+								"Small creator subsidies, storage support for new creators, and free-tier infrastructure access.",
 							status: "planned",
 							startQ: 2,
 							endQ: 4,
@@ -1045,7 +1045,7 @@ export default function RoadmapPage() {
 			<div className="text-center mb-8">
 				<Reveal>
 					<p className="text-xs uppercase tracking-wider text-base-content/40 mb-1">
-						501(c)(3) non-profit
+						Non-profit · no profit-taking
 					</p>
 					<h1 className="text-3xl font-bold mb-2">Roadmap</h1>
 				</Reveal>

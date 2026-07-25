@@ -33,9 +33,9 @@ export const purchases = pgTable("purchases", {
 	buyerId: integer("buyer_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
-	// Null for one-time charges that aren't a post purchase (wallet top-up, Seed buy).
+	// Null for one-time charges that aren't a post purchase (e.g. a Seed buy).
 	postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
-	type: text("type").notNull().default("digital"), // digital | physical | service | wallet | seeds
+	type: text("type").notNull().default("digital"), // digital | physical | service | seeds
 	amount: numeric("amount").notNull(),
 	processingFee: numeric("processing_fee").notNull(),
 	deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
