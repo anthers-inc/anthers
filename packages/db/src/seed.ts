@@ -1018,7 +1018,9 @@ async function seed() {
 	// Gate definitions per creator: a mix of Anthers Gates (unlocked by holding a badge)
 	// and Seed Gates (unlocked by giving Seeds to the creator this cycle).
 	//   - anthers_badge → threshold is a badge RANK: root=1, sprout=2, petal=3, blossom=4.
-	//   - seed         → threshold is dollars of Seeds given to the creator this cycle.
+	//   - seed         → threshold is dollars of Seeds given to the creator this cycle. A Seed
+	//                    is an indivisible $3 unit, so every threshold here is a multiple of 3;
+	//                    the stepper steps whole Seeds and POST /seeds rejects anything else.
 	const GATES_BY_CREATOR: Record<
 		string,
 		{ gateType: "anthers_badge" | "seed"; threshold: string; label: string; description: string }[]
@@ -1038,13 +1040,13 @@ async function seed() {
 			},
 			{
 				gateType: "seed",
-				threshold: "2.00",
+				threshold: "3.00",
 				label: "Pixel Pal",
 				description: "Weekly pixel art WIP threads",
 			},
 			{
 				gateType: "seed",
-				threshold: "5.00",
+				threshold: "6.00",
 				label: "Playtester",
 				description: "Access to private playtesting branches and feedback channels",
 			},
@@ -1058,19 +1060,19 @@ async function seed() {
 			},
 			{
 				gateType: "seed",
-				threshold: "2.00",
+				threshold: "3.00",
 				label: "Reader",
 				description: "Extended footnotes and research notes",
 			},
 			{
 				gateType: "seed",
-				threshold: "5.00",
+				threshold: "6.00",
 				label: "Inner Circle",
 				description: "Monthly AMA threads and draft previews",
 			},
 			{
 				gateType: "seed",
-				threshold: "10.00",
+				threshold: "12.00",
 				label: "Patron",
 				description: "Annual long-form piece dedicated to patron questions",
 			},
@@ -1090,7 +1092,7 @@ async function seed() {
 			},
 			{
 				gateType: "seed",
-				threshold: "8.00",
+				threshold: "9.00",
 				label: "Collaborator",
 				description: "Unreleased demos, remix packs, and sample libraries",
 			},
@@ -1110,7 +1112,7 @@ async function seed() {
 			},
 			{
 				gateType: "seed",
-				threshold: "2.00",
+				threshold: "3.00",
 				label: "Sketch Club",
 				description: "Weekly process videos and timelapse recordings",
 			},
@@ -1136,7 +1138,7 @@ async function seed() {
 			},
 			{
 				gateType: "seed",
-				threshold: "7.00",
+				threshold: "9.00",
 				label: "Patron",
 				description: "Playable prototypes and experimental builds",
 			},
@@ -1313,23 +1315,31 @@ async function seed() {
 
 		// -- Pool distributions + directed Seeds --
 		// The Time Pool is $1.50 per Anthers-Seed, distributed to watched creators by
-		// watch-time; directed creator-Seeds are the user's creator-Seed dollars, spread
-		// to creators in whole-$3 units by watch-time (any remainder to the top creator).
+		// watch-time. Directed creator-Seeds are different in kind: they are indivisible $3
+		// units the user *points*, so the fixture hands out whole Seeds by largest remainder
+		// rather than splitting a Seed proportionally. Nothing is left undirected — a Seed a
+		// user hasn't pointed is not creator income (it would support the Foundation), so
+		// attributing a fractional leftover to creators by watch-time would seed a state the
+		// model doesn't produce.
 		const timePool = timePoolFor(cfg.anthersSeeds);
 		if (timePool > 0 || creatorSeedTotal > 0) {
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 
-			// Directed Seeds in whole-$3 units by watch-time; the remainder spread by time.
+			// Whole Seeds by watch-time, largest-remainder for the ones that don't divide evenly.
 			const directed = new Map<string, number>();
-			let directedTotal = 0;
-			for (const [creatorUsername, target] of entries) {
-				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
-				const amt = Math.floor((creatorSeedTotal * proportion) / SEED_PRICE) * SEED_PRICE; // $3 units
-				directed.set(creatorUsername, amt);
-				directedTotal += amt;
+			const seedsToGive = Math.round(creatorSeedTotal / SEED_PRICE);
+			const shares = entries.map(([username, target]) => {
+				const exact = (totalSeconds > 0 ? target.seconds / totalSeconds : 0) * seedsToGive;
+				return { username, whole: Math.floor(exact), remainder: exact - Math.floor(exact) };
+			});
+			let assigned = shares.reduce((sum, r) => sum + r.whole, 0);
+			for (const r of [...shares].sort((a, b) => b.remainder - a.remainder)) {
+				if (assigned >= seedsToGive) break;
+				r.whole += 1;
+				assigned += 1;
 			}
-			const undirected = creatorSeedTotal - directedTotal;
+			for (const r of shares) directed.set(r.username, r.whole * SEED_PRICE);
 
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
@@ -1337,8 +1347,8 @@ async function seed() {
 
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
 				const poolAmt = Math.round(timePool * proportion * 100) / 100;
-				const seedAmt =
-					(directed.get(creatorUsername) ?? 0) + Math.round(undirected * proportion * 100) / 100;
+				// Settled Seed income is exactly what the user directed — whole Seeds, nothing spread.
+				const seedAmt = directed.get(creatorUsername) ?? 0;
 
 				try {
 					await db.insert(poolDistributions).values({
@@ -1354,7 +1364,7 @@ async function seed() {
 				}
 			}
 
-			// -- Seed allocations (directed whole-$ Seeds) --
+			// -- Seed allocations (whole $3 Seeds, as directed above) --
 			let allocationCount = 0;
 			for (const [creatorUsername] of entries) {
 				const cId = createdUserIds[creatorUsername];

@@ -20,8 +20,9 @@ import {
 	EXPECTED_STAIRCASE,
 	GAUNTLET_POSTS,
 	gauntletPost,
+	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
-import { type Badge, rankForSeeds } from "@anthers/shared/constants";
+import { type Badge, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessiblePost,
@@ -125,12 +126,21 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	it("each Seed rung unlocks exactly one more post than the rung below", () => {
-		const counts = [0, 1, 2, 4].map(
+		// Derived from the fixture's rungs, never typed: a Seed is an indivisible $3 unit, so
+		// retuning SEED_RUNGS must not need a matching edit here.
+		const counts = [0, ...SEED_RUNGS].map(
 			(s) =>
 				POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx("blossom", s)).canAccess).length,
 		);
-		// From Blossom (5 unlocked), $1/$2/$4 each add exactly one Seed-gated post.
+		// From Blossom (5 unlocked), each whole Seed adds exactly one Seed-gated post.
 		expect(counts).toEqual([5, 6, 7, 8]);
+	});
+
+	it("every Seed rung is a whole number of $3 Seeds", () => {
+		// The product can't express a fraction of a Seed — the stepper steps whole Seeds and
+		// POST /seeds rejects the rest — so a fixture threshold that isn't a multiple of
+		// SEED_PRICE would be testing a state no user can reach.
+		for (const rung of SEED_RUNGS) expect(rung % SEED_PRICE).toBe(0);
 	});
 });
 

@@ -33,6 +33,7 @@ import {
 	gauntletPost,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
+import { SEED_PRICE } from "@anthers/shared/constants";
 import { expect, type Page, test } from "@playwright/test";
 import { API_URL, trackErrorsStrict } from "./fixtures";
 
@@ -200,25 +201,28 @@ for (const [seeds, state, unlocked, stillLocked] of [
 // ── The Seed ladder, through the real Give-Seeds control ─────────────────────
 test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	// Two bought Seeds' worth of budget ($3 each). Holding budget is not giving it —
+	// Enough budget for the whole three-Seed ladder. Holding budget is not giving it —
 	// the staircase must still read exactly as Blossom.
-	hop("--seed-budget", "6");
+	hop("--seed-budget", String(SEED_PRICE * 3));
 	await expectStaircase(page, "Blossom");
 	expect(errors).toEqual([]);
 });
 
-for (const [target, delta, state, unlocked, stillLocked] of [
-	[1, 1, "Blossom + $1 given", "G6", "G7"],
-	[2, 1, "Blossom + $2 given", "G7", "G8"],
-	[4, 2, "Blossom + $4 given", "G8", null],
+// One click per Seed: the stepper steps whole Seeds ($3), so reaching rung N from rung
+// N-1 is exactly one click, and the give button quotes the delta in dollars.
+for (const [seeds, state, unlocked, stillLocked] of [
+	[1, EXPECTED_STAIRCASE[6].state, "G6", "G7"],
+	[2, EXPECTED_STAIRCASE[7].state, "G7", "G8"],
+	[3, EXPECTED_STAIRCASE[8].state, "G8", null],
 ] as const) {
-	test(`rung 5 — give to $${target}: exactly one more post unlocks`, async ({ page }) => {
+	test(`rung 5 — give a ${seeds}${seeds === 1 ? "st" : seeds === 2 ? "nd" : "rd"} Seed: exactly one more post unlocks`, async ({
+		page,
+	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
 		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=tiers`);
-		const plus = page.getByRole("button", { name: "More seeds" });
-		for (let i = 0; i < delta; i++) await plus.click();
-		await page.getByRole("button", { name: `Give $${delta.toFixed(2)}` }).click();
+		await page.getByRole("button", { name: "More seeds" }).click();
+		await page.getByRole("button", { name: `Give $${SEED_PRICE.toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
 		await expect(page.getByRole("button", { name: "Give Seeds" })).toBeVisible();
 
@@ -232,7 +236,7 @@ for (const [target, delta, state, unlocked, stillLocked] of [
 test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=tiers`);
-	// $4 is committed; within the cycle the control's floor IS the committed amount.
+	// The full ladder is committed; within the cycle the control's floor IS that amount.
 	await expect(page.getByRole("button", { name: "Fewer seeds" })).toBeDisabled();
 	expect(errors).toEqual([]);
 });

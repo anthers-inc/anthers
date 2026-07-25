@@ -18,7 +18,7 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
-import { BADGE_ORDER, type Badge } from "@anthers/shared/constants";
+import { BADGE_ORDER, type Badge, SEED_PRICE } from "@anthers/shared/constants";
 import type { AnthersAccessRow, SeedAccessRow } from "./schema/content.js";
 
 /** The fixture's creator. The `gauntlet_` prefix marks every row this fixture owns. */
@@ -44,11 +44,14 @@ export const GAUNTLET_VIEWER_PASSWORD = "gauntletpassword123";
 export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
 
 /**
- * The Seed ladder's rungs, in dollars. Chosen to fit Blossom's four included Seeds, so the
- * whole ladder is walkable without buying extra Seeds — one less stubbed payment path in the
- * way of a rung that isn't about payment.
+ * The Seed ladder's rungs, in dollars — one, two and three whole Seeds.
+ *
+ * A Seed is an indivisible $3 unit, so every creator gate threshold is a multiple of
+ * `SEED_PRICE`; a $1 or $4 rung isn't expressible in the product (the stepper steps whole
+ * Seeds and the API rejects the rest), so the fixture must not pretend otherwise. Three
+ * rungs keep the walk short while still proving the ladder climbs one rung at a time.
  */
-export const SEED_RUNGS = [1, 2, 4] as const;
+export const SEED_RUNGS = [SEED_PRICE, SEED_PRICE * 2, SEED_PRICE * 3] as const;
 
 /** The purchase rung's list price — what the creator receives; fees are added on top. */
 export const DOWNLOAD_PRICE = "9.99";
@@ -175,32 +178,22 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		"Gated at the top rung. Only a currently-held Blossom badge opens it.",
 		{ anthersAccess: anthersRung("blossom") },
 	),
-	post(
-		6,
-		"G6",
-		"seed-1",
-		"For readers who've given $1 in Seeds",
-		"≥ $1 in Seeds given to this creator",
-		"The first Seed rung. No badge opens this one — only Seeds given to this creator this cycle.",
-		{ seedAccess: seedRung(SEED_RUNGS[0]) },
-	),
-	post(
-		7,
-		"G7",
-		"seed-2",
-		"For readers who've given $2 in Seeds",
-		"≥ $2 in Seeds given to this creator",
-		"The second Seed rung. $1 is not enough; $2 or more opens it.",
-		{ seedAccess: seedRung(SEED_RUNGS[1]) },
-	),
-	post(
-		8,
-		"G8",
-		"seed-4",
-		"For readers who've given $4 in Seeds",
-		"≥ $4 in Seeds given to this creator",
-		"The top Seed rung — exactly Blossom's four included Seeds, so it's reachable without buying extra.",
-		{ seedAccess: seedRung(SEED_RUNGS[2]) },
+	// The three Seed rungs are generated from SEED_RUNGS so the slug, the copy and the access
+	// table can never disagree about what opens the post — the drift that let an earlier
+	// version advertise "$1 in Seeds" while gating on a different number entirely. Slugs are
+	// keyed to the Seed *count*, so retuning SEED_PRICE doesn't orphan the seeded rows.
+	...SEED_RUNGS.map((dollars, i) =>
+		post(
+			6 + i,
+			`G${6 + i}`,
+			`seed-${i + 1}`,
+			`For readers who've given ${seedLabel(i + 1)}`,
+			`≥ ${seedLabel(i + 1)} ($${dollars}) given to this creator`,
+			i === 0
+				? "The first Seed rung. No badge opens this one — only Seeds given to this creator this cycle."
+				: `Seed rung ${i + 1}. ${seedLabel(i)} is not enough; ${seedLabel(i + 1)} or more opens it.`,
+			{ seedAccess: seedRung(dollars) },
+		),
 	),
 	post(
 		9,
@@ -280,6 +273,16 @@ function reasons(
  * following must never grant access. The resolver can't even see a follow (no such field
  * in `AccessContext`); the e2e row exists to prove the *app* honors that too.
  */
+/** "1 Seed" / "2 Seeds" — the ladder is counted in Seeds, not dollars. */
+function seedLabel(seeds: number): string {
+	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
+}
+
+/** A staircase row's label for the Seed rungs, e.g. "Blossom + 2 Seeds given". */
+function seedState(seeds: number): string {
+	return `Blossom + ${seedLabel(seeds)} given`;
+}
+
 export const EXPECTED_STAIRCASE: StaircaseState[] = [
 	{
 		state: "Free, unfollowed",
@@ -330,26 +333,26 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 		reasons: reasons(ENT, ENT, ENT, ENT, GATE, GATE, GATE, PAY),
 	},
 	{
-		state: "Blossom + $1 given",
+		state: seedState(1),
 		following: true,
 		anthersSeeds: 4,
-		seedDollars: 1,
+		seedDollars: SEED_RUNGS[0],
 		purchased: [],
 		reasons: reasons(ENT, ENT, ENT, ENT, ENT, GATE, GATE, PAY),
 	},
 	{
-		state: "Blossom + $2 given",
+		state: seedState(2),
 		following: true,
 		anthersSeeds: 4,
-		seedDollars: 2,
+		seedDollars: SEED_RUNGS[1],
 		purchased: [],
 		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, GATE, PAY),
 	},
 	{
-		state: "Blossom + $4 given",
+		state: seedState(3),
 		following: true,
 		anthersSeeds: 4,
-		seedDollars: 4,
+		seedDollars: SEED_RUNGS[2],
 		purchased: [],
 		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, ENT, PAY),
 	},
@@ -357,7 +360,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 		state: "+ purchased",
 		following: true,
 		anthersSeeds: 4,
-		seedDollars: 4,
+		seedDollars: SEED_RUNGS[2],
 		purchased: ["G9"],
 		reasons: reasons(ENT, ENT, ENT, ENT, ENT, ENT, ENT, BOUGHT),
 	},
@@ -385,8 +388,8 @@ export const GAUNTLET_GATES: Array<{
 	...SEED_RUNGS.map((dollars, i) => ({
 		gateType: "seed" as const,
 		threshold: String(dollars),
-		label: `$${dollars} in Seeds`,
-		description: `Readers who've given at least $${dollars} in Seeds this cycle.`,
+		label: seedLabel(i + 1),
+		description: `Readers who've given at least ${seedLabel(i + 1)} ($${dollars}) this cycle.`,
 		sortOrder: 10 + i,
 	})),
 ];
