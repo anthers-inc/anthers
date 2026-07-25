@@ -1,34 +1,156 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Attention tracking — the browser half of Time Pool measurement.
+ *
+ * Surfaces register *claims* on the user's attention; a single module-level
+ * ticker decides once a second which of them have earned that second, using the
+ * pure policy in `@anthers/shared/attention`. Nothing here decides policy — this
+ * file only supplies the evidence (visibility, idleness, playback) and batches
+ * the result to the API.
+ *
+ * The single-ticker shape is load-bearing. When every hook ran its own interval,
+ * no surface could see any other, so the mini-player and the post page both
+ * billed the same second of the same track. Now they're two claims on one pair,
+ * and the policy credits one of them.
+ */
 
+import {
+	type AttentionClaim,
+	claimKey,
+	creditableClaims,
+	eventTypeFor,
+	isTimePoolEligible,
+} from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
-const FLUSH_INTERVAL_MS = 30_000; // Report every 30 seconds
-const TICK_INTERVAL_MS = 1_000; // Accumulate every 1 second
+const TICK_MS = 1_000;
+const FLUSH_INTERVAL_MS = 30_000;
+/** The API caps a single event at 300s and a batch at 50 (`routes/subscriptions.ts`). */
+const MAX_EVENT_SECONDS = 300;
+const MAX_EVENTS_PER_REQUEST = 50;
+/** Backstop so a long offline stretch can't grow the queue without bound. */
+const MAX_PENDING_EVENTS = 500;
 
 interface AttentionEvent {
 	creatorId: number;
 	postId?: number | null;
-	eventType: "page_view" | "play" | "watch" | "read" | "listen";
+	eventType: ReturnType<typeof eventTypeFor>;
 	durationSeconds: number;
 }
 
-// Pending events waiting to be flushed
+// ── Module state ─────────────────────────────────────────────────────────────
+
+/** Live claims by registration id. */
+const claims = new Map<number, AttentionClaim>();
+/** Fractional seconds earned per creator/post pair, awaiting a whole-second flush. */
+const accrued = new Map<string, { claim: AttentionClaim; seconds: number }>();
 let pendingEvents: AttentionEvent[] = [];
-let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+let nextId = 1;
+let ticker: ReturnType<typeof setInterval> | null = null;
+let flusher: ReturnType<typeof setInterval> | null = null;
+let lastInteractionAt = Date.now();
 let isAuthenticated = false;
+let listenersBound = false;
+
+// ── Evidence ─────────────────────────────────────────────────────────────────
+
+const INTERACTION_EVENTS = [
+	"pointerdown",
+	"keydown",
+	"scroll",
+	"wheel",
+	"touchstart",
+	"mousemove",
+] as const;
+
+function markInteraction() {
+	lastInteractionAt = Date.now();
+}
+
+function bindListeners() {
+	if (listenersBound || typeof window === "undefined") return;
+	listenersBound = true;
+
+	for (const type of INTERACTION_EVENTS) {
+		window.addEventListener(type, markInteraction, { passive: true });
+	}
+	// A tab returning to the foreground is itself a sign of life; without this a
+	// user who left, came back, and read without touching anything would look idle.
+	document.addEventListener("visibilitychange", () => {
+		if (document.visibilityState === "visible") {
+			markInteraction();
+		} else {
+			flushAccrued();
+			void flushEvents();
+		}
+	});
+}
+
+// ── The ticker ───────────────────────────────────────────────────────────────
+
+function tick() {
+	const credited = creditableClaims([...claims.values()], {
+		visible: typeof document === "undefined" || document.visibilityState === "visible",
+		msSinceInteraction: Date.now() - lastInteractionAt,
+	});
+	if (credited.length === 0) return;
+
+	// Split the tick evenly: a user's real second never becomes two credited
+	// seconds, however many things are playing at once.
+	const share = TICK_MS / 1_000 / credited.length;
+	for (const claim of credited) {
+		const key = claimKey(claim);
+		const entry = accrued.get(key);
+		if (entry) {
+			entry.claim = claim;
+			entry.seconds += share;
+		} else {
+			accrued.set(key, { claim, seconds: share });
+		}
+	}
+}
+
+/** Move whole accrued seconds into pending events, carrying the fraction forward. */
+function flushAccrued() {
+	const liveKeys = new Set([...claims.values()].map(claimKey));
+
+	for (const [key, entry] of accrued) {
+		const whole = Math.floor(entry.seconds);
+		if (whole > 0) {
+			entry.seconds -= whole;
+			pushEvent({
+				creatorId: entry.claim.creatorId,
+				postId: entry.claim.postId,
+				eventType: eventTypeFor(entry.claim.contentType),
+				durationSeconds: Math.min(whole, MAX_EVENT_SECONDS),
+			});
+		}
+		// Drop sub-second remainders for pairs nothing is claiming any more, so a
+		// long browsing session doesn't accumulate dead keys.
+		if (entry.seconds < 1 && !liveKeys.has(key)) accrued.delete(key);
+	}
+}
+
+function pushEvent(event: AttentionEvent) {
+	pendingEvents.push(event);
+	if (pendingEvents.length > MAX_PENDING_EVENTS) {
+		pendingEvents = pendingEvents.slice(-MAX_PENDING_EVENTS);
+	}
+}
 
 async function flushEvents() {
 	if (!isAuthenticated || pendingEvents.length === 0) return;
 
-	const toSend = [...pendingEvents];
-	pendingEvents = [];
-
+	// Never send more than the endpoint accepts. Sending the whole backlog was a
+	// permanent wedge: a batch over 50 is rejected, requeued, and rejected again.
+	const batch = pendingEvents.splice(0, MAX_EVENTS_PER_REQUEST);
 	try {
 		const res = await client.api.subscriptions.attention.$post({
 			json: {
-				events: toSend.map((e) => ({
+				events: batch.map((e) => ({
 					creatorId: e.creatorId,
 					eventType: e.eventType,
 					durationSeconds: e.durationSeconds,
@@ -36,100 +158,105 @@ async function flushEvents() {
 				})),
 			},
 		});
-		if (!res.ok) {
-			// On failure, put events back for next flush attempt
-			pendingEvents.unshift(...toSend);
-		}
+		if (!res.ok) pendingEvents.unshift(...batch);
 	} catch {
-		// On failure, put events back for next flush attempt
-		pendingEvents.unshift(...toSend);
+		pendingEvents.unshift(...batch);
 	}
 }
 
-function ensureFlushTimer() {
-	if (flushTimer) return;
-	flushTimer = setInterval(flushEvents, FLUSH_INTERVAL_MS);
-
-	// Also flush on page unload
-	if (typeof window !== "undefined") {
-		window.addEventListener("visibilitychange", () => {
-			if (document.visibilityState === "hidden") {
-				flushEvents();
-			}
-		});
+function startEngine() {
+	bindListeners();
+	if (!ticker) ticker = setInterval(tick, TICK_MS);
+	if (!flusher) {
+		flusher = setInterval(() => {
+			flushAccrued();
+			void flushEvents();
+		}, FLUSH_INTERVAL_MS);
 	}
 }
+
+function stopEngineIfIdle() {
+	if (claims.size > 0) return;
+	flushAccrued();
+	void flushEvents();
+	if (ticker) {
+		clearInterval(ticker);
+		ticker = null;
+	}
+	if (flusher) {
+		clearInterval(flusher);
+		flusher = null;
+	}
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────────────
 
 /**
- * Hook that tracks attention time on a content page.
- * Accumulates seconds while the page is visible/active, then batch-reports.
+ * Register one claim on the user's attention for as long as the component is
+ * mounted and `active`.
+ *
+ * `contentType` is the *content entity* being consumed — a `content_items.type`
+ * or `"text"` for a post-native text block. That's what decides both the
+ * consumption mode and whether this earns anything at all: pages, profiles, and
+ * other connective tissue have no content entity and so make no claim.
  */
-export function useAttentionTracker(params: {
+export function useAttentionClaim(params: {
 	creatorId: number | null;
 	postId?: number | null;
-	eventType: AttentionEvent["eventType"];
-	active?: boolean; // defaults to true; set false to pause tracking
+	contentType: string;
+	/** Required for playback-mode content (video/audio); ignored otherwise. */
+	playing?: boolean;
+	/** Set false to suspend the claim (e.g. the viewer can't access the post). */
+	active?: boolean;
 }) {
-	const { creatorId, postId, eventType, active = true } = params;
+	const { creatorId, postId = null, contentType, playing, active = true } = params;
 	const { isAuthenticated: authStatus } = useAuth();
-	const accumulatedRef = useRef(0);
-	const lastCreatorRef = useRef(creatorId);
+	const idRef = useRef<number | null>(null);
+	if (idRef.current === null) idRef.current = nextId++;
 
-	// Keep module-level auth state in sync
 	useEffect(() => {
 		isAuthenticated = authStatus;
 	}, [authStatus]);
 
-	// Flush accumulated time into pending events
-	const flushAccumulated = useCallback(() => {
-		if (accumulatedRef.current > 0 && lastCreatorRef.current) {
-			pendingEvents.push({
-				creatorId: lastCreatorRef.current,
-				postId: postId || null,
-				eventType,
-				durationSeconds: accumulatedRef.current,
-			});
-			accumulatedRef.current = 0;
-		}
-	}, [postId, eventType]);
-
 	useEffect(() => {
-		// If creator changed, flush old data
-		if (lastCreatorRef.current !== creatorId) {
-			flushAccumulated();
-			lastCreatorRef.current = creatorId;
+		const id = idRef.current;
+		if (id === null) return;
+
+		const eligible = authStatus && creatorId !== null && active && isTimePoolEligible(contentType);
+		if (!eligible) {
+			if (claims.delete(id)) stopEngineIfIdle();
+			return;
 		}
-	}, [creatorId, flushAccumulated]);
 
-	useEffect(() => {
-		if (!authStatus || !creatorId || !active) return;
-
-		ensureFlushTimer();
-
-		const tickTimer = setInterval(() => {
-			// Only tick when page is visible
-			if (document.visibilityState === "visible") {
-				accumulatedRef.current += 1;
-			}
-		}, TICK_INTERVAL_MS);
-
-		// Periodically flush accumulated to pending
-		const localFlush = setInterval(flushAccumulated, FLUSH_INTERVAL_MS);
+		claims.set(id, { creatorId, postId, contentType, playing });
+		startEngine();
 
 		return () => {
-			clearInterval(tickTimer);
-			clearInterval(localFlush);
-			// Flush remaining on unmount
-			flushAccumulated();
+			claims.delete(id);
+			stopEngineIfIdle();
 		};
-	}, [authStatus, creatorId, active, flushAccumulated]);
+	}, [authStatus, creatorId, postId, contentType, playing, active]);
 }
 
 /**
- * Report a one-shot attention event (e.g., page_view).
+ * Record a one-shot, zero-duration visit — an analytics signal that earns no
+ * Time Pool minutes. This is what non-content surfaces use: a project page is a
+ * shelf, not a work, so it registers the visit and earns nothing.
  */
-export function reportAttention(event: AttentionEvent) {
-	if (!isAuthenticated) return;
-	pendingEvents.push(event);
-	ensureFlushTimer();
+export function useReportVisit(params: { creatorId: number | null; postId?: number | null }) {
+	const { creatorId, postId = null } = params;
+	const { isAuthenticated: authStatus } = useAuth();
+	const reportedRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		isAuthenticated = authStatus;
+	}, [authStatus]);
+
+	useEffect(() => {
+		if (!authStatus || creatorId === null || reportedRef.current === creatorId) return;
+		reportedRef.current = creatorId;
+
+		pushEvent({ creatorId, postId, eventType: "page_view", durationSeconds: 0 });
+		void flushEvents();
+	}, [authStatus, creatorId, postId]);
 }

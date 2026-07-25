@@ -8,7 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useAttentionTracker } from "./attention";
+import { useAttentionClaim } from "./attention";
 
 interface Track {
 	src: string;
@@ -107,12 +107,16 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		setDuration(0);
 	}, []);
 
-	// Track attention for background audio playback (mini-player)
-	useAttentionTracker({
+	// Background audio playback. This claims the same (creator, post) pair as the
+	// post page's own player, so when both are up the policy credits one of them —
+	// the double-count is resolved centrally rather than by either side knowing
+	// about the other.
+	useAttentionClaim({
 		creatorId: currentTrack?.creatorId ?? null,
 		postId: currentTrack?.postId ?? null,
-		eventType: "listen",
-		active: isPlaying && !!currentTrack,
+		contentType: "audio",
+		playing: isPlaying,
+		active: !!currentTrack,
 	});
 
 	return (

@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { PauseIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
+import { useAttentionClaim } from "../../lib/attention";
 import WaveformDisplay from "./WaveformDisplay";
 
 interface AudioPlayerProps {
 	src: string;
 	waveform?: number[] | null;
 	onPlayInMiniPlayer?: () => void;
+	/**
+	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
+	 * shouldn't be credited (previews, the Studio); the player then just plays.
+	 */
+	attention?: { creatorId: number | null; postId: number | null };
 }
 
 function formatTime(seconds: number): string {
@@ -15,11 +21,26 @@ function formatTime(seconds: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function AudioPlayer({ src, waveform, onPlayInMiniPlayer }: AudioPlayerProps) {
+export default function AudioPlayer({
+	src,
+	waveform,
+	onPlayInMiniPlayer,
+	attention,
+}: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
 	const [duration, setDuration] = useState(0);
+
+	// Audio credits time only while it is actually playing — and keeps crediting
+	// in a hidden tab, because listening while working elsewhere is real listening.
+	useAttentionClaim({
+		creatorId: attention?.creatorId ?? null,
+		postId: attention?.postId ?? null,
+		contentType: "audio",
+		playing: isPlaying,
+		active: !!attention,
+	});
 
 	useEffect(() => {
 		const audio = audioRef.current;
@@ -28,15 +49,24 @@ export default function AudioPlayer({ src, waveform, onPlayInMiniPlayer }: Audio
 		const onTimeUpdate = () => setProgress(audio.currentTime);
 		const onDurationChange = () => setDuration(audio.duration || 0);
 		const onEnded = () => setIsPlaying(false);
+		// Mirror the element's own state so pausing via anything other than our
+		// button (media keys, another tab claiming audio focus) is reflected.
+		const onPlay = () => setIsPlaying(true);
+		const onPause = () => setIsPlaying(false);
 
 		audio.addEventListener("timeupdate", onTimeUpdate);
 		audio.addEventListener("durationchange", onDurationChange);
 		audio.addEventListener("ended", onEnded);
+		audio.addEventListener("play", onPlay);
+		audio.addEventListener("pause", onPause);
 
 		return () => {
 			audio.removeEventListener("timeupdate", onTimeUpdate);
 			audio.removeEventListener("durationchange", onDurationChange);
 			audio.removeEventListener("ended", onEnded);
+			audio.removeEventListener("play", onPlay);
+			audio.removeEventListener("pause", onPause);
+			setIsPlaying(false);
 		};
 	}, []);
 

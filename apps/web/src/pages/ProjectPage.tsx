@@ -10,7 +10,7 @@ import { LockClosedIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useAttentionTracker } from "@/lib/attention";
+import { useReportVisit } from "@/lib/attention";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import { studioUrl } from "../lib/studio";
 
@@ -39,11 +39,10 @@ export default function ProjectPage() {
 	}, [slug]);
 
 	// Attention tracking—a collection view is a page_view for the creator.
-	useAttentionTracker({
-		creatorId: project?.creatorId ?? null,
-		eventType: "page_view",
-		active: !!project,
-	});
+	// A project is a collection — a shelf holding no work of its own — so browsing
+	// one records the visit and earns no Time Pool minutes. The time is earned on
+	// the posts, where the content entities actually live.
+	useReportVisit({ creatorId: project?.creatorId ?? null });
 
 	if (loading) {
 		return (

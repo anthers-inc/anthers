@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { consumptionModeFor } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
@@ -14,7 +15,7 @@ import type {
 } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ClockIcon, FilmIcon, MusicalNoteIcon, PhotoIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AudioPlayer from "../components/media/AudioPlayer";
@@ -26,7 +27,7 @@ import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
-import { useAttentionTracker } from "../lib/attention";
+import { useAttentionClaim } from "../lib/attention";
 import { useMediaPlayer } from "../lib/media-player";
 import { studioEditPostUrl } from "../lib/studio";
 
@@ -203,15 +204,24 @@ export default function PostPage() {
 		return () => clearInterval(interval);
 	}, [slug, hasActiveTranscode]);
 
-	// Attention tracking — map the post's derived contentType to an event type.
-	const eventType =
-		post?.contentType === "video" ? "watch" : post?.contentType === "audio" ? "listen" : "read";
+	// Attention is earned by the post's CONTENT ELEMENTS, never by the page itself
+	// — the post body is connective tissue, so a body-only announcement earns
+	// nothing. Timed media (video/audio) claims its own time from inside its
+	// player, gated on real playback; this claim covers the attended elements
+	// (text blocks, images, embedded games) that are consumed by being present.
+	const attendedContentType = useMemo(() => {
+		for (const entry of post?.contents ?? []) {
+			const type = entry.kind === "text" ? "text" : entry.contentItem?.type;
+			if (type && consumptionModeFor(type) === "presence") return type;
+		}
+		return null;
+	}, [post]);
 
-	useAttentionTracker({
+	useAttentionClaim({
 		creatorId: post?.creatorId ?? null,
 		postId: post?.id ?? null,
-		eventType,
-		active: !!post && (post.access?.canAccess ?? true),
+		contentType: attendedContentType ?? "",
+		active: !!post && !!attendedContentType && (post.access?.canAccess ?? true),
 	});
 
 	const handleComment = async (e: React.FormEvent) => {
@@ -342,7 +352,14 @@ export default function PostPage() {
 						/>
 					);
 				}
-				if (src) return <VideoPlayer src={src} poster={item.thumbnail ?? undefined} />;
+				if (src)
+					return (
+						<VideoPlayer
+							src={src}
+							poster={item.thumbnail ?? undefined}
+							attention={canAccess ? { creatorId: post.creatorId, postId: post.id } : undefined}
+						/>
+					);
 				return <MediaPreview item={item} icon={<FilmIcon className="w-16 h-16" />} />;
 			}
 			case "audio": {
@@ -364,6 +381,7 @@ export default function PostPage() {
 							src={src}
 							waveform={item.transcoding?.waveformData}
 							onPlayInMiniPlayer={() => playAudioInMiniPlayer(item, src)}
+							attention={canAccess ? { creatorId: post.creatorId, postId: post.id } : undefined}
 						/>
 					);
 				return <MediaPreview item={item} icon={<MusicalNoteIcon className="w-12 h-12" />} />;
