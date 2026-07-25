@@ -101,6 +101,64 @@ export interface AttentionContext {
 	msSinceInteraction: number;
 }
 
+// ── The wall-clock clamp (server side) ───────────────────────────────────────
+
+/**
+ * The rolling window over which a user's credited seconds may not exceed elapsed
+ * real seconds. One hour: long enough that ordinary batching and brief network
+ * gaps never brush it, short enough that no one can bank idle time and spend it.
+ */
+export const CREDIT_WINDOW_SECONDS = 3_600;
+
+/** Anything carrying a duration the clamp can trim. */
+export interface CreditableEvent {
+	durationSeconds: number;
+}
+
+export interface ClampResult<T> {
+	/** The same events in the same order, with durations trimmed to fit the budget. */
+	events: T[];
+	/** Seconds actually credited. */
+	granted: number;
+	/** Seconds refused because the window was already full. */
+	refused: number;
+}
+
+/**
+ * Trim a batch of attention events so a user can never be credited more seconds
+ * than have actually elapsed.
+ *
+ * Everything upstream of this is client-supplied and therefore advisory: the
+ * browser splits ticks between concurrent claims, but it only sees one tab, and
+ * a forged request sees nothing at all. This is the backstop that makes the
+ * equal-time principle true rather than merely intended — five tabs, five
+ * devices, or a hand-written `curl` all land against the same budget.
+ *
+ * Zero-duration events (visit pings) pass through untouched: they carry no time,
+ * so they cannot over-credit, and they're the analytics signal for surfaces that
+ * deliberately earn nothing.
+ */
+export function clampToWindow<T extends CreditableEvent>(
+	events: T[],
+	alreadyCreditedSeconds: number,
+	windowSeconds: number = CREDIT_WINDOW_SECONDS,
+): ClampResult<T> {
+	let budget = Math.max(0, windowSeconds - Math.max(0, alreadyCreditedSeconds));
+	let granted = 0;
+	let refused = 0;
+
+	const trimmed = events.map((event) => {
+		const wanted = Math.max(0, event.durationSeconds);
+		const give = Math.min(wanted, budget);
+		budget -= give;
+		granted += give;
+		refused += wanted - give;
+		return give === event.durationSeconds ? event : { ...event, durationSeconds: give };
+	});
+
+	return { events: trimmed, granted, refused };
+}
+
 /** The dedupe key: one credit per creator/post pair per tick, never two. */
 export function claimKey(claim: AttentionClaim): string {
 	return `${claim.creatorId}:${claim.postId ?? "none"}`;

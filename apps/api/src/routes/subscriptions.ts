@@ -20,6 +20,7 @@ import {
 	seedAllocations,
 	users,
 } from "@anthers/db/schema";
+import { CREDIT_WINDOW_SECONDS, clampToWindow } from "@anthers/shared/attention";
 import { badgeRank, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
 import { rankViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
@@ -388,10 +389,35 @@ const subscriptionRoutes = new Hono()
 			const { events } = c.req.valid("json");
 
 			if (events.length === 0) {
-				return c.json({ recorded: 0 });
+				return c.json({ recorded: 0, granted: 0, refused: 0 });
 			}
 
-			const rows = events.map((e) => ({
+			// The wall-clock clamp. Everything upstream of here is client-supplied:
+			// the browser splits a tick between concurrent claims, but it only sees
+			// one tab, and a forged request sees nothing at all. Credited seconds in
+			// any rolling window can never exceed the seconds that actually elapsed,
+			// so five tabs, five devices, or a hand-written request all land against
+			// one budget. Honest use never reaches it — you cannot consume more than
+			// an hour of anything within an hour.
+			const windowStart = new Date(Date.now() - CREDIT_WINDOW_SECONDS * 1_000);
+			const [spent] = await db
+				.select({
+					total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int`,
+				})
+				.from(attentionEvents)
+				.where(
+					and(eq(attentionEvents.userId, user.id), gte(attentionEvents.createdAt, windowStart)),
+				);
+
+			const { events: allowed, granted, refused } = clampToWindow(events, spent?.total ?? 0);
+
+			if (refused > 0) {
+				console.warn(
+					`attention clamp: user ${user.id} claimed ${granted + refused}s with ${spent?.total ?? 0}s already credited this window — refused ${refused}s`,
+				);
+			}
+
+			const rows = allowed.map((e) => ({
 				userId: user.id,
 				creatorId: e.creatorId,
 				eventType: e.eventType,
@@ -401,7 +427,7 @@ const subscriptionRoutes = new Hono()
 
 			await db.insert(attentionEvents).values(rows);
 
-			return c.json({ recorded: rows.length });
+			return c.json({ recorded: rows.length, granted, refused });
 		},
 	)
 
