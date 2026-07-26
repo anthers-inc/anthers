@@ -1,0 +1,112 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Static checks + the Bun test suites (API routes, jobs, and the shared money/
+  # attention policy). Deliberately its own job with its own database rather than a
+  # step in `playwright`: the two suites then share no state, run in parallel, and
+  # report independently — a red API suite isn't hidden behind a browser failure.
+  # It also skips the Chromium download, and avoids both suites wanting port 8000.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anthers
+          POSTGRES_PASSWORD: anthers
+          POSTGRES_DB: anthers
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anthers -d anthers"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://anthers:anthers@localhost:5432/anthers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Typecheck was previously enforced only by the App Platform build, which means
+      # a type error surfaced at deploy time rather than on the PR that caused it.
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Apply database migrations
+        run: bun run db:migrate
+
+      # The suites drive the Hono app through `app.fetch` against this real Postgres.
+      - name: Run test suites
+        run: bun test
+
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The User Gauntlet spec needs the real API + Postgres behind the preview SPA
+    # (see apps/web/playwright.config.ts webServer). Mirrors compose.yaml's dev database.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anthers
+          POSTGRES_PASSWORD: anthers
+          POSTGRES_DB: anthers
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anthers -d anthers"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://anthers:anthers@localhost:5432/anthers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Apply database migrations
+        run: bun run db:migrate
+
+      - name: Run e2e tests
+        working-directory: apps/web
+        env:
+          CI: "true"
+        run: bunx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
