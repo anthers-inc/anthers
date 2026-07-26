@@ -43,6 +43,50 @@ export const sessions = pgTable("sessions", {
 		.references(() => users.id, { onDelete: "cascade" }),
 	ipAddress: text("ip_address"),
 	userAgent: text("user_agent"),
+	// How the session is carried: "web" = the browser cookie, "desktop" = a bearer
+	// token held by an installed Studio app. Same session primitive either way (an
+	// opaque row with an expiry); `kind` exists so a creator can tell their devices
+	// apart in the revocation list, and so a stolen laptop is killable without
+	// signing every browser out.
+	kind: text("kind").notNull().default("web"),
+	// Human label for the revocation list — the device name the desktop app reports
+	// at enrolment ("parker-thinkpad"). Null for browser sessions, which are
+	// described by user_agent instead.
+	label: text("label"),
+	// Last time this session authenticated a request, throttled to one write per
+	// hour (see touchSession) so a Devices list can show "last used" without a DB
+	// write on every API call.
+	lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * One in-flight desktop enrolment. The desktop app never sees a password: it opens
+ * an authorize page in the SYSTEM browser (where the creator already holds a normal
+ * cookie session), and one confirm click mints the desktop session here.
+ *
+ * PKCE binds the two halves. The app generates a random verifier, sends only its
+ * SHA-256 `challenge` to the browser, and must present the verifier to redeem the
+ * `code`. That way another local app that hijacks the `anthers://` scheme and steals
+ * the code off the deep link still cannot exchange it — it never saw the verifier.
+ *
+ * Rows are single-use (`consumedAt`) and short-lived (`expiresAt`); the swept remains
+ * carry no secret, since `sessionToken` is cleared on redemption.
+ */
+export const desktopAuthRequests = pgTable("desktop_auth_requests", {
+	id: serial("id").primaryKey(),
+	// SHA-256 of the app's PKCE verifier, hex. Supplied when the flow starts.
+	challenge: text("challenge").notNull().unique(),
+	// One-time redemption code, minted at confirm. Null until the creator approves.
+	code: text("code").unique(),
+	// Device label the app asked for, shown on the authorize page so the creator can
+	// see what they are approving.
+	label: text("label"),
+	// The minted session's token, held only between confirm and redemption.
+	sessionToken: text("session_token"),
+	userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+	consumedAt: timestamp("consumed_at", { withTimezone: true }),
 	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

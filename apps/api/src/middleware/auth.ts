@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
-import { validateSession } from "../services/auth.js";
+import { touchSession, validateSession } from "../services/auth.js";
+import { bearerToken, resolveBearerSession } from "./bearer.js";
 
 type SessionUser = {
 	id: number;
@@ -21,22 +22,36 @@ type AuthEnv = {
 };
 
 /**
- * Middleware that requires a valid session cookie.
+ * Middleware that requires a valid session.
+ *
+ * The session arrives either as the browser's `session` cookie or, for the packaged
+ * desktop Studio, as an `Authorization: Bearer` header. A presented bearer header IS
+ * the request's credential — the cookie is not consulted and there is no fallback to
+ * it — which is what lets `csrfProtection` decide the same question independently.
+ * See `middleware/bearer.ts`.
+ *
  * Sets c.get("user") and c.get("sessionToken") on success.
  * Returns 401 if no valid session.
  */
 export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
-	const token = getCookie(c, "session");
+	const presentedBearer = bearerToken(c);
+	const token = presentedBearer ?? getCookie(c, "session");
 
 	if (!token) {
 		return c.json({ error: "Authentication required" }, 401);
 	}
 
-	const result = await validateSession(token);
+	// On a mutating request the CSRF middleware has already resolved this token;
+	// resolveBearerSession memoizes, so this reuses that lookup rather than repeating it.
+	const result = presentedBearer ? await resolveBearerSession(c) : await validateSession(token);
 
 	if (!result) {
 		return c.json({ error: "Invalid or expired session" }, 401);
 	}
+
+	// Fire-and-forget: the Devices list wants a "last used" reading, but no user-facing
+	// request should wait on (or fail because of) that bookkeeping write.
+	void touchSession(result.session).catch(() => {});
 
 	c.set("user", {
 		id: result.user.id,

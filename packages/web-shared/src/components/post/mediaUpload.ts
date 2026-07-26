@@ -5,11 +5,7 @@
  * `key` (persisted on the post) and a `url` (used only for in-form preview).
  */
 
-export const apiBase =
-	typeof location !== "undefined" &&
-	(location.hostname === "localhost" || location.hostname === "127.0.0.1")
-		? "http://localhost:8000"
-		: "";
+import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
 /** mediaType values the direct endpoint accepts for display images. */
 export type ImageMediaType = "image" | "thumbnail" | "cover";
@@ -22,9 +18,8 @@ export async function uploadImageFile(
 	const formData = new FormData();
 	formData.append("file", file);
 	formData.append("mediaType", mediaType);
-	const res = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+	const res = await apiFetch("/api/content/media-upload/direct", {
 		method: "POST",
-		credentials: "include",
 		body: formData,
 	});
 	if (!res.ok) throw new Error("Image upload failed");
@@ -39,5 +34,5 @@ export async function uploadImageFile(
 export function keyToPreview(key: string): string {
 	if (!key) return "";
 	if (/^(https?:)?\/\//.test(key) || key.startsWith("/")) return key;
-	return `${apiBase}/content/${key}`;
+	return `${apiBaseUrl()}/content/${key}`;
 }

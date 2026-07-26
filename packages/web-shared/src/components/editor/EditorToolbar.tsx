@@ -8,11 +8,7 @@ import {
 	PhotoIcon,
 } from "@heroicons/react/24/outline";
 import type { Editor } from "@tiptap/react";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
+import { apiFetch } from "../../lib/rpc";
 
 interface EditorToolbarProps {
 	editor: Editor;
@@ -54,10 +50,9 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			formData.append("image", file);
 
 			try {
-				const res = await fetch(`${apiBase}/api/content/inline-images`, {
+				const res = await apiFetch("/api/content/inline-images", {
 					method: "POST",
 					body: formData,
-					credentials: "include",
 				});
 				const data = await res.json();
 				editor.chain().focus().setImage({ src: data.inlineImage.image }).run();

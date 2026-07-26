@@ -16,7 +16,7 @@ import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { Link } from "../lib/router";
-import { client } from "../lib/rpc";
+import { apiFetch, client } from "../lib/rpc";
 import type {
 	AnalyticsOverview,
 	ContentAnalyticsItem,
@@ -25,11 +25,6 @@ import type {
 	CrossPublishResult,
 	TimeseriesEntry,
 } from "../lib/types";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 const PERIOD_OPTIONS = [
 	{ value: "7", label: "7 days" },
@@ -473,15 +468,9 @@ export default function AnalyticsDashboardPage() {
 
 		// Use raw fetch for endpoints that need query params
 		Promise.all([
-			fetch(`${apiBase}/api/integrations/analytics/overview?period=${period}`, {
-				credentials: "include",
-			}).then((res) => res.json()),
-			fetch(`${apiBase}/api/integrations/analytics/content?period=${period}`, {
-				credentials: "include",
-			}).then((res) => res.json()),
-			fetch(`${apiBase}/api/integrations/analytics/timeseries?period=${period}`, {
-				credentials: "include",
-			}).then((res) => res.json()),
+			apiFetch(`/api/integrations/analytics/overview?period=${period}`).then((res) => res.json()),
+			apiFetch(`/api/integrations/analytics/content?period=${period}`).then((res) => res.json()),
+			apiFetch(`/api/integrations/analytics/timeseries?period=${period}`).then((res) => res.json()),
 		])
 			.then(([overviewData, contentData, timeseriesData]) => {
 				setOverview(overviewData as AnalyticsOverview);

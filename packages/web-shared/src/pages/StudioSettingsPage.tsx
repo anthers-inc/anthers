@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import SeedLadderEditor from "../components/post/SeedLadderEditor";
-import { apiBaseUrl, client } from "../lib/rpc";
+import { apiFetch, client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
 function StripeOnboardingSection() {
@@ -170,9 +170,8 @@ function PlatformConnectionsSection() {
 	const handleYouTubeConnect = async () => {
 		setError(null);
 		try {
-			const res = await fetch(`${apiBaseUrl()}/api/integrations/platforms/youtube/auth`, {
+			const res = await apiFetch("/api/integrations/platforms/youtube/auth", {
 				method: "POST",
-				credentials: "include",
 				headers: { "Content-Type": "application/json" },
 			});
 			if (!res.ok) {
@@ -213,9 +212,8 @@ function PlatformConnectionsSection() {
 		setDisconnecting(platform);
 		setError(null);
 		try {
-			const res = await fetch(`${apiBaseUrl()}/api/integrations/platforms/${platform}/disconnect`, {
+			const res = await apiFetch(`/api/integrations/platforms/${platform}/disconnect`, {
 				method: "DELETE",
-				credentials: "include",
 			});
 			if (!res.ok) {
 				const data = (await res.json()) as { detail?: string };

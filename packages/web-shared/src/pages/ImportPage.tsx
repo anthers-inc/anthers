@@ -10,12 +10,7 @@ import { useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { Link } from "../lib/router";
-import { client } from "../lib/rpc";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
+import { apiFetch, client } from "../lib/rpc";
 
 interface ItchioGame {
 	url: string;
@@ -53,9 +48,8 @@ export default function ImportPage() {
 		setSelected(new Set());
 
 		try {
-			const res = await fetch(
-				`${apiBase}/api/integrations/import/itchio/preview?username=${encodeURIComponent(username.trim())}`,
-				{ credentials: "include" },
+			const res = await apiFetch(
+				`/api/integrations/import/itchio/preview?username=${encodeURIComponent(username.trim())}`,
 			);
 			if (!res.ok) {
 				const errData = await res.json().catch(() => ({}));

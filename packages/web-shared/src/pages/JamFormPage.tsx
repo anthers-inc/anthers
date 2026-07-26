@@ -4,13 +4,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
-import { client } from "../lib/rpc";
+import { apiFetch, client } from "../lib/rpc";
 import type { GameJam } from "../lib/types";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 function toLocalDatetime(isoStr: string): string {
 	if (!isoStr) return "";
@@ -99,17 +94,15 @@ export default function JamFormPage() {
 			if (coverFile) formData.append("coverImage", coverFile);
 
 			if (isEditing) {
-				const res = await fetch(`${apiBase}/api/jams/${slug}`, {
+				const res = await apiFetch(`/api/jams/${slug}`, {
 					method: "PATCH",
-					credentials: "include",
 					body: formData,
 				});
 				if (!res.ok) throw res;
 				navigate(`/jams/${jamSlug}`);
 			} else {
-				const res = await fetch(`${apiBase}/api/jams`, {
+				const res = await apiFetch("/api/jams", {
 					method: "POST",
-					credentials: "include",
 					body: formData,
 				});
 				if (!res.ok) throw res;

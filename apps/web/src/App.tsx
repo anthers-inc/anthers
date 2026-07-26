@@ -24,6 +24,7 @@ import CreatorMonetizationCalculatorPage from "./pages/CreatorMonetizationCalcul
 import CreatorPayComparisonPage from "./pages/CreatorPayComparisonPage";
 import CreatorProfilePage from "./pages/CreatorProfilePage";
 // Shared content pages (work for both logged-in and logged-out)
+import DesktopAuthorizePage from "./pages/DesktopAuthorizePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import FAQPage from "./pages/FAQPage";
 // Public marketing pages
@@ -163,6 +164,11 @@ export default function App() {
 						</ProtectedRoute>
 					}
 				/>
+				{/* Desktop Studio sign-in confirmation. Opened in the system browser by the
+					packaged app; the creator confirms here and the app receives a one-time
+					code over its anthers:// scheme. Handles its own auth bounce so the
+					sign-in round trip returns to this exact URL (challenge intact). */}
+				<Route path="/desktop/authorize" element={<DesktopAuthorizePage />} />
 				{/* Admin / operations console — platform operators only (AdminRoute
 					mirrors the API's requireAdmin; non-admins are bounced home). */}
 				<Route

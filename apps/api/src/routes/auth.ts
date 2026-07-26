@@ -7,15 +7,23 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
 import { isReservedUsername } from "../reserved-usernames.js";
 import {
+	authorizeDesktopAuth,
+	cleanupDesktopAuthRequests,
 	createEmailVerificationToken,
 	createPasswordResetToken,
 	createSession,
 	deleteSession,
+	getPendingDesktopAuth,
 	hashPassword,
+	listUserSessions,
+	redeemDesktopAuth,
 	resetPassword,
+	revokeUserSession,
+	startDesktopAuth,
 	validateSession,
 	verifyEmailToken,
 	verifyPassword,
@@ -58,6 +66,27 @@ const resetPasswordSchema = z.object({
 const changePasswordSchema = z.object({
 	currentPassword: z.string(),
 	newPassword: z.string().min(8).max(128),
+});
+
+/** A PKCE challenge/code/verifier — all are hex tokens from `generateToken()`. */
+const hexToken = z
+	.string()
+	.min(32)
+	.max(128)
+	.regex(/^[0-9a-f]+$/, "Expected a lowercase hex token");
+
+const desktopStartSchema = z.object({
+	challenge: hexToken,
+	label: z.string().min(1).max(80).optional(),
+});
+
+const desktopAuthorizeSchema = z.object({
+	challenge: hexToken,
+});
+
+const desktopExchangeSchema = z.object({
+	code: hexToken,
+	verifier: hexToken,
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -174,8 +203,11 @@ const authRoutes = new Hono()
 	})
 
 	// ── Sign Out ──────────────────────────────────────────────────────────────
+	// Reads the bearer token first so a desktop sign-out ends the DESKTOP session
+	// rather than silently doing nothing (these two routes resolve the session
+	// themselves instead of going through requireAuth, so they need the same rule).
 	.post("/sign-out", async (c) => {
-		const token = getCookie(c, "session");
+		const token = bearerToken(c) ?? getCookie(c, "session");
 		if (token) {
 			await deleteSession(token);
 		}
@@ -185,17 +217,23 @@ const authRoutes = new Hono()
 
 	// ── Current User ─────────────────────────────────────────────────────────
 	.get("/me", async (c) => {
-		const token = getCookie(c, "session");
+		const presentedBearer = bearerToken(c);
+		const token = presentedBearer ?? getCookie(c, "session");
 		if (!token) {
 			return c.json({ user: null });
 		}
 
 		const result = await validateSession(token);
 		if (!result) {
-			deleteCookie(c, "session", {
-				path: "/",
-				...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
-			});
+			// Only a browser has a cookie to clear; a dead bearer token is the client's
+			// to discard, and clearing the cookie here would sign the browser out of a
+			// session the desktop app's staleness says nothing about.
+			if (!presentedBearer) {
+				deleteCookie(c, "session", {
+					path: "/",
+					...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
+				});
+			}
 			return c.json({ user: null });
 		}
 
@@ -291,6 +329,92 @@ const authRoutes = new Hono()
 
 			return c.json({ success: true });
 		},
-	);
+	)
+
+	// ── Devices / Sessions ───────────────────────────────────────────────────
+	// The revocation surface that makes long-lived desktop tokens safe to hand out:
+	// a stolen laptop is killable without signing every browser out.
+	.get("/sessions", requireAuth, async (c) => {
+		const user = c.get("user");
+		const current = c.get("sessionToken");
+		const rows = await listUserSessions(user.id);
+		const currentId = await validateSession(current).then((r) => r?.session.id ?? null);
+		return c.json({
+			sessions: rows.map((s) => ({ ...s, current: s.id === currentId })),
+		});
+	})
+
+	.delete("/sessions/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		if (!Number.isInteger(id)) return c.json({ error: "Invalid session id" }, 400);
+
+		const revoked = await revokeUserSession(user.id, id);
+		if (!revoked) return c.json({ error: "Not found" }, 404);
+		return c.json({ success: true });
+	})
+
+	// ── Desktop Enrolment ────────────────────────────────────────────────────
+	// The desktop Studio never sees a password. It opens the authorize page in the
+	// SYSTEM browser, where the creator already holds a cookie session, and one
+	// confirm click mints an independently revocable desktop token. PKCE binds the
+	// app that started the flow to the app that redeems it. See 42.06 § Desktop auth.
+
+	// Step 1 — the app opens the flow with only a PKCE challenge. Deliberately
+	// unauthenticated: no session exists yet and no user is implied.
+	.post("/desktop/start", zValidator("json", desktopStartSchema, invalidBody), async (c) => {
+		const { challenge, label } = c.req.valid("json");
+		await startDesktopAuth(challenge, label ?? null);
+		// Opportunistic sweep — these rows are short-lived and low-volume, so this
+		// costs less than owning a scheduled job for them.
+		void cleanupDesktopAuthRequests().catch(() => {});
+		return c.json({ success: true }, 201);
+	})
+
+	// Step 2 — the authorize page asks what it is about to approve. Returns only the
+	// device label, never anything derived from a session.
+	.get("/desktop/pending/:challenge", async (c) => {
+		const pending = await getPendingDesktopAuth(c.req.param("challenge"));
+		if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
+		return c.json({ label: pending.label, expiresAt: pending.expiresAt });
+	})
+
+	// Step 3 — the confirm click, under the browser's normal cookie session. This is
+	// what turns "this browser is signed in" into a separate desktop credential.
+	.post(
+		"/desktop/authorize",
+		requireAuth,
+		zValidator("json", desktopAuthorizeSchema, invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const { challenge } = c.req.valid("json");
+
+			const code = await authorizeDesktopAuth(
+				challenge,
+				user.id,
+				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
+				c.req.header("User-Agent") ?? null,
+			);
+			if (!code) return c.json({ error: "This sign-in request has expired" }, 404);
+
+			return c.json({ code });
+		},
+	)
+
+	// Step 4 — the app redeems the code with its verifier and receives the token.
+	// Unauthenticated by design: possession of code + verifier IS the proof.
+	.post("/desktop/exchange", zValidator("json", desktopExchangeSchema, invalidBody), async (c) => {
+		const { code, verifier } = c.req.valid("json");
+
+		const token = await redeemDesktopAuth(code, verifier);
+		if (!token) return c.json({ error: "Invalid or expired code" }, 400);
+
+		const result = await validateSession(token);
+		if (!result) return c.json({ error: "Invalid or expired code" }, 400);
+
+		// The one place a session token is returned in a body rather than a Set-Cookie:
+		// the caller is not a browser and has no cookie jar to put it in.
+		return c.json({ token, user: serializeUser(result.user) });
+	});
 
 export { authRoutes };

@@ -6,13 +6,8 @@ import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
-import { client } from "../lib/rpc";
+import { apiFetch, client } from "../lib/rpc";
 import type { Project } from "../lib/types";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 function slugify(text: string): string {
 	return text
@@ -26,9 +21,8 @@ async function uploadImage(file: File): Promise<string> {
 	const formData = new FormData();
 	formData.append("file", file);
 	formData.append("mediaType", "cover");
-	const res = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+	const res = await apiFetch("/api/content/media-upload/direct", {
 		method: "POST",
-		credentials: "include",
 		body: formData,
 	});
 	if (!res.ok) throw new Error("Image upload failed");

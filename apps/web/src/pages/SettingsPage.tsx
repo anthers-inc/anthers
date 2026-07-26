@@ -2,13 +2,120 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
+import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
 import { studioUrl } from "../lib/studio";
 
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
+interface DeviceSession {
+	id: number;
+	kind: string;
+	label: string | null;
+	ipAddress: string | null;
+	userAgent: string | null;
+	lastUsedAt: string | null;
+	createdAt: string;
+	current: boolean;
+}
+
+function formatWhen(value: string | null): string {
+	if (!value) return "never";
+	const then = new Date(value).getTime();
+	const mins = Math.round((Date.now() - then) / 60000);
+	if (mins < 1) return "just now";
+	if (mins < 60) return `${mins}m ago`;
+	if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+	return new Date(value).toLocaleDateString();
+}
+
+/**
+ * Devices — the revocation surface for signed-in sessions.
+ *
+ * This is what makes a long-lived desktop token safe to hand out: a stolen laptop is
+ * killable here without signing every browser out. Browser sessions are listed too,
+ * since "where am I signed in" is the question a creator actually has.
+ */
+function DevicesSection() {
+	const [sessions, setSessions] = useState<DeviceSession[] | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [revoking, setRevoking] = useState<number | null>(null);
+
+	const load = () => {
+		apiFetch("/api/auth/sessions")
+			.then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load devices."))))
+			.then((data) => setSessions((data as { sessions: DeviceSession[] }).sessions))
+			.catch(() => setError("Could not load your devices."));
+	};
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: load is stable for mount-only fetch
+	useEffect(load, []);
+
+	const revoke = async (id: number) => {
+		setRevoking(id);
+		setError(null);
+		try {
+			const res = await apiFetch(`/api/auth/sessions/${id}`, { method: "DELETE" });
+			if (!res.ok) throw new Error("Failed to sign that device out.");
+			setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to sign that device out.");
+		} finally {
+			setRevoking(null);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Devices</h3>
+				<p className="text-sm text-base-content/60">
+					Where you're signed in. Signing a device out immediately ends its access.
+				</p>
+
+				{error && (
+					<div className="alert alert-error text-sm mt-2">
+						<span>{error}</span>
+					</div>
+				)}
+
+				{sessions === null && !error && (
+					<p className="text-sm text-base-content/50 mt-2">Loading…</p>
+				)}
+
+				{sessions !== null && (
+					<ul className="mt-2 divide-y divide-base-300">
+						{sessions.map((s) => (
+							<li key={s.id} className="flex items-center gap-3 py-3">
+								<div className="min-w-0 flex-1">
+									<div className="flex items-center gap-2">
+										<span className="font-medium truncate">
+											{s.label ?? (s.kind === "desktop" ? "Anthers Studio" : "Browser")}
+										</span>
+										{s.kind === "desktop" && <span className="badge badge-sm">Desktop</span>}
+										{s.current && <span className="badge badge-sm badge-primary">This device</span>}
+									</div>
+									<div className="text-xs text-base-content/50 truncate">
+										Last used {formatWhen(s.lastUsedAt)}
+										{s.ipAddress ? ` · ${s.ipAddress}` : ""}
+									</div>
+								</div>
+								{!s.current && (
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										onClick={() => revoke(s.id)}
+										disabled={revoking === s.id}
+									>
+										{revoking === s.id ? "Signing out…" : "Sign out"}
+									</button>
+								)}
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		</div>
+	);
+}
 
 function BlueskySection() {
 	const { user, linkBluesky, unlinkBluesky, refreshUser } = useAuth();
@@ -139,9 +246,8 @@ export default function SettingsPage() {
 		setSuccess(false);
 
 		try {
-			const res = await fetch(`${apiBase}/api/accounts/me`, {
+			const res = await apiFetch("/api/accounts/me", {
 				method: "PATCH",
-				credentials: "include",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ isCreator: checked }),
 			});
@@ -209,6 +315,9 @@ export default function SettingsPage() {
 
 			{/* Bluesky / ATProto */}
 			<BlueskySection />
+
+			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
+			<DevicesSection />
 
 			{/* Creator tools live in the Studio (payouts, connections, Seed tiers). */}
 			{isCreator && (

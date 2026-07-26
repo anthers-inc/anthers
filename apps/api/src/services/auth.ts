@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { db } from "@anthers/db/client";
-import { sessions, users, verificationTokens } from "@anthers/db/schema";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { desktopAuthRequests, sessions, users, verificationTokens } from "@anthers/db/schema";
+import { and, desc, eq, gt, lt } from "drizzle-orm";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+/** How stale `sessions.last_used_at` may get before a request refreshes it. */
+const LAST_USED_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
+/** Enrolment window — long enough to read the authorize page, short enough to matter. */
+const DESKTOP_AUTH_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+/** How a session is carried. See `sessions.kind`. */
+export type SessionKind = "web" | "desktop";
 
 // ─── Token Generation ────────────────────────────────────────────────────────
 
@@ -33,6 +40,7 @@ export async function createSession(
 	userId: number,
 	ipAddress?: string | null,
 	userAgent?: string | null,
+	options?: { kind?: SessionKind; label?: string | null },
 ): Promise<string> {
 	const token = generateToken();
 	const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS);
@@ -42,6 +50,8 @@ export async function createSession(
 		userId,
 		ipAddress: ipAddress ?? null,
 		userAgent: userAgent ?? null,
+		kind: options?.kind ?? "web",
+		label: options?.label ?? null,
 		expiresAt,
 	});
 
@@ -76,6 +86,165 @@ export async function deleteSession(token: string): Promise<void> {
 /** Delete all sessions for a user (e.g. after password change) */
 export async function deleteAllUserSessions(userId: number): Promise<void> {
 	await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+/**
+ * Record that a session just authenticated a request.
+ *
+ * Throttled: skipped entirely unless the stored value is already older than
+ * `LAST_USED_THROTTLE_MS`, so the Devices list gets a "last used" reading without
+ * turning every authenticated API call into a write. The read that decides this has
+ * already happened in validateSession, so the throttle costs nothing when it holds.
+ */
+export async function touchSession(session: {
+	id: number;
+	lastUsedAt: Date | null;
+}): Promise<void> {
+	const now = Date.now();
+	if (session.lastUsedAt && now - session.lastUsedAt.getTime() < LAST_USED_THROTTLE_MS) return;
+	await db
+		.update(sessions)
+		.set({ lastUsedAt: new Date(now) })
+		.where(eq(sessions.id, session.id));
+}
+
+/**
+ * List a user's live sessions for the Devices list, newest first. Tokens are never
+ * included — this is a revocation UI, not a credential dispenser.
+ */
+export async function listUserSessions(userId: number) {
+	return db
+		.select({
+			id: sessions.id,
+			kind: sessions.kind,
+			label: sessions.label,
+			ipAddress: sessions.ipAddress,
+			userAgent: sessions.userAgent,
+			lastUsedAt: sessions.lastUsedAt,
+			createdAt: sessions.createdAt,
+			expiresAt: sessions.expiresAt,
+		})
+		.from(sessions)
+		.where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, new Date())))
+		.orderBy(desc(sessions.createdAt));
+}
+
+/**
+ * Revoke one of a user's own sessions by id. Scoped to `userId` in the WHERE clause
+ * rather than checked beforehand, so one user can never revoke another's session
+ * even if they guess the id. Returns false when nothing matched.
+ */
+export async function revokeUserSession(userId: number, sessionId: number): Promise<boolean> {
+	const deleted = await db
+		.delete(sessions)
+		.where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+		.returning({ id: sessions.id });
+	return deleted.length > 0;
+}
+
+// ─── Desktop Enrolment (browser handoff + PKCE) ──────────────────────────────
+
+/** SHA-256 of a PKCE verifier, lowercase hex — the form stored as `challenge`. */
+export async function pkceChallenge(verifier: string): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+	return Array.from(new Uint8Array(digest))
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
+}
+
+/**
+ * Open a desktop enrolment. Called unauthenticated by the app itself, which has only
+ * generated a verifier — no session exists yet and no user is implied. Re-opening an
+ * existing challenge is idempotent so a retried request can't strand the flow.
+ */
+export async function startDesktopAuth(challenge: string, label: string | null): Promise<void> {
+	const expiresAt = new Date(Date.now() + DESKTOP_AUTH_EXPIRY_MS);
+	await db
+		.insert(desktopAuthRequests)
+		.values({ challenge, label, expiresAt })
+		.onConflictDoUpdate({
+			target: desktopAuthRequests.challenge,
+			set: { label, expiresAt, code: null, sessionToken: null, userId: null, consumedAt: null },
+		});
+}
+
+/** A pending enrolment, as shown on the authorize page before the creator confirms. */
+export async function getPendingDesktopAuth(challenge: string) {
+	const [row] = await db
+		.select()
+		.from(desktopAuthRequests)
+		.where(
+			and(
+				eq(desktopAuthRequests.challenge, challenge),
+				gt(desktopAuthRequests.expiresAt, new Date()),
+			),
+		)
+		.limit(1);
+	if (!row || row.consumedAt) return null;
+	return row;
+}
+
+/**
+ * The confirm click: mint the desktop session and a one-time code that redeems it.
+ * Runs in the browser under a normal cookie session, so the user is already proven —
+ * this call is what turns that proof into a separately revocable desktop credential.
+ */
+export async function authorizeDesktopAuth(
+	challenge: string,
+	userId: number,
+	ipAddress: string | null,
+	userAgent: string | null,
+): Promise<string | null> {
+	const pending = await getPendingDesktopAuth(challenge);
+	if (!pending) return null;
+
+	const sessionToken = await createSession(userId, ipAddress, userAgent, {
+		kind: "desktop",
+		label: pending.label,
+	});
+	const code = generateToken();
+
+	await db
+		.update(desktopAuthRequests)
+		.set({ code, sessionToken, userId })
+		.where(eq(desktopAuthRequests.id, pending.id));
+
+	return code;
+}
+
+/**
+ * Redeem a code for the session token, proving possession of the verifier.
+ *
+ * This is the step that makes deep-link interception useless: a rogue local app that
+ * registers `anthers://` and grabs the code never saw the verifier, so the hash won't
+ * match and the code is spent either way — the row is marked consumed on ANY redemption
+ * attempt against it, so a stolen code cannot be retried once the real app fails over.
+ */
+export async function redeemDesktopAuth(code: string, verifier: string): Promise<string | null> {
+	const [row] = await db
+		.select()
+		.from(desktopAuthRequests)
+		.where(and(eq(desktopAuthRequests.code, code), gt(desktopAuthRequests.expiresAt, new Date())))
+		.limit(1);
+
+	if (!row || row.consumedAt || !row.sessionToken) return null;
+
+	// Burn the row first, whatever the outcome — a code is single-use by definition,
+	// and a wrong verifier means someone other than the requester holds it.
+	await db
+		.update(desktopAuthRequests)
+		.set({ consumedAt: new Date(), sessionToken: null, code: null })
+		.where(eq(desktopAuthRequests.id, row.id));
+
+	const expected = await pkceChallenge(verifier);
+	if (expected !== row.challenge) return null;
+
+	return row.sessionToken;
+}
+
+/** Drop expired/consumed enrolment rows. Safe to call opportunistically. */
+export async function cleanupDesktopAuthRequests(): Promise<void> {
+	await db.delete(desktopAuthRequests).where(lt(desktopAuthRequests.expiresAt, new Date()));
 }
 
 /** Delete all expired sessions (cleanup) */

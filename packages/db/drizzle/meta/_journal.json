@@ -43,6 +43,13 @@
       "when": 1784858373535,
       "tag": "0005_striped_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785029403499,
+      "tag": "0006_worthless_korath",
+      "breakpoints": true
     }
   ]
 }

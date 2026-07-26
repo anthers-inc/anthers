@@ -34,6 +34,7 @@ const ROUTE_NAMES = [
 	"demo-creator-page",
 	"demo-infrastructure",
 	"demo-user",
+	"desktop",
 	"discover",
 	"faq",
 	"feed",
