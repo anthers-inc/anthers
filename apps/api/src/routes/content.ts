@@ -698,23 +698,65 @@ async function reconcilePostEntries(postId: number, entries: PostEntryInput[]): 
 }
 
 /**
- * Where a gated post's HLS should be streamed from. When set, a completed video
- * transcode's manifest URL is rewritten to the access-checked, signed-segment
- * endpoint (`buildHlsManifestUrl`) instead of the raw public CDN URL — so entitled
- * viewers of a gated post can actually play it (the CDN 403s private segments).
+ * Where a post's media should be delivered from. When set, a completed transcode's
+ * stored URL is rewritten to the matching access-checked endpoint — signed HLS for
+ * video, a signed redirect for audio — instead of a raw CDN URL. Stored media is
+ * private, so the raw URL 403s; the endpoints are how an entitled viewer actually
+ * plays it. Null in local dev, where /content serves everything unsigned.
  */
-interface HlsStreamCtx {
+interface DeliveryCtx {
 	slug: string;
 	origin: string;
 }
 
-/** URL of the access-checked HLS master for a gated video item referenced by a post. */
+/** URL of the access-checked HLS master for a video item referenced by a post. */
 function buildHlsManifestUrl(
-	ctx: HlsStreamCtx,
+	ctx: DeliveryCtx,
 	contentItemId: number,
 	file = "master.m3u8",
 ): string {
 	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/hls/${contentItemId}/${file}`;
+}
+
+/** URL of the access-checked audio endpoint for an audio item referenced by a post. */
+function buildAudioUrl(ctx: DeliveryCtx, contentItemId: number): string {
+	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/audio/${contentItemId}`;
+}
+
+/**
+ * A transcode row as a *viewer* may see it.
+ *
+ * `hlsManifestUrl` and `outputFileUrl` point at the deliverable, so they follow the
+ * same rule as `sourceKey` and asset files: handed out only when the viewer has
+ * access. Everything else — status, progress, ETA, error, waveform — stays, so a
+ * locked post still renders "Processing…" instead of an empty frame.
+ *
+ * For a viewer who *does* have access the URLs are rewritten to the access-checked
+ * delivery routes. That rewrite is not a nicety: stored media is private, so a raw
+ * CDN URL would 403 even for someone entitled to it.
+ */
+function viewerTranscoding(
+	job: TranscodingJobRow | null,
+	canAccess: boolean,
+	delivery: DeliveryCtx | null,
+): TranscodingJobRow | null {
+	if (!job) return null;
+	if (!canAccess) return { ...job, hlsManifestUrl: null, outputFileUrl: null };
+	if (!delivery || job.status !== "completed") return job;
+
+	if (job.mediaType === "video" && job.hlsManifestUrl) {
+		return { ...job, hlsManifestUrl: buildHlsManifestUrl(delivery, job.contentItemId) };
+	}
+	if (job.mediaType === "audio" && job.outputFileUrl) {
+		return { ...job, outputFileUrl: buildAudioUrl(delivery, job.contentItemId) };
+	}
+	return job;
+}
+
+/** Parse a `:contentId` path param, rejecting anything that isn't a positive integer. */
+function parseContentId(raw: string): number | null {
+	const n = Number(raw);
+	return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 /** Serialize one post entry for a response, blanking the referenced item's media when gated. */
@@ -724,7 +766,7 @@ function serializeEntry(
 	itemAssets: AssetRow[],
 	job: TranscodingJobRow | null,
 	canAccess: boolean,
-	hls: HlsStreamCtx | null,
+	delivery: DeliveryCtx | null,
 ) {
 	if (entry.kind === "text") {
 		return {
@@ -737,21 +779,12 @@ function serializeEntry(
 		};
 	}
 
-	// Video: hand the player our signed-segment manifest endpoint, not the raw CDN URL.
-	// Library content is processed with PRIVATE segments (access isn't known at upload
-	// time), so every accessible post — free or gated — routes through the access-checked
-	// signing endpoint in S3 mode; local dev serves the direct manifest (no ACLs).
-	let transcoding = job;
-	if (
-		hls &&
-		canAccess &&
-		job &&
-		item?.type === "video" &&
-		job.status === "completed" &&
-		job.hlsManifestUrl
-	) {
-		transcoding = { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, item.id) };
-	}
+	// Media URLs are the deliverable: rewritten to the access-checked delivery routes for
+	// a viewer with access, and withheld entirely from one without. Library content is
+	// processed before it is attached to any post, so access isn't knowable at upload
+	// time — every accessible post, free or gated, routes through the signing endpoints
+	// in S3 mode; local dev serves the stored URLs directly (no ACLs).
+	const transcoding = viewerTranscoding(job, canAccess, delivery);
 
 	const contentItem = item
 		? {
@@ -785,7 +818,7 @@ function serializeEntry(
 async function loadPostContents(
 	postId: number,
 	canAccess: boolean,
-	hls: HlsStreamCtx | null = null,
+	delivery: DeliveryCtx | null = null,
 ) {
 	const entries = await db
 		.select()
@@ -837,7 +870,7 @@ async function loadPostContents(
 			item ? (assetsByItem.get(item.id) ?? []) : [],
 			item ? (jobByItem.get(item.id) ?? null) : null,
 			canAccess,
-			hls,
+			delivery,
 		);
 	});
 }
@@ -852,19 +885,25 @@ function publicOrigin(): string {
 }
 
 /**
- * Decide where a post's HLS should stream from. In S3 mode ALL video streams through
- * the access-checked signed-segment endpoint — access is enforced live at request
- * time, so it doesn't matter whether a segment's stored ACL is public or private (and
- * a post's access can change after transcode without leaving playback broken). Local
- * dev serves segments directly (the /content route serves everything).
+ * Decide where a post's media should be delivered from. In S3 mode ALL video and audio
+ * goes through the access-checked endpoints, because access is enforced live at request
+ * time — which is the only way it *can* work: media is processed in the library before
+ * it is attached to any post, so there is no access table to consult at upload time, and
+ * a post's access can change after the transcode besides. That is also why the stored
+ * objects are uniformly private and this layer signs per request, rather than the jobs
+ * trying to bake an ACL. Local dev serves media directly (the /content route serves
+ * everything, unsigned).
  */
-function hlsStreamCtxFor(post: typeof posts.$inferSelect): HlsStreamCtx | null {
+function deliveryCtxFor(post: typeof posts.$inferSelect): DeliveryCtx | null {
 	if (isLocalStorage) return null;
 	return { slug: post.slug, origin: publicOrigin() };
 }
 
-/** Short-lived signed-segment lifetime — must exceed a viewer's watch time (VOD). */
-const HLS_SEGMENT_TTL_SECONDS = 6 * 60 * 60;
+/**
+ * Lifetime of a signed media URL. Must exceed a viewer's watch/listen time, since the
+ * URL is handed out once and used for the whole of a VOD playback.
+ */
+const SIGNED_MEDIA_TTL_SECONDS = 6 * 60 * 60;
 
 /**
  * Rewrite an HLS playlist for signed delivery. In the master, child variant playlists
@@ -873,7 +912,7 @@ const HLS_SEGMENT_TTL_SECONDS = 6 * 60 * 60;
  */
 async function rewriteHlsPlaylist(
 	text: string,
-	opts: { isMaster: boolean; prefixKey: string; ctx: HlsStreamCtx; contentItemId: number },
+	opts: { isMaster: boolean; prefixKey: string; ctx: DeliveryCtx; contentItemId: number },
 ): Promise<string> {
 	const out: string[] = [];
 	for (const raw of text.split("\n")) {
@@ -890,7 +929,7 @@ async function rewriteHlsPlaylist(
 			out.push(
 				await storage.getUrl(`${opts.prefixKey}/${line}`, {
 					signed: true,
-					expiresIn: HLS_SEGMENT_TTL_SECONDS,
+					expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 				}),
 			);
 		}
@@ -1150,7 +1189,7 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		const contents = await loadPostContents(post.id, true, hlsStreamCtxFor(post));
+		const contents = await loadPostContents(post.id, true, deliveryCtxFor(post));
 		return c.json({ post: { ...post, contents } }, 201);
 	})
 
@@ -1198,7 +1237,7 @@ const contentRoutes = new Hono()
 		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
 		const access = resolveAccessSync(post as AccessiblePost, ctx);
 
-		const contents = await loadPostContents(post.id, access.canAccess, hlsStreamCtxFor(post));
+		const contents = await loadPostContents(post.id, access.canAccess, deliveryCtxFor(post));
 
 		// When the post is locked to this viewer, the WHOLE post locks: the body (like
 		// the content elements) is gated content, not a teaser. Only the title, cover
@@ -1372,7 +1411,7 @@ const contentRoutes = new Hono()
 			});
 		}
 
-		const contents = await loadPostContents(updated.id, true, hlsStreamCtxFor(updated));
+		const contents = await loadPostContents(updated.id, true, deliveryCtxFor(updated));
 		return c.json({ post: { ...updated, contents } });
 	})
 
@@ -1556,23 +1595,59 @@ const contentRoutes = new Hono()
 			.where(eq(postContents.postId, post.id))
 			.orderBy(desc(transcodingJobs.createdAt));
 
-		// Sign completed video manifests exactly as the post-detail serialization does, so a
-		// job the poller sees flip to "completed" hands the player a usable manifest (segments
-		// are always private → the raw CDN manifest 403s).
+		// Serialized exactly as post detail does — same helper, same rule. That matters:
+		// this route is a second way to reach the same rows, so anything post detail
+		// withholds has to be withheld here too or the poller becomes the side channel
+		// around it. Status still flows to a denied viewer; only the payload URLs don't.
 		const viewerId = await getOptionalUserId(c);
 		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
 		const canAccess = resolveAccessSync(post as AccessiblePost, ctx).canAccess;
-		const hls = hlsStreamCtxFor(post);
-		const signed = jobs.map(({ job }) =>
-			hls &&
-			canAccess &&
-			job.mediaType === "video" &&
-			job.status === "completed" &&
-			job.hlsManifestUrl
-				? { ...job, hlsManifestUrl: buildHlsManifestUrl(hls, job.contentItemId) }
-				: job,
-		);
-		return c.json({ jobs: signed });
+		const delivery = deliveryCtxFor(post);
+		return c.json({ jobs: jobs.map(({ job }) => viewerTranscoding(job, canAccess, delivery)) });
+	})
+
+	// ── Audio delivery (access-checked, signed) ──────────────────────────────────
+	// The audio counterpart of the HLS endpoint below. Processed audio is stored private,
+	// so this is the only way to reach it: access is re-checked here on every request,
+	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
+	// range requests (seeking) go straight to the CDN instead of through the API.
+	.get("/posts/:slug/audio/:contentId", async (c) => {
+		const post = await findPostRow(c.req.param("slug"));
+		if (!post) return c.json({ error: "Post not found" }, 404);
+
+		const viewerId = await getOptionalUserId(c);
+		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
+		const access = resolveAccessSync(post as AccessiblePost, ctx);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const contentItemId = parseContentId(c.req.param("contentId"));
+		if (contentItemId == null) return c.json({ error: "Not found" }, 404);
+
+		// Confirm the item is referenced by this post before serving its audio — otherwise
+		// any post the viewer can reach would unlock every item on the platform.
+		const [ref] = await db
+			.select({ id: postContents.id })
+			.from(postContents)
+			.where(and(eq(postContents.contentItemId, contentItemId), eq(postContents.postId, post.id)))
+			.limit(1);
+		if (!ref) return c.json({ error: "Not found" }, 404);
+
+		const [job] = await db
+			.select()
+			.from(transcodingJobs)
+			.where(eq(transcodingJobs.contentItemId, contentItemId))
+			.orderBy(desc(transcodingJobs.createdAt))
+			.limit(1);
+		if (!job?.outputFileUrl) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(urlToKey(job.outputFileUrl), {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store so the 302 (which carries a signed URL, and is access-dependent) is
+		// never cached by a proxy and replayed at a viewer who shouldn't have it.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
 	})
 
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
@@ -1594,7 +1669,8 @@ const contentRoutes = new Hono()
 		const access = resolveAccessSync(post as AccessiblePost, ctx);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
-		const contentItemId = Number(c.req.param("contentId"));
+		const contentItemId = parseContentId(c.req.param("contentId"));
+		if (contentItemId == null) return c.json({ error: "Not found" }, 404);
 		// Confirm the item is referenced by this post before serving its transcode.
 		const [ref] = await db
 			.select({ id: postContents.id })
@@ -1612,12 +1688,14 @@ const contentRoutes = new Hono()
 		const manifestUrl = job?.hlsManifestUrl;
 		if (!manifestUrl) return c.json({ error: "Not found" }, 404);
 
-		// Storage key prefix = the directory of the master.m3u8 key (playlists are public,
-		// so we fetch the requested one directly and rewrite it).
+		// Storage key prefix = the directory of the master.m3u8 key. Playlists are stored
+		// private alongside their segments, so fetch this one signed — a bare URL 403s.
 		const masterKey = decodeURIComponent(new URL(manifestUrl).pathname.replace(/^\/+/, ""));
 		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
 
-		const res = await fetch(await storage.getUrl(`${prefixKey}/${file}`));
+		const res = await fetch(
+			await storage.getUrl(`${prefixKey}/${file}`, { signed: true, expiresIn: 300 }),
+		);
 		if (!res.ok) return c.json({ error: "Not found" }, 404);
 
 		const rewritten = await rewriteHlsPlaylist(await res.text(), {

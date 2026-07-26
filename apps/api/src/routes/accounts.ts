@@ -21,6 +21,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { type AccessiblePost, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -206,15 +207,47 @@ const accountRoutes = new Hono()
 			.orderBy(desc(posts.createdAt))
 			.limit(50);
 
+		// Enumerate the fields rather than spreading the row. This used to be
+		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
+		// post regardless of gating — following someone is not access, and the timeline
+		// (`GET /api/content/posts`) has always enumerated for exactly this reason. Each
+		// entry carries its resolved `access` so the client renders the same locked-post
+		// preview it does everywhere else.
+		const ctx = await buildAccessContext(sessionUser.id, {
+			postIds: feedPosts.map((r) => r.post.id),
+		});
+
 		return c.json({
-			posts: feedPosts.map((row) => ({
-				...row.post,
-				creator: {
-					username: row.creatorUsername,
-					displayName: row.creatorDisplayName,
-					avatar: row.creatorAvatar,
-				},
-			})),
+			posts: feedPosts.map((row) => {
+				const p = row.post;
+				return {
+					id: p.id,
+					publicId: p.publicId,
+					slug: p.slug,
+					creatorId: p.creatorId,
+					title: p.title,
+					contentType: p.contentType,
+					streamEnabled: p.streamEnabled,
+					downloadEnabled: p.downloadEnabled,
+					thumbnail: p.thumbnail,
+					showOnTimeline: p.showOnTimeline,
+					isPinned: p.isPinned,
+					tags: p.tags,
+					isPublished: p.isPublished,
+					scheduledFor: p.scheduledFor,
+					viewCount: p.viewCount,
+					downloadCount: p.downloadCount,
+					estimatedReadMinutes: p.estimatedReadMinutes,
+					createdAt: p.createdAt,
+					updatedAt: p.updatedAt,
+					creator: {
+						username: row.creatorUsername,
+						displayName: row.creatorDisplayName,
+						avatar: row.creatorAvatar,
+					},
+					access: resolveAccessSync(p as AccessiblePost, ctx),
+				};
+			}),
 		});
 	})
 
