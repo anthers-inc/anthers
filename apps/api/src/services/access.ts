@@ -4,20 +4,21 @@
  * "may this user consume this post, and if not, what does it cost?"
  *
  * Access is expressed by two per-post tables (see `packages/db/src/schema/content.ts`):
- *   - `anthersAccess`: one row per Anthers Badge tier (free/root/sprout/petal/blossom)
+ *   - `anthersAccess`: one row per Anthers rank (free/root/sprout/petal/blossom)
  *   - `seedAccess`:    the $0 "everyone" baseline plus the creator's Seed-ladder rungs
  *
  * Each row is `{ allow, price }`. A viewer *qualifies* for a row when they meet its
- * Badge / Seed threshold. Access is the **OR** across BOTH tables: among the rows the
+ * rank / Seed threshold. Access is the **OR** across BOTH tables: among the rows the
  * viewer qualifies for AND that are allowed, the cheapest price wins. price 0 = free;
  * a positive price = a one-time purchase that unlocks the post's enabled delivery
  * (stream and/or download — one price unlocks both). No qualifying allowed row is a
  * hard gate. Posts ship "free but fully locked" (every row allow=false).
  *
- * V4: the Anthers Gate is evaluated point-in-time — the viewer must *currently hold*
- * the required badge (`accounts.badge`), no trailing-spend window. Resolution reads
- * three viewer facts — held badge, per-creator Seeds this cycle, and prior purchases —
- * which `buildAccessContext` loads once so a batch (the timeline) resolves without an N+1.
+ * The Anthers Gate is evaluated point-in-time — the viewer must *currently hold* the
+ * required rank, which under the support model simply is their Anthers-Seed count
+ * (`accounts.anthersSeeds`); there is no trailing-spend window. Resolution reads three
+ * viewer facts — held rank, per-creator Seeds this cycle, and prior purchases — which
+ * `buildAccessContext` loads once so a batch (the timeline) resolves without an N+1.
  */
 
 import { db } from "@anthers/db/client";

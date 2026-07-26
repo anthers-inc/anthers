@@ -788,8 +788,8 @@ export default function CreatorMonetizationCalculatorPage() {
 									companion storage &amp; bandwidth calculators.
 								</li>
 								<li>
-									Rates from the V4 badge-plan model (<code>@anthers/shared</code>). Planning model
-									— approximate, not for invoicing.
+									Rates from the support model (<code>@anthers/shared</code>). Planning model —
+									approximate, not for invoicing.
 								</li>
 							</ul>
 						</div>
