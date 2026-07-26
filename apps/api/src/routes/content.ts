@@ -2244,12 +2244,21 @@ const contentRoutes = new Hono()
 				return c.json({
 					method: "direct" as const,
 					uploadUrl: `/api/content/media-upload/direct`,
+					headers: {} as Record<string, string>,
 					key,
 				});
 			}
 
-			const uploadUrl = await storage.getPresignedUploadUrl(key, contentType, 3600);
-			return c.json({ method: "presigned" as const, uploadUrl, key });
+			// Consult the same allowlist the direct route uses rather than restating it.
+			// Every member of this route's enum is a deliverable, so this is "private"
+			// today — the point is that it stays correct if the enum ever grows.
+			const { url, headers } = await storage.getPresignedUploadUrl(
+				key,
+				contentType,
+				aclForMediaType(mediaType),
+				3600,
+			);
+			return c.json({ method: "presigned" as const, uploadUrl: url, headers, key });
 		},
 	)
 

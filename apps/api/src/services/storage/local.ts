@@ -53,11 +53,14 @@ export class LocalStorageService implements StorageService {
 	async getPresignedUploadUrl(
 		_key: string,
 		_contentType: string,
+		_acl: "public" | "private",
 		_expiresIn?: number,
-	): Promise<string> {
+	): Promise<{ url: string; headers: Record<string, string> }> {
 		// In local mode, there's no S3 to presign against.
 		// Return the direct-upload endpoint URL so the client can POST the file.
-		return `${getBaseUrl()}/api/content/media-upload/direct`;
+		// No headers: the ACL is meaningless here — `/content` serves everything
+		// unsigned, which is exactly why an ACL mistake is invisible in local dev.
+		return { url: `${getBaseUrl()}/api/content/media-upload/direct`, headers: {} };
 	}
 
 	async delete(key: string): Promise<void> {

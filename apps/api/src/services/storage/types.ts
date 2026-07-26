@@ -38,10 +38,32 @@ export interface StorageService {
 	getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string>;
 
 	/**
-	 * Get a presigned PUT URL for direct browser-to-storage uploads.
-	 * In local mode this returns the direct upload endpoint URL.
+	 * Get a presigned PUT URL for direct browser-to-storage uploads, plus the headers
+	 * the client MUST send with it. In local mode this returns the direct upload
+	 * endpoint URL and no headers.
+	 *
+	 * Returns headers rather than expecting the caller to know them because the ACL
+	 * only takes effect if it travels as a request *header*: the SDK also hoists it
+	 * into the presigned query string, and Spaces silently ignores it there (verified
+	 * against the live bucket — an object signed `public-read` in the query came back
+	 * owner-only). A server that sets the ACL without the client echoing it reviews as
+	 * correct and does nothing, so the header list is part of the server's answer.
+	 *
+	 * @param acl - Same allowlist semantics as `upload`. NOTE this is *intent*, not
+	 * enforcement: a presigned URL signs only `host`, so the uploading client can send
+	 * any `x-amz-acl` it likes and Spaces honours it over the one we signed (also
+	 * verified live). A creator can therefore publish their own upload at a stable
+	 * public URL, which is a metering hole rather than a content leak — it serves bytes
+	 * outside the access-checked, bandwidth-accounted path. Closing that needs a bucket
+	 * policy denying non-private ACLs under the presigned prefixes; it is not something
+	 * this layer can do.
 	 */
-	getPresignedUploadUrl(key: string, contentType: string, expiresIn?: number): Promise<string>;
+	getPresignedUploadUrl(
+		key: string,
+		contentType: string,
+		acl: "public" | "private",
+		expiresIn?: number,
+	): Promise<{ url: string; headers: Record<string, string> }>;
 
 	/** Delete a file. */
 	delete(key: string): Promise<void>;
