@@ -12,13 +12,13 @@
 		light;
 }
 
-/* The shared client layer (@anthers/web-shared) lives outside apps/studio, so
+/* The shared client layer (@anthers/web-shared) lives outside apps/studio-web, so
    Tailwind's automatic content detection misses it. Register its source tree
    explicitly so the authoring/management components' utility classes get generated. */
 @source "../../../../packages/web-shared/src";
 
 /* Register the Studio's OWN source explicitly. Unlike apps/web (whose src Tailwind
-   auto-detects), the Studio's automatic detection doesn't pick up apps/studio/src — so
+   auto-detects), the Studio's automatic detection doesn't pick up apps/studio-web/src — so
    without this the Studio shell/nav classes (StudioShell etc.) would be dropped. A bare
    `@source "../"` didn't take; the explicit glob does. */
 @source "../**/*.{ts,tsx}";

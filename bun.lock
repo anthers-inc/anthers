@@ -39,8 +39,8 @@
         "typescript": "^5.8.0",
       },
     },
-    "apps/studio": {
-      "name": "studio",
+    "apps/studio-web": {
+      "name": "studio-web",
       "version": "0.1.0",
       "dependencies": {
         "@anthers/web-shared": "workspace:*",
@@ -1309,7 +1309,7 @@
 
     "strnum": ["strnum@2.2.0", "", {}, "sha512-Y7Bj8XyJxnPAORMZj/xltsfo55uOiyHcU2tnAVzHUnSJR/KsEX+9RoDeXEnsXtl/CX4fAcrt64gZ13aGaWPeBg=="],
 
-    "studio": ["studio@workspace:apps/studio"],
+    "studio-web": ["studio-web@workspace:apps/studio-web"],
 
     "style-to-js": ["style-to-js@1.1.21", "", { "dependencies": { "style-to-object": "1.0.14" } }, "sha512-RjQetxJrrUJLQPHbLku6U/ocGtzyjbJMP9lCNK7Ag0CNh690nSH8woqWH9u16nMjYBAok+i7JO1NP2pOy8IsPQ=="],
 

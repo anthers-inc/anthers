@@ -13,7 +13,7 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-COPY apps/studio/package.json apps/studio/
+COPY apps/studio-web/package.json apps/studio-web/
 RUN bun install --frozen-lockfile
 
 # Copy source (packages + API — no frontend needed here)
