@@ -16,7 +16,7 @@ import { fetchExternalMetrics } from "./fetch-metrics.js";
 import { type PackageVideoData, packageVideo } from "./package-video.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { publishScheduled } from "./publish-scheduled.js";
-import { ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
+import { CRON_SCHEDULES, ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 
@@ -137,12 +137,9 @@ async function start() {
 
 	// ── Cron schedules ────────────────────────────────────────────────
 
-	await queue.schedule(QUEUES.DISTRIBUTE_POOL, "0 0 * * *", {}); // midnight daily
-	await queue.schedule(QUEUES.SETTLE_CYCLE, "0 2 1 * *", {}); // 2 AM on the 1st — settles the prior cycle
-	// Foundation subsidy calculation (legacy queue name: calculate-crf)
-	await queue.schedule(QUEUES.CALCULATE_CRF, "0 1 * * *", {}); // 1 AM daily (idempotent per month)
-	await queue.schedule(QUEUES.FETCH_METRICS, "0 */6 * * *", {}); // every 6 hours
-	await queue.schedule(QUEUES.PUBLISH_SCHEDULED, "* * * * *", {}); // every minute — publishes due drafts
+	for (const [queueName, cron] of CRON_SCHEDULES) {
+		await queue.schedule(queueName, cron, {});
+	}
 
 	// Recover any transcodes interrupted by the previous worker's shutdown.
 	// Best-effort: recovery must never crash the worker, so failures are logged,

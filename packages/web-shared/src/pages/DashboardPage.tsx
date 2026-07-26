@@ -26,6 +26,8 @@ export default function DashboardPage() {
 
 	// ── Delete / unpublish ──
 	const [deleteTarget, setDeleteTarget] = useState<PostListItem | null>(null);
+	/** Project pending deletion. Separate from the post flow: the stakes differ (see below). */
+	const [projectDeleteTarget, setProjectDeleteTarget] = useState<Project | null>(null);
 	const [orphanMedia, setOrphanMedia] = useState<
 		{ id: number; title: string | null; type: string; thumbnail: string | null }[]
 	>([]);
@@ -83,6 +85,31 @@ export default function DashboardPage() {
 			if (res.status === 204 || res.ok) {
 				setPosts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
 				setDeleteTarget(null);
+			}
+		} finally {
+			setActioning(false);
+		}
+	};
+
+	/**
+	 * Delete a project (collection).
+	 *
+	 * Deliberately NOT modelled on the post-delete flow above, because the stakes are
+	 * different: `project_posts.projectId` cascades, so only the MEMBERSHIP rows go — every
+	 * post in the collection survives on the creator's profile. There is no orphaned-media
+	 * question here and nothing to purge, so offering a media checkbox would imply a
+	 * destructiveness this action doesn't have.
+	 */
+	const confirmDeleteProject = async () => {
+		if (!projectDeleteTarget) return;
+		setActioning(true);
+		try {
+			const res = await client.api.content.projects[":slug"].$delete({
+				param: { slug: projectDeleteTarget.slug },
+			});
+			if (res.status === 204 || res.ok) {
+				setProjects((prev) => prev.filter((p) => p.id !== projectDeleteTarget.id));
+				setProjectDeleteTarget(null);
 			}
 		} finally {
 			setActioning(false);
@@ -235,6 +262,14 @@ export default function DashboardPage() {
 											>
 												<PencilSquareIcon className="w-4 h-4" />
 											</Link>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs text-error"
+												title="Delete"
+												onClick={() => setProjectDeleteTarget(project)}
+											>
+												<TrashIcon className="w-4 h-4" />
+											</button>
 										</td>
 									</tr>
 								))}
@@ -405,6 +440,47 @@ export default function DashboardPage() {
 						type="button"
 						className="modal-backdrop"
 						onClick={() => setDeleteTarget(null)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
+
+			{/* Delete a project. Says plainly that the posts survive — the whole reason this
+				dialog is milder than the post one. */}
+			{projectDeleteTarget && (
+				<div className="modal modal-open" role="dialog">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">
+							Delete "{projectDeleteTarget.title || "Untitled"}"?
+						</h3>
+						<p className="py-3 text-sm text-base-content/70">
+							This removes the collection and its ordering. <strong>Posts are not deleted</strong> —
+							they stay on your profile and in your library, they just stop being grouped here. It
+							can't be undone.
+						</p>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setProjectDeleteTarget(null)}
+								disabled={actioning}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={confirmDeleteProject}
+								disabled={actioning}
+							>
+								{actioning ? "Deleting..." : "Delete project"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setProjectDeleteTarget(null)}
 						aria-label="Close"
 					/>
 				</div>

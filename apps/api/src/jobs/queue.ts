@@ -205,3 +205,24 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		expireInMinutes: 5,
 	},
 };
+
+/**
+ * Every cron the worker registers, as data.
+ *
+ * Lifted out of `start()` so the registration is assertable without pg-boss: the
+ * schedules used to be five inline `queue.schedule(...)` calls inside a function that
+ * only runs against a live queue, so nothing could check them and a dropped or mistyped
+ * line would surface as "the cron just never fired" in production. `publish-scheduled`
+ * in particular is load-bearing — it is the only thing that turns a scheduled draft into
+ * a published post.
+ */
+export const CRON_SCHEDULES: ReadonlyArray<
+	readonly [(typeof QUEUES)[keyof typeof QUEUES], string]
+> = [
+	[QUEUES.DISTRIBUTE_POOL, "0 0 * * *"], // midnight daily
+	[QUEUES.SETTLE_CYCLE, "0 2 1 * *"], // 2 AM on the 1st — settles the prior cycle
+	// Foundation subsidy calculation (legacy queue name: calculate-crf)
+	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
+	[QUEUES.FETCH_METRICS, "0 */6 * * *"], // every 6 hours
+	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
+] as const;
