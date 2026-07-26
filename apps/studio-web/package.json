@@ -20,6 +20,7 @@
 		"@ffmpeg/ffmpeg": "^0.12.10",
 		"@ffmpeg/util": "^0.12.1",
 		"@heroicons/react": "^2.2.0",
+		"@tauri-apps/api": "2.11.1",
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
 		"react-router-dom": "^7.0.0"

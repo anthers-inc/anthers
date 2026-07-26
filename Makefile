@@ -4,7 +4,8 @@
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         typecheck test lint lint-fix format \
-        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet
+        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet \
+        desktop-dev desktop-build desktop-check
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
@@ -190,5 +191,25 @@ test-e2e-ui: ## Run the Playwright e2e suite in UI mode
 
 test-gauntlet: ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
 	cd apps/web && bunx playwright test --project=gauntlet
+
+
+# ─── Desktop Studio (Tauri) ───
+# The desktop shell wraps the SAME apps/studio-web build the browser Studio serves.
+# Its package scripts are deliberately not named dev/build, so the root's
+# `--filter '*'` globs can't launch a window during `make dev` or force a Rust
+# build on every web build — drive them from here instead.
+#
+# Debug builds point at the local dev API (http://localhost:8000), so `make dev`
+# in another terminal is the expected companion. Override for other hosts with
+# ANTHERS_API_BASE.
+
+desktop-dev: ## Run the desktop Studio against the local dev API (needs `make dev`)
+	cd apps/studio-desktop && bun run tauri:dev
+
+desktop-build: ## Build desktop installers for THIS platform (see docs for cross-platform)
+	cd apps/studio-desktop && bun run tauri:build
+
+desktop-check: ## Typecheck the Rust shell without building installers
+	cd apps/studio-desktop/src-tauri && cargo check
 
 .DEFAULT_GOAL := help
