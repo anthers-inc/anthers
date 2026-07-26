@@ -172,7 +172,11 @@ describe("Content-library references", () => {
 	});
 
 	it("deleting the library item cascades away the post's reference", async () => {
-		const del = await req(`/api/content/content-items/${itemId}`, {
+		// `?force=1` because the item IS in use here — that's the whole premise of this
+		// test. An unflagged delete now 409s rather than silently stripping the reference
+		// (see "Library delete refuses to silently strip posts" in post-lifecycle). What's
+		// under test is the cascade itself, so it opts in explicitly.
+		const del = await req(`/api/content/content-items/${itemId}?force=1`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: ownerCookie },
 		});

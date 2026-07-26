@@ -272,6 +272,9 @@ const updatePostSchema = postBaseSchema.partial();
 /** Query flags for DELETE /posts/:slug — purgeMedia opts into removing orphaned library media. */
 const deletePostQuerySchema = z.object({ purgeMedia: z.enum(["true", "1"]).optional() });
 
+/** Query flags for DELETE /content-items/:id — force opts into deleting an in-use item. */
+const deleteItemQuerySchema = z.object({ force: z.enum(["true", "1"]).optional() });
+
 const createProjectSchema = z.object({
 	title: z.string().min(1).max(255),
 	slug: z
@@ -610,6 +613,25 @@ async function orphanedItemIds(postId: number): Promise<number[]> {
 		.where(and(inArray(postContents.contentItemId, ids), ne(postContents.postId, postId)));
 	const stillUsed = new Set(others.map((r) => r.itemId));
 	return ids.filter((id) => !stillUsed.has(id));
+}
+
+/**
+ * The posts referencing a library item — `orphanedItemIds` asked from the other end.
+ * Used both to preview a library delete and to refuse an unflagged destructive one.
+ */
+async function postsUsingItem(
+	itemId: number,
+): Promise<Array<{ slug: string; title: string | null; isPublished: boolean }>> {
+	const rows = await db
+		.selectDistinct({
+			slug: posts.slug,
+			title: posts.title,
+			isPublished: posts.isPublished,
+		})
+		.from(postContents)
+		.innerJoin(posts, eq(postContents.postId, posts.id))
+		.where(and(eq(postContents.contentItemId, itemId), eq(postContents.kind, "content")));
+	return rows;
 }
 
 // ─── Post entry persistence ─────────────────────────────────────────────────────
@@ -1305,6 +1327,23 @@ const contentRoutes = new Hono()
 			contentsChanged = entriesSignature(before) !== entriesSignature(data.contents);
 		}
 
+		// Delivery-method floor, evaluated on the state this edit RESULTS IN.
+		//
+		// `updatePostSchema` is `postBaseSchema.partial()`, and `.partial()` silently drops
+		// the create-time `.refine()` that requires at least one of stream/download — so
+		// without this a PATCH could switch both off and leave a PUBLISHED post with no way
+		// to consume it at all. It has to live here rather than on the schema: a request
+		// sending only `streamEnabled: false` is valid or not depending on the post's stored
+		// `downloadEnabled`, which a schema refine can't see.
+		const willStream = data.streamEnabled ?? existing.streamEnabled;
+		const willDownload = data.downloadEnabled ?? existing.downloadEnabled;
+		if (!willStream && !willDownload) {
+			return c.json(
+				{ error: "A post must enable at least one access type (stream or download)" },
+				400,
+			);
+		}
+
 		// Publish-readiness gate: block going (or staying) published while a referenced item is
 		// still transcoding. Save/draft and scheduling stay free.
 		const willPublish = data.isPublished ?? existing.isPublished;
@@ -1856,23 +1895,67 @@ const contentRoutes = new Hono()
 	 * Delete a library item (owner-only). Best-effort purges its stored media first, then
 	 * deletes the row — cascade removes its assets, transcodes, and any post_contents refs.
 	 */
-	.delete("/content-items/:id", requireAuth, async (c) => {
+	/**
+	 * Which of the caller's posts reference this library item — the preview that has to
+	 * exist before a delete can be an informed choice. Mirror image of
+	 * `GET /posts/:slug/orphaned-media`, which answers the same question from the other end.
+	 */
+	.get("/content-items/:id/usage", requireAuth, async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
-		const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) {
-			return c.json({ error: "Content item not found" }, 404);
-		}
+		const [item] = await db
+			.select({ id: contentItems.id })
+			.from(contentItems)
+			.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
+			.limit(1);
+		if (!item) return c.json({ error: "Content item not found" }, 404);
 
-		const [itemAssets, jobRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.contentItemId, id)),
-			db.select().from(transcodingJobs).where(eq(transcodingJobs.contentItemId, id)),
-		]);
-		await purgeItemMedia(item, itemAssets, jobRows);
-
-		await db.delete(contentItems).where(eq(contentItems.id, id));
-		return c.body(null, 204);
+		return c.json({ posts: await postsUsingItem(id) });
 	})
+
+	.delete(
+		"/content-items/:id",
+		requireAuth,
+		zValidator("query", deleteItemQuerySchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
+			if (!item || item.creatorId !== user.id) {
+				return c.json({ error: "Content item not found" }, 404);
+			}
+
+			// `post_contents.contentItemId` cascades, so deleting an in-use item silently strips
+			// it from every post referencing it — including published ones. Refuse unless the
+			// caller has seen the damage and opted in, and hand back the list so a client can
+			// show it. This is the same care the post-delete path takes with orphaned media,
+			// pointed the other way; failing closed here is deliberate, since the destructive
+			// reading of an ambiguous request is the unrecoverable one.
+			const force = c.req.valid("query").force;
+			if (!force) {
+				const inUse = await postsUsingItem(id);
+				if (inUse.length > 0) {
+					return c.json(
+						{
+							error: `This item is used by ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
+							code: "item_in_use",
+							posts: inUse,
+						},
+						409,
+					);
+				}
+			}
+
+			const [itemAssets, jobRows] = await Promise.all([
+				db.select().from(assets).where(eq(assets.contentItemId, id)),
+				db.select().from(transcodingJobs).where(eq(transcodingJobs.contentItemId, id)),
+			]);
+			await purgeItemMedia(item, itemAssets, jobRows);
+
+			await db.delete(contentItems).where(eq(contentItems.id, id));
+			return c.body(null, 204);
+		},
+	)
 
 	// ── Content-item downloadable assets (builds/variants) ────────────────────────
 	.post(

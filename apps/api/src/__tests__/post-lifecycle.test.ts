@@ -327,3 +327,140 @@ describe("Scheduled-publish sweep", () => {
 		expect((await get.json()).post.isPublished).toBe(false);
 	});
 });
+
+/**
+ * Two validation gaps found while checking the status report against the code, both in
+ * the "a request that looks fine leaves the data wrong" family rather than the "500s"
+ * family — which is why neither had coverage.
+ */
+describe("Delivery-method floor on PATCH", () => {
+	/** Create a post owned by `owner` and return its slug. */
+	async function makePost(title: string, body: Record<string, unknown> = {}) {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title, seedAccess: FREE, isPublished: true, ...body }),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()).post.slug;
+	}
+
+	it("rejects a create with no delivery method", async () => {
+		// The create-time `.refine()` existed but had never been exercised by a test.
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({
+				title: `NoDelivery ${id}`,
+				streamEnabled: false,
+				downloadEnabled: false,
+				seedAccess: FREE,
+			}),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("rejects a PATCH that switches both off", async () => {
+		// The actual bug: `updatePostSchema` is `postBaseSchema.partial()`, and `.partial()`
+		// drops the refine — so this used to 200 and leave a published post unconsumable.
+		const slug = await makePost(`BothOff ${id}`, { streamEnabled: true, downloadEnabled: true });
+		const res = await req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ streamEnabled: false, downloadEnabled: false }),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("rejects a PATCH that switches off the only one left", async () => {
+		// The case a schema-level refine could never catch: the request names ONE field, and
+		// whether it's legal depends on the post's stored value for the other.
+		const slug = await makePost(`LastOne ${id}`, { streamEnabled: true, downloadEnabled: false });
+		const res = await req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ streamEnabled: false }),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("allows switching one off while the other stays on", async () => {
+		const slug = await makePost(`SwapOne ${id}`, { streamEnabled: true, downloadEnabled: true });
+		const res = await req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ streamEnabled: false }),
+		});
+		expect(res.status).toBe(200);
+	});
+});
+
+describe("Library delete refuses to silently strip posts", () => {
+	async function postUsing(itemId: number, title: string) {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({
+				title,
+				streamEnabled: false,
+				downloadEnabled: true,
+				seedAccess: FREE,
+				contents: [{ kind: "content", contentItemId: itemId }],
+				isPublished: true,
+			}),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()).post.slug;
+	}
+
+	it("reports which posts use an item", async () => {
+		const itemId = await makeItem(owner, `Usage ${id}`);
+		const slug = await postUsing(itemId, `Uses item ${id}`);
+		const res = await req(`/api/content/content-items/${itemId}/usage`, {
+			headers: { Cookie: owner },
+		});
+		expect(res.status).toBe(200);
+		const { posts } = await res.json();
+		expect(posts.map((p: { slug: string }) => p.slug)).toContain(slug);
+	});
+
+	it("409s on an unflagged delete of an in-use item, and leaves it intact", async () => {
+		// `post_contents.contentItemId` cascades, so this used to 204 and quietly remove the
+		// item from a PUBLISHED post. Failing closed is the point: the destructive reading of
+		// an ambiguous request is the one you can't undo.
+		const itemId = await makeItem(owner, `InUse ${id}`);
+		await postUsing(itemId, `Keeps item ${id}`);
+		const res = await req(`/api/content/content-items/${itemId}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("item_in_use");
+
+		const still = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		expect(still.length).toBe(1);
+	});
+
+	it("deletes an in-use item when forced", async () => {
+		const itemId = await makeItem(owner, `Forced ${id}`);
+		await postUsing(itemId, `Loses item ${id}`);
+		const res = await req(`/api/content/content-items/${itemId}?force=1`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(res.status).toBe(204);
+
+		const gone = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		expect(gone.length).toBe(0);
+	});
+
+	it("deletes an unused item without a flag", async () => {
+		// The common case must stay a one-step action — the guard is scoped to real damage.
+		const itemId = await makeItem(owner, `Unused ${id}`);
+		const res = await req(`/api/content/content-items/${itemId}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(res.status).toBe(204);
+	});
+});
