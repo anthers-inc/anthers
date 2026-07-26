@@ -76,6 +76,29 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
+  # Stripe — TEST MODE in production, deliberately. Prod's STRIPE_PRICE_SEED is a
+  # test-mode object ($3/mo recurring, livemode:false), so no real money can move;
+  # the site is behind SiteGate besides. This block was missing from this file
+  # entirely while prod carried the values, which is how the drift went unnoticed:
+  # `lib/stripe.ts` builds its client from STRIPE_SECRET_KEY alone, so having that
+  # set silently deactivated all seven `503 Payments are not configured` guards
+  # while the client still had no publishable key to mount Elements with.
+  # STRIPE_SUBSCRIPTION_WEBHOOK_SECRET is deliberately NOT here — PR #118 removed
+  # its last consumer, though the live spec still carries it.
+  - key: STRIPE_PRICE_SEED
+    scope: RUN_TIME
+    value: price_1TuuxeKtfvGGDfeNhvZrL2tm
+  # Publishable, i.e. designed to be shipped to browsers — a value, not a SECRET.
+  # Read at RUNTIME by `GET /api/payments/stripe/config`; it is not a build-time var.
+  - key: STRIPE_PUBLISHABLE_KEY
+    scope: RUN_TIME
+    value: pk_test_51T9K9NKtfvGGDfeNjQyhpAn3hwewJpss3lkTUBmQd6d1oXjRGzomk1Rp1MPlTaJF6v9JXeU0RxQwQmeb9WT625xa00AIeV5S1A
+  - key: STRIPE_SECRET_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: STRIPE_WEBHOOK_SECRET
+    scope: RUN_TIME
+    type: SECRET
 
 ingress:
   rules:
