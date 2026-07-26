@@ -24,8 +24,10 @@
 #   - STORAGE_BACKEND=s3 → DO Spaces (bucket `anthers-media`, nyc3). SPACES_KEY /
 #     SPACES_SECRET are dashboard-set secrets; bucket/region are non-secret here.
 #     Objects use a creator-first key layout (creators/<creatorId>/…).
-#   - Stripe / ATProto envs are omitted (read lazily; features stubbed/gated) —
-#     add them when those features come online.
+#   - ATProto envs are omitted (read lazily; that feature is still stubbed) — add
+#     them when it comes online. STRIPE_* is NO LONGER omitted: prod runs Stripe
+#     in test mode and the vars are declared below. (This line used to claim they
+#     were absent, which stayed here for a while after they weren't.)
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: anthers
@@ -76,6 +78,16 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
+  # Session-cookie domain, read by routes/auth.ts on set AND on delete. Left unset
+  # deliberately: unset means a host-only cookie, which is correct while the SPA and
+  # the API share the apex origin (the Studio calls the apex API, so it's still
+  # same-site). It becomes REQUIRED the moment the API moves to its own subdomain —
+  # and note a cookie set with a domain can only be cleared with the same domain, so
+  # changing this mid-flight strands existing sessions until they expire. Declared
+  # here, valueless, so the knob is visible rather than lore.
+  - key: COOKIE_DOMAIN
+    scope: RUN_TIME
+    value: ""
   # Stripe — TEST MODE in production, deliberately. Prod's STRIPE_PRICE_SEED is a
   # test-mode object ($3/mo recurring, livemode:false), so no real money can move;
   # the site is behind SiteGate besides. This block was missing from this file

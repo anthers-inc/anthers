@@ -52,6 +52,7 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
+import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -2313,9 +2314,9 @@ const contentRoutes = new Hono()
 				key = `${prefix}/uploads/${uuid}.${ext}`;
 		}
 
-		// Private for downloadable/originals; public for display images.
-		const privateTypes = new Set(["video", "audio", "asset"]);
-		const acl = privateTypes.has(mediaType ?? "") ? "private" : "public";
+		// Public ONLY for display chrome; everything else private, including any
+		// mediaType this route doesn't recognise (it arrives unvalidated off the form).
+		const acl = aclForMediaType(mediaType);
 
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);

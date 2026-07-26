@@ -26,6 +26,9 @@ export class LocalStorageService implements StorageService {
 		key: string,
 		body: Buffer | Uint8Array,
 		_contentType: string,
+		// Ignored: /content serves everything unsigned in dev. Worth knowing when
+		// reasoning about a leak — an ACL mistake is invisible locally and only shows
+		// up against S3, which is why the delivery tests assert URLs at the API layer.
 		_acl?: "public" | "private",
 	): Promise<string> {
 		const filePath = join(CONTENT_ROOT, key);
