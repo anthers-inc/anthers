@@ -57,6 +57,26 @@ let listenersBound = false;
 
 // ── Evidence ─────────────────────────────────────────────────────────────────
 
+/**
+ * What counts as a sign of life for presence-mode content.
+ *
+ * `mousemove` is the loose one — it's the only entry here that fires without
+ * intent (a bumped desk, a drifting optical sensor, a mouse jiggler), so it does
+ * defeat the idle gate. Kept deliberately, on this reasoning: presence mode also
+ * requires a *visible* tab, so the jiggle has to happen on a foregrounded post,
+ * and the server's wall-clock clamp means credited seconds can never exceed
+ * elapsed ones. What a jiggler gains is therefore not more money — the Time Pool
+ * is a fixed $1.50 per Anthers-Seed either way — but a different allocation of
+ * their own share. That's a user pointing their own pool at a tab they left open,
+ * which is a far smaller problem than fraud that mints seconds, and dropping
+ * `mousemove` would under-credit the real case it exists for: someone reading a
+ * screenful of long-form text for a minute without scrolling.
+ *
+ * The measurement that WOULD sharpen this is per-element visibility (today only
+ * tab visibility is measured, so a post earns while its content is scrolled off
+ * screen). That's a real change to how claims are registered — see the task
+ * "Measure element visibility, not just tab visibility".
+ */
 const INTERACTION_EVENTS = [
 	"pointerdown",
 	"keydown",

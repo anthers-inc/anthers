@@ -14,24 +14,38 @@ import { db } from "@anthers/db/client";
 import {
 	accounts,
 	attentionEvents,
+	contentItems,
 	creatorGates,
 	poolDistributions,
+	postContents,
 	posts,
 	seedAllocations,
 	users,
 } from "@anthers/db/schema";
-import { CREDIT_WINDOW_SECONDS, clampToWindow } from "@anthers/shared/attention";
+import {
+	type AttentionEventType,
+	CREDIT_WINDOW_SECONDS,
+	clampToWindow,
+	eventTypeFor,
+	isTimePoolEligible,
+} from "@anthers/shared/attention";
 import { badgeRank, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
 import { rankViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { stripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
-import { heldBadge, resolveAccess } from "../services/access.js";
+import {
+	type AccessiblePost,
+	buildAccessContext,
+	heldBadge,
+	resolveAccess,
+	resolveAccessSync,
+} from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import {
 	createOneTimeCharge,
@@ -91,6 +105,72 @@ async function getOptionalUserId(c: any): Promise<number | null> {
 	if (!token) return null;
 	const result = await validateSession(token);
 	return result?.user.id ?? null;
+}
+
+// ── Attention eligibility (server side) ──────────────────────────────────────
+
+/**
+ * What a post can legitimately be credited for, resolved from the database rather
+ * than taken on the client's word.
+ *
+ * `packages/shared/src/attention.ts` owns the *policy* — which content types earn,
+ * and under what evidence — and the browser applies it honestly. But a claim is an
+ * HTTP request, and `distribute-pool` turns `attention_events.duration_seconds`
+ * straight into money, so the policy has to be re-decided here against the real
+ * post. The wall-clock clamp downstream bounds *volume*; it has nothing to say
+ * about *attribution*, and a hand-written request could otherwise credit `read`
+ * seconds against a body-only announcement, or against a creator who had nothing
+ * to do with the post.
+ */
+interface PostEligibility {
+	creatorId: number;
+	/** Event types the post's own content elements can earn — empty means it earns nothing. */
+	earns: Set<AttentionEventType>;
+	/** Whether the claiming viewer may actually consume it. */
+	accessible: boolean;
+}
+
+async function loadPostEligibility(
+	postIds: number[],
+	viewerId: number,
+): Promise<Map<number, PostEligibility>> {
+	const byId = new Map<number, PostEligibility>();
+	if (postIds.length === 0) return byId;
+
+	const postRows = await db.select().from(posts).where(inArray(posts.id, postIds));
+	if (postRows.length === 0) return byId;
+
+	// Content elements, with the referenced library item's type where there is one.
+	// `kind = "text"` is a post-native element and has no item — it earns as "text".
+	const entries = await db
+		.select({ postId: postContents.postId, kind: postContents.kind, type: contentItems.type })
+		.from(postContents)
+		.leftJoin(contentItems, eq(postContents.contentItemId, contentItems.id))
+		.where(
+			inArray(
+				postContents.postId,
+				postRows.map((p) => p.id),
+			),
+		);
+
+	const earnsByPost = new Map<number, Set<AttentionEventType>>();
+	for (const entry of entries) {
+		const contentType = entry.kind === "text" ? "text" : entry.type;
+		if (!contentType || !isTimePoolEligible(contentType)) continue;
+		const set = earnsByPost.get(entry.postId) ?? new Set<AttentionEventType>();
+		set.add(eventTypeFor(contentType));
+		earnsByPost.set(entry.postId, set);
+	}
+
+	const ctx = await buildAccessContext(viewerId, { postIds: postRows.map((p) => p.id) });
+	for (const post of postRows) {
+		byId.set(post.id, {
+			creatorId: post.creatorId,
+			earns: earnsByPost.get(post.id) ?? new Set(),
+			accessible: resolveAccessSync(post as AccessiblePost, ctx).canAccess,
+		});
+	}
+	return byId;
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -389,7 +469,47 @@ const subscriptionRoutes = new Hono()
 			const { events } = c.req.valid("json");
 
 			if (events.length === 0) {
-				return c.json({ recorded: 0, granted: 0, refused: 0 });
+				return c.json({ recorded: 0, granted: 0, refused: 0, ineligible: 0 });
+			}
+
+			// Eligibility, re-decided server-side. A zero-duration event carries no time
+			// and cannot over-credit, so visit pings pass through untouched — they are
+			// deliberately the analytics signal for surfaces that earn nothing. Anything
+			// claiming *time* has to earn it, against four checks:
+			//
+			//   1. It names a post. A claim with no post context is connective tissue by
+			//      definition (a profile, discovery) and the model says those earn nothing.
+			//   2. That post exists.
+			//   3. The claimed creator really is the post's creator — otherwise the
+			//      attribution is simply forged.
+			//   4. The post carries a content element that earns this event type, and the
+			//      viewer can actually access it. Prose in a post BODY earns nothing while
+			//      the same prose as a content element earns; that asymmetry is deliberate
+			//      and documented, and this is where it becomes true rather than intended.
+			const timed = events.filter((e) => e.durationSeconds > 0);
+			const eligibility = await loadPostEligibility(
+				[...new Set(timed.map((e) => e.postId).filter((id): id is number => id != null))],
+				user.id,
+			);
+
+			const eligible = events.filter((e) => {
+				if (e.durationSeconds <= 0) return true;
+				if (e.postId == null) return false;
+				const post = eligibility.get(e.postId);
+				if (!post) return false;
+				if (post.creatorId !== e.creatorId) return false;
+				return post.accessible && post.earns.has(e.eventType);
+			});
+
+			const ineligible = events.length - eligible.length;
+			if (ineligible > 0) {
+				console.warn(
+					`attention eligibility: user ${user.id} submitted ${ineligible} of ${events.length} events that no post entitles them to — dropped`,
+				);
+			}
+
+			if (eligible.length === 0) {
+				return c.json({ recorded: 0, granted: 0, refused: 0, ineligible });
 			}
 
 			// The wall-clock clamp. Everything upstream of here is client-supplied:
@@ -409,7 +529,9 @@ const subscriptionRoutes = new Hono()
 					and(eq(attentionEvents.userId, user.id), gte(attentionEvents.createdAt, windowStart)),
 				);
 
-			const { events: allowed, granted, refused } = clampToWindow(events, spent?.total ?? 0);
+			// Clamped over the ELIGIBLE set, so a rejected claim never eats another
+			// surface's budget on its way to being dropped.
+			const { events: allowed, granted, refused } = clampToWindow(eligible, spent?.total ?? 0);
 
 			if (refused > 0) {
 				console.warn(
@@ -427,7 +549,7 @@ const subscriptionRoutes = new Hono()
 
 			await db.insert(attentionEvents).values(rows);
 
-			return c.json({ recorded: rows.length, granted, refused });
+			return c.json({ recorded: rows.length, granted, refused, ineligible });
 		},
 	)
 
