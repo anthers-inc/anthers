@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { client } from "@anthers/web-shared/rpc";
+import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type { Project, PublicUser } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -200,14 +200,7 @@ export default function DiscoverPage() {
 		if (pricing) params.set("pricing", pricing);
 		if (tag) params.set("tag", tag);
 
-		const apiBase =
-			window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-				? "http://localhost:8000"
-				: "";
-
-		fetch(`${apiBase}/api/content/projects?${params.toString()}`, {
-			credentials: "include",
-		})
+		apiFetch(`/api/content/projects?${params.toString()}`)
 			.then((res) => res.json())
 			.then((json) => setProjects(json.projects))
 			.catch(() => {})

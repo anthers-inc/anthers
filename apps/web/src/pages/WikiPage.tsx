@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { apiFetch } from "@anthers/web-shared/rpc";
 import {
 	BookOpenIcon,
 	ChevronRightIcon,
@@ -214,13 +216,9 @@ export default function WikiPage() {
 			setLoading(true);
 			setError(null);
 			try {
-				// Wiki endpoint isn't part of the typed RPC routes, use raw fetch
-				const baseUrl =
-					typeof location !== "undefined" &&
-					(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-						? "http://localhost:8000"
-						: "";
-				const res = await fetch(`${baseUrl}/api/wiki/${currentSection}/${currentFile}`);
+				// Wiki endpoint isn't part of the typed RPC routes, so it goes through
+				// apiFetch directly rather than the generated client.
+				const res = await apiFetch(`/api/wiki/${currentSection}/${currentFile}`);
 				if (!res.ok) throw new Error(`Failed to load wiki page (${res.status})`);
 				const data = await res.json();
 				setContent(data.content);
