@@ -33,6 +33,27 @@ export function isDesktop(): boolean {
 }
 
 /**
+ * Auth headers for transports that CANNOT go through `apiFetch` — specifically the
+ * XHR uploads, which exist only because `fetch` has no upload-progress event.
+ *
+ * Anything bypassing `apiFetch` bypasses the bearer header with it, and on the desktop
+ * there is no cookie to fall back on, so the request simply 401s. Use this together
+ * with `apiSendsCookies()` wherever a raw request is unavoidable.
+ */
+export function apiAuthHeaders(): Record<string, string> {
+	const token = desktopRuntime()?.getToken();
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Whether a raw request should carry cookies. False on the desktop: there is no
+ * cookie, and asking for credentialed CORS there only invites a preflight rejection.
+ */
+export function apiSendsCookies(): boolean {
+	return !isDesktop();
+}
+
+/**
  * Resolve the API origin for whichever app consumes this client.
  *
  * The API and the consumer SPA share the apex origin (anthers.org); the Studio is

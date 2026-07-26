@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { uploadImageFile } from "../components/post/mediaUpload";
-import { client } from "./rpc";
+import { apiAuthHeaders, apiBaseUrl, apiSendsCookies, client } from "./rpc";
 import { canTranscodeInBrowser, transcodeInBrowser } from "./transcode";
 
 /**
@@ -77,15 +77,13 @@ function xhrUploadFormData<T>(
 ): Promise<T> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
-		// Handle relative URLs — use the same base as the RPC client
-		const baseUrl =
-			typeof location !== "undefined" &&
-			(location.hostname === "localhost" || location.hostname === "127.0.0.1")
-				? "http://localhost:8000"
-				: "";
-		const fullUrl = url.startsWith("/") ? `${baseUrl}${url}` : url;
+		// XHR is used here only because `fetch` has no upload-progress event — but that
+		// means it also bypasses `apiFetch`, and with it the desktop's bearer header.
+		// Resolve the base and the credential the same way `apiFetch` would.
+		const fullUrl = url.startsWith("/") ? `${apiBaseUrl()}${url}` : url;
 		xhr.open("POST", fullUrl);
-		xhr.withCredentials = true;
+		xhr.withCredentials = apiSendsCookies();
+		for (const [k, v] of Object.entries(apiAuthHeaders())) xhr.setRequestHeader(k, v);
 
 		xhr.upload.addEventListener("progress", (e) => {
 			if (e.lengthComputable && onProgress) {
@@ -174,6 +172,97 @@ export async function uploadClientTranscodedVideo(
 
 	// ── Upload source (65–80%) ──
 	const sourceKey = await uploadMediaFile(file, "video", (pct) =>
+		onProgress?.({
+			stage: "Uploading source",
+			percent: 65 + Math.round(pct * 0.15),
+			etaSeconds: null,
+		}),
+	);
+
+	// ── Upload variants (80–97%), sequential for monotonic progress ──
+	const variants: UploadedVariant[] = [];
+	const span = 17 / Math.max(1, result.variants.length);
+	for (let i = 0; i < result.variants.length; i++) {
+		const v = result.variants[i];
+		const base = 80 + i * span;
+		const variantFile = new File([toBlobPart(v.data)], `${v.name}.mp4`, { type: "video/mp4" });
+		const key = await uploadMediaFile(variantFile, "video", (pct) =>
+			onProgress?.({
+				stage: `Uploading ${v.name}`,
+				percent: Math.round(base + (pct / 100) * span),
+				etaSeconds: null,
+			}),
+		);
+		variants.push({
+			name: v.name,
+			height: v.height,
+			width: v.width,
+			bitrate: v.bitrate,
+			bandwidth: v.bandwidth,
+			key,
+		});
+	}
+
+	// ── Upload thumbnail (97–100%) ──
+	let thumbnailKey = "";
+	let thumbnailPreview = "";
+	if (result.thumbnail) {
+		onProgress?.({ stage: "Uploading thumbnail", percent: 98, etaSeconds: null });
+		try {
+			const thumbFile = new File([toBlobPart(result.thumbnail)], "poster.jpg", {
+				type: "image/jpeg",
+			});
+			const uploaded = await uploadImageFile(thumbFile, "thumbnail");
+			thumbnailKey = uploaded.key;
+			thumbnailPreview = uploaded.url;
+		} catch {
+			// Poster is optional; the server can still derive one during packaging.
+		}
+	}
+
+	onProgress?.({ stage: "Done", percent: 100, etaSeconds: 0 });
+	return {
+		sourceKey,
+		variants,
+		thumbnailKey,
+		thumbnailPreview,
+		durationSeconds: result.durationSeconds,
+	};
+}
+
+/**
+ * The desktop equivalent: encode with the bundled native ffmpeg, then upload exactly
+ * as the browser path does.
+ *
+ * Takes a PATH rather than a `File` — the native picker yields one, and ffmpeg reads
+ * the source straight off disk, so a multi-gigabyte source is never held in memory
+ * during the encode. The upload still reads bytes into memory (same as the browser
+ * path); that ceiling is now the source *upload*, not the *encode*, and lifting it
+ * means moving the upload into Rust. Documented as a follow-up rather than guessed at.
+ *
+ * Progress bands match `uploadClientTranscodedVideo` so the UI is identical.
+ */
+export async function uploadNativeTranscodedVideo(
+	path: string,
+	onProgress?: (p: VideoJobProgress) => void,
+): Promise<ClientVideoUpload> {
+	const { transcodeNative, basename } = await import("./native-transcode");
+	const { readFile } = await import("@tauri-apps/plugin-fs");
+
+	// ── Encode (0–65%) ──
+	const result = await transcodeNative(path, (p) => {
+		onProgress?.({
+			stage: p.stage,
+			percent: Math.round(p.percent * 0.65),
+			etaSeconds: p.etaSeconds,
+		});
+	});
+
+	// ── Upload source (65–80%) ──
+	const name = basename(path);
+	const sourceBytes = await readFile(path);
+	const sourceFile = new File([toBlobPart(sourceBytes)], name, { type: "video/mp4" });
+	const sourceKey = await uploadMediaFile(sourceFile, "video", (pct) =>
 		onProgress?.({
 			stage: "Uploading source",
 			percent: 65 + Math.round(pct * 0.15),

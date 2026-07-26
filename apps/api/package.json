@@ -5,7 +5,8 @@
 	"license": "AGPL-3.0-or-later",
 	"type": "module",
 	"scripts": {
-		"dev": "bun --env-file=../../.env --watch src/index.ts",
+		"dev": "bun run dev:api & bun run dev:worker & wait",
+		"dev:api": "bun --env-file=../../.env --watch src/index.ts",
 		"dev:worker": "bun --env-file=../../.env --watch src/jobs/worker.ts",
 		"start": "bun --env-file=../../.env src/index.ts",
 		"start:worker": "bun --env-file=../../.env src/jobs/worker.ts",

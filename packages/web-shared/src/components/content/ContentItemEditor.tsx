@@ -10,13 +10,14 @@
  */
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
-import { client } from "../../lib/rpc";
+import { client, isDesktop } from "../../lib/rpc";
 import type { Asset, ContentItem, ContentItemInput, LibraryContentType } from "../../lib/types";
 import {
 	canTranscodeInBrowser,
 	type UploadedVariant,
 	uploadClientTranscodedVideo,
 	uploadMediaFile,
+	uploadNativeTranscodedVideo,
 } from "../../lib/upload";
 import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
@@ -139,6 +140,50 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 		}
 	};
 
+	/**
+	 * Desktop: pick a video by real path and encode it with the bundled native ffmpeg.
+	 *
+	 * A separate entry point from `handleVideo` because the native picker yields a
+	 * PATH, not a `File` — which is the point: ffmpeg reads the source off disk, so the
+	 * encode is neither capped at 300 MB nor holding the file in memory, and it uses
+	 * every core instead of one per rung.
+	 */
+	const handleVideoNative = async () => {
+		const { pickVideoFile, basename } = await import("../../lib/native-transcode");
+		const path = await pickVideoFile();
+		if (!path) return;
+
+		setUploading(true);
+		setProgress(0);
+		setStage("");
+		setEta(null);
+		setVideoVariants([]);
+		setVideoName(basename(path));
+		try {
+			const res = await uploadNativeTranscodedVideo(path, (p) => {
+				setProgress(p.percent);
+				setStage(p.stage);
+				setEta(p.etaSeconds);
+			});
+			setVideoKey(res.sourceKey);
+			setVideoVariants(res.variants);
+			setVideoDuration(res.durationSeconds);
+			if (!thumbnailUrl && res.thumbnailPreview) {
+				setThumbnailUrl(res.thumbnailPreview);
+				setThumbnailPreview(res.thumbnailPreview);
+			}
+		} catch (err) {
+			// No silent fallback here: unlike the browser encoder there is no smaller path
+			// to retry on, and swallowing an ffmpeg failure would leave the creator staring
+			// at a reset form with no idea why.
+			setVideoName(null);
+			setStage(err instanceof Error ? err.message : "Encoding failed.");
+		} finally {
+			setUploading(false);
+			setEta(null);
+		}
+	};
+
 	const handleVideo = async (file: File) => {
 		setUploading(true);
 		setProgress(0);
@@ -221,7 +266,11 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 		switch (type) {
 			case "video":
 				input.sourceKey = videoKey;
-				if (videoDuration) input.durationSeconds = videoDuration;
+				// Rounded because the API takes `z.number().int()`, and BOTH encoders produce
+				// a float — ffprobe reports 19.933333, and the browser's `video.duration` is
+				// just as fractional. Sending it raw 400s for any video that doesn't happen
+				// to be a whole number of seconds, i.e. nearly all of them.
+				if (videoDuration) input.durationSeconds = Math.round(videoDuration);
 				if (videoVariants.length > 0) input.metadata = { clientVariants: videoVariants };
 				break;
 			case "audio":
@@ -407,6 +456,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 							encodeMode={encodeMode}
 							onModeChange={setEncodeMode}
 							onSelect={handleVideo}
+							onPickNative={isDesktop() ? handleVideoNative : undefined}
 						/>
 					)}
 
@@ -671,6 +721,11 @@ interface MediaSlotProps {
 	encodeMode?: EncodeMode;
 	onModeChange?: (mode: EncodeMode) => void;
 	onSelect: (file: File) => void;
+	/**
+	 * Desktop only. When present, the drop zone is replaced by the native picker,
+	 * because a browser `File` has no path and the native encoder needs one.
+	 */
+	onPickNative?: () => void;
 }
 
 function MediaSlot({
@@ -684,6 +739,7 @@ function MediaSlot({
 	encodeMode,
 	onModeChange,
 	onSelect,
+	onPickNative,
 }: MediaSlotProps) {
 	const maxSize = kind === "video" ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024;
 	return (
@@ -714,15 +770,27 @@ function MediaSlot({
 				</div>
 			) : (
 				<div className="flex flex-col gap-3">
-					{kind === "video" && encodeMode && onModeChange && (
+					{kind === "video" && encodeMode && onModeChange && !onPickNative && (
 						<EncodeModeChooser encodeMode={encodeMode} onModeChange={onModeChange} />
 					)}
-					<FileUpload
-						accept={`${kind}/*`}
-						maxSize={maxSize}
-						onFileSelect={onSelect}
-						label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
-					/>
+					{onPickNative ? (
+						<div className="flex flex-col gap-2">
+							<button type="button" className="btn btn-primary btn-sm w-fit" onClick={onPickNative}>
+								Choose a video…
+							</button>
+							<p className="text-xs text-base-content/50">
+								Encoded on this computer with all your cores — no file-size limit, and you can leave
+								it running.
+							</p>
+						</div>
+					) : (
+						<FileUpload
+							accept={`${kind}/*`}
+							maxSize={maxSize}
+							onFileSelect={onSelect}
+							label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
+						/>
+					)}
 				</div>
 			)}
 		</FormField>
