@@ -9,7 +9,13 @@
 export interface StorageService {
 	/**
 	 * Upload a file. Returns the storage key.
-	 * @param acl - "public" for covers/avatars/thumbnails, "private" for gated content
+	 *
+	 * @param acl - "public" ONLY for display chrome the viewer is meant to see before
+	 * they have access (covers, avatars, thumbnails). Everything that is, or could
+	 * become, a gated deliverable is "private" and reaches viewers through an
+	 * access-checked endpoint that signs per request. **Omitting this gives you
+	 * "private"** — the default fails closed deliberately, so forgetting it locks an
+	 * object rather than publishing one.
 	 */
 	upload(
 		key: string,

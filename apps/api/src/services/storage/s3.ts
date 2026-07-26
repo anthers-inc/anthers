@@ -47,7 +47,13 @@ export class S3StorageService implements StorageService {
 		key: string,
 		body: Buffer | Uint8Array,
 		contentType: string,
-		acl: "public" | "private" = "public",
+		// Defaults PRIVATE — fail closed. This defaulted to "public", which meant any
+		// call site that forgot the argument published its object, and that is the
+		// mechanism by which gated HLS playlists ended up world-readable. Every call
+		// site passes explicitly today, so this default is a backstop rather than a
+		// behaviour: the point is that the next one to forget gets a locked object
+		// and a bug report, not a silent leak.
+		acl: "public" | "private" = "private",
 	): Promise<string> {
 		await s3.send(
 			new PutObjectCommand({

@@ -4,7 +4,11 @@
  *
  * Usage:
  *   import { storage } from "../services/storage/index.js";
- *   await storage.upload(key, buffer, contentType);
+ *   await storage.upload(key, buffer, contentType);            // private
+ *   await storage.upload(key, buffer, contentType, "public");  // display chrome only
+ *
+ * The ACL argument defaults to "private" — see the note on `StorageService.upload`.
+ * The three-argument form above is deliberately the locked one.
  */
 
 export type { StorageService } from "./types.js";
