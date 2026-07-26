@@ -351,8 +351,15 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * HLS transcode (or a cheap remux when the browser pre-encoded a variant ladder); audio
  * → normalize. Fired on library upload (POST /content-items) and when the source changes
  * (PATCH), NEVER on post save — processing is a library concern, not a post concern.
+ *
+ * Returns the queued job (null when the item needs no processing) so the caller can
+ * serialize it into the response. The create response previously reported
+ * `transcoding: null` for an item whose job had just been queued — which read as "no
+ * processing" to the client, hiding the status badge AND leaving the library's
+ * poll-while-processing loop switched off, so a freshly uploaded item sat unlabelled
+ * until a manual refresh.
  */
-async function queueTranscodeForItem(item: ContentItemRow): Promise<void> {
+async function queueTranscodeForItem(item: ContentItemRow): Promise<TranscodingJobRow | null> {
 	if (item.type === "video" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
@@ -373,13 +380,17 @@ async function queueTranscodeForItem(item: ContentItemRow): Promise<void> {
 				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
 			);
 		}
-	} else if (item.type === "audio" && item.sourceKey) {
+		return job;
+	}
+	if (item.type === "audio" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ contentItemId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
 		await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
+		return job;
 	}
+	return null;
 }
 
 /**
@@ -1648,9 +1659,9 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		await queueTranscodeForItem(item);
+		const job = await queueTranscodeForItem(item);
 		await resolveItemThumbnail(item);
-		return c.json({ item: serializeItem(item) }, 201);
+		return c.json({ item: serializeItem(item, [], job) }, 201);
 	})
 
 	/** The caller's library, each item with its latest transcode + assets for the UI. */

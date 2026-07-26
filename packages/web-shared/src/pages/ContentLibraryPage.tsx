@@ -40,11 +40,27 @@ export default function ContentLibraryPage() {
 		fetchItems().finally(() => setLoading(false));
 	}, []);
 
-	// Poll while any item is still processing so its badge/players settle without a refresh.
+	// Catch up whenever the tab comes back into view — cheap, and it covers the case
+	// where processing finished while the creator was looking at something else.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: fetchItems only closes over setItems
+	useEffect(() => {
+		const onVisible = () => {
+			if (!document.hidden) fetchItems();
+		};
+		document.addEventListener("visibilitychange", onVisible);
+		return () => document.removeEventListener("visibilitychange", onVisible);
+	}, []);
+
+	// Poll while any item is still processing so its badge/players settle without a
+	// refresh. Ticks are skipped while the tab is hidden — the visibility listener above
+	// catches up on return, so nothing is missed and a backgrounded tab isn't polling.
 	const anyProcessing = items.some((i) => processingState(i) === "processing");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: fetchItems only closes over setItems
 	useEffect(() => {
 		if (!anyProcessing) return;
-		const interval = setInterval(fetchItems, 4000);
+		const interval = setInterval(() => {
+			if (!document.hidden) fetchItems();
+		}, 4000);
 		return () => clearInterval(interval);
 	}, [anyProcessing]);
 
