@@ -3,11 +3,10 @@ import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
 	allowanceGiB,
-	BADGE_ORDER,
+	ANTHERS_BADGES,
 	BANDWIDTH_PER_GIB,
 	type Badge,
 	badgeLabel,
-	badgeRank,
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
@@ -118,11 +117,12 @@ export function supportBreakdown(params: {
 	};
 }
 
-/** A rank rung as a display view model — money fields pre-rounded to 2dp strings. */
+/** A rung of Anthers's Badge ladder as a display view model — money pre-rounded to 2dp. */
 export interface RankView {
-	id: Badge;
+	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
+	id: Badge | "free";
 	name: string;
-	/** Anthers-Seeds required for this rank (0 = free … 4 = blossom). */
+	/** Anthers-Seeds required for this rung (0 = no Badge … 4 = blossom). */
 	anthersSeeds: number;
 	/** Monthly $ to hold this rank ($3 × anthersSeeds). */
 	price: number;
@@ -143,8 +143,17 @@ export interface RankView {
  * remainder into one line (as the Subscribe page shows it).
  */
 export function rankViews(): RankView[] {
-	return BADGE_ORDER.map((badge) => {
-		const n = badgeRank(badge);
+	// The 0-Seed rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's
+	// prepended here for display only. Seed counts come from each Badge's THRESHOLD,
+	// never from its position: this list is ordered by threshold, but nothing reads
+	// the index, so a Badge set with gaps renders correctly too.
+	const rungs: Array<{ id: Badge | "free"; seeds: number }> = [
+		{ id: "free", seeds: 0 },
+		...ANTHERS_BADGES.map((b) => ({ id: b.name as Badge, seeds: b.threshold })),
+	];
+	return rungs.map(({ id, seeds }) => {
+		const badge = id;
+		const n = seeds;
 		const price = seedCost(n);
 		const timePool = new Decimal(timePoolFor(n));
 		const supportsAnthers = n === 0 ? new Decimal(0) : new Decimal(price).minus(timePool);
