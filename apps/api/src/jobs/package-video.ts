@@ -177,17 +177,16 @@ export async function packageVideo(data: PackageVideoData) {
 		await generateMasterPlaylist(outputDir, variants);
 		await updateJobProgress(jobId, 88);
 
-		// Upload HLS output — playlists public (player bootstrap), segments always private
-		// (access is enforced at serve time via the signed-HLS endpoint; the item may be
-		// posted with different access, so we can't bake it in here).
+		// Upload HLS output — playlists AND segments private. Access is enforced at serve
+		// time via the signed-HLS endpoint (the item may be posted with different access,
+		// so we can't bake it in here), and a public playlist was a working CDN URL around
+		// that endpoint. Mirrors transcode-video.ts; keep the two in step.
 		const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 		const hlsFiles = await readdir(outputDir);
 		for (const filename of hlsFiles) {
 			const fileBuffer = await readFile(join(outputDir, filename));
-			const isPlaylist = filename.endsWith(".m3u8");
-			const ct = isPlaylist ? "application/vnd.apple.mpegurl" : "video/mp2t";
-			const acl = isPlaylist ? "public" : "private";
-			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
+			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
+			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, "private");
 		}
 		await updateJobProgress(jobId, 94);
 

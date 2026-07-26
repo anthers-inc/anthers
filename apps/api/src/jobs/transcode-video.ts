@@ -338,11 +338,11 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
 			// Content is processed in the library before it's attached to any post, so its
 			// access isn't known yet (and one item can be posted with different access).
-			// Segments are always PRIVATE and served through the access-checking signed-HLS
-			// endpoint; playlists stay public so that endpoint (and the player) can bootstrap.
-			const isPlaylist = filename.endsWith(".m3u8");
-			const acl = isPlaylist ? "public" : "private";
-			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, acl);
+			// EVERYTHING is private — playlists included. A public playlist had a working
+			// CDN URL that bypassed the access-checked endpoint entirely, which is the whole
+			// point of that endpoint; it fetches playlists signed now, so nothing needs the
+			// public bootstrap that used to justify it.
+			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, "private");
 		}
 		await updateJobProgress(jobId, 90);
 

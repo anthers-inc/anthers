@@ -244,16 +244,13 @@ export async function buildAccessContext(
 	};
 }
 
-/** Would an anonymous viewer get this post for free? Used for storage-ACL decisions in jobs. */
-export function isPubliclyFree(post: AccessiblePost): boolean {
-	const ctx: AccessContext = {
-		userId: null,
-		badge: "free",
-		seedByCreator: new Map(),
-		purchasedPostIds: new Set(),
-	};
-	return resolveAccessSync(post, ctx).isFree;
-}
+// `isPubliclyFree(post)` used to live here, documented as driving storage-ACL decisions
+// in the media jobs. It never had a call site and never could: the jobs run when an item
+// is created in the LIBRARY, before it is attached to any post, so there is no access
+// table to evaluate — and a post's access can change after the transcode anyway, which
+// would leave a baked-in ACL wrong. The settled answer is the opposite shape: store every
+// derived media object private, and sign per request at the delivery endpoints, where
+// access is re-resolved live. See `deliveryCtxFor` in routes/content.ts.
 
 /** Convenience: resolve access for a single post (loads its own context). */
 export async function resolveAccess(

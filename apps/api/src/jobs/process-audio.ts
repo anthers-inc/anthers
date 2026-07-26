@@ -212,12 +212,14 @@ export async function processAudio(data: ProcessAudioData) {
 		await updateJobProgress(jobId, 60);
 
 		// 3. Upload processed file (creator-first layout). Processed in the library before
-		// it's attached to any post, so access isn't known here. The MP3 is public (a bare
-		// CDN URL that plays); gated-audio delivery via signed URLs is a tracked follow-up
-		// (audio has no per-request signing endpoint yet, unlike HLS video).
+		// it's attached to any post, so access isn't known here — which is exactly why the
+		// MP3 is PRIVATE and delivery goes through the access-checked audio endpoint
+		// (`GET /posts/:slug/audio/:contentId`), the same shape video uses for HLS. This
+		// used to be public: a bare CDN URL that played, handed out in the post JSON, so
+		// gated audio was retrievable by an anonymous viewer.
 		const outputKey = `creators/${item.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
-		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "public");
+		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
 		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);
 
