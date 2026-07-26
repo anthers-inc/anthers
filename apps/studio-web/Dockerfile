@@ -2,7 +2,10 @@
 # Creator Studio web service — serves the built Studio SPA with cross-origin-isolation
 # headers (COOP+COEP). A SERVICE (not a static site) because DO App Platform static
 # sites can't set custom response headers. See epic E50 - Creator Studio.
-FROM oven/bun:1
+# Pinned deliberately — see the note in apps/api/Dockerfile for the bun 1.3.9 incident
+# that motivated it. Keep the two images on the same version: they install from the
+# same lockfile, so a version that breaks one breaks both.
+FROM oven/bun:1.3.14
 
 WORKDIR /app
 

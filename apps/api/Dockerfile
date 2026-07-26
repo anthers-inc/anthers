@@ -1,4 +1,12 @@
-FROM oven/bun:1
+# Pinned, not `oven/bun:1`. The floating tag means the image App Platform builds is
+# whatever Bun shipped that morning, and that is not hypothetical: bun 1.3.9 made
+# `bun install --frozen-lockfile` exit 1 on this repo's lockfile (an optional peer,
+# better-sqlite3, fails its native postinstall in this image and 1.3.9 counted that as
+# fatal; 1.2.23 and 1.3.14 both exit 0). A deploy inside that window would have failed
+# to build with no commit to blame — and with a floating tag, a green CI image build
+# says nothing about what gets built at deploy time. Bump this deliberately; CI builds
+# the image on the PR, so the bump is checked.
+FROM oven/bun:1.3.14
 
 WORKDIR /app
 
