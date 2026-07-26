@@ -1,8 +1,18 @@
 name: ci
 
+# `release` is here because it is the branch App Platform actually deploys, and
+# nothing was watching it. Note what this does and doesn't buy: `deploy_on_push`
+# is true on every component, so App Platform starts building the moment the push
+# lands and GitHub Actions cannot hold it back. What running here gives us is a
+# green/red mark against the exact SHA being deployed — which matters because
+# `release` can be pushed from somewhere other than a fast-forward of `main`
+# (a hotfix branch, a cherry-pick), and that push would otherwise be the first
+# time the code was ever checked. Making this a true gate means setting
+# `deploy_on_push: false` and triggering the deploy after CI, which changes the
+# deploy workflow and is Parker's call.
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
 
 jobs:
@@ -57,6 +67,53 @@ jobs:
       # The suites drive the Hono app through `app.fetch` against this real Postgres.
       - name: Run test suites
         run: bun test
+
+  # The two Docker images App Platform builds at deploy time. Nothing else in CI
+  # exercises them, and that gap is exactly how `bcd212e` shipped: adding
+  # `apps/studio-desktop` as a workspace changed `bun.lock`, neither Dockerfile
+  # COPY'd its `package.json`, and `bun install --frozen-lockfile` failed inside
+  # both images. Prod kept serving the previous deployment so there was no outage,
+  # but nothing local or in CI could have caught it — PR #52 did the identical
+  # thing when `apps/studio` was added. Building here turns "remember to add the
+  # manifest" into a check.
+  #
+  # Build only — nothing is pushed to a registry. App Platform builds its own
+  # images from the same Dockerfiles; this proves they build, not what ships.
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      # Both images share the workspace-manifest failure mode, so when it strikes
+      # it strikes both. Seeing both fail is the signal that it's the lockfile and
+      # not something specific to one image.
+      fail-fast: false
+      matrix:
+        include:
+          # Serves api, worker, and the PRE_DEPLOY migrate job — one image, three
+          # components, distinguished only by run_command in .do/app.yaml.
+          - name: api
+            dockerfile: apps/api/Dockerfile
+          # The separate `anthers-studio` app. Its App Platform spec exists only in
+          # App Platform, not in this repo, so this is the only place in version
+          # control where that deployment gets checked at all.
+          - name: studio-web
+            dockerfile: apps/studio-web/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          # Scoped per image so the two don't evict each other's layers.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   playwright:
     runs-on: ubuntu-latest
