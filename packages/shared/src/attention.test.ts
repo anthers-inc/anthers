@@ -207,7 +207,7 @@ describe("wall-clock clamp", () => {
 	test("passes a batch through untouched when the window has room", () => {
 		const events = [ev(30), ev(30)];
 		const result = clampToWindow(events, 0);
-		expect(result.granted).toBe(60);
+		expect(result.granted).toBe(61); // DELIBERATELY BROKEN — CI proof, reverted next commit
 		expect(result.refused).toBe(0);
 		expect(result.events).toEqual(events);
 	});
