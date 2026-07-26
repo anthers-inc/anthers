@@ -14,6 +14,12 @@ COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/studio-web/package.json apps/studio-web/
+# EVERY workspace listed in bun.lock must have its manifest here, even ones this image
+# never builds: `--frozen-lockfile` compares the lockfile against the workspaces it can
+# actually see, and a missing package.json reads as "the lockfile changed". The desktop
+# Studio is Rust + Tauri and ships nothing to the server, but omitting it fails the
+# install outright.
+COPY apps/studio-desktop/package.json apps/studio-desktop/
 RUN bun install --frozen-lockfile
 
 # Copy source (packages + API — no frontend needed here)
