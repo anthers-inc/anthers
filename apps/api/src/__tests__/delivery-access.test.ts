@@ -48,7 +48,7 @@ const creatorName = `deliv_${id}`;
 const viewerName = `deliv_viewer_${id}`;
 
 /** Locked to everyone but the owner: present rows, none allowed. */
-const LOCKED = { anthersAccess: [{ tier: "free", allow: false, price: "0" }] };
+const LOCKED = { anthersAccess: [{ threshold: 0, allow: false, price: "0" }] };
 
 describe("Delivery-layer access", () => {
 	let creatorCookie: string;

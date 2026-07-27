@@ -1,19 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Settings card: the creator's Seed ladder — the rungs that populate every post's
- * Seed Access table. Each rung is a Seed gate (label + $threshold + description).
+ * Seed Access table. Each rung is a Seed gate (label + Seed threshold + description).
  * Wired to the subscriptions gates API (own seed-type gates only).
+ *
+ * Thresholds are **whole Seeds**, not dollars (migration `0007`). A Seed is an
+ * indivisible $3 unit, so a rung between two whole Seeds is not expressible — which is
+ * why the input steps by 1 rather than by a cent, and why the dollar figure beside it is
+ * derived for display rather than typed.
  */
+import { SEED_PRICE } from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { CreatorGate } from "../../lib/types";
 
-/** Threshold must be sent with exactly two decimals to satisfy the PATCH validator. */
-function twoDecimals(v: string): string {
-	const n = Number(v);
-	if (!Number.isFinite(n) || n < 0) return "0.00";
-	return n.toFixed(2);
+/** Coerce to a whole Seed count ≥ 1 — the API stores thresholds as whole Seeds. */
+function wholeSeeds(v: string): string {
+	const n = Math.floor(Number(v));
+	if (!Number.isFinite(n) || n < 1) return "1";
+	return String(n);
+}
+
+/** "2 Seeds ($6/mo)" — the count is the gate; the money is derived for the creator's sake. */
+function rungLabel(threshold: string | number): string {
+	const seeds = Math.max(0, Math.floor(Number(threshold) || 0));
+	return `${seeds} Seed${seeds === 1 ? "" : "s"} ($${seeds * SEED_PRICE}/mo)`;
 }
 
 export default function SeedLadderEditor() {
@@ -59,7 +71,7 @@ export default function SeedLadderEditor() {
 		try {
 			const res = await client.api.subscriptions.gates.$post({
 				json: {
-					threshold: twoDecimals(newThreshold),
+					threshold: wholeSeeds(newThreshold),
 					label: newLabel.trim(),
 					description: newDescription.trim(),
 					gateType: "seed",
@@ -91,7 +103,7 @@ export default function SeedLadderEditor() {
 			const res = await client.api.subscriptions.gates[":id"].$patch({
 				param: { id: String(id) },
 				json: {
-					threshold: twoDecimals(editThreshold),
+					threshold: wholeSeeds(editThreshold),
 					label: editLabel.trim(),
 					description: editDescription.trim(),
 				},
@@ -127,8 +139,8 @@ export default function SeedLadderEditor() {
 			<div className="card-body">
 				<h3 className="card-title text-lg">Seed Ladder</h3>
 				<p className="text-sm text-base-content/60 mb-2">
-					Seed rungs let supporters unlock content by giving you Seeds past a dollar threshold.
-					These rungs appear as rows in every post's Seed Access table.
+					Seed rungs let supporters unlock content by giving you a number of Seeds — ${SEED_PRICE}
+					/mo each. These rungs appear as rows in every post's Seed Access table.
 				</p>
 
 				{error && (
@@ -160,9 +172,9 @@ export default function SeedLadderEditor() {
 											className="input input-bordered input-sm w-28"
 											value={editThreshold}
 											onChange={(e) => setEditThreshold(e.target.value)}
-											min="0"
-											step="0.01"
-											placeholder="Threshold $"
+											min="1"
+											step="1"
+											placeholder="Seeds"
 										/>
 									</div>
 									<input
@@ -195,7 +207,7 @@ export default function SeedLadderEditor() {
 									<div className="flex-1">
 										<div className="flex items-center gap-2">
 											<span className="font-medium text-sm">{gate.label}</span>
-											<span className="badge badge-sm">${Number(gate.threshold).toFixed(2)}</span>
+											<span className="badge badge-sm">{rungLabel(gate.threshold)}</span>
 										</div>
 										{gate.description && (
 											<p className="text-xs text-base-content/50">{gate.description}</p>
@@ -240,9 +252,9 @@ export default function SeedLadderEditor() {
 									className="input input-bordered input-sm w-28"
 									value={newThreshold}
 									onChange={(e) => setNewThreshold(e.target.value)}
-									min="0"
-									step="0.01"
-									placeholder="Threshold $"
+									min="1"
+									step="1"
+									placeholder="Seeds"
 								/>
 							</div>
 							<input

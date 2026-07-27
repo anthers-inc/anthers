@@ -3,32 +3,46 @@
  * Access & entitlement resolution — the one place that answers
  * "may this user consume this post, and if not, what does it cost?"
  *
- * Access is expressed by two per-post tables (see `packages/db/src/schema/content.ts`):
- *   - `anthersAccess`: one row per Anthers rank (free/root/sprout/petal/blossom)
- *   - `seedAccess`:    the $0 "everyone" baseline plus the creator's Seed-ladder rungs
+ * Access is expressed by two per-post tables (see `packages/db/src/schema/content.ts`),
+ * and since migration `0007` they are the SAME row shape — `{ threshold, allow, price }`,
+ * where `threshold` is **whole Seeds**:
+ *   - `anthersAccess`: threshold = Anthers-Seeds the viewer currently holds
+ *   - `seedAccess`:    threshold = Seeds the viewer has given THIS creator this cycle
  *
- * Each row is `{ allow, price }`. A viewer *qualifies* for a row when they meet its
- * rank / Seed threshold. Access is the **OR** across BOTH tables: among the rows the
- * viewer qualifies for AND that are allowed, the cheapest price wins. price 0 = free;
- * a positive price = a one-time purchase that unlocks the post's enabled delivery
- * (stream and/or download — one price unlocks both). No qualifying allowed row is a
- * hard gate. Posts ship "free but fully locked" (every row allow=false).
+ * That is the whole difference: one primitive — a Seed threshold — pointed at two
+ * entities. So there is one comparison here, `seedsMeet`, applied to two counts, rather
+ * than a rank ladder for one table and a dollar figure for the other.
  *
- * The Anthers Gate is evaluated point-in-time — the viewer must *currently hold* the
- * required rank, which under the support model simply is their Anthers-Seed count
+ * A viewer *qualifies* for a row when they meet its threshold. Access is the **OR**
+ * across BOTH tables: among the rows the viewer qualifies for AND that are allowed, the
+ * cheapest price wins. price 0 = free; a positive price = a one-time purchase that
+ * unlocks the post's enabled delivery (stream and/or download — one price unlocks both).
+ * No qualifying allowed row is a hard gate. Posts ship "free but fully locked" (every
+ * row allow=false).
+ *
+ * The Anthers Gate is point-in-time — the viewer must *currently hold* the Seeds
  * (`accounts.anthersSeeds`); there is no trailing-spend window. Resolution reads three
- * viewer facts — held rank, per-creator Seeds this cycle, and prior purchases — which
- * `buildAccessContext` loads once so a batch (the timeline) resolves without an N+1.
+ * viewer facts — Anthers-Seeds held, per-creator Seeds this cycle, and prior purchases —
+ * which `buildAccessContext` loads once so a batch (the timeline) resolves without an N+1.
+ *
+ * Note a gate need not sit on a Badge. Thresholds are levels, not Badge identities, so a
+ * creator may gate at 3 Seeds whether or not they have named a Badge there.
  */
 
 import { db } from "@anthers/db/client";
-import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
+import type { AccessRow, AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { type BadgeKey, badgeRank, rankForSeeds } from "@anthers/shared/constants";
+import {
+	ANTHERS_BADGES,
+	type BadgeKey,
+	rankForSeeds,
+	seedsFromDollars,
+	seedsMeet,
+} from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
-/** Anthers Badge tiers, low → high. */
-export const TIER_ORDER = ["free", "root", "sprout", "petal", "blossom"] as const;
+/** The thresholds a default Anthers table carries: everyone (0) plus each Anthers Badge. */
+const ANTHERS_THRESHOLDS = [0, ...ANTHERS_BADGES.map((b) => b.threshold)];
 
 /** The post fields access resolution depends on (structurally satisfied by a full post row). */
 export interface AccessiblePost {
@@ -43,9 +57,15 @@ export interface AccessiblePost {
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of posts. */
 export interface AccessContext {
 	userId: number | null;
-	/** The viewer's *currently held* rank — their Anthers-Seed count (point-in-time). */
-	badge: BadgeKey;
-	/** creatorId → dollars of Seeds the viewer has given to that creator this cycle */
+	/**
+	 * Anthers-Seeds the viewer *currently holds* (point-in-time).
+	 *
+	 * A raw count, not a Badge name: a gate is a threshold, and thresholds exist at levels
+	 * no Badge is named for. Collapsing to the held Badge first would quantise the viewer
+	 * down to the nearest named rung and silently deny them gates they actually clear.
+	 */
+	anthersSeeds: number;
+	/** creatorId → whole Seeds the viewer has given to that creator this cycle */
 	seedByCreator: Map<number, number>;
 	/** post ids the viewer has a completed purchase for */
 	purchasedPostIds: Set<number>;
@@ -88,13 +108,27 @@ export function currentBillingCycle(): string {
  * which resolution still has to represent, and represents as "free".
  */
 export async function heldBadge(userId: number): Promise<BadgeKey> {
+	return rankForSeeds(await heldAnthersSeeds(userId));
+}
+
+/**
+ * Anthers-Seeds a user currently holds — what gate resolution actually compares against.
+ *
+ * Deliberately NOT routed through the held Badge. A Badge is the highest threshold you
+ * meet, so collapsing to it first would round a 3-Seed viewer down to a 2-Seed Badge and
+ * deny them a 3-Seed gate they genuinely clear. Resolve on the count; name the Badge only
+ * for display.
+ */
+export async function heldAnthersSeeds(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ anthersSeeds: accounts.anthersSeeds })
 		.from(accounts)
 		.where(eq(accounts.userId, userId))
 		.limit(1);
-	return rankForSeeds(Number(row?.anthersSeeds ?? 0));
+	return Math.max(0, Math.floor(Number(row?.anthersSeeds ?? 0)));
 }
+
+export { seedsFromDollars };
 
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
@@ -106,29 +140,20 @@ interface Offer {
 	baseline: boolean;
 }
 
-/** Anthers-table offers the viewer qualifies for — the viewer must *currently hold* the row's tier. */
-function anthersOffers(rows: AnthersAccessRow[], viewerBadge: BadgeKey): Offer[] {
-	const offers: Offer[] = [];
-	const viewerRank = badgeRank(viewerBadge);
-	for (const row of rows) {
-		if (!row.allow) continue;
-		// `BadgeKey`, not `Badge`: the free row's tier is literally "free", which is the
-		// absence of a Badge rather than one of them. `badgeRank` maps it to 0.
-		const needRank = badgeRank(row.tier as BadgeKey);
-		// free tier (rank 0) qualifies for everyone; higher tiers need the held badge.
-		if (viewerRank < needRank) continue;
-		offers.push({ price: Number(row.price ?? "0"), baseline: needRank <= 0 });
-	}
-	return offers;
-}
-
-/** Seed-table offers the viewer qualifies for (Seeds given to this creator ≥ the rung threshold). */
-function seedOffers(rows: SeedAccessRow[], viewerSeeds: number): Offer[] {
+/**
+ * The allowed rows a viewer holding `heldSeeds` qualifies for.
+ *
+ * **One function for both tables.** The Anthers table and the Seed table differ only in
+ * which Seed count is passed in — Anthers-Seeds held, or Seeds given to this creator —
+ * so they cannot drift apart in how they decide, only in what they are asked about.
+ */
+function offersFor(rows: AccessRow[], heldSeeds: number): Offer[] {
 	const offers: Offer[] = [];
 	for (const row of rows) {
 		if (!row.allow) continue;
-		if (viewerSeeds < row.threshold) continue;
-		offers.push({ price: Number(row.price ?? "0"), baseline: row.threshold <= 0 });
+		const threshold = Number(row.threshold ?? 0);
+		if (!seedsMeet(heldSeeds, threshold)) continue;
+		offers.push({ price: Number(row.price ?? "0"), baseline: threshold <= 0 });
 	}
 	return offers;
 }
@@ -157,11 +182,13 @@ export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "purchased" };
 	}
 
-	const viewerSeeds = ctx.seedByCreator.get(post.creatorId) ?? 0;
+	// The same comparison, twice — once against Anthers-Seeds held, once against Seeds
+	// given to this creator. OR across both: qualifying anywhere is qualifying.
+	const givenSeeds = ctx.seedByCreator.get(post.creatorId) ?? 0;
 
 	const offers = [
-		...anthersOffers(post.anthersAccess ?? [], ctx.badge),
-		...seedOffers(post.seedAccess ?? [], viewerSeeds),
+		...offersFor(post.anthersAccess ?? [], ctx.anthersSeeds),
+		...offersFor(post.seedAccess ?? [], givenSeeds),
 	];
 
 	// No qualifying allowed row → hard gate.
@@ -207,7 +234,7 @@ export async function buildAccessContext(
 	if (userId == null) {
 		return {
 			userId: null,
-			badge: "free",
+			anthersSeeds: 0,
 			seedByCreator: new Map(),
 			purchasedPostIds: new Set(),
 		};
@@ -216,8 +243,8 @@ export async function buildAccessContext(
 	const cycle = currentBillingCycle();
 	const scoped = opts.postIds && opts.postIds.length > 0;
 
-	const [badge, seedRows, purchaseRows] = await Promise.all([
-		heldBadge(userId),
+	const [anthersSeeds, seedRows, purchaseRows] = await Promise.all([
+		heldAnthersSeeds(userId),
 		db
 			.select({ creatorId: seedAllocations.creatorId, amount: seedAllocations.amount })
 			.from(seedAllocations)
@@ -234,14 +261,17 @@ export async function buildAccessContext(
 			),
 	]);
 
+	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
+	// gate. Gates count Seeds, so the dollars are divided here, at the one boundary where
+	// the two meet, rather than by every caller that compares against a threshold.
 	const seedByCreator = new Map<number, number>();
 	for (const s of seedRows) {
-		seedByCreator.set(s.creatorId, Number(s.amount));
+		seedByCreator.set(s.creatorId, seedsFromDollars(s.amount));
 	}
 
 	return {
 		userId,
-		badge,
+		anthersSeeds,
 		seedByCreator,
 		// Wallet/Seed one-time charges have a null postId — only real post purchases unlock.
 		purchasedPostIds: new Set(
@@ -272,7 +302,7 @@ export async function resolveAccess(
  * (allow=false, price "0") — "free but fully locked". The creator opts access in.
  */
 export function defaultAnthersAccess(): AnthersAccessRow[] {
-	return TIER_ORDER.map((tier) => ({ tier, allow: false, price: "0" }));
+	return ANTHERS_THRESHOLDS.map((threshold) => ({ threshold, allow: false, price: "0" }));
 }
 
 /** Default Seed table = just the $0 "everyone" baseline row, locked. Ladder rungs are added by the creator. */

@@ -149,11 +149,17 @@ export const poolDistributions = pgTable(
 );
 
 /**
- * Creator-defined gate ladder. `seed` rungs populate the Seed Access table
- * (`threshold` = dollars of Seeds directed to the creator this cycle, in $3
- * increments); `anthers_badge` rungs are the Anthers Gate, unlocked by the viewer
- * *currently holding* the required rank (`threshold` = rank 1 = root … 4 = blossom,
- * i.e. that many Anthers-Seeds).
+ * Creator-defined gate ladder — the creator's *named* rungs.
+ *
+ * `threshold` is **whole Seeds for both gate types** (unified in migration `0007`, which
+ * divided the `seed` rungs by 3). `seed` rungs read the Seeds directed to this creator
+ * this cycle; `anthers_badge` rungs read the viewer's *currently held* Anthers-Seed count.
+ * One unit, one comparison — the direction is the only difference.
+ *
+ * The `seed` rungs previously counted dollars, which meant the price of a Seed was baked
+ * into every stored gate and the same concept was spelled two ways across this table and
+ * `posts.seed_access`. Naming the rungs is this table's job; deciding a post's access is
+ * `posts.seed_access`'s, and a post may gate at a threshold no rung is named for.
  */
 export const creatorGates = pgTable(
 	"creator_gates",
@@ -163,7 +169,7 @@ export const creatorGates = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		gateType: text("gate_type").notNull().default("seed"), // "seed" | "anthers_badge"
-		threshold: numeric("threshold").notNull(), // seed: $ of Seeds; anthers_badge: rank 1–4
+		threshold: numeric("threshold").notNull(), // whole Seeds, both gate types
 		label: text("label").notNull(),
 		description: text("description").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),

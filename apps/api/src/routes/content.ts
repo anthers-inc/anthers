@@ -173,17 +173,20 @@ const CONTENT_ITEM_TYPES = [
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
-const anthersAccessRowSchema = z.object({
-	tier: z.enum(["free", "root", "sprout", "petal", "blossom"]),
+/**
+ * Both access tables are the same row: a whole-Seed threshold, an allow flag, a price.
+ * The Anthers table's threshold counts Anthers-Seeds held; the Seed table's counts Seeds
+ * given to this creator. Integer-only — a gate sits at a whole Seed or nowhere, and
+ * accepting 2.5 would let a row be written that no viewer can ever exactly meet.
+ */
+const accessRowSchema = z.object({
+	threshold: z.number().int().nonnegative(),
 	allow: z.boolean(),
 	price: z.string().regex(MONEY),
 });
 
-const seedAccessRowSchema = z.object({
-	threshold: z.number().nonnegative(),
-	allow: z.boolean(),
-	price: z.string().regex(MONEY),
-});
+const anthersAccessRowSchema = accessRowSchema;
+const seedAccessRowSchema = accessRowSchema;
 
 // A post's ordered content list is an array of entries: an inline text block, or a
 // reference to a library content item. Each may carry an `id` for reconcile-by-id on patch.

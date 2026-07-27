@@ -319,13 +319,13 @@ export default function SettingsPage() {
 			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
 			<DevicesSection />
 
-			{/* Creator tools live in the Studio (payouts, connections, Seed tiers). */}
+			{/* Creator tools live in the Studio (payouts, connections, Badges). */}
 			{isCreator && (
 				<div className="card bg-base-200 mt-6">
 					<div className="card-body">
 						<h3 className="card-title text-lg">Creator tools</h3>
 						<p className="text-sm text-base-content/60">
-							Manage payouts, platform connections, and Seed tiers in your Studio.
+							Manage payouts, platform connections, and your Badges in your Studio.
 						</p>
 						<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
 							Open Studio settings

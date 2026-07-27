@@ -14,24 +14,33 @@ import {
 import { users } from "./auth.js";
 
 /**
- * A row in a post's **Anthers Access** table — one per Anthers Badge tier. Access
- * is granted (possibly at a price) when `allow` is true; `price` "0" = free.
+ * The two access tables are **one row shape**, and that is the point.
+ *
+ * A gate is a single primitive — *a whole-Seed threshold pointed at an entity*. Point it
+ * at Anthers and it reads the viewer's Anthers-Seed count; point it at the creator and it
+ * reads the Seeds that viewer has given *them* this cycle. Nothing else differs, so
+ * nothing else should differ in the row.
+ *
+ * `threshold` is **whole Seeds in both tables** — never dollars, never a list position.
+ * Migration `0007` converted both: the Anthers table from a tier *name* (free/root/…),
+ * and the Seed table from *dollars* (÷ 3, Seeds being indivisible $3 units since #123).
+ * Dollars leaked the price of a Seed into every stored gate; a name conflated a Badge
+ * with the level it sits at. A threshold does neither, and a gate needs no Badge to sit
+ * on it — with Badges at 2 and 4, a gate at 3 is legal and a 3-Seed viewer clears it.
  */
-export interface AnthersAccessRow {
-	tier: string; // free | root | sprout | petal | blossom (the Anthers Badge tier)
+export interface AccessRow {
+	/** Whole Seeds required to qualify for this row. 0 = everyone. */
+	threshold: number;
 	allow: boolean;
-	price: string; // money string; "0" = free for this tier when allowed
-}
-
-/**
- * A row in a post's **Seed Access** table — the $0 "everyone" baseline plus the
- * creator's Seed-ladder rungs. `threshold` is dollars of Seeds given to the creator.
- */
-export interface SeedAccessRow {
-	threshold: number; // dollars of Seeds given to this creator this cycle; 0 = everyone
-	allow: boolean;
+	/** Money string; "0" = free at this threshold when allowed. */
 	price: string;
 }
+
+/** A row in a post's **Anthers Access** table — `threshold` is Anthers-Seeds held. */
+export type AnthersAccessRow = AccessRow;
+
+/** A row in a post's **Seed Access** table — `threshold` is Seeds given to the creator. */
+export type SeedAccessRow = AccessRow;
 
 /**
  * Posts — the universal, content-type-agnostic unit of published content.

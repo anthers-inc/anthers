@@ -45,19 +45,19 @@ export interface Creator {
 
 // ─── Access & pricing ───
 
-/** One row of a post's Anthers Access table (per tier). */
-export interface AnthersAccessRow {
-	tier: string; // free | root | sprout | petal | blossom (the Anthers Badge tier)
+/**
+ * One row of a post's access table — the SAME shape for both tables (migration `0007`).
+ * `threshold` is whole Seeds: Anthers-Seeds held for the Anthers table, Seeds given to
+ * this creator for the Seed table. 0 = everyone.
+ */
+export interface AccessRow {
+	threshold: number;
 	allow: boolean;
 	price: string; // money string; "0" = free when allowed
 }
 
-/** One row of a post's Seed Access table (per Seed-$ threshold; 0 = everyone). */
-export interface SeedAccessRow {
-	threshold: number;
-	allow: boolean;
-	price: string;
-}
+export type AnthersAccessRow = AccessRow;
+export type SeedAccessRow = AccessRow;
 
 /** Resolved access for a post + viewer (see api services/access.ts). */
 export interface AccessResult {
