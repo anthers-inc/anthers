@@ -17,6 +17,13 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { ContentItem } from "../lib/types";
 
+/** A post referencing a library item, as returned by the 409 `item_in_use` body. */
+interface UsingPost {
+	slug: string;
+	title: string | null;
+	isPublished: boolean;
+}
+
 export default function ContentLibraryPage() {
 	const [items, setItems] = useState<ContentItem[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -25,6 +32,8 @@ export default function ContentLibraryPage() {
 	const [editor, setEditor] = useState<{ item: ContentItem | null } | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
 	const [deleting, setDeleting] = useState(false);
+	/** Posts blocking an unflagged delete — non-null once the server has named them. */
+	const [inUse, setInUse] = useState<UsingPost[] | null>(null);
 
 	const fetchItems = () =>
 		client.api.content["content-items"]
@@ -71,17 +80,37 @@ export default function ContentLibraryPage() {
 				: [item, ...prev],
 		);
 
+	/**
+	 * Delete in two beats when the item is in use. The first attempt goes unflagged; the
+	 * server answers 409 `item_in_use` with the posts that reference it, which turns the
+	 * dialog's vague "posts will lose this content" into the actual list. Only the second
+	 * press sends `force`. The old single-shot call destroyed references to published
+	 * posts with no way to see it coming.
+	 */
 	const confirmDelete = async () => {
 		if (!deleteTarget) return;
 		setDeleting(true);
 		try {
 			const res = await client.api.content["content-items"][":id"].$delete({
 				param: { id: String(deleteTarget.id) },
+				query: inUse ? { force: "1" } : {},
 			});
-			if (res.ok) setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+			if (res.ok) {
+				setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+				setDeleteTarget(null);
+				setInUse(null);
+				return;
+			}
+			if (res.status === 409) {
+				const body = (await res.json()) as { code?: string; posts?: UsingPost[] };
+				if (body.code === "item_in_use") {
+					setInUse(body.posts ?? []);
+					return;
+				}
+			}
+			setDeleteTarget(null);
 		} finally {
 			setDeleting(false);
-			setDeleteTarget(null);
 		}
 	};
 
@@ -151,13 +180,34 @@ export default function ContentLibraryPage() {
 						<h3 className="font-bold text-lg">Delete content?</h3>
 						<p className="py-3 text-sm text-base-content/70">
 							"{deleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be
-							permanently removed. Posts that reference it will lose this content.
+							permanently removed.
 						</p>
+						{inUse && inUse.length > 0 && (
+							<div className="alert alert-warning text-sm">
+								<div>
+									<p className="font-medium">
+										Used by {inUse.length} post{inUse.length === 1 ? "" : "s"} — deleting it removes
+										this content from {inUse.length === 1 ? "it" : "them"}:
+									</p>
+									<ul className="list-disc list-inside mt-1">
+										{inUse.map((p) => (
+											<li key={p.slug}>
+												{p.title || "Untitled"}
+												{p.isPublished ? " (published)" : " (draft)"}
+											</li>
+										))}
+									</ul>
+								</div>
+							</div>
+						)}
 						<div className="modal-action">
 							<button
 								type="button"
 								className="btn btn-ghost"
-								onClick={() => setDeleteTarget(null)}
+								onClick={() => {
+									setDeleteTarget(null);
+									setInUse(null);
+								}}
 								disabled={deleting}
 							>
 								Cancel
@@ -168,14 +218,17 @@ export default function ContentLibraryPage() {
 								onClick={confirmDelete}
 								disabled={deleting}
 							>
-								{deleting ? "Deleting…" : "Delete"}
+								{deleting ? "Deleting…" : inUse ? "Delete anyway" : "Delete"}
 							</button>
 						</div>
 					</div>
 					<button
 						type="button"
 						className="modal-backdrop"
-						onClick={() => setDeleteTarget(null)}
+						onClick={() => {
+							setDeleteTarget(null);
+							setInUse(null);
+						}}
 						aria-label="Close"
 					>
 						close
