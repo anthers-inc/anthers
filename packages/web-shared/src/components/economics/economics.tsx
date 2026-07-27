@@ -14,7 +14,6 @@ import {
 	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
-	type Badge,
 	type BadgeKey,
 	badgeLabel,
 	badgeRank,

@@ -2,10 +2,11 @@
 import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
-	allowanceGiB,
 	ANTHERS_BADGES,
+	allowanceGiB,
 	BANDWIDTH_PER_GIB,
 	type Badge,
+	type BadgeKey,
 	badgeLabel,
 	CARD_FLAT,
 	CARD_RATE,
@@ -120,7 +121,7 @@ export function supportBreakdown(params: {
 /** A rung of Anthers's Badge ladder as a display view model — money pre-rounded to 2dp. */
 export interface RankView {
 	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
-	id: Badge | "free";
+	id: BadgeKey;
 	name: string;
 	/** Anthers-Seeds required for this rung (0 = no Badge … 4 = blossom). */
 	anthersSeeds: number;
@@ -147,7 +148,7 @@ export function rankViews(): RankView[] {
 	// prepended here for display only. Seed counts come from each Badge's THRESHOLD,
 	// never from its position: this list is ordered by threshold, but nothing reads
 	// the index, so a Badge set with gaps renders correctly too.
-	const rungs: Array<{ id: Badge | "free"; seeds: number }> = [
+	const rungs: Array<{ id: BadgeKey; seeds: number }> = [
 		{ id: "free", seeds: 0 },
 		...ANTHERS_BADGES.map((b) => ({ id: b.name as Badge, seeds: b.threshold })),
 	];
