@@ -29,7 +29,7 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
-import { badgeRank, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
+import { badgeRank, rankForSeeds, SEED_PRICE, seedsMeet } from "@anthers/shared/constants";
 import { rankViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -42,9 +42,10 @@ import { requireAuth, requireVerified } from "../middleware/auth.js";
 import {
 	type AccessiblePost,
 	buildAccessContext,
-	heldBadge,
+	heldAnthersSeeds,
 	resolveAccess,
 	resolveAccessSync,
+	seedsFromDollars,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import {
@@ -993,8 +994,9 @@ const subscriptionRoutes = new Hono()
 			});
 		}
 
-		// The viewer's held rank (point-in-time) and their Seeds to this creator this cycle.
-		const badge = await heldBadge(currentUserId);
+		// The viewer's held Anthers-Seeds (point-in-time) and their Seeds to this creator.
+		const anthersSeeds = await heldAnthersSeeds(currentUserId);
+		const badge = rankForSeeds(anthersSeeds);
 		const cycle = getCurrentBillingCycle();
 		const [seed] = await db
 			.select({ amount: seedAllocations.amount })
@@ -1010,14 +1012,14 @@ const subscriptionRoutes = new Hono()
 
 		const seedAmount = seed?.amount ?? "0.00";
 
-		// Anthers Gate unlocks when the held rank clears the gate's rank; Seed Gate by Seeds given.
+		// Both gate types are a whole-Seed threshold (migration `0007`) — the Anthers Gate reads
+		// Anthers-Seeds held, the Seed Gate reads Seeds given here. Same comparison, two counts.
+		// The dollar ledger is converted once, so no threshold is ever compared against money.
+		const givenSeeds = seedsFromDollars(seedAmount);
 		const unlockedGates = gates
-			.filter((g) => {
-				if (g.gateType === "anthers_badge") {
-					return badgeRank(badge) >= Number(g.threshold);
-				}
-				return Number(seedAmount) >= Number(g.threshold);
-			})
+			.filter((g) =>
+				seedsMeet(g.gateType === "anthers_badge" ? anthersSeeds : givenSeeds, Number(g.threshold)),
+			)
 			.map((g) => g.id);
 
 		return c.json({

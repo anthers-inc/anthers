@@ -20,9 +20,10 @@ import {
 	EXPECTED_STAIRCASE,
 	GAUNTLET_POSTS,
 	gauntletPost,
+	rungDollars,
 	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
-import { type BadgeKey, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessiblePost,
@@ -32,6 +33,11 @@ import {
 
 const CREATOR_ID = 900;
 const VIEWER_ID = 901;
+
+/** Anthers-Seed levels the staircase walks: no Badge (0), then each Badge's threshold. */
+const ANTHERS_LEVELS = [0, ...ANTHERS_BADGES.map((b) => b.threshold)];
+/** The top Badge's threshold — the Anthers ladder fully climbed. */
+const TOP = ANTHERS_LEVELS[ANTHERS_LEVELS.length - 1];
 
 /**
  * The posts under test are the FIXTURE's own definitions, imported rather than restated.
@@ -58,11 +64,15 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 
 type PostKey = string;
 
-function ctx(badge: BadgeKey, seeds: number, purchased: number[] = []): AccessContext {
+/**
+ * A viewer context. Both counts are **whole Seeds** — Anthers-Seeds held, and Seeds given
+ * to the gauntlet creator this cycle — which is the only thing gate resolution reads.
+ */
+function ctx(anthersSeeds: number, seedsGiven: number, purchased: number[] = []): AccessContext {
 	return {
 		userId: VIEWER_ID,
-		badge,
-		seedByCreator: new Map(seeds > 0 ? [[CREATOR_ID, seeds]] : []),
+		anthersSeeds,
+		seedByCreator: new Map(seedsGiven > 0 ? [[CREATOR_ID, seedsGiven]] : []),
 		purchasedPostIds: new Set(purchased),
 	};
 }
@@ -76,13 +86,15 @@ const PAY: AccessReason = "payment_required";
  * quietly drift from what the other proved. Each row is realized as a resolver context here;
  * the `following` field is untestable at this layer (see the header note) and rides along
  * as documentation. The viewer's badge derives from the row's Anthers-Seed count exactly as
- * the app derives it (`rankForSeeds`) — the support-model linkage, pinned.
+ * the app derives it — the support-model linkage, pinned. Resolution reads the Anthers-Seed
+ * COUNT directly rather than the Badge it names, so a viewer is never quantised down to the
+ * nearest named rung before their access is decided.
  */
 const STAIRCASE = EXPECTED_STAIRCASE.map((row) => ({
 	state: row.state,
 	ctx: ctx(
-		rankForSeeds(row.anthersSeeds),
-		row.seedDollars,
+		row.anthersSeeds,
+		row.seedsGiven,
 		row.purchased.map((key) => POSTS[key].id),
 	),
 	reasons: row.reasons as Record<PostKey, AccessReason>,
@@ -118,40 +130,47 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	it("each badge rung unlocks exactly one more post than the rung below", () => {
-		const counts = (["free", "root", "sprout", "petal", "blossom"] as BadgeKey[]).map(
-			(b) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(b, 0)).canAccess).length,
+		// Levels come from the Badge set's own thresholds, so a re-placed Badge re-aims this
+		// test rather than silently testing the wrong rung.
+		const counts = ANTHERS_LEVELS.map(
+			(seeds) =>
+				POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(seeds, 0)).canAccess).length,
 		);
-		// Free sees only G1; each paid rung adds exactly one badge-gated post.
+		// No Badge sees only G1; each paid rung adds exactly one badge-gated post.
 		expect(counts).toEqual([1, 2, 3, 4, 5]);
 	});
 
 	it("each Seed rung unlocks exactly one more post than the rung below", () => {
-		// Derived from the fixture's rungs, never typed: a Seed is an indivisible $3 unit, so
-		// retuning SEED_RUNGS must not need a matching edit here.
+		// Derived from the fixture's rungs, never typed, so retuning SEED_RUNGS needs no
+		// matching edit here.
 		const counts = [0, ...SEED_RUNGS].map(
-			(s) =>
-				POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx("blossom", s)).canAccess).length,
+			(s) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(TOP, s)).canAccess).length,
 		);
 		// From Blossom (5 unlocked), each whole Seed adds exactly one Seed-gated post.
 		expect(counts).toEqual([5, 6, 7, 8]);
 	});
 
-	it("every Seed rung is a whole number of $3 Seeds", () => {
+	it("every Seed rung is a whole number of Seeds", () => {
 		// The product can't express a fraction of a Seed — the stepper steps whole Seeds and
-		// POST /seeds rejects the rest — so a fixture threshold that isn't a multiple of
-		// SEED_PRICE would be testing a state no user can reach.
-		for (const rung of SEED_RUNGS) expect(rung % SEED_PRICE).toBe(0);
+		// POST /seeds rejects the rest — so a fractional threshold would be testing a state no
+		// user can reach. Thresholds count Seeds now, so "whole" is the assertion; the $3 that
+		// a Seed costs is a separate fact, checked against the money helper.
+		for (const rung of SEED_RUNGS) {
+			expect(Number.isInteger(rung)).toBe(true);
+			expect(rung).toBeGreaterThan(0);
+			expect(rungDollars(rung) % SEED_PRICE).toBe(0);
+		}
 	});
 });
 
 describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("G1 is free to everyone; a badge/Seed unlock is 'entitled', not 'free'", () => {
-		const free = resolveAccessSync(POSTS.G1, ctx("free", 0));
+		const free = resolveAccessSync(POSTS.G1, ctx(0, 0));
 		expect(free.isFree).toBe(true);
 		expect(free.isEntitled).toBe(false);
 
 		// G2 at Root qualifies via a non-baseline row → entitled, and NOT isFree.
-		const entitled = resolveAccessSync(POSTS.G2, ctx("root", 0));
+		const entitled = resolveAccessSync(POSTS.G2, ctx(1, 0));
 		expect(entitled.isFree).toBe(false);
 		expect(entitled.isEntitled).toBe(true);
 	});
@@ -159,31 +178,31 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("an anonymous viewer is 'login_required' where a logged-in one is 'gated'", () => {
 		const anon: AccessContext = {
 			userId: null,
-			badge: "free",
+			anthersSeeds: 0,
 			seedByCreator: new Map(),
 			purchasedPostIds: new Set(),
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
-		expect(resolveAccessSync(POSTS.G2, ctx("free", 0)).reason).toBe("gated");
+		expect(resolveAccessSync(POSTS.G2, ctx(0, 0)).reason).toBe("gated");
 		// ...but a free post is free to anyone, logged in or not.
 		expect(resolveAccessSync(POSTS.G1, anon).reason).toBe("free");
 	});
 
 	it("G9 quotes its price until bought, then unlocks download permanently", () => {
-		const before = resolveAccessSync(POSTS.G9, ctx("free", 0));
+		const before = resolveAccessSync(POSTS.G9, ctx(0, 0));
 		expect(before.requiresPurchase).toBe(true);
 		expect(before.price).toBe(DOWNLOAD_PRICE);
 		expect(before.downloadEnabled).toBe(true);
 		expect(before.streamEnabled).toBe(false);
 
 		// A purchase outranks everything, even back down on the Free plan.
-		const after = resolveAccessSync(POSTS.G9, ctx("free", 0, [POSTS.G9.id]));
+		const after = resolveAccessSync(POSTS.G9, ctx(0, 0, [POSTS.G9.id]));
 		expect(after.canAccess).toBe(true);
 		expect(after.reason).toBe("purchased");
 	});
 
 	it("neither ladder unlocks G9 — the purchase rung can't be reached by climbing", () => {
-		const top = resolveAccessSync(POSTS.G9, ctx("blossom", 4));
+		const top = resolveAccessSync(POSTS.G9, ctx(TOP, 4));
 		expect(top.canAccess).toBe(false);
 		expect(top.reason).toBe("payment_required");
 	});
@@ -191,7 +210,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("the creator always sees their own gated content", () => {
 		const owner = resolveAccessSync(POSTS.G5, {
 			userId: CREATOR_ID,
-			badge: "free",
+			anthersSeeds: 0,
 			seedByCreator: new Map(),
 			purchasedPostIds: new Set(),
 		});
@@ -202,7 +221,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("Seeds given to one creator don't unlock another's gates", () => {
 		const elsewhere: AccessContext = {
 			userId: VIEWER_ID,
-			badge: "free",
+			anthersSeeds: 0,
 			seedByCreator: new Map([[CREATOR_ID + 1, 99]]),
 			purchasedPostIds: new Set(),
 		};

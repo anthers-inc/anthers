@@ -5,33 +5,31 @@
  * price "0"). A price of $0 with Allow checked = free at that level; a positive
  * price is a minimum (itch.io style — buyers may pay more).
  */
+import { ANTHERS_BADGES, badgeLabel } from "@anthers/shared/constants";
 import type { AnthersAccessRow, CreatorGate, SeedAccessRow } from "../../lib/types";
 
 // ─── Row drafts ───
 
-/** The fixed Anthers Badge tiers, matching the API's tier enum. */
-export type AnthersTier = "free" | "root" | "sprout" | "petal" | "blossom";
-
-export interface SeedRowDraft {
+/**
+ * One draft shape for both tables, because both stored rows are one shape: a whole-Seed
+ * threshold, an allow flag, a price. `label` is display only — the threshold is what is
+ * saved and what decides access, so renaming a Badge never moves a gate.
+ */
+export interface AccessRowDraft {
+	/** Whole Seeds required — Anthers-Seeds held, or Seeds given to this creator. */
 	threshold: number;
 	label: string;
 	allow: boolean;
 	price: string;
 }
 
-export interface AnthersRowDraft {
-	tier: AnthersTier;
-	label: string;
-	allow: boolean;
-	price: string;
-}
+export type SeedRowDraft = AccessRowDraft;
+export type AnthersRowDraft = AccessRowDraft;
 
-const ANTHERS_TIERS: { tier: AnthersTier; label: string }[] = [
-	{ tier: "free", label: "Free" },
-	{ tier: "root", label: "Root" },
-	{ tier: "sprout", label: "Sprout" },
-	{ tier: "petal", label: "Petal" },
-	{ tier: "blossom", label: "Blossom" },
+/** The Anthers ladder as editable rows: everyone, then each Anthers Badge at its level. */
+const ANTHERS_LEVELS: { threshold: number; label: string }[] = [
+	{ threshold: 0, label: "Everyone" },
+	...ANTHERS_BADGES.map((b) => ({ threshold: b.threshold, label: badgeLabel(b.name) })),
 ];
 
 /** Coerce a user-entered price to a valid money string ("0" when blank/invalid). */
@@ -73,28 +71,31 @@ export function buildSeedRows(
 	return rows;
 }
 
-/** Anthers rows = the five fixed tiers, hydrated from an existing table if present. */
+/** Anthers rows = everyone plus each Badge level, hydrated from an existing table if present. */
 export function buildAnthersRows(existing?: AnthersAccessRow[] | null): AnthersRowDraft[] {
-	const byTier = new Map<string, AnthersAccessRow>();
-	for (const r of existing ?? []) byTier.set(r.tier, r);
-	return ANTHERS_TIERS.map(({ tier, label }) => {
-		const ex = byTier.get(tier);
-		return { tier, label, allow: ex?.allow ?? false, price: ex?.price ?? "0" };
+	const byThreshold = new Map<number, AnthersAccessRow>();
+	for (const r of existing ?? []) byThreshold.set(r.threshold, r);
+	return ANTHERS_LEVELS.map(({ threshold, label }) => {
+		const ex = byThreshold.get(threshold);
+		return { threshold, label, allow: ex?.allow ?? false, price: ex?.price ?? "0" };
 	});
 }
 
-export function serializeSeedRows(rows: SeedRowDraft[]): SeedAccessRow[] {
+/** Both tables serialize identically — the label is editor-only and never stored. */
+function serializeRows(rows: AccessRowDraft[]): AccessRowDraft[] {
 	return rows.map((r) => ({
 		threshold: r.threshold,
 		allow: r.allow,
 		price: normalizeMoney(r.price),
-	}));
+	})) as AccessRowDraft[];
 }
 
-export function serializeAnthersRows(
-	rows: AnthersRowDraft[],
-): { tier: AnthersTier; allow: boolean; price: string }[] {
-	return rows.map((r) => ({ tier: r.tier, allow: r.allow, price: normalizeMoney(r.price) }));
+export function serializeSeedRows(rows: SeedRowDraft[]): SeedAccessRow[] {
+	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
+}
+
+export function serializeAnthersRows(rows: AnthersRowDraft[]): AnthersAccessRow[] {
+	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
 }
 
 // ─── Component ───
@@ -142,7 +143,9 @@ export default function AccessTables({
 									<td>
 										<span className="font-medium">{row.label}</span>{" "}
 										<span className="text-base-content/50">
-											{row.threshold === 0 ? "$0" : `$${row.threshold.toFixed(2)}+`}
+											{row.threshold === 0
+												? "Everyone"
+												: `${row.threshold} Seed${row.threshold === 1 ? "" : "s"}+`}
 										</span>
 									</td>
 									<td className="text-center">
@@ -182,14 +185,14 @@ export default function AccessTables({
 					<table className="table table-sm">
 						<thead>
 							<tr>
-								<th>Tier</th>
+								<th>Badge</th>
 								<th className="w-20 text-center">Allow</th>
 								<th className="w-32">Price ($)</th>
 							</tr>
 						</thead>
 						<tbody>
 							{anthersRows.map((row, i) => (
-								<tr key={row.tier}>
+								<tr key={row.threshold}>
 									<td className="font-medium">{row.label}</td>
 									<td className="text-center">
 										<input

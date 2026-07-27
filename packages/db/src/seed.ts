@@ -11,6 +11,7 @@
  */
 
 import {
+	ANTHERS_BADGES,
 	DELIVERY_GIB_PER_HOUR,
 	rankLabel,
 	SEED_PRICE,
@@ -73,11 +74,12 @@ function daysAgo(n: number): Date {
 	return d;
 }
 
-const ACCESS_TIERS = ["free", "root", "sprout", "petal", "blossom"] as const;
+/** The levels an Anthers table covers: everyone (0) plus each Anthers Badge's threshold. */
+const ACCESS_LEVELS = [0, ...ANTHERS_BADGES.map((b) => b.threshold)];
 
-/** The neutral Anthers table — every badge tier locked. */
+/** The neutral Anthers table — every badge rung locked. */
 function lockedAnthers() {
-	return ACCESS_TIERS.map((tier) => ({ tier, allow: false, price: "0" }));
+	return ACCESS_LEVELS.map((threshold) => ({ threshold, allow: false, price: "0" }));
 }
 
 /** Free to everyone: the $0 Seed baseline row is allowed at price 0. */
@@ -96,14 +98,18 @@ function paidAccess(price: string) {
 /** Anthers-gated: any paid Anthers badge streams it free; everyone else is locked out. */
 function anthersGatedAccess() {
 	return {
-		anthersAccess: ACCESS_TIERS.map((tier) => ({ tier, allow: tier !== "free", price: "0" })),
+		anthersAccess: ACCESS_LEVELS.map((threshold) => ({
+			threshold,
+			allow: threshold > 0,
+			price: "0",
+		})),
 		seedAccess: [{ threshold: 0, allow: false, price: "0" }],
 	};
 }
 
 /**
- * Seed-gated: locked for everyone at the $0 baseline, then unlocked (free) once the
- * viewer has given `threshold` dollars of Seeds to the creator this cycle.
+ * Seed-gated: locked for everyone at the baseline, then unlocked (free) once the viewer
+ * has given `threshold` whole Seeds to the creator this cycle.
  */
 function seedGatedAccess(threshold: number) {
 	return {
@@ -130,8 +136,8 @@ const SEED_GATED_POSTS = new Set<string>([
 	"How I Design Pixel Art Tilesets",
 	"How I Build Reactive Visuals with Three.js",
 ]);
-/** Dollars of Seeds a viewer must give a creator to clear a Seed-gated post. */
-const SEED_GATE_THRESHOLD = 3;
+/** Whole Seeds a viewer must give a creator to clear a Seed-gated post. */
+const SEED_GATE_THRESHOLD = 1;
 
 // ---------------------------------------------------------------------------
 // Seed data definitions

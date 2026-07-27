@@ -80,7 +80,7 @@ async function createPost(cookie: string, body: Record<string, unknown>): Promis
 }
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
-const LOCKED = { anthersAccess: [{ tier: "free", allow: false, price: "0" }] };
+const LOCKED = { anthersAccess: [{ threshold: 0, allow: false, price: "0" }] };
 
 let viewer: { cookie: string; id: number };
 let creator: { cookie: string; id: number };
