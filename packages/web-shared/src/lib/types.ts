@@ -317,6 +317,8 @@ export interface RatingAggregate {
 export interface MediaUploadResponse {
 	method: "presigned" | "direct";
 	uploadUrl: string;
+	/** Headers the client must echo on the PUT — carries `x-amz-acl`. Empty in local mode. */
+	headers: Record<string, string>;
 	key: string;
 }
 

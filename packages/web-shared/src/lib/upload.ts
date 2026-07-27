@@ -20,12 +20,16 @@ export async function uploadMediaFile(
 	const urlInfo = (await res.json()) as {
 		method: "presigned" | "direct";
 		uploadUrl: string;
+		headers?: Record<string, string>;
 		key: string;
 	};
 
 	if (urlInfo.method === "presigned") {
-		// S3 presigned upload — PUT directly to Spaces
-		await xhrUpload(urlInfo.uploadUrl, file, "PUT", onProgress);
+		// S3 presigned upload — PUT directly to Spaces. The server's headers must be
+		// echoed verbatim: `x-amz-acl` only applies as a request header (Spaces ignores
+		// the copy the presigner hoists into the query string), so dropping them here
+		// silently reverts the object to the bucket default.
+		await xhrUpload(urlInfo.uploadUrl, file, "PUT", onProgress, urlInfo.headers);
 		return urlInfo.key;
 	} else {
 		// Direct multipart upload (local dev)
@@ -46,10 +50,12 @@ function xhrUpload(
 	file: File,
 	method: string,
 	onProgress?: (percent: number) => void,
+	headers?: Record<string, string>,
 ): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
 		xhr.open(method, url);
+		for (const [k, v] of Object.entries(headers ?? {})) xhr.setRequestHeader(k, v);
 
 		xhr.upload.addEventListener("progress", (e) => {
 			if (e.lengthComputable && onProgress) {

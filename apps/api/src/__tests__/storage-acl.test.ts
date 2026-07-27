@@ -60,3 +60,49 @@ describe("upload ACL allowlist", () => {
 		expect(PUBLIC_MEDIA_TYPES.has(" avatar")).toBe(false);
 	});
 });
+
+/**
+ * The presigned path — the other half, and the one where being "correct" in the
+ * server's source is not enough.
+ *
+ * Verified against the live `anthers-media` bucket on 2026-07-26: the presigner hoists
+ * `x-amz-acl` into the query string, and Spaces IGNORES it there — an object signed
+ * `public-read` in the query came back owner-only. It is honoured only as a request
+ * header. So the ACL takes effect exactly when the client echoes the header, which is
+ * why `getPresignedUploadUrl` returns headers instead of leaving the caller to infer
+ * them. A regression here is silent: uploads keep succeeding, objects just quietly take
+ * the bucket default again.
+ *
+ * These run offline — presigning is local HMAC, no network and no real credentials.
+ */
+describe("presigned upload ACL", () => {
+	// s3.ts reads its config at module scope, so the env has to exist before the import.
+	process.env.SPACES_REGION ??= "nyc3";
+	process.env.SPACES_BUCKET ??= "test-bucket";
+	process.env.SPACES_KEY ??= "test-key";
+	process.env.SPACES_SECRET ??= "test-secret";
+
+	async function presign(acl: "public" | "private") {
+		const { S3StorageService } = await import("../services/storage/s3");
+		return new S3StorageService().getPresignedUploadUrl("k/obj.mp4", "video/mp4", acl);
+	}
+
+	it("returns the ACL as a header the client must echo", async () => {
+		expect((await presign("private")).headers["x-amz-acl"]).toBe("private");
+		expect((await presign("public")).headers["x-amz-acl"]).toBe("public-read");
+	});
+
+	it("signs a usable PUT URL", async () => {
+		const { url } = await presign("private");
+		const q = new URL(url).searchParams;
+		expect(q.get("X-Amz-Signature")).toBeTruthy();
+		expect(q.get("X-Amz-Expires")).toBe("3600");
+	});
+
+	it("local mode presigns nothing and demands no headers", async () => {
+		const { LocalStorageService } = await import("../services/storage/local");
+		const out = await new LocalStorageService().getPresignedUploadUrl("k", "video/mp4", "private");
+		expect(out.headers).toEqual({});
+		expect(out.url).toContain("/api/content/media-upload/direct");
+	});
+});

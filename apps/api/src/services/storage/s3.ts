@@ -92,16 +92,27 @@ export class S3StorageService implements StorageService {
 		return `https://${bucket}.${region}.digitaloceanspaces.com/${key}`;
 	}
 
-	async getPresignedUploadUrl(key: string, contentType: string, expiresIn = 3600): Promise<string> {
-		return getSignedUrl(
+	async getPresignedUploadUrl(
+		key: string,
+		contentType: string,
+		acl: "public" | "private",
+		expiresIn = 3600,
+	): Promise<{ url: string; headers: Record<string, string> }> {
+		const value = acl === "public" ? "public-read" : "private";
+		const url = await getSignedUrl(
 			s3,
 			new PutObjectCommand({
 				Bucket: bucket,
 				Key: key,
 				ContentType: contentType,
+				ACL: value,
 			}),
 			{ expiresIn },
 		);
+		// The ACL is returned as a header for the client to echo, not left to the URL.
+		// getSignedUrl hoists `x-amz-acl` into the query string, and Spaces ignores it
+		// there — signing alone is a no-op. See the note on the interface.
+		return { url, headers: { "x-amz-acl": value } };
 	}
 
 	async delete(key: string): Promise<void> {
