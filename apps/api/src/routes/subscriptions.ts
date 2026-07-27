@@ -57,6 +57,17 @@ import {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Max Anthers-Seeds a single subscription can hold (a sane upper bound; Blossom+ well within). */
+/**
+ * Operational ceiling on a single subscription-quantity update — a fat-finger and abuse
+ * guard, NOT a model bound.
+ *
+ * `services/billing.ts` describes rank as "unbounded, so Blossom+ works", and both are
+ * true: the Badge ladder genuinely has no top rung (benefits keep scaling per Seed), while
+ * this caps what one request may set. The two read as contradictory, which is why it was
+ * filed as drift; the resolution is that "unbounded" is about the ladder and this is about
+ * a request. Note `/seeds/buy` caps quantity at 1000 rather than 100 — a different bound
+ * for a different path, left alone here, but worth one number if they should agree.
+ */
 const MAX_ANTHERS_SEEDS = 100;
 
 /** The rank ladder (free … blossom), each with its Seed count + decomposition. Shared
@@ -406,9 +417,18 @@ const subscriptionRoutes = new Hono()
 		if (!acct || acct.anthersSeeds === 0) {
 			return c.json({ error: "No Anthers-Seeds to cancel" }, 400);
 		}
+		// Refuse outright when payments aren't configured, like the other seven payment
+		// routes. This used to be `if (stripe && …)`, which silently SKIPPED Stripe and
+		// mutated the DB anyway — recording a cancellation locally that never reached
+		// Stripe, so billing would keep charging a user the UI showed as cancelled. That was
+		// filed as harmless while prod carried no Stripe config; prod now runs Stripe in
+		// test mode, so the guard is doing real work.
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+
 		// Cancel at period end — the Seeds keep working until the cycle ends, then the
-		// subscription.deleted webhook reverts to 0.
-		if (stripe && acct.stripeSubscriptionId) {
+		// subscription.deleted webhook reverts to 0. An account with no Stripe subscription
+		// (nothing to cancel remotely) still cancels locally: the flag is its whole state.
+		if (acct.stripeSubscriptionId) {
 			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: true });
 		}
 		await db.update(accounts).set({ canceledAt: new Date() }).where(eq(accounts.id, acct.id));
@@ -423,7 +443,10 @@ const subscriptionRoutes = new Hono()
 		if (!acct?.canceledAt) {
 			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
-		if (stripe && acct.stripeSubscriptionId) {
+		// Same guard as cancel — see the note there on why `if (stripe && …)` was wrong.
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+
+		if (acct.stripeSubscriptionId) {
 			await stripe.subscriptions.update(acct.stripeSubscriptionId, { cancel_at_period_end: false });
 		}
 		await db.update(accounts).set({ canceledAt: null }).where(eq(accounts.id, acct.id));
