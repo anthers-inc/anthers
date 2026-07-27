@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-	type Badge,
+	type BadgeKey,
 	badgeLabel,
 	badgeRank,
 	SEED_PRICE,
@@ -61,7 +61,7 @@ const cnt = (n: number) => Math.round(n).toLocaleString("en-US");
 // ---------------------------------------------------------------------------
 
 function ConversionEngine() {
-	const [badge, setBadge] = useState<Badge>("sprout");
+	const [badge, setBadge] = useState<BadgeKey>("sprout");
 	const [total, setTotal] = useState(20);
 	const [you, setYou] = useState(8);
 	const [seedsToYou, setSeedsToYou] = useState(1);

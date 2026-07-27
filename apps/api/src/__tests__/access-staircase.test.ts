@@ -22,7 +22,7 @@ import {
 	gauntletPost,
 	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
-import { type Badge, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
+import { type BadgeKey, rankForSeeds, SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessiblePost,
@@ -58,7 +58,7 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 
 type PostKey = string;
 
-function ctx(badge: Badge, seeds: number, purchased: number[] = []): AccessContext {
+function ctx(badge: BadgeKey, seeds: number, purchased: number[] = []): AccessContext {
 	return {
 		userId: VIEWER_ID,
 		badge,

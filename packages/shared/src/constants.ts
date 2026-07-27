@@ -95,6 +95,59 @@ export function badgeFor(
 	return { badge: best, plus: best !== null && held > best.threshold };
 }
 
+/**
+ * A display key covering "no Badge held" alongside the real ones.
+ *
+ * 0 Seeds is the *absence* of a Badge, not a Badge named "free" — but the UI still
+ * needs something to key its art and labels on for that state, and `Record<Badge, …>`
+ * maps predate the distinction. This is the seam: the model says four Badges, the
+ * display says five states.
+ */
+export type BadgeKey = Badge | "free";
+
+/**
+ * Compatibility layer over the threshold model, keeping the names the call sites
+ * already use while fixing what they MEAN.
+ *
+ * `badgeRank` used to be `BADGE_ORDER.indexOf(name)` — a position. It now returns the
+ * Badge's THRESHOLD. For Anthers's own set those coincide (Badges sit at 1/2/3/4, so
+ * index == threshold), which is exactly why the old code worked and exactly why it was
+ * only ever accidentally correct. Any Badge set with gaps broke it silently. Routing
+ * these through thresholds fixes the semantics ahead of the call-site migration, so the
+ * branch builds and the bug is closed in one step rather than gated behind the other.
+ *
+ * These are a migration aid, not the destination — prefer `badgeFor` / `seedsMeet`.
+ */
+export const BADGE_ORDER: readonly BadgeKey[] = [
+	"free",
+	...ANTHERS_BADGES.map((b) => b.name as Badge),
+] as const;
+
+/** The Badge name held at `anthersSeeds`, or "free" below the lowest threshold. */
+export function rankForSeeds(anthersSeeds: number): BadgeKey {
+	return (badgeFor(anthersSeeds).badge?.name as Badge) ?? "free";
+}
+
+/** Whole Seeds required for a Badge — its threshold, NOT its position. */
+export function badgeRank(badge: BadgeKey): number {
+	return badge === "free" ? 0 : (thresholdOf(badge) ?? 0);
+}
+
+/** Does a currently-held Badge meet a required one? Compares thresholds. */
+export function badgeMeets(held: BadgeKey, required: BadgeKey): boolean {
+	return badgeRank(held) >= badgeRank(required);
+}
+
+/** Does a held Seed count clear the threshold of a named Badge? */
+export function seedsMeetRank(anthersSeeds: number, required: BadgeKey): boolean {
+	return seedsMeet(anthersSeeds, badgeRank(required));
+}
+
+/** Display label for the Badge held at `anthersSeeds`, with the "+" rule applied. */
+export function rankLabel(anthersSeeds: number): string {
+	return heldBadgeLabel(anthersSeeds);
+}
+
 /** Title-case a Badge name for display ("root" → "Root"). */
 export function badgeLabel(name: string): string {
 	return name.charAt(0).toUpperCase() + name.slice(1);

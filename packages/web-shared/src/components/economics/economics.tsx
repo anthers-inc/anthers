@@ -15,6 +15,7 @@ import {
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	type Badge,
+	type BadgeKey,
 	badgeLabel,
 	badgeRank,
 	CARD_FLAT,
@@ -44,7 +45,7 @@ const TAX_TIP =
 // ─── Badge presentation. Every rank shares one round botanical frame
 // (`frame-round`) — a single, consistent wreath across all ranks; the emoji inside is
 // what differs. ───
-export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
+export const BADGE_ART: Record<BadgeKey, { emoji: string; wreath: BrandIconName }> = {
 	free: { emoji: "🌰", wreath: "frame-round" },
 	root: { emoji: "🫚", wreath: "frame-round" },
 	sprout: { emoji: "🌱", wreath: "frame-round" },
@@ -140,7 +141,7 @@ function SplitRow({
 // ─── (2) Anthers-Seeds — interactive rank picker ───
 
 /** The five ranks as selectable chips: emoji + label + $/mo (= $3 × Anthers-Seeds). */
-function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) => void }) {
+function PlanPicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
 	return (
 		<div className="mb-6 grid grid-cols-5 gap-2">
 			{BADGE_ORDER.map((b) => {
@@ -194,7 +195,7 @@ function PlanPicker({ value, onChange }: { value: Badge; onChange: (b: Badge) =>
 }
 
 export function SubscriptionCalculator() {
-	const [badge, setBadge] = useState<Badge>("root");
+	const [badge, setBadge] = useState<BadgeKey>("root");
 	const n = badgeRank(badge);
 	const price = seedCost(n);
 	const timePool = timePoolFor(n);

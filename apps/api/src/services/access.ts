@@ -24,7 +24,7 @@
 import { db } from "@anthers/db/client";
 import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { type Badge, badgeRank, rankForSeeds } from "@anthers/shared/constants";
+import { type Badge, type BadgeKey, badgeRank, rankForSeeds } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** Anthers Badge tiers, low → high. */
@@ -44,7 +44,7 @@ export interface AccessiblePost {
 export interface AccessContext {
 	userId: number | null;
 	/** The viewer's *currently held* rank — their Anthers-Seed count (point-in-time). */
-	badge: Badge;
+	badge: BadgeKey;
 	/** creatorId → dollars of Seeds the viewer has given to that creator this cycle */
 	seedByCreator: Map<number, number>;
 	/** post ids the viewer has a completed purchase for */
