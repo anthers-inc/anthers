@@ -214,6 +214,9 @@ format: ## Format code with Biome
 # Drives Playwright's own bundled Chromium (not your installed browser). See
 # apps/web/tests/README.md — notably the SiteGate localStorage bypass.
 
+storage-check: ## Inspect the live Spaces bucket's ACL/policy/CORS posture (WRITE_PROBE=1 to round-trip a test object)
+	bun run apps/api/scripts/storage-posture.ts $(if $(WRITE_PROBE),--write-probe,)
+
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium
 
