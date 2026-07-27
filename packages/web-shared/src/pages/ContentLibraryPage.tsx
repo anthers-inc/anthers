@@ -81,11 +81,30 @@ export default function ContentLibraryPage() {
 		);
 
 	/**
-	 * Delete in two beats when the item is in use. The first attempt goes unflagged; the
-	 * server answers 409 `item_in_use` with the posts that reference it, which turns the
-	 * dialog's vague "posts will lose this content" into the actual list. Only the second
-	 * press sends `force`. The old single-shot call destroyed references to published
-	 * posts with no way to see it coming.
+	 * Open the delete dialog, asking the server which posts use this item FIRST so the
+	 * warning arrives before the decision rather than after it. Best-effort: if the
+	 * preview call fails the dialog still opens, and the server's 409 remains the
+	 * backstop that makes the destructive path impossible to take blind.
+	 */
+	const openDelete = async (item: ContentItem) => {
+		setDeleteTarget(item);
+		setInUse(null);
+		try {
+			const res = await client.api.content["content-items"][":id"].usage.$get({
+				param: { id: String(item.id) },
+			});
+			if (res.ok) setInUse(((await res.json()) as { posts: UsingPost[] }).posts ?? []);
+		} catch {
+			// Preview is best-effort — the 409 still catches it on submit.
+		}
+	};
+
+	/**
+	 * Delete, forcing only when we know the item is in use.
+	 *
+	 * `force` is keyed on a NON-EMPTY `inUse` list, not merely on `inUse` being set: the
+	 * preflight above populates it with `[]` for an unused item, and treating that as
+	 * "confirmed" would send `force` on every delete and defeat the server guard.
 	 */
 	const confirmDelete = async () => {
 		if (!deleteTarget) return;
@@ -93,7 +112,7 @@ export default function ContentLibraryPage() {
 		try {
 			const res = await client.api.content["content-items"][":id"].$delete({
 				param: { id: String(deleteTarget.id) },
-				query: inUse ? { force: "1" } : {},
+				query: inUse && inUse.length > 0 ? { force: "1" } : {},
 			});
 			if (res.ok) {
 				setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
@@ -157,7 +176,7 @@ export default function ContentLibraryPage() {
 							key={item.id}
 							item={item}
 							onEdit={(it) => setEditor({ item: it })}
-							onDelete={(it) => setDeleteTarget(it)}
+							onDelete={(it) => openDelete(it)}
 						/>
 					))}
 				</div>
@@ -218,7 +237,7 @@ export default function ContentLibraryPage() {
 								onClick={confirmDelete}
 								disabled={deleting}
 							>
-								{deleting ? "Deleting…" : inUse ? "Delete anyway" : "Delete"}
+								{deleting ? "Deleting…" : inUse && inUse.length > 0 ? "Delete anyway" : "Delete"}
 							</button>
 						</div>
 					</div>
