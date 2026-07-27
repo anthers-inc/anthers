@@ -16,6 +16,7 @@ import { contentItems, transcodingJobs } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
+import { CRON_SCHEDULES, QUEUES } from "../jobs/queue";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -462,5 +463,101 @@ describe("Library delete refuses to silently strip posts", () => {
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
 		expect(res.status).toBe(204);
+	});
+});
+
+/**
+ * Three gaps the status report named, each confirmed against the code rather than
+ * suspected. All three share a shape: the suite looked like it covered the case, but the
+ * assertion was standing next to it rather than on it.
+ */
+describe("Gaps the suite looked like it covered", () => {
+	async function makeScheduledReadyPost(title: string) {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({
+				title,
+				streamEnabled: true,
+				downloadEnabled: false,
+				seedAccess: FREE,
+				contents: [{ kind: "text", bodyHtml: "<p>x</p>" }],
+				isPublished: true,
+			}),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()).post.slug;
+	}
+
+	it("hides an unpublished post from an ANONYMOUS visitor, not just a signed-in stranger", async () => {
+		// The existing permalink test's "stranger" is a second *signed-in* account, so the
+		// anonymous branch — `getOptionalUserId` returning null — was never exercised. That's
+		// the branch a search-engine crawler or a shared link actually takes.
+		const slug = await makeScheduledReadyPost(`Anon ${id}`);
+		await req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ isPublished: false }),
+		});
+
+		const anon = await req(`/api/content/posts/${slug}`); // no Cookie header at all
+		expect(anon.status).toBe(404);
+
+		const ownerView = await req(`/api/content/posts/${slug}`, { headers: { Cookie: owner } });
+		expect(ownerView.status).toBe(200);
+	});
+
+	it("409s on a PATCH to an already-published post whose media went unready", async () => {
+		// Every `media_not_ready` assertion went through POST, leaving the PATCH-side
+		// `willPublish` branch untested — and that is the deliberately strict one: it rejects
+		// ANY edit to an already-published post whose referenced media has gone unready,
+		// even an edit that has nothing to do with the media.
+		const itemId = await makeItem(owner, `Regress ${id}`);
+		const create = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({
+				title: `Regress ${id}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				seedAccess: FREE,
+				contents: [{ kind: "content", contentItemId: itemId }],
+				isPublished: true,
+			}),
+		});
+		expect(create.status).toBe(201);
+		const slug = (await create.json()).post.slug;
+
+		// The media regresses to processing after the post went live.
+		await db.insert(transcodingJobs).values({
+			contentItemId: itemId,
+			mediaType: "video",
+			status: "processing",
+			progress: 10,
+		});
+
+		// A title-only edit — nothing to do with media — is still refused.
+		const res = await req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title: `Regress renamed ${id}` }),
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("media_not_ready");
+	});
+
+	it("registers publish-scheduled as a per-minute cron", async () => {
+		// The sweep itself is tested by calling publishScheduled() directly, which
+		// deliberately never starts pg-boss — so nothing checked that anything ever CALLS
+		// it on a schedule. A dropped registration would surface as "scheduled posts just
+		// never publish", with every existing test still green.
+		const entry = CRON_SCHEDULES.find(([q]) => q === QUEUES.PUBLISH_SCHEDULED);
+		expect(entry).toBeDefined();
+		expect(entry?.[1]).toBe("* * * * *");
+
+		// Every queue with a cron must also be a real queue, so a rename can't leave a
+		// schedule pointing at nothing.
+		const known = new Set<string>(Object.values(QUEUES));
+		for (const [q] of CRON_SCHEDULES) expect(known.has(q)).toBe(true);
 	});
 });
