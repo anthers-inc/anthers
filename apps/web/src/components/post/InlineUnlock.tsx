@@ -114,7 +114,7 @@ export default function InlineUnlock({
 
 			{minSeeds != null && creatorUsername ? (
 				<Link
-					to={`/${creatorUsername}?tab=tiers`}
+					to={`/${creatorUsername}?tab=badges`}
 					className={minBadge ? "btn btn-ghost btn-sm" : "btn btn-primary btn-wide"}
 				>
 					{minBadge ? `Or give ${seedCount(minSeeds)}` : `Give ${seedCount(minSeeds)} to unlock`}
@@ -122,7 +122,7 @@ export default function InlineUnlock({
 			) : null}
 
 			{!minBadge && minSeeds == null && creatorUsername ? (
-				<Link to={`/${creatorUsername}?tab=tiers`} className="btn btn-primary btn-wide">
+				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
 					Join to unlock
 				</Link>
 			) : null}

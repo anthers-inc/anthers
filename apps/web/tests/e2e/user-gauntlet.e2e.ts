@@ -220,7 +220,7 @@ for (const [seeds, state, unlocked, stillLocked] of [
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
-		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=tiers`);
+		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
 		await page.getByRole("button", { name: "More seeds" }).click();
 		await page.getByRole("button", { name: `Give $${SEED_PRICE.toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
@@ -235,7 +235,7 @@ for (const [seeds, state, unlocked, stillLocked] of [
 
 test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=tiers`);
+	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
 	// The full ladder is committed; within the cycle the control's floor IS that amount.
 	await expect(page.getByRole("button", { name: "Fewer seeds" })).toBeDisabled();
 	expect(errors).toEqual([]);

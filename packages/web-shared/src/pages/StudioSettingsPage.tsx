@@ -352,15 +352,15 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts, platform connections, and Seed tiers. Account settings (profile, email, identity)
-				live on your Anthers account.
+				Payouts, platform connections, and Badges. Account settings (profile, email, identity) live
+				on your Anthers account.
 			</p>
 
 			<div className="flex flex-col gap-6">
 				<StripeOnboardingSection />
 				<PlatformConnectionsSection />
 				<div>
-					<h2 className="text-lg font-semibold mb-2">Seed Tiers</h2>
+					<h2 className="text-lg font-semibold mb-2">Seed Badges</h2>
 					<SeedLadderEditor />
 				</div>
 			</div>

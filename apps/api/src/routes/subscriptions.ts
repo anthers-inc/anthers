@@ -870,8 +870,10 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				// seed gate: dollars of Seeds ($3 increments). anthers_badge gate: rank (1=root … 4=blossom).
-				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
+				// Whole Seeds, both gate types (migration `0007`) — Seeds given to this creator for
+				// `seed`, Anthers-Seeds held for `anthers_badge`. Digits only: a fractional gate is
+				// one no viewer could ever exactly meet, since Seeds are indivisible.
+				threshold: z.string().regex(/^\d+$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
 				gateType: z.enum(["seed", "anthers_badge"]).optional().default("seed"),
@@ -901,10 +903,7 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				threshold: z
-					.string()
-					.regex(/^\d+(\.\d{1,2})?$/)
-					.optional(),
+				threshold: z.string().regex(/^\d+$/).optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),
 			}),

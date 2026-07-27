@@ -62,7 +62,7 @@ export function UnlockPanel({
 		: `Join or give Seeds to ${creatorName} to unlock this post and their other members-only work.`;
 	// Land on the tiers tab, where the ladder and the Give Seeds control actually are —
 	// the profile's default tab drops the intent the viewer arrived with.
-	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}?tab=tiers` : "/subscribe";
+	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}?tab=badges` : "/subscribe";
 	return (
 		<div className="card bg-base-200 border border-base-300">
 			<div className="card-body items-center text-center gap-3">
@@ -141,7 +141,7 @@ export function UnlockModal({
 					Join or give Seeds to {creatorName} to unlock this and their members-only work.
 				</p>
 				<Link
-					to={post.creator?.username ? `/${post.creator.username}?tab=tiers` : "/subscribe"}
+					to={post.creator?.username ? `/${post.creator.username}?tab=badges` : "/subscribe"}
 					className="btn btn-primary btn-block"
 				>
 					Join to unlock

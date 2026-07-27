@@ -115,8 +115,8 @@ const FAQ_ITEMS: FAQItem[] = [
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
 						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've given to
-						that creator this month. Creators set the thresholds in $3 increments (whole Seeds) and
-						name the tiers themselves.
+						that creator this month. Creators set the thresholds in whole Seeds and name the Badges
+						themselves.
 					</li>
 					<li>
 						<strong>Anthers gates</strong> — based on your current rank, i.e. how many Anthers-Seeds

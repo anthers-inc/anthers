@@ -29,9 +29,9 @@ import { useCallback, useEffect, useState } from "react";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
 
-type Tab = "all" | "games" | "videos" | "audio" | "writing" | "tiers" | "about";
+type Tab = "all" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
 
-function tierNameFor(id: string): string {
+function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
 	return id.charAt(0).toUpperCase() + id.slice(1);
 }
@@ -244,13 +244,13 @@ function GatedContentWrapper({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Tiers tab                                                          */
+/*  Badges tab                                                          */
 /* ------------------------------------------------------------------ */
 
-function TiersTab({
+function BadgesTab({
 	gates,
 	unlockedGates,
-	userTier,
+	heldBadge,
 	userSeed,
 	creatorName,
 	creatorId,
@@ -259,7 +259,7 @@ function TiersTab({
 }: {
 	gates: CreatorGate[];
 	unlockedGates: number[];
-	userTier: string;
+	heldBadge: string;
 	userSeed: string;
 	creatorName: string;
 	creatorId: number;
@@ -267,15 +267,15 @@ function TiersTab({
 	canGiveSeeds: boolean;
 	onGiven: () => void | Promise<void>;
 }) {
-	const anthersTierGates = gates.filter((g) => g.gateType === "anthers_badge");
+	const anthersBadgeGates = gates.filter((g) => g.gateType === "anthers_badge");
 	const seedGates = gates.filter((g) => g.gateType === "seed");
 	const unlockedSet = new Set(unlockedGates);
 
 	if (gates.length === 0) {
 		return (
 			<EmptyState
-				title="No tiers configured"
-				description={`${creatorName} hasn't set up any content tiers yet. All content is publicly available.`}
+				title="No Badges configured"
+				description={`${creatorName} hasn't set up any Badges yet. All content is publicly available.`}
 			/>
 		);
 	}
@@ -283,13 +283,13 @@ function TiersTab({
 	return (
 		<div className="max-w-2xl space-y-8">
 			{/* User's current status */}
-			{userTier !== "none" && userTier !== "free" && (
+			{heldBadge !== "none" && heldBadge !== "free" && (
 				<div className="card bg-base-200">
 					<div className="card-body py-3 px-4">
 						<div className="flex items-center justify-between text-sm">
 							<span className="text-base-content/60">Your status with {creatorName}</span>
 							<div className="flex items-center gap-2">
-								<span className="badge badge-sm badge-outline">{tierNameFor(userTier)}</span>
+								<span className="badge badge-sm badge-outline">{badgeNameFor(heldBadge)}</span>
 								{parseFloat(userSeed) > 0 && (
 									<span className="badge badge-sm badge-primary badge-outline">
 										${userSeed} in Seeds
@@ -301,15 +301,15 @@ function TiersTab({
 				</div>
 			)}
 
-			{/* Anthers Tiers */}
-			{anthersTierGates.length > 0 && (
+			{/* Anthers Badges */}
+			{anthersBadgeGates.length > 0 && (
 				<div>
 					<h3 className="text-lg font-bold mb-1">Anthers Badges</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Platform-wide tiers unlocked by your Anthers Badge.
+						Platform-wide access, unlocked by the Anthers Badge you hold.
 					</p>
 					<div className="space-y-2">
-						{anthersTierGates.map((gate) => {
+						{anthersBadgeGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
 							const gateBadge = anthersBadgeForRank(Number(gate.threshold));
 							const gatePlan = gateBadge ? { price: seedCost(badgeRank(gateBadge)) } : null;
@@ -350,12 +350,12 @@ function TiersTab({
 				</div>
 			)}
 
-			{/* Seed Tiers */}
+			{/* Seed Badges */}
 			{seedGates.length > 0 && (
 				<div>
-					<h3 className="text-lg font-bold mb-1">Seed Tiers</h3>
+					<h3 className="text-lg font-bold mb-1">Seed Badges</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Custom tiers set by {creatorName}. Give them Seeds to unlock.
+						Badges set by {creatorName}. Give them Seeds to unlock.
 					</p>
 					{canGiveSeeds && (
 						<div className="mb-3">
@@ -415,11 +415,11 @@ function TiersTab({
 			)}
 
 			{/* Upgrade prompt */}
-			{(userTier === "none" || userTier === "free") && (
+			{(heldBadge === "none" || heldBadge === "free") && (
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Pick an Anthers plan to start unlocking tiers and supporting {creatorName} with Seeds.
+							Hold Anthers-Seeds to start unlocking Badges and supporting {creatorName} with Seeds.
 						</p>
 						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
 							Get Started
@@ -435,7 +435,7 @@ function TiersTab({
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "tiers", "about"];
+const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "badges", "about"];
 
 export default function CreatorProfilePage() {
 	const { username } = useParams<{ username: string }>();
@@ -445,7 +445,7 @@ export default function CreatorProfilePage() {
 	const [creator, setCreator] = useState<PublicUser | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [posts, setPosts] = useState<PostListItem[]>([]);
-	// ?tab=tiers is a real entry point, not a nicety: a locked post's unlock panel sends the
+	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// viewer here to act, and dropping them on the default tab loses the intent they arrived with.
 	const tabParam = searchParams.get("tab") as Tab | null;
 	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "all";
@@ -885,7 +885,7 @@ export default function CreatorProfilePage() {
 								{creatorStatus && creatorStatus.badge !== "free" && (
 									<div className="flex items-center gap-2 text-xs">
 										<span className="badge badge-sm badge-outline">
-											{tierNameFor(creatorStatus.badge)}
+											{badgeNameFor(creatorStatus.badge)}
 										</span>
 										{parseFloat(creatorStatus.seedAmount) > 0 && (
 											<span className="badge badge-sm badge-primary badge-outline">
@@ -908,7 +908,7 @@ export default function CreatorProfilePage() {
 							["videos", `Videos (${videoPosts.length})`],
 							["audio", `Audio (${audioPosts.length})`],
 							["writing", `Writing (${textPosts.length})`],
-							["tiers", "Tiers"],
+							["badges", "Badges"],
 							["about", "About"],
 						] as const
 					).map(([key, label]) => (
@@ -1021,11 +1021,11 @@ export default function CreatorProfilePage() {
 							/>
 						))}
 
-					{tab === "tiers" && (
-						<TiersTab
+					{tab === "badges" && (
+						<BadgesTab
 							gates={creatorStatus?.gates ?? []}
 							unlockedGates={creatorStatus?.unlockedGates ?? []}
-							userTier={creatorStatus?.badge ?? "free"}
+							heldBadge={creatorStatus?.badge ?? "free"}
 							userSeed={creatorStatus?.seedAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.username}
 							creatorId={creator.id}
