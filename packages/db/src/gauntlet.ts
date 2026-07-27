@@ -18,7 +18,7 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
-import { BADGE_ORDER, type Badge, SEED_PRICE } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, BADGE_ORDER, type Badge, SEED_PRICE } from "@anthers/shared/constants";
 import type { AnthersAccessRow, SeedAccessRow } from "./schema/content.js";
 
 /** The fixture's creator. The `gauntlet_` prefix marks every row this fixture owns. */
@@ -378,11 +378,14 @@ export const GAUNTLET_GATES: Array<{
 	description: string;
 	sortOrder: number;
 }> = [
-	...BADGE_ORDER.slice(1).map((tier, i) => ({
+	// Thresholds come from each Badge's own `threshold`, never from its position in the
+	// list — the fixture must not re-introduce the index/threshold conflation the resolver
+	// was just freed from, or it would agree with a bug instead of catching it.
+	...ANTHERS_BADGES.map((badge, i) => ({
 		gateType: "anthers_badge" as const,
-		threshold: String(i + 1),
-		label: tier.charAt(0).toUpperCase() + tier.slice(1),
-		description: `Anyone currently holding the ${tier} badge (or higher).`,
+		threshold: String(badge.threshold),
+		label: badge.name.charAt(0).toUpperCase() + badge.name.slice(1),
+		description: `Anyone currently holding the ${badge.name} badge (or higher).`,
 		sortOrder: i,
 	})),
 	...SEED_RUNGS.map((dollars, i) => ({

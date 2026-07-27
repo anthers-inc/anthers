@@ -8,12 +8,13 @@ export const APP_NAME = "Anthers";
  *   - at a **creator** (a *directed Seed*): 100% to them, no fee, no payout
  *     processing; clears that creator's Seed Gates in $3 increments; or
  *   - at **Anthers** (an *Anthers-Seed*): covers the user's streaming (at cost),
- *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), sets the
- *     user's **rank**, and leaves a **remainder** for the Anthers Foundation.
+ *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), earns
+ *     **Anthers's Badges**, and leaves a **remainder** for the Anthers Foundation.
  *
- * A user's rank IS their Anthers-Seed count: free = 0, root = 1 … blossom = 4,
- * with a "+" beyond four (Blossom+). Bandwidth is folded into Anthers-Seeds — no
- * wallet — as a 15 GiB free floor for everyone plus a 60 GiB allowance per Seed.
+ * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
+ * Anthers is a recipient like any creator — it simply defines its own Badge set
+ * (root/sprout/petal/blossom at 1/2/3/4 Anthers-Seeds). Bandwidth is folded into
+ * Anthers-Seeds — no wallet — as a 15 GiB free floor plus 60 GiB per Seed.
  *
  * The at-cost **Payments** line (card + processing) is added ON TOP of the whole
  * monthly charge, like sales tax (ACH-discountable) — never carved out of a Seed,
@@ -26,15 +27,36 @@ export const APP_NAME = "Anthers";
  * Playground (50.04) and Subscription Economics (50.01).
  */
 
-// ── Rank (= Anthers-Seed count) ──────────────────────────────────────────────
-/** A rank name. "free" = 0 Anthers-Seeds; root … blossom = 1 … 4 (blossom = 4+). */
-export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
+// ── Badges (what a recipient returns for Seeds) ───────────────────────────────
+/**
+ * A Badge: a name at a whole-Seed threshold. This shape is the whole point — a
+ * Badge is identified by the Seeds it takes to hold, never by its position in a
+ * list, because an issuer may place Badges at ANY Seed levels. A creator's set of
+ * 1/3/5/7 is exactly as valid as Anthers's 1/2/3/4; the only rule is that the
+ * granularity floor is one Seed.
+ *
+ * This replaced an enum whose *index* was compared against a Seed count. That
+ * worked only because Anthers's Badges happen to sit at consecutive integers, so
+ * index and threshold coincided — an accident, not a design. Under any
+ * non-consecutive set it mis-resolved access silently: no error, just wrong
+ * answers. Compare thresholds, never positions.
+ */
+export interface BadgeDef {
+	name: string;
+	/** Whole Seeds given to the issuer required to hold this Badge. */
+	threshold: number;
+}
 
-/** Ordered low → high. Index is the rank (Anthers-Seed count) for gate comparison. */
-export const BADGE_ORDER = ["free", "root", "sprout", "petal", "blossom"] as const;
+/** Anthers's own Badge set — ordinary Badges; Anthers just defines its own. */
+export const ANTHERS_BADGES: readonly BadgeDef[] = [
+	{ name: "root", threshold: 1 },
+	{ name: "sprout", threshold: 2 },
+	{ name: "petal", threshold: 3 },
+	{ name: "blossom", threshold: 4 },
+] as const;
 
-/** The highest *named* rank's Anthers-Seed count (blossom = 4); beyond it is "blossom+". */
-export const MAX_NAMED_RANK = 4;
+/** The names in Anthers's set, for the places that still need a closed union. */
+export type Badge = "root" | "sprout" | "petal" | "blossom";
 
 // ── Seed dials (Seed price locked; allocation dials tuned-but-tunable) ────────
 /** A Seed — a flat $3/month unit of support (creator-directed or an Anthers-Seed). */
@@ -48,38 +70,118 @@ export const FREE_FLOOR_GIB = 15;
 /** Streaming allowance (GiB/mo) added per Anthers-Seed, on top of the free floor. */
 export const GIB_PER_SEED = 60;
 
-// ── Rank helpers ─────────────────────────────────────────────────────────────
-/** The rank name for an Anthers-Seed count (0 = free … 4+ = blossom). */
-export function rankForSeeds(anthersSeeds: number): Badge {
-	const n = Math.max(0, Math.min(MAX_NAMED_RANK, Math.floor(anthersSeeds)));
-	return BADGE_ORDER[n];
+// ── Badge helpers ────────────────────────────────────────────────────────────
+/**
+ * The Badge a holder of `seeds` currently holds in `badges`, and whether it renders
+ * with a "+".
+ *
+ * The rule, uniformly: your Badge is the **highest-threshold Badge whose threshold
+ * you meet**; holding *strictly more* Seeds than that threshold adds a "+". The "+"
+ * applies BETWEEN Badges, not only past the top of the set — with Badges at 2 and 4,
+ * a holder of 3 Seeds has the 2-Seed Badge with a "+". It honours someone who chose
+ * to give a little extra; whether it *carries* anything is the issuer's choice.
+ *
+ * Returns `badge: null` below the lowest threshold (no Badge held).
+ */
+export function badgeFor(
+	seeds: number,
+	badges: readonly BadgeDef[] = ANTHERS_BADGES,
+): { badge: BadgeDef | null; plus: boolean } {
+	const held = Math.max(0, Math.floor(seeds));
+	let best: BadgeDef | null = null;
+	for (const b of badges) {
+		if (b.threshold <= held && (best === null || b.threshold > best.threshold)) best = b;
+	}
+	return { badge: best, plus: best !== null && held > best.threshold };
 }
 
-/** Rank of a name (0 = free … 4 = blossom), for point-in-time gate comparison. */
-export function badgeRank(badge: Badge): number {
-	return BADGE_ORDER.indexOf(badge);
+/**
+ * A display key covering "no Badge held" alongside the real ones.
+ *
+ * 0 Seeds is the *absence* of a Badge, not a Badge named "free" — but the UI still
+ * needs something to key its art and labels on for that state, and `Record<Badge, …>`
+ * maps predate the distinction. This is the seam: the model says four Badges, the
+ * display says five states.
+ */
+export type BadgeKey = Badge | "free";
+
+/**
+ * Compatibility layer over the threshold model, keeping the names the call sites
+ * already use while fixing what they MEAN.
+ *
+ * `badgeRank` used to be `BADGE_ORDER.indexOf(name)` — a position. It now returns the
+ * Badge's THRESHOLD. For Anthers's own set those coincide (Badges sit at 1/2/3/4, so
+ * index == threshold), which is exactly why the old code worked and exactly why it was
+ * only ever accidentally correct. Any Badge set with gaps broke it silently. Routing
+ * these through thresholds fixes the semantics ahead of the call-site migration, so the
+ * branch builds and the bug is closed in one step rather than gated behind the other.
+ *
+ * These are a migration aid, not the destination — prefer `badgeFor` / `seedsMeet`.
+ */
+export const BADGE_ORDER: readonly BadgeKey[] = [
+	"free",
+	...ANTHERS_BADGES.map((b) => b.name as Badge),
+] as const;
+
+/** The Badge name held at `anthersSeeds`, or "free" below the lowest threshold. */
+export function rankForSeeds(anthersSeeds: number): BadgeKey {
+	return (badgeFor(anthersSeeds).badge?.name as Badge) ?? "free";
 }
 
-/** True if a *currently held* rank meets a required gate rank (point-in-time). */
-export function badgeMeets(held: Badge, required: Badge): boolean {
+/** Whole Seeds required for a Badge — its threshold, NOT its position. */
+export function badgeRank(badge: BadgeKey): number {
+	return badge === "free" ? 0 : (thresholdOf(badge) ?? 0);
+}
+
+/** Does a currently-held Badge meet a required one? Compares thresholds. */
+export function badgeMeets(held: BadgeKey, required: BadgeKey): boolean {
 	return badgeRank(held) >= badgeRank(required);
 }
 
-/** True if a held Anthers-Seed count meets a required rank (handles blossom+). */
-export function seedsMeetRank(anthersSeeds: number, required: Badge): boolean {
-	return Math.floor(anthersSeeds) >= badgeRank(required);
+/** Does a held Seed count clear the threshold of a named Badge? */
+export function seedsMeetRank(anthersSeeds: number, required: BadgeKey): boolean {
+	return seedsMeet(anthersSeeds, badgeRank(required));
 }
 
-/** Human label for a rank (Free / Root / Sprout / Petal / Blossom). */
-export function badgeLabel(badge: Badge): string {
-	return badge.charAt(0).toUpperCase() + badge.slice(1);
-}
-
-/** Label for an Anthers-Seed count, with a "+" past blossom (e.g. "Blossom+"). */
+/** Display label for the Badge held at `anthersSeeds`, with the "+" rule applied. */
 export function rankLabel(anthersSeeds: number): string {
-	const n = Math.max(0, Math.floor(anthersSeeds));
-	const base = badgeLabel(rankForSeeds(n));
-	return n > MAX_NAMED_RANK ? `${base}+` : base;
+	return heldBadgeLabel(anthersSeeds);
+}
+
+/** Title-case a Badge name for display ("root" → "Root"). */
+export function badgeLabel(name: string): string {
+	return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * Display label for what a holder of `seeds` holds — e.g. "Petal", "Blossom+",
+ * "Blorp+". `emptyLabel` is what to show below the lowest Badge (default "Free").
+ */
+export function heldBadgeLabel(
+	seeds: number,
+	badges: readonly BadgeDef[] = ANTHERS_BADGES,
+	emptyLabel = "Free",
+): string {
+	const { badge, plus } = badgeFor(seeds, badges);
+	if (!badge) return emptyLabel;
+	return `${badgeLabel(badge.name)}${plus ? "+" : ""}`;
+}
+
+/** Whole Seeds required for a named Badge in a set, or null if the set has no such Badge. */
+export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_BADGES) {
+	return badges.find((b) => b.name === name)?.threshold ?? null;
+}
+
+/**
+ * Does a held Seed count clear a gate at `threshold` whole Seeds?
+ *
+ * This is the ONLY comparison access resolution needs, for both directions — an
+ * Anthers Gate and a Seed Gate differ solely in which Seed count is passed in. A
+ * gate needn't sit on a Badge: with Badges at 2 and 4, a gate at 3 is legal and a
+ * 3-Seed holder clears it.
+ */
+export function seedsMeet(heldSeeds: number, threshold: number): boolean {
+	return Math.floor(heldSeeds) >= threshold;
 }
 
 // ── Per-Seed derived amounts ─────────────────────────────────────────────────

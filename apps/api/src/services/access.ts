@@ -24,7 +24,7 @@
 import { db } from "@anthers/db/client";
 import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { type Badge, badgeRank, rankForSeeds } from "@anthers/shared/constants";
+import { type BadgeKey, badgeRank, rankForSeeds } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** Anthers Badge tiers, low → high. */
@@ -44,7 +44,7 @@ export interface AccessiblePost {
 export interface AccessContext {
 	userId: number | null;
 	/** The viewer's *currently held* rank — their Anthers-Seed count (point-in-time). */
-	badge: Badge;
+	badge: BadgeKey;
 	/** creatorId → dollars of Seeds the viewer has given to that creator this cycle */
 	seedByCreator: Map<number, number>;
 	/** post ids the viewer has a completed purchase for */
@@ -82,8 +82,12 @@ export function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** A user's currently held rank (point-in-time), derived from their Anthers-Seed count. */
-export async function heldBadge(userId: number): Promise<Badge> {
+/**
+ * The Badge a user currently holds (point-in-time), derived from their Anthers-Seed
+ * count. `BadgeKey`, not `Badge`, because 0 Anthers-Seeds is the *absence* of a Badge —
+ * which resolution still has to represent, and represents as "free".
+ */
+export async function heldBadge(userId: number): Promise<BadgeKey> {
 	const [row] = await db
 		.select({ anthersSeeds: accounts.anthersSeeds })
 		.from(accounts)
@@ -103,12 +107,14 @@ interface Offer {
 }
 
 /** Anthers-table offers the viewer qualifies for — the viewer must *currently hold* the row's tier. */
-function anthersOffers(rows: AnthersAccessRow[], viewerBadge: Badge): Offer[] {
+function anthersOffers(rows: AnthersAccessRow[], viewerBadge: BadgeKey): Offer[] {
 	const offers: Offer[] = [];
 	const viewerRank = badgeRank(viewerBadge);
 	for (const row of rows) {
 		if (!row.allow) continue;
-		const needRank = badgeRank(row.tier as Badge);
+		// `BadgeKey`, not `Badge`: the free row's tier is literally "free", which is the
+		// absence of a Badge rather than one of them. `badgeRank` maps it to 0.
+		const needRank = badgeRank(row.tier as BadgeKey);
 		// free tier (rank 0) qualifies for everyone; higher tiers need the held badge.
 		if (viewerRank < needRank) continue;
 		offers.push({ price: Number(row.price ?? "0"), baseline: needRank <= 0 });
