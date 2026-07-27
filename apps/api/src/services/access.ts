@@ -36,7 +36,7 @@ import {
 	ANTHERS_BADGES,
 	type BadgeKey,
 	rankForSeeds,
-	SEED_PRICE,
+	seedsFromDollars,
 	seedsMeet,
 } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
@@ -128,15 +128,7 @@ export async function heldAnthersSeeds(userId: number): Promise<number> {
 	return Math.max(0, Math.floor(Number(row?.anthersSeeds ?? 0)));
 }
 
-/**
- * Whole Seeds represented by a dollar amount of support ($3 = 1 Seed).
- *
- * Floors, because a partial Seed does not clear a gate — and since #123 made Seeds
- * indivisible, a partial should never exist outside legacy rows anyway.
- */
-export function seedsFromDollars(amount: string | number | null | undefined): number {
-	return Math.max(0, Math.floor(Number(amount ?? 0) / SEED_PRICE));
-}
+export { seedsFromDollars };
 
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);

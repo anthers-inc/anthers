@@ -184,6 +184,20 @@ export function seedsMeet(heldSeeds: number, threshold: number): boolean {
 	return Math.floor(heldSeeds) >= threshold;
 }
 
+/**
+ * Whole Seeds represented by a dollar amount of support ($3 = 1 Seed).
+ *
+ * The one place money becomes Seeds. `seed_allocations.amount` is a payment ledger and
+ * stays money; gates count Seeds. Converting here — rather than at each comparison —
+ * keeps a dollar figure from ever being compared against a threshold.
+ *
+ * Floors, because a partial Seed does not clear a gate; since Seeds were made indivisible
+ * a partial should not exist outside legacy rows anyway.
+ */
+export function seedsFromDollars(amount: string | number | null | undefined): number {
+	return Math.max(0, Math.floor(Number(amount ?? 0) / SEED_PRICE));
+}
+
 // ── Per-Seed derived amounts ─────────────────────────────────────────────────
 /** Monthly $ for `n` Seeds (Anthers or creator-directed): n × $3. */
 export function seedCost(n: number): number {
