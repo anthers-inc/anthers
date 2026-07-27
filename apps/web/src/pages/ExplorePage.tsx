@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { apiFetch } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -41,14 +42,7 @@ export default function ExplorePage() {
 		if (search) params.set("search", search);
 		if (sort && sort !== "newest") params.set("sort", sort);
 
-		const apiBase =
-			window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-				? "http://localhost:8000"
-				: "";
-
-		fetch(`${apiBase}/api/content/projects?${params.toString()}`, {
-			credentials: "include",
-		})
+		apiFetch(`/api/content/projects?${params.toString()}`)
 			.then((res) => {
 				if (!res.ok) throw new Error("Failed to load projects");
 				return res.json();

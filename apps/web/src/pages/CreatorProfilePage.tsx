@@ -4,7 +4,7 @@ import { BADGE_ORDER, badgeLabel, badgeRank, seedCost } from "@anthers/shared/co
 import { useAuth } from "@anthers/web-shared/auth";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
-import { client } from "@anthers/web-shared/rpc";
+import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
 	Badge,
 	CreatorGate,
@@ -28,11 +28,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import ContentCard from "../components/cards/ContentCard";
 import ProjectCard from "../components/cards/ProjectCard";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 type Tab = "all" | "games" | "videos" | "audio" | "writing" | "tiers" | "about";
 
@@ -469,9 +464,7 @@ export default function CreatorProfilePage() {
 	 */
 	const refreshCreatorStatus = useCallback(async () => {
 		if (!username) return;
-		const res = await fetch(`${apiBase}/api/subscriptions/creator-status/${username}`, {
-			credentials: "include",
-		});
+		const res = await apiFetch(`/api/subscriptions/creator-status/${username}`, {});
 		if (!res.ok) return;
 		setCreatorStatus((await res.json()) as CreatorStatus);
 	}, [username]);
@@ -526,9 +519,8 @@ export default function CreatorProfilePage() {
 				const uploadData = new FormData();
 				uploadData.append("file", avatarFile);
 				uploadData.append("mediaType", "avatar");
-				const uploadRes = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+				const uploadRes = await apiFetch("/api/content/media-upload/direct", {
 					method: "POST",
-					credentials: "include",
 					body: uploadData,
 				});
 				if (!uploadRes.ok) throw new Error("Failed to upload avatar.");
@@ -540,9 +532,8 @@ export default function CreatorProfilePage() {
 				const uploadData = new FormData();
 				uploadData.append("file", headerFile);
 				uploadData.append("mediaType", "header");
-				const uploadRes = await fetch(`${apiBase}/api/content/media-upload/direct`, {
+				const uploadRes = await apiFetch("/api/content/media-upload/direct", {
 					method: "POST",
-					credentials: "include",
 					body: uploadData,
 				});
 				if (!uploadRes.ok) throw new Error("Failed to upload header image.");
@@ -559,9 +550,8 @@ export default function CreatorProfilePage() {
 			if (avatarUrl) payload.avatar = avatarUrl;
 			if (headerUrl) payload.headerImage = headerUrl;
 
-			const res = await fetch(`${apiBase}/api/accounts/me`, {
+			const res = await apiFetch("/api/accounts/me", {
 				method: "PATCH",
-				credentials: "include",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(payload),
 			});
@@ -610,9 +600,7 @@ export default function CreatorProfilePage() {
 			}),
 			client.api.content.projects.$get({ query: { creator: username } }).then((res) => res.json()),
 			client.api.content.posts.$get({ query: { creator: username } }).then((res) => res.json()),
-			fetch(`${apiBase}/api/subscriptions/creator-status/${username}`, {
-				credentials: "include",
-			})
+			apiFetch(`/api/subscriptions/creator-status/${username}`, {})
 				.then((res) => (res.ok ? res.json() : null))
 				.catch(() => null),
 		])

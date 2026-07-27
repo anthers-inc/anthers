@@ -3,17 +3,12 @@ import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { apiFetch } from "@anthers/web-shared/rpc";
 import Logo from "@anthers/web-shared/ui/Logo";
 import { type ReactNode, useEffect, useState } from "react";
 
 const STORAGE_KEY = "anthers_site_access";
 const INVITE_PARAM = "invite";
-
-const baseUrl =
-	typeof location !== "undefined" &&
-	(location.hostname === "localhost" || location.hostname === "127.0.0.1")
-		? "http://localhost:8000"
-		: "";
 
 type Interest = "user" | "creator" | "both";
 type SubmitState = "idle" | "submitting" | "success" | "error";
@@ -38,7 +33,7 @@ const inviteKey = takeInviteKeyFromUrl();
 
 async function redeemInviteKey(key: string): Promise<boolean> {
 	try {
-		const res = await fetch(`${baseUrl}/health/gate`, {
+		const res = await apiFetch("/health/gate", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ invite: key }),
@@ -112,7 +107,7 @@ export function SiteGatePanel({
 		setPasswordLoading(true);
 		setPasswordError(false);
 		try {
-			const res = await fetch(`${baseUrl}/health/gate`, {
+			const res = await apiFetch("/health/gate", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ password }),
@@ -134,7 +129,7 @@ export function SiteGatePanel({
 		e.preventDefault();
 		setSubmitState("submitting");
 		try {
-			const res = await fetch(`${baseUrl}/api/waitlist`, {
+			const res = await apiFetch("/api/waitlist", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ email, interest }),

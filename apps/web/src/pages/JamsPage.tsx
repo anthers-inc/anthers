@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
+import { apiFetch } from "@anthers/web-shared/rpc";
 import type { GameJam } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -17,11 +18,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { studioUrl } from "../lib/studio";
-
-const apiBase =
-	window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-		? "http://localhost:8000"
-		: "";
 
 const STATUS_TABS = [
 	{ value: "", label: "All" },
@@ -124,7 +120,7 @@ export default function JamsPage() {
 	useEffect(() => {
 		setLoading(true);
 		const params = statusFilter ? `?status=${statusFilter}` : "";
-		fetch(`${apiBase}/api/jams${params}`, { credentials: "include" })
+		apiFetch(`/api/jams${params}`)
 			.then((res) => res.json())
 			.then((data: { jams: GameJam[] }) => setJams(data.jams))
 			.catch(() => {})

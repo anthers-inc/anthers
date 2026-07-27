@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Link, useNavigate } from "@anthers/web-shared/router";
+import { apiFetch } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
 import {
 	ArrowRightIcon,
@@ -9,12 +10,6 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const API_BASE =
-	typeof location !== "undefined" &&
-	(location.hostname === "localhost" || location.hostname === "127.0.0.1")
-		? "http://localhost:8000"
-		: "";
 
 export default function SearchBar() {
 	const navigate = useNavigate();
@@ -65,9 +60,7 @@ export default function SearchBar() {
 		setLoading(true);
 		debounceRef.current = setTimeout(() => {
 			const params = new URLSearchParams({ search: term.trim() });
-			fetch(`${API_BASE}/api/content/projects?${params.toString()}`, {
-				credentials: "include",
-			})
+			apiFetch(`/api/content/projects?${params.toString()}`, {})
 				.then((res) => res.json())
 				.then((json) => setResults((json.projects as Project[]).slice(0, 6)))
 				.catch(() => setResults([]))

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { apiFetch } from "@anthers/web-shared/rpc";
 import type { PostListItem } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -14,12 +15,6 @@ const FILTERS = [
 	{ key: "audio", label: "Audio" },
 ] as const;
 
-const baseUrl =
-	typeof location !== "undefined" &&
-	(location.hostname === "localhost" || location.hostname === "127.0.0.1")
-		? "http://localhost:8000"
-		: "";
-
 export default function PostFeedPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [posts, setPosts] = useState<PostListItem[]>([]);
@@ -32,9 +27,7 @@ export default function PostFeedPage() {
 		const params = new URLSearchParams();
 		if (contentTypeFilter) params.set("content_type", contentTypeFilter);
 		const qs = params.toString();
-		fetch(`${baseUrl}/api/content/posts${qs ? `?${qs}` : ""}`, {
-			credentials: "include",
-		})
+		apiFetch(`/api/content/posts${qs ? `?${qs}` : ""}`, {})
 			.then((res) => (res.ok ? res.json() : { posts: [] }))
 			.then((data: { posts?: PostListItem[] }) => setPosts(data.posts ?? []))
 			.catch((err) => console.error("Failed to load posts:", err))
