@@ -76,7 +76,11 @@ const PLANS = rankViews();
 
 /** The plan view for an Anthers-Seed count (rank-capped at blossom for display). */
 function planFor(anthersSeeds: number) {
-	return PLANS[badgeRank(rankForSeeds(anthersSeeds))];
+	// Look the rung up by its Badge, never by array position. `badgeRank` returns a
+	// THRESHOLD, and a threshold only doubles as an index while Anthers's Badges sit at
+	// 1/2/3/4; the moment they don't, indexing returns the wrong rung or undefined.
+	const held = rankForSeeds(anthersSeeds);
+	return PLANS.find((p) => p.id === held) ?? PLANS[0];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

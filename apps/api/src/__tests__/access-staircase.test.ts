@@ -118,7 +118,7 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	it("each badge rung unlocks exactly one more post than the rung below", () => {
-		const counts = (["free", "root", "sprout", "petal", "blossom"] as Badge[]).map(
+		const counts = (["free", "root", "sprout", "petal", "blossom"] as BadgeKey[]).map(
 			(b) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(b, 0)).canAccess).length,
 		);
 		// Free sees only G1; each paid rung adds exactly one badge-gated post.

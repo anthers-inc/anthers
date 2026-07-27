@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { BADGE_ORDER, badgeLabel, badgeRank, seedCost } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, badgeLabel, badgeRank, seedCost } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
@@ -161,9 +161,14 @@ function GiveSeedsCard({
 	);
 }
 
-/** An Anthers Gate's threshold is a Badge rank (1 = Root … 4 = Blossom). */
+/**
+ * The Badge sitting at an Anthers Gate's threshold (1 = Root … 4 = Blossom).
+ *
+ * Matches on threshold rather than indexing by it: a gate is any whole-Seed level, and a
+ * Badge need not sit at every level, so "no Badge at this threshold" is a real answer.
+ */
 function anthersBadgeForRank(rank: number): Badge | null {
-	return (BADGE_ORDER[rank] as Badge | undefined) ?? null;
+	return (ANTHERS_BADGES.find((b) => b.threshold === rank)?.name as Badge | undefined) ?? null;
 }
 
 /** Resolve display access for a post from its per-viewer AccessResult. */

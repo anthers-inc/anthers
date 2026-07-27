@@ -27,15 +27,15 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // the same source of truth the API charges against.
 // ---------------------------------------------------------------------------
 
-/** Ordered plans low → high; the paid tiers drive the personas/matrix. */
-const PLANS: Badge[] = ["free", "root", "sprout", "petal", "blossom"];
-const PAID_PLANS: Badge[] = ["root", "sprout", "petal", "blossom"];
+/** Ordered rungs low → high; the paid Badges drive the personas/matrix. */
+const PLANS: BadgeKey[] = ["free", "root", "sprout", "petal", "blossom"];
+const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
-const timePoolOf = (badge: Badge) => timePoolFor(badgeRank(badge));
+const timePoolOf = (badge: BadgeKey) => timePoolFor(badgeRank(badge));
 /** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
-const seedsOf = (badge: Badge) => badgeRank(badge);
+const seedsOf = (badge: BadgeKey) => badgeRank(badge);
 /** "Supports Anthers" — the non-Time-Pool half of each Anthers-Seed (bandwidth + Foundation). */
-const supportsAnthersOf = (badge: Badge) =>
+const supportsAnthersOf = (badge: BadgeKey) =>
 	Math.max(0, seedCost(badgeRank(badge)) - timePoolFor(badgeRank(badge)));
 
 // ---------------------------------------------------------------------------
@@ -447,7 +447,7 @@ interface Segment {
 	id: number;
 	name: string;
 	subs: number;
-	badge: Badge;
+	badge: BadgeKey;
 	total: number;
 	you: number;
 	seedsToYou: number;
@@ -506,7 +506,7 @@ function AudienceBuilder() {
 								field === "name"
 									? value
 									: field === "badge"
-										? (value as Badge)
+										? (value as BadgeKey)
 										: Number.parseFloat(value) || 0,
 						}
 					: s,
