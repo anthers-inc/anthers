@@ -36,6 +36,7 @@ import {
 	ANTHERS_BADGES,
 	type BadgeKey,
 	rankForSeeds,
+	seedCost,
 	seedsFromDollars,
 	seedsMeet,
 } from "@anthers/shared/constants";
@@ -80,10 +81,57 @@ export type AccessReason =
 	| "gated"
 	| "login_required";
 
+/**
+ * One way a denied viewer could open this post, stated in the gate's own terms.
+ *
+ * `moreNeeded` is the point of this type: the UI must be able to say what the viewer
+ * still needs, not what the gate abstractly requires, and it must not compute that
+ * itself. The client used to derive its own label from the threshold and got it wrong —
+ * naming the highest Badge at-or-below the gate, which by definition does *not* clear a
+ * gate that sits above it. Resolution owns the thresholds, so resolution owns this.
+ */
+export interface UnlockRoute {
+	/** Whole Seeds this gate requires. */
+	threshold: number;
+	/** Whole Seeds the viewer still has to add — the marginal ask. */
+	moreNeeded: number;
+	/** Monthly cost of holding `threshold` Seeds, as a money string. */
+	price: string;
+	/**
+	 * The Badge sitting EXACTLY at this threshold, or null when the gate sits between
+	 * Badges (which is legal — a gate needn't sit on a Badge). Never the nearest Badge:
+	 * naming one the viewer would still be short of is the bug this type exists to kill.
+	 *
+	 * A plain `string`, not `BadgeKey`: `BadgeKey` covers only Anthers's own four, and a
+	 * creator names their Badges whatever they like. Only the Anthers side is populated
+	 * today, but typing it to Anthers's set would have to be undone the moment it isn't.
+	 */
+	badge: string | null;
+}
+
+/**
+ * How a gated post could be opened, per destination. Null routes mean that side offers
+ * no path in — a post gated only on Seeds to the creator has no `anthers` route, and one
+ * whose only allowed rows carry a price can have neither, because reaching the threshold
+ * would still not open it.
+ */
+export interface UnlockOffer {
+	/** Climb by giving more Seeds to Anthers. */
+	anthers: UnlockRoute | null;
+	/** Climb by giving more Seeds to this creator. */
+	creator: UnlockRoute | null;
+}
+
 export interface AccessResult {
 	/** May the viewer consume the content now? */
 	canAccess: boolean;
 	reason: AccessReason;
+	/**
+	 * Present only when the viewer is shut out by a gate (`gated`), and only for routes
+	 * that genuinely open the post. Absent for purchase (ProjectPricing owns that) and,
+	 * necessarily, for a logged-out viewer, whose standing we don't know.
+	 */
+	unlock?: UnlockOffer;
 	/** Accessible to everyone at no cost. */
 	isFree: boolean;
 	/** A (one-time) purchase is the path to access. */
@@ -159,6 +207,39 @@ function offersFor(rows: AccessRow[], heldSeeds: number): Offer[] {
 }
 
 /**
+ * The cheapest rung in one table that would actually OPEN the post for this viewer.
+ *
+ * "Actually open" is the whole subtlety: only a row that is both allowed **and free**
+ * qualifies. An allowed row carrying a price doesn't become access when you reach its
+ * threshold — it becomes a purchase — so offering it as an unlock route would promise
+ * something climbing cannot deliver. Returns null when the table offers no such rung.
+ */
+export function unlockRoute(
+	rows: AccessRow[],
+	heldSeeds: number,
+	badges: readonly { name: string; threshold: number }[],
+): UnlockRoute | null {
+	let best: number | null = null;
+	for (const row of rows) {
+		if (!row.allow) continue;
+		if (Number(row.price ?? "0") > 0) continue;
+		const threshold = Number(row.threshold ?? 0);
+		if (seedsMeet(heldSeeds, threshold)) continue; // already met — not a route in
+		if (best === null || threshold < best) best = threshold;
+	}
+	if (best === null) return null;
+	// Exact match only. The nearest Badge at-or-below would not clear this gate, and
+	// naming it is precisely the error this replaces.
+	const badge = badges.find((b) => b.threshold === best) ?? null;
+	return {
+		threshold: best,
+		moreNeeded: Math.max(0, best - heldSeeds),
+		price: money(seedCost(best)),
+		badge: badge?.name ?? null,
+	};
+}
+
+/**
  * Resolve access for a single post against an already-loaded viewer context.
  * Pure and synchronous, so the timeline can resolve a batch cheaply.
  */
@@ -191,9 +272,21 @@ export function resolveAccessSync(post: AccessiblePost, ctx: AccessContext): Acc
 		...offersFor(post.seedAccess ?? [], givenSeeds),
 	];
 
-	// No qualifying allowed row → hard gate.
+	// No qualifying allowed row → hard gate. Report what would open it, from here.
 	if (offers.length === 0) {
-		return { ...base, canAccess: false, reason: ctx.userId != null ? "gated" : "login_required" };
+		if (ctx.userId == null) return { ...base, canAccess: false, reason: "login_required" };
+		return {
+			...base,
+			canAccess: false,
+			reason: "gated",
+			unlock: {
+				anthers: unlockRoute(post.anthersAccess ?? [], ctx.anthersSeeds, ANTHERS_BADGES),
+				// No Badge set: a creator's Badges are their own rows, not carried on the post
+				// (thresholds are levels, not Badge identities — migration 0007). The creator's
+				// name is the identity the UI shows on this side, so it needs no Badge here.
+				creator: unlockRoute(post.seedAccess ?? [], givenSeeds, []),
+			},
+		};
 	}
 
 	// Qualifies via a non-baseline (Badge/Seed) row → "entitled" for display.

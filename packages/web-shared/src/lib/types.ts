@@ -59,6 +59,26 @@ export interface AccessRow {
 export type AnthersAccessRow = AccessRow;
 export type SeedAccessRow = AccessRow;
 
+/**
+ * One way a denied viewer could open a post. `moreNeeded` is the marginal ask — what
+ * they still have to add — and it is computed server-side on purpose: the UI naming its
+ * own Badge from a threshold is what produced a button offering a Badge that could not
+ * clear the gate it sat above. `badge` is the Badge sitting EXACTLY at `threshold`, or
+ * null when the gate falls between Badges (legal — a gate needn't sit on one).
+ */
+export interface UnlockRoute {
+	threshold: number;
+	moreNeeded: number;
+	price: string;
+	badge: string | null;
+}
+
+/** How a gated post could be opened, per destination. Null = that side offers no way in. */
+export interface UnlockOffer {
+	anthers: UnlockRoute | null;
+	creator: UnlockRoute | null;
+}
+
 /** Resolved access for a post + viewer (see api services/access.ts). */
 export interface AccessResult {
 	canAccess: boolean;
@@ -76,6 +96,8 @@ export interface AccessResult {
 	isEntitled: boolean;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
+	/** Present only when `reason` is "gated" — see UnlockOffer. */
+	unlock?: UnlockOffer;
 }
 
 // ─── Content Types ───
