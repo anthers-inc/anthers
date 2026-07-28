@@ -110,6 +110,20 @@ export interface GauntletPost {
 	downloadEnabled: boolean;
 	anthersAccess: AnthersAccessRow[];
 	seedAccess: SeedAccessRow[];
+	/**
+	 * Real playable media to attach, produced by `db:gauntlet:media` — which generates a
+	 * short clip with ffmpeg and runs it through the **actual** transcode job, so the post
+	 * ends up with genuine HLS segments or a genuine normalized MP3 behind it.
+	 *
+	 * This is what lets the walk assert *bytes* instead of access reasons. A reason-only
+	 * suite is structurally incapable of catching a delivery leak — the exact bug class
+	 * where the resolver says "gated" and a working URL sits in the same response — so the
+	 * fixture has to be able to actually play something.
+	 *
+	 * Undefined on the other posts on purpose: media seeding costs an ffmpeg run apiece,
+	 * and one gated + one free item already cover both directions of the delivery check.
+	 */
+	media?: "video" | "audio";
 }
 
 function post(
@@ -153,7 +167,12 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		"Anyone can read this",
 		"always — free to everyone",
 		"The free post. It streams for anyone, signed in or not, and it is the gauntlet's comment target.",
-		{ seedAccess: [{ threshold: 0, allow: true, price: "0" }] },
+		{
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			// Free + real video: the case where the bytes MUST arrive, for anyone at all.
+			contentType: "video",
+			media: "video",
+		},
 	),
 	post(
 		2,
@@ -171,7 +190,14 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		"Behind the Sprout gate",
 		"badge ≥ Sprout",
 		"Gated at the Sprout rung. Root cannot reach it; Sprout and above can.",
-		{ anthersAccess: anthersRung("sprout") },
+		{
+			anthersAccess: anthersRung("sprout"),
+			// Gated + real audio: the mirror case, where the bytes must NOT arrive until the
+			// viewer climbs to Sprout. Audio because it exercises the second delivery
+			// endpoint (`/posts/:slug/audio/:contentId`), which nothing walks today.
+			contentType: "audio",
+			media: "audio",
+		},
 	),
 	post(
 		4,
@@ -223,6 +249,15 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 		},
 	),
 ];
+
+/**
+ * The posts carrying real playable media, in fixture order. `db:gauntlet:media` seeds
+ * exactly these; the e2e walk asserts bytes for exactly these. One list, so a post can't
+ * be given media the assertions don't know about (or vice versa).
+ */
+export const GAUNTLET_MEDIA_POSTS = GAUNTLET_POSTS.filter(
+	(p): p is GauntletPost & { media: "video" | "audio" } => p.media != null,
+);
 
 /** Look a gauntlet post up by its staircase key (G1…G9). */
 export function gauntletPost(key: string): GauntletPost {

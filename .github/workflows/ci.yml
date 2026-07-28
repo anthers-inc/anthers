@@ -152,6 +152,14 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
+      # The gauntlet fixture generates a short clip and runs it through the real transcode
+      # job, so the walk can assert delivered bytes rather than access reasons. Without
+      # ffmpeg that step no-ops and those assertions silently skip — which is exactly the
+      # kind of quiet coverage loss the gauntlet exists to prevent, so install it rather
+      # than trusting whatever the runner image happens to ship.
+      - name: Ensure ffmpeg
+        run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
       - name: Apply database migrations
         run: bun run db:migrate
 
