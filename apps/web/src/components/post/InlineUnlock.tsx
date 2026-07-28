@@ -5,8 +5,7 @@
  * lowest allowed Anthers threshold (subscribe inline, with the confirmation modal)
  * and/or the lowest Seed rung — right on the post.
  */
-import { badgeLabel, rankForSeeds } from "@anthers/shared/constants";
-import { rankViews } from "@anthers/shared/fees";
+import { type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, Post } from "@anthers/web-shared/types";
@@ -19,6 +18,11 @@ import SubscriptionPaymentModal, {
 /** "1 Seed" / "3 Seeds" — thresholds count Seeds, so the copy must too. */
 function seedCount(seeds: number): string {
 	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
+}
+
+/** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
+function seedsToGo(moreNeeded: number): string {
+	return `${moreNeeded} more Seed${moreNeeded === 1 ? "" : "s"}`;
 }
 
 export default function InlineUnlock({
@@ -52,21 +56,14 @@ export default function InlineUnlock({
 		);
 	}
 
-	// The minimum unlock rungs: the lowest allowed threshold above "everyone" in each table.
-	// Both tables are the same shape now, so this is the same reduction twice.
-	const lowestAllowed = (rows: { threshold: number; allow: boolean }[] | null | undefined) =>
-		(rows ?? [])
-			.filter((r) => r.allow && r.threshold > 0)
-			.sort((a, b) => a.threshold - b.threshold)[0]?.threshold;
-
-	const minAnthersSeeds = lowestAllowed(post.anthersAccess);
-	const minSeeds = lowestAllowed(post.seedAccess);
-	// The Anthers rung may sit at a level no Badge is named for; label it by Seeds if so.
-	const minBadge = minAnthersSeeds != null ? rankForSeeds(minAnthersSeeds) : undefined;
-	const badgePrice =
-		minAnthersSeeds != null
-			? rankViews().find((p) => p.anthersSeeds === minAnthersSeeds)?.price
-			: undefined;
+	// The unlock routes come from the RESOLVER, which owns the thresholds — the client no
+	// longer derives them. It used to, and got the label wrong: it named the highest Badge
+	// at-or-below the gate, which by definition does not clear a gate sitting above it, and
+	// silently dropped the price whenever the gate fell between Badges. `badge` here is the
+	// Badge sitting EXACTLY at the threshold, or null when none does.
+	const anthersRoute = access.unlock?.anthers ?? null;
+	const creatorRoute = access.unlock?.creator ?? null;
+	const minAnthersSeeds = anthersRoute?.threshold;
 
 	const unlockWithBadge = async () => {
 		if (minAnthersSeeds == null) return;
@@ -85,7 +82,11 @@ export default function InlineUnlock({
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
 				anthersSeeds: minAnthersSeeds,
-				planName: badgeLabel(minBadge ?? "free"),
+				// Name the Badge only when the gate actually sits on one; otherwise the
+				// level itself is the honest label for what's being bought.
+				planName: anthersRoute?.badge
+					? badgeLabel(anthersRoute.badge as BadgeKey)
+					: `${minAnthersSeeds} Seed${minAnthersSeeds === 1 ? "" : "s"}`,
 				preview,
 			});
 		} catch {
@@ -95,33 +96,47 @@ export default function InlineUnlock({
 		}
 	};
 
+	// Whichever side asks for less is the primary action; a tie goes to the creator, since
+	// Seeds given to a creator reach them in full.
+	const anthersFirst =
+		!!anthersRoute && (!creatorRoute || anthersRoute.moreNeeded < creatorRoute.moreNeeded);
+	const lockedBy = anthersFirst && anthersRoute?.badge ? badgeLabel(anthersRoute.badge) : null;
+
 	return (
 		<UnlockCard
-			blurb={`Subscribe or give Seeds to ${creatorName} to unlock this post and their other members-only work.`}
+			lockedBy={lockedBy}
+			// No blurb when there's a route: the button already says what to do and to whom,
+			// and a sentence restating it just makes the reader parse the same fact twice.
+			// The blurb survives only where nothing else explains the situation.
+			blurb={
+				!anthersRoute && !creatorRoute
+					? `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`
+					: undefined
+			}
 		>
-			{minBadge ? (
+			{anthersRoute ? (
 				<button
 					type="button"
-					className="btn btn-primary btn-wide"
+					className={anthersFirst ? "btn btn-primary btn-wide" : "btn btn-ghost btn-sm"}
 					onClick={unlockWithBadge}
 					disabled={loading}
 				>
 					{loading
 						? "Loading…"
-						: `Unlock with ${badgeLabel(minBadge)}${badgePrice ? ` · $${badgePrice}/mo` : ""}`}
+						: `${anthersFirst ? "Unlock" : "Or unlock"} with ${seedsToGo(anthersRoute.moreNeeded)} to Anthers`}
 				</button>
 			) : null}
 
-			{minSeeds != null && creatorUsername ? (
+			{creatorRoute && creatorUsername ? (
 				<Link
 					to={`/${creatorUsername}?tab=badges`}
-					className={minBadge ? "btn btn-ghost btn-sm" : "btn btn-primary btn-wide"}
+					className={anthersFirst ? "btn btn-ghost btn-sm" : "btn btn-primary btn-wide"}
 				>
-					{minBadge ? `Or give ${seedCount(minSeeds)}` : `Give ${seedCount(minSeeds)} to unlock`}
+					{`${anthersFirst ? "Or unlock" : "Unlock"} with ${seedsToGo(creatorRoute.moreNeeded)} to ${creatorName}`}
 				</Link>
 			) : null}
 
-			{!minBadge && minSeeds == null && creatorUsername ? (
+			{!anthersRoute && !creatorRoute && creatorUsername ? (
 				<Link to={`/${creatorUsername}?tab=badges`} className="btn btn-primary btn-wide">
 					Join to unlock
 				</Link>
@@ -145,15 +160,27 @@ export default function InlineUnlock({
 	);
 }
 
-function UnlockCard({ blurb, children }: { blurb: string; children: React.ReactNode }) {
+function UnlockCard({
+	blurb,
+	lockedBy,
+	children,
+}: {
+	/** Only for states the action itself doesn't explain (login, or no route at all). */
+	blurb?: string;
+	/** Badge the gate sits on, when it sits on one — the lock's *identity*. */
+	lockedBy?: string | null;
+	children: React.ReactNode;
+}) {
 	return (
 		<div className="card bg-base-200 border border-base-300">
 			<div className="card-body items-center text-center gap-3">
 				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
 					<LockClosedIcon className="w-6 h-6 text-base-content/70" />
 				</div>
-				<h3 className="font-bold text-lg">Unlock this post</h3>
-				<p className="text-sm text-base-content/60 max-w-sm">{blurb}</p>
+				<h3 className="font-bold text-lg">
+					{lockedBy ? `Locked · ${lockedBy}` : "Unlock this post"}
+				</h3>
+				{blurb ? <p className="text-sm text-base-content/60 max-w-sm">{blurb}</p> : null}
 				{children}
 			</div>
 		</div>

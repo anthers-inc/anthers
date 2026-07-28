@@ -2,7 +2,7 @@
 
 import { consumptionModeFor } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
-import { LockedCover } from "@anthers/web-shared/post/unlock";
+import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -602,7 +602,14 @@ export default function PostPage() {
 					// The title/creator/date above stay visible; body + media are withheld server-side.
 					access && (
 						<div className="mb-8">
-							<LockedCover thumbnail={post.thumbnail} className="aspect-video rounded-lg mb-6" />
+							<LockedCover
+								thumbnail={post.thumbnail}
+								className="aspect-video rounded-lg mb-6"
+								lockedBy={lockedByBadge(
+									access,
+									post.creator?.displayName || post.creator?.username || "this creator",
+								)}
+							/>
 							{access.requiresPurchase ? (
 								<ProjectPricing
 									slug={post.slug}

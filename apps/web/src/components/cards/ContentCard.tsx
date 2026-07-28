@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { LockedCover, unlockLabel } from "@anthers/web-shared/post/unlock";
+import { LockedCover, lockedByBadge, unlockLabel } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+
+/** Who the Seeds would go to, for a card's unlock copy. */
+function cardCreatorName(post: PostListItem): string {
+	return post.creator?.displayName || post.creator?.username || "this creator";
+}
 
 export default function ContentCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
@@ -23,7 +28,11 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 		<>
 			{/* Thumbnail / cover area */}
 			{locked ? (
-				<LockedCover thumbnail={post.thumbnail} className="aspect-video" />
+				<LockedCover
+					thumbnail={post.thumbnail}
+					className="aspect-video"
+					lockedBy={post.access ? lockedByBadge(post.access, cardCreatorName(post)) : null}
+				/>
 			) : (
 				<>
 					{post.contentType === "video" && (
@@ -85,11 +94,11 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				{locked && post.access ? (
 					<>
 						<p className="text-xs text-base-content/40 italic line-clamp-2">
-							Join to unlock this post and other members-only work.
+							Members-only work from this creator.
 						</p>
 						{/* Visual affordance only — the whole card opens the unlock modal. */}
 						<span className="btn btn-sm btn-outline btn-block mt-1 pointer-events-none">
-							{unlockLabel(post.access)}
+							{unlockLabel(post.access, cardCreatorName(post))}
 						</span>
 					</>
 				) : (

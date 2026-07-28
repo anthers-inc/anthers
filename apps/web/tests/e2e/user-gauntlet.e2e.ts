@@ -96,10 +96,22 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
 	await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeHidden();
 }
 
+/**
+ * A locked post shows the unlock panel, and that panel says what it is locked BY and what
+ * to do about it. The heading carries the gate's identity — "Locked · Root" when the gate
+ * sits on a Badge, "Unlock this post" when it doesn't — and the CTA carries the *marginal*
+ * ask, which is the thing a viewer actually needs: how many more Seeds, and to whom.
+ */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
 	const spec = gauntletPost(key);
 	await page.goto(`/posts/${spec.slug}`);
-	await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: /^(Locked ·|Unlock this post)/ })).toBeVisible();
+	// The ask must be marginal and must name a destination — never a bare "Join to unlock".
+	await expect(
+		page
+			.getByRole("button", { name: /Unlock with \d+ more Seeds? to / })
+			.or(page.getByRole("link", { name: /Unlock with \d+ more Seeds? to / })),
+	).toBeVisible();
 	// The API strips a locked post's body server-side; trust nothing client-side.
 	await expect(page.getByText(spec.body)).toBeHidden();
 }
@@ -308,6 +320,19 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	await expectPostUnlocked(page, "G1");
 	await expectPostLocked(page, "G2");
 	await expectPostLocked(page, "G6");
+
+	// The exact numbers, at the one state where they're unambiguous: holding nothing, G2's
+	// Root gate (1 Seed to Anthers) and G6's first Seed rung (1 Seed to the creator) each
+	// ask for exactly one more. Pinning the arithmetic here is what stops the panel drifting
+	// back to quoting the THRESHOLD instead of the gap.
+	await page.goto(`/posts/${gauntletPost("G2").slug}`);
+	await expect(page.getByRole("heading", { name: "Locked · Root" })).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: "Unlock with 1 more Seed to Anthers" }),
+	).toBeVisible();
+
+	await page.goto(`/posts/${gauntletPost("G6").slug}`);
+	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
 
 	await expectStaircase(page, "Free, unfollowed");
 
