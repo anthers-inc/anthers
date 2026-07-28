@@ -733,7 +733,7 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				<thead>
 					<tr className="border-base-content/10">
 						<th style={serif} className="font-medium">
-							Rank
+							Badge
 						</th>
 						<th style={serif} className="text-right font-medium">
 							They pay
