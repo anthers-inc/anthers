@@ -82,6 +82,18 @@ export class S3StorageService implements StorageService {
 		return tempPath;
 	}
 
+	async read(key: string): Promise<Uint8Array | null> {
+		try {
+			const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+			if (!response.Body) return null;
+			return await response.Body.transformToByteArray();
+		} catch {
+			// A missing key is a 404 from the SDK, and every caller wants "not found",
+			// not an exception — the endpoints above all turn it into their own 404.
+			return null;
+		}
+	}
+
 	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		if (opts?.signed) {
 			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {

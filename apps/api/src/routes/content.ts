@@ -1743,12 +1743,15 @@ const contentRoutes = new Hono()
 		const masterKey = urlToKey(manifestUrl);
 		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
 
-		const res = await fetch(
-			await storage.getUrl(`${prefixKey}/${file}`, { signed: true, expiresIn: 300 }),
-		);
-		if (!res.ok) return c.json({ error: "Not found" }, 404);
+		// Read the playlist straight out of storage rather than signing a URL and fetching
+		// it. In local mode that fetch went to `localhost:8000/content/...` — the API
+		// calling ITSELF from inside a request handler, which reset under CI's concurrency
+		// and took the rest of the walk down with it. In S3 mode it was a needless
+		// round-trip. Playlists are a few hundred bytes; segments still stream from the CDN.
+		const bytes = await storage.read(`${prefixKey}/${file}`);
+		if (!bytes) return c.json({ error: "Not found" }, 404);
 
-		const rewritten = await rewriteHlsPlaylist(await res.text(), {
+		const rewritten = await rewriteHlsPlaylist(new TextDecoder().decode(bytes), {
 			isMaster: file === "master.m3u8",
 			prefixKey,
 			ctx: { slug: post.slug, origin: publicOrigin() },

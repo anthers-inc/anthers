@@ -45,6 +45,12 @@ export class LocalStorageService implements StorageService {
 		return tempPath;
 	}
 
+	async read(key: string): Promise<Uint8Array | null> {
+		const file = Bun.file(join(CONTENT_ROOT, key));
+		if (!(await file.exists())) return null;
+		return new Uint8Array(await file.arrayBuffer());
+	}
+
 	async getUrl(key: string, _opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		// Local dev — no signing, just return a URL the static middleware serves
 		return `${getBaseUrl()}/content/${key}`;

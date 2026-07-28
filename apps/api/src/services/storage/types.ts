@@ -31,6 +31,19 @@ export interface StorageService {
 	downloadToTemp(key: string): Promise<string>;
 
 	/**
+	 * Read a small object straight into memory. Null when it doesn't exist.
+	 *
+	 * For things a request handler needs the *contents* of — HLS playlists, above all —
+	 * rather than a URL to hand a client. The alternative, `fetch(await getUrl(key))`,
+	 * is wrong in both backends for different reasons: in local mode it makes the API
+	 * issue an HTTP request **to itself** from inside a request handler, which is a
+	 * connection-reset waiting to happen under constrained concurrency (it was, in CI);
+	 * in S3 mode it signs a URL and pays a full round-trip to fetch bytes the SDK could
+	 * have handed over directly. Meant for small objects — never a media segment.
+	 */
+	read(key: string): Promise<Uint8Array | null>;
+
+	/**
 	 * Get a URL for a file.
 	 * - Public files: bare URL (no signing).
 	 * - Private files with `signed: true`: time-limited signed URL.
