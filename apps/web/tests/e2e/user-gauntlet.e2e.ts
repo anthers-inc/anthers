@@ -104,6 +104,162 @@ async function expectPostLocked(page: Page, key: string): Promise<void> {
 	await expect(page.getByText(spec.body)).toBeHidden();
 }
 
+// ── Real media: bytes, not reasons ───────────────────────────────────────────
+/**
+ * The assertions below are the reason `db:gauntlet:media` exists. Everything else in this
+ * walk reads an access *reason*, and a reason-only suite cannot catch the bug class that
+ * matters most here: the resolver correctly answering "gated" while a working URL to the
+ * bytes sits in the same response. So for the two media posts we walk the delivery chain
+ * to its end and look at what actually comes back.
+ *
+ * **These call the access-checked delivery endpoints by URL rather than following the
+ * pointer in the post JSON, and that is deliberate.** With `STORAGE_BACKEND=local` the API
+ * sets no delivery context (`deliveryCtxFor` returns null), so an entitled viewer is handed
+ * the raw `/content/...` URL and the app never touches `/posts/:slug/hls/...` at all. A
+ * test that followed the JSON pointer would therefore assert *static file serving* in dev
+ * and the real route only in production — the weaker half, in the place with less scrutiny.
+ * Addressing the endpoints directly exercises the same code in both modes.
+ *
+ * Scope, stated plainly: this proves the access check, the playlist rewrite, the redirect
+ * and the bytes. It does **not** prove the stored object is private — locally `/content`
+ * serves everything unsigned, so an ACL mistake is invisible here by construction. That
+ * half is `storage-acl.test.ts`'s job, and the two together are the whole picture.
+ */
+
+/**
+ * Whether the fixture carries real media. Keyed off ffmpeg the same way the seeder is,
+ * NOT off what the API returned: inferring it from the response once made a broken
+ * assertion look like a passing skip, which is the exact failure this suite exists to
+ * prevent. If ffmpeg is here, these assertions run and must pass.
+ */
+let mediaSeeded = false;
+
+interface ContentItemView {
+	id: number;
+	transcoding?: {
+		status: string;
+		hlsManifestUrl: string | null;
+		outputFileUrl: string | null;
+	} | null;
+}
+
+interface ContentEntry {
+	kind: string;
+	contentItem?: ContentItemView | null;
+}
+
+/** The post's content item as this viewer sees it — media URLs blanked when denied. */
+async function mediaItem(page: Page, key: string): Promise<ContentItemView | null> {
+	const spec = gauntletPost(key);
+	const res = await page.request.get(`${API_URL}/api/content/posts/${spec.slug}`);
+	expect(res.ok(), `post fetch failed for ${key}: ${res.status()}`).toBe(true);
+	// `contents` hangs off `post`, not the response root.
+	const body = (await res.json()) as { post?: { contents?: ContentEntry[] } };
+	const entry = (body.post?.contents ?? []).find((e) => e.kind === "content" && e.contentItem);
+	return entry?.contentItem ?? null;
+}
+
+/** The access-checked delivery routes for one content item on one post. */
+function hlsUrl(key: string, itemId: number, file = "master.m3u8"): string {
+	return `${API_URL}/api/content/posts/${gauntletPost(key).slug}/hls/${itemId}/${file}`;
+}
+function audioUrl(key: string, itemId: number): string {
+	return `${API_URL}/api/content/posts/${gauntletPost(key).slug}/audio/${itemId}`;
+}
+
+/** Re-host a URL the API generated onto the API's own origin (see the note in the walk). */
+function atApi(url: string): string {
+	const u = new URL(url);
+	return `${API_URL}${u.pathname}${u.search}`;
+}
+
+/** Walk master → variant → segment and confirm real transport-stream bytes come back. */
+async function expectVideoBytes(page: Page, key: string): Promise<void> {
+	const item = await mediaItem(page, key);
+	expect(item?.transcoding?.status, `${key} transcode status`).toBe("completed");
+	expect(
+		item?.transcoding?.hlsManifestUrl,
+		`${key} withheld its video from an entitled viewer`,
+	).toBeTruthy();
+
+	// 1. The master playlist, through the access-checked route.
+	const master = await page.request.get(hlsUrl(key, item?.id as number));
+	expect(master.status(), `${key} master playlist`).toBe(200);
+	const masterBody = await master.text();
+	expect(masterBody).toContain("#EXTM3U");
+
+	// 2. A variant playlist. The master's rewrite points these back through the endpoint,
+	//    so this URL is absolute and access-checked in its own right.
+	const variantUrl = masterBody
+		.split("\n")
+		.find((l) => l.trim() && !l.startsWith("#"))
+		?.trim();
+	expect(variantUrl, `${key} master lists no variant playlist`).toBeTruthy();
+	expect(variantUrl, `${key} variant ref was not rewritten to the delivery route`).toContain(
+		"/hls/",
+	);
+	// The rewrite stamps `FRONTEND_URL` as the origin, because in production the site and
+	// the API share one origin behind App Platform's ingress. This harness has no proxy —
+	// the SPA is on :4173 and the API on :8000 — so the *path* is the contract worth
+	// asserting and the origin is deployment config. Re-point it at the API to follow it.
+	const variant = await page.request.get(atApi(variantUrl as string));
+	expect(variant.status(), `${key} variant playlist`).toBe(200);
+	const variantBody = await variant.text();
+	expect(variantBody).toContain("#EXTINF");
+
+	// 3. A real segment — the assertion this whole fixture change exists for. Not a URL,
+	//    not a reason: the actual bytes, checked for the MPEG-TS sync byte (0x47).
+	const segmentUrl = variantBody
+		.split("\n")
+		.find((l) => l.trim() && !l.startsWith("#"))
+		?.trim();
+	expect(segmentUrl, `${key} variant lists no segment`).toBeTruthy();
+	const segment = await page.request.get(segmentUrl as string);
+	expect(segment.status(), `${key} segment`).toBe(200);
+	const bytes = await segment.body();
+	expect(bytes.length, `${key} segment is empty`).toBeGreaterThan(1000);
+	expect(bytes[0], `${key} segment is not MPEG-TS (no 0x47 sync byte)`).toBe(0x47);
+}
+
+/** Follow the audio redirect and confirm real MP3 bytes come back. */
+async function expectAudioBytes(page: Page, key: string): Promise<void> {
+	const item = await mediaItem(page, key);
+	expect(item?.transcoding?.status, `${key} transcode status`).toBe("completed");
+	expect(
+		item?.transcoding?.outputFileUrl,
+		`${key} withheld its audio from an entitled viewer`,
+	).toBeTruthy();
+
+	// The endpoint 302s to the stored object (signed, in S3 mode); the request follows it.
+	const res = await page.request.get(audioUrl(key, item?.id as number));
+	expect(res.status(), `${key} audio`).toBe(200);
+	const bytes = await res.body();
+	expect(bytes.length, `${key} audio is empty`).toBeGreaterThan(1000);
+	// An MP3 starts with either an ID3 tag or a frame-sync word (0xFF 0xEx/0xFx).
+	const isId3 = bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33;
+	const isFrameSync = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+	expect(isId3 || isFrameSync, `${key} audio is not MP3`).toBe(true);
+}
+
+/**
+ * The negative, and the sharper of the two: a denied viewer gets no pointer at the media
+ * *and* cannot reach it by constructing the URL themselves. The second half is the one
+ * that matters — withholding a URL is not access control if the endpoint serves anyone
+ * who guesses it, and guessing is trivial (the content item id is in the same response).
+ */
+async function expectMediaWithheld(page: Page, key: string): Promise<void> {
+	const item = await mediaItem(page, key);
+	// The item id survives — it isn't the deliverable. Every URL to the payload does not.
+	expect(item?.id, `${key} should still expose its content item id`).toBeTruthy();
+	expect(item?.transcoding?.hlsManifestUrl ?? null, `${key} leaked an HLS URL`).toBeNull();
+	expect(item?.transcoding?.outputFileUrl ?? null, `${key} leaked an audio URL`).toBeNull();
+
+	for (const url of [hlsUrl(key, item?.id as number), audioUrl(key, item?.id as number)]) {
+		const res = await page.request.get(url);
+		expect(res.status(), `${key} served ${url} to a denied viewer`).toBe(403);
+	}
+}
+
 test.beforeAll(async () => {
 	// Reset to the floor through the canonical script — this is what makes re-runs and
 	// retries deterministic. The viewer's session survives (reset never touches sessions).
@@ -111,6 +267,29 @@ test.beforeAll(async () => {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
+	// The reset deletes the fixture's posts and their content items, so real media has to
+	// be re-attached every time — and through the real transcode job, not a staged row.
+	execFileSync("bun", ["run", "db:gauntlet:media"], { cwd: REPO_ROOT, stdio: "inherit" });
+
+	// Ask ffmpeg directly rather than inferring from the API. Inferring is what let a
+	// broken assertion read as a passing skip the first time this was written: the media
+	// seeded fine, the probe looked in the wrong place, and the walk went green having
+	// checked nothing. With ffmpeg present the byte assertions RUN — they never skip.
+	mediaSeeded = (() => {
+		try {
+			execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+			return true;
+		} catch {
+			return false;
+		}
+	})();
+	if (!mediaSeeded) {
+		console.warn(
+			"[gauntlet] ffmpeg not installed — the fixture has no real media, so the delivery\n" +
+				"[gauntlet] byte assertions are SKIPPED. Install ffmpeg to cover them.",
+		);
+	}
+
 	for (const post of GAUNTLET_POSTS) {
 		const res = await fetch(`${API_URL}/api/content/posts/${post.slug}`);
 		if (!res.ok) throw new Error(`Fixture post ${post.slug} not reachable: ${res.status}`);
@@ -131,6 +310,13 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	await expectPostLocked(page, "G6");
 
 	await expectStaircase(page, "Free, unfollowed");
+
+	if (mediaSeeded) {
+		// "Free streams" as a claim about BYTES, not about a reason string: G1's video
+		// really plays for a viewer holding nothing, and G3's audio really doesn't.
+		await expectVideoBytes(page, "G1");
+		await expectMediaWithheld(page, "G3");
+	}
 	expect(errors).toEqual([]);
 });
 
@@ -194,6 +380,11 @@ for (const [seeds, state, unlocked, stillLocked] of [
 		await expectPostUnlocked(page, unlocked);
 		await expectPostLocked(page, stillLocked);
 		await expectStaircase(page, state);
+
+		// G3 carries the gated audio. Sprout is the rung that opens it, so this is the
+		// state where "the bytes arrive" flips from false to true — the same transition
+		// the floor asserted the other side of.
+		if (mediaSeeded && unlocked === "G3") await expectAudioBytes(page, "G3");
 		expect(errors).toEqual([]);
 	});
 }

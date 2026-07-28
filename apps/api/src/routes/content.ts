@@ -1733,7 +1733,14 @@ const contentRoutes = new Hono()
 
 		// Storage key prefix = the directory of the master.m3u8 key. Playlists are stored
 		// private alongside their segments, so fetch this one signed — a bare URL 403s.
-		const masterKey = decodeURIComponent(new URL(manifestUrl).pathname.replace(/^\/+/, ""));
+		//
+		// `urlToKey`, not a hand-rolled `new URL(...).pathname`: the two differ by the
+		// `content/` prefix that local storage puts in its URLs and S3 does not. The inline
+		// version was therefore correct against Spaces (bucket in the host, path IS the key)
+		// and silently wrong in dev, where it produced `content/creators/…` and made every
+		// HLS request 404. The audio endpoint above already used the helper, so the two
+		// delivery routes disagreed about how to read the same kind of URL.
+		const masterKey = urlToKey(manifestUrl);
 		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
 
 		const res = await fetch(

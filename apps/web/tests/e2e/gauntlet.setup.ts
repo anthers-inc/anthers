@@ -33,6 +33,10 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
+	// Real playable media for the fixture's two media posts, through the real transcode
+	// job. Separate step because it belongs to `apps/api` (the jobs and the storage
+	// service are the API's, and `packages/db` must not depend upward on an app).
+	execFileSync("bun", ["run", "db:gauntlet:media"], { cwd: REPO_ROOT, stdio: "inherit" });
 
 	// Sign in exactly as the SPA would: same route, same Origin, real Set-Cookie.
 	const res = await fetch(`${API_URL}/api/auth/sign-in`, {

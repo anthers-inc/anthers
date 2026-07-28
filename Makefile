@@ -175,6 +175,7 @@ db-seed: ## Seed dev database with fake creators/projects/posts
 
 gauntlet-reset: db-ready ## Reset the User Gauntlet fixture and put the dev account back on the floor
 	bun run db:gauntlet
+	bun run db:gauntlet:media
 
 gauntlet-clean: db-ready ## Remove the User Gauntlet fixture entirely
 	bun run db:gauntlet:clean
