@@ -240,8 +240,8 @@ export default function ForCreatorsPage() {
 								uses—half of a download's bandwidth (a fraction of a cent), or a nominal 1% where
 								nothing is delivered—plus half of your storage cost past the free {FREE_STORAGE_GIB}{" "}
 								GiB. On streaming there's no markup at all: the Foundation simply receives what's
-								left of a fan's Anthers-Seed after their bandwidth and the Time Pool. It funds free
-								access, charitable programs, and lean operations—Anthers itself never profits.
+								left of a fan's Seed to Anthers after their bandwidth and the Time Pool. It funds
+								free access, charitable programs, and lean operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -457,9 +457,8 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<SignpostCard step="2" title="The Anthers commons — the Time Pool" tone="anthers">
-							Fans also hold{" "}
-							<strong className="font-semibold text-base-content/85">Anthers-Seeds</strong> pointed
-							at the platform itself. Each one:
+							Fans also hold <strong className="font-semibold text-base-content/85">Seeds</strong>{" "}
+							pointed at the platform itself. Each one:
 							<ul>
 								<li>
 									puts {fmtMoney(TIME_POOL_PER_SEED)} into that fan's{" "}
@@ -471,7 +470,7 @@ export default function ForCreatorsPage() {
 									are the same hour
 								</li>
 								<li>
-									raises their rank (Root → Blossom), which opens Anthers-gated work across every
+									raises their Badge (Root → Blossom), which opens Anthers-gated work across every
 									creator, including yours
 								</li>
 							</ul>
@@ -499,13 +498,13 @@ export default function ForCreatorsPage() {
 					</Card>
 				</Reveal>
 
-				{/* What a fan brings to the Time Pool at each rank (derived from constants) */}
+				{/* What a fan brings to the Time Pool at each Badge (derived from constants) */}
 				<Reveal className="mx-auto mt-12 block max-w-2xl">
 					<Card className="overflow-x-auto">
 						<table className="table">
 							<thead>
 								<tr className="border-base-content/10">
-									{["Rank", "Anthers-Seeds", "They pay", "Their Time Pool"].map((h, i) => (
+									{["Badge", "Seeds to Anthers", "They pay", "Their Time Pool"].map((h, i) => (
 										<th
 											key={h}
 											style={serif}
@@ -545,13 +544,13 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
-						A fan's rank is how many Anthers-Seeds they hold right now—a point-in-time choice, not a
-						rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is split
-						across every creator they spend time with, so what reaches you is your share of their
-						month, not the whole figure. Seeds they give you directly are separate, and 100% yours.
-						*A free account pays nothing; the Foundation funds its small Time Pool and its streaming
-						floor, so even a free viewer pays the creators they watch. Bandwidth is folded into each
-						Anthers-Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you get{" "}
+						A fan's Badge is how many Seeds they're giving Anthers right now—a point-in-time choice,
+						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
+						split across every creator they spend time with, so what reaches you is your share of
+						their month, not the whole figure. Seeds they give you directly are separate, and 100%
+						yours. *A free account pays nothing; the Foundation funds its small Time Pool and its
+						streaming floor, so even a free viewer pays the creators they watch. Bandwidth is folded
+						into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you get{" "}
 						{FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
@@ -588,7 +587,7 @@ export default function ForCreatorsPage() {
 								🌼&nbsp; Anthers Gates
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Or gate on a fan's rank—Root through Blossom—and reach everyone already backing the
+								Or gate on a fan's Badge—Root through Blossom—and reach everyone already backing the
 								commons, including people who've never heard of you. That work is paid from the Time
 								Pool, so it earns without asking a newcomer for anything extra.
 							</p>
@@ -601,8 +600,8 @@ export default function ForCreatorsPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Every Seed level of yours carries a Badge you design—a small collectible emblem your
-								supporters wear, the way Anthers' ranks have their botanical wreaths. The Foundation
-								sponsors emerging illustrators to help creators make them.
+								supporters wear, the way Anthers's own Badges have their botanical wreaths. The
+								Foundation sponsors emerging illustrators to help creators make them.
 							</p>
 						</Card>
 					</Reveal>
@@ -866,7 +865,7 @@ const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
 const STREAM_HR_BANDWIDTH = perHour(STREAM_FAN_BANDWIDTH);
 const STREAM_HR_FOUNDATION = perHour(STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_BANDWIDTH);
 /** "a Sprout fan ($6/mo, ~28 hrs/month)" — the shared preamble for the stream notes. */
-const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Anthers-Seeds, ~${STREAM_FAN_HOURS} hrs/month)`;
+const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Seeds to Anthers, ~${STREAM_FAN_HOURS} hrs/month)`;
 
 // The Seed scenario: Seeds come in whole $3 units, so the comparison uses two of
 // them — $6/month — and the rival rows are scaled to the same $6.
@@ -898,11 +897,11 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 const streamReceipt: Line[] = [
 	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
 	{
-		label: "Their bandwidth — folded into their Anthers-Seeds, at cost",
+		label: "Their bandwidth — folded into their Seeds to Anthers, at cost",
 		amount: STREAM_HR_BANDWIDTH,
 	},
 	{
-		label: "The Foundation — what's left of their Anthers-Seeds, spread across the month",
+		label: "The Foundation — what's left of their Seeds to Anthers, spread across the month",
 		amount: STREAM_HR_FOUNDATION,
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
@@ -937,7 +936,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
 				{ name: "YouTube (Premium)", creator: "~$0.05–0.20", platform: "~55%" },
 			],
-			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Anthers-Seed they add. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
+			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Seed they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
 			breakdown: streamReceipt,
 		},
 		games: {
@@ -1235,9 +1234,9 @@ function SolutionExplorer() {
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
 				Anthers never profits. On a sale, beyond your price and delivery at cost, the only markup is
 				the Foundation fee, which funds free access for everyone and the Foundation's programs; on a
-				stream the Foundation simply receives what's left of the fan's Anthers-Seeds; a Seed given
-				to you is a pure passthrough. Scenario figures are illustrative; competitor rates are rough
-				public estimates.
+				stream the Foundation simply receives what's left of the fan's Seeds to Anthers; a Seed
+				given to you is a pure passthrough. Scenario figures are illustrative; competitor rates are
+				rough public estimates.
 			</p>
 		</Card>
 	);

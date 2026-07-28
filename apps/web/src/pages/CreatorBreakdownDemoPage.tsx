@@ -764,7 +764,7 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Users hold Anthers-Seeds ($3 each); each funds a Time Pool ($1.50, distributed to creators
+				Users give Anthers Seeds ($3 each); each funds a Time Pool ($1.50, distributed to creators
 				by watch-time), the user's own bandwidth (at cost, folded in), and a remainder for the
 				Anthers Foundation. Seeds given straight to a creator are 100% theirs. "To creators" here is
 				the Time Pool. {creator.displayName} earns their watch-time share —{" "}
@@ -873,7 +873,7 @@ function CreatorBreakdownPanel({ creator }: { creator: DemoCreatorBreakdown }) {
 				</div>
 				<div>
 					<h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.15em] text-primary/70">
-						Per-Supporter Funding by Rank
+						Per-Supporter Funding by Badge
 					</h4>
 					<div className="card rounded-3xl border border-base-content/10 bg-base-100 shadow-sm">
 						<div className="card-body p-4">

@@ -473,7 +473,7 @@ export default function SubscriptionPage() {
 			const res = await client.api.subscriptions.cancel.$post();
 			setAccount(((await res.json()) as unknown as { account: Account }).account);
 			setSuccess(
-				"Your Anthers-Seeds will revert to Free at the end of the current billing period.",
+				"The Seeds you give Anthers will revert to Free at the end of the current billing period.",
 			);
 		} catch {
 			setError("Failed to cancel.");
@@ -613,8 +613,8 @@ export default function SubscriptionPage() {
 
 				{/* Plan decomposition */}
 				<div className="divider text-sm text-base-content/50 my-3">
-					What your Anthers-Seeds fund
-					<InfoTip text="Each Anthers-Seed ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the Foundation). The card fee rides on top; there's no wallet." />
+					What your Seeds to Anthers fund
+					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the Foundation). The card fee rides on top; there's no wallet." />
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>

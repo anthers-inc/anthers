@@ -419,7 +419,8 @@ function BadgesTab({
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Hold Anthers-Seeds to start unlocking Badges and supporting {creatorName} with Seeds.
+							Give Seeds to Anthers to start unlocking Badges, and to {creatorName} to support them
+							directly.
 						</p>
 						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
 							Get Started

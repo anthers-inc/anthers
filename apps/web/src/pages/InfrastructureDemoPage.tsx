@@ -495,10 +495,10 @@ function UnitCostCalculator() {
 							<span className="font-semibold text-base-content">
 								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
 							</span>{" "}
-							— a bandwidth pass-through folded into the viewer's Anthers-Seeds, at cost ($0.01/GiB,
-							after a free monthly allowance). Creator earnings are{" "}
+							— a bandwidth pass-through folded into the viewer's Seeds to Anthers, at cost
+							($0.01/GiB, after a free monthly allowance). Creator earnings are{" "}
 							<span className="font-semibold text-success">decoupled</span> from this: they come
-							from viewers' Anthers-Seed Time Pool ($1.50 each), distributed by watch-time
+							from the Time Pool their Seeds to Anthers fund ($1.50 each), distributed by watch-time
 							(equal-time), plus directed Seeds. The Time Pool and Seeds reach creators in full; the
 							folded-in bandwidth is billed at cost.
 						</p>
@@ -718,7 +718,7 @@ function ReferenceCreatorProfiles() {
 				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
 				at cost with no markup. The{" "}
 				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by the
-				Anthers-Seed remainder, covers free access across the platform.
+				remainder of Seeds given to Anthers, covers free access across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -826,16 +826,17 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
-						Anthers Sprout rank: 2 Anthers-Seeds ($6) → $3 Time Pool to creators, with the remainder
-						(~$2.52) funding the Foundation; Seeds given straight to a creator are 100% theirs. Time
-						Pool is distributed by watch-time. Bandwidth is folded into each Anthers-Seed, at cost.
+						Anthers Sprout Badge: 2 Seeds to Anthers ($6) → $3 Time Pool to creators, with the
+						remainder (~$2.52) funding the Foundation; Seeds given straight to a creator are 100%
+						theirs. Time Pool is distributed by watch-time. Bandwidth is folded into each Seed, at
+						cost.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
 					<p>
-						The Anthers Foundation, funded by the Anthers-Seed remainder, covers free access — a
-						free monthly streaming floor per viewer (15 GiB) plus a per-Seed allowance, and 50 GiB
-						free storage per creator — from a shared subsidy pool.
+						The Anthers Foundation, funded by the remainder of Seeds given to Anthers, covers free
+						access — a free monthly streaming floor per viewer (15 GiB) plus a per-Seed allowance,
+						and 50 GiB free storage per creator — from a shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>

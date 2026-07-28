@@ -65,7 +65,7 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 const DEMO_PLAN = {
 	badge: "Petal",
 	anthersSeeds: 3,
-	price: 9.0, // 3 Anthers-Seeds × $3
+	price: 9.0, // 3 Seeds to Anthers × $3
 	timePool: 4.5, // to creators, distributed by watch-time ($1.50 × 3)
 	seeds: 3, // directed creator-Seeds (count, $3 each)
 	seedPool: 9.0, // $ value of the directed Seeds
@@ -468,7 +468,7 @@ function SubscriptionDashboardDemo() {
 					Your Anther—{DEMO_PLAN.month}
 				</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.badge} rank — {DEMO_PLAN.anthersSeeds} Anthers-Seeds ($
+					{DEMO_PLAN.badge} — {DEMO_PLAN.anthersSeeds} Seeds to Anthers ($
 					{DEMO_PLAN.price.toFixed(2)}/mo)
 				</p>
 			</div>
@@ -602,7 +602,7 @@ function SubscriptionDashboardDemo() {
 					</div>
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">
-						<span>{DEMO_PLAN.badge} rank total</span>
+						<span>{DEMO_PLAN.badge} total</span>
 						<span>${monthlyTotal.toFixed(2)}</span>
 					</div>
 					<p className="text-xs text-base-content/40 mt-1">

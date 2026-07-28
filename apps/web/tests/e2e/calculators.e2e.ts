@@ -65,12 +65,13 @@ test.describe("Resources calculators", () => {
 	test("creator monetization: support model renders zero-cut", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/creator-monetization");
-		// The viewer picks a rank (their Anthers-Seed count, a segmented control — not a GiB
-		// slider); creator earnings = a share of the Time Pool by watch-time + directed Seeds.
-		await expect(page.getByText("Viewer's rank").first()).toBeVisible();
+		// The viewer picks a Badge (how many Seeds they give Anthers, a segmented control —
+		// not a GiB slider); creator earnings = a share of the Time Pool by watch-time plus
+		// the Seeds given straight to them.
+		await expect(page.getByText("Viewer's Badge").first()).toBeVisible();
 		// The crux line states the zero-cut split ("...reaches creators (Time Pool + Seeds)...").
 		await expect(page.getByText(/reaches creators/)).toBeVisible();
 		expect(errors).toEqual([]);
-		// TODO(Phase 6): restore a live rank-pick interaction assertion once the app is run.
+		// TODO(Phase 6): restore a live Badge-pick interaction assertion once the app is run.
 	});
 });

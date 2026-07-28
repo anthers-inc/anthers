@@ -37,7 +37,7 @@ import { useState } from "react";
 
 /* ── Model dials — all from @anthers/shared/constants, never re-typed here ───── */
 const FREE_GIB = FREE_FLOOR_GIB; // free streaming floor at 0 Seeds (avoids a paywall cliff)
-const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Anthers-Seed
+const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Seed given to Anthers
 const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, Foundation-subsidized
 const MAX_SEEDS = 10; // stepper cap (a page choice, not a model dial); past 4 the badge gains a "+"
 

@@ -47,7 +47,7 @@ const EXPLAINERS: ResourceCard[] = [
 		to: "/demo-user",
 		title: "See where your money goes",
 		blurb:
-			"A viewer's-eye view of Anthers-Seeds, Seeds, the Time Pool, and where every dollar goes.",
+			"A viewer's-eye view of Seeds — to Anthers and to creators — the Time Pool, and where every dollar goes.",
 		tag: "Users",
 		icon: WalletIcon,
 	},

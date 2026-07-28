@@ -231,7 +231,7 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const target = Number(c.req.param("seeds"));
 		if (!Number.isInteger(target) || target < 0 || target > MAX_ANTHERS_SEEDS) {
-			return c.json({ error: "Invalid Anthers-Seed count" }, 400);
+			return c.json({ error: "Invalid Seed count" }, 400);
 		}
 		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
@@ -241,7 +241,7 @@ const subscriptionRoutes = new Hono()
 		// Cancel preview (→ 0 / Free): what you keep, and until when.
 		if (target === 0) {
 			if (!acct.stripeSubscriptionId || acct.anthersSeeds === 0) {
-				return c.json({ error: "No Anthers-Seeds to cancel" }, 400);
+				return c.json({ error: "No Seeds to Anthers to cancel" }, 400);
 			}
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			return c.json({
@@ -335,7 +335,7 @@ const subscriptionRoutes = new Hono()
 			}
 
 			const priceId = seedPriceId();
-			if (!priceId) return c.json({ error: "No Stripe price configured for Anthers-Seeds" }, 500);
+			if (!priceId) return c.json({ error: "No Stripe price configured for Seeds" }, 500);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
 
 			// Changing the count on an active subscription → set the quantity with proration.
@@ -423,7 +423,7 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
 		if (!acct || acct.anthersSeeds === 0) {
-			return c.json({ error: "No Anthers-Seeds to cancel" }, 400);
+			return c.json({ error: "No Seeds to Anthers to cancel" }, 400);
 		}
 		// Refuse outright when payments aren't configured, like the other seven payment
 		// routes. This used to be `if (stripe && …)`, which silently SKIPPED Stripe and
