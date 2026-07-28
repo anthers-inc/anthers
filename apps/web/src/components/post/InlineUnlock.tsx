@@ -105,12 +105,13 @@ export default function InlineUnlock({
 	return (
 		<UnlockCard
 			lockedBy={lockedBy}
+			// No blurb when there's a route: the button already says what to do and to whom,
+			// and a sentence restating it just makes the reader parse the same fact twice.
+			// The blurb survives only where nothing else explains the situation.
 			blurb={
-				anthersFirst && anthersRoute
-					? `This post opens at ${seedCount(anthersRoute.threshold)} to Anthers — $${anthersRoute.price}/month.`
-					: creatorRoute
-						? `This post opens at ${seedCount(creatorRoute.threshold)} to ${creatorName} — $${creatorRoute.price}/month.`
-						: `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`
+				!anthersRoute && !creatorRoute
+					? `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`
+					: undefined
 			}
 		>
 			{anthersRoute ? (
@@ -164,7 +165,8 @@ function UnlockCard({
 	lockedBy,
 	children,
 }: {
-	blurb: string;
+	/** Only for states the action itself doesn't explain (login, or no route at all). */
+	blurb?: string;
 	/** Badge the gate sits on, when it sits on one — the lock's *identity*. */
 	lockedBy?: string | null;
 	children: React.ReactNode;
@@ -178,7 +180,7 @@ function UnlockCard({
 				<h3 className="font-bold text-lg">
 					{lockedBy ? `Locked · ${lockedBy}` : "Unlock this post"}
 				</h3>
-				<p className="text-sm text-base-content/60 max-w-sm">{blurb}</p>
+				{blurb ? <p className="text-sm text-base-content/60 max-w-sm">{blurb}</p> : null}
 				{children}
 			</div>
 		</div>

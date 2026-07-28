@@ -119,13 +119,13 @@ export function UnlockPanel({
 }) {
 	const isLogin = access.reason === "login_required";
 	const cheapest = cheapestRoute(access, creatorName);
-	// State the requirement, not the mechanism: what they're short by, and where it goes.
+	// No message when there's a route — the CTA below already names the ask and its
+	// destination, and repeating it in a sentence above makes the reader read it twice.
+	// Kept only for the states nothing else explains.
 	const message = isLogin
 		? `Log in to check your access to this post from ${creatorName}.`
 		: cheapest
-			? `This post opens at ${cheapest.route.threshold} Seed${
-					cheapest.route.threshold === 1 ? "" : "s"
-				} to ${cheapest.target} — $${cheapest.route.price}/month.`
+			? null
 			: `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`;
 	// Land on the tiers tab, where the ladder and the Give Seeds control actually are —
 	// the profile's default tab drops the intent the viewer arrived with.
@@ -136,8 +136,12 @@ export function UnlockPanel({
 				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
 					<LockClosedIcon className="w-6 h-6 text-base-content/70" />
 				</div>
-				<h3 className="font-bold text-lg">Unlock this post</h3>
-				<p className="text-sm text-base-content/60 max-w-sm">{message}</p>
+				<h3 className="font-bold text-lg">
+					{lockedByBadge(access, creatorName)
+						? `Locked · ${lockedByBadge(access, creatorName)}`
+						: "Unlock this post"}
+				</h3>
+				{message ? <p className="text-sm text-base-content/60 max-w-sm">{message}</p> : null}
 				<Link to={to} className="btn btn-primary btn-wide">
 					{unlockLabel(access, creatorName)}
 				</Link>
@@ -205,13 +209,11 @@ export function UnlockModal({
 		const cheapest = cheapestRoute(access, creatorName);
 		body = (
 			<>
-				<p className="text-sm text-base-content/60">
-					{cheapest
-						? `Opens at ${cheapest.route.threshold} Seed${
-								cheapest.route.threshold === 1 ? "" : "s"
-							} to ${cheapest.target} — $${cheapest.route.price}/month.`
-						: `Give Seeds to ${creatorName} to unlock this and their members-only work.`}
-				</p>
+				{cheapest ? null : (
+					<p className="text-sm text-base-content/60">
+						Give Seeds to {creatorName} to unlock this and their members-only work.
+					</p>
+				)}
 				<Link
 					to={post.creator?.username ? `/${post.creator.username}?tab=badges` : "/subscribe"}
 					className="btn btn-primary btn-block"
