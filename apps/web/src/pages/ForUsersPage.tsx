@@ -153,7 +153,7 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* ① The Anthers commons — free floor + Anthers-Seeds + Time Pool */}
+			{/* ① The Anthers commons — free floor + Seeds to Anthers + Time Pool */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>① The Anthers commons</Eyebrow>
@@ -166,12 +166,12 @@ export default function ForUsersPage() {
 						creativity and community with their neighbors around the world.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Anthers-Seeds are how you help keep it that way. Each Seed you point at Anthers covers
-						your own streaming at cost, funds the free public content everyone enjoys—creators earn
-						from the <strong className="font-semibold text-base-content/80">Time Pool</strong> for
-						the time people spend with their public work—and raises your rank, unlocking a growing
-						library of Anthers-gated content across every creator. The more the garden fills in, the
-						more each Seed gives you.
+						Seeds given to Anthers are how you help keep it that way. Each one covers your own
+						streaming at cost, funds the free public content everyone enjoys—creators earn from the{" "}
+						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
+						people spend with their public work—and raises your Badge, unlocking a growing library
+						of Anthers-gated content across every creator. The more the garden fills in, the more
+						each Seed gives you.
 					</p>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -183,15 +183,15 @@ export default function ForUsersPage() {
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
 								free viewer's small bandwidth cost is subsidized by the Anthers Foundation, from a
-								pool that every Anthers-Seed supports. By sharing the load together, mountains
-								diffuse into pebbles—and we all get a healthier internet for it.
+								pool that every Seed given to Anthers supports. By sharing the load together,
+								mountains diffuse into pebbles—and we all get a healthier internet for it.
 							</p>
 						</Card>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
 							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🎋&nbsp; What Anthers-Seeds add
+								🎋&nbsp; What Seeds to Anthers add
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
 								<FreeItem yes>
@@ -201,12 +201,12 @@ export default function ForUsersPage() {
 									A Time Pool that pays creators for the time you spend with their public work.
 								</FreeItem>
 								<FreeItem yes>
-									A rank that opens a growing library of Anthers-gated content, across every
+									A Badge that opens a growing library of Anthers-gated content, across every
 									creator.
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
-								Anthers-Seeds are $3 a month each—hold 1 for Root, up to 4+ for Blossom. Supporting
+								Seeds are $3 a month each—give Anthers 1 for Root, up to 4+ for Blossom. Supporting
 								Anthers is separate from supporting a creator directly—one keeps the commons free,
 								the other reaches a creator in full.
 							</p>
@@ -232,7 +232,7 @@ export default function ForUsersPage() {
 								<p className="mt-0.5 font-mono text-xs text-primary">{b.threshold}</p>
 								<p className="mt-0.5 text-[11px] text-base-content/45">
 									{i + 1}
-									{i === BADGE_LADDER.length - 1 ? "+" : ""} Anthers-Seed{i > 0 ? "s" : ""}
+									{i === BADGE_LADDER.length - 1 ? "+" : ""} Seed{i > 0 ? "s" : ""} to Anthers
 								</p>
 								{i < BADGE_LADDER.length - 1 && (
 									<span className="pointer-events-none absolute -right-3 top-8 hidden text-base-content/25 md:block">

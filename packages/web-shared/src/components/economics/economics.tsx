@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The two Meadow economics cards — the interactive "Where your Anthers-Seeds go"
+// The two Meadow economics cards — the interactive "Where your Seeds to Anthers go"
 // rank picker and the one-time-purchase example — plus the badge ladder and the
 // hover-tooltip (i). All numbers derive from the support model (see
 // @anthers/shared/constants + fees): a Seed is a flat $3, pointed at a creator
@@ -218,10 +218,10 @@ export function SubscriptionCalculator() {
 	return (
 		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
 			<h3 style={serif} className="mb-1 text-lg font-medium">
-				Where your Anthers-Seeds go
+				Where your Seeds to Anthers go
 			</h3>
 			<p className="mb-5 text-xs text-base-content/50">
-				Pick a rank — each Anthers-Seed is $3. Everything updates live.
+				Pick a level — each Seed is $3. Everything updates live.
 			</p>
 
 			<PlanPicker value={badge} onChange={setBadge} />
@@ -236,10 +236,10 @@ export function SubscriptionCalculator() {
 				<div>
 					<div className="flex items-center justify-between gap-3 text-sm">
 						<div className="min-w-0">
-							<span className="font-medium text-base-content/90">{badgeLabel(badge)} rank</span>
+							<span className="font-medium text-base-content/90">{badgeLabel(badge)}</span>
 							<span className="text-base-content/55">
 								{" "}
-								— {n} Anthers-Seed{n === 1 ? "" : "s"}
+								— {n} Seed{n === 1 ? "" : "s"} to Anthers
 							</span>
 						</div>
 						<span className="w-14 text-right font-mono tabular-nums">{money(price)}</span>
@@ -291,8 +291,8 @@ export function SubscriptionCalculator() {
 				</p>
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
-				Bandwidth is folded in: every account streams a free floor each month, and each Anthers-Seed
-				adds more — all at cost ({money(BANDWIDTH_PER_GIB)}/GiB), no wallet, no hidden fees.
+				Bandwidth is folded in: every account streams a free floor each month, and each Seed adds
+				more — all at cost ({money(BANDWIDTH_PER_GIB)}/GiB), no wallet, no hidden fees.
 			</p>
 		</div>
 	);

@@ -145,7 +145,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: "A fan's Anthers-Seeds set a monthly Time Pool ($1.50 each) that's split across everyone they watch, by watch-time — 100% reaches creators, Anthers profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
+				note: "The Seeds a fan gives Anthers set a monthly Time Pool ($1.50 each) that's split across everyone they watch, by watch-time — 100% reaches creators, Anthers profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
 			},
 		],
 	},
@@ -164,7 +164,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "$0.004/stream × ~17 songs (3:30 each); an artist keeps less after their label",
 					cut: "~30% + labels",
 				},
-				note: `Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on how many Anthers-Seeds the fan holds that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.`,
+				note: `Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on how many Seeds the fan gives Anthers that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: Seeds and direct album/merch sales are, and those are 100% yours.`,
 			},
 		],
 	},
@@ -274,7 +274,7 @@ export default function CreatorPayComparisonPage() {
 						<b className="text-base-content">Seed</b> given to you and every direct sale is 100%
 						yours, and the Time Pool is distributed to creators by watch-time. The one thing that
 						funds the platform is the <b className="text-base-content">Foundation remainder</b> —
-						what's left of each Anthers-Seed after the fan's own bandwidth and the Time Pool,
+						what's left of each Seed to Anthers after the fan's own bandwidth and the Time Pool,
 						funding free access and creator programs, never subtracted from your earnings. Here's
 						what actually reaches you, platform by platform.
 					</>
@@ -318,9 +318,9 @@ export default function CreatorPayComparisonPage() {
 					out of what reaches creators. Support is all in{" "}
 					<b className="text-base-content/70">Seeds</b> — a flat $3/month each. A fan gives Seeds
 					straight to creators ($3, 100% to them) and holds{" "}
-					<b className="text-base-content/70">Anthers-Seeds</b> pointed at Anthers; each
-					Anthers-Seed splits into a Time Pool ($1.50, distributed to the creators they watch by
-					watch-time), the fan's own bandwidth (at cost, folded in — no wallet), and the{" "}
+					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
+					Time Pool ($1.50, distributed to the creators they watch by watch-time), the fan's own
+					bandwidth (at cost, folded in — no wallet), and the{" "}
 					<b className="text-base-content/70">Foundation remainder</b> that funds free access and
 					creator programs. On a direct sale the creator receives the full listed price; the only
 					add is a small Foundation fee — a markup on that download's bandwidth (about half of it)
@@ -328,8 +328,8 @@ export default function CreatorPayComparisonPage() {
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
-					their monthly watch-time, the same rate for every medium (equal-time). Each Anthers-Seed
-					adds ${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
+					their monthly watch-time, the same rate for every medium (equal-time). Each Seed to
+					Anthers adds ${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
 					{PAID_POOLS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}

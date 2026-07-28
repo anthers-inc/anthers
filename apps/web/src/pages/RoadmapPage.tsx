@@ -341,9 +341,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 					items: [
 						{
 							id: "u-sub-tiers",
-							title: "Anthers-Seeds & Seeds",
+							title: "Seeds — to Anthers, and to creators",
 							description:
-								"Hold Anthers-Seeds ($3 each — your count is your rank, Root to Blossom) and give Seeds straight to creators (100% to them). Each Anthers-Seed funds the Time Pool (shared by watch-time), your streaming (at cost, folded in — no wallet), and a remainder for the Anthers Foundation. Every dollar is money to creators, bandwidth at cost, or the Foundation remainder.",
+								"Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (100% to them). Each Seed to Anthers funds the Time Pool (shared by watch-time), your streaming (at cost, folded in — no wallet), and a remainder for the Anthers Foundation. Every dollar is money to creators, bandwidth at cost, or the Foundation remainder.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,

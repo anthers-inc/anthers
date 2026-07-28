@@ -309,8 +309,8 @@ export default function AboutPage() {
 							<p className="leading-relaxed text-base-content/65">
 								Creators keep 100% of every Seed and every direct purchase, and the shared Time Pool
 								pays out to creators by watch-time. Every dollar a user spends is money to creators,
-								bandwidth at cost, or the remainder of each Anthers-Seed that supports the Anthers
-								Foundation—a non-profit, so no investors and no profit-taking.
+								bandwidth at cost, or the remainder of each Seed given to Anthers that supports the
+								Anthers Foundation—a non-profit, so no investors and no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -336,9 +336,9 @@ export default function AboutPage() {
 						</h3>
 						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 							The Foundation is the operational heart of Anthers's mission, funded by the remainder
-							of each Anthers-Seed, plus small fees on creator storage and on direct downloads. The
-							great majority of it is charitable: it funds free access for everyone, plus
-							infrastructure equity, education, creation grants, and emergency assistance.
+							of each Seed given to Anthers, plus small fees on creator storage and on direct
+							downloads. The great majority of it is charitable: it funds free access for everyone,
+							plus infrastructure equity, education, creation grants, and emergency assistance.
 						</p>
 					</Reveal>
 					<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -401,7 +401,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Seeds (given to creators, or held as Anthers-Seeds) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Anthers-Seed that supports the Anthers Foundation. As a non-profit, Anthers takes no profit—the remainder it collects funds free access and the Foundation's programs.",
+								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Seed given to Anthers that supports the Anthers Foundation. As a non-profit, Anthers takes no profit—the remainder it collects funds free access and the Foundation's programs.",
 							},
 							{
 								num: "04",
