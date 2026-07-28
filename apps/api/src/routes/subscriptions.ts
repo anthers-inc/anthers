@@ -37,7 +37,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type Stripe from "stripe";
 import { z } from "zod";
-import { stripe } from "../lib/stripe.js";
+import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import {
 	type AccessiblePost,
@@ -233,6 +233,7 @@ const subscriptionRoutes = new Hono()
 		if (!Number.isInteger(target) || target < 0 || target > MAX_ANTHERS_SEEDS) {
 			return c.json({ error: "Invalid Anthers-Seed count" }, 400);
 		}
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		const acct = await ensureAccount(user.id);
@@ -314,6 +315,7 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { anthersSeeds } = c.req.valid("json");
+			const stripe = getStripe();
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
@@ -384,6 +386,7 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { quantity } = c.req.valid("json");
+			const stripe = getStripe();
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 			await ensureAccount(user.id);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
@@ -428,6 +431,7 @@ const subscriptionRoutes = new Hono()
 		// Stripe, so billing would keep charging a user the UI showed as cancelled. That was
 		// filed as harmless while prod carried no Stripe config; prod now runs Stripe in
 		// test mode, so the guard is doing real work.
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Cancel at period end — the Seeds keep working until the cycle ends, then the
@@ -449,6 +453,7 @@ const subscriptionRoutes = new Hono()
 			return c.json({ error: "No canceled subscription to resume" }, 400);
 		}
 		// Same guard as cancel — see the note there on why `if (stripe && …)` was wrong.
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		if (acct.stripeSubscriptionId) {
@@ -461,6 +466,7 @@ const subscriptionRoutes = new Hono()
 
 	// ── Billing Portal ───────────────────────────────────────────────────────
 	.post("/billing-portal", requireAuth, async (c) => {
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 		const user = c.get("user");
 		const customerId = await ensureStripeCustomer(user.id, user.email);

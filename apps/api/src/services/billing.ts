@@ -14,7 +14,7 @@ import { anthersSeedBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
-import { stripe } from "../lib/stripe.js";
+import { getStripe } from "../lib/stripe.js";
 
 function currentBillingCycle(): string {
 	const now = new Date();
@@ -56,6 +56,7 @@ export function anthersSeedsFromSub(sub: Stripe.Subscription): number {
 
 /** Create (once) and persist the user's Stripe customer id. */
 export async function ensureStripeCustomer(userId: number, email: string): Promise<string> {
+	const stripe = getStripe();
 	if (!stripe) throw new Error("Stripe not configured");
 	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, userId)).limit(1);
 	if (acct?.stripeCustomerId) return acct.stripeCustomerId;
@@ -74,6 +75,7 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 export async function savedCardFor(
 	customerId: string,
 ): Promise<{ id: string; brand: string; last4: string } | null> {
+	const stripe = getStripe();
 	if (!stripe) return null;
 	const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
 	const pm = pms.data[0];
@@ -92,6 +94,7 @@ export async function createOneTimeCharge(opts: {
 	type: "seeds";
 	base: number;
 }): Promise<{ clientSecret: string | null; buyerTotal: string; processingFee: string }> {
+	const stripe = getStripe();
 	if (!stripe) throw new Error("Stripe not configured");
 	const base = new Decimal(opts.base);
 	const processing = base.mul(CARD_RATE).plus(CARD_FLAT); // buyer covers the card fee, on top

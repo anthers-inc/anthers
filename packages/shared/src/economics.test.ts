@@ -47,6 +47,32 @@ describe("anthersSeedBreakdown", () => {
 		expect(b.subsidised).toBe(true);
 		expect(b.timePool.toNumber()).toBeGreaterThan(0);
 	});
+
+	/**
+	 * The shock absorber has no floor, and that is deliberate rather than an oversight:
+	 * the remainder is a plain subtraction, so a heavy enough streamer drives it negative
+	 * — which is the true statement that this user cost the Foundation money, and the
+	 * number the accounting wants. Clamping here would silently break the conservation
+	 * invariant asserted above (the parts would no longer sum to the seed value).
+	 *
+	 * The clamp belongs at the boundary that persists it, and lives there: `settle-cycle.ts`
+	 * writes `Decimal.max(0, foundation)` to the ledger and the cycle snapshot, because both
+	 * report what the Foundation *received*, which is never less than nothing. That clamp is
+	 * pinned end-to-end in `apps/api/src/__tests__/payments-stripe.test.ts`. (The identical
+	 * line in `billing.ts`'s `snapshotCycle` is defensive only and cannot currently fire —
+	 * that path passes no bandwidth, so its remainder is always $1.50 per Seed.)
+	 */
+	test("Foundation can go negative — the remainder has no floor, by design", () => {
+		// One Seed ($3) against 200 GiB at $0.01/GiB: $3.00 − $1.50 Time Pool − $2.00 = −$0.50.
+		const b = anthersSeedBreakdown(1, { bandwidthGiB: 200 });
+		expect(b.foundation.isNegative()).toBe(true);
+		expect(b.foundation.toFixed(2)).toBe("-0.50");
+		// Conservation still holds exactly, which is the reason not to clamp here.
+		expect(b.timePool.plus(b.bandwidth).plus(b.foundation).toFixed(2)).toBe(b.seedValue.toFixed(2));
+		// The Time Pool is untouched: creators are paid the same by a user who cost more
+		// to serve than they paid in.
+		expect(b.timePool.toFixed(2)).toBe("1.50");
+	});
 });
 
 describe("cardFee (Payments, on top)", () => {

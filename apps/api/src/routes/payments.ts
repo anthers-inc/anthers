@@ -25,7 +25,7 @@ import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
-import { stripe } from "../lib/stripe.js";
+import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
@@ -115,6 +115,7 @@ const paymentRoutes = new Hono()
 
 	.post("/stripe/onboard", requireAuth, async (c) => {
 		const user = c.get("user");
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Check for existing Stripe account
@@ -178,6 +179,7 @@ const paymentRoutes = new Hono()
 		if (!q.ok) return c.json({ error: q.error }, q.status);
 		const { post, amount, fees } = q;
 
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Route 100% of the listed price to the creator when they're set up to receive it;
@@ -324,6 +326,7 @@ const paymentRoutes = new Hono()
 
 	// ── Stripe Webhook ───────────────────────────────────────────────────────
 	.post("/stripe/webhook", async (c) => {
+		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		const sig = c.req.header("stripe-signature");
