@@ -3,8 +3,8 @@
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-ready db-up db-down db-generate db-migrate db-push db-studio db-seed db-reset \
         gauntlet-reset gauntlet-clean stripe-webhooks \
-        typecheck test lint lint-fix format \
-        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet \
+        verify typecheck test lint lint-fix format \
+        e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
         desktop-dev desktop-check desktop-build desktop-build-linux desktop-build-windows \
         desktop-build-macos desktop-notarize desktop-version desktop-release
 
@@ -196,6 +196,27 @@ db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipe
 
 # ─── Quality ───
 
+# What CI runs, in CI's order, as one command. `bun test` alone is the unit suites only,
+# and `--project=gauntlet` skips the `chromium` project the marketing-page specs live in —
+# so running a subset and believing you're covered is the easy mistake, and it is the one
+# that has actually broken CI here. If this passes, ci.yml should too; if you skip it, you
+# are guessing. (The `images` job isn't mirrored — it needs Docker and exists to catch a
+# workspace-manifest failure mode that only appears in an image build.)
+verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Playwright
+	bun run typecheck
+	bun run lint
+	$(MAKE) db-ready
+	bun test
+	$(MAKE) free-preview-port
+	cd apps/web && bunx playwright test
+
+# The SPA preview server is never reused (see playwright.config.ts), so Playwright now
+# refuses to start when something already holds the port — loudly, which is the point.
+# The blessed targets clear it for you so that strictness isn't just an obstacle; running
+# `bunx playwright test` by hand still gets the error, which is the right default.
+free-preview-port:
+	@fuser -k 4173/tcp >/dev/null 2>&1 && echo "  freed a stale preview server on :4173" || true
+
 typecheck: ## Run TypeScript type checking
 	bun run typecheck
 
@@ -224,13 +245,13 @@ e2e-install: ## Install the Chromium build Playwright drives (one-time)
 screenshots: ## Screenshot routes and flag JS errors (ROUTES="/a /b" to override)
 	cd apps/web && bun run build.ts && bun run scripts/screenshot.ts $(ROUTES)
 
-test-e2e: ## Run the Playwright e2e suite (builds + serves automatically)
+test-e2e: free-preview-port ## Run the Playwright e2e suite (builds + serves automatically)
 	cd apps/web && bunx playwright test
 
-test-e2e-ui: ## Run the Playwright e2e suite in UI mode
+test-e2e-ui: free-preview-port ## Run the Playwright e2e suite in UI mode
 	cd apps/web && bunx playwright test --ui
 
-test-gauntlet: ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
+test-gauntlet: free-preview-port ## Run the User Gauntlet spec pass (fixture reset + staircase walk)
 	cd apps/web && bunx playwright test --project=gauntlet
 
 
