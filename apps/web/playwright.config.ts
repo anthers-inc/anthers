@@ -51,11 +51,18 @@ export default defineConfig({
 	],
 	webServer: [
 		// The SPA, built and served statically — what the browser loads.
+		//
+		// NEVER reused, even locally. This is the only server that serves the *bundle*, and
+		// reusing it skips the `build.ts` in the command above — so anything already sitting
+		// on this port (a preview you started by hand, an earlier run) gets tested instead of
+		// your working tree. That produces the worst kind of failure: one the source in front
+		// of you contradicts. It cost a debugging cycle on 2026-07-28, chasing a fix that was
+		// already correct. A rebuild is a few seconds; a lie is expensive.
 		{
 			command: `bun run build.ts && PORT=${PORT} bun run serve.ts`,
 			cwd: here,
 			url: `http://localhost:${PORT}`,
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 			timeout: 120_000,
 		},
 		// The real API + Postgres. Pages served from localhost resolve their API base to
@@ -64,6 +71,10 @@ export default defineConfig({
 		// Locally this reuses a running `make dev` API (same port, same database); without
 		// one it brings the dev Postgres up itself (docker) and starts the API. In CI the
 		// database is a service container and the environment carries DATABASE_URL.
+		//
+		// Reuse is kept HERE, unlike the SPA above, because this server doesn't serve the
+		// bundle — it runs from source, so a running `make dev` API is already current. That
+		// asymmetry is the point: reuse what can't go stale, rebuild what can.
 		{
 			command: process.env.CI
 				? "bun src/index.ts"
