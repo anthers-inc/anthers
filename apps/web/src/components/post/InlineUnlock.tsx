@@ -36,7 +36,7 @@ export default function InlineUnlock({
 }) {
 	const [pending, setPending] = useState<{
 		anthersSeeds: number;
-		planName: string;
+		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ export default function InlineUnlock({
 				param: { seeds: String(minAnthersSeeds) },
 			});
 			if (!res.ok) {
-				setError("Couldn't load plan details. Please try again.");
+				setError("Couldn't load the details. Please try again.");
 				return;
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
@@ -84,13 +84,13 @@ export default function InlineUnlock({
 				anthersSeeds: minAnthersSeeds,
 				// Name the Badge only when the gate actually sits on one; otherwise the
 				// level itself is the honest label for what's being bought.
-				planName: anthersRoute?.badge
+				badgeName: anthersRoute?.badge
 					? badgeLabel(anthersRoute.badge as BadgeKey)
 					: `${minAnthersSeeds} Seed${minAnthersSeeds === 1 ? "" : "s"}`,
 				preview,
 			});
 		} catch {
-			setError("Couldn't load plan details. Please try again.");
+			setError("Couldn't load the details. Please try again.");
 		} finally {
 			setLoading(false);
 		}
@@ -147,7 +147,7 @@ export default function InlineUnlock({
 			{pending && (
 				<SubscriptionPaymentModal
 					anthersSeeds={pending.anthersSeeds}
-					planName={pending.planName}
+					badgeName={pending.badgeName}
 					preview={pending.preview}
 					onComplete={() => {
 						setPending(null);

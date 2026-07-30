@@ -5,18 +5,19 @@
 // shown as two symmetrical interactive cards wrapped in one outer card:
 //
 //   • Back the ANTHERS COMMONS (left) — the same Seed, pointed at Anthers. Each Seed
-//     scales your streaming allowance, Time Pool, and Anthers-gate access rank.
+//     scales your streaming allowance, Time Pool, and the Anthers Gates you clear.
 //   • Back a CREATOR (right) — Seeds, $3/mo each, 100% to the creator. Each Seed level
 //     unlocks more of their world, and each is branded with the creator's own Badge —
-//     the same mechanic as Anthers's ranks, so users can collect badges across creators.
+//     the same mechanic as Anthers's Badges, so users can collect them across creators.
 //
-// Both cards share the BadgeLadder (Anthers renders its botanical rank wreaths; a creator
-// renders their own cute emblems). Seeds run 0–10; past 4 you keep the top badge with a
-// "+" (Blossom+, Legend+) while benefits keep scaling — the rank for gating stays the top.
+// Both cards share the BadgeLadder (Anthers renders its botanical wreaths; a creator
+// renders their own cute emblems). Seeds run 0–10; past 4 you keep the top Badge with a
+// "+" (Blossom+, Legend+) while benefits keep scaling — the gating Badge stays the top.
 // The outer card sums BOTH steppers into one monthly-spend breakdown. Every dollar figure
 // comes from @anthers/shared/constants — the same dials the API charges against — so this
 // page can't drift from the model; the creator-Badge names/perks are the only invented
-// part. The steppers are still front-end only: they aren't wired to checkout.
+// part. The Anthers stepper commits for real through SubscriptionPaymentModal; the
+// creator stepper stays illustrative, since giving Seeds to a creator needs a creator.
 
 import {
 	CARD_FLAT,
@@ -32,8 +33,12 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { BADGE_ART } from "@anthers/web-shared/economics";
+import { client } from "@anthers/web-shared/rpc";
 import type { Badge } from "@anthers/web-shared/types";
 import { useState } from "react";
+import SubscriptionPaymentModal, {
+	type SubscriptionPreview,
+} from "../components/subscribe/SubscriptionPaymentModal";
 
 /* ── Model dials — all from @anthers/shared/constants, never re-typed here ───── */
 const FREE_GIB = FREE_FLOOR_GIB; // free streaming floor at 0 Seeds (avoids a paywall cliff)
@@ -41,8 +46,8 @@ const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Seed g
 const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, Foundation-subsidized
 const MAX_SEEDS = 10; // stepper cap (a page choice, not a model dial); past 4 the badge gains a "+"
 
-// Anthers ranks map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
-const RANK_ORDER: Badge[] = ["root", "sprout", "petal", "blossom"];
+// Anthers Badges map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
+const BADGE_NAMES: Badge[] = ["root", "sprout", "petal", "blossom"];
 const LADDER: { label: string; badge: Badge }[] = [
 	{ label: "Free", badge: "free" },
 	{ label: "Root", badge: "root" },
@@ -53,7 +58,7 @@ const LADDER: { label: string; badge: Badge }[] = [
 
 // A generic example creator's Badges (one per Seed level) + what each unlocks. Cute and
 // deliberately NOT botanical, so they read as the creator's own brand, distinct from
-// Anthers's flower ranks. Gate i unlocks at i+1 Seeds ($(i+1)*3).
+// Anthers's flower Badges. Gate i unlocks at i+1 Seeds ($(i+1)*3).
 const CREATOR_BADGES = [
 	{ emoji: "🐣", name: "New Friend", perk: "Early access to everything new" },
 	{ emoji: "🌟", name: "Regular", perk: "Behind-the-scenes & extras" },
@@ -75,9 +80,9 @@ function watchHours(gib: number): number {
 	return Math.round(gib / DELIVERY_GIB_PER_HOUR);
 }
 
-/** The Anthers rank a given Seed count reaches (null at 0). */
-function rankFor(seeds: number): Badge | null {
-	return seeds <= 0 ? null : RANK_ORDER[Math.min(seeds, RANK_ORDER.length) - 1];
+/** The Anthers Badge a given Seed count reaches (null at 0). */
+function badgeAt(seeds: number): Badge | null {
+	return seeds <= 0 ? null : BADGE_NAMES[Math.min(seeds, BADGE_NAMES.length) - 1];
 }
 
 /* ── Small pieces ───────────────────────────────────────────────────────────── */
@@ -265,7 +270,7 @@ function BadgeLadder({
 	);
 }
 
-// Anthers ranks render the botanical wreath + emoji from the brand package.
+// Anthers Badges render the botanical wreath + emoji from the brand package.
 const ANTHERS_RUNGS = LADDER.map((rung) => ({
 	label: rung.label,
 	render: (active: boolean) =>
@@ -312,8 +317,8 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 	const cost = SEED_PRICE * seeds;
 	const gib = FREE_GIB + GIB_PER_SEED * seeds;
 	const timePool = TIMEPOOL_PER_SEED * seeds;
-	const rank = rankFor(seeds);
-	const rankName = rank ? rank[0].toUpperCase() + rank.slice(1) : null;
+	const badge = badgeAt(seeds);
+	const badgeName = badge ? badge[0].toUpperCase() + badge.slice(1) : null;
 
 	return (
 		<div className="flex h-full flex-col rounded-2xl border-2 border-accent/30 bg-base-200/60 p-6 shadow-sm">
@@ -332,7 +337,7 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 				<BadgeLadder
 					rungs={ANTHERS_RUNGS}
 					activeIndex={Math.min(seeds, LADDER.length - 1)}
-					plus={seeds > RANK_ORDER.length}
+					plus={seeds > BADGE_NAMES.length}
 				/>
 			</div>
 
@@ -371,9 +376,9 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 						)}
 					</BenefitRow>
 					<BenefitRow icon="🔓" label="Access">
-						{rankName ? (
+						{badgeName ? (
 							<>
-								<strong>{rankName}</strong>-gated content, across every creator
+								<strong>{badgeName}</strong>-gated content, across every creator
 							</>
 						) : (
 							<span className="text-base-content/50">Free public content only</span>
@@ -452,6 +457,45 @@ export default function SubscribePage() {
 	// either Anthers or a creator) — a visitor sees $0/mo first, then opts up if they like.
 	const [anthersSeeds, setAnthersSeeds] = useState(0);
 	const [creatorSeeds, setCreatorSeeds] = useState(0);
+
+	// The commit ceremony. This page used to render both steppers and no way to act on
+	// them — /subscription's "Adjust Seeds" pointed here, which was a dead end. It opens
+	// the SAME modal the locked-post inline unlock uses, deliberately: one ceremony, so
+	// proration, the next-charge date and the saved card are described identically
+	// wherever a user commits.
+	const [pending, setPending] = useState<{
+		anthersSeeds: number;
+		badgeName: string;
+		preview: SubscriptionPreview;
+	} | null>(null);
+	const [committing, setCommitting] = useState(false);
+	const [commitError, setCommitError] = useState<string | null>(null);
+
+	const commitAnthersSeeds = async () => {
+		setCommitting(true);
+		setCommitError(null);
+		try {
+			const res = await client.api.subscriptions.preview[":seeds"].$get({
+				param: { seeds: String(anthersSeeds) },
+			});
+			if (!res.ok) {
+				setCommitError("Couldn't load the details. Please try again.");
+				return;
+			}
+			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
+			setPending({
+				anthersSeeds,
+				// The Seed count is the honest label: a commit needn't land on a Badge, and
+				// naming the Badge below the count would understate what's being given.
+				badgeName: `${anthersSeeds} Seed${anthersSeeds === 1 ? "" : "s"}`,
+				preview,
+			});
+		} catch {
+			setCommitError("Couldn't load the details. Please try again.");
+		} finally {
+			setCommitting(false);
+		}
+	};
 
 	// Combined monthly spend, summed across both steppers. Payments is a single at-cost
 	// card fee on the whole batched charge, added ON TOP — never carved out of a Seed.
@@ -553,21 +597,52 @@ export default function SubscribePage() {
 				</div>
 			</Reveal>
 
-			{/* One shared sign-up CTA below the outer card */}
+			{/* One shared CTA below the outer card. Signed in with Seeds set for Anthers, it
+			    commits them; otherwise it points at the next useful thing. */}
 			<Reveal delay={200} className="mx-auto mt-10 max-w-xl text-center">
-				{signedIn ? (
-					<a href="/discover" className="btn btn-primary btn-lg px-8">
-						Find creators to support
-					</a>
-				) : (
+				{!signedIn ? (
 					<a href="/signup" className="btn btn-primary btn-lg px-8">
 						Create your free account
 					</a>
+				) : anthersSeeds > 0 ? (
+					<button
+						type="button"
+						className={`btn btn-primary btn-lg px-8 ${committing ? "btn-disabled" : ""}`}
+						onClick={commitAnthersSeeds}
+						disabled={committing}
+					>
+						{committing
+							? "Loading…"
+							: `Give ${anthersSeeds} Seed${anthersSeeds === 1 ? "" : "s"} to Anthers`}
+					</button>
+				) : (
+					<a href="/discover" className="btn btn-primary btn-lg px-8">
+						Find creators to support
+					</a>
 				)}
+				{commitError && <p className="mt-3 text-sm text-error">{commitError}</p>}
 				<p className="mt-3 text-sm text-base-content/50">
-					Free forever — set up your support whenever you like.
+					{signedIn && anthersSeeds > 0
+						? "You'll see the exact charge before anything is confirmed."
+						: signedIn && creatorSeeds > 0
+							? "Seeds for a creator are given from that creator's page."
+							: "Free forever — set up your support whenever you like."}
 				</p>
 			</Reveal>
+
+			{pending && (
+				<SubscriptionPaymentModal
+					anthersSeeds={pending.anthersSeeds}
+					badgeName={pending.badgeName}
+					preview={pending.preview}
+					onComplete={() => {
+						setPending(null);
+						// The webhook applies the Seed count, so send the user where it shows.
+						window.location.href = "/subscription";
+					}}
+					onClose={() => setPending(null)}
+				/>
+			)}
 
 			{/* Why non-profit */}
 			<div className="mx-auto mt-14 max-w-3xl pb-4 text-center">
