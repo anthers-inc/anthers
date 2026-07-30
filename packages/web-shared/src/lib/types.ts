@@ -405,7 +405,7 @@ export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 
 /** A rank rung (GET /subscriptions/badges) — Anthers-Seed count + its decomposition. */
-export interface BadgePlan {
+export interface BadgeView {
 	id: Badge;
 	name: string;
 	anthersSeeds: number;
@@ -416,7 +416,7 @@ export interface BadgePlan {
 	subsidised: boolean;
 }
 
-/** A user's account: the Anthers-Seeds they hold (their rank) + the Seeds they've
+/** A user's account: the Seeds they've given Anthers (which are their Badge) + the Seeds they've
  *  directed to creators. Bandwidth is folded into the Anthers-Seeds — there is no wallet. */
 export interface Account {
 	id?: number;
@@ -435,12 +435,12 @@ export interface Account {
 	updatedAt?: string;
 }
 
-/** Response of GET /subscriptions/me — the account plus its held rank + plan. */
+/** Response of GET /subscriptions/me — the account plus the Badge it currently holds. */
 export interface AccountResponse {
 	account: Account;
 	anthersSeeds: number;
-	rank: Badge;
-	plan: BadgePlan;
+	badge: Badge;
+	badgeView: BadgeView;
 }
 
 export interface AttentionSummary {

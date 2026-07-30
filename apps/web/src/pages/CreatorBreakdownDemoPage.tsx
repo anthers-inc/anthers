@@ -32,7 +32,7 @@ interface RevenueByPlan {
 	price: number;
 	/** Time Pool ($) — to creators, by watch-time. */
 	timePool: number;
-	/** Money to creators from this plan = Time Pool + Seeds. */
+	/** Money to creators at this Badge = Time Pool + Seeds. */
 	toCreators: number;
 }
 
@@ -764,7 +764,7 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Users give Anthers Seeds ($3 each); each funds a Time Pool ($1.50, distributed to creators
+				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($1.50, distributed to creators
 				by watch-time), the user's own bandwidth (at cost, folded in), and a remainder for the
 				Anthers Foundation. Seeds given straight to a creator are 100% theirs. "To creators" here is
 				the Time Pool. {creator.displayName} earns their watch-time share —{" "}

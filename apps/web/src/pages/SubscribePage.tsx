@@ -511,7 +511,7 @@ export default function SubscribePage() {
 							desc={
 								anthersSeeds === 0
 									? `the Foundation sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
-									: "via your Anthers Seeds, to creators by watch-time"
+									: "via the Seeds you give Anthers, to creators by watch-time"
 							}
 							amount={anthersTimePool}
 							strong

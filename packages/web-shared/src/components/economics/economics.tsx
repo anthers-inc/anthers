@@ -140,7 +140,7 @@ function SplitRow({
 // ─── (2) Anthers-Seeds — interactive rank picker ───
 
 /** The five ranks as selectable chips: emoji + label + $/mo (= $3 × Anthers-Seeds). */
-function PlanPicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
+function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
 	return (
 		<div className="mb-6 grid grid-cols-5 gap-2">
 			{BADGE_ORDER.map((b) => {
@@ -224,7 +224,7 @@ export function SubscriptionCalculator() {
 				Pick a level — each Seed is $3. Everything updates live.
 			</p>
 
-			<PlanPicker value={badge} onChange={setBadge} />
+			<BadgePicker value={badge} onChange={setBadge} />
 
 			<div className="mb-6 flex h-2.5 overflow-hidden rounded-full bg-base-content/10">
 				{barParts.map((p) => (

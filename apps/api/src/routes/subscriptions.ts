@@ -71,17 +71,17 @@ import {
  */
 const MAX_ANTHERS_SEEDS = 100;
 
-/** The rank ladder (free … blossom), each with its Seed count + decomposition. Shared
+/** The Badge ladder (Free … Blossom), each with its Seed count + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
-const PLANS = badgeViews();
+const BADGE_VIEWS = badgeViews();
 
-/** The plan view for an Anthers-Seed count (rank-capped at blossom for display). */
-function planFor(anthersSeeds: number) {
+/** The Badge view for a count of Seeds given to Anthers (capped at Blossom for display). */
+function badgeViewFor(anthersSeeds: number) {
 	// Look the rung up by its Badge, never by array position. `thresholdForBadge` returns a
 	// THRESHOLD, and a threshold only doubles as an index while Anthers's Badges sit at
 	// 1/2/3/4; the moment they don't, indexing returns the wrong rung or undefined.
 	const held = heldBadgeName(anthersSeeds);
-	return PLANS.find((p) => p.id === held) ?? PLANS[0];
+	return BADGE_VIEWS.find((v) => v.id === held) ?? BADGE_VIEWS[0];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,8 +192,8 @@ async function loadPostEligibility(
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const subscriptionRoutes = new Hono()
-	// ── Rank ladder ─────────────────────────────────────────────────────────────
-	.get("/badges", (c) => c.json({ badges: PLANS }))
+	// ── Badge ladder ────────────────────────────────────────────────────────────
+	.get("/badges", (c) => c.json({ badges: BADGE_VIEWS }))
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	.get("/me", requireAuth, async (c) => {
@@ -213,16 +213,16 @@ const subscriptionRoutes = new Hono()
 					canceledAt: null,
 				},
 				anthersSeeds: 0,
-				rank: "free",
-				plan: PLANS[0],
+				badge: "free",
+				badgeView: BADGE_VIEWS[0],
 			});
 		}
 
 		return c.json({
 			account: acct,
 			anthersSeeds: acct.anthersSeeds,
-			rank: heldBadgeName(acct.anthersSeeds),
-			plan: planFor(acct.anthersSeeds),
+			badge: heldBadgeName(acct.anthersSeeds),
+			badgeView: badgeViewFor(acct.anthersSeeds),
 		});
 	})
 

@@ -21,7 +21,7 @@ import type {
 	AccountResponse,
 	AttentionSummary,
 	Badge,
-	BadgePlan,
+	BadgeView,
 	CreatorEarnings,
 	CreatorGate,
 	PoolDistribution,
@@ -251,10 +251,10 @@ function initials(row: CreatorRow): string {
 export default function SubscriptionPage() {
 	const [searchParams] = useSearchParams();
 
-	// Account + plan + wallet + earnings
+	// Account + Badge + earnings
 	const [account, setAccount] = useState<Account | null>(null);
 	const [badge, setBadge] = useState<Badge>("free");
-	const [plan, setPlan] = useState<BadgePlan | null>(null);
+	const [badgeView, setBadgeView] = useState<BadgeView | null>(null);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 
 	// Per-cycle data
@@ -284,8 +284,8 @@ export default function SubscriptionPage() {
 			const meRes = await client.api.subscriptions.me.$get();
 			const me = (await meRes.json()) as AccountResponse;
 			setAccount(me.account);
-			setBadge(me.rank);
-			setPlan(me.plan);
+			setBadge(me.badge);
+			setBadgeView(me.badgeView);
 		} catch {
 			setError("Failed to load your account.");
 		} finally {
@@ -522,13 +522,13 @@ export default function SubscriptionPage() {
 			</div>
 		);
 
-	if (!account || !plan)
+	if (!account || !badgeView)
 		return (
 			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
 				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
 				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
 				<Link to="/subscribe" className="btn btn-primary">
-					Choose a plan
+					Give Seeds
 				</Link>
 			</div>
 		);
@@ -568,7 +568,7 @@ export default function SubscriptionPage() {
 											onClick={handleResume}
 											disabled={!!actionLoading}
 										>
-											{actionLoading === "resume" ? "Resuming…" : "Resume Plan"}
+											{actionLoading === "resume" ? "Resuming…" : "Resume giving Seeds"}
 										</button>
 									) : (
 										<button
@@ -577,7 +577,7 @@ export default function SubscriptionPage() {
 											onClick={handleCancel}
 											disabled={!!actionLoading}
 										>
-											{actionLoading === "cancel" ? "Canceling…" : "Cancel Plan"}
+											{actionLoading === "cancel" ? "Stopping…" : "Stop giving Seeds"}
 										</button>
 									))}
 							</>
@@ -587,8 +587,8 @@ export default function SubscriptionPage() {
 					<div className="text-center flex-1 order-1 md:order-2">
 						<h1 className="text-2xl font-bold mb-1">Your Anthers — {cycleLabel(selectedCycle)}</h1>
 						<p className="text-sm text-base-content/60 mb-2">
-							<strong>{plan.name}</strong> plan
-							<span className="text-base-content/40"> · {fmt(plan.price)}/mo</span>
+							<strong>{badgeView.name}</strong>
+							<span className="text-base-content/40"> · {fmt(badgeView.price)}/mo</span>
 							{isCanceling && (
 								<span className="text-error ml-1">(reverts to Free at period end)</span>
 							)}
@@ -606,12 +606,12 @@ export default function SubscriptionPage() {
 
 					<div className="md:w-40 flex md:justify-end order-3">
 						<Link to="/subscribe" className="btn btn-primary btn-sm">
-							Change plan
+							Adjust Seeds
 						</Link>
 					</div>
 				</div>
 
-				{/* Plan decomposition */}
+				{/* Where the month's Seeds go */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
 					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the Foundation). The card fee rides on top; there's no wallet." />
@@ -619,19 +619,19 @@ export default function SubscriptionPage() {
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Time Pool</div>
-						<div className="text-lg font-bold text-success">{fmt(plan.timePool)}</div>
+						<div className="text-lg font-bold text-success">{fmt(badgeView.timePool)}</div>
 						<div className="text-[11px] text-base-content/40">to creators, by watch-time</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Supports Anthers</div>
-						<div className="text-lg font-bold">{fmt(plan.supportsAnthers)}</div>
+						<div className="text-lg font-bold">{fmt(badgeView.supportsAnthers)}</div>
 						<div className="text-[11px] text-base-content/40">
 							your bandwidth (at cost) + Foundation
 						</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Streaming allowance</div>
-						<div className="text-lg font-bold">{plan.allowanceGiB} GiB</div>
+						<div className="text-lg font-bold">{badgeView.allowanceGiB} GiB</div>
 						<div className="text-[11px] text-base-content/40">per month, folded in</div>
 					</div>
 				</div>
@@ -713,7 +713,7 @@ export default function SubscriptionPage() {
 
 							{seedBudget <= 0 ? (
 								<div className="text-sm text-base-content/50 text-center py-4">
-									<p>Your plan includes no Seeds this cycle.</p>
+									<p>You've given no Seeds this cycle.</p>
 									<Link to="/subscribe" className="link link-primary text-sm">
 										Upgrade to give Seeds
 									</Link>
@@ -858,7 +858,7 @@ export default function SubscriptionPage() {
 
 			{account.currentPeriodEnd && viewMode === "current" && (
 				<p className="text-xs text-base-content/40 text-center">
-					{isCanceling ? "Plan ends" : "Next renewal"}:{" "}
+					{isCanceling ? "Seeds end" : "Next renewal"}:{" "}
 					{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
 						month: "long",
 						day: "numeric",
