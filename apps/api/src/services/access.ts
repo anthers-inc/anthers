@@ -34,8 +34,6 @@ import type { AccessRow, AnthersAccessRow, SeedAccessRow } from "@anthers/db/sch
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
 import {
 	ANTHERS_BADGES,
-	type BadgeKey,
-	rankForSeeds,
 	seedCost,
 	seedsFromDollars,
 	seedsMeet,
@@ -148,15 +146,6 @@ export interface AccessResult {
 export function currentBillingCycle(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/**
- * The Badge a user currently holds (point-in-time), derived from their Anthers-Seed
- * count. `BadgeKey`, not `Badge`, because 0 Anthers-Seeds is the *absence* of a Badge —
- * which resolution still has to represent, and represents as "free".
- */
-export async function heldBadge(userId: number): Promise<BadgeKey> {
-	return rankForSeeds(await heldAnthersSeeds(userId));
 }
 
 /**
