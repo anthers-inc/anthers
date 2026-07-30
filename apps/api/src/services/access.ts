@@ -32,12 +32,7 @@
 import { db } from "@anthers/db/client";
 import type { AccessRow, AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import {
-	ANTHERS_BADGES,
-	seedCost,
-	seedsFromDollars,
-	seedsMeet,
-} from "@anthers/shared/constants";
+import { ANTHERS_BADGES, seedCost, seedsFromDollars, seedsMeet } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** The thresholds a default Anthers table carries: everyone (0) plus each Anthers Badge. */

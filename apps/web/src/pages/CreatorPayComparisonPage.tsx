@@ -36,11 +36,11 @@
 // it reads as one set with the rest of Resources.
 
 import {
-	badgeRank,
 	CARD_FLAT,
 	CARD_RATE,
 	SEED_PRICE,
 	TIME_POOL_PER_SEED,
+	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
@@ -89,13 +89,13 @@ interface Platform {
 // $0.03–0.60 per view-hour depending on how many Seeds they hold and how much they
 // watch — the same rate for every medium (equal-time). 100% of it reaches creators.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
-const PAID_POOLS = RANKS.map((b) => timePoolFor(badgeRank(b)));
+const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
 const money = (n: number) => `$${n.toFixed(2)}`;
 const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
 /** The reference streamer both this page and /for-creators quote: Sprout (2 Anthers-
  *  Seeds), ~28 watch-hours a month → their Time Pool ÷ those hours. */
 const REF_HOURS = 28;
-const REF_HR_PAY = money(timePoolFor(badgeRank("sprout")) / REF_HOURS);
+const REF_HR_PAY = money(timePoolFor(thresholdForBadge("sprout")) / REF_HOURS);
 
 // The Seed scenario: Seeds are whole $3 units, so the membership matchups use two of
 // them ($6/month) and the rival rows are scaled to the same $6.

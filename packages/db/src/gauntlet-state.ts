@@ -24,7 +24,7 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
-import { badgeLabel, rankForSeeds, SEED_PRICE, seedsFromDollars } from "@anthers/shared/constants";
+import { badgeLabel, heldBadgeName, SEED_PRICE, seedsFromDollars } from "@anthers/shared/constants";
 import { and, eq } from "drizzle-orm";
 import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
 import { accounts, db, posts, purchases, seedAllocations, users } from "./index.js";
@@ -182,7 +182,7 @@ async function main(): Promise<void> {
 	const seeds = Number(acct?.anthersSeeds ?? 0);
 	console.log(
 		`${TAG} ${viewerUsername}: ${seeds} Anthers-Seed${seeds === 1 ? "" : "s"} (${badgeLabel(
-			rankForSeeds(seeds),
+			heldBadgeName(seeds),
 		)}) · budget $${Number(acct?.creatorSeedTotal ?? 0).toFixed(2)} · given ${seedsFromDollars(
 			alloc?.amount,
 		)} Seeds ($${Number(alloc?.amount ?? 0).toFixed(2)}) to ${GAUNTLET_CREATOR_USERNAME}`,

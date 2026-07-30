@@ -280,7 +280,7 @@ export interface StaircaseState {
 	state: string;
 	/** Whether the viewer follows the creator. MUST NOT affect any reason — that's the point. */
 	following: boolean;
-	/** The viewer's Anthers-Seed count; rank (badge) derives from it (`rankForSeeds`). */
+	/** The viewer's Anthers-Seed count; rank (badge) derives from it (`heldBadgeName`). */
 	anthersSeeds: number;
 	/** Whole Seeds given to the gauntlet creator this cycle (× SEED_PRICE for the money). */
 	seedsGiven: number;

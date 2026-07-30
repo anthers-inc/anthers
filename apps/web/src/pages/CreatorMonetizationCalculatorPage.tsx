@@ -3,9 +3,9 @@
 import {
 	type BadgeKey,
 	badgeLabel,
-	badgeRank,
 	SEED_PRICE,
 	seedCost,
+	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -31,12 +31,12 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 const PLANS: BadgeKey[] = ["free", "root", "sprout", "petal", "blossom"];
 const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
-const timePoolOf = (badge: BadgeKey) => timePoolFor(badgeRank(badge));
+const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
-const seedsOf = (badge: BadgeKey) => badgeRank(badge);
+const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
 /** "Supports Anthers" — the non-Time-Pool half of each Anthers-Seed (bandwidth + Foundation). */
 const supportsAnthersOf = (badge: BadgeKey) =>
-	Math.max(0, seedCost(badgeRank(badge)) - timePoolFor(badgeRank(badge)));
+	Math.max(0, seedCost(thresholdForBadge(badge)) - timePoolFor(thresholdForBadge(badge)));
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -75,7 +75,7 @@ function ConversionEngine() {
 		const tp = timePoolOf(badge);
 		const seeds = planSeeds * SEED_PRICE;
 		const supportsAnthers = supportsAnthersOf(badge);
-		const price = seedCost(badgeRank(badge));
+		const price = seedCost(thresholdForBadge(badge));
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;

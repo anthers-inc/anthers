@@ -29,8 +29,8 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
-import { badgeRank, rankForSeeds, SEED_PRICE, seedsMeet } from "@anthers/shared/constants";
-import { rankViews } from "@anthers/shared/fees";
+import { heldBadgeName, SEED_PRICE, seedsMeet, thresholdForBadge } from "@anthers/shared/constants";
+import { badgeViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -72,15 +72,15 @@ import {
 const MAX_ANTHERS_SEEDS = 100;
 
 /** The rank ladder (free … blossom), each with its Seed count + decomposition. Shared
- *  with the Subscribe page via `rankViews()` so the two never drift. */
-const PLANS = rankViews();
+ *  with the Subscribe page via `badgeViews()` so the two never drift. */
+const PLANS = badgeViews();
 
 /** The plan view for an Anthers-Seed count (rank-capped at blossom for display). */
 function planFor(anthersSeeds: number) {
-	// Look the rung up by its Badge, never by array position. `badgeRank` returns a
+	// Look the rung up by its Badge, never by array position. `thresholdForBadge` returns a
 	// THRESHOLD, and a threshold only doubles as an index while Anthers's Badges sit at
 	// 1/2/3/4; the moment they don't, indexing returns the wrong rung or undefined.
-	const held = rankForSeeds(anthersSeeds);
+	const held = heldBadgeName(anthersSeeds);
 	return PLANS.find((p) => p.id === held) ?? PLANS[0];
 }
 
@@ -221,7 +221,7 @@ const subscriptionRoutes = new Hono()
 		return c.json({
 			account: acct,
 			anthersSeeds: acct.anthersSeeds,
-			rank: rankForSeeds(acct.anthersSeeds),
+			rank: heldBadgeName(acct.anthersSeeds),
 			plan: planFor(acct.anthersSeeds),
 		});
 	})
@@ -1001,7 +1001,7 @@ const subscriptionRoutes = new Hono()
 
 		// The viewer's held Anthers-Seeds (point-in-time) and their Seeds to this creator.
 		const anthersSeeds = await heldAnthersSeeds(currentUserId);
-		const badge = rankForSeeds(anthersSeeds);
+		const badge = heldBadgeName(anthersSeeds);
 		const cycle = getCurrentBillingCycle();
 		const [seed] = await db
 			.select({ amount: seedAllocations.amount })

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ANTHERS_BADGES, badgeLabel, badgeRank, seedCost } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, badgeLabel, seedCost, thresholdForBadge } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
@@ -312,7 +312,7 @@ function BadgesTab({
 						{anthersBadgeGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
 							const gateBadge = anthersBadgeForRank(Number(gate.threshold));
-							const gatePlan = gateBadge ? { price: seedCost(badgeRank(gateBadge)) } : null;
+							const gatePlan = gateBadge ? { price: seedCost(thresholdForBadge(gateBadge)) } : null;
 							return (
 								<div
 									key={gate.id}

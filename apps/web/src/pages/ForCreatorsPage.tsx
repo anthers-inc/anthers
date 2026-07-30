@@ -34,12 +34,12 @@ import {
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	badgeLabel,
-	badgeRank,
 	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
 	SEED_PRICE,
 	seedCost,
 	TIME_POOL_PER_SEED,
+	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -517,7 +517,7 @@ export default function ForCreatorsPage() {
 							</thead>
 							<tbody>
 								{BADGE_ORDER.map((b) => {
-									const n = badgeRank(b);
+									const n = thresholdForBadge(b);
 									const isFree = b === "free";
 									return (
 										<tr
@@ -855,7 +855,7 @@ const PASSTHROUGH = "pure passthrough";
 // the SAME for every medium (equal-time), and independent of resolution (pay is by
 // time, not bytes). The rest of that $6 is the fan's own bandwidth at cost and the
 // Foundation remainder, which shrinks per hour the more they watch.
-const STREAM_FAN_SEEDS = badgeRank("sprout");
+const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
 const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);

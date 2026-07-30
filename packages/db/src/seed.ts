@@ -13,7 +13,7 @@
 import {
 	ANTHERS_BADGES,
 	DELIVERY_GIB_PER_HOUR,
-	rankLabel,
+	heldBadgeLabel,
 	SEED_PRICE,
 	seedCost,
 	timePoolFor,
@@ -1310,7 +1310,7 @@ async function seed() {
 			billingCycle,
 		});
 		console.log(
-			`    account: ${rankLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
+			`    account: ${heldBadgeLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
 		);
 
 		// -- Attention events --
@@ -1460,7 +1460,7 @@ async function seed() {
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
 		console.log(
-			`    ${tu.username} — ${rankLabel(accountConfig(tu.username).anthersSeeds)} rank — ${tu.displayName}`,
+			`    ${tu.username} — ${heldBadgeLabel(accountConfig(tu.username).anthersSeeds)} rank — ${tu.displayName}`,
 		);
 	}
 	for (const c of CREATORS) {
