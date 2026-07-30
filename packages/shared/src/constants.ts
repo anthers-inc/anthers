@@ -106,46 +106,39 @@ export function badgeFor(
 export type BadgeKey = Badge | "free";
 
 /**
- * Compatibility layer over the threshold model, keeping the names the call sites
- * already use while fixing what they MEAN.
+ * The display states a `Record<BadgeKey, …>` has to cover: Free, then each Anthers
+ * Badge in ascending threshold order.
  *
- * `badgeRank` used to be `BADGE_ORDER.indexOf(name)` — a position. It now returns the
- * Badge's THRESHOLD. For Anthers's own set those coincide (Badges sit at 1/2/3/4, so
- * index == threshold), which is exactly why the old code worked and exactly why it was
- * only ever accidentally correct. Any Badge set with gaps broke it silently. Routing
- * these through thresholds fixes the semantics ahead of the call-site migration, so the
- * branch builds and the bug is closed in one step rather than gated behind the other.
- *
- * These are a migration aid, not the destination — prefer `badgeFor` / `seedsMeet`.
+ * This is a **display** list, not a ladder to index into. A Badge is identified by its
+ * threshold, never by its position here — the two coincide for Anthers's own set (1/2/3/4)
+ * and that coincidence is what made the retired `badgeRank = BADGE_ORDER.indexOf(name)`
+ * look correct while silently mis-resolving any set with gaps. Never reintroduce an
+ * `indexOf` against this; use `thresholdForBadge` or `seedsMeet`.
  */
 export const BADGE_ORDER: readonly BadgeKey[] = [
 	"free",
 	...ANTHERS_BADGES.map((b) => b.name as Badge),
 ] as const;
 
-/** The Badge name held at `anthersSeeds`, or "free" below the lowest threshold. */
-export function rankForSeeds(anthersSeeds: number): BadgeKey {
-	return (badgeFor(anthersSeeds).badge?.name as Badge) ?? "free";
-}
-
-/** Whole Seeds required for a Badge — its threshold, NOT its position. */
-export function badgeRank(badge: BadgeKey): number {
+/**
+ * Whole Seeds required for a named Badge — its **threshold**, and 0 for "free", which
+ * is the absence of a Badge rather than a Badge sitting at zero.
+ */
+export function thresholdForBadge(badge: BadgeKey): number {
 	return badge === "free" ? 0 : (thresholdOf(badge) ?? 0);
 }
 
-/** Does a currently-held Badge meet a required one? Compares thresholds. */
-export function badgeMeets(held: BadgeKey, required: BadgeKey): boolean {
-	return badgeRank(held) >= badgeRank(required);
-}
-
-/** Does a held Seed count clear the threshold of a named Badge? */
-export function seedsMeetRank(anthersSeeds: number, required: BadgeKey): boolean {
-	return seedsMeet(anthersSeeds, badgeRank(required));
-}
-
-/** Display label for the Badge held at `anthersSeeds`, with the "+" rule applied. */
-export function rankLabel(anthersSeeds: number): string {
-	return heldBadgeLabel(anthersSeeds);
+/**
+ * The Badge name held at `anthersSeeds`, or "free" below the lowest threshold.
+ *
+ * Note this **collapses** a Seed count onto a Badge and so throws away the remainder —
+ * a 3-Seed holder in a set with Badges at 2 and 4 answers "the 2-Seed Badge". That is
+ * right for *labelling* what someone holds and wrong for *resolving access*, which must
+ * compare the Seed count against the gate's own threshold via `seedsMeet`. Rounding down
+ * to a Badge first is how a viewer gets denied a gate they actually clear.
+ */
+export function heldBadgeName(anthersSeeds: number): BadgeKey {
+	return (badgeFor(anthersSeeds).badge?.name as Badge) ?? "free";
 }
 
 /** Title-case a Badge name for display ("root" → "Root"). */

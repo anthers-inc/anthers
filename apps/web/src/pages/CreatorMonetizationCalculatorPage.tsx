@@ -3,9 +3,9 @@
 import {
 	type BadgeKey,
 	badgeLabel,
-	badgeRank,
 	SEED_PRICE,
 	seedCost,
+	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -28,15 +28,15 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // ---------------------------------------------------------------------------
 
 /** Ordered rungs low → high; the paid Badges drive the personas/matrix. */
-const PLANS: BadgeKey[] = ["free", "root", "sprout", "petal", "blossom"];
+const BADGE_KEYS: BadgeKey[] = ["free", "root", "sprout", "petal", "blossom"];
 const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
-const timePoolOf = (badge: BadgeKey) => timePoolFor(badgeRank(badge));
+const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
-const seedsOf = (badge: BadgeKey) => badgeRank(badge);
+const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
 /** "Supports Anthers" — the non-Time-Pool half of each Anthers-Seed (bandwidth + Foundation). */
 const supportsAnthersOf = (badge: BadgeKey) =>
-	Math.max(0, seedCost(badgeRank(badge)) - timePoolFor(badgeRank(badge)));
+	Math.max(0, seedCost(thresholdForBadge(badge)) - timePoolFor(thresholdForBadge(badge)));
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -75,7 +75,7 @@ function ConversionEngine() {
 		const tp = timePoolOf(badge);
 		const seeds = planSeeds * SEED_PRICE;
 		const supportsAnthers = supportsAnthersOf(badge);
-		const price = seedCost(badgeRank(badge));
+		const price = seedCost(thresholdForBadge(badge));
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;
@@ -140,7 +140,7 @@ function ConversionEngine() {
 								ariaLabel="Viewer's Badge"
 								value={badge}
 								onChange={setBadge}
-								options={PLANS.map((b) => ({ value: b, label: badgeLabel(b) }))}
+								options={BADGE_KEYS.map((b) => ({ value: b, label: badgeLabel(b) }))}
 							/>
 							<div className="flex justify-between font-mono text-[10px] text-base-content/40 mt-1.5">
 								<span>{usd2(m.tp)} Time Pool</span>
@@ -199,8 +199,8 @@ function ConversionEngine() {
 							</div>
 							<p className="text-base-content/40 text-xs mt-1">
 								{m.planSeeds === 0
-									? "The Free plan includes no Seeds."
-									: `Their plan includes ${m.planSeeds} Seed${m.planSeeds === 1 ? "" : "s"} — capped there (${m.directedSeeds} to you).`}
+									? "Free carries no Seeds."
+									: `They give ${m.planSeeds} Seed${m.planSeeds === 1 ? "" : "s"} — capped there (${m.directedSeeds} to you).`}
 							</p>
 						</label>
 					</div>
@@ -216,7 +216,7 @@ function ConversionEngine() {
 									{usd2(m.tp)}
 								</p>
 								<p className="mt-1.5 text-xs text-base-content/50">
-									plan <span className="font-semibold text-success">{badgeLabel(badge)}</span> ·{" "}
+									<span className="font-semibold text-success">{badgeLabel(badge)}</span> ·{" "}
 									{m.planSeeds} Seeds
 								</p>
 							</div>
@@ -298,9 +298,9 @@ function ConversionEngine() {
 						</div>
 
 						<div className="text-sm text-base-content/80 bg-success/10 rounded-lg p-3.5 leading-relaxed">
-							This viewer chose the <b className="text-success">{badgeLabel(badge)}</b> plan (
-							{usd2(m.price)}/mo). Of that, <b>{usd2(m.toCreators)}</b> reaches creators (
-							{usd2(m.tp)} Time Pool + {usd2(m.seeds)} Seeds); Anthers keeps <b>$0</b>. You hold{" "}
+							This viewer holds <b className="text-success">{badgeLabel(badge)}</b> ({usd2(m.price)}
+							/mo). Of that, <b>{usd2(m.toCreators)}</b> reaches creators ({usd2(m.tp)} Time Pool +{" "}
+							{usd2(m.seeds)} Seeds); Anthers keeps <b>$0</b>. You hold{" "}
 							<b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their {+total.toFixed(2)}{" "}
 							hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
 						</div>
@@ -374,7 +374,7 @@ function ValueMatrix() {
 						<thead>
 							<tr>
 								<th className="text-left font-semibold p-2.5 border-b border-base-content/20">
-									Plan · Time Pool
+									Badge · Time Pool
 								</th>
 								{cols.map((c, i) => (
 									<th
@@ -532,7 +532,7 @@ function AudienceBuilder() {
 							<tr className="text-[10px] uppercase tracking-wide text-base-content/50 border-b border-base-content/20">
 								<th className="text-left p-2 font-sans">Segment</th>
 								<th className="text-right p-2">Subs</th>
-								<th className="text-right p-2">Plan</th>
+								<th className="text-right p-2">Badge</th>
 								<th className="text-right p-2">Total hrs</th>
 								<th className="text-right p-2">Hrs of you</th>
 								<th className="text-right p-2">Seeds→you</th>
@@ -774,7 +774,7 @@ export default function CreatorMonetizationCalculatorPage() {
 									into their Seeds to Anthers, at cost) and never touches the creator share.
 								</li>
 								<li>
-									The <b>Badge</b> is a chosen point-in-time plan, not a rolling spend total.
+									The <b>Badge</b> is what you hold right now, not a rolling spend total.
 								</li>
 							</ul>
 						</div>

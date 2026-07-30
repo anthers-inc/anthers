@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { badgeRank, seedCost, timePoolFor } from "@anthers/shared/constants";
+import { seedCost, thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -32,7 +32,7 @@ interface RevenueByPlan {
 	price: number;
 	/** Time Pool ($) — to creators, by watch-time. */
 	timePool: number;
-	/** Money to creators from this plan = Time Pool + Seeds. */
+	/** Money to creators at this Badge = Time Pool + Seeds. */
 	toCreators: number;
 }
 
@@ -125,7 +125,7 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {
-		const n = badgeRank(b);
+		const n = thresholdForBadge(b);
 		const timePool = timePoolFor(n);
 		return {
 			badge: b.charAt(0).toUpperCase() + b.slice(1),
@@ -764,10 +764,10 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Users give Anthers Seeds ($3 each); each funds a Time Pool ($1.50, distributed to creators
-				by watch-time), the user's own bandwidth (at cost, folded in), and a remainder for the
-				Anthers Foundation. Seeds given straight to a creator are 100% theirs. "To creators" here is
-				the Time Pool. {creator.displayName} earns their watch-time share —{" "}
+				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($1.50, distributed to
+				creators by watch-time), the user's own bandwidth (at cost, folded in), and a remainder for
+				the Anthers Foundation. Seeds given straight to a creator are 100% theirs. "To creators"
+				here is the Time Pool. {creator.displayName} earns their watch-time share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
 				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>

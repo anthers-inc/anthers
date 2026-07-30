@@ -18,7 +18,7 @@ export interface SubscriptionPreview {
 interface Props {
 	/** The target Anthers-Seed count to subscribe to (the subscription quantity). */
 	anthersSeeds: number;
-	planName: string;
+	badgeName: string;
 	preview: SubscriptionPreview;
 	/** Called after the change is confirmed — the webhook then applies the Seed count. */
 	onComplete: () => void;
@@ -34,12 +34,12 @@ function formatDate(unix: number | null): string | null {
 	});
 }
 
-function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: Props) {
+function PaymentForm({ anthersSeeds, badgeName, preview, onComplete, onClose }: Props) {
 	const stripe = useStripe();
 	const elements = useElements();
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// New subscriptions can choose saved vs new card; a plan change always uses the
+	// New subscriptions can choose saved vs new card; a change always uses the
 	// subscription's card on file. Default to the saved card when there is one.
 	const [useNewCard, setUseNewCard] = useState(!preview.savedCard);
 	const cardStyle = useMemo(cardElementStyle, []);
@@ -54,13 +54,13 @@ function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: P
 		try {
 			const res = await client.api.subscriptions.account.$post({ json: { anthersSeeds } });
 			if (!res.ok) {
-				setError("Couldn't update your plan. Please try again.");
+				setError("Couldn't update your Seeds. Please try again.");
 				setProcessing(false);
 				return;
 			}
 			const data = (await res.json()) as { pending?: boolean; clientSecret?: string | null };
 
-			// A new subscription returns a client secret to confirm inline. A plan change is
+			// A new subscription returns a client secret to confirm inline. A change is
 			// charged to the card on file, so there's nothing to confirm here.
 			if (data.pending && data.clientSecret) {
 				if (!stripe) {
@@ -91,7 +91,7 @@ function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: P
 			}
 			onComplete();
 		} catch {
-			setError("Couldn't update your plan. Please try again.");
+			setError("Couldn't update your Seeds. Please try again.");
 			setProcessing(false);
 		}
 	};
@@ -100,7 +100,7 @@ function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: P
 		<div className="modal modal-open">
 			<div className="modal-box max-w-md">
 				<h3 className="font-bold text-lg mb-1">
-					{isChange ? `Switch to ${planName}` : `Subscribe to ${planName}`}
+					{isChange ? `Switch to ${badgeName}` : `Give ${badgeName}`}
 				</h3>
 
 				{/* What they'll be charged — now and going forward */}
@@ -123,8 +123,8 @@ function PaymentForm({ anthersSeeds, planName, preview, onComplete, onClose }: P
 					)}
 				</div>
 				<p className="text-xs text-base-content/50 mb-3">
-					Renews automatically. Cancel anytime — your plan stays active through the period you've
-					paid for.
+					Renews automatically. Stop anytime — your Seeds stay active through the period you've paid
+					for.
 				</p>
 
 				<form onSubmit={submit} className="flex flex-col gap-3">

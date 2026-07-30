@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ANTHERS_BADGES, badgeLabel, badgeRank, seedCost } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, badgeLabel, seedCost, thresholdForBadge } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
@@ -50,7 +50,7 @@ function badgeNameFor(id: string): string {
  * Two API rules shape the control rather than being discovered as errors:
  *   - allocations RATCHET within a cycle (a decrease is rejected), so the committed amount
  *     is the stepper's floor;
- *   - the total across all creators can't exceed the Seeds your plan includes, so the
+ *   - the total across all creators can't exceed the Seeds you hold, so the
  *     ceiling is what you've already given this creator plus what's still unallocated.
  *
  * `amount` is the creator's new TOTAL, not a delta — the endpoint upserts it.
@@ -90,8 +90,8 @@ function GiveSeedsCard({
 	// Re-sync when the committed amount changes underneath us (after a successful give).
 	useEffect(() => setPending(committed), [committed]);
 
-	// Only the Free plan carries no Seeds, and the tab's upgrade prompt already makes that
-	// case — rendering our own "pick a plan" CTA here would just duplicate it.
+	// Only Free carries no Seeds, and the tab's upgrade prompt already makes that
+	// case — rendering our own "give Seeds" CTA here would just duplicate it.
 	if (budget === null || budget <= 0) return null;
 
 	const max = committed + Math.floor(remaining);
@@ -312,7 +312,9 @@ function BadgesTab({
 						{anthersBadgeGates.map((gate) => {
 							const unlocked = unlockedSet.has(gate.id);
 							const gateBadge = anthersBadgeForRank(Number(gate.threshold));
-							const gatePlan = gateBadge ? { price: seedCost(badgeRank(gateBadge)) } : null;
+							const gateBadgeView = gateBadge
+								? { price: seedCost(thresholdForBadge(gateBadge)) }
+								: null;
 							return (
 								<div
 									key={gate.id}
@@ -330,9 +332,9 @@ function BadgesTab({
 													<span className="font-medium">
 														{gateBadge ? badgeLabel(gateBadge) : gate.label}
 													</span>
-													{gatePlan && (
+													{gateBadgeView && (
 														<span className="text-base-content/40 ml-2 text-sm">
-															${gatePlan.price}/mo plan
+															${gateBadgeView.price}/mo
 														</span>
 													)}
 												</div>

@@ -119,7 +119,7 @@ export function supportBreakdown(params: {
 }
 
 /** A rung of Anthers's Badge ladder as a display view model — money pre-rounded to 2dp. */
-export interface RankView {
+export interface BadgeView {
 	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
 	id: BadgeKey;
 	name: string;
@@ -143,7 +143,7 @@ export interface RankView {
  * can't drift. "Supports Anthers" bundles bandwidth (at cost) + the Foundation
  * remainder into one line (as the Subscribe page shows it).
  */
-export function rankViews(): RankView[] {
+export function badgeViews(): BadgeView[] {
 	// The 0-Seed rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's
 	// prepended here for display only. Seed counts come from each Badge's THRESHOLD,
 	// never from its position: this list is ordered by threshold, but nothing reads

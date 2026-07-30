@@ -3,8 +3,8 @@
 // Coverage for the Badge model — the rule that a Badge is identified by its whole-Seed
 // THRESHOLD and never by its position in a list.
 //
-// The distinction has teeth. `badgeRank` used to be `BADGE_ORDER.indexOf(name)`, and
-// `seedsMeetRank` compared a Seed count against that index. It gave correct answers only
+// The distinction has teeth. The retired `badgeRank` was `BADGE_ORDER.indexOf(name)`, and
+// the retired `seedsMeetRank` compared a Seed count against that index. It gave correct answers only
 // because Anthers's own Badges sit at 1/2/3/4, where index and threshold coincide — an
 // accident, not a design. Any issuer whose Badges skip a level mis-resolved access
 // *silently*: no error, no crash, just wrong answers about who may read what.
@@ -16,14 +16,12 @@ import { describe, expect, test } from "bun:test";
 import {
 	ANTHERS_BADGES,
 	type BadgeDef,
+	type BadgeKey,
 	badgeFor,
-	badgeMeets,
-	badgeRank,
 	heldBadgeLabel,
-	rankForSeeds,
-	rankLabel,
+	heldBadgeName,
 	seedsMeet,
-	seedsMeetRank,
+	thresholdForBadge,
 	thresholdOf,
 } from "./constants.js";
 
@@ -75,10 +73,10 @@ describe('the "+" rule applies between Badges, not only past the top', () => {
 	});
 
 	test("Anthers's own consecutive set only ever plusses past Blossom", () => {
-		expect(rankLabel(0)).toBe("Free");
-		expect(rankLabel(1)).toBe("Root");
-		expect(rankLabel(4)).toBe("Blossom");
-		expect(rankLabel(5)).toBe("Blossom+");
+		expect(heldBadgeLabel(0)).toBe("Free");
+		expect(heldBadgeLabel(1)).toBe("Root");
+		expect(heldBadgeLabel(4)).toBe("Blossom");
+		expect(heldBadgeLabel(5)).toBe("Blossom+");
 	});
 
 	test("the empty label is caller-chosen", () => {
@@ -104,16 +102,16 @@ describe("gates are thresholds, and need not sit on a Badge", () => {
 	});
 });
 
-describe("badgeRank returns a threshold", () => {
+describe("thresholdForBadge returns a threshold", () => {
 	test("Anthers's Badges report their Seed cost", () => {
-		expect(badgeRank("free")).toBe(0);
-		expect(badgeRank("root")).toBe(1);
-		expect(badgeRank("blossom")).toBe(4);
+		expect(thresholdForBadge("free")).toBe(0);
+		expect(thresholdForBadge("root")).toBe(1);
+		expect(thresholdForBadge("blossom")).toBe(4);
 	});
 
 	test("it agrees with the Badge set rather than a hardcoded ladder", () => {
 		for (const b of ANTHERS_BADGES) {
-			expect(badgeRank(b.name as "root"), b.name).toBe(b.threshold);
+			expect(thresholdForBadge(b.name as "root"), b.name).toBe(b.threshold);
 		}
 	});
 
@@ -124,28 +122,33 @@ describe("badgeRank returns a threshold", () => {
 });
 
 describe("Anthers gate resolution is point-in-time and monotone", () => {
-	test("rankForSeeds names the held Badge, or free at zero", () => {
-		expect(rankForSeeds(0)).toBe("free");
-		expect(rankForSeeds(1)).toBe("root");
-		expect(rankForSeeds(4)).toBe("blossom");
-		expect(rankForSeeds(99)).toBe("blossom");
+	test("heldBadgeName names the held Badge, or free at zero", () => {
+		expect(heldBadgeName(0)).toBe("free");
+		expect(heldBadgeName(1)).toBe("root");
+		expect(heldBadgeName(4)).toBe("blossom");
+		expect(heldBadgeName(99)).toBe("blossom");
 	});
 
 	test("holding more never removes access a lower count had", () => {
 		for (const required of ["free", "root", "sprout", "petal", "blossom"] as const) {
 			let seen = false;
 			for (let seeds = 0; seeds <= 8; seeds++) {
-				const ok = seedsMeetRank(seeds, required);
+				const ok = seedsMeet(seeds, thresholdForBadge(required));
 				if (seen) expect(ok, `${seeds} Seeds vs ${required}`).toBe(true);
 				if (ok) seen = true;
 			}
 		}
 	});
 
-	test("badgeMeets compares thresholds in both directions", () => {
-		expect(badgeMeets("blossom", "root")).toBe(true);
-		expect(badgeMeets("root", "blossom")).toBe(false);
-		expect(badgeMeets("petal", "petal")).toBe(true);
-		expect(badgeMeets("free", "root")).toBe(false);
+	// The retired `badgeMeets(held, required)` compared two Badge NAMES. Comparing their
+	// thresholds directly is the same answer without the intermediate collapse, and keeps
+	// the assertion that a Badge-to-Badge comparison is threshold arithmetic either way.
+	test("comparing two Badges compares their thresholds, in both directions", () => {
+		const meets = (held: BadgeKey, required: BadgeKey) =>
+			thresholdForBadge(held) >= thresholdForBadge(required);
+		expect(meets("blossom", "root")).toBe(true);
+		expect(meets("root", "blossom")).toBe(false);
+		expect(meets("petal", "petal")).toBe(true);
+		expect(meets("free", "root")).toBe(false);
 	});
 });

@@ -9,9 +9,9 @@ import Decimal from "decimal.js";
 import { BADGE_ORDER, SEED_PRICE, TIME_POOL_PER_SEED, timePoolFor } from "./constants.js";
 import {
 	anthersSeedBreakdown,
+	badgeViews,
 	calculateFees,
 	cardFee,
-	rankViews,
 	supportBreakdown,
 } from "./fees.js";
 
@@ -102,9 +102,9 @@ describe("supportBreakdown", () => {
 	});
 });
 
-describe("rankViews", () => {
+describe("badgeViews", () => {
 	test("one row per rank; price = $3 × Anthers-Seed count; money renders to 2dp", () => {
-		const views = rankViews();
+		const views = badgeViews();
 		expect(views).toHaveLength(BADGE_ORDER.length);
 		views.forEach((v, i) => {
 			expect(v.anthersSeeds).toBe(i);

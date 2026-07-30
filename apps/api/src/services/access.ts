@@ -32,14 +32,7 @@
 import { db } from "@anthers/db/client";
 import type { AccessRow, AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import {
-	ANTHERS_BADGES,
-	type BadgeKey,
-	rankForSeeds,
-	seedCost,
-	seedsFromDollars,
-	seedsMeet,
-} from "@anthers/shared/constants";
+import { ANTHERS_BADGES, seedCost, seedsFromDollars, seedsMeet } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** The thresholds a default Anthers table carries: everyone (0) plus each Anthers Badge. */
@@ -148,15 +141,6 @@ export interface AccessResult {
 export function currentBillingCycle(): string {
 	const now = new Date();
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/**
- * The Badge a user currently holds (point-in-time), derived from their Anthers-Seed
- * count. `BadgeKey`, not `Badge`, because 0 Anthers-Seeds is the *absence* of a Badge —
- * which resolution still has to represent, and represents as "free".
- */
-export async function heldBadge(userId: number): Promise<BadgeKey> {
-	return rankForSeeds(await heldAnthersSeeds(userId));
 }
 
 /**
