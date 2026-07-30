@@ -60,6 +60,7 @@ import {
 	posts,
 	purchases,
 	seedAllocations,
+	stripeAccounts,
 	users,
 } from "./index.js";
 
@@ -143,6 +144,53 @@ async function ensureCreator(): Promise<number> {
 		.returning({ id: users.id });
 	console.log(`${TAG} created creator "${GAUNTLET_CREATOR_USERNAME}" (id ${created.id})`);
 	return created.id;
+}
+
+/**
+ * Link the fixture creator to a test-mode Stripe Connect account, so the purchase rung is
+ * walkable.
+ *
+ * **Silent no-op when `GAUNTLET_STRIPE_ACCOUNT` is unset** — the `ensure-dev-account`
+ * convention — so a fresh clone and CI (which have no Stripe keys) still seed cleanly and
+ * simply skip rung 6, while a local run with the var set can complete a real test-mode
+ * checkout.
+ *
+ * This exists because the link is the one part of the onboarding that does *not* survive.
+ * The `acct_…` lives at Stripe and persists forever, but `stripe_accounts.user_id` cascades
+ * on delete, so any DB rebuild silently drops the row and the fixture had no way to restore
+ * it — which is exactly how a creator onboarded on 2026-07-23 was still reported "not
+ * connected" a week later. Set the var and the link is reproducible instead of manual.
+ */
+async function ensureCreatorConnect(creatorId: number): Promise<void> {
+	const acctId = process.env.GAUNTLET_STRIPE_ACCOUNT?.trim();
+	if (!acctId) return;
+
+	const [existing] = await db
+		.select({ id: stripeAccounts.id })
+		.from(stripeAccounts)
+		.where(eq(stripeAccounts.userId, creatorId))
+		.limit(1);
+	if (existing) {
+		await db
+			.update(stripeAccounts)
+			.set({
+				stripeAccountId: acctId,
+				chargesEnabled: true,
+				payoutsEnabled: true,
+				onboardingComplete: true,
+				updatedAt: new Date(),
+			})
+			.where(eq(stripeAccounts.id, existing.id));
+	} else {
+		await db.insert(stripeAccounts).values({
+			userId: creatorId,
+			stripeAccountId: acctId,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+	}
+	console.log(`${TAG} linked creator to Stripe Connect account ${acctId}`);
 }
 
 /**
@@ -344,6 +392,7 @@ async function main(): Promise<void> {
 	}
 
 	const creatorId = await ensureCreator();
+	await ensureCreatorConnect(creatorId);
 	await deleteGauntletPosts(creatorId);
 
 	const postIds: number[] = [];

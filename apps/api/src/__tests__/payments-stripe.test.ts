@@ -811,6 +811,23 @@ describe("Checkout — destination charge construction", () => {
 		return { res, body: await res.json() };
 	}
 
+	/** A creator who can actually be paid — now a precondition of checkout, not a mode. */
+	async function connectCreator(acctId = `acct_${uid()}`) {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
+		await db.insert(stripeAccounts).values({
+			userId: creatorId,
+			stripeAccountId: acctId,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+		return acctId;
+	}
+
+	beforeAll(async () => {
+		await connectCreator();
+	});
+
 	it("quotes the pass-through breakdown and records a pending purchase", async () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);
@@ -835,29 +852,40 @@ describe("Checkout — destination charge construction", () => {
 		});
 	});
 
-	it("holds the charge on the platform when the creator isn't connected yet", async () => {
+	// The branch this replaces used to charge the buyer and hold the money on the platform
+	// when the creator had no connected account. It was unreachable from the product — the
+	// buy UI refuses to render without `creatorHasStripe` — and survived precisely because
+	// nothing asserted it. A connected creator is now a precondition, and the failure is
+	// loud: no charge is created at all, so no money moves that nobody can settle.
+	it("refuses checkout, and creates no PaymentIntent, when the creator can't be paid", async () => {
 		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
 
 		const { res } = await checkout();
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(409);
+		expect(fake.lastCall("paymentIntents.create")).toBeUndefined();
 
-		const params = fake.lastCall("paymentIntents.create")?.args[0] as
-			| Stripe.PaymentIntentCreateParams
-			| undefined;
-		expect(params?.transfer_data).toBeUndefined();
-		expect(params?.application_fee_amount).toBeUndefined();
+		await connectCreator();
 	});
 
-	it("routes 100% of the listed price to a connected creator, keeping the rest as the application fee", async () => {
-		const acctId = `acct_${uid()}`;
+	it("refuses when onboarding started but payouts are not enabled", async () => {
 		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
 		await db.insert(stripeAccounts).values({
 			userId: creatorId,
-			stripeAccountId: acctId,
+			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
-			payoutsEnabled: true,
+			payoutsEnabled: false,
 			onboardingComplete: true,
 		});
+
+		const { res } = await checkout();
+		expect(res.status).toBe(409);
+		expect(fake.lastCall("paymentIntents.create")).toBeUndefined();
+
+		await connectCreator();
+	});
+
+	it("routes 100% of the listed price to a connected creator, keeping the rest as the application fee", async () => {
+		const acctId = await connectCreator();
 
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);

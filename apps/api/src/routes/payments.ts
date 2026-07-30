@@ -182,17 +182,21 @@ const paymentRoutes = new Hono()
 		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Route 100% of the listed price to the creator when they're set up to receive it;
-		// the application fee is everything else the buyer pays (Foundation Fee + at-cost
-		// bandwidth + processing + sales tax). No connected account yet → a plain charge
-		// held on the platform, so the plumbing is testable before Connect onboarding.
+		// A connected creator is a HARD PRECONDITION, not a mode switch. Anthers does not
+		// sell a creator's work when the money cannot reach them: this route used to fall
+		// back to a plain platform-held charge "so the plumbing is testable before Connect
+		// onboarding", but the buy UI has always refused to render without
+		// `creatorHasStripe`, so that branch was unreachable from the product and would
+		// have parked buyers' money in a platform balance nobody reconciles. Failing here
+		// is louder and matches what the interface already promises.
 		const [creatorAccount] = await db
 			.select()
 			.from(stripeAccounts)
 			.where(eq(stripeAccounts.userId, post.creatorId))
 			.limit(1);
-		const creatorConnected =
-			!!creatorAccount?.onboardingComplete && !!creatorAccount.payoutsEnabled;
+		if (!creatorAccount?.onboardingComplete || !creatorAccount.payoutsEnabled) {
+			return c.json({ error: "This creator can't accept payments yet." }, 409);
+		}
 
 		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
 		const applicationFeeCents = Math.round(fees.buyerTotal.minus(amount).toNumber() * 100);
@@ -203,7 +207,10 @@ const paymentRoutes = new Hono()
 			payment_method_types: ["card"],
 			metadata: { kind: "direct_purchase", postId: String(post.id), buyerId: String(user.id) },
 		};
-		if (creatorConnected && applicationFeeCents < totalCents) {
+		// The creator receives 100% of the listed price; the application fee is everything
+		// else the buyer pays on top (Foundation Fee + at-cost bandwidth + processing + tax).
+		// Guarded because a fee at or above the total would be rejected by Stripe anyway.
+		if (applicationFeeCents < totalCents) {
 			params.application_fee_amount = applicationFeeCents;
 			params.transfer_data = { destination: creatorAccount.stripeAccountId };
 		}
