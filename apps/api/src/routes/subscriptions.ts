@@ -29,7 +29,7 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
-import { heldBadgeName, SEED_PRICE, seedsMeet, thresholdForBadge } from "@anthers/shared/constants";
+import { heldBadgeName, SEED_PRICE, seedsMeet } from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
