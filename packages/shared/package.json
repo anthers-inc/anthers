@@ -9,7 +9,8 @@
 		"./fees": "./src/fees.ts",
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
-		"./moderation": "./src/moderation.ts"
+		"./moderation": "./src/moderation.ts",
+		"./content": "./src/content.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

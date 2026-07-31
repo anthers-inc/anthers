@@ -1,0 +1,19 @@
+-- A score can no longer be left without words: a rating becomes a REVIEW that
+-- carries a score.
+--
+-- Nullable on purpose, and it stays nullable. The API requires `body` on every
+-- write from here on, so nothing new can be score-only — but rows written before
+-- this migration have no text and never will, and they have to keep rendering
+-- and keep counting toward the average. A NOT NULL column would mean either
+-- inventing text for them or dropping real reviews, and both are worse than one
+-- nullable column meaning "written before we asked for words".
+--
+-- Read null (or "") as a legacy score-only review, never as a shape a new write
+-- may produce.
+--
+-- Plain text, not HTML. Like comments, it renders as a React text node and is
+-- never passed through the sanitizer, because nothing here is interpreted as
+-- markup. Don't "upgrade" it to rich text without also adding sanitization at
+-- the write boundary — `services/sanitize.ts` exists for exactly that, and the
+-- reason it isn't used here is that there is no markup to allow.
+ALTER TABLE "ratings" ADD COLUMN "body" text;

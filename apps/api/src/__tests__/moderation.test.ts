@@ -129,12 +129,20 @@ beforeAll(async () => {
 	otherCommentId = (await c2.json()).comment.id;
 
 	// Two ratings: 1 star from A (the one we'll hide), 5 stars from B.
-	const r1 = await post(`/api/content/posts/${slug}/ratings`, viewerA, { score: 1 });
+	const r1 = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		score: 1,
+		body: "did not work for me at all",
+	});
 	expect(r1.status).toBe(201);
 	ratingId = (await r1.json()).rating.id;
-	expect((await post(`/api/content/posts/${slug}/ratings`, viewerB, { score: 5 })).status).toBe(
-		201,
-	);
+	expect(
+		(
+			await post(`/api/content/posts/${slug}/ratings`, viewerB, {
+				score: 5,
+				body: "one of the best things I have played this year",
+			})
+		).status,
+	).toBe(201);
 });
 
 describe("Filing a report", () => {
@@ -241,14 +249,11 @@ describe("The operator queue", () => {
 		expect(summary.openReports).toBeGreaterThanOrEqual(1);
 	});
 
-	it("lists ratings nobody reported, so a bare score is still reachable", async () => {
-		// A rating is a 1-5 int with no per-rating surface anywhere in the app, so
-		// no user can see one to report it. Without this browse filter it would be
-		// moderatable in the schema and unreachable in practice.
+	it("lists reviews nobody reported, so an operator can act before anyone complains", async () => {
 		const { items } = await queue(admin, "ratings");
 		const entry = items.find((i) => i.subjectId === ratingId && i.subjectType === "rating");
 		expect(entry).toBeDefined();
-		expect(entry?.excerpt).toBe("1 / 5");
+		expect(entry?.excerpt).toBe("1/5 — did not work for me at all");
 		expect(entry?.openReports).toBe(0);
 	});
 });
@@ -368,7 +373,10 @@ describe("Hiding a rating", () => {
 	});
 
 	it("cannot be resurrected by re-rating — the upsert only touches the score", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, { score: 4 });
+		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+			score: 4,
+			body: "came back to it and warmed up considerably",
+		});
 		expect(res.status).toBe(201);
 
 		const [row] = await db.select().from(ratings).where(eq(ratings.id, ratingId));

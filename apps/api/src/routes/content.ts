@@ -36,6 +36,7 @@ import {
 	transcodingJobs,
 	users,
 } from "@anthers/db/schema";
+import { COMMENT_MAX, REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, avg, count, desc, eq, inArray, like, ne, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -313,8 +314,18 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = createProjectSchema.partial();
 
-const createCommentSchema = z.object({ body: z.string().min(1).max(10000) });
-const createRatingSchema = z.object({ score: z.number().int().min(1).max(5) });
+const createCommentSchema = z.object({ body: z.string().min(1).max(COMMENT_MAX) });
+/**
+ * A review: a score AND written text. The minimum is deliberately low — it's a
+ * blunt instrument and "lol" clears it either way. The point of requiring text
+ * isn't to filter by length, it's that a written verdict gives a reader something
+ * to weigh and a moderator something to act on, where a bare score is
+ * unmoderatable by construction. Plain text, no markup, so no sanitizer.
+ */
+const createRatingSchema = z.object({
+	score: z.number().int().min(1).max(5),
+	body: z.string().trim().min(REVIEW_MIN, "Please say a little about why").max(REVIEW_MAX),
+});
 
 const createAssetSchema = z.object({
 	file: z.string().min(1).max(500),
@@ -1566,7 +1577,10 @@ const contentRoutes = new Hono()
 		},
 	)
 
-	// ── Post Ratings ───────────────────────────────────────────────────────────
+	// ── Post Reviews ───────────────────────────────────────────────────────────
+	// A review is a score plus written text — a score can't be left on its own.
+	// The route path stays `/ratings` (and the table stays `ratings`): "review" is
+	// a copy rule, not a schema rule, exactly like the Seed vocabulary changes.
 	.get("/posts/:slug/ratings", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
@@ -1576,21 +1590,47 @@ const contentRoutes = new Hono()
 			.from(ratings)
 			.where(and(eq(ratings.postId, post.id), visibleRating));
 
+		// The written reviews themselves. Hidden ones are withheld here for the same
+		// reason they're excluded from the aggregate — this is a public read.
+		const reviewRows = await db
+			.select({
+				id: ratings.id,
+				userId: ratings.userId,
+				score: ratings.score,
+				body: ratings.body,
+				createdAt: ratings.createdAt,
+				username: users.username,
+				avatar: users.avatar,
+			})
+			.from(ratings)
+			.innerJoin(users, eq(ratings.userId, users.id))
+			.where(and(eq(ratings.postId, post.id), visibleRating))
+			.orderBy(desc(ratings.createdAt));
+
 		let userRating: number | null = null;
+		let userReview: string | null = null;
 		const currentUserId = await getOptionalUserId(c);
 		if (currentUserId) {
+			// Deliberately unfiltered by moderation status: the score and words a
+			// viewer submitted shouldn't silently change under them. Their review
+			// simply stops counting and stops appearing to everyone else.
 			const [row] = await db
-				.select({ score: ratings.score })
+				.select({ score: ratings.score, body: ratings.body })
 				.from(ratings)
 				.where(and(eq(ratings.postId, post.id), eq(ratings.userId, currentUserId)))
 				.limit(1);
 			userRating = row?.score ?? null;
+			userReview = row?.body ?? null;
 		}
 
 		return c.json({
 			average: agg.average ? Number(agg.average) : null,
 			count: Number(agg.count),
 			userRating,
+			userReview,
+			// `body` is null on rows written before reviews required text. They still
+			// render and still count; the client shows the score without a quote.
+			reviews: reviewRows.map((r) => ({ ...r, body: r.body ?? "" })),
 		});
 	})
 
@@ -1599,14 +1639,19 @@ const contentRoutes = new Hono()
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
-		const { score } = c.req.valid("json");
-		// The conflict branch sets `score` and nothing else — notably not
-		// `moderationStatus`. Re-rating changes the number on a hidden row without
-		// resurrecting it, so a user can't un-hide their own rating by voting again.
+		const { score, body } = c.req.valid("json");
+		// The conflict branch sets `score` and `body` and nothing else — notably not
+		// `moderationStatus`. Re-reviewing changes the score and the words on a hidden
+		// row without resurrecting it, so a user can't un-hide their own review by
+		// submitting again. Adding a field here means adding it to BOTH the insert
+		// and this set clause; forgetting the set clause silently makes edits no-ops.
 		const [rating] = await db
 			.insert(ratings)
-			.values({ userId: user.id, postId: post.id, score })
-			.onConflictDoUpdate({ target: [ratings.userId, ratings.postId], set: { score } })
+			.values({ userId: user.id, postId: post.id, score, body: body.trim() })
+			.onConflictDoUpdate({
+				target: [ratings.userId, ratings.postId],
+				set: { score, body: body.trim() },
+			})
 			.returning();
 
 		return c.json({ rating }, 201);

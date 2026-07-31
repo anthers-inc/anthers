@@ -232,7 +232,7 @@ export async function dismissReports(input: {
 export interface QueueItem {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	/** The comment text, or "★ N" for a rating — whatever the operator has to judge. */
+	/** The comment text, or a review's score and words — whatever the operator has to judge. */
 	excerpt: string;
 	score: number | null;
 	moderationStatus: string;
@@ -261,10 +261,11 @@ const QUEUE_LIMIT = 100;
  *
  * `reported` — the queue proper: anything with an open report, most-reported first.
  * `comments` / `ratings` — recent activity, so an operator can act on something
- *   nobody reported. Ratings need this: a rating is a bare 1–5 score with no
- *   per-rating surface anywhere in the app, so nobody can *see* one to report it.
- *   Without a browse view, ratings would be moderatable in the schema and
- *   unreachable in practice.
+ *   nobody reported. This mattered more than it looks when a rating was a bare
+ *   1–5 score: nothing rendered it, so nobody could *see* one to report it, and
+ *   browse was the only way it was reachable at all. Reviews now carry text and
+ *   a report control, so the queue is fed properly — browse stays because acting
+ *   before anyone complains is still worth being able to do.
  * `hidden` — what we've already taken down, which is how a restore gets found.
  */
 export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
@@ -374,6 +375,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				moderationStatus: ratings.moderationStatus,
 				createdAt: ratings.createdAt,
 				score: ratings.score,
+				body: ratings.body,
 			})
 			.from(ratings)
 			.leftJoin(users, eq(ratings.userId, users.id))
@@ -382,7 +384,10 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		for (const r of rows) {
 			items.set(key("rating", r.id), {
 				...base("rating", r),
-				excerpt: `${r.score} / 5`,
+				// Score first so the operator sees the verdict, then the words that
+				// justify it — the words are the part there's actually a call to make on.
+				// `body` is empty on rows predating the write-time text requirement.
+				excerpt: r.body ? `${r.score}/5 — ${r.body}` : `${r.score}/5`,
 				score: r.score,
 			});
 		}

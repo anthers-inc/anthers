@@ -349,10 +349,17 @@ export const ratings = pgTable(
 			.notNull()
 			.references(() => posts.id, { onDelete: "cascade" }),
 		score: integer("score").notNull(), // 1-5, validated at application layer
-		// Same rule as comments: hidden, not deleted. A hidden rating is excluded
-		// from every average and count. Note that the rating upsert only ever sets
-		// `score`, so re-rating changes the number on a hidden row without
-		// resurrecting it — a user can't un-hide their own rating by voting again.
+		// A score cannot be left without words — the API requires `body` on write.
+		// It is nullable here only because rows predating that rule exist and must
+		// keep rendering; treat "" / null as a legacy score-only review, never as a
+		// shape new writes may produce. Plain text, not HTML: like comments, it is
+		// rendered as a React text node and never passed through a sanitizer,
+		// because nothing here is ever interpreted as markup.
+		body: text("body"),
+		// Same rule as comments: hidden, not deleted. A hidden review is excluded
+		// from every average and count. Note the upsert only ever sets `score` and
+		// `body`, so re-reviewing changes them on a hidden row without resurrecting
+		// it — a user can't un-hide their own review by submitting again.
 		moderationStatus: text("moderation_status").notNull().default("visible"), // visible | hidden
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
