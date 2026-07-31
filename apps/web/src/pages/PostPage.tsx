@@ -14,7 +14,13 @@ import type {
 	TranscodingJob,
 } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { ClockIcon, FilmIcon, MusicalNoteIcon, PhotoIcon } from "@heroicons/react/24/outline";
+import {
+	ClockIcon,
+	FilmIcon,
+	FlagIcon,
+	MusicalNoteIcon,
+	PhotoIcon,
+} from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,6 +32,7 @@ import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
 import ProjectRating from "../components/project/ProjectRating";
+import ReportDialog from "../components/ui/ReportDialog";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionClaim } from "../lib/attention";
 import { useMediaPlayer } from "../lib/media-player";
@@ -96,6 +103,8 @@ export default function PostPage() {
 	const [loading, setLoading] = useState(true);
 	const [commentBody, setCommentBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
+	/** Which comment the report dialog is open for, if any. */
+	const [reportingComment, setReportingComment] = useState<number | null>(null);
 
 	// ── Owner actions (edit / unpublish / delete) ──
 	const [showHistory, setShowHistory] = useState(false);
@@ -735,6 +744,20 @@ export default function PostPage() {
 										<span className="text-base-content/40 text-xs">
 											{new Date(comment.createdAt).toLocaleDateString()}
 										</span>
+										{/* Reporting needs a session — there's nobody to hold accountable
+										    for an anonymous report, and the one-per-person rule that keeps
+										    the queue honest needs a person to count. */}
+										{isAuthenticated && (
+											<button
+												type="button"
+												className="ml-auto text-base-content/30 hover:text-base-content/70"
+												onClick={() => setReportingComment(comment.id)}
+												title="Report this comment"
+												aria-label={`Report ${comment.username}'s comment`}
+											>
+												<FlagIcon className="w-3.5 h-3.5" />
+											</button>
+										)}
 									</div>
 									<p className="text-sm mt-1">{comment.body}</p>
 								</div>
@@ -743,6 +766,15 @@ export default function PostPage() {
 					</div>
 				)}
 			</div>
+
+			{reportingComment !== null && (
+				<ReportDialog
+					subjectType="comment"
+					subjectId={reportingComment}
+					label="this comment"
+					onClose={() => setReportingComment(null)}
+				/>
+			)}
 		</div>
 	);
 }

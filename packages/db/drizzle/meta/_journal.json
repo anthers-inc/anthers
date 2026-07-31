@@ -57,6 +57,13 @@
       "when": 1785125763557,
       "tag": "0007_seed_thresholds",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785463308895,
+      "tag": "0008_moderation_surface",
+      "breakpoints": true
     }
   ]
 }

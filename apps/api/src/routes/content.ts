@@ -57,6 +57,25 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Moderation filters for public reads of user-generated rows.
+ *
+ * Hiding a comment or rating is a state transition (`moderation_status`), never a
+ * delete — see `services/moderation.ts` — which means the row is still sitting in
+ * the table and every read has to exclude it deliberately. These two predicates
+ * are named so that stays one obvious thing to add rather than a literal string
+ * copied into each new query; a read site that forgets one is a moderation leak,
+ * not a cosmetic bug.
+ *
+ * Applied to: the comment list, the rating aggregate on the ratings endpoint, and
+ * the rating aggregate embedded in post detail. Every public count of either is
+ * derived from those. Deliberately NOT applied to a viewer's own `userRating` —
+ * the star they see should be the star they actually submitted, and re-rating
+ * only overwrites the score, so a hidden rating stays hidden.
+ */
+const visibleComment = eq(comments.moderationStatus, "visible");
+const visibleRating = eq(ratings.moderationStatus, "visible");
+
 async function getOptionalUserId(c: any): Promise<number | null> {
 	const token = getCookie(c, "session");
 	if (!token) return null;
@@ -1252,7 +1271,7 @@ const contentRoutes = new Hono()
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
-			.where(eq(ratings.postId, post.id));
+			.where(and(eq(ratings.postId, post.id), visibleRating));
 
 		// Fire-and-forget view count.
 		db.update(posts)
@@ -1520,7 +1539,7 @@ const contentRoutes = new Hono()
 			.select({ comment: comments, username: users.username, avatar: users.avatar })
 			.from(comments)
 			.innerJoin(users, eq(comments.userId, users.id))
-			.where(eq(comments.postId, post.id))
+			.where(and(eq(comments.postId, post.id), visibleComment))
 			.orderBy(desc(comments.createdAt));
 
 		return c.json({
@@ -1555,7 +1574,7 @@ const contentRoutes = new Hono()
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
-			.where(eq(ratings.postId, post.id));
+			.where(and(eq(ratings.postId, post.id), visibleRating));
 
 		let userRating: number | null = null;
 		const currentUserId = await getOptionalUserId(c);
@@ -1581,6 +1600,9 @@ const contentRoutes = new Hono()
 		if (!post) return c.json({ error: "Post not found" }, 404);
 
 		const { score } = c.req.valid("json");
+		// The conflict branch sets `score` and nothing else — notably not
+		// `moderationStatus`. Re-rating changes the number on a hidden row without
+		// resurrecting it, so a user can't un-hide their own rating by voting again.
 		const [rating] = await db
 			.insert(ratings)
 			.values({ userId: user.id, postId: post.id, score })

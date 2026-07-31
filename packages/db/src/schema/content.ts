@@ -301,18 +301,26 @@ export const inlineImages = pgTable("inline_images", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const comments = pgTable("comments", {
-	id: serial("id").primaryKey(),
-	userId: integer("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	postId: integer("post_id")
-		.notNull()
-		.references(() => posts.id, { onDelete: "cascade" }),
-	body: text("body").notNull(),
-	atprotoUri: text("atproto_uri").unique(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const comments = pgTable(
+	"comments",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		postId: integer("post_id")
+			.notNull()
+			.references(() => posts.id, { onDelete: "cascade" }),
+		body: text("body").notNull(),
+		// Removal is a STATE, never a DELETE — see packages/db/src/schema/moderation.ts.
+		// The row, its author and its text all survive being hidden; the who/why/when
+		// lives in moderation_actions. Every public read filters on this.
+		moderationStatus: text("moderation_status").notNull().default("visible"), // visible | hidden
+		atprotoUri: text("atproto_uri").unique(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_comments_post_visible").on(table.postId, table.moderationStatus)],
+);
 
 export const bookmarks = pgTable(
 	"bookmarks",
@@ -341,8 +349,16 @@ export const ratings = pgTable(
 			.notNull()
 			.references(() => posts.id, { onDelete: "cascade" }),
 		score: integer("score").notNull(), // 1-5, validated at application layer
+		// Same rule as comments: hidden, not deleted. A hidden rating is excluded
+		// from every average and count. Note that the rating upsert only ever sets
+		// `score`, so re-rating changes the number on a hidden row without
+		// resurrecting it — a user can't un-hide their own rating by voting again.
+		moderationStatus: text("moderation_status").notNull().default("visible"), // visible | hidden
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_ratings_user_post").on(table.userId, table.postId)],
+	(table) => [
+		uniqueIndex("uq_ratings_user_post").on(table.userId, table.postId),
+		index("idx_ratings_post_visible").on(table.postId, table.moderationStatus),
+	],
 );

@@ -9,15 +9,44 @@
  * live in the DO dashboard, deep-linked from the frontend rather than proxied
  * here — a thin console over DO's own monitoring, per the task's steer.
  *
- * Read-only by design. Mutating controls (retry/cancel a job) and alerting are
- * follow-ons; nothing here writes.
+ * The telemetry half is read-only by design; job retry/cancel and alerting are
+ * still follow-ons. The MODERATION half below is this console's first mutating
+ * surface, and it stays inside the same `requireAdmin` gate rather than growing
+ * a second admin router with a second answer to "who is an operator?".
  */
 
 import { db } from "@anthers/db/client";
+import {
+	isModerationReason,
+	isModerationSubjectType,
+	MODERATION_NOTE_MAX,
+} from "@anthers/shared/moderation";
+import { zValidator } from "@hono/zod-validator";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import {
+	dismissReports,
+	hideSubject,
+	loadQueue,
+	moderationSummary,
+	type QueueFilter,
+	restoreSubject,
+} from "../services/moderation.js";
+
+const QUEUE_FILTERS: readonly QueueFilter[] = ["reported", "comments", "ratings", "hidden"];
+
+const subjectSchema = z.object({
+	subjectType: z.string().refine(isModerationSubjectType, "Unknown subject type"),
+	subjectId: z.number().int().positive(),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+});
+
+const hideSchema = subjectSchema.extend({
+	reason: z.string().refine(isModerationReason, "Unknown reason"),
+});
 
 // pg-boss job states (v12). We surface the live ones that signal health;
 // `completed` rows are pruned by keep_until, so their count is only ever recent.
@@ -186,6 +215,53 @@ const adminRoutes = new Hono()
 			pgboss: { available: pgbossPresent, queues: queueHealth, failures },
 			transcodes: { counts: transcodeCounts, problems: transcodeProblems },
 		});
+	})
+
+	// ── Moderation ──────────────────────────────────────────────────────────
+	// The operator queue and the two decisions that act on it. Everything here
+	// delegates to services/moderation.ts; in particular, nothing on this route
+	// deletes a row — hiding is a state transition, and the record of it is what
+	// makes appeals and creator-side tools additions rather than migrations.
+	.get("/moderation", async (c) => {
+		const requested = c.req.query("filter") ?? "reported";
+		const filter = (QUEUE_FILTERS as readonly string[]).includes(requested)
+			? (requested as QueueFilter)
+			: "reported";
+
+		const [items, summary] = await Promise.all([loadQueue(filter), moderationSummary()]);
+		return c.json({ filter, items, summary });
+	})
+
+	.post("/moderation/hide", zValidator("json", hideSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId, reason, note } = c.req.valid("json");
+		const result = await hideSubject({
+			subjectType,
+			subjectId,
+			actorId: user.id,
+			reason,
+			note,
+		});
+		if (!result) return c.json({ error: "Subject not found" }, 404);
+		return c.json(result);
+	})
+
+	.post("/moderation/restore", zValidator("json", subjectSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId, note } = c.req.valid("json");
+		const result = await restoreSubject({ subjectType, subjectId, actorId: user.id, note });
+		if (!result) return c.json({ error: "Subject not found" }, 404);
+		return c.json(result);
+	})
+
+	// Clear a subject's reports without touching the content — the "I looked, it's
+	// fine" outcome. Distinct from hiding, and it has to be, or the only way to
+	// empty the queue would be to take things down.
+	.post("/moderation/dismiss", zValidator("json", subjectSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId } = c.req.valid("json");
+		const result = await dismissReports({ subjectType, subjectId, actorId: user.id });
+		return c.json(result);
 	});
 
 /** Pull a readable message out of a pg-boss job's `output` jsonb (shape varies). */

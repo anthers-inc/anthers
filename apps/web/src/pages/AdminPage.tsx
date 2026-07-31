@@ -2,11 +2,16 @@
 /**
  * Admin / operations console — the MVP ops dashboard.
  *
- * Read-only telemetry for an operator: platform activity (from our Postgres),
- * background job / queue health (pg-boss + media transcodes), and deep-links
- * out to DigitalOcean for live logs + spend (a thin console over DO's own
- * monitoring rather than a re-implementation). Gated by AdminRoute + the API's
- * requireAdmin. Mutating controls and alerting are deliberate follow-ons.
+ * Two halves. **Moderation** is the operator's work queue — report → hide →
+ * recorded removal — and the console's first mutating surface. **Telemetry** is
+ * the original read-only view: platform activity (from our Postgres), background
+ * job / queue health (pg-boss + media transcodes), and deep-links out to
+ * DigitalOcean for live logs + spend (a thin console over DO's own monitoring
+ * rather than a re-implementation). Gated by AdminRoute + the API's requireAdmin.
+ *
+ * Moderation renders outside the telemetry loading gate and fetches on its own —
+ * the thing an operator came here to act on shouldn't wait on a queue-health
+ * query. Job retry/cancel and alerting are still follow-ons.
  */
 
 import { client } from "@anthers/web-shared/rpc";
@@ -22,6 +27,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import ModerationQueue from "../components/admin/ModerationQueue";
 
 // ── Response shapes (mirror apps/api/src/routes/admin.ts) ────────────────────
 interface Activity {
@@ -138,7 +144,8 @@ export default function AdminPage() {
 				<div>
 					<h1 className="text-2xl font-bold">Operations</h1>
 					<p className="text-sm text-base-content/60">
-						Read-only platform telemetry{updatedAt && ` · updated ${updatedAt}`}
+						Moderation queue and platform telemetry
+						{updatedAt && ` · telemetry updated ${updatedAt}`}
 					</p>
 				</div>
 				<button
@@ -157,6 +164,12 @@ export default function AdminPage() {
 					<span>{error}</span>
 				</div>
 			)}
+
+			{/* Outside the telemetry gate on purpose — it loads itself, so the work
+			    queue isn't held behind a pg-boss health query. */}
+			<div className="mb-10">
+				<ModerationQueue />
+			</div>
 
 			{loading && !activity && !jobs ? (
 				<div className="flex justify-center py-20">
