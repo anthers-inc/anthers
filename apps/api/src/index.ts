@@ -14,6 +14,7 @@ import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { jamRoutes } from "./routes/jams.js";
+import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
@@ -58,6 +59,7 @@ const app = new Hono()
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/jams", jamRoutes)
+	.route("/api/moderation", moderationRoutes)
 	.route("/api/waitlist", waitlistRoutes)
 	.route("/api/admin", adminRoutes);
 

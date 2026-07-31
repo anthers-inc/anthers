@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * The moderation vocabulary, pinned.
+ *
+ * Two things here are load-bearing in a way the type system can't express:
+ *
+ * 1. **The reason codes are STORED VALUES.** `moderation_reports.reason` and
+ *    `moderation_actions.reason` hold these strings verbatim, so renaming one
+ *    orphans every row already carrying it — a rename is a data migration, not
+ *    a copy edit. Labels are free to change; the exact-set assertion below is
+ *    what makes the difference visible when someone edits this list.
+ *
+ * 2. **There is no terminal status.** `ModerationStatus` is deliberately just
+ *    visible/hidden, because "removal is a state transition, never a delete" is
+ *    the constraint that keeps appeals, creator-side tools and labelers as later
+ *    features rather than later migrations. A `deleted` value would be that
+ *    constraint quietly dying in a type alias.
+ */
+import { describe, expect, it } from "bun:test";
+import {
+	isModerationReason,
+	isModerationSubjectType,
+	MODERATION_REASON_VALUES,
+	MODERATION_REASONS,
+	MODERATION_STATUSES,
+	MODERATION_SUBJECT_TYPES,
+	moderationReasonLabel,
+} from "./moderation.js";
+
+describe("Report taxonomy", () => {
+	it("pins the stored reason codes — renaming one is a data migration", () => {
+		expect([...MODERATION_REASON_VALUES]).toEqual([
+			"spam",
+			"harassment",
+			"sexual",
+			"violence",
+			"illegal",
+			"other",
+		]);
+	});
+
+	it("keeps codes unique, so two reasons can't collapse into one stored value", () => {
+		expect(new Set(MODERATION_REASON_VALUES).size).toBe(MODERATION_REASONS.length);
+	});
+
+	it("gives every reason a label and a hint a reporter can act on", () => {
+		for (const reason of MODERATION_REASONS) {
+			expect(reason.label.length).toBeGreaterThan(0);
+			expect(reason.hint.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("keeps `other` last — it's the catch-all, not a peer", () => {
+		expect(MODERATION_REASON_VALUES.at(-1)).toBe("other");
+	});
+
+	it("validates membership rather than accepting any string", () => {
+		expect(isModerationReason("spam")).toBe(true);
+		expect(isModerationReason("misinformation")).toBe(false);
+		expect(isModerationReason("")).toBe(false);
+	});
+
+	it("labels a known code and falls back to the code itself for an unknown one", () => {
+		expect(moderationReasonLabel("spam")).toBe("Spam or advertising");
+		// Forward compatibility: a client on an older bundle renders a code it has
+		// never heard of as the code, not as blank.
+		expect(moderationReasonLabel("future-reason")).toBe("future-reason");
+	});
+});
+
+describe("Moderation states", () => {
+	it("has exactly two states, and neither of them means deleted", () => {
+		expect([...MODERATION_STATUSES]).toEqual(["visible", "hidden"]);
+		expect(MODERATION_STATUSES).not.toContain("deleted");
+		expect(MODERATION_STATUSES).not.toContain("removed");
+	});
+});
+
+describe("Subject types", () => {
+	it("covers the two user-generated row types and validates membership", () => {
+		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating"]);
+		expect(isModerationSubjectType("comment")).toBe(true);
+		expect(isModerationSubjectType("post")).toBe(false);
+	});
+});
