@@ -601,7 +601,7 @@ export default function PostPage() {
 							);
 						})}
 
-						{/* Rating */}
+						{/* Reviews */}
 						<div className="mb-8 mt-8">
 							<ProjectRating slug={post.slug} />
 						</div>
@@ -640,7 +640,7 @@ export default function PostPage() {
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">Delete this post?</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							This permanently removes the post along with its comments and ratings. It can't be
+							This permanently removes the post along with its comments and reviews. It can't be
 							undone.
 						</p>
 						{orphanMedia.length > 0 && (

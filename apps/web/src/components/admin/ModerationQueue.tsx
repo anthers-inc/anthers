@@ -3,10 +3,8 @@
  * Moderation queue — the operator's half of the surface, and the ops console's
  * first mutating control.
  *
- * Four views over one list, because a report-fed queue alone leaves a gap: a
- * rating is a bare 1–5 score with no per-rating surface anywhere in the app, so
- * no reader can see one to report it. "Reported" is the queue proper; "Comments"
- * and "Ratings" are recent activity so an operator can act on something nobody
+ * Four views over one list. "Reported" is the queue proper; "Comments" and
+ * "Reviews" are recent activity so an operator can act on something nobody
  * flagged; "Hidden" is how a takedown gets found again and reversed.
  *
  * Two outcomes, kept distinct on purpose. **Hide** takes the content down and
@@ -66,7 +64,7 @@ interface QueueResponse {
 const FILTERS = [
 	{ value: "reported", label: "Reported" },
 	{ value: "comments", label: "Comments" },
-	{ value: "ratings", label: "Ratings" },
+	{ value: "ratings", label: "Reviews" },
 	{ value: "hidden", label: "Hidden" },
 ] as const;
 

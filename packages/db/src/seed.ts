@@ -982,29 +982,41 @@ async function seed() {
 	}
 	console.log("  Collections created.");
 
-	// ---- 4. Create some ratings ----
-	console.log("Creating seed ratings...");
+	// ---- 4. Create some reviews ----
+	// A review is a score plus text — seeding score-only rows would produce the
+	// legacy shape the API no longer accepts, and dev data should look like what
+	// the product actually produces.
+	console.log("Creating seed reviews...");
 	const allUserIds = Object.values(createdUserIds);
+	const reviewBodies = [
+		"Genuinely didn't expect to be this taken with it. The pacing is the thing — nothing overstays.",
+		"Rough around the edges in places, but the ideas underneath are worth the friction.",
+		"I've come back to this three times now, which is more than I can say for most things.",
+		"Does one thing and does it properly. I'd rather have this than something twice the size.",
+		"Loved the sound design especially. Would happily pay for more in this vein.",
+		"Solid. A couple of moments didn't land for me, but the whole holds together well.",
+	];
 
 	for (const { postId, creatorUsername } of createdPosts) {
-		// Each creator's posts get rated by the other seed users.
-		const raters = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
+		// Each creator's posts get reviewed by the other seed users.
+		const reviewers = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
 
-		for (const raterId of raters) {
+		for (const [i, reviewerId] of reviewers.entries()) {
 			const score = randomInt(3, 5); // seed data skews positive
 			try {
 				await db.insert(ratings).values({
-					userId: raterId,
+					userId: reviewerId,
 					postId,
 					score,
+					body: reviewBodies[(postId + i) % reviewBodies.length],
 					createdAt: daysAgo(randomInt(1, 90)),
 				});
 			} catch {
-				// Unique constraint (user_id, post_id) — already rated
+				// Unique constraint (user_id, post_id) — already reviewed
 			}
 		}
 	}
-	console.log("  Ratings created.");
+	console.log("  Reviews created.");
 
 	// ---- 5. Create some comments ----
 	console.log("Creating seed comments...");

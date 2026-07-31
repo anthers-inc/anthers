@@ -330,10 +330,26 @@ export interface Comment {
 	avatar: string | null;
 }
 
+/** One written review: a score plus the words that justify it. */
+export interface Review {
+	id: number;
+	userId: number;
+	score: number;
+	/** "" for rows written before reviews required text — render the score alone. */
+	body: string;
+	createdAt: string;
+	username: string;
+	avatar: string | null;
+}
+
 export interface RatingAggregate {
 	average: number | null;
 	count: number;
+	/** The viewer's own score, shown even if their review is hidden. */
 	userRating: number | null;
+	/** The viewer's own review text, so the form can open pre-filled for an edit. */
+	userReview: string | null;
+	reviews: Review[];
 }
 
 export interface MediaUploadResponse {
