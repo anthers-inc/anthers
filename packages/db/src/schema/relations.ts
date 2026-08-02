@@ -222,7 +222,7 @@ export const attentionEventsRelations = relations(attentionEvents, ({ one }) => 
 		references: [users.id],
 		relationName: "attentionCreator",
 	}),
-	post: one(posts, { fields: [attentionEvents.postId], references: [posts.id] }),
+	work: one(works, { fields: [attentionEvents.workId], references: [works.id] }),
 }));
 
 export const seedAllocationsRelations = relations(seedAllocations, ({ one }) => ({

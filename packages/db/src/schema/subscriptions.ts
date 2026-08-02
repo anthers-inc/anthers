@@ -21,7 +21,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { posts } from "./content.js";
+import { works } from "./content.js";
 
 /**
  * A user's standing account (one per user). `anthersSeeds` is the count of
@@ -86,7 +86,11 @@ export const attentionEvents = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		postId: integer("post_id").references(() => posts.id, { onDelete: "set null" }),
+		// Time is earned by a **Work**, never by a post. A post is connective tissue and
+		// earns nothing (40.05), which used to be a policy the endpoint enforced against a
+		// schema that couldn't express it; now the column says so. Null only on
+		// zero-duration visit pings, which are analytics and credit nothing.
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
 		eventType: text("event_type").notNull(), // page_view | play | watch | read | listen
 		durationSeconds: integer("duration_seconds").default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

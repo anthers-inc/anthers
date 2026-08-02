@@ -51,7 +51,7 @@ import {
 	GAUNTLET_MEDIA_POSTS,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
-import { works, postContents, posts, transcodingJobs, users } from "@anthers/db/schema";
+import { postWorkRefs, posts, transcodingJobs, users, works } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -155,10 +155,10 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 	}
 
 	const existing = await db
-		.select({ workId: postContents.workId })
-		.from(postContents)
-		.where(eq(postContents.postId, row.id));
-	const staleIds = existing.map((e) => e.workId).filter((id): id is number => id != null);
+		.select({ workId: postWorkRefs.workId })
+		.from(postWorkRefs)
+		.where(eq(postWorkRefs.postId, row.id));
+	const staleIds = existing.map((e) => e.workId);
 	if (staleIds.length > 0) await db.delete(works).where(inArray(works.id, staleIds));
 
 	const clipPath = await generateClip(post.media);
@@ -177,15 +177,19 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 			.insert(works)
 			.values({
 				creatorId: creator,
+				publicId: 100_000_000 + Math.floor(Math.random() * 900_000_000),
+				slug: `${post.slug}-work`,
 				type: post.media,
 				title: post.title,
 				description: post.body,
 				sourceKey,
+				// The fixture stages RELEASED media — the gauntlet walks a viewer through
+				// real access, and a private Work is unreachable by construction.
+				visibility: "released",
+				releasedAt: new Date(),
 			})
 			.returning({ id: works.id });
-		await db
-			.insert(postContents)
-			.values({ postId: row.id, position: 0, kind: "content", workId: item.id });
+		await db.insert(postWorkRefs).values({ postId: row.id, position: 0, workId: item.id });
 
 		const [job] = await db
 			.insert(transcodingJobs)

@@ -21,7 +21,6 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
-import { type AccessiblePost, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -204,19 +203,17 @@ const accountRoutes = new Hono()
 			.from(posts)
 			.innerJoin(users, eq(posts.creatorId, users.id))
 			.where(and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)))
-			.orderBy(desc(posts.createdAt))
+			.orderBy(sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`)
 			.limit(50);
 
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
-		// post regardless of gating — following someone is not access, and the timeline
-		// (`GET /api/content/posts`) has always enumerated for exactly this reason. Each
-		// entry carries its resolved `access` so the client renders the same locked-post
-		// preview it does everywhere else.
-		const ctx = await buildAccessContext(sessionUser.id, {
-			postIds: feedPosts.map((r) => r.post.id),
-		});
-
+		// post regardless of gating. A post carries no gate of its own now, so there is no
+		// per-entry access verdict here any more — but enumerating stays, because a feed
+		// has no business shipping a whole row and the habit is what kept the leak out.
+		//
+		// TODO(stage 4): interleave released Works with posts here, so a creator who only
+		// releases still reaches their followers. Posts-only until the Catalog timeline lands.
 		return c.json({
 			posts: feedPosts.map((row) => {
 				const p = row.post;
@@ -226,18 +223,13 @@ const accountRoutes = new Hono()
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
-					contentType: p.contentType,
-					streamEnabled: p.streamEnabled,
-					downloadEnabled: p.downloadEnabled,
-					thumbnail: p.thumbnail,
 					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
+					publishedAt: p.publishedAt,
 					scheduledFor: p.scheduledFor,
 					viewCount: p.viewCount,
-					downloadCount: p.downloadCount,
-					estimatedReadMinutes: p.estimatedReadMinutes,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
 					creator: {
@@ -245,7 +237,6 @@ const accountRoutes = new Hono()
 						displayName: row.creatorDisplayName,
 						avatar: row.creatorAvatar,
 					},
-					access: resolveAccessSync(p as AccessiblePost, ctx),
 				};
 			}),
 		});

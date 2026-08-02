@@ -108,7 +108,8 @@ export async function createOneTimeCharge(opts: {
 	});
 	await db.insert(purchases).values({
 		buyerId: opts.userId,
-		postId: null,
+		// A Seed buy is not a Work purchase — nothing to unlock.
+		workId: null,
 		type: opts.type,
 		amount: base.toFixed(2),
 		processingFee: processing.toFixed(2),

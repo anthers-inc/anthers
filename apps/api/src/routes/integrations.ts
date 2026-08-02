@@ -10,6 +10,7 @@ import {
 	crossPublishResults,
 	platformConnections,
 	posts,
+	works,
 	projects,
 } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
@@ -95,29 +96,29 @@ const integrationRoutes = new Hono()
 		if (type === "all" || type === "posts") {
 			const postStats = await db
 				.select({
-					postId: attentionEvents.postId,
-					postTitle: posts.title,
-					postSlug: posts.slug,
+					workId: attentionEvents.workId,
+					postTitle: works.title,
+					postSlug: works.slug,
 					eventCount: sql<number>`COUNT(*)::int`,
 					totalDuration: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::float`,
 				})
 				.from(attentionEvents)
-				.innerJoin(posts, eq(attentionEvents.postId, posts.id))
+				.innerJoin(works, eq(attentionEvents.workId, works.id))
 				.where(
 					and(
 						eq(attentionEvents.creatorId, user.id),
 						gte(attentionEvents.createdAt, since),
-						sql`${attentionEvents.postId} IS NOT NULL`,
+						sql`${attentionEvents.workId} IS NOT NULL`,
 					),
 				)
-				.groupBy(attentionEvents.postId, posts.title, posts.slug)
+				.groupBy(attentionEvents.workId, works.title, works.slug)
 				.orderBy(desc(sql`COUNT(*)`))
 				.limit(50);
 
 			result.push(
 				...postStats.map((r) => ({
 					type: "post",
-					id: r.postId,
+					id: r.workId,
 					title: r.postTitle,
 					slug: r.postSlug,
 					eventCount: Number(r.eventCount),

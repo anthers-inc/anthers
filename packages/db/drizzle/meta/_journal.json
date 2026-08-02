@@ -78,6 +78,13 @@
       "when": 1785698497109,
       "tag": "0010_catalog_works",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785699979717,
+      "tag": "0011_attention_works",
+      "breakpoints": true
     }
   ]
 }

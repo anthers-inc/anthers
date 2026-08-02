@@ -63,10 +63,10 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 			total: sum(purchases.creatorEarnings),
 		})
 		.from(purchases)
-		.innerJoin(posts, eq(purchases.postId, posts.id))
+		.innerJoin(works, eq(purchases.workId, works.id))
 		.where(
 			and(
-				eq(posts.creatorId, creatorId),
+				eq(works.creatorId, creatorId),
 				eq(purchases.status, "completed"),
 				sql`${purchases.createdAt} >= ${monthStart}`,
 				sql`${purchases.createdAt} < ${monthEnd}`,

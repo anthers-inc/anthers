@@ -14,11 +14,10 @@ import {
 	assets,
 	crfLedger,
 	crfSubsidies,
-	postContents,
-	posts,
 	purchases,
 	stripeAccounts,
 	users,
+	works,
 } from "@anthers/db/schema";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -31,48 +30,54 @@ import { resolveAccess } from "../services/access.js";
 import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
 
 /**
- * Shared purchase resolution for checkout and quote: find the post, confirm it's
+ * Shared purchase resolution for checkout and quote: find the Work, confirm it's
  * purchasable by this viewer, and compute the fee breakdown — so both endpoints
  * quote identical numbers. Returns an error shape (with an HTTP status) or the
- * resolved post + amount + fees.
+ * resolved Work + amount + fees.
+ *
+ * A purchase names a **Work**, because a Work is what carries the gate and what a
+ * permanent unlock has to be permanent *about*. Buying "a post" never quite made sense
+ * once one Work could sit behind several posts at different prices.
  */
 async function resolvePurchase(slug: string, userId: number) {
-	const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
-	if (!post) return { ok: false as const, status: 404 as const, error: "Post not found" };
+	const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
+	if (!work) return { ok: false as const, status: 404 as const, error: "Work not found" };
+
+	// A private Work isn't on sale — it hasn't been released to anyone yet.
+	if (work.visibility !== "released" && work.creatorId !== userId)
+		return { ok: false as const, status: 404 as const, error: "Work not found" };
 
 	// resolveAccess is the source of truth: owner / free / entitled / already-purchased
 	// all mean "nothing to buy"; a hard gate with no price path isn't purchasable.
-	const access = await resolveAccess(post, userId);
+	const access = await resolveAccess(work, userId);
 	if (access.canAccess)
 		return {
 			ok: false as const,
 			status: 400 as const,
-			error: "You already have access to this post",
+			error: "You already have access to this work",
 		};
 	if (!access.requiresPurchase || !access.price)
 		return {
 			ok: false as const,
 			status: 400 as const,
-			error: "This post is not available for direct purchase",
+			error: "This work is not available for direct purchase",
 		};
 
 	const amount = new Decimal(access.price);
 	if (amount.lte(0))
-		return { ok: false as const, status: 400 as const, error: "This post is free" };
+		return { ok: false as const, status: 400 as const, error: "This work is free" };
 
-	// Delivery (bandwidth) scales with the total size of the downloadable assets on the
-	// content items this post references (assets now belong to items, not the post).
+	// Delivery (bandwidth) scales with the total size of this Work's downloadable assets.
 	const [assetSize] = await db
 		.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 		.from(assets)
-		.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
-		.where(eq(postContents.postId, post.id));
+		.where(eq(assets.workId, work.id));
 
 	// Pass-through model: the creator receives the full listed price; the Foundation Fee,
 	// delivery bandwidth, and card + tax are added on top and paid by the buyer.
 	// Digital download → Digital AFF (50% of the download's bandwidth).
 	const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
-	return { ok: true as const, post, amount, fees };
+	return { ok: true as const, work, amount, fees };
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -177,7 +182,7 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const q = await resolvePurchase(c.req.param("slug"), user.id);
 		if (!q.ok) return c.json({ error: q.error }, q.status);
-		const { post, amount, fees } = q;
+		const { work, amount, fees } = q;
 
 		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
@@ -192,7 +197,7 @@ const paymentRoutes = new Hono()
 		const [creatorAccount] = await db
 			.select()
 			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, post.creatorId))
+			.where(eq(stripeAccounts.userId, work.creatorId))
 			.limit(1);
 		if (!creatorAccount?.onboardingComplete || !creatorAccount.payoutsEnabled) {
 			return c.json({ error: "This creator can't accept payments yet." }, 409);
@@ -205,7 +210,7 @@ const paymentRoutes = new Hono()
 			amount: totalCents,
 			currency: "usd",
 			payment_method_types: ["card"],
-			metadata: { kind: "direct_purchase", postId: String(post.id), buyerId: String(user.id) },
+			metadata: { kind: "direct_purchase", workId: String(work.id), buyerId: String(user.id) },
 		};
 		// The creator receives 100% of the listed price; the application fee is everything
 		// else the buyer pays on top (Foundation Fee + at-cost bandwidth + processing + tax).
@@ -221,7 +226,7 @@ const paymentRoutes = new Hono()
 		// and access unlocks the moment a completed row exists.
 		await db.insert(purchases).values({
 			buyerId: user.id,
-			postId: post.id,
+			workId: work.id,
 			type: "digital",
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
@@ -249,12 +254,12 @@ const paymentRoutes = new Hono()
 		const user = c.get("user");
 		const { slug } = c.req.param();
 
-		const [post] = await db.select().from(posts).where(eq(posts.slug, slug)).limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		// "Owns" = can consume it now: creator, free, a prior purchase, or an
 		// entitlement grant (subscriber/Seed). resolveAccess unifies all four.
-		const access = await resolveAccess(post, user.id);
+		const access = await resolveAccess(work, user.id);
 		return c.json({ owns: access.canAccess });
 	})
 
@@ -275,29 +280,29 @@ const paymentRoutes = new Hono()
 		const result = await db
 			.select({
 				purchase: purchases,
-				postTitle: posts.title,
-				postSlug: posts.slug,
-				postCoverImage: posts.thumbnail,
-				postContentType: posts.contentType,
-				creatorId: posts.creatorId,
+				workTitle: works.title,
+				workSlug: works.slug,
+				workCoverImage: works.thumbnail,
+				workType: works.type,
+				creatorId: works.creatorId,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
 			.from(purchases)
-			.innerJoin(posts, eq(purchases.postId, posts.id))
-			.innerJoin(users, eq(posts.creatorId, users.id))
+			.innerJoin(works, eq(purchases.workId, works.id))
+			.innerJoin(users, eq(works.creatorId, users.id))
 			.where(and(...conditions))
 			.orderBy(desc(purchases.createdAt));
 
 		return c.json({
 			purchases: result.map((r) => ({
 				...r.purchase,
-				post: {
-					title: r.postTitle,
-					slug: r.postSlug,
-					coverImage: r.postCoverImage,
-					contentType: r.postContentType,
+				work: {
+					title: r.workTitle,
+					slug: r.workSlug,
+					coverImage: r.workCoverImage,
+					type: r.workType,
 				},
 				creator: {
 					username: r.creatorUsername,

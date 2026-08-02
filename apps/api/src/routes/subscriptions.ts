@@ -14,13 +14,12 @@ import { db } from "@anthers/db/client";
 import {
 	accounts,
 	attentionEvents,
-	contentItems,
 	creatorGates,
 	poolDistributions,
-	postContents,
 	posts,
 	seedAllocations,
 	users,
+	works,
 } from "@anthers/db/schema";
 import {
 	type AttentionEventType,
@@ -40,7 +39,7 @@ import { z } from "zod";
 import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import {
-	type AccessiblePost,
+	type AccessibleWork,
 	buildAccessContext,
 	heldAnthersSeeds,
 	resolveAccess,
@@ -138,52 +137,45 @@ async function getOptionalUserId(c: any): Promise<number | null> {
  * seconds against a body-only announcement, or against a creator who had nothing
  * to do with the post.
  */
-interface PostEligibility {
+interface WorkEligibility {
 	creatorId: number;
-	/** Event types the post's own content elements can earn — empty means it earns nothing. */
+	/** Event types this Work can earn — empty means it earns nothing. */
 	earns: Set<AttentionEventType>;
 	/** Whether the claiming viewer may actually consume it. */
 	accessible: boolean;
+	/** Private Works aren't public consumption, so they can't earn from the public. */
+	released: boolean;
 }
 
-async function loadPostEligibility(
-	postIds: number[],
+/**
+ * Eligibility, keyed on the **Work** — which is what actually earns.
+ *
+ * This got simpler with the model rather than merely moving: a post could hold many
+ * content elements of different types, so "what does this earn?" was a set gathered
+ * across a join. A Work has exactly one type, so it is one lookup. The asymmetry the old
+ * version existed to enforce — prose in a post BODY earns nothing while the same prose as
+ * a content element earns — is now structural: prose that earns is a Work of type `text`,
+ * and a post body is an announcement.
+ */
+async function loadWorkEligibility(
+	workIds: number[],
 	viewerId: number,
-): Promise<Map<number, PostEligibility>> {
-	const byId = new Map<number, PostEligibility>();
-	if (postIds.length === 0) return byId;
+): Promise<Map<number, WorkEligibility>> {
+	const byId = new Map<number, WorkEligibility>();
+	if (workIds.length === 0) return byId;
 
-	const postRows = await db.select().from(posts).where(inArray(posts.id, postIds));
-	if (postRows.length === 0) return byId;
+	const workRows = await db.select().from(works).where(inArray(works.id, workIds));
+	if (workRows.length === 0) return byId;
 
-	// Content elements, with the referenced library item's type where there is one.
-	// `kind = "text"` is a post-native element and has no item — it earns as "text".
-	const entries = await db
-		.select({ postId: postContents.postId, kind: postContents.kind, type: contentItems.type })
-		.from(postContents)
-		.leftJoin(contentItems, eq(postContents.contentItemId, contentItems.id))
-		.where(
-			inArray(
-				postContents.postId,
-				postRows.map((p) => p.id),
-			),
-		);
-
-	const earnsByPost = new Map<number, Set<AttentionEventType>>();
-	for (const entry of entries) {
-		const contentType = entry.kind === "text" ? "text" : entry.type;
-		if (!contentType || !isTimePoolEligible(contentType)) continue;
-		const set = earnsByPost.get(entry.postId) ?? new Set<AttentionEventType>();
-		set.add(eventTypeFor(contentType));
-		earnsByPost.set(entry.postId, set);
-	}
-
-	const ctx = await buildAccessContext(viewerId, { postIds: postRows.map((p) => p.id) });
-	for (const post of postRows) {
-		byId.set(post.id, {
-			creatorId: post.creatorId,
-			earns: earnsByPost.get(post.id) ?? new Set(),
-			accessible: resolveAccessSync(post as AccessiblePost, ctx).canAccess,
+	const ctx = await buildAccessContext(viewerId, { workIds: workRows.map((w) => w.id) });
+	for (const work of workRows) {
+		const earns = new Set<AttentionEventType>();
+		if (isTimePoolEligible(work.type)) earns.add(eventTypeFor(work.type));
+		byId.set(work.id, {
+			creatorId: work.creatorId,
+			earns,
+			accessible: resolveAccessSync(work as AccessibleWork, ctx).canAccess,
+			released: work.visibility === "released",
 		});
 	}
 	return byId;
@@ -492,7 +484,7 @@ const subscriptionRoutes = new Hono()
 							creatorId: z.number().int(),
 							eventType: z.enum(["page_view", "play", "watch", "read", "listen"]),
 							durationSeconds: z.number().int().min(0).max(300).default(0),
-							postId: z.number().int().optional(),
+							workId: z.number().int().optional(),
 						}),
 					)
 					.max(50),
@@ -511,34 +503,34 @@ const subscriptionRoutes = new Hono()
 			// deliberately the analytics signal for surfaces that earn nothing. Anything
 			// claiming *time* has to earn it, against four checks:
 			//
-			//   1. It names a post. A claim with no post context is connective tissue by
-			//      definition (a profile, discovery) and the model says those earn nothing.
-			//   2. That post exists.
-			//   3. The claimed creator really is the post's creator — otherwise the
+			//   1. It names a Work. A claim with no Work context is connective tissue by
+			//      definition (a post body, a profile, discovery) and those earn nothing.
+			//   2. That Work exists and has been released — private staging isn't
+			//      consumption, so it cannot be consumed by the public.
+			//   3. The claimed creator really is the Work's creator — otherwise the
 			//      attribution is simply forged.
-			//   4. The post carries a content element that earns this event type, and the
-			//      viewer can actually access it. Prose in a post BODY earns nothing while
-			//      the same prose as a content element earns; that asymmetry is deliberate
-			//      and documented, and this is where it becomes true rather than intended.
+			//   4. The Work's type earns this event type, and the viewer can actually
+			//      access it.
 			const timed = events.filter((e) => e.durationSeconds > 0);
-			const eligibility = await loadPostEligibility(
-				[...new Set(timed.map((e) => e.postId).filter((id): id is number => id != null))],
+			const eligibility = await loadWorkEligibility(
+				[...new Set(timed.map((e) => e.workId).filter((id): id is number => id != null))],
 				user.id,
 			);
 
 			const eligible = events.filter((e) => {
 				if (e.durationSeconds <= 0) return true;
-				if (e.postId == null) return false;
-				const post = eligibility.get(e.postId);
-				if (!post) return false;
-				if (post.creatorId !== e.creatorId) return false;
-				return post.accessible && post.earns.has(e.eventType);
+				if (e.workId == null) return false;
+				const work = eligibility.get(e.workId);
+				if (!work) return false;
+				if (work.creatorId !== e.creatorId) return false;
+				if (!work.released && work.creatorId !== user.id) return false;
+				return work.accessible && work.earns.has(e.eventType);
 			});
 
 			const ineligible = events.length - eligible.length;
 			if (ineligible > 0) {
 				console.warn(
-					`attention eligibility: user ${user.id} submitted ${ineligible} of ${events.length} events that no post entitles them to — dropped`,
+					`attention eligibility: user ${user.id} submitted ${ineligible} of ${events.length} events that no Work entitles them to — dropped`,
 				);
 			}
 
@@ -578,7 +570,7 @@ const subscriptionRoutes = new Hono()
 				creatorId: e.creatorId,
 				eventType: e.eventType,
 				durationSeconds: e.durationSeconds,
-				postId: e.postId ?? null,
+				workId: e.workId ?? null,
 			}));
 
 			await db.insert(attentionEvents).values(rows);
@@ -944,20 +936,20 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Content Access Check ─────────────────────────────────────────────────
-	// Access lives on the post itself (the two access tables); resolveAccess is the
-	// single source of truth, shared with the content and payment routes.
-	.get("/access/:postId", async (c) => {
-		const { postId } = c.req.param();
+	// Access lives on the Work (the two access tables); resolveAccess is the single
+	// source of truth, shared with the content and payment routes.
+	.get("/access/:workId", async (c) => {
+		const { workId } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
 
-		const [post] = await db
+		const [work] = await db
 			.select()
-			.from(posts)
-			.where(eq(posts.id, Number(postId)))
+			.from(works)
+			.where(eq(works.id, Number(workId)))
 			.limit(1);
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const result = await resolveAccess(post, currentUserId);
+		const result = await resolveAccess(work, currentUserId);
 		return c.json({
 			access: result.canAccess,
 			reason: result.reason,
