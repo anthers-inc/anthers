@@ -299,6 +299,34 @@ export const projects = pgTable("projects", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Many-to-many: which **Works** belong to which project, with ordering.
+ *
+ * The counterpart to `project_posts`, and the half that was always missing. A project
+ * could only ever hold announcements, which meant an album could not hold its tracks —
+ * 40.02's own worked example ("a track in both an album and a best-of") was not
+ * expressible in the schema that document described.
+ */
+export const projectItems = pgTable(
+	"project_items",
+	{
+		id: serial("id").primaryKey(),
+		projectId: integer("project_id")
+			.notNull()
+			.references(() => projects.id, { onDelete: "cascade" }),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		sortOrder: integer("sort_order").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_project_items").on(table.projectId, table.workId),
+		index("idx_project_items_project").on(table.projectId, table.sortOrder),
+		index("idx_project_items_work").on(table.workId),
+	],
+);
+
 /** Many-to-many: which posts belong to which project (collection), with ordering. */
 export const projectPosts = pgTable(
 	"project_posts",

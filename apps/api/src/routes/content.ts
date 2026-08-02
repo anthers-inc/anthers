@@ -31,6 +31,7 @@ import {
 	postEdits,
 	posts,
 	postWorkRefs,
+	projectItems,
 	projectPosts,
 	projects,
 	ratings,
@@ -390,6 +391,11 @@ const createAssetSchema = z.object({
 	platform: z.string().max(50).optional().default(""),
 	version: z.string().max(50).optional().default(""),
 	isPrimary: z.boolean().optional().default(false),
+});
+
+const addWorkToCollectionSchema = z.object({
+	workId: z.number().int(),
+	sortOrder: z.number().int().optional(),
 });
 
 const addToCollectionSchema = z.object({
@@ -2316,6 +2322,26 @@ const contentRoutes = new Hono()
 			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
 
+		// The Works in this collection, each resolved on its own gates. A project is a
+		// shelf: putting a Work on it changes nothing about who can open it.
+		const itemRows = await db
+			.select({ work: works, sortOrder: projectItems.sortOrder })
+			.from(projectItems)
+			.innerJoin(works, eq(projectItems.workId, works.id))
+			.where(
+				and(
+					eq(projectItems.projectId, row.project.id),
+					// A creator browsing their own project sees drafts; nobody else does.
+					viewerId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
+				),
+			)
+			.orderBy(asc(projectItems.sortOrder));
+
+		const memberWorkIds = itemRows.map((r) => r.work.id);
+		const { assetsByWork, jobByWork } = await loadWorkBundles(memberWorkIds);
+		const workCtx = await buildAccessContext(viewerId, { workIds: memberWorkIds });
+		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
+
 		return c.json({
 			project: {
 				...row.project,
@@ -2324,6 +2350,16 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				},
+				works: itemRows.map((m) => ({
+					sortOrder: m.sortOrder,
+					...serializeWorkForViewer(
+						m.work,
+						assetsByWork.get(m.work.id) ?? [],
+						jobByWork.get(m.work.id) ?? null,
+						resolveAccessSync(m.work as AccessibleWork, workCtx),
+						deliveryCtx(),
+					),
+				})),
 				// No per-post access verdict: a post has no gates. The Works a member post
 				// links resolve on their own gates, at the post's own endpoint.
 				posts: memberRows.map((m) => ({
@@ -2384,6 +2420,74 @@ const contentRoutes = new Hono()
 			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
 			.returning({ id: projects.id });
 
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+		return c.body(null, 204);
+	})
+
+	// ── Collection membership (Works) ────────────────────────────────────────────
+	//
+	// The half that was always missing. A project could only hold announcements, which
+	// meant an album could not hold its tracks — 40.02's own worked example ("a track in
+	// both an album and a best-of") was not expressible in the schema it described.
+	.post(
+		"/projects/:slug/works",
+		requireAuth,
+		zValidator("json", addWorkToCollectionSchema),
+		async (c) => {
+			const user = c.get("user");
+			const { slug } = c.req.param();
+			const { workId, sortOrder } = c.req.valid("json");
+
+			const [project] = await db
+				.select({ id: projects.id })
+				.from(projects)
+				.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
+				.limit(1);
+			if (!project) return c.json({ error: "Project not found" }, 404);
+
+			const [work] = await db
+				.select({ id: works.id })
+				.from(works)
+				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			let order = sortOrder;
+			if (order === undefined) {
+				const [maxRow] = await db
+					.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+					.from(projectItems)
+					.where(eq(projectItems.projectId, project.id));
+				order = Number(maxRow.max) + 1;
+			}
+
+			const [link] = await db
+				.insert(projectItems)
+				.values({ projectId: project.id, workId: work.id, sortOrder: order })
+				.onConflictDoNothing({ target: [projectItems.projectId, projectItems.workId] })
+				.returning();
+
+			if (!link) return c.json({ error: "Work is already in this collection" }, 409);
+			return c.json({ projectItem: link }, 201);
+		},
+	)
+
+	.delete("/projects/:slug/works/:workId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const { slug, workId } = c.req.param();
+
+		const deleted = await db
+			.delete(projectItems)
+			.where(
+				and(
+					eq(projectItems.workId, Number(workId)),
+					sql`${projectItems.projectId} IN (SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+				),
+			)
+			.returning({ id: projectItems.id });
+
+		// Removing a Work from a collection never touches the Work. It stays in the
+		// Catalog, released, with its gates — a collection is a shelf, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})

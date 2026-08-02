@@ -353,7 +353,11 @@ test("rung 2 — follow: the feed fills, access does not change", async ({ page 
 	await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
 
 	await page.goto("/feed");
-	await expect(page.getByText(gauntletPost("G1").title)).toBeVisible();
+	// The feed interleaves posts and releases, so a Work AND the post announcing it can
+	// both appear — `.first()` rather than a strict single match. Whether the feed should
+	// collapse an announcement into the release it announces is a real question, and not
+	// one this rung is asking.
+	await expect(page.getByText(gauntletPost("G1").title).first()).toBeVisible();
 
 	// The negative assertion this rung exists for: following is not entitlement.
 	// The row must be IDENTICAL to the unfollowed floor.

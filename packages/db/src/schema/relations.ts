@@ -8,6 +8,7 @@ import {
 	inlineImages,
 	posts,
 	postWorkRefs,
+	projectItems,
 	projectPosts,
 	projects,
 	ratings,
@@ -115,10 +116,18 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 }));
 
 // Projects — collections that group posts.
+// A project collects BOTH kinds, in separate ordered lists — a game project holds its
+// builds and soundtrack (Works) alongside its devlogs and patch notes (Posts).
 export const projectsRelations = relations(projects, ({ one, many }) => ({
 	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts),
+	projectItems: many(projectItems),
 	bookmarks: many(bookmarks),
+}));
+
+export const projectItemsRelations = relations(projectItems, ({ one }) => ({
+	project: one(projects, { fields: [projectItems.projectId], references: [projects.id] }),
+	work: one(works, { fields: [projectItems.workId], references: [works.id] }),
 }));
 
 export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
@@ -132,6 +141,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	assets: many(assets),
 	transcodingJobs: many(transcodingJobs),
 	postRefs: many(postWorkRefs), // where this Work has been posted
+	projectItems: many(projectItems), // collections this Work belongs to
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
 	ratings: many(ratings),

@@ -2,7 +2,7 @@
 
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { PostListItem, Project, PublicUser } from "@anthers/web-shared/types";
+import type { PostListItem, Project, PublicUser, Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
+import WorkCard from "../components/cards/WorkCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 
@@ -158,7 +159,9 @@ function FeedSidebarContent({
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { setPageContent } = useSidebar();
-	const [feedPosts, setFeedPosts] = useState<PostListItem[]>([]);
+	/** One stream over both kinds — `kind` says which card to render. */
+	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
+	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [feedLoading, setFeedLoading] = useState(true);
@@ -221,14 +224,14 @@ export default function AuthenticatedHomePage() {
 	useEffect(() => {
 		// Fetch the user's feed. Guard on res.ok before reading the body: an error
 		// response (e.g. a 401 when the session cookie isn't valid) is `{ error }`,
-		// not `{ posts }`, so parsing it blindly would set feedPosts to `undefined`
-		// and crash the render on `feedPosts.length`. On error we keep the initial [].
+		// not `{ entries }`, so parsing it blindly would set the feed to `undefined`
+		// and crash the render on `.length`. On error we keep the initial [].
 		client.api.accounts.me.feed
 			.$get()
 			.then(async (res) => {
 				if (!res.ok) return;
-				const data = (await res.json()) as { posts: PostListItem[] };
-				setFeedPosts(data.posts);
+				const data = (await res.json()) as unknown as { entries: FeedEntry[] };
+				setFeedPosts(data.entries ?? []);
 			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
@@ -264,15 +267,23 @@ export default function AuthenticatedHomePage() {
 					</div>
 				) : feedPosts.length > 0 ? (
 					<div className="flex flex-col gap-4">
-						{feedPosts.map((post) => (
-							<PostCard key={post.id} post={post} />
-						))}
+						{/* Posts and releases in one stream. A creator who only ever adds to
+							    their Catalog still reaches the people who follow them — without
+							    that, a post would be the price of being seen, which is exactly
+							    the coupling the Catalog/Posts split removes. */}
+						{feedPosts.map((entry) =>
+							entry.kind === "release" ? (
+								<WorkCard key={`work-${entry.id}`} work={entry as unknown as Work} />
+							) : (
+								<PostCard key={`post-${entry.id}`} post={entry as unknown as PostListItem} />
+							),
+						)}
 					</div>
 				) : (
 					<EmptyState
 						icon={<RssIcon className="w-12 h-12" />}
 						title="Your feed is empty"
-						description="Follow creators to see their latest posts here. Content from your network -- things your follows like, share, and purchase -- will also appear."
+						description="Follow creators to see their latest posts and releases here. Content from your network -- things your follows like, share, and purchase -- will also appear."
 						action={
 							<Link to="/discover" className="btn btn-primary btn-sm">
 								Discover creators

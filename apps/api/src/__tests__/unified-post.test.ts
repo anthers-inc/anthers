@@ -238,6 +238,87 @@ describe("Catalog vertical slice", () => {
 		expect(work.postedIn[0].slug).toBe(announcementSlug);
 	});
 
+	it("holds Works and Posts in one project, in separate lists", async () => {
+		const proj = await req("/api/content/projects", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			body: JSON.stringify({
+				title: `Collection ${id}`,
+				slug: `collection-${id}`,
+				isPublished: true,
+			}),
+		});
+		expect(proj.status).toBe(201);
+		const projectSlug = (await proj.json()).project.slug;
+
+		// A game project holds its builds AND the devlogs about them — the half the
+		// schema could not express before, which made an album unable to hold its tracks.
+		const addWork = await req(`/api/content/projects/${projectSlug}/works`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			body: JSON.stringify({ workId: oldGameId }),
+		});
+		expect(addWork.status).toBe(201);
+
+		const announcement = await req(`/api/content/posts/${announcementSlug}`);
+		const announcementId = (await announcement.json()).post.id as number;
+		const addPost = await req(`/api/content/projects/${projectSlug}/posts`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
+			body: JSON.stringify({ postId: announcementId }),
+		});
+		expect(addPost.status).toBe(201);
+
+		const view = await req(`/api/content/projects/${projectSlug}`, {
+			headers: { Cookie: otherCookie },
+		});
+		expect(view.status).toBe(200);
+		const { project } = await view.json();
+		expect(project.works.length).toBe(1);
+		expect(project.posts.length).toBe(1);
+		// Shelving a Work changes nothing about who can open it.
+		expect(project.works[0].access.canAccess).toBe(false);
+		expect(project.works[0].sourceKey).toBe("");
+	});
+
+	it("shows a follower both what the creator said and what they released", async () => {
+		// Without this a creator who only ever adds to their Catalog is invisible to their
+		// own followers, and a post becomes the price of being seen — exactly the coupling
+		// the Catalog/Posts split removes.
+		const follow = await req(`/api/accounts/users/${creatorName}/follow`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, Cookie: otherCookie },
+		});
+		expect(follow.ok).toBe(true);
+
+		const res = await req("/api/accounts/me/feed", { headers: { Cookie: otherCookie } });
+		expect(res.status).toBe(200);
+		const { entries } = await res.json();
+		expect(entries.some((e: { kind: string }) => e.kind === "release")).toBe(true);
+		expect(entries.some((e: { kind: string }) => e.kind === "post")).toBe(true);
+
+		// A release in the feed carries the card and nothing else. This endpoint resolves
+		// no access at all, so a payload here would be a leak by construction.
+		for (const e of entries.filter((x: { kind: string }) => x.kind === "release")) {
+			expect(e.sourceKey).toBeUndefined();
+			expect(e.embedUrl).toBeUndefined();
+			expect(e.transcoding).toBeUndefined();
+			expect(e.bodyHtml).toBeUndefined();
+		}
+
+		const postsOnly = await req("/api/accounts/me/feed?kind=posts", {
+			headers: { Cookie: otherCookie },
+		});
+		const onlyPosts = (await postsOnly.json()).entries as { kind: string }[];
+		expect(onlyPosts.every((e) => e.kind === "post")).toBe(true);
+
+		const releasesOnly = await req("/api/accounts/me/feed?kind=releases", {
+			headers: { Cookie: otherCookie },
+		});
+		const onlyReleases = (await releasesOnly.json()).entries as { kind: string }[];
+		expect(onlyReleases.every((e) => e.kind === "release")).toBe(true);
+	});
+
 	it("keeps the Work when the announcement is deleted", async () => {
 		const del = await req(`/api/content/posts/${announcementSlug}`, {
 			method: "DELETE",

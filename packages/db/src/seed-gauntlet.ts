@@ -208,10 +208,16 @@ async function deleteGauntletPosts(creatorId: number): Promise<void> {
 	const postIds = rows.map((r) => r.id);
 	// Works do NOT cascade from a post — they are the creator's Catalog and outlive any
 	// announcement — so this fixture's own Works are collected and removed explicitly.
+	//
+	// Matched on the CREATOR, not the slug prefix. The gauntlet creator exists only for
+	// this fixture, so everything it owns is fixture data by definition — whereas a
+	// prefix match silently leaves behind any Work an earlier version of the fixture
+	// named differently, and a leftover shows up as a duplicate card in the feed with a
+	// stale date. That happened.
 	const workRows = await db
 		.select({ id: works.id })
 		.from(works)
-		.where(and(eq(works.creatorId, creatorId), like(works.slug, `${GAUNTLET_SLUG_PREFIX}%`)));
+		.where(eq(works.creatorId, creatorId));
 
 	await db.delete(posts).where(inArray(posts.id, postIds));
 	if (workRows.length > 0) {

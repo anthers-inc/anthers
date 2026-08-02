@@ -6,7 +6,7 @@
  *   GET    /me                      — current user profile (full)
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
- *   GET    /me/feed                 — posts from followed creators
+ *   GET    /me/feed                 — posts AND releases from followed creators
  *   GET    /creators                — list all creators
  *   GET    /users/:username         — public user profile
  *   POST   /users/:username/follow  — follow a creator
@@ -14,7 +14,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { follows, posts, users } from "@anthers/db/schema";
+import { follows, posts, users, works } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -193,31 +193,64 @@ const accountRoutes = new Hono()
 			return c.json({ posts: [] });
 		}
 
-		const feedPosts = await db
-			.select({
-				post: posts,
-				creatorUsername: users.username,
-				creatorDisplayName: users.displayName,
-				creatorAvatar: users.avatar,
-			})
-			.from(posts)
-			.innerJoin(users, eq(posts.creatorId, users.id))
-			.where(and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)))
-			.orderBy(sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`)
-			.limit(50);
+		// The feed shows BOTH what a creator said and what they released.
+		//
+		// This is what keeps releasing from costing a creator their reach. Without it, a
+		// creator who only ever adds to their Catalog is invisible to their own followers
+		// until they write an announcement — which would quietly re-couple the two things
+		// the model just separated, by making a post the price of being seen. Filtered with
+		// `?kind=posts` or `?kind=releases` for someone who wants one or the other.
+		const kind = c.req.query("kind") ?? "all";
+
+		const feedPosts =
+			kind === "releases"
+				? []
+				: await db
+						.select({
+							post: posts,
+							creatorUsername: users.username,
+							creatorDisplayName: users.displayName,
+							creatorAvatar: users.avatar,
+						})
+						.from(posts)
+						.innerJoin(users, eq(posts.creatorId, users.id))
+						.where(and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)))
+						.orderBy(sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`)
+						.limit(50);
+
+		const feedWorks =
+			kind === "posts"
+				? []
+				: await db
+						.select({
+							work: works,
+							creatorUsername: users.username,
+							creatorDisplayName: users.displayName,
+							creatorAvatar: users.avatar,
+						})
+						.from(works)
+						.innerJoin(users, eq(works.creatorId, users.id))
+						.where(and(inArray(works.creatorId, creatorIds), eq(works.visibility, "released")))
+						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
+						.limit(50);
 
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
 		// post regardless of gating. A post carries no gate of its own now, so there is no
-		// per-entry access verdict here any more — but enumerating stays, because a feed
-		// has no business shipping a whole row and the habit is what kept the leak out.
+		// per-entry access verdict here — but enumerating stays, because a feed has no
+		// business shipping a whole row and the habit is what kept the leak out.
 		//
-		// TODO(stage 4): interleave released Works with posts here, so a creator who only
-		// releases still reaches their followers. Posts-only until the Catalog timeline lands.
-		return c.json({
-			posts: feedPosts.map((row) => {
+		// The Works are enumerated for a stronger reason: a released Work is very often
+		// gated, and this endpoint resolves no access at all. Nothing here may carry a
+		// payload — no sourceKey, no embedUrl, no transcode URLs — only the card. Anyone
+		// who wants the thing itself goes to the Work, where access is resolved live.
+		const entries = [
+			...feedPosts.map((row) => {
 				const p = row.post;
 				return {
+					kind: "post" as const,
+					// The feed sorts on one key across both kinds; a post's is its publication.
+					at: (p.publishedAt ?? p.createdAt).toISOString(),
 					id: p.id,
 					publicId: p.publicId,
 					slug: p.slug,
@@ -239,6 +272,44 @@ const accountRoutes = new Hono()
 					},
 				};
 			}),
+			...feedWorks.map((row) => {
+				const w = row.work;
+				return {
+					kind: "release" as const,
+					// A release sorts on when it went public, NOT on its Created date — the
+					// feed is "what happened", and a back-dated 2015 game released today is
+					// news today. The Catalog is where the Created date does the ordering.
+					at: (w.releasedAt ?? w.createdAt).toISOString(),
+					id: w.id,
+					publicId: w.publicId,
+					slug: w.slug,
+					creatorId: w.creatorId,
+					title: w.title,
+					type: w.type,
+					// Thumbnails are public by design — they are the preview a locked Work is
+					// supposed to show.
+					thumbnail: w.thumbnail,
+					description: w.description,
+					authoredAt: w.authoredAt,
+					authoredPrecision: w.authoredPrecision,
+					releasedAt: w.releasedAt,
+					createdAt: w.createdAt,
+					creator: {
+						username: row.creatorUsername,
+						displayName: row.creatorDisplayName,
+						avatar: row.creatorAvatar,
+					},
+				};
+			}),
+		]
+			.sort((a, b) => b.at.localeCompare(a.at))
+			.slice(0, 50);
+
+		return c.json({
+			entries,
+			// `posts` kept as the posts-only projection so an older client keeps working
+			// rather than rendering an empty feed against a key it doesn't know.
+			posts: entries.filter((e) => e.kind === "post"),
 		});
 	})
 
