@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/r
 import { client } from "@anthers/web-shared/rpc";
 import type {
 	Comment,
-	ContentItem,
+	Work,
 	Post,
 	PostEntry,
 	TranscodingJob,
@@ -44,7 +44,7 @@ function isJobPending(status: string): boolean {
 }
 
 /** Thumbnail-only preview shown when a content item lacks a playable payload. */
-function MediaPreview({ item, icon }: { item: ContentItem; icon: React.ReactNode }) {
+function MediaPreview({ item, icon }: { item: Work; icon: React.ReactNode }) {
 	if (item.thumbnail) {
 		return (
 			<div className="relative rounded-lg overflow-hidden bg-base-200">
@@ -60,7 +60,7 @@ function MediaPreview({ item, icon }: { item: ContentItem; icon: React.ReactNode
 }
 
 /** Card describing a physical good or service (no media payload). */
-function PhysicalServiceCard({ item }: { item: ContentItem }) {
+function PhysicalServiceCard({ item }: { item: Work }) {
 	const meta = item.metadata ?? {};
 	const scalarEntries = Object.entries(meta).filter(
 		([, v]) => typeof v === "string" || typeof v === "number",
@@ -172,9 +172,9 @@ export default function PostPage() {
 	const hasActiveTranscode = (post?.contents ?? []).some(
 		(entry) =>
 			entry.kind === "content" &&
-			entry.contentItem?.transcoding != null &&
-			entry.contentItem.transcoding.status !== "completed" &&
-			entry.contentItem.transcoding.status !== "failed",
+			entry.work?.transcoding != null &&
+			entry.work.transcoding.status !== "completed" &&
+			entry.work.transcoding.status !== "failed",
 	);
 	useEffect(() => {
 		if (!slug || !hasActiveTranscode) return;
@@ -184,14 +184,14 @@ export default function PostPage() {
 				if (!res.ok) return;
 				const { jobs } = (await res.json()) as unknown as { jobs: TranscodingJob[] };
 				const latest = new Map<number, TranscodingJob>();
-				for (const j of jobs) if (!latest.has(j.contentItemId)) latest.set(j.contentItemId, j);
+				for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j);
 				setPost((prev) => {
 					if (!prev?.contents) return prev;
 					let changed = false;
 					const contents = prev.contents.map((entry) => {
-						if (entry.kind !== "content" || !entry.contentItem) return entry;
-						const job = latest.get(entry.contentItem.id);
-						const cur = entry.contentItem.transcoding;
+						if (entry.kind !== "content" || !entry.work) return entry;
+						const job = latest.get(entry.work.id);
+						const cur = entry.work.transcoding;
 						if (
 							job &&
 							(cur?.status !== job.status ||
@@ -199,7 +199,7 @@ export default function PostPage() {
 								cur?.etaSeconds !== job.etaSeconds)
 						) {
 							changed = true;
-							return { ...entry, contentItem: { ...entry.contentItem, transcoding: job } };
+							return { ...entry, work: { ...entry.work, transcoding: job } };
 						}
 						return entry;
 					});
@@ -220,7 +220,7 @@ export default function PostPage() {
 	// (text blocks, images, embedded games) that are consumed by being present.
 	const attendedContentType = useMemo(() => {
 		for (const entry of post?.contents ?? []) {
-			const type = entry.kind === "text" ? "text" : entry.contentItem?.type;
+			const type = entry.kind === "text" ? "text" : entry.work?.type;
 			if (type && consumptionModeFor(type) === "presence") return type;
 		}
 		return null;
@@ -333,7 +333,7 @@ export default function PostPage() {
 		}
 	};
 
-	const playAudioInMiniPlayer = (item: ContentItem, src: string) => {
+	const playAudioInMiniPlayer = (item: Work, src: string) => {
 		mediaPlayer.playTrack({
 			src,
 			title: item.title || post.title || "Untitled",
@@ -346,7 +346,7 @@ export default function PostPage() {
 	};
 
 	/** The media/body for one content item (null → nothing to render). */
-	const renderContentItem = (item: ContentItem): React.ReactNode => {
+	const renderContentItem = (item: Work): React.ReactNode => {
 		switch (item.type) {
 			case "video": {
 				const job = item.transcoding;
@@ -429,7 +429,7 @@ export default function PostPage() {
 			) : null;
 		}
 
-		const item = entry.contentItem;
+		const item = entry.work;
 		if (!item) {
 			return (
 				<div className="rounded-lg bg-base-200 p-4 text-sm text-base-content/50">

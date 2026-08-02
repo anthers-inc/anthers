@@ -105,7 +105,7 @@ export interface AccessResult {
 /** Downloadable file (build, track, PDF, installer, …) attached to a content element. */
 export interface Asset {
 	id: number;
-	contentItemId: number;
+	workId: number;
 	file: string;
 	filename: string;
 	fileSize: number | null;
@@ -118,7 +118,7 @@ export interface Asset {
 
 export interface TranscodingJob {
 	id: number;
-	contentItemId: number;
+	workId: number;
 	mediaType: string;
 	status: string;
 	progress: number | null;
@@ -143,27 +143,71 @@ export type ContentType =
 	| "physical"
 	| "service";
 
-/** The uploadable/processable library content types (everything but post-native text). */
-export type LibraryContentType = Exclude<ContentType, "text">;
+/**
+ * Work types whose media is UPLOADED. A text Work is authored in place — its prose is the
+ * deliverable — so it has no source file and never enters the upload/transcode path.
+ */
+export type UploadableWorkType = Exclude<ContentType, "text">;
+
+/** How precise a creator's asserted Created date is — rendered exactly as claimed. */
+export type AuthoredPrecision = "year" | "month" | "day";
+
+/** Whether a Work is still staging, or has been released to the public Catalog. */
+export type WorkVisibility = "private" | "released";
 
 /**
- * A creator-owned content library item — the first-class, reusable unit that owns its
- * media, downloadable variants (assets), and transcodes. Posts reference it. The full
- * shape comes from the library endpoints; when embedded in a post entry the creator-only
- * fields are omitted and the media payload is blanked for viewers without access.
+ * A **Work** — one entry in a creator's Catalog, and the unit of published creative work.
+ *
+ * It owns its media, downloadable variants (assets) and transcodes, AND its visibility,
+ * dates, delivery switches and access gates. A Work stands alone: it can be released,
+ * gated, purchased and consumed with no Post ever existing. Posts merely reference it.
+ *
+ * Two shapes come back from the API. The creator's own Catalog returns everything,
+ * including the access tables they edit. A viewer-facing response returns the same
+ * identity and metadata but blanks the media payload unless `access.canAccess` — a denied
+ * viewer gets no pointer at the deliverable at all.
  */
-export interface ContentItem {
+export interface Work {
 	id: number;
-	creatorId?: number; // library endpoints only
+	publicId?: number;
+	slug?: string;
+	creatorId?: number;
 	type: ContentType;
 	title: string | null;
-	description?: string | null; // library endpoints only
+	description?: string | null;
 	thumbnail: string | null;
+
 	// Media payload — blanked (empty) by the API when the viewer lacks access.
 	sourceKey: string | null;
 	embedUrl: string | null;
 	durationSeconds: number | null;
+	/** Prose, for `type: "text"`. Gated like any other payload. */
+	body?: string | null;
+	bodyHtml?: string | null;
+	estimatedReadMinutes?: number | null;
 	metadata: Record<string, unknown> | null;
+
+	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
+	// the public sees `authoredAt` (when the work was MADE) and `releasedAt`.
+	visibility?: WorkVisibility;
+	releasedAt?: string | null;
+	authoredAt?: string | null;
+	authoredPrecision?: AuthoredPrecision | null;
+
+	// Delivery & access (creator-facing tables; viewers get the resolved `access`).
+	streamEnabled?: boolean;
+	downloadEnabled?: boolean;
+	anthersAccess?: AnthersAccessRow[] | null;
+	seedAccess?: SeedAccessRow[] | null;
+	access?: AccessResult;
+
+	isPinned?: boolean;
+	tags?: string[] | null;
+	websiteUrl?: string | null;
+	sourceUrl?: string | null;
+	viewCount?: number;
+	downloadCount?: number;
+
 	assets: Asset[];
 	transcoding: TranscodingJob | null;
 	createdAt?: string;
@@ -171,35 +215,41 @@ export interface ContentItem {
 }
 
 /**
- * One entry in a post's ordered content list (GET /posts/:slug). Either an inline text
- * block (post-native prose) or a reference to a library content item.
+ * A post's reference to a Work, as returned by post detail.
+ *
+ * Deliberately thin: the reference carries no access and no state of its own, so there is
+ * nothing here but a position and the Work, each resolved on its own gates. A post the
+ * reader can read may well link a Work they cannot open.
  */
-export type PostEntry =
-	| { kind: "text"; id: number; postId: number; position: number; bodyHtml: string | null }
-	| {
-			kind: "content";
-			id: number;
-			postId: number;
-			position: number;
-			caption: string | null;
-			contentItem: ContentItem | null;
-	  };
+export interface PostWorkRef {
+	position: number;
+	work: Work;
+}
 
-/** Post-entry input for create/patch. */
-export type PostEntryInput =
-	| { kind: "text"; id?: number; bodyHtml?: string }
-	| { kind: "content"; id?: number; contentItemId: number; caption?: string };
-
-/** Library content-item create/patch input. */
-export interface ContentItemInput {
-	type: LibraryContentType;
+/** Work create/patch input. */
+export interface WorkInput {
+	type?: ContentType;
 	title?: string;
+	slug?: string;
 	description?: string;
 	thumbnail?: string;
 	sourceKey?: string;
 	embedUrl?: string;
 	durationSeconds?: number;
+	body?: string;
+	bodyHtml?: string;
 	metadata?: Record<string, unknown>;
+	visibility?: WorkVisibility;
+	authoredAt?: string | null;
+	authoredPrecision?: AuthoredPrecision | null;
+	streamEnabled?: boolean;
+	downloadEnabled?: boolean;
+	anthersAccess?: AnthersAccessRow[];
+	seedAccess?: SeedAccessRow[];
+	isPinned?: boolean;
+	tags?: string[];
+	websiteUrl?: string;
+	sourceUrl?: string;
 }
 
 /** The universal content unit — full detail shape (GET /posts/:slug). */
@@ -211,16 +261,6 @@ export interface Post {
 	title: string | null;
 	body: string | null;
 	bodyHtml: string | null;
-	contentType: string;
-	thumbnail: string | null;
-
-	// Access type
-	streamEnabled: boolean;
-	downloadEnabled: boolean;
-
-	// Access tables (OR-gated)
-	anthersAccess: AnthersAccessRow[] | null;
-	seedAccess: SeedAccessRow[] | null;
 
 	// Presentation
 	showOnTimeline: boolean;
@@ -228,14 +268,12 @@ export interface Post {
 
 	// Metadata
 	tags: string[] | null;
-	websiteUrl: string | null;
-	sourceUrl: string | null;
-	estimatedReadMinutes: number | null;
 	isPublished: boolean | null;
+	/** When the post actually went live — the feed's sort key. Null while unpublished. */
+	publishedAt: string | null;
 	/** ISO datetime a draft is scheduled to auto-publish at; null when not scheduled. */
 	scheduledFor: string | null;
 	viewCount: number;
-	downloadCount: number;
 	atprotoUri: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -244,8 +282,11 @@ export interface Post {
 	creator?: Creator;
 	ratingAverage?: number | null;
 	ratingCount?: number;
-	contents?: PostEntry[];
-	access?: AccessResult;
+	/**
+	 * The Works this post links. There is no post-level `access` — a post is an
+	 * announcement and carries no gate; each Work resolves on its own.
+	 */
+	linkedWorks?: PostWorkRef[];
 	/** Transparent edit history (newest first), present on the detail endpoint. */
 	edits?: PostEdit[];
 }
@@ -264,23 +305,19 @@ export interface PostListItem {
 	slug: string;
 	creatorId: number;
 	title: string | null;
-	contentType: string;
-	streamEnabled: boolean;
-	downloadEnabled: boolean;
-	thumbnail: string | null;
 	showOnTimeline: boolean;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
+	publishedAt: string | null;
 	scheduledFor?: string | null;
 	viewCount: number;
-	downloadCount: number;
-	estimatedReadMinutes: number | null;
 	createdAt: string;
 	updatedAt: string;
 	creator?: Creator;
-	access?: AccessResult;
-	latestTranscodingStatus?: { status: string; progress: number } | null;
+	/** First linked Work's thumbnail, if any — thumbnails are public by design. */
+	thumbnail: string | null;
+	linkedWorkCount: number;
 }
 
 /** A post as it appears inside a collection (GET /projects/:slug). */
@@ -289,10 +326,8 @@ export interface CollectionPost {
 	publicId: number;
 	slug: string;
 	title: string | null;
-	contentType: string;
-	thumbnail: string | null;
-	streamEnabled: boolean;
-	downloadEnabled: boolean;
+	isPublished: boolean | null;
+	publishedAt: string | null;
 	sortOrder: number;
 	creator?: Creator;
 	access?: AccessResult;

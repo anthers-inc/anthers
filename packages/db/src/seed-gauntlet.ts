@@ -56,7 +56,7 @@ import {
 	db,
 	follows,
 	poolDistributions,
-	postContents,
+	postWorkRefs,
 	posts,
 	purchases,
 	seedAllocations,
@@ -206,54 +206,71 @@ async function deleteGauntletPosts(creatorId: number): Promise<void> {
 	if (rows.length === 0) return;
 
 	const postIds = rows.map((r) => r.id);
-	// content_items don't cascade from the post (they're the creator's library, referenced
-	// by post_contents), so collect and remove this fixture's own items explicitly.
-	const items = await db
-		.select({ workId: postContents.workId })
-		.from(postContents)
-		.where(inArray(postContents.postId, postIds));
-	const itemIds = items.map((i) => i.workId).filter((id): id is number => id != null);
+	// Works do NOT cascade from a post — they are the creator's Catalog and outlive any
+	// announcement — so this fixture's own Works are collected and removed explicitly.
+	const workRows = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(and(eq(works.creatorId, creatorId), like(works.slug, `${GAUNTLET_SLUG_PREFIX}%`)));
 
 	await db.delete(posts).where(inArray(posts.id, postIds));
-	if (itemIds.length > 0) await db.delete(works).where(inArray(works.id, itemIds));
-	console.log(`${TAG} removed ${postIds.length} existing fixture posts`);
+	if (workRows.length > 0) {
+		await db.delete(works).where(
+			inArray(
+				works.id,
+				workRows.map((w) => w.id),
+			),
+		);
+	}
+	console.log(`${TAG} removed ${postIds.length} fixture posts and ${workRows.length} Works`);
 }
 
-/** Write one gauntlet post, plus the content item + asset G9 needs to be downloadable. */
+/**
+ * Write one gauntlet fixture entry: a **Work** carrying the gate, plus a post announcing
+ * it. The Work is the subject — the staircase this fixture exists to walk is an access
+ * staircase, and access lives on the Work. The post is there so the announcement side of
+ * the model is exercised too, and it deliberately confers nothing.
+ */
 async function createPost(creatorId: number, spec: GauntletPost): Promise<number> {
-	const [inserted] = await db
-		.insert(posts)
+	const [work] = await db
+		.insert(works)
 		.values({
 			creatorId,
 			publicId: spec.publicId,
 			slug: spec.slug,
+			type: spec.contentType,
 			title: spec.title,
+			description: spec.body,
 			body: spec.body,
 			bodyHtml: `<p>${spec.body}</p>`,
-			contentType: spec.contentType,
 			streamEnabled: spec.streamEnabled,
 			downloadEnabled: spec.downloadEnabled,
 			anthersAccess: spec.anthersAccess,
 			seedAccess: spec.seedAccess,
+			visibility: "released",
+			releasedAt: new Date(),
+		})
+		.returning({ id: works.id });
+
+	const [inserted] = await db
+		.insert(posts)
+		.values({
+			creatorId,
+			publicId: spec.publicId + 1_000,
+			slug: `${spec.slug}-post`,
+			title: spec.title,
+			body: spec.body,
+			bodyHtml: `<p>${spec.body}</p>`,
 			isPublished: true,
+			publishedAt: new Date(),
 		})
 		.returning({ id: posts.id });
+	await db.insert(postWorkRefs).values({ postId: inserted.id, workId: work.id, position: 0 });
 
 	if (spec.downloadEnabled) {
-		// The checkout sums the post's asset bytes for the delivery fee, and the download
-		// route needs a real key to sign — so a downloadable post needs an item + asset.
-		const [item] = await db
-			.insert(works)
-			.values({
-				creatorId,
-				type: spec.contentType,
-				title: spec.title,
-				description: spec.body,
-			})
-			.returning({ id: works.id });
-		await db
-			.insert(postContents)
-			.values({ postId: inserted.id, position: 0, kind: "content", workId: item.id });
+		// The checkout sums the Work's asset bytes for the delivery fee, and the download
+		// route needs a real key to sign — so a downloadable Work needs an asset.
+		const item = work;
 		const fileKey = `creators/${creatorId}/assets/${spec.slug}.zip`;
 		await db.insert(assets).values({
 			workId: item.id,
@@ -336,11 +353,25 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 		.delete(attentionEvents)
 		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.creatorId, creatorId)));
 
+	// A purchase unlocks permanently, so a leftover one would silently pre-open G9. It
+	// now names a Work, so clear against the fixture's Works rather than its posts.
+	const fixtureWorks = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(and(eq(works.creatorId, creatorId), like(works.slug, `${GAUNTLET_SLUG_PREFIX}%`)));
+	if (fixtureWorks.length > 0) {
+		await db.delete(purchases).where(
+			and(
+				eq(purchases.buyerId, viewerId),
+				inArray(
+					purchases.workId,
+					fixtureWorks.map((w) => w.id),
+				),
+			),
+		);
+	}
+
 	if (postIds.length > 0) {
-		// A purchase unlocks permanently, so a leftover one would silently pre-open G9.
-		await db
-			.delete(purchases)
-			.where(and(eq(purchases.buyerId, viewerId), inArray(purchases.postId, postIds)));
 		// Clear the viewer's own comments so the comment rung starts empty each run.
 		await db
 			.delete(comments)

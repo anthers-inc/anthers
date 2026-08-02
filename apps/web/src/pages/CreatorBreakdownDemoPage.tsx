@@ -36,7 +36,7 @@ interface RevenueByPlan {
 	toCreators: number;
 }
 
-interface ContentItem {
+interface Work {
 	/** e.g. "Long essays (40-90 min)", "Podcast episodes" */
 	label: string;
 	mediaType: "video" | "audio" | "text" | "game";
@@ -61,7 +61,7 @@ interface DemoCreatorBreakdown {
 	/** Stats on their current platform */
 	audienceStats: { label: string; value: string }[];
 	/** Detailed content library with per-category breakdowns */
-	contentLibrary: ContentItem[];
+	contentLibrary: Work[];
 	/** Monthly revenue on current platform vs Anthers */
 	current: PlatformComparison;
 	anthers: PlatformComparison;
@@ -425,7 +425,7 @@ interface DerivedCosts {
 	deliveryCost: number;
 }
 
-function deriveItemCosts(item: ContentItem): DerivedCosts {
+function deriveItemCosts(item: Work): DerivedCosts {
 	const { mediaType, count, avgDurationMin, monthlyPlays, avgPlayMin } = item;
 
 	if (mediaType === "video") {

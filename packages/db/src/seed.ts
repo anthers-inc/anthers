@@ -32,7 +32,7 @@ import {
 	db,
 	follows,
 	poolDistributions,
-	postContents,
+	postWorkRefs,
 	posts,
 	projectPosts,
 	projects,
@@ -710,11 +710,14 @@ async function seed() {
 	});
 
 	const createdUserIds: Record<string, number> = {};
-	// Everything published is a Post now; track them for ratings/comments/collections.
+	// Posts (announcements) and Works (the Catalog) are tracked separately now — ratings,
+	// comments and collections hang off posts; purchases and gates off Works.
 	const createdPosts: { postId: number; creatorUsername: string }[] = [];
 	const postIdBySlug: Record<string, number> = {};
 	const postIdByTitle: Record<string, number> = {};
-	// Base purchase price per work title (works now express pricing via access tables).
+	const workIdBySlug: Record<string, number> = {};
+	const workIdByTitle: Record<string, number> = {};
+	// Base purchase price per work title (Works express pricing via their access tables).
 	const priceByTitle: Record<string, string> = {};
 
 	// Current cycle bounds — shared by every account/cycle/distribution row.
@@ -726,6 +729,11 @@ async function seed() {
 		createdPosts.push({ postId, creatorUsername: username });
 		postIdBySlug[slug] = postId;
 		postIdByTitle[title] = postId;
+	};
+
+	const recordWork = (workId: number, slug: string, title: string, _username: string) => {
+		workIdBySlug[slug] = workId;
+		workIdByTitle[title] = workId;
 	};
 
 	// ---- 1. Create users ----
@@ -783,7 +791,7 @@ async function seed() {
 	// ---- 2. Create works (download/priced posts) ----
 	// Former standalone "projects" (downloadable works) are now posts: download-enabled,
 	// carrying the pricing. mediaType → contentType; pricingType → entitlement pricing.
-	console.log("Creating seed works (posts)...");
+	console.log("Creating seed Works (the Catalog)...");
 	for (const [username, creatorWorks] of Object.entries(PROJECTS_BY_CREATOR)) {
 		const creatorId = createdUserIds[username];
 		if (!creatorId) continue;
@@ -792,14 +800,14 @@ async function seed() {
 			const slug = slugify(work.title);
 
 			const existing = await db
-				.select({ id: posts.id })
-				.from(posts)
-				.where(eq(posts.slug, slug))
+				.select({ id: works.id })
+				.from(works)
+				.where(eq(works.slug, slug))
 				.limit(1);
 
 			if (existing.length > 0) {
 				console.log(`  Skipping work "${work.title}" (slug exists)`);
-				recordPost(existing[0].id, slug, work.title, username);
+				recordWork(existing[0].id, slug, work.title, username);
 				continue;
 			}
 
@@ -821,65 +829,49 @@ async function seed() {
 			priceByTitle[work.title] = price;
 			const access = work.pricingType === "free" ? freeAccess() : paidAccess(price);
 
-			const [inserted] = await db
-				.insert(posts)
+			// A creator's works go in the CATALOG. Every one is a released Work carrying its
+			// own delivery, gates and dates — no post required, which is the whole point.
+			// Text works are Works too (type "text"): prose that earns lives in the Catalog,
+			// while a post body is an announcement and earns nothing. See 40.05.
+			const authored = daysAgo(randomInt(200, 1500));
+			const [created] = await db
+				.insert(works)
 				.values({
 					creatorId,
 					publicId: nextPublicId(),
 					slug,
+					type: work.mediaType,
 					title: work.title,
+					description: work.shortDescription,
 					body: work.description,
 					bodyHtml: `<p>${work.description.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
-					contentType: work.mediaType,
 					...delivery,
 					...access,
 					tags: work.tags,
-					isPublished: true,
+					// Made well before it was uploaded — the migration case Parker is testing.
+					authoredAt: authored,
+					authoredPrecision: randomInt(0, 2) === 0 ? "year" : "day",
+					visibility: "released",
+					releasedAt: daysAgo(randomInt(30, 180)),
 					viewCount: randomInt(50, 5000),
 					downloadCount: randomInt(10, 2000),
 					createdAt: daysAgo(randomInt(30, 180)),
 				})
-				.returning({ id: posts.id });
+				.returning({ id: works.id });
 
-			// Media works become a library content item the post references. A text WORK
-			// becomes a post-native text content element rather than living in the body
-			// alone: the body is connective tissue and earns no Time Pool minutes, so a
-			// published essay has to be an actual content element to be eligible. See
-			// 40.05 Attention and Time Pool Eligibility. Download works get a build asset.
-			if (work.mediaType === "text") {
-				await db.insert(postContents).values({
-					postId: inserted.id,
-					position: 0,
-					kind: "text",
-					bodyHtml: `<p>${work.description.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+			if (delivery.downloadEnabled) {
+				await db.insert(assets).values({
+					workId: created.id,
+					file: `creators/${creatorId}/assets/seed-${slug}.zip`,
+					filename: `${slug}.zip`,
+					fileSize: randomInt(50, 800) * 1024 * 1024,
+					mimeType: "application/zip",
+					platform: work.mediaType === "game" ? "windows" : "",
 				});
-			} else {
-				const [item] = await db
-					.insert(works)
-					.values({
-						creatorId,
-						type: work.mediaType,
-						title: work.title,
-						description: work.shortDescription,
-					})
-					.returning({ id: works.id });
-				await db
-					.insert(postContents)
-					.values({ postId: inserted.id, position: 0, kind: "content", workId: item.id });
-				if (delivery.downloadEnabled) {
-					await db.insert(assets).values({
-						workId: item.id,
-						file: `creators/${creatorId}/assets/seed-${slug}.zip`,
-						filename: `${slug}.zip`,
-						fileSize: randomInt(50, 800) * 1024 * 1024,
-						mimeType: "application/zip",
-						platform: work.mediaType === "game" ? "windows" : "",
-					});
-				}
 			}
 
-			recordPost(inserted.id, slug, work.title, username);
-			console.log(`  Created work "${work.title}" (id: ${inserted.id})`);
+			recordWork(created.id, slug, work.title, username);
+			console.log(`  Created work "${work.title}" (id: ${created.id})`);
 		}
 	}
 
@@ -912,24 +904,53 @@ async function seed() {
 					? seedGatedAccess(SEED_GATE_THRESHOLD)
 					: freeAccess();
 
+			// Gating applies to a WORK, so the prose becomes a text Work carrying the gate,
+			// and the post announces it. That split is the model made concrete: the
+			// announcement is readable by anyone, the writing behind it is not.
+			const published = daysAgo(randomInt(1, 60));
+			const [textWork] = await db
+				.insert(works)
+				.values({
+					creatorId,
+					publicId: nextPublicId(),
+					slug: `${slug}-read`,
+					type: "text",
+					title: post.title,
+					description: post.body.slice(0, 200),
+					body: post.body,
+					bodyHtml: `<p>${post.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+					estimatedReadMinutes: post.estimatedReadMinutes ?? null,
+					streamEnabled: true,
+					downloadEnabled: false,
+					...access,
+					visibility: "released",
+					releasedAt: published,
+					authoredAt: published,
+					authoredPrecision: "day",
+					createdAt: published,
+				})
+				.returning({ id: works.id });
+			recordWork(textWork.id, `${slug}-read`, post.title, username);
+
 			const [inserted] = await db
 				.insert(posts)
 				.values({
 					creatorId,
 					slug,
 					title: post.title,
-					body: post.body,
-					bodyHtml: `<p>${post.body.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
-					contentType: post.contentType,
+					// The announcement is a short lead-in, not the piece itself.
+					body: post.body.slice(0, 200),
+					bodyHtml: `<p>${post.body.slice(0, 200).replace(/\n/g, "<br>")}</p>`,
 					publicId: nextPublicId(),
-					streamEnabled: true,
-					downloadEnabled: false,
-					...access,
 					isPublished: true,
-					estimatedReadMinutes: post.estimatedReadMinutes ?? null,
-					createdAt: daysAgo(randomInt(1, 60)),
+					publishedAt: published,
+					createdAt: published,
 				})
 				.returning({ id: posts.id });
+
+			await db
+				.insert(postWorkRefs)
+				.values({ postId: inserted.id, workId: textWork.id, position: 0 });
 
 			recordPost(inserted.id, slug, post.title, username);
 			console.log(`  Created post "${post.title}" (id: ${inserted.id})`);
@@ -1253,24 +1274,23 @@ async function seed() {
 			const slug = slugify(title);
 			const [p] = await db
 				.select({ id: posts.id })
-				.from(posts)
-				.where(eq(posts.slug, slug))
+				.from(works)
+				.where(eq(works.slug, slug))
 				.limit(1);
 
 			if (!p) {
-				console.log(`    Skipping purchase "${title}" (post not found)`);
+				console.log(`    Skipping purchase "${title}" (work not found)`);
 				continue;
 			}
 
 			const amount = parseFloat(priceByTitle[title] ?? "0");
 			if (amount <= 0) continue;
 
-			// Delivery bandwidth of the post's downloadable assets → digital-purchase fees.
+			// Delivery bandwidth of the Work's downloadable assets → digital-purchase fees.
 			const [sz] = await db
 				.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 				.from(assets)
-				.innerJoin(postContents, eq(postContents.workId, assets.workId))
-				.where(eq(postContents.postId, p.id));
+				.where(eq(assets.workId, p.id));
 			const deliveryGiB = Number(sz?.bytes ?? 0) / 1073741824;
 
 			// Digital purchase (zero-cut): the creator keeps 100%; the buyer pays delivery at
@@ -1286,7 +1306,7 @@ async function seed() {
 			try {
 				await db.insert(purchases).values({
 					buyerId: userId,
-					postId: p.id,
+					workId: p.id,
 					type: "digital",
 					amount: amount.toFixed(2),
 					processingFee: processingFee.toFixed(2),

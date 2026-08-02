@@ -15,10 +15,10 @@ import {
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
-import type { ContentItem, LibraryContentType } from "../../lib/types";
+import type { Work, UploadableWorkType } from "../../lib/types";
 
 /** The uploadable/processable library content types (text stays post-native). */
-export const LIBRARY_TYPE_OPTIONS: { value: LibraryContentType; label: string }[] = [
+export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[] = [
 	{ value: "video", label: "Video" },
 	{ value: "audio", label: "Audio" },
 	{ value: "image", label: "Image" },
@@ -61,7 +61,7 @@ export function isBuildType(type: string): boolean {
  */
 export type ProcessingState = "none" | "processing" | "ready" | "failed";
 
-export function processingState(item: ContentItem): ProcessingState {
+export function processingState(item: Work): ProcessingState {
 	const status = item.transcoding?.status;
 	if (!status) return "none";
 	if (status === "failed") return "failed";
@@ -70,7 +70,7 @@ export function processingState(item: ContentItem): ProcessingState {
 }
 
 /** Small state badge for a library item (null when there is nothing to show). */
-export function ProcessingBadge({ item }: { item: ContentItem }) {
+export function ProcessingBadge({ item }: { item: Work }) {
 	switch (processingState(item)) {
 		case "processing":
 			return <span className="badge badge-warning badge-sm gap-1">Processing…</span>;
@@ -97,7 +97,7 @@ export function TypeBadge({ type }: { type: string }) {
  * The best still image for a card: an explicit thumbnail, else (for images) the image
  * itself. Videos without a poster and audio/game/etc. fall back to the type icon.
  */
-export function itemPreviewUrl(item: ContentItem): string | null {
+export function itemPreviewUrl(item: Work): string | null {
 	if (item.thumbnail) return item.thumbnail;
 	if (item.type === "image" && item.sourceKey) return item.sourceKey;
 	return null;
