@@ -14,15 +14,15 @@
  * staging is the thing being tested.
  */
 import { db } from "@anthers/db/client";
-import { works } from "@anthers/db/schema";
 import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
+import { works } from "@anthers/db/schema";
 
 let seq = 0;
 
 /** A unique 9-digit public id, in the same range the routes mint. */
 export function testPublicId(): number {
 	seq += 1;
-	return 100_000_000 + ((Date.now() % 800_000_000) + seq * 7919) % 800_000_000;
+	return 100_000_000 + (((Date.now() % 800_000_000) + seq * 7919) % 800_000_000);
 }
 
 export interface WorkFixture {

@@ -9,7 +9,7 @@
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
-import type { Work, UploadableWorkType } from "../../lib/types";
+import type { UploadableWorkType, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import WorkEditor from "./WorkEditor";
 import {

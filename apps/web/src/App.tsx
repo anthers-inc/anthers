@@ -34,6 +34,7 @@ import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
 import PostPage from "./pages/PostPage";
+import WorkPage from "./pages/WorkPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ResourcesPage from "./pages/ResourcesPage";
@@ -193,6 +194,8 @@ export default function App() {
 				<Route path="/verify-email" element={<VerifyEmailPage />} />
 				<Route path="/discover/:slug" element={<ProjectRedirect />} />
 				<Route path="/posts/:slug" element={<PostPage />} />
+				{/* A Work stands on its own — reachable whether or not a post ever mentioned it. */}
+				<Route path="/works/:slug" element={<WorkPage />} />
 				<Route path="/subscribe" element={<SubscribePage />} />
 				<Route path="/jams" element={<JamsPage />} />
 				<Route path="/jams/:slug" element={<JamPage />} />
@@ -217,6 +220,7 @@ export default function App() {
 				{/* Creator site routes */}
 				<Route path="/:username/:slug" element={<ProjectPage />} />
 				<Route path="/:username/posts/:slug" element={<PostPage />} />
+				<Route path="/:username/works/:slug" element={<WorkPage />} />
 
 				{/* Creator profile -- must be last to avoid catching other routes */}
 				<Route path="/:username" element={<CreatorProfilePage />} />

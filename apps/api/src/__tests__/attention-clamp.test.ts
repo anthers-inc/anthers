@@ -15,10 +15,10 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { attentionEvents } from "@anthers/db/schema";
-import { insertWork } from "./work-fixtures.js";
 import { CREDIT_WINDOW_SECONDS } from "@anthers/shared/attention";
 import { and, eq, gte, sql } from "drizzle-orm";
 import app from "../index";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

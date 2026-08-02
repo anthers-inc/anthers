@@ -140,7 +140,9 @@ describe("Catalog CRUD and post links", () => {
 		expect(work.visibility).toBe("released");
 		expect(work.releasedAt).toBeTruthy();
 
-		const after = await req(`/api/content/works/${workId}`, { headers: { Cookie: strangerCookie } });
+		const after = await req(`/api/content/works/${workId}`, {
+			headers: { Cookie: strangerCookie },
+		});
 		expect(after.status).toBe(200);
 	});
 

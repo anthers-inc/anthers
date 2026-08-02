@@ -23,17 +23,17 @@ const PLATFORM_LABELS: Record<string, string> = {
 export default function ProjectDownloads({
 	assets,
 	contentType,
-	postSlug,
+	workId,
 	canAccess,
 }: {
 	assets: Asset[];
 	contentType: string;
-	postSlug: string;
+	workId: number;
 	canAccess: boolean;
 }) {
 	if (assets.length === 0) return null;
 
-	// If the viewer can't access this post, show a gated message instead of files.
+	// If the viewer can't access this Work, show a gated message instead of files.
 	if (!canAccess) {
 		return (
 			<div>
@@ -91,10 +91,12 @@ export default function ProjectDownloads({
 											className="btn btn-sm btn-primary"
 											onClick={async () => {
 												try {
-													const res = await client.api.content.posts[":slug"].assets[
-														":id"
+													// Downloads are Work-scoped: the asset belongs to a Work, and the
+													// Work carries the gate the endpoint re-checks.
+													const res = await client.api.content.works[":id"].assets[
+														":assetId"
 													].download.$post({
-														param: { slug: postSlug, id: String(asset.id) },
+														param: { id: String(workId), assetId: String(asset.id) },
 													});
 													if (!res.ok) {
 														window.location.href = asset.file;

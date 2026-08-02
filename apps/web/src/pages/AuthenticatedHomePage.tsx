@@ -15,8 +15,8 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import ContentCard from "../components/cards/ContentCard";
 import CreatorCard from "../components/cards/CreatorCard";
+import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
@@ -265,7 +265,7 @@ export default function AuthenticatedHomePage() {
 				) : feedPosts.length > 0 ? (
 					<div className="flex flex-col gap-4">
 						{feedPosts.map((post) => (
-							<ContentCard key={post.id} post={post} />
+							<PostCard key={post.id} post={post} />
 						))}
 					</div>
 				) : (

@@ -24,10 +24,10 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { insertWork } from "./work-fixtures.js";
-import { works, transcodingJobs, users } from "@anthers/db/schema";
+import { transcodingJobs, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -127,8 +127,7 @@ describe("Delivery-layer access", () => {
 		});
 	});
 
-	it("publishes a locked post and a free post over the same two items", async () => {
-	});
+	it("publishes a locked post and a free post over the same two items", async () => {});
 
 	// ── Work detail ────────────────────────────────────────────────────────────
 

@@ -54,6 +54,7 @@ const ROUTE_NAMES = [
 	"subscription",
 	"verify-email",
 	"wiki",
+	"works",
 ];
 
 /**

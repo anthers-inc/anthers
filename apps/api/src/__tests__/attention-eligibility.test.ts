@@ -23,9 +23,9 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { attentionEvents } from "@anthers/db/schema";
-import { insertWork } from "./work-fixtures.js";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

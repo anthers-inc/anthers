@@ -27,19 +27,19 @@ import {
 	attentionEvents,
 	bookmarks,
 	comments,
-	works,
 	creatorGates,
 	db,
 	follows,
 	poolDistributions,
-	postWorkRefs,
 	posts,
+	postWorkRefs,
 	projectPosts,
 	projects,
 	purchases,
 	ratings,
 	seedAllocations,
 	users,
+	works,
 } from "./index.js";
 
 // ---------------------------------------------------------------------------

@@ -1,24 +1,55 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { LockedCover, lockedByBadge, unlockLabel } from "@anthers/web-shared/post/unlock";
-import { postUrl } from "@anthers/web-shared/postUrl";
+import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
-import type { PostListItem } from "@anthers/web-shared/types";
+import type { Work } from "@anthers/web-shared/types";
 import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
 /** Who the Seeds would go to, for a card's unlock copy. */
-function cardCreatorName(post: PostListItem): string {
-	return post.creator?.displayName || post.creator?.username || "this creator";
+function cardCreatorName(work: WorkCardItem): string {
+	return work.creator?.displayName || work.creator?.username || "this creator";
 }
 
-export default function ContentCard({ post }: { post: PostListItem }) {
-	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		year: "numeric",
-	});
+/** A Work as the Catalog lists it, plus the creator the listing joins on. */
+type WorkCardItem = Work & {
+	creator?: { username: string; displayName?: string | null; avatar?: string | null };
+};
+
+/**
+ * Renders the creator-asserted **Created** date at exactly the precision they claimed.
+ *
+ * A Work back-dated to "2015" must render "2015", not "1 January 2015" — inventing a day
+ * the creator never asserted is the kind of false precision the whole `authoredPrecision`
+ * column exists to prevent. Falls back to the release date when nothing was asserted.
+ */
+function madeLabel(work: WorkCardItem): string {
+	const iso = work.authoredAt ?? work.releasedAt ?? work.createdAt;
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	if (!work.authoredAt) {
+		return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+	}
+	switch (work.authoredPrecision) {
+		case "year":
+			return String(d.getUTCFullYear());
+		case "month":
+			return d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+		default:
+			return d.toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+				timeZone: "UTC",
+			});
+	}
+}
+
+export default function WorkCard({ work: post }: { work: WorkCardItem }) {
+	const date = madeLabel(post);
 
 	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
 	// Clicking still navigates into the post, where the unlock options live.
@@ -35,7 +66,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				/>
 			) : (
 				<>
-					{post.contentType === "video" && (
+					{post.type === "video" && (
 						<div className="relative aspect-video bg-base-300">
 							{post.thumbnail ? (
 								<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -53,7 +84,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 						</div>
 					)}
 
-					{post.contentType === "audio" && (
+					{post.type === "audio" && (
 						<div className="relative h-24 bg-gradient-to-br from-secondary/20 to-primary/20">
 							<div className="absolute inset-0 flex items-center justify-center">
 								<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
@@ -61,7 +92,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 						</div>
 					)}
 
-					{post.contentType === "text" && post.thumbnail && (
+					{post.type === "text" && post.thumbnail && (
 						<figure>
 							<img src={post.thumbnail} alt="" className="w-full h-36 object-cover" />
 						</figure>
@@ -104,9 +135,9 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 				) : (
 					/* Badges row */
 					<div className="flex items-center gap-2 mt-auto pt-1">
-						<ContentTypeBadge contentType={post.contentType} />
+						<ContentTypeBadge contentType={post.type} />
 						<PricingBadge access={post.access} />
-						{post.estimatedReadMinutes && post.contentType === "text" && (
+						{post.estimatedReadMinutes && post.type === "text" && (
 							<span className="text-xs text-base-content/40">
 								{post.estimatedReadMinutes} min read
 							</span>
@@ -121,7 +152,7 @@ export default function ContentCard({ post }: { post: PostListItem }) {
 		"card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left";
 
 	return (
-		<Link to={postUrl(post)} className={cardClass}>
+		<Link to={workUrl(post)} className={cardClass}>
 			{content}
 		</Link>
 	);

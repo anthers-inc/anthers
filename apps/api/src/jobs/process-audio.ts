@@ -10,7 +10,7 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { works, transcodingJobs } from "@anthers/db/schema";
+import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 
@@ -158,11 +158,7 @@ export async function processAudio(data: ProcessAudioData) {
 		.set({ status: "processing", progress: 0 })
 		.where(eq(transcodingJobs.id, jobId));
 
-	const [item] = await db
-		.select()
-		.from(works)
-		.where(eq(works.id, job.workId))
-		.limit(1);
+	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!item) throw new Error(`Content item ${job.workId} not found`);
 
 	const storageKey = item.sourceKey ?? "";

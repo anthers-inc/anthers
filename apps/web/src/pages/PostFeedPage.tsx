@@ -6,7 +6,7 @@ import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import ContentCard from "../components/cards/ContentCard";
+import PostCard from "../components/cards/PostCard";
 
 const FILTERS = [
 	{ key: "", label: "All" },
@@ -73,7 +73,7 @@ export default function PostFeedPage() {
 			) : (
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl">
 					{posts.map((post) => (
-						<ContentCard key={post.id} post={post} />
+						<PostCard key={post.id} post={post} />
 					))}
 				</div>
 			)}

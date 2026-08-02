@@ -10,7 +10,7 @@ interface VideoPlayerProps {
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
 	 */
-	attention?: { creatorId: number | null; postId: number | null };
+	attention?: { creatorId: number | null; workId: number | null };
 }
 
 export default function VideoPlayer({
@@ -27,7 +27,7 @@ export default function VideoPlayer({
 	// open tab earns nothing, whatever else is on the page.
 	useAttentionClaim({
 		creatorId: attention?.creatorId ?? null,
-		postId: attention?.postId ?? null,
+		workId: attention?.workId ?? null,
 		contentType: "video",
 		playing: isPlaying,
 		active: !!attention,

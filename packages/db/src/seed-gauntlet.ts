@@ -51,17 +51,17 @@ import {
 	assets,
 	attentionEvents,
 	comments,
-	works,
 	creatorGates,
 	db,
 	follows,
 	poolDistributions,
-	postWorkRefs,
 	posts,
+	postWorkRefs,
 	purchases,
 	seedAllocations,
 	stripeAccounts,
 	users,
+	works,
 } from "./index.js";
 
 const TAG = "[gauntlet]";

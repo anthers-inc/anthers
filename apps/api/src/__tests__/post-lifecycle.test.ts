@@ -12,7 +12,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { works, transcodingJobs } from "@anthers/db/schema";
+import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";

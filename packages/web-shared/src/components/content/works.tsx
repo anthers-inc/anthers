@@ -15,7 +15,7 @@ import {
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
-import type { Work, UploadableWorkType } from "../../lib/types";
+import type { UploadableWorkType, Work } from "../../lib/types";
 
 /** The uploadable/processable library content types (text stays post-native). */
 export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[] = [

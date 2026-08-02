@@ -11,7 +11,7 @@
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { client, isDesktop } from "../../lib/rpc";
-import type { Asset, Work, WorkInput, UploadableWorkType } from "../../lib/types";
+import type { Asset, UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import {
 	canTranscodeInBrowser,
 	type UploadedVariant,

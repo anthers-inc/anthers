@@ -21,7 +21,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { insertWork } from "./work-fixtures.js";
 import {
 	accountCycles,
 	accounts,
@@ -40,6 +39,7 @@ import Stripe from "stripe";
 import app from "../index";
 import { settleCycle } from "../jobs/settle-cycle";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";

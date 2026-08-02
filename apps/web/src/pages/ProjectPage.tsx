@@ -115,36 +115,25 @@ export default function ProjectPage() {
 			) : (
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 					{posts.map((member) => {
-						const locked = !!member.access && !member.access.canAccess;
-						const image = member.thumbnail;
+						// A member post carries no gate and no cover — it is an announcement.
+						// The Works it links resolve on their own, at the post itself.
 						return (
 							<Link
 								key={member.id}
 								to={postUrl(member)}
 								className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
 							>
-								<div className="aspect-video bg-base-300 relative">
-									{image ? (
-										<img
-											src={image}
-											alt={member.title ?? "Post"}
-											className="w-full h-full object-cover"
-										/>
-									) : (
-										<div className="w-full h-full flex items-center justify-center text-base-content/20">
-											<ContentTypeBadge contentType={member.contentType} />
-										</div>
-									)}
-									{locked && (
-										<div className="absolute top-2 right-2 badge badge-neutral gap-1">
-											<LockClosedIcon className="w-3 h-3" />
-											Locked
-										</div>
-									)}
-								</div>
 								<div className="card-body p-4 gap-2">
-									<ContentTypeBadge contentType={member.contentType} />
 									{member.title && <h3 className="font-semibold line-clamp-2">{member.title}</h3>}
+									{member.publishedAt && (
+										<span className="text-xs text-base-content/40">
+											{new Date(member.publishedAt).toLocaleDateString("en-US", {
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
+										</span>
+									)}
 								</div>
 							</Link>
 						);

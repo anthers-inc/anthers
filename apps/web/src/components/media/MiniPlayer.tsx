@@ -39,7 +39,7 @@ export default function MiniPlayer() {
 				{/* Title + creator */}
 				<div className="flex-1 min-w-0">
 					<Link
-						to={`/posts/${currentTrack.postId}`}
+						to={`/posts/${currentTrack.workId}`}
 						className="text-sm font-medium truncate block link link-hover"
 					>
 						{currentTrack.title}

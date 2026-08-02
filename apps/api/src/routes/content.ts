@@ -29,8 +29,8 @@ import {
 	comments,
 	inlineImages,
 	postEdits,
-	postWorkRefs,
 	posts,
+	postWorkRefs,
 	projectPosts,
 	projects,
 	ratings,
@@ -2030,72 +2030,62 @@ const contentRoutes = new Hono()
 		return c.json({ posts: await postsUsingWork(id) });
 	})
 
-	.delete(
-		"/works/:id",
-		requireAuth,
-		zValidator("query", deleteWorkQuerySchema),
-		async (c) => {
-			const user = c.get("user");
-			const id = Number(c.req.param("id"));
-			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-			if (!item || item.creatorId !== user.id) {
-				return c.json({ error: "Work not found" }, 404);
+	.delete("/works/:id", requireAuth, zValidator("query", deleteWorkQuerySchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		// `post_work_refs.workId` cascades, so deleting a linked Work silently strips it
+		// from every post referencing it — including published ones. Refuse unless the
+		// caller has seen the damage and opted in, and hand back the list so a client can
+		// show it. Failing closed is deliberate: the destructive reading of an ambiguous
+		// request is the unrecoverable one.
+		const force = c.req.valid("query").force;
+		if (!force) {
+			const inUse = await postsUsingWork(id);
+			if (inUse.length > 0) {
+				return c.json(
+					{
+						error: `This Work is linked from ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
+						code: "work_in_use",
+						posts: inUse,
+					},
+					409,
+				);
 			}
+		}
 
-			// `post_work_refs.workId` cascades, so deleting a linked Work silently strips it
-			// from every post referencing it — including published ones. Refuse unless the
-			// caller has seen the damage and opted in, and hand back the list so a client can
-			// show it. Failing closed is deliberate: the destructive reading of an ambiguous
-			// request is the unrecoverable one.
-			const force = c.req.valid("query").force;
-			if (!force) {
-				const inUse = await postsUsingWork(id);
-				if (inUse.length > 0) {
-					return c.json(
-						{
-							error: `This Work is linked from ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
-							code: "work_in_use",
-							posts: inUse,
-						},
-						409,
-					);
-				}
-			}
+		const [workAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, id)),
+			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
+		]);
+		await purgeWorkMedia(item, workAssets, jobRows);
 
-			const [workAssets, jobRows] = await Promise.all([
-				db.select().from(assets).where(eq(assets.workId, id)),
-				db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
-			]);
-			await purgeWorkMedia(item, workAssets, jobRows);
-
-			await db.delete(works).where(eq(works.id, id));
-			return c.body(null, 204);
-		},
-	)
+		await db.delete(works).where(eq(works.id, id));
+		return c.body(null, 204);
+	})
 
 	// ── Content-item downloadable assets (builds/variants) ────────────────────────
-	.post(
-		"/works/:id/assets",
-		requireAuth,
-		zValidator("json", createAssetSchema),
-		async (c) => {
-			const user = c.get("user");
-			const id = Number(c.req.param("id"));
-			const [item] = await db
-				.select({ id: works.id })
-				.from(works)
-				.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
-				.limit(1);
-			if (!item) return c.json({ error: "Work not found" }, 404);
+	.post("/works/:id/assets", requireAuth, zValidator("json", createAssetSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db
+			.select({ id: works.id })
+			.from(works)
+			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.limit(1);
+		if (!item) return c.json({ error: "Work not found" }, 404);
 
-			const data = c.req.valid("json");
-			const [asset] = await db
-				.insert(assets)
-				.values({ workId: id, ...data })
-				.returning();
-			return c.json({ asset }, 201);
-		},
-	)
+		const data = c.req.valid("json");
+		const [asset] = await db
+			.insert(assets)
+			.values({ workId: id, ...data })
+			.returning();
+		return c.json({ asset }, 201);
+	})
 
 	.delete("/works/:id/assets/:assetId", requireAuth, async (c) => {
 		const user = c.get("user");

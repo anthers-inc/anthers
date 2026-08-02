@@ -3,7 +3,7 @@
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { LinkIcon } from "@heroicons/react/24/outline";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
@@ -38,15 +38,16 @@ export default function PostCard({ post }: { post: PostListItem }) {
 					</div>
 				</div>
 				{post.title && <h3 className="font-semibold line-clamp-1">{post.title}</h3>}
-				<div className="flex items-center gap-2 mt-auto pt-2">
-					<ContentTypeBadge contentType={post.contentType} />
-					{post.downloadEnabled && (
+				{/* A post carries no type, no delivery and no gate — it is words and links.
+				    What it can say is how many Works it points at. */}
+				{post.linkedWorkCount > 0 && (
+					<div className="flex items-center gap-2 mt-auto pt-2">
 						<span className="badge badge-sm badge-ghost gap-1">
-							<ArrowDownTrayIcon className="w-3 h-3" />
+							<LinkIcon className="w-3 h-3" />
+							{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
 						</span>
-					)}
-					<PricingBadge access={post.access} />
-				</div>
+					</div>
+				)}
 			</div>
 		</Link>
 	);

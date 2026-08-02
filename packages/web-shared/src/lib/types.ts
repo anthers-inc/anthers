@@ -424,7 +424,8 @@ export interface CheckoutResponse {
 export interface Purchase {
 	id: number;
 	buyerId: number;
-	postId: number;
+	/** The Work this purchase permanently unlocks. Null for a Seed buy, which unlocks nothing. */
+	workId: number | null;
 	amount: string;
 	processingFee: string;
 	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
@@ -433,12 +434,12 @@ export interface Purchase {
 	status: string;
 	createdAt: string;
 	updatedAt: string;
-	post?: {
+	work?: {
 		title: string | null;
 		slug: string;
 		publicId?: number;
 		coverImage: string | null;
-		contentType: string;
+		type: string;
 	};
 	creator?: Creator;
 }
