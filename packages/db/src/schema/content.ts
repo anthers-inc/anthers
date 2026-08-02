@@ -27,6 +27,10 @@ import { users } from "./auth.js";
  * Dollars leaked the price of a Seed into every stored gate; a name conflated a Badge
  * with the level it sits at. A threshold does neither, and a gate needs no Badge to sit
  * on it — with Badges at 2 and 4, a gate at 3 is legal and a 3-Seed viewer clears it.
+ *
+ * These tables live on a **Work**, not a Post (migration `0010`). A Work referenced from
+ * two Posts used to inherit each Post's gates independently, so the same bytes were
+ * genuinely free via one and gated via the other. A gate belongs to the thing being gated.
  */
 export interface AccessRow {
 	/** Whole Seeds required to qualify for this row. 0 = everyone. */
@@ -36,20 +40,137 @@ export interface AccessRow {
 	price: string;
 }
 
-/** A row in a post's **Anthers Access** table — `threshold` is Anthers-Seeds held. */
+/** A row in a Work's **Anthers Access** table — `threshold` is Anthers-Seeds held. */
 export type AnthersAccessRow = AccessRow;
 
-/** A row in a post's **Seed Access** table — `threshold` is Seeds given to the creator. */
+/** A row in a Work's **Seed Access** table — `threshold` is Seeds given to the creator. */
 export type SeedAccessRow = AccessRow;
 
+/** How precise a Work's creator-asserted Created date is. */
+export type AuthoredPrecision = "year" | "month" | "day";
+
 /**
- * Posts — the universal, content-type-agnostic unit of published content.
+ * Works — the creator's **Catalog**, and the unit of published creative work.
  *
- * Everything a creator publishes is a Post. A post BODY (rich text) is shown to
- * anyone with visibility; the deliverable itself is an ordered array of typed
- * **content elements** (`post_contents`). Delivery (stream and/or download) and
- * access (the two OR-gated access tables) are orthogonal per-post switches.
- * Projects group posts; they are not a content type.
+ * A Work is a game, a video, a track, an image, an essay, a piece of software, a physical
+ * good or a service. It owns everything about itself: its source media and derived
+ * variants (`assets`, `transcoding_jobs`), its access gates, its delivery switches, its
+ * dates, and the Time Pool minutes it earns. It has its own public URL and stands alone —
+ * a Work can be released, gated, discussed and paid for with **no Post ever existing**.
+ *
+ * This replaced `content_items` in migration `0010`. That table was a *private media
+ * staging record*: invisible until referenced from a published Post, with no visibility,
+ * no gates, no dates of its own and no URL. The rename tracks a change of entity, not of
+ * label — see `40.08 Catalog and Posts` in the vault.
+ *
+ * Prose is a Work now (`type = "text"`, prose in `bodyHtml`). Under the old model rich
+ * text was deliberately post-native and NOT a library item, which produced the model's
+ * strangest rule — prose in a post body earned nothing while the same prose as a content
+ * element earned. The rule was right; the earning form just had no home of its own.
+ */
+export const works = pgTable(
+	"works",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Stable, non-sequential public id — the durable part of the canonical URL
+		// /works/{slug}-{publicId}; the slug may change on rename without breaking links.
+		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
+		slug: text("slug").notNull().unique(),
+		// text | video | audio | image | game | software | physical | service
+		type: text("type").notNull(),
+		title: text("title").default(""),
+		description: text("description").default(""),
+		thumbnail: text("thumbnail").default(""), // poster/cover key or URL
+
+		// ── Source media (only the fields relevant to `type` are populated) ──
+		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
+		embedUrl: text("embed_url").default(""), // game/software web embed
+		durationSeconds: integer("duration_seconds"), // video/audio
+		// type = "text": the prose itself. `body` is the plain-text shadow used for search;
+		// `bodyHtml` is sanitized server-side at the write boundary, as post bodies are.
+		body: text("body").default(""),
+		bodyHtml: text("body_html").default(""),
+		estimatedReadMinutes: integer("estimated_read_minutes"),
+		// Browser-encode transport (metadata.clientVariants) + physical/service product
+		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
+		// downloadable variants (game/software builds) live in `assets`.
+		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+
+		// ── Visibility ──
+		// private = staging (uploaded, processing, being written — nobody else's business).
+		// released = publicly listed in the Catalog, which is NOT the same as freely
+		// accessible: what it costs and who can reach it is the job of the gates below.
+		// A third value `unlisted` is anticipated and deliberately not built yet.
+		visibility: text("visibility").notNull().default("private"), // private | released
+		releasedAt: timestamp("released_at", { withTimezone: true }),
+
+		// ── Dates ──
+		// Three dates exist for a Work and the platform may only assert two of them.
+		// `createdAt` is the UPLOAD date (ours, creator-visible only); `releasedAt` is when
+		// it went public (ours); `authoredAt` is when the work was MADE — off-platform,
+		// asserted by the creator, freely editable, and often long before Anthers existed.
+		authoredAt: timestamp("authored_at", { withTimezone: true }),
+		// Stored precision, so back-filling a 2015 project renders "2015" rather than an
+		// invented 1 January. Null alongside a null authoredAt.
+		authoredPrecision: text("authored_precision").$type<AuthoredPrecision>(),
+
+		// ── Delivery (orthogonal; ≥1 enforced at the app layer) ──
+		streamEnabled: boolean("stream_enabled").notNull().default(true),
+		downloadEnabled: boolean("download_enabled").notNull().default(false),
+
+		// ── Access tables (OR-gated — see services/access.ts) ──
+		// Default = "free but fully locked": every row allow=false, price "0".
+		anthersAccess: jsonb("anthers_access").$type<AnthersAccessRow[]>().default([]),
+		seedAccess: jsonb("seed_access").$type<SeedAccessRow[]>().default([]),
+
+		// ── Presentation & metadata ──
+		isPinned: boolean("is_pinned").notNull().default(false),
+		tags: jsonb("tags").$type<string[]>().default([]),
+		websiteUrl: text("website_url").default(""),
+		sourceUrl: text("source_url").default(""),
+
+		// ── Counters (bigint — views/downloads can exceed int4 at scale) ──
+		viewCount: bigint("view_count", { mode: "number" }).notNull().default(0),
+		downloadCount: bigint("download_count", { mode: "number" }).notNull().default(0),
+
+		// ── ATProto ──
+		// A Work wants its own lexicon rather than riding a post record; deferred with
+		// ATProto adoption itself, and unpopulated meanwhile.
+		atprotoUri: text("atproto_uri").unique(),
+
+		/** The UPLOAD date — when the Work entered the Catalog. Creator-visible only. */
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_works_creator").on(table.creatorId),
+		index("idx_works_type").on(table.type),
+		// The Catalog timeline: a creator's released Works in Created-date order.
+		index("idx_works_catalog").on(table.creatorId, table.visibility, table.authoredAt),
+		index("idx_works_released").on(table.visibility, table.releasedAt),
+		uniqueIndex("uq_works_public_id").on(table.publicId),
+	],
+);
+
+/**
+ * Posts — announcements, and nothing more.
+ *
+ * A Post carries rich text, links and body-embedded images, and exists to talk to the
+ * people who follow and support a creator. It carries **no media of its own beyond its
+ * body** — no attachments, no content elements. Anything that is a *work* belongs in the
+ * Catalog.
+ *
+ * A Post may **reference** Works (`post_work_refs`), which renders as a card and gives the
+ * Work its posting history in return. That reference is **inert: it confers no access
+ * whatsoever.** A Work linked from a Post is reachable exactly to the extent its own gates
+ * allow, and a Post may freely link something the reader cannot open. This is what stops
+ * the two concepts re-coupling through the back door.
+ *
+ * Because a Post is not a container, a Post earns no Time Pool minutes — unchanged policy,
+ * but now for a structural reason rather than a rule.
  */
 export const posts = pgTable(
 	"posts",
@@ -63,23 +184,8 @@ export const posts = pgTable(
 		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
 		slug: text("slug").notNull().unique(),
 		title: text("title").default(""),
-		// The post BODY (rich text visible to anyone with visibility) — NOT the deliverable.
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
-		// Denormalized "primary" type for cards/badges/filtering, derived from the first
-		// content element: text|image|audio|video|game|software|physical|service|mixed
-		contentType: text("content_type").notNull().default("text"),
-		// Denormalized card image (first element's thumbnail/image), set on save.
-		thumbnail: text("thumbnail").default(""),
-
-		// ── Access type (orthogonal delivery; ≥1 enforced at the app layer) ──
-		streamEnabled: boolean("stream_enabled").notNull().default(true),
-		downloadEnabled: boolean("download_enabled").notNull().default(false),
-
-		// ── Access tables (OR-gated — see services/access.ts) ──
-		// Default = "free but fully locked": every row allow=false, price "0".
-		anthersAccess: jsonb("anthers_access").$type<AnthersAccessRow[]>().default([]),
-		seedAccess: jsonb("seed_access").$type<SeedAccessRow[]>().default([]),
 
 		// ── Presentation ──
 		showOnTimeline: boolean("show_on_timeline").notNull().default(true),
@@ -87,17 +193,22 @@ export const posts = pgTable(
 
 		// ── Metadata ──
 		tags: jsonb("tags").$type<string[]>().default([]),
-		websiteUrl: text("website_url").default(""),
-		sourceUrl: text("source_url").default(""),
-		estimatedReadMinutes: integer("estimated_read_minutes"),
 		isPublished: boolean("is_published").notNull().default(false),
+		/**
+		 * When the post actually went live — the feed's sort key.
+		 *
+		 * Added in `0010` to fix a latent bug: everything sorted by `createdAt`, which is
+		 * when the DRAFT ROW was written, so a post drafted in January and published in
+		 * March sorted as January — and `publish-scheduled` published without recording
+		 * when. Null while unpublished; set once, on the transition to published.
+		 */
+		publishedAt: timestamp("published_at", { withTimezone: true }),
 		// When set, a still-unpublished (draft) post auto-publishes at this time via the
 		// publish-scheduled cron sweep. Cleared once the post publishes. Null = not scheduled.
 		scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
 
-		// ── Counters (bigint — views/downloads can exceed int4 at scale) ──
+		// ── Counters ──
 		viewCount: bigint("view_count", { mode: "number" }).notNull().default(0),
-		downloadCount: bigint("download_count", { mode: "number" }).notNull().default(0),
 
 		// ── ATProto ──
 		atprotoUri: text("atproto_uri").unique(),
@@ -107,9 +218,39 @@ export const posts = pgTable(
 	},
 	(table) => [
 		index("idx_posts_creator").on(table.creatorId),
-		index("idx_posts_content_type").on(table.contentType),
 		index("idx_posts_created").on(table.createdAt),
+		// The post feed sorts on publication, not on when the draft row appeared.
+		index("idx_posts_published").on(table.isPublished, table.publishedAt),
 		uniqueIndex("uq_posts_public_id").on(table.publicId),
+	],
+);
+
+/**
+ * A Post's references to Works — the ONLY link between the two, and deliberately inert.
+ *
+ * Confers no access, no ownership and no media: it exists so a Post can show a card for
+ * something in the Catalog, and so a Work can show where it has been posted (the "clean
+ * record of when the content has been posted"). Replaced `post_contents` in `0010`, which
+ * carried the opposite semantics — a post OWNED its content elements and gated them.
+ */
+export const postWorkRefs = pgTable(
+	"post_work_refs",
+	{
+		id: serial("id").primaryKey(),
+		postId: integer("post_id")
+			.notNull()
+			.references(() => posts.id, { onDelete: "cascade" }),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		position: integer("position").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_post_work_refs").on(table.postId, table.workId),
+		index("idx_post_work_refs_post").on(table.postId, table.position),
+		// The Work's posting history, newest first.
+		index("idx_post_work_refs_work").on(table.workId, table.createdAt),
 	],
 );
 
@@ -135,79 +276,10 @@ export const postEdits = pgTable(
 );
 
 /**
- * Content library — the creator's first-class, reusable content items. A creator
- * uploads content here once (processing runs async, no babysitting), then references
- * it from any number of posts via `post_contents`. The item OWNS its source media,
- * downloadable variants (`assets`), and transcodes (`transcoding_jobs`) — a post only
- * references it, so deleting a post never destroys content. Private to the creator
- * until a post/project makes it accessible. Rich text/prose is NOT a library item;
- * it stays post-native (the post body + inline text blocks in `post_contents`).
- */
-export const contentItems = pgTable(
-	"content_items",
-	{
-		id: serial("id").primaryKey(),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		// video | audio | image | game | software | physical | service
-		type: text("type").notNull(),
-		title: text("title").default(""),
-		description: text("description").default(""),
-		thumbnail: text("thumbnail").default(""), // poster/cover key or URL
-
-		// ── Source media (only the field relevant to `type` is populated) ──
-		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
-		embedUrl: text("embed_url").default(""), // game/software web embed
-		durationSeconds: integer("duration_seconds"), // video/audio
-		// Browser-encode transport (metadata.clientVariants) + physical/service product
-		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
-		// downloadable variants (game/software builds) live in `assets`.
-		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		index("idx_content_items_creator").on(table.creatorId),
-		index("idx_content_items_type").on(table.type),
-	],
-);
-
-/**
- * A post's ordered content list. Each entry is either an inline TEXT block (post-native
- * prose) or a REFERENCE to a library content item. The post is the access point: a
- * referenced item inherits the post's access rules. Media/downloads/transcodes live on
- * the content item, never here — so a post can be deleted without destroying content.
- */
-export const postContents = pgTable(
-	"post_contents",
-	{
-		id: serial("id").primaryKey(),
-		postId: integer("post_id")
-			.notNull()
-			.references(() => posts.id, { onDelete: "cascade" }),
-		position: integer("position").notNull().default(0),
-		// "text" (inline prose block) | "content" (reference to a library item)
-		kind: text("kind").notNull().default("content"),
-		bodyHtml: text("body_html").default(""), // kind = text
-		contentItemId: integer("content_item_id").references(() => contentItems.id, {
-			onDelete: "cascade",
-		}), // kind = content
-		caption: text("caption").default(""), // optional per-post caption for a content ref
-
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		index("idx_post_contents_post").on(table.postId, table.position),
-		index("idx_post_contents_item").on(table.contentItemId),
-	],
-);
-
-/**
- * Projects — collections (playlist-like wrappers) that group posts and give them
- * a rich custom showcase page. Not a content type; hold no content or pricing.
+ * Projects — collections (playlist-like wrappers) that group a creator's things and give
+ * them a rich custom showcase page. Not a content type; hold no content or pricing.
+ * A project collects **both** Works and Posts, in separate ordered lists — a game project
+ * holds its builds and soundtrack alongside its devlogs and patch notes.
  */
 export const projects = pgTable("projects", {
 	id: serial("id").primaryKey(),
@@ -248,14 +320,14 @@ export const projectPosts = pgTable(
 	],
 );
 
-/** Downloadable files/variants (builds, tracks, PDFs, installers, …) of a content item. */
+/** Downloadable files/variants (builds, tracks, PDFs, installers, …) of a Work. */
 export const assets = pgTable(
 	"assets",
 	{
 		id: serial("id").primaryKey(),
-		contentItemId: integer("content_item_id")
+		workId: integer("work_id")
 			.notNull()
-			.references(() => contentItems.id, { onDelete: "cascade" }),
+			.references(() => works.id, { onDelete: "cascade" }),
 		file: text("file").notNull(), // storage key
 		filename: text("filename").notNull(),
 		// bigint — a build/installer can exceed int4 (2.1 GB).
@@ -266,18 +338,18 @@ export const assets = pgTable(
 		isPrimary: boolean("is_primary").default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_assets_content_item").on(table.contentItemId)],
+	(table) => [index("idx_assets_work").on(table.workId)],
 );
 
-/** Media processing for a content item (video HLS transcode, audio normalize) — runs once
- *  on upload to the library, then every post that references the item reuses the output. */
+/** Media processing for a Work (video HLS transcode, audio normalize) — runs once on
+ *  upload to the Catalog, before the Work is released or referenced anywhere. */
 export const transcodingJobs = pgTable(
 	"transcoding_jobs",
 	{
 		id: serial("id").primaryKey(),
-		contentItemId: integer("content_item_id")
+		workId: integer("work_id")
 			.notNull()
-			.references(() => contentItems.id, { onDelete: "cascade" }),
+			.references(() => works.id, { onDelete: "cascade" }),
 		mediaType: text("media_type").notNull(), // video | audio
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
 		progress: integer("progress").default(0),
@@ -289,9 +361,10 @@ export const transcodingJobs = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_transcoding_content_item").on(table.contentItemId)],
+	(table) => [index("idx_transcoding_work").on(table.workId)],
 );
 
+/** Images embedded directly in a post body (or a text Work's prose) by the rich-text editor. */
 export const inlineImages = pgTable("inline_images", {
 	id: serial("id").primaryKey(),
 	creatorId: integer("creator_id")
@@ -330,6 +403,7 @@ export const bookmarks = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "cascade" }),
 		sortOrder: integer("sort_order").notNull().default(0),
