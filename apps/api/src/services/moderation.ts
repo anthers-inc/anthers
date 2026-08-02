@@ -31,6 +31,7 @@ import {
 	posts,
 	ratings,
 	users,
+	works,
 } from "@anthers/db/schema";
 import {
 	MODERATION_NOTE_MAX,
@@ -50,7 +51,6 @@ const SUBJECTS = {
 export interface ModerationSubjectRow {
 	id: number;
 	userId: number;
-	postId: number;
 	moderationStatus: string;
 }
 
@@ -64,7 +64,6 @@ export async function findSubject(
 		.select({
 			id: table.id,
 			userId: table.userId,
-			postId: table.postId,
 			moderationStatus: table.moderationStatus,
 		})
 		.from(table)
@@ -238,7 +237,14 @@ export interface QueueItem {
 	moderationStatus: string;
 	createdAt: string;
 	author: { id: number; username: string } | null;
-	post: { slug: string; title: string } | null;
+	/**
+	 * Where the item lives, so an operator can go read it in context.
+	 *
+	 * `kind` exists because that is no longer always a post: comments hang off a Post or a
+	 * Work, and reviews only off a Work. Calling this `post` and quietly filling it with a
+	 * Work's slug would send the operator to a 404.
+	 */
+	context: { kind: "post" | "work"; slug: string; title: string } | null;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -316,17 +322,52 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	const commentIds = keys.filter((k) => k.subjectType === "comment").map((k) => k.subjectId);
 	const ratingIds = keys.filter((k) => k.subjectType === "rating").map((k) => k.subjectId);
 
+	type QueueContext = QueueItem["context"];
+
+	/**
+	 * Resolve `(kind, id)` pairs to the slug and title an operator can navigate to.
+	 *
+	 * Batched by kind rather than joined per row, because a comment's subject is
+	 * polymorphic — there is no single table to LEFT JOIN against, which is the price the
+	 * moderation tables already pay for their own polymorphism.
+	 */
+	async function loadContexts(
+		refs: { kind: "post" | "work"; id: number }[],
+	): Promise<Map<string, QueueContext>> {
+		const out = new Map<string, QueueContext>();
+		const postIds = [...new Set(refs.filter((r) => r.kind === "post").map((r) => r.id))];
+		const workIds = [...new Set(refs.filter((r) => r.kind === "work").map((r) => r.id))];
+		if (postIds.length > 0) {
+			const rows = await db
+				.select({ id: posts.id, slug: posts.slug, title: posts.title })
+				.from(posts)
+				.where(inArray(posts.id, postIds));
+			for (const r of rows) {
+				out.set(`post:${r.id}`, { kind: "post", slug: r.slug, title: r.title ?? "" });
+			}
+		}
+		if (workIds.length > 0) {
+			const rows = await db
+				.select({ id: works.id, slug: works.slug, title: works.title })
+				.from(works)
+				.where(inArray(works.id, workIds));
+			for (const r of rows) {
+				out.set(`work:${r.id}`, { kind: "work", slug: r.slug, title: r.title ?? "" });
+			}
+		}
+		return out;
+	}
+
 	function base(
 		subjectType: ModerationSubjectType,
 		r: {
 			id: number;
 			userId: number;
 			username: string | null;
-			postSlug: string | null;
-			postTitle: string | null;
 			moderationStatus: string;
 			createdAt: Date;
 		},
+		context: QueueContext,
 	): Omit<QueueItem, "excerpt" | "score"> {
 		return {
 			subjectType,
@@ -334,7 +375,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			moderationStatus: r.moderationStatus,
 			createdAt: r.createdAt.toISOString(),
 			author: r.username ? { id: r.userId, username: r.username } : null,
-			post: r.postSlug ? { slug: r.postSlug, title: r.postTitle ?? "" } : null,
+			context,
 			openReports: 0,
 			totalReports: 0,
 			reasons: [],
@@ -349,18 +390,24 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				id: comments.id,
 				userId: comments.userId,
 				username: users.username,
-				postSlug: posts.slug,
-				postTitle: posts.title,
+				subjectType: comments.subjectType,
+				subjectId: comments.subjectId,
 				moderationStatus: comments.moderationStatus,
 				createdAt: comments.createdAt,
 				body: comments.body,
 			})
 			.from(comments)
 			.leftJoin(users, eq(comments.userId, users.id))
-			.leftJoin(posts, eq(comments.postId, posts.id))
 			.where(inArray(comments.id, commentIds));
+		const contexts = await loadContexts(
+			rows.map((r) => ({ kind: r.subjectType === "work" ? "work" : "post", id: r.subjectId })),
+		);
 		for (const r of rows) {
-			items.set(key("comment", r.id), { ...base("comment", r), excerpt: r.body, score: null });
+			items.set(key("comment", r.id), {
+				...base("comment", r, contexts.get(`${r.subjectType}:${r.subjectId}`) ?? null),
+				excerpt: r.body,
+				score: null,
+			});
 		}
 	}
 
@@ -370,8 +417,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				id: ratings.id,
 				userId: ratings.userId,
 				username: users.username,
-				postSlug: posts.slug,
-				postTitle: posts.title,
+				workId: ratings.workId,
 				moderationStatus: ratings.moderationStatus,
 				createdAt: ratings.createdAt,
 				score: ratings.score,
@@ -379,11 +425,15 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			})
 			.from(ratings)
 			.leftJoin(users, eq(ratings.userId, users.id))
-			.leftJoin(posts, eq(ratings.postId, posts.id))
 			.where(inArray(ratings.id, ratingIds));
+		const contexts = await loadContexts(
+			rows
+				.filter((r) => r.workId != null)
+				.map((r) => ({ kind: "work" as const, id: r.workId as number })),
+		);
 		for (const r of rows) {
 			items.set(key("rating", r.id), {
-				...base("rating", r),
+				...base("rating", r, r.workId != null ? (contexts.get(`work:${r.workId}`) ?? null) : null),
 				// Score first so the operator sees the verdict, then the words that
 				// justify it — the words are the part there's actually a call to make on.
 				// `body` is empty on rows predating the write-time text requirement.

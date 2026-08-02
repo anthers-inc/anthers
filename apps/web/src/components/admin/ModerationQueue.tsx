@@ -36,7 +36,12 @@ interface QueueItem {
 	moderationStatus: string;
 	createdAt: string;
 	author: { id: number; username: string } | null;
-	post: { slug: string; title: string } | null;
+	/**
+	 * Where the item lives. `kind` matters: a comment can sit on a Post or a Work, and a
+	 * review only on a Work — linking every one of them to /posts/ would send the operator
+	 * to a 404 for half the queue.
+	 */
+	context: { kind: "post" | "work"; slug: string; title: string } | null;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -235,14 +240,14 @@ export default function ModerationQueue() {
 											</span>
 										</div>
 										<div className="mt-1 text-sm break-words">{item.excerpt}</div>
-										{item.post && (
+										{item.context && (
 											<a
-												href={`/posts/${item.post.slug}`}
+												href={`/${item.context.kind === "work" ? "works" : "posts"}/${item.context.slug}`}
 												target="_blank"
 												rel="noopener noreferrer"
 												className="link link-hover text-xs text-base-content/50"
 											>
-												on “{item.post.title}”
+												on “{item.context.title}”
 											</a>
 										)}
 									</td>

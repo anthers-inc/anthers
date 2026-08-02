@@ -109,8 +109,6 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts), // collections this post belongs to
 	workRefs: many(postWorkRefs),
-	comments: many(comments),
-	ratings: many(ratings),
 	attentionEvents: many(attentionEvents),
 	crossPublishResults: many(crossPublishResults),
 	jamEntries: many(jamEntries),
@@ -136,6 +134,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	postRefs: many(postWorkRefs), // where this Work has been posted
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
+	ratings: many(ratings),
 }));
 
 export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({
@@ -155,14 +154,15 @@ export const inlineImagesRelations = relations(inlineImages, ({ one }) => ({
 	creator: one(users, { fields: [inlineImages.creatorId], references: [users.id] }),
 }));
 
+// No `subject` relation on comments: the subject is polymorphic, so there is nothing for
+// the relational API to point at. Every read joins explicitly, as moderation's do.
 export const commentsRelations = relations(comments, ({ one }) => ({
 	user: one(users, { fields: [comments.userId], references: [users.id] }),
-	post: one(posts, { fields: [comments.postId], references: [posts.id] }),
 }));
 
 export const ratingsRelations = relations(ratings, ({ one }) => ({
 	user: one(users, { fields: [ratings.userId], references: [users.id] }),
-	post: one(posts, { fields: [ratings.postId], references: [posts.id] }),
+	work: one(works, { fields: [ratings.workId], references: [works.id] }),
 }));
 
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({

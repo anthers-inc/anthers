@@ -26,10 +26,12 @@ import { useCallback, useEffect, useState } from "react";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
+import CommentThread from "../components/post/CommentThread";
 import InlineUnlock from "../components/post/InlineUnlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
 import ProjectPricing from "../components/project/ProjectPricing";
+import ProjectRating from "../components/project/ProjectRating";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionClaim } from "../lib/attention";
@@ -301,6 +303,13 @@ export default function WorkPage() {
 					canAccess={canAccess}
 				/>
 			)}
+
+			{/* Reviews — a verdict on the work itself, which is the only thing a review
+			    was ever about. Gated behind access on the server: you can't review what you
+			    haven't been able to see. */}
+			<ProjectRating workId={work.id} />
+
+			<CommentThread subject={{ kind: "work", id: work.id }} canComment={canAccess} />
 
 			{/* Where this Work has been announced — the other half of an inert reference. */}
 			{work.postedIn && work.postedIn.length > 0 && (

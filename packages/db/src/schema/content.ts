@@ -374,6 +374,20 @@ export const inlineImages = pgTable("inline_images", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Comments, polymorphic over what they're attached to.
+ *
+ * A comment hangs off a **Post** (discussion of an announcement) or a **Work** (discussion
+ * of the thing itself). Those are genuinely different conversations, and a Work needs its
+ * own because it can be released, consumed and paid for with no post in sight — under the
+ * old model a Work had nowhere for anyone to say anything.
+ *
+ * The `(subject_type, subject_id)` shape is copied from `moderation_reports` /
+ * `moderation_actions`, deliberately: a third commentable kind should be a new *value*,
+ * not a new column plus a branch in every query. The cost is the same one moderation
+ * pays — no foreign key on the subject, so nothing cascades, and the read sites have to
+ * resolve the subject themselves.
+ */
 export const comments = pgTable(
 	"comments",
 	{
@@ -381,9 +395,8 @@ export const comments = pgTable(
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		postId: integer("post_id")
-			.notNull()
-			.references(() => posts.id, { onDelete: "cascade" }),
+		subjectType: text("subject_type").notNull().default("post"), // post | work
+		subjectId: integer("subject_id").notNull(),
 		body: text("body").notNull(),
 		// Removal is a STATE, never a DELETE — see packages/db/src/schema/moderation.ts.
 		// The row, its author and its text all survive being hidden; the who/why/when
@@ -392,7 +405,13 @@ export const comments = pgTable(
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_comments_post_visible").on(table.postId, table.moderationStatus)],
+	(table) => [
+		index("idx_comments_subject_visible").on(
+			table.subjectType,
+			table.subjectId,
+			table.moderationStatus,
+		),
+	],
 );
 
 export const bookmarks = pgTable(
@@ -412,6 +431,20 @@ export const bookmarks = pgTable(
 	(table) => [index("idx_bookmarks_user").on(table.userId, table.sortOrder)],
 );
 
+/**
+ * Reviews — a reader's verdict on a **Work**, and deliberately not on a Post.
+ *
+ * Unlike comments this is NOT polymorphic, because reviewing an announcement is a category
+ * error: 63.01 defines a review as "a reader's verdict on a work", and 40.06 makes reviews
+ * floor-level moderation precisely because "a creator moderating reviews of their own work
+ * is the conflict reviews exist to avoid". Both sentences are about works. Giving reviews a
+ * subject type would invite a shape the model has no meaning for.
+ *
+ * `workId` is nullable only to carry migration `0012`'s orphans: reviews that were left on
+ * body-only posts, which had no Work to move to. Nothing reads them and no new write can
+ * produce one — they are kept rather than deleted because destroying a user's words to fit
+ * a schema change is the thing this codebase refuses to do elsewhere.
+ */
 export const ratings = pgTable(
 	"ratings",
 	{
@@ -419,9 +452,7 @@ export const ratings = pgTable(
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		postId: integer("post_id")
-			.notNull()
-			.references(() => posts.id, { onDelete: "cascade" }),
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		score: integer("score").notNull(), // 1-5, validated at application layer
 		// A score cannot be left without words — the API requires `body` on write.
 		// It is nullable here only because rows predating that rule exist and must
@@ -439,7 +470,9 @@ export const ratings = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		uniqueIndex("uq_ratings_user_post").on(table.userId, table.postId),
-		index("idx_ratings_post_visible").on(table.postId, table.moderationStatus),
+		// One review per person per Work. NULL workIds are the migration orphans above;
+		// Postgres treats NULLs as distinct, so they don't collide with each other.
+		uniqueIndex("uq_ratings_user_work").on(table.userId, table.workId),
+		index("idx_ratings_work_visible").on(table.workId, table.moderationStatus),
 	],
 );

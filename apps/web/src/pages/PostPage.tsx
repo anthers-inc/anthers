@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
-import ProjectRating from "../components/project/ProjectRating";
+import CommentThread from "../components/post/CommentThread";
 import ReportDialog from "../components/ui/ReportDialog";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { studioEditPostUrl } from "../lib/studio";
@@ -336,11 +336,6 @@ export default function PostPage() {
 						</div>
 					</section>
 				)}
-
-				{/* Reviews */}
-				<div className="mb-8 mt-8">
-					<ProjectRating slug={post.slug} />
-				</div>
 			</article>
 
 			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
@@ -401,89 +396,7 @@ export default function PostPage() {
 				</div>
 			)}
 
-			{/* Comments */}
-			<div className="border-t border-base-300 pt-6">
-				<h2 className="text-xl font-bold mb-4">Comments ({comments.length})</h2>
-
-				{isAuthenticated && (
-					<form onSubmit={handleComment} className="mb-6">
-						<textarea
-							className="textarea textarea-bordered w-full"
-							placeholder="Write a comment..."
-							rows={3}
-							value={commentBody}
-							onChange={(e) => setCommentBody(e.target.value)}
-						/>
-						<button
-							type="submit"
-							className="btn btn-primary btn-sm mt-2"
-							disabled={submitting || !commentBody.trim()}
-						>
-							{submitting ? (
-								<span className="loading loading-spinner loading-sm" />
-							) : (
-								"Post comment"
-							)}
-						</button>
-					</form>
-				)}
-
-				{comments.length === 0 ? (
-					<p className="text-base-content/50 text-sm">
-						No comments yet. {isAuthenticated ? "Be the first!" : "Log in to comment."}
-					</p>
-				) : (
-					<div className="flex flex-col gap-4">
-						{comments.map((comment) => (
-							<div key={comment.id} className="flex gap-3">
-								{comment.avatar ? (
-									<img
-										src={comment.avatar}
-										alt={comment.username}
-										className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-									/>
-								) : (
-									<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-										{comment.username.charAt(0).toUpperCase()}
-									</div>
-								)}
-								<div className="flex-1">
-									<div className="flex items-center gap-2 text-sm">
-										<span className="font-medium">{comment.username}</span>
-										<span className="text-base-content/40 text-xs">
-											{new Date(comment.createdAt).toLocaleDateString()}
-										</span>
-										{/* Reporting needs a session — there's nobody to hold accountable
-										    for an anonymous report, and the one-per-person rule that keeps
-										    the queue honest needs a person to count. */}
-										{isAuthenticated && (
-											<button
-												type="button"
-												className="ml-auto text-base-content/30 hover:text-base-content/70"
-												onClick={() => setReportingComment(comment.id)}
-												title="Report this comment"
-												aria-label={`Report ${comment.username}'s comment`}
-											>
-												<FlagIcon className="w-3.5 h-3.5" />
-											</button>
-										)}
-									</div>
-									<p className="text-sm mt-1">{comment.body}</p>
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-			</div>
-
-			{reportingComment !== null && (
-				<ReportDialog
-					subjectType="comment"
-					subjectId={reportingComment}
-					label="this comment"
-					onClose={() => setReportingComment(null)}
-				/>
-			)}
+			<CommentThread subject={{ kind: "post", slug: post.slug }} />
 		</div>
 	);
 }

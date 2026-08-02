@@ -375,9 +375,17 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 
 	if (postIds.length > 0) {
 		// Clear the viewer's own comments so the comment rung starts empty each run.
+		// Comments are polymorphic now, so the subject type has to be named — without it
+		// this would also match a Work whose id happened to collide with a post's.
 		await db
 			.delete(comments)
-			.where(and(eq(comments.userId, viewerId), inArray(comments.postId, postIds)));
+			.where(
+				and(
+					eq(comments.userId, viewerId),
+					eq(comments.subjectType, "post"),
+					inArray(comments.subjectId, postIds),
+				),
+			);
 	}
 }
 

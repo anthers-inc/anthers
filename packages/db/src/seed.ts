@@ -1018,22 +1018,27 @@ async function seed() {
 		"Solid. A couple of moments didn't land for me, but the whole holds together well.",
 	];
 
-	for (const { postId, creatorUsername } of createdPosts) {
-		// Each creator's posts get reviewed by the other seed users.
-		const reviewers = allUserIds.filter((id) => id !== createdUserIds[creatorUsername]);
+	// Reviews attach to WORKS — a review is a verdict on a work, not on an announcement.
+	for (const [title, workId] of Object.entries(workIdByTitle)) {
+		const creatorUsername = Object.entries(PROJECTS_BY_CREATOR).find(([, list]) =>
+			list.some((w) => w.title === title),
+		)?.[0];
+		const reviewers = allUserIds.filter(
+			(id) => !creatorUsername || id !== createdUserIds[creatorUsername],
+		);
 
 		for (const [i, reviewerId] of reviewers.entries()) {
 			const score = randomInt(3, 5); // seed data skews positive
 			try {
 				await db.insert(ratings).values({
 					userId: reviewerId,
-					postId,
+					workId,
 					score,
-					body: reviewBodies[(postId + i) % reviewBodies.length],
+					body: reviewBodies[(workId + i) % reviewBodies.length],
 					createdAt: daysAgo(randomInt(1, 90)),
 				});
 			} catch {
-				// Unique constraint (user_id, post_id) — already reviewed
+				// Unique constraint (user_id, work_id) — already reviewed
 			}
 		}
 	}
@@ -1050,7 +1055,8 @@ async function seed() {
 			try {
 				await db.insert(comments).values({
 					userId: commenters[i],
-					postId,
+					subjectType: "post",
+					subjectId: postId,
 					body: pick(COMMENT_BODIES),
 					createdAt: daysAgo(randomInt(1, 60)),
 				});

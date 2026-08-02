@@ -39,7 +39,12 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
-import { COMMENT_MAX, REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
+import {
+	COMMENT_MAX,
+	type CommentSubjectType,
+	REVIEW_MAX,
+	REVIEW_MIN,
+} from "@anthers/shared/content";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, avg, count, desc, eq, inArray, like, ne, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -79,6 +84,26 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
  */
 const visibleComment = eq(comments.moderationStatus, "visible");
 const visibleRating = eq(ratings.moderationStatus, "visible");
+
+/**
+ * A subject's visible comments, newest first.
+ *
+ * One function for both subject types — the Post thread and the Work thread differ only in
+ * which `(subject_type, subject_id)` pair is asked about, so they cannot drift apart in how
+ * they filter. That matters here more than most places: `visibleComment` is the whole of
+ * moderation at read time, and a second copy of this query is a second place to forget it.
+ */
+async function listComments(subjectType: CommentSubjectType, subjectId: number) {
+	const rows = await db
+		.select({ comment: comments, username: users.username, avatar: users.avatar })
+		.from(comments)
+		.innerJoin(users, eq(comments.userId, users.id))
+		.where(
+			and(eq(comments.subjectType, subjectType), eq(comments.subjectId, subjectId), visibleComment),
+		)
+		.orderBy(desc(comments.createdAt));
+	return rows.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar }));
+}
 
 async function getOptionalUserId(c: any): Promise<number | null> {
 	const token = getCookie(c, "session");
@@ -1265,10 +1290,8 @@ const contentRoutes = new Hono()
 			.limit(1);
 		const creatorHasStripe = !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled;
 
-		const [agg] = await db
-			.select({ average: avg(ratings.score), count: count(ratings.id) })
-			.from(ratings)
-			.where(and(eq(ratings.postId, post.id), visibleRating));
+		// No review aggregate here: a review is a verdict on a WORK, and a post is an
+		// announcement. The Works this post links carry their own.
 
 		// Fire-and-forget view count.
 		db.update(posts)
@@ -1297,8 +1320,6 @@ const contentRoutes = new Hono()
 			post: {
 				...post,
 				creator: { ...creator, hasStripe: creatorHasStripe },
-				ratingAverage: agg.average ? Number(agg.average) : null,
-				ratingCount: Number(agg.count),
 				linkedWorks,
 				edits,
 			},
@@ -1407,25 +1428,30 @@ const contentRoutes = new Hono()
 		// schema so an older client's `?purgeMedia=1` is a no-op rather than a 400.
 		void purgeMedia;
 
+		// Comments are polymorphic, so there is no FK to cascade them — the price the
+		// moderation tables already pay for the same shape. Removing them explicitly is
+		// what keeps a deleted post from leaving a thread nothing can reach and nothing
+		// will ever clean up. (Their moderation reports survive on purpose: a report is a
+		// record, and `subjectStillExists` filters them out of the queue and the counts.)
+		await db
+			.delete(comments)
+			.where(and(eq(comments.subjectType, "post"), eq(comments.subjectId, existing.id)));
+
 		await db.delete(posts).where(eq(posts.id, existing.id));
 		return c.body(null, 204);
 	})
 
-	// ── Post Comments ──────────────────────────────────────────────────────────
+	// ── Comments (polymorphic: a Post or a Work) ───────────────────────────────
+	//
+	// Both surfaces are the same three queries over `(subject_type, subject_id)`, so they
+	// share them. A Work needed its own thread because it can be released, consumed and
+	// paid for with no post in sight — under the old model there was nowhere to say
+	// anything about it.
+
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
-
-		const result = await db
-			.select({ comment: comments, username: users.username, avatar: users.avatar })
-			.from(comments)
-			.innerJoin(users, eq(comments.userId, users.id))
-			.where(and(eq(comments.postId, post.id), visibleComment))
-			.orderBy(desc(comments.createdAt));
-
-		return c.json({
-			comments: result.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar })),
-		});
+		return c.json({ comments: await listComments("post", post.id) });
 	})
 
 	.post(
@@ -1440,25 +1466,56 @@ const contentRoutes = new Hono()
 			const { body } = c.req.valid("json");
 			const [comment] = await db
 				.insert(comments)
-				.values({ userId: user.id, postId: post.id, body })
+				.values({ userId: user.id, subjectType: "post", subjectId: post.id, body })
 				.returning();
 
 			return c.json({ comment: { ...comment, username: user.username } }, 201);
 		},
 	)
 
-	// ── Post Reviews ───────────────────────────────────────────────────────────
-	// A review is a score plus written text — a score can't be left on its own.
-	// The route path stays `/ratings` (and the table stays `ratings`): "review" is
-	// a copy rule, not a schema rule, exactly like the Seed vocabulary changes.
-	.get("/posts/:slug/ratings", async (c) => {
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	.get("/works/:id/comments", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		return c.json({ comments: await listComments("work", work.id) });
+	})
+
+	.post("/works/:id/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		// Discussion follows access. Commenting on a Work you cannot open would be talking
+		// about something you have not seen, and it would leak the existence of a thread
+		// to people the gate is keeping out.
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const { body } = c.req.valid("json");
+		const [comment] = await db
+			.insert(comments)
+			.values({ userId: user.id, subjectType: "work", subjectId: work.id, body })
+			.returning();
+
+		return c.json({ comment: { ...comment, username: user.username } }, 201);
+	})
+
+	// ── Reviews (Works only) ───────────────────────────────────────────────────
+	//
+	// A review is "a reader's verdict on a work" (63.01), and reviews are floor-level
+	// moderation because "a creator moderating reviews of their own work is the conflict
+	// reviews exist to avoid" (40.06). Both are about works, so unlike comments this is
+	// NOT polymorphic — reviewing an announcement is a category error.
+	//
+	// The route path stays `/ratings` (and the table stays `ratings`): "review" is a copy
+	// rule, not a schema rule, exactly like the Seed vocabulary changes.
+	.get("/works/:id/ratings", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
-			.where(and(eq(ratings.postId, post.id), visibleRating));
+			.where(and(eq(ratings.workId, work.id), visibleRating));
 
 		// The written reviews themselves. Hidden ones are withheld here for the same
 		// reason they're excluded from the aggregate — this is a public read.
@@ -1474,7 +1531,7 @@ const contentRoutes = new Hono()
 			})
 			.from(ratings)
 			.innerJoin(users, eq(ratings.userId, users.id))
-			.where(and(eq(ratings.postId, post.id), visibleRating))
+			.where(and(eq(ratings.workId, work.id), visibleRating))
 			.orderBy(desc(ratings.createdAt));
 
 		let userRating: number | null = null;
@@ -1487,7 +1544,7 @@ const contentRoutes = new Hono()
 			const [row] = await db
 				.select({ score: ratings.score, body: ratings.body })
 				.from(ratings)
-				.where(and(eq(ratings.postId, post.id), eq(ratings.userId, currentUserId)))
+				.where(and(eq(ratings.workId, work.id), eq(ratings.userId, currentUserId)))
 				.limit(1);
 			userRating = row?.score ?? null;
 			userReview = row?.body ?? null;
@@ -1504,10 +1561,16 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post("/posts/:slug/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
+	.post("/works/:id/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
 		const user = c.get("user");
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		// You may only review what you can actually consume. This is stricter than the old
+		// post route, which let anyone who could reach the page leave a verdict on content
+		// they had never seen.
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
 		const { score, body } = c.req.valid("json");
 		// The conflict branch sets `score` and `body` and nothing else — notably not
@@ -1517,9 +1580,9 @@ const contentRoutes = new Hono()
 		// and this set clause; forgetting the set clause silently makes edits no-ops.
 		const [rating] = await db
 			.insert(ratings)
-			.values({ userId: user.id, postId: post.id, score, body: body.trim() })
+			.values({ userId: user.id, workId: work.id, score, body: body.trim() })
 			.onConflictDoUpdate({
-				target: [ratings.userId, ratings.postId],
+				target: [ratings.userId, ratings.workId],
 				set: { score, body: body.trim() },
 			})
 			.returning();
