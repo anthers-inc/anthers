@@ -13,16 +13,16 @@ import { postContents, posts, transcodingJobs } from "@anthers/db/schema";
 import { and, desc, eq, inArray, isNotNull, lte } from "drizzle-orm";
 
 /** Content-item IDs whose latest transcoding job hasn't reached "completed". */
-async function unreadyItemSet(itemIds: number[]): Promise<Set<number>> {
+async function unreadyWorkSet(itemIds: number[]): Promise<Set<number>> {
 	if (itemIds.length === 0) return new Set();
 	const jobs = await db
 		.select({
-			itemId: transcodingJobs.contentItemId,
+			itemId: transcodingJobs.workId,
 			status: transcodingJobs.status,
 			createdAt: transcodingJobs.createdAt,
 		})
 		.from(transcodingJobs)
-		.where(inArray(transcodingJobs.contentItemId, itemIds))
+		.where(inArray(transcodingJobs.workId, itemIds))
 		.orderBy(desc(transcodingJobs.createdAt));
 	const latest = new Map<number, string>();
 	for (const j of jobs) if (!latest.has(j.itemId)) latest.set(j.itemId, j.status);
@@ -48,11 +48,11 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 	let published = 0;
 	for (const post of due) {
 		const refs = await db
-			.select({ itemId: postContents.contentItemId })
+			.select({ itemId: postContents.workId })
 			.from(postContents)
 			.where(and(eq(postContents.postId, post.id), eq(postContents.kind, "content")));
 		const itemIds = [...new Set(refs.map((r) => r.itemId).filter((x): x is number => x != null))];
-		const unready = await unreadyItemSet(itemIds);
+		const unready = await unreadyWorkSet(itemIds);
 		if (unready.size > 0) {
 			console.log(
 				`[publish-scheduled] Deferring post ${post.id} — ${unready.size} referenced item(s) still processing`,

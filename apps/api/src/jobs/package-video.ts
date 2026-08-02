@@ -16,7 +16,7 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { contentItems, transcodingJobs } from "@anthers/db/schema";
+import { works, transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 
@@ -138,17 +138,17 @@ export async function packageVideo(data: PackageVideoData) {
 
 	const [item] = await db
 		.select()
-		.from(contentItems)
-		.where(eq(contentItems.id, job.contentItemId))
+		.from(works)
+		.where(eq(works.id, job.workId))
 		.limit(1);
-	if (!item) throw new Error(`Content item ${job.contentItemId} not found`);
+	if (!item) throw new Error(`Content item ${job.workId} not found`);
 
 	// Persist the client-probed duration on the item (thumbnail position + UI).
 	if (duration && duration > 0 && !item.durationSeconds) {
 		await db
-			.update(contentItems)
+			.update(works)
 			.set({ durationSeconds: Math.round(duration) })
-			.where(eq(contentItems.id, item.id));
+			.where(eq(works.id, item.id));
 	}
 
 	const localPaths: string[] = [];
@@ -201,9 +201,9 @@ export async function packageVideo(data: PackageVideoData) {
 				await storage.upload(thumbnailKey, thumbBuffer, "image/jpeg", "public");
 				const thumbnailUrl = await storage.getUrl(thumbnailKey);
 				await db
-					.update(contentItems)
+					.update(works)
 					.set({ thumbnail: thumbnailUrl })
-					.where(eq(contentItems.id, item.id));
+					.where(eq(works.id, item.id));
 			}
 		}
 

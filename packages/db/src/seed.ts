@@ -27,7 +27,7 @@ import {
 	attentionEvents,
 	bookmarks,
 	comments,
-	contentItems,
+	works,
 	creatorGates,
 	db,
 	follows,
@@ -855,20 +855,20 @@ async function seed() {
 				});
 			} else {
 				const [item] = await db
-					.insert(contentItems)
+					.insert(works)
 					.values({
 						creatorId,
 						type: work.mediaType,
 						title: work.title,
 						description: work.shortDescription,
 					})
-					.returning({ id: contentItems.id });
+					.returning({ id: works.id });
 				await db
 					.insert(postContents)
-					.values({ postId: inserted.id, position: 0, kind: "content", contentItemId: item.id });
+					.values({ postId: inserted.id, position: 0, kind: "content", workId: item.id });
 				if (delivery.downloadEnabled) {
 					await db.insert(assets).values({
-						contentItemId: item.id,
+						workId: item.id,
 						file: `creators/${creatorId}/assets/seed-${slug}.zip`,
 						filename: `${slug}.zip`,
 						fileSize: randomInt(50, 800) * 1024 * 1024,
@@ -1269,7 +1269,7 @@ async function seed() {
 			const [sz] = await db
 				.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
 				.from(assets)
-				.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
+				.innerJoin(postContents, eq(postContents.workId, assets.workId))
 				.where(eq(postContents.postId, p.id));
 			const deliveryGiB = Number(sz?.bytes ?? 0) / 1073741824;
 

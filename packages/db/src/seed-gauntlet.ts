@@ -51,7 +51,7 @@ import {
 	assets,
 	attentionEvents,
 	comments,
-	contentItems,
+	works,
 	creatorGates,
 	db,
 	follows,
@@ -209,13 +209,13 @@ async function deleteGauntletPosts(creatorId: number): Promise<void> {
 	// content_items don't cascade from the post (they're the creator's library, referenced
 	// by post_contents), so collect and remove this fixture's own items explicitly.
 	const items = await db
-		.select({ contentItemId: postContents.contentItemId })
+		.select({ workId: postContents.workId })
 		.from(postContents)
 		.where(inArray(postContents.postId, postIds));
-	const itemIds = items.map((i) => i.contentItemId).filter((id): id is number => id != null);
+	const itemIds = items.map((i) => i.workId).filter((id): id is number => id != null);
 
 	await db.delete(posts).where(inArray(posts.id, postIds));
-	if (itemIds.length > 0) await db.delete(contentItems).where(inArray(contentItems.id, itemIds));
+	if (itemIds.length > 0) await db.delete(works).where(inArray(works.id, itemIds));
 	console.log(`${TAG} removed ${postIds.length} existing fixture posts`);
 }
 
@@ -243,20 +243,20 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 		// The checkout sums the post's asset bytes for the delivery fee, and the download
 		// route needs a real key to sign — so a downloadable post needs an item + asset.
 		const [item] = await db
-			.insert(contentItems)
+			.insert(works)
 			.values({
 				creatorId,
 				type: spec.contentType,
 				title: spec.title,
 				description: spec.body,
 			})
-			.returning({ id: contentItems.id });
+			.returning({ id: works.id });
 		await db
 			.insert(postContents)
-			.values({ postId: inserted.id, position: 0, kind: "content", contentItemId: item.id });
+			.values({ postId: inserted.id, position: 0, kind: "content", workId: item.id });
 		const fileKey = `creators/${creatorId}/assets/${spec.slug}.zip`;
 		await db.insert(assets).values({
-			contentItemId: item.id,
+			workId: item.id,
 			file: fileKey,
 			filename: `${spec.slug}.zip`,
 			// Fixed, not random: the delivery fee is derived from this, so a stable size

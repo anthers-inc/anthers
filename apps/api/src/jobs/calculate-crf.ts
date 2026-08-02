@@ -14,7 +14,7 @@ import { db } from "@anthers/db";
 import {
 	accounts,
 	assets,
-	contentItems,
+	works,
 	crfLedger,
 	crfSubsidies,
 	poolDistributions,
@@ -125,8 +125,8 @@ export async function calculateCrfSubsidies() {
 		const [storageResult] = await db
 			.select({ total: sum(assets.fileSize) })
 			.from(assets)
-			.innerJoin(contentItems, eq(assets.contentItemId, contentItems.id))
-			.where(eq(contentItems.creatorId, creator.id));
+			.innerJoin(works, eq(assets.workId, works.id))
+			.where(eq(works.creatorId, creator.id));
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 

@@ -51,7 +51,7 @@ import {
 	GAUNTLET_MEDIA_POSTS,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
-import { contentItems, postContents, posts, transcodingJobs, users } from "@anthers/db/schema";
+import { works, postContents, posts, transcodingJobs, users } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -155,11 +155,11 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 	}
 
 	const existing = await db
-		.select({ contentItemId: postContents.contentItemId })
+		.select({ workId: postContents.workId })
 		.from(postContents)
 		.where(eq(postContents.postId, row.id));
-	const staleIds = existing.map((e) => e.contentItemId).filter((id): id is number => id != null);
-	if (staleIds.length > 0) await db.delete(contentItems).where(inArray(contentItems.id, staleIds));
+	const staleIds = existing.map((e) => e.workId).filter((id): id is number => id != null);
+	if (staleIds.length > 0) await db.delete(works).where(inArray(works.id, staleIds));
 
 	const clipPath = await generateClip(post.media);
 	try {
@@ -174,7 +174,7 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 		);
 
 		const [item] = await db
-			.insert(contentItems)
+			.insert(works)
 			.values({
 				creatorId: creator,
 				type: post.media,
@@ -182,14 +182,14 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 				description: post.body,
 				sourceKey,
 			})
-			.returning({ id: contentItems.id });
+			.returning({ id: works.id });
 		await db
 			.insert(postContents)
-			.values({ postId: row.id, position: 0, kind: "content", contentItemId: item.id });
+			.values({ postId: row.id, position: 0, kind: "content", workId: item.id });
 
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: item.id, mediaType: post.media, status: "pending", progress: 0 })
+			.values({ workId: item.id, mediaType: post.media, status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
 
 		// The real job, in-process. pg-boss isn't running; this is the code it would run.
