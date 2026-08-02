@@ -12,7 +12,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { contentItems, transcodingJobs } from "@anthers/db/schema";
+import { works, transcodingJobs } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
@@ -67,7 +67,7 @@ describe("Publish-readiness gate", () => {
 		itemId = await makeItem(owner, "Gated build");
 		await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: itemId, mediaType: "video", status: "pending", progress: 0 });
+			.values({ workId: itemId, mediaType: "video", status: "pending", progress: 0 });
 
 		const res = await req("/api/content/posts", {
 			method: "POST",
@@ -77,7 +77,7 @@ describe("Publish-readiness gate", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: true,
 			}),
 		});
@@ -94,7 +94,7 @@ describe("Publish-readiness gate", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: false,
 			}),
 		});
@@ -106,7 +106,7 @@ describe("Publish-readiness gate", () => {
 		await db
 			.update(transcodingJobs)
 			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.contentItemId, itemId));
+			.where(eq(transcodingJobs.workId, itemId));
 
 		const res = await req("/api/content/posts", {
 			method: "POST",
@@ -116,7 +116,7 @@ describe("Publish-readiness gate", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: true,
 			}),
 		});
@@ -190,7 +190,7 @@ describe("Delete with orphaned-media purge", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: false,
 			}),
 		});
@@ -208,7 +208,7 @@ describe("Delete with orphaned-media purge", () => {
 		});
 		expect(del.status).toBe(204);
 
-		const [gone] = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		const [gone] = await db.select().from(works).where(eq(works.id, itemId));
 		expect(gone).toBeUndefined();
 	});
 
@@ -222,7 +222,7 @@ describe("Delete with orphaned-media purge", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: false,
 			}),
 		});
@@ -234,7 +234,7 @@ describe("Delete with orphaned-media purge", () => {
 		});
 		expect(del.status).toBe(204);
 
-		const [kept] = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		const [kept] = await db.select().from(works).where(eq(works.id, itemId));
 		expect(kept).toBeDefined();
 	});
 });
@@ -312,7 +312,7 @@ describe("Scheduled-publish sweep", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: false,
 				scheduledFor: past,
 			}),
@@ -320,7 +320,7 @@ describe("Scheduled-publish sweep", () => {
 		const slug = (await res.json()).post.slug;
 		await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: itemId, mediaType: "video", status: "processing", progress: 20 });
+			.values({ workId: itemId, mediaType: "video", status: "processing", progress: 20 });
 
 		await publishScheduled();
 
@@ -406,7 +406,7 @@ describe("Library delete refuses to silently strip posts", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: true,
 			}),
 		});
@@ -426,7 +426,7 @@ describe("Library delete refuses to silently strip posts", () => {
 	});
 
 	it("409s on an unflagged delete of an in-use item, and leaves it intact", async () => {
-		// `post_contents.contentItemId` cascades, so this used to 204 and quietly remove the
+		// `post_contents.workId` cascades, so this used to 204 and quietly remove the
 		// item from a PUBLISHED post. Failing closed is the point: the destructive reading of
 		// an ambiguous request is the one you can't undo.
 		const itemId = await makeItem(owner, `InUse ${id}`);
@@ -438,7 +438,7 @@ describe("Library delete refuses to silently strip posts", () => {
 		expect(res.status).toBe(409);
 		expect((await res.json()).code).toBe("item_in_use");
 
-		const still = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		const still = await db.select().from(works).where(eq(works.id, itemId));
 		expect(still.length).toBe(1);
 	});
 
@@ -451,7 +451,7 @@ describe("Library delete refuses to silently strip posts", () => {
 		});
 		expect(res.status).toBe(204);
 
-		const gone = await db.select().from(contentItems).where(eq(contentItems.id, itemId));
+		const gone = await db.select().from(works).where(eq(works.id, itemId));
 		expect(gone.length).toBe(0);
 	});
 
@@ -521,7 +521,7 @@ describe("Gaps the suite looked like it covered", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: true,
 			}),
 		});
@@ -530,7 +530,7 @@ describe("Gaps the suite looked like it covered", () => {
 
 		// The media regresses to processing after the post went live.
 		await db.insert(transcodingJobs).values({
-			contentItemId: itemId,
+			workId: itemId,
 			mediaType: "video",
 			status: "processing",
 			progress: 10,

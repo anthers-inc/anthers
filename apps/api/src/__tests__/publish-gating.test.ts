@@ -100,7 +100,7 @@ describe("Content-library references", () => {
 				seedAccess: FREE,
 				contents: [
 					{ kind: "text", bodyHtml: "<p>Read me first.</p>" },
-					{ kind: "content", contentItemId: itemId },
+					{ kind: "content", workId: itemId },
 				],
 				isPublished: true,
 			}),
@@ -127,7 +127,7 @@ describe("Content-library references", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
+				contents: [{ kind: "content", workId: itemId }],
 				isPublished: false,
 			}),
 		});
@@ -139,7 +139,7 @@ describe("Content-library references", () => {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({
-				contents: [{ kind: "content", id: contentEntryId, contentItemId: itemId }],
+				contents: [{ kind: "content", id: contentEntryId, workId: itemId }],
 			}),
 		});
 		expect(res.status).toBe(200);

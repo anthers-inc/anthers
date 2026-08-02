@@ -26,7 +26,7 @@ import {
 import { ANTHERS_BADGES, SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
-	type AccessiblePost,
+	type AccessibleWork,
 	type AccessReason,
 	resolveAccessSync,
 } from "../services/access";
@@ -45,7 +45,7 @@ const TOP = ANTHERS_LEVELS[ANTHERS_LEVELS.length - 1];
  * `make gauntlet-reset` seeded something else — the test would be proving a fiction. Here,
  * every assertion below is about the exact rows the fixture writes.
  */
-function accessible(key: string): AccessiblePost {
+function accessible(key: string): AccessibleWork {
 	const spec = gauntletPost(key);
 	return {
 		id: spec.publicId,
@@ -59,7 +59,7 @@ function accessible(key: string): AccessiblePost {
 
 const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.key)])) as Record<
 	string,
-	AccessiblePost
+	AccessibleWork
 >;
 
 type PostKey = string;
@@ -73,7 +73,7 @@ function ctx(anthersSeeds: number, seedsGiven: number, purchased: number[] = [])
 		userId: VIEWER_ID,
 		anthersSeeds,
 		seedByCreator: new Map(seedsGiven > 0 ? [[CREATOR_ID, seedsGiven]] : []),
-		purchasedPostIds: new Set(purchased),
+		purchasedWorkIds: new Set(purchased),
 	};
 }
 
@@ -180,7 +180,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: null,
 			anthersSeeds: 0,
 			seedByCreator: new Map(),
-			purchasedPostIds: new Set(),
+			purchasedWorkIds: new Set(),
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
 		expect(resolveAccessSync(POSTS.G2, ctx(0, 0)).reason).toBe("gated");
@@ -212,7 +212,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: CREATOR_ID,
 			anthersSeeds: 0,
 			seedByCreator: new Map(),
-			purchasedPostIds: new Set(),
+			purchasedWorkIds: new Set(),
 		});
 		expect(owner.canAccess).toBe(true);
 		expect(owner.reason).toBe("owner");
@@ -223,7 +223,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: VIEWER_ID,
 			anthersSeeds: 0,
 			seedByCreator: new Map([[CREATOR_ID + 1, 99]]),
-			purchasedPostIds: new Set(),
+			purchasedWorkIds: new Set(),
 		};
 		expect(resolveAccessSync(POSTS.G6, elsewhere).reason).toBe("gated");
 	});

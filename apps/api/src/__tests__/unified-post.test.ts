@@ -129,7 +129,7 @@ describe("Unified Post vertical slice", () => {
 				downloadEnabled: true,
 				// Purchasable by anyone at $5 (the $0 Seed baseline, priced).
 				seedAccess: [{ threshold: 0, allow: true, price: "5.00" }],
-				contents: [{ kind: "content", contentItemId: gameItemId }],
+				contents: [{ kind: "content", workId: gameItemId }],
 				isPublished: true,
 			}),
 		});
@@ -152,7 +152,7 @@ describe("Unified Post vertical slice", () => {
 				streamEnabled: false,
 				downloadEnabled: true,
 				seedAccess: [{ threshold: 0, allow: true, price: "0" }],
-				contents: [{ kind: "content", contentItemId: gameItemId }],
+				contents: [{ kind: "content", workId: gameItemId }],
 				isPublished: false,
 			}),
 		});

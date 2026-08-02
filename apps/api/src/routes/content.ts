@@ -1781,26 +1781,128 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	/** One Work from the caller's own Catalog, with its assets + latest transcode. */
-	.get("/works/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const id = Number(c.req.param("id"));
-		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) {
+	/**
+	 * One Work — the Catalog's public detail endpoint, and the owner's editor payload.
+	 *
+	 * Deliberately one route serving both. The owner gets the full row (including the
+	 * access tables they edit); everyone else gets the viewer serialization, which withholds
+	 * the deliverable unless their access resolves. Two routes would mean two places for
+	 * "what may this viewer see?" to drift apart, and the whole point of this layer is that
+	 * the question has one answer.
+	 *
+	 * A `private` Work 404s for everyone but its creator — not 403, because the existence
+	 * of unreleased work is itself not public information.
+	 */
+	.get("/works/:id", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const viewerId = await getOptionalUserId(c);
+		const isOwner = viewerId != null && viewerId === work.creatorId;
+		if (work.visibility !== "released" && !isOwner) {
 			return c.json({ error: "Work not found" }, 404);
 		}
 
 		const [workAssets, jobRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, id)),
+			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
 				.select()
 				.from(transcodingJobs)
-				.where(eq(transcodingJobs.workId, id))
+				.where(eq(transcodingJobs.workId, work.id))
 				.orderBy(desc(transcodingJobs.createdAt)),
 		]);
 
-		await resolveWorkThumbnail(item);
-		return c.json({ work: serializeWork(item, workAssets, jobRows[0] ?? null) });
+		await resolveWorkThumbnail(work);
+
+		if (isOwner) {
+			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null) });
+		}
+
+		// Fire-and-forget view count, owners excluded.
+		db.update(works)
+			.set({ viewCount: sql`${works.viewCount} + 1` })
+			.where(eq(works.id, work.id))
+			.execute();
+
+		const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+		const [creator] = await db
+			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
+			.from(users)
+			.where(eq(users.id, work.creatorId))
+			.limit(1);
+
+		return c.json({
+			work: {
+				...serializeWorkForViewer(
+					work,
+					workAssets,
+					jobRows[0] ?? null,
+					resolveAccessSync(work as AccessibleWork, ctx),
+					deliveryCtx(),
+				),
+				creator,
+				// Where this Work has been announced — the other half of the reference.
+				postedIn: await postsUsingWork(work.id),
+			},
+		});
+	})
+
+	/**
+	 * A creator's public Catalog — their released Works, newest-made first.
+	 *
+	 * Sorted by the creator-asserted **Created** date by default, so it reads as a body of
+	 * work in the order it was made rather than the order it happened to be uploaded.
+	 * `sort=released` gives "what's new here" instead. Works with no Created date fall back
+	 * to their release date so they can't vanish to the bottom.
+	 */
+	.get("/catalog/:username", async (c) => {
+		const username = c.req.param("username");
+		const sort = c.req.query("sort") ?? "authored";
+		const type = c.req.query("type");
+
+		const [creator] = await db
+			.select({ id: users.id, username: users.username, displayName: users.displayName })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+		if (!creator) return c.json({ error: "Creator not found" }, 404);
+
+		const viewerId = await getOptionalUserId(c);
+		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
+		// A creator browsing their own Catalog sees drafts too; nobody else does.
+		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
+		if (type) conditions.push(eq(works.type, type));
+
+		const order =
+			sort === "released"
+				? sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`
+				: sql`COALESCE(${works.authoredAt}, ${works.releasedAt}, ${works.createdAt}) DESC`;
+
+		const rows = await db
+			.select()
+			.from(works)
+			.where(and(...conditions))
+			.orderBy(desc(works.isPinned), order)
+			.limit(200);
+		if (rows.length === 0) return c.json({ creator, works: [] });
+
+		const ids = rows.map((r) => r.id);
+		const { assetsByWork, jobByWork } = await loadWorkBundles(ids);
+		const ctx = await buildAccessContext(viewerId, { workIds: ids });
+		await Promise.all(rows.map(resolveWorkThumbnail));
+
+		return c.json({
+			creator,
+			works: rows.map((w) =>
+				serializeWorkForViewer(
+					w,
+					assetsByWork.get(w.id) ?? [],
+					jobByWork.get(w.id) ?? null,
+					resolveAccessSync(w as AccessibleWork, ctx),
+					deliveryCtx(),
+				),
+			),
+		});
 	})
 
 	/**

@@ -110,7 +110,7 @@ beforeAll(async () => {
 		streamEnabled: false,
 		downloadEnabled: true,
 		seedAccess: FREE,
-		contents: [{ kind: "content", contentItemId: itemId }],
+		contents: [{ kind: "content", workId: itemId }],
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);
