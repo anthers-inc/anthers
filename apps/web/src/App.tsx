@@ -34,7 +34,6 @@ import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
 import LibraryPage from "./pages/LibraryPage";
 import PostPage from "./pages/PostPage";
-import WorkPage from "./pages/WorkPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ResourcesPage from "./pages/ResourcesPage";
@@ -47,6 +46,7 @@ import VerifyEmailPage from "./pages/VerifyEmailPage";
 import VideoBandwidthCalculatorPage from "./pages/VideoBandwidthCalculatorPage";
 import VideoStorageCalculatorPage from "./pages/VideoStorageCalculatorPage";
 import WikiPage from "./pages/WikiPage";
+import WorkPage from "./pages/WorkPage";
 
 export default function App() {
 	return (

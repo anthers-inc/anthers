@@ -138,28 +138,28 @@ async function creatorId(): Promise<number | null> {
 }
 
 /**
- * Attach real media to one post. Idempotent by deletion: any content item already hanging
- * off this post is removed first, so re-running never accumulates duplicates (and a stale
- * item from a previous shape can't linger and be served).
+ * Give one fixture **Work** real media. `db:gauntlet` already created the Work (and an
+ * announcement post pointing at it); this replaces its source with an actual encoded clip
+ * and runs the real job in-process.
+ *
+ * It updates the existing Work rather than inserting a new one, because the gauntlet walks
+ * access against a Work whose gates `db:gauntlet` set — creating a second Work here would
+ * strand those gates on a row nothing links.
  */
 async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, creator: number) {
-	const [row] = await db
-		.select({ id: posts.id })
-		.from(posts)
-		.where(and(eq(posts.creatorId, creator), eq(posts.slug, post.slug)))
+	const [work] = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(and(eq(works.creatorId, creator), eq(works.slug, post.slug)))
 		.limit(1);
-	if (!row) {
+	if (!work) {
 		throw new Error(
-			`${TAG} fixture post ${post.slug} not found — run \`bun run db:gauntlet\` first`,
+			`${TAG} fixture Work ${post.slug} not found — run \`bun run db:gauntlet\` first`,
 		);
 	}
 
-	const existing = await db
-		.select({ workId: postWorkRefs.workId })
-		.from(postWorkRefs)
-		.where(eq(postWorkRefs.postId, row.id));
-	const staleIds = existing.map((e) => e.workId);
-	if (staleIds.length > 0) await db.delete(works).where(inArray(works.id, staleIds));
+	// Drop any transcode from a previous run so re-running never serves stale output.
+	await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
 
 	const clipPath = await generateClip(post.media);
 	try {
@@ -174,22 +174,10 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 		);
 
 		const [item] = await db
-			.insert(works)
-			.values({
-				creatorId: creator,
-				publicId: 100_000_000 + Math.floor(Math.random() * 900_000_000),
-				slug: `${post.slug}-work`,
-				type: post.media,
-				title: post.title,
-				description: post.body,
-				sourceKey,
-				// The fixture stages RELEASED media — the gauntlet walks a viewer through
-				// real access, and a private Work is unreachable by construction.
-				visibility: "released",
-				releasedAt: new Date(),
-			})
+			.update(works)
+			.set({ sourceKey, updatedAt: new Date() })
+			.where(eq(works.id, work.id))
 			.returning({ id: works.id });
-		await db.insert(postWorkRefs).values({ postId: row.id, position: 0, workId: item.id });
 
 		const [job] = await db
 			.insert(transcodingJobs)

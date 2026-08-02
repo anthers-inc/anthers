@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Inline unlock for a gated post. Instead of bouncing the viewer to the creator's
- * Badges page, this offers the *exact minimum upgrade* that unlocks the post — the
- * lowest allowed Anthers threshold (subscribe inline, with the confirmation modal)
- * and/or the lowest Seed rung — right on the post.
+ * Inline unlock for a gated **Work**. Instead of bouncing the viewer to the creator's
+ * Badges page, this offers the *exact minimum upgrade* that unlocks it — the lowest
+ * allowed Anthers threshold (subscribe inline, with the confirmation modal) and/or the
+ * lowest Seed rung — right where the viewer hit the gate.
  */
 import { type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { AccessResult, Post } from "@anthers/web-shared/types";
+import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import SubscriptionPaymentModal, {
@@ -25,12 +25,17 @@ function seedsToGo(moreNeeded: number): string {
 	return `${moreNeeded} more Seed${moreNeeded === 1 ? "" : "s"}`;
 }
 
+/** Only the creator identity is needed — this works for any gated thing. */
+interface UnlockSubject {
+	creator?: { username: string; displayName?: string | null } | null;
+}
+
 export default function InlineUnlock({
 	post,
 	access,
 	onUnlocked,
 }: {
-	post: Post;
+	post: UnlockSubject;
 	access: AccessResult;
 	onUnlocked: () => void;
 }) {

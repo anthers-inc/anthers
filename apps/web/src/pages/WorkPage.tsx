@@ -15,19 +15,21 @@
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
-import { LockedCover, lockedByBadge, UnlockPanel } from "@anthers/web-shared/post/unlock";
+import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { TranscodingJob, Work } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
+import InlineUnlock from "../components/post/InlineUnlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectEmbed from "../components/project/ProjectEmbed";
+import ProjectPricing from "../components/project/ProjectPricing";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionClaim } from "../lib/attention";
@@ -35,6 +37,8 @@ import { useAttentionClaim } from "../lib/attention";
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 type WorkDetail = Work & {
 	creator?: { username: string; displayName: string | null; avatar: string | null };
+	/** Whether the creator can actually take a direct payment (Connect onboarded). */
+	creatorHasStripe?: boolean;
 	postedIn?: {
 		slug: string;
 		title: string | null;
@@ -80,29 +84,25 @@ export default function WorkPage() {
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 
+	/** Re-read the Work — the access verdict changes under us when a viewer unlocks it. */
+	const refetch = useCallback(async () => {
+		if (!slug) return;
+		const res = await client.api.content.works[":id"].$get({ param: { id: slug } });
+		if (!res.ok) {
+			setWork(null);
+			return;
+		}
+		const data = (await res.json()) as unknown as { work: WorkDetail };
+		setWork(data.work);
+	}, [slug]);
+
 	useEffect(() => {
 		if (!slug) return;
-		let cancelled = false;
 		setLoading(true);
-		client.api.content.works[":id"]
-			.$get({ param: { id: slug } })
-			.then(async (res) => {
-				if (!res.ok) return null;
-				return (await res.json()) as unknown as { work: WorkDetail };
-			})
-			.then((data) => {
-				if (!cancelled) setWork(data?.work ?? null);
-			})
-			.catch(() => {
-				if (!cancelled) setWork(null);
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [slug]);
+		refetch()
+			.catch(() => setWork(null))
+			.finally(() => setLoading(false));
+	}, [slug, refetch]);
 
 	// Keep the canonical `/works/{slug}-{publicId}` URL in the bar, so a link shared from a
 	// bare id or a stale slug settles on the durable form.
@@ -234,7 +234,17 @@ export default function WorkPage() {
 							className="aspect-video rounded-lg"
 							lockedBy={access ? lockedByBadge(access, creatorName) : null}
 						/>
-						{access && <UnlockPanel access={access} creatorName={creatorName} />}
+						{access &&
+							(access.requiresPurchase ? (
+								<ProjectPricing
+									slug={work.slug ?? ""}
+									access={access}
+									creatorHasStripe={work.creatorHasStripe ?? false}
+									onPurchaseComplete={refetch}
+								/>
+							) : (
+								<InlineUnlock post={work} access={access} onUnlocked={refetch} />
+							))}
 					</div>
 				) : encoding ? (
 					<TranscodingStatus
@@ -265,7 +275,7 @@ export default function WorkPage() {
 						{(work.type === "game" || work.type === "software") && work.embedUrl && (
 							<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
 						)}
-						{work.type === "text" && work.bodyHtml && (
+						{work.bodyHtml && (
 							<article className="prose max-w-none">
 								<SanitizedHtml html={work.bodyHtml} />
 							</article>
@@ -274,6 +284,9 @@ export default function WorkPage() {
 				)}
 			</section>
 
+			{/* The public blurb — visible whether or not the viewer can open the Work, because a
+			    locked Work still has to say what it is. The gated prose renders above, inside
+			    the deliverable. */}
 			{work.description && (
 				<section className="prose max-w-none text-base-content/80">
 					<p>{work.description}</p>

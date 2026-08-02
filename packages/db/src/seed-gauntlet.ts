@@ -240,7 +240,10 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			slug: spec.slug,
 			type: spec.contentType,
 			title: spec.title,
-			description: spec.body,
+			// `description` is the PUBLIC blurb — a locked Work still has to say what it is,
+			// the way a storefront page does. The gated payload is `body`/`bodyHtml`, which
+			// is why the two must not be the same string here.
+			description: `${spec.title} — a gauntlet fixture.`,
 			body: spec.body,
 			bodyHtml: `<p>${spec.body}</p>`,
 			streamEnabled: spec.streamEnabled,
@@ -353,23 +356,22 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 		.delete(attentionEvents)
 		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.creatorId, creatorId)));
 
-	// A purchase unlocks permanently, so a leftover one would silently pre-open G9. It
-	// now names a Work, so clear against the fixture's Works rather than its posts.
-	const fixtureWorks = await db
-		.select({ id: works.id })
-		.from(works)
-		.where(and(eq(works.creatorId, creatorId), like(works.slug, `${GAUNTLET_SLUG_PREFIX}%`)));
-	if (fixtureWorks.length > 0) {
-		await db.delete(purchases).where(
+	// A purchase unlocks permanently, so a leftover one would silently pre-open G9.
+	//
+	// Cleared by the synthetic PaymentIntent id, NOT by Work id. The fixture deletes and
+	// recreates its Works on every reset, so they come back with fresh ids — an id-based
+	// clear can only ever reach the CURRENT generation, while the hop's idempotency check
+	// keys on the (stable) PaymentIntent id and would then skip writing a new row. The
+	// result was a purchase pointing at a Work that no longer exists, G9 reading
+	// `payment_required` forever, and a reset that looked like it had worked.
+	await db
+		.delete(purchases)
+		.where(
 			and(
 				eq(purchases.buyerId, viewerId),
-				inArray(
-					purchases.workId,
-					fixtureWorks.map((w) => w.id),
-				),
+				like(purchases.stripePaymentIntentId, "pi_gauntlet_hop_%"),
 			),
 		);
-	}
 
 	if (postIds.length > 0) {
 		// Clear the viewer's own comments so the comment rung starts empty each run.

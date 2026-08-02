@@ -60,7 +60,7 @@ const NAVIGATION_ABORTED_FETCH = /TypeError: Failed to fetch/;
 const ALLOWED = [NAVIGATION_ABORTED_FETCH];
 
 /** slug → numeric post id, resolved once from the live API (the access route keys on id). */
-const postIds: Record<string, number> = {};
+const workIds: Record<string, number> = {};
 
 function staircaseRow(state: string): StaircaseState {
 	const row = EXPECTED_STAIRCASE.find((r) => r.state === state);
@@ -77,7 +77,7 @@ async function expectStaircase(page: Page, stateName: string): Promise<void> {
 	const row = staircaseRow(stateName);
 	const observed: Record<string, string> = {};
 	for (const post of GAUNTLET_POSTS) {
-		const res = await page.request.get(`${API_URL}/api/subscriptions/access/${postIds[post.key]}`);
+		const res = await page.request.get(`${API_URL}/api/subscriptions/access/${workIds[post.key]}`);
 		expect(res.ok(), `access lookup failed for ${post.key}: ${res.status()}`).toBe(true);
 		const body = (await res.json()) as { reason: string; price: string | null };
 		observed[post.key] = body.reason;
@@ -88,10 +88,10 @@ async function expectStaircase(page: Page, stateName: string): Promise<void> {
 	expect(observed, `staircase row "${stateName}"`).toEqual(row.reasons);
 }
 
-/** The post page's own verdict: unlocked shows the body, locked shows the unlock panel. */
+/** The Work page's own verdict: unlocked shows the body, locked shows the unlock panel. */
 async function expectPostUnlocked(page: Page, key: string): Promise<void> {
 	const spec = gauntletPost(key);
-	await page.goto(`/posts/${spec.slug}`);
+	await page.goto(`/works/${spec.slug}`);
 	await expect(page.getByText(spec.body)).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeHidden();
 }
@@ -104,7 +104,7 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
  */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
 	const spec = gauntletPost(key);
-	await page.goto(`/posts/${spec.slug}`);
+	await page.goto(`/works/${spec.slug}`);
 	await expect(page.getByRole("heading", { name: /^(Locked ·|Unlock this post)/ })).toBeVisible();
 	// The ask must be marginal and must name a destination — never a bare "Join to unlock".
 	await expect(
@@ -160,23 +160,21 @@ interface ContentEntry {
 	contentItem?: ContentItemView | null;
 }
 
-/** The post's content item as this viewer sees it — media URLs blanked when denied. */
+/** The Work as this viewer sees it — media URLs blanked when denied. */
 async function mediaItem(page: Page, key: string): Promise<ContentItemView | null> {
 	const spec = gauntletPost(key);
-	const res = await page.request.get(`${API_URL}/api/content/posts/${spec.slug}`);
-	expect(res.ok(), `post fetch failed for ${key}: ${res.status()}`).toBe(true);
-	// `contents` hangs off `post`, not the response root.
-	const body = (await res.json()) as { post?: { contents?: ContentEntry[] } };
-	const entry = (body.post?.contents ?? []).find((e) => e.kind === "content" && e.contentItem);
-	return entry?.contentItem ?? null;
+	const res = await page.request.get(`${API_URL}/api/content/works/${spec.slug}`);
+	expect(res.ok(), `work fetch failed for ${key}: ${res.status()}`).toBe(true);
+	const body = (await res.json()) as { work?: ContentItemView };
+	return body.work ?? null;
 }
 
-/** The access-checked delivery routes for one content item on one post. */
+/** The access-checked delivery routes for one Work. No post is involved. */
 function hlsUrl(key: string, itemId: number, file = "master.m3u8"): string {
-	return `${API_URL}/api/content/posts/${gauntletPost(key).slug}/hls/${itemId}/${file}`;
+	return `${API_URL}/api/content/works/${itemId}/hls/${file}`;
 }
-function audioUrl(key: string, itemId: number): string {
-	return `${API_URL}/api/content/posts/${gauntletPost(key).slug}/audio/${itemId}`;
+function audioUrl(_key: string, itemId: number): string {
+	return `${API_URL}/api/content/works/${itemId}/audio`;
 }
 
 /** Re-host a URL the API generated onto the API's own origin (see the note in the walk). */
@@ -303,10 +301,12 @@ test.beforeAll(async () => {
 	}
 
 	for (const post of GAUNTLET_POSTS) {
-		const res = await fetch(`${API_URL}/api/content/posts/${post.slug}`);
-		if (!res.ok) throw new Error(`Fixture post ${post.slug} not reachable: ${res.status}`);
-		const body = (await res.json()) as { post: { id: number } };
-		postIds[post.key] = body.post.id;
+		// The fixture's subject is the WORK — the staircase this walks is an access
+		// staircase, and access lives on the Work. Each also has an announcement post.
+		const res = await fetch(`${API_URL}/api/content/works/${post.slug}`);
+		if (!res.ok) throw new Error(`Fixture Work ${post.slug} not reachable: ${res.status}`);
+		const body = (await res.json()) as { work: { id: number } };
+		workIds[post.key] = body.work.id;
 	}
 });
 
@@ -325,13 +325,13 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	// Root gate (1 Seed to Anthers) and G6's first Seed rung (1 Seed to the creator) each
 	// ask for exactly one more. Pinning the arithmetic here is what stops the panel drifting
 	// back to quoting the THRESHOLD instead of the gap.
-	await page.goto(`/posts/${gauntletPost("G2").slug}`);
+	await page.goto(`/works/${gauntletPost("G2").slug}`);
 	await expect(page.getByRole("heading", { name: "Locked · Root" })).toBeVisible();
 	await expect(
 		page.getByRole("button", { name: "Unlock with 1 more Seed to Anthers" }),
 	).toBeVisible();
 
-	await page.goto(`/posts/${gauntletPost("G6").slug}`);
+	await page.goto(`/works/${gauntletPost("G6").slug}`);
 	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
 
 	await expectStaircase(page, "Free, unfollowed");
@@ -364,7 +364,9 @@ test("rung 2 — follow: the feed fills, access does not change", async ({ page 
 test("rung 3 — comment on the free post", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
-	await page.goto(`/posts/${gauntletPost("G1").slug}`);
+	// Comments still hang off the POST — a Work carries no comment thread yet, and the
+	// fixture gives every Work an announcement post at `<slug>-post`.
+	await page.goto(`/posts/${gauntletPost("G1").slug}-post`);
 	const commentText = "Walking the gauntlet — first rung comment.";
 	await page.getByPlaceholder("Write a comment...").fill(commentText);
 	await page.getByRole("button", { name: "Post comment" }).click();
@@ -378,7 +380,7 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	// honest expectation today is yes. If this ever starts failing, the product got
 	// stricter — update the spec doc's rung-3 note along with this assertion.
 	const res = await page.request.post(
-		`${API_URL}/api/content/posts/${gauntletPost("G2").slug}/comments`,
+		`${API_URL}/api/content/posts/${gauntletPost("G2").slug}-post/comments`,
 		{
 			data: { body: "Commenting on a post I cannot read (recorded gauntlet behavior)." },
 			headers: { Origin: "http://localhost:4173" },
@@ -469,7 +471,7 @@ test("rung 6 — purchase unlocks the download, and only the purchase does", asy
 	await expectStaircase(page, "+ purchased");
 
 	// The post page must now offer the download instead of a checkout.
-	await page.goto(`/posts/${gauntletPost("G9").slug}`);
+	await page.goto(`/works/${gauntletPost("G9").slug}`);
 	await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
 	await expect(page.getByText("Purchase this post to access downloads.")).toBeHidden();
 

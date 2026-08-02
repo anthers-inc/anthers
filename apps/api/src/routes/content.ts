@@ -848,8 +848,11 @@ function serializeWorkForViewer(
 		updatedAt: work.updatedAt,
 		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
 		metadata: stripInternalMetadata(work.metadata),
-		// Prose IS the deliverable for a text Work, so it is gated like any other payload.
-		bodyHtml: work.type === "text" ? (canAccess ? work.bodyHtml : "") : undefined,
+		// The creator's prose. For a text Work this IS the deliverable; for any other type
+		// it is the notes that come with it. Either way it rides with the payload and is
+		// gated — `description` is the public blurb that stays visible when locked.
+		bodyHtml: canAccess ? work.bodyHtml : "",
+		body: canAccess ? work.body : "",
 		sourceKey: canAccess ? work.sourceKey : "",
 		embedUrl: canAccess ? work.embedUrl : "",
 		// Download keys are only handed out through the access-checked download route.
@@ -1831,6 +1834,17 @@ const contentRoutes = new Hono()
 			.where(eq(users.id, work.creatorId))
 			.limit(1);
 
+		// Can the creator actually receive a direct-purchase payout? Drives whether the
+		// buyer is offered a live checkout or told the creator can't take payments yet.
+		const [creatorStripe] = await db
+			.select({
+				payoutsEnabled: stripeAccounts.payoutsEnabled,
+				onboardingComplete: stripeAccounts.onboardingComplete,
+			})
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, work.creatorId))
+			.limit(1);
+
 		return c.json({
 			work: {
 				...serializeWorkForViewer(
@@ -1841,6 +1855,7 @@ const contentRoutes = new Hono()
 					deliveryCtx(),
 				),
 				creator,
+				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
 				// Where this Work has been announced — the other half of the reference.
 				postedIn: await postsUsingWork(work.id),
 			},
