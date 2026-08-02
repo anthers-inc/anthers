@@ -935,7 +935,7 @@ describe("Checkout — destination charge construction", () => {
 
 		const { res, body } = await checkout();
 		expect(res.status).toBe(400);
-		expect(body.error).toBe("You already have access to this post");
+		expect(body.error).toBe("You already have access to this work");
 	});
 });
 
@@ -1030,36 +1030,27 @@ describe("Checkout — what isn't for sale", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("refuses a hard-gated post with no price path", async () => {
+	it("refuses a hard-gated Work with no price path", async () => {
 		fake.reset();
-		const itemRes = await req("/api/content/content-items", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({ type: "game", title: `Locked ${run}` }),
+		// Every row present, none allowed, no price anywhere — reaching a threshold would
+		// still not open it, so there is nothing to sell.
+		const work = await insertWork({
+			creatorId,
+			type: "game",
+			title: `Locked ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			anthersAccess: LOCKED,
+			seedAccess: LOCKED,
 		});
-		const itemId = (await itemRes.json()).item.id as number;
-		const postRes = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({
-				title: `Locked post ${run}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				anthersAccess: LOCKED,
-				seedAccess: LOCKED,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: true,
-			}),
-		});
-		const slug = (await postRes.json()).post.slug;
 
-		const res = await req(`/api/payments/checkout/${slug}`, {
+		const res = await req(`/api/payments/checkout/${work.slug}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
 		});
 		expect(res.status).toBe(400);
-		expect((await res.json()).error).toBe("This post is not available for direct purchase");
-		// Nothing was sent to Stripe for a post that was never purchasable.
+		expect((await res.json()).error).toBe("This work is not available for direct purchase");
+		// Nothing was sent to Stripe for a Work that was never purchasable.
 		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
 	});
 });

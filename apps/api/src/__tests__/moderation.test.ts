@@ -98,19 +98,16 @@ beforeAll(async () => {
 	viewerB = await signUp(viewerBName);
 	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
 
-	const itemRes = await post("/api/content/content-items", creator, {
+	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Mod fixture ${id}`,
 	});
 	expect(itemRes.status).toBe(201);
-	const itemId = (await itemRes.json()).item.id;
+	const workId = (await itemRes.json()).work.id;
 
 	const postRes = await post("/api/content/posts", creator, {
 		title: `Moderated post ${id}`,
-		streamEnabled: false,
-		downloadEnabled: true,
-		seedAccess: FREE,
-		contents: [{ kind: "content", workId: itemId }],
+		workIds: [workId],
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);

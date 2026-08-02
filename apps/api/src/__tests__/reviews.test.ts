@@ -84,19 +84,16 @@ beforeAll(async () => {
 	viewerA = await signUp(viewerAName);
 	viewerB = await signUp(viewerBName);
 
-	const itemRes = await post("/api/content/content-items", creator, {
+	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Review fixture ${id}`,
 	});
 	expect(itemRes.status).toBe(201);
-	const itemId = (await itemRes.json()).item.id;
+	const workId = (await itemRes.json()).work.id;
 
 	const postRes = await post("/api/content/posts", creator, {
 		title: `Reviewed post ${id}`,
-		streamEnabled: false,
-		downloadEnabled: true,
-		seedAccess: FREE,
-		contents: [{ kind: "content", workId: itemId }],
+		workIds: [workId],
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);

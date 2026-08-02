@@ -36,14 +36,27 @@ async function signUp(username: string): Promise<string> {
 }
 
 /** Create an owned library item and return its id. game type → no auto media processing. */
-async function makeItem(cookie: string, title: string): Promise<number> {
-	const res = await req("/api/content/content-items", {
+/** Create a Work through the API. `game` by default so nothing queues a transcode. */
+async function makeItem(cookie: string, title: string, type = "game"): Promise<number> {
+	const res = await req("/api/content/works", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ type: "game", title }),
+		body: JSON.stringify({ type, title }),
 	});
 	expect(res.status).toBe(201);
-	return (await res.json()).item.id;
+	return (await res.json()).work.id;
+}
+
+/** Create a Work and release it, so it is publicly reachable. */
+async function makeReleasedWork(cookie: string, title: string, type = "game"): Promise<number> {
+	const workId = await makeItem(cookie, title, type);
+	const res = await req(`/api/content/works/${workId}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+		body: JSON.stringify({ visibility: "released", anthersAccess: FREE }),
+	});
+	expect(res.status).toBe(200);
+	return workId;
 }
 
 const id = crypto.randomUUID().slice(0, 8);
@@ -60,68 +73,58 @@ beforeAll(async () => {
 	stranger = await signUp(strangerName);
 });
 
-describe("Publish-readiness gate", () => {
-	let itemId: number;
+describe("Release-readiness gate", () => {
+	// The gate MOVED rather than vanished. Readiness is a property of the media, the media
+	// belongs to a Work, and a post that merely links a Work has nothing to wait for — so
+	// this blocks RELEASE, and publishing an announcement is never blocked by an encode.
+	let workId: number;
 
-	it("blocks publishing a post whose referenced media is still transcoding", async () => {
-		itemId = await makeItem(owner, "Gated build");
+	it("blocks releasing a Work whose media is still transcoding", async () => {
+		workId = await makeItem(owner, "Gated build", "video");
 		await db
 			.insert(transcodingJobs)
-			.values({ workId: itemId, mediaType: "video", status: "pending", progress: 0 });
+			.values({ workId, mediaType: "video", status: "pending", progress: 0 });
 
-		const res = await req("/api/content/posts", {
-			method: "POST",
+		const res = await req(`/api/content/works/${workId}`, {
+			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `Gate ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: true,
-			}),
+			body: JSON.stringify({ visibility: "released" }),
 		});
 		expect(res.status).toBe(409);
 		expect((await res.json()).code).toBe("media_not_ready");
 	});
 
-	it("allows saving the same post as a draft while media processes", async () => {
+	it("publishes a post linking that Work anyway", async () => {
+		// The announcement is not the work. Blocking it on someone's encode was an artefact
+		// of the post owning the media.
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({
-				title: `Gate draft ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: false,
-			}),
-		});
-		expect(res.status).toBe(201);
-		expect((await res.json()).post.isPublished).toBe(false);
-	});
-
-	it("publishes once the transcode completes", async () => {
-		await db
-			.update(transcodingJobs)
-			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.workId, itemId));
-
-		const res = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `Gate ok ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
+				title: `Gate announce ${id}`,
+				workIds: [workId],
 				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
 		expect((await res.json()).post.isPublished).toBe(true);
+	});
+
+	it("releases once the transcode completes", async () => {
+		await db
+			.update(transcodingJobs)
+			.set({ status: "completed", progress: 100 })
+			.where(eq(transcodingJobs.workId, workId));
+
+		const res = await req(`/api/content/works/${workId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ visibility: "released" }),
+		});
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.visibility).toBe("released");
+		expect(work.releasedAt).toBeTruthy();
 	});
 });
 
@@ -179,20 +182,38 @@ describe("Edit history", () => {
 	});
 });
 
-describe("Delete with orphaned-media purge", () => {
-	it("purges an orphaned library item when opted in", async () => {
-		const itemId = await makeItem(owner, "Orphan build");
+describe("Post delete never destroys the Work it announced", () => {
+	// The opt-in media purge is GONE, deliberately. Under the old model a post OWNED its
+	// content, so an explicit "also remove now-unused media?" was the careful thing to
+	// offer. A Work stands on its own in the Catalog now and is deleted from there, on
+	// purpose, by its own route.
+	it("leaves the linked Work intact, even when asked to purge", async () => {
+		const workId = await makeReleasedWork(owner, "Survivor build");
 		const create = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `Purge ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: false,
-			}),
+			body: JSON.stringify({ title: `Purge ${id}`, workIds: [workId], isPublished: false }),
+		});
+		const slug = (await create.json()).post.slug;
+
+		// `?purgeMedia=true` is accepted and ignored so an older client gets a no-op
+		// rather than a 400 — but it must not destroy anything.
+		const del = await req(`/api/content/posts/${slug}?purgeMedia=true`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(del.status).toBe(204);
+
+		const [survivor] = await db.select().from(works).where(eq(works.id, workId));
+		expect(survivor).toBeDefined();
+	});
+
+	it("still reports which Works would lose their only link", async () => {
+		const workId = await makeReleasedWork(owner, "Only-linked build");
+		const create = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title: `Lonely ${id}`, workIds: [workId], isPublished: false }),
 		});
 		const slug = (await create.json()).post.slug;
 
@@ -200,42 +221,7 @@ describe("Delete with orphaned-media purge", () => {
 			headers: { Cookie: owner },
 		});
 		expect(preview.status).toBe(200);
-		expect((await preview.json()).items.map((i: { id: number }) => i.id)).toContain(itemId);
-
-		const del = await req(`/api/content/posts/${slug}?purgeMedia=true`, {
-			method: "DELETE",
-			headers: { Origin: ORIGIN, Cookie: owner },
-		});
-		expect(del.status).toBe(204);
-
-		const [gone] = await db.select().from(works).where(eq(works.id, itemId));
-		expect(gone).toBeUndefined();
-	});
-
-	it("keeps library media when purge is not requested", async () => {
-		const itemId = await makeItem(owner, "Kept build");
-		const create = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `Keep ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: false,
-			}),
-		});
-		const slug = (await create.json()).post.slug;
-
-		const del = await req(`/api/content/posts/${slug}`, {
-			method: "DELETE",
-			headers: { Origin: ORIGIN, Cookie: owner },
-		});
-		expect(del.status).toBe(204);
-
-		const [kept] = await db.select().from(works).where(eq(works.id, itemId));
-		expect(kept).toBeDefined();
+		expect((await preview.json()).items.map((i: { id: number }) => i.id)).toContain(workId);
 	});
 });
 
@@ -302,30 +288,30 @@ describe("Scheduled-publish sweep", () => {
 		expect(post.scheduledFor).toBeNull();
 	});
 
-	it("defers a due draft whose media is still processing", async () => {
-		const itemId = await makeItem(owner, "Sched build");
+	it("stamps publishedAt when the sweep publishes, rather than leaving the draft date", async () => {
+		// This is the omission that made the column necessary: the sweep published without
+		// recording when, so a post drafted in January and auto-published in March sorted
+		// as January for the rest of its life.
+		const past = new Date(Date.now() - 60_000).toISOString();
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({
-				title: `Sched unready ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
+				title: `Sweep stamp ${id}`,
 				isPublished: false,
 				scheduledFor: past,
 			}),
 		});
 		const slug = (await res.json()).post.slug;
-		await db
-			.insert(transcodingJobs)
-			.values({ workId: itemId, mediaType: "video", status: "processing", progress: 20 });
 
 		await publishScheduled();
 
 		const get = await req(`/api/content/posts/${slug}`, { headers: { Cookie: owner } });
-		expect((await get.json()).post.isPublished).toBe(false);
+		const { post } = await get.json();
+		expect(post.isPublished).toBe(true);
+		expect(post.publishedAt).toBeTruthy();
+		// Published now, not when the draft row was written.
+		expect(new Date(post.publishedAt).getTime()).toBeGreaterThan(Date.now() - 60_000);
 	});
 });
 
@@ -334,38 +320,23 @@ describe("Scheduled-publish sweep", () => {
  * the "a request that looks fine leaves the data wrong" family rather than the "500s"
  * family — which is why neither had coverage.
  */
-describe("Delivery-method floor on PATCH", () => {
-	/** Create a post owned by `owner` and return its slug. */
-	async function makePost(title: string, body: Record<string, unknown> = {}) {
-		const res = await req("/api/content/posts", {
+describe("Delivery-method floor lives on the Work", () => {
+	// The floor moved with delivery itself. It still has to be evaluated on the state the
+	// edit RESULTS IN, because `.partial()` drops any create-time refine and a request
+	// naming ONE field is legal or not depending on the stored value of the other.
+	async function makeWork(title: string, body: Record<string, unknown> = {}) {
+		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title, seedAccess: FREE, isPublished: true, ...body }),
+			body: JSON.stringify({ type: "game", title, ...body }),
 		});
 		expect(res.status).toBe(201);
-		return (await res.json()).post.slug;
+		return (await res.json()).work.id as number;
 	}
 
-	it("rejects a create with no delivery method", async () => {
-		// The create-time `.refine()` existed but had never been exercised by a test.
-		const res = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `NoDelivery ${id}`,
-				streamEnabled: false,
-				downloadEnabled: false,
-				seedAccess: FREE,
-			}),
-		});
-		expect(res.status).toBe(400);
-	});
-
 	it("rejects a PATCH that switches both off", async () => {
-		// The actual bug: `updatePostSchema` is `postBaseSchema.partial()`, and `.partial()`
-		// drops the refine — so this used to 200 and leave a published post unconsumable.
-		const slug = await makePost(`BothOff ${id}`, { streamEnabled: true, downloadEnabled: true });
-		const res = await req(`/api/content/posts/${slug}`, {
+		const workId = await makeWork(`BothOff ${id}`, { streamEnabled: true, downloadEnabled: true });
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({ streamEnabled: false, downloadEnabled: false }),
@@ -374,10 +345,11 @@ describe("Delivery-method floor on PATCH", () => {
 	});
 
 	it("rejects a PATCH that switches off the only one left", async () => {
-		// The case a schema-level refine could never catch: the request names ONE field, and
-		// whether it's legal depends on the post's stored value for the other.
-		const slug = await makePost(`LastOne ${id}`, { streamEnabled: true, downloadEnabled: false });
-		const res = await req(`/api/content/posts/${slug}`, {
+		const workId = await makeWork(`LastOne ${id}`, {
+			streamEnabled: true,
+			downloadEnabled: false,
+		});
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({ streamEnabled: false }),
@@ -386,79 +358,76 @@ describe("Delivery-method floor on PATCH", () => {
 	});
 
 	it("allows switching one off while the other stays on", async () => {
-		const slug = await makePost(`SwapOne ${id}`, { streamEnabled: true, downloadEnabled: true });
-		const res = await req(`/api/content/posts/${slug}`, {
+		const workId = await makeWork(`SwapOne ${id}`, { streamEnabled: true, downloadEnabled: true });
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({ streamEnabled: false }),
 		});
 		expect(res.status).toBe(200);
 	});
-});
 
-describe("Library delete refuses to silently strip posts", () => {
-	async function postUsing(itemId: number, title: string) {
+	it("no longer constrains a post at all", async () => {
+		// A post has no delivery method to floor. It is words and links.
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: true,
-			}),
+			body: JSON.stringify({ title: `NoDelivery ${id}`, isPublished: true }),
 		});
 		expect(res.status).toBe(201);
-		return (await res.json()).post.slug;
+	});
+});
+
+describe("Work delete refuses to silently strip posts", () => {
+	async function postUsing(workId: number, title: string) {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title, workIds: [workId], isPublished: true }),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()).post.slug as string;
 	}
 
-	it("reports which posts use an item", async () => {
-		const itemId = await makeItem(owner, `Usage ${id}`);
-		const slug = await postUsing(itemId, `Uses item ${id}`);
-		const res = await req(`/api/content/content-items/${itemId}/usage`, {
-			headers: { Cookie: owner },
-		});
+	it("reports which posts link a Work, and when they were posted", async () => {
+		const workId = await makeReleasedWork(owner, "Used build");
+		await postUsing(workId, `Uses ${id}`);
+		const res = await req(`/api/content/works/${workId}/usage`, { headers: { Cookie: owner } });
 		expect(res.status).toBe(200);
 		const { posts } = await res.json();
-		expect(posts.map((p: { slug: string }) => p.slug)).toContain(slug);
+		expect(posts.length).toBe(1);
+		// The posting history Parker asked for: not just where, but when.
+		expect(posts[0].postedAt).toBeTruthy();
 	});
 
-	it("409s on an unflagged delete of an in-use item, and leaves it intact", async () => {
-		// `post_contents.workId` cascades, so this used to 204 and quietly remove the
-		// item from a PUBLISHED post. Failing closed is the point: the destructive reading of
-		// an ambiguous request is the one you can't undo.
-		const itemId = await makeItem(owner, `InUse ${id}`);
-		await postUsing(itemId, `Keeps item ${id}`);
-		const res = await req(`/api/content/content-items/${itemId}`, {
+	it("409s on an unflagged delete of a linked Work, and leaves it intact", async () => {
+		const workId = await makeReleasedWork(owner, "Linked build");
+		await postUsing(workId, `Linked ${id}`);
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
 		expect(res.status).toBe(409);
-		expect((await res.json()).code).toBe("item_in_use");
-
-		const still = await db.select().from(works).where(eq(works.id, itemId));
-		expect(still.length).toBe(1);
+		expect((await res.json()).code).toBe("work_in_use");
+		const [still] = await db.select().from(works).where(eq(works.id, workId));
+		expect(still).toBeDefined();
 	});
 
-	it("deletes an in-use item when forced", async () => {
-		const itemId = await makeItem(owner, `Forced ${id}`);
-		await postUsing(itemId, `Loses item ${id}`);
-		const res = await req(`/api/content/content-items/${itemId}?force=1`, {
+	it("deletes a linked Work when forced", async () => {
+		const workId = await makeReleasedWork(owner, "Forced build");
+		await postUsing(workId, `Forced ${id}`);
+		const res = await req(`/api/content/works/${workId}?force=true`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
 		expect(res.status).toBe(204);
-
-		const gone = await db.select().from(works).where(eq(works.id, itemId));
-		expect(gone.length).toBe(0);
+		const [gone] = await db.select().from(works).where(eq(works.id, workId));
+		expect(gone).toBeUndefined();
 	});
 
-	it("deletes an unused item without a flag", async () => {
-		// The common case must stay a one-step action — the guard is scoped to real damage.
-		const itemId = await makeItem(owner, `Unused ${id}`);
-		const res = await req(`/api/content/content-items/${itemId}`, {
+	it("deletes an unlinked Work without a flag", async () => {
+		const workId = await makeReleasedWork(owner, "Unused build");
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
@@ -466,11 +435,6 @@ describe("Library delete refuses to silently strip posts", () => {
 	});
 });
 
-/**
- * Three gaps the status report named, each confirmed against the code rather than
- * suspected. All three share a shape: the suite looked like it covered the case, but the
- * assertion was standing next to it rather than on it.
- */
 describe("Gaps the suite looked like it covered", () => {
 	async function makeScheduledReadyPost(title: string) {
 		const res = await req("/api/content/posts", {
@@ -507,43 +471,28 @@ describe("Gaps the suite looked like it covered", () => {
 		expect(ownerView.status).toBe(200);
 	});
 
-	it("409s on a PATCH to an already-published post whose media went unready", async () => {
-		// Every `media_not_ready` assertion went through POST, leaving the PATCH-side
-		// `willPublish` branch untested — and that is the deliberately strict one: it rejects
-		// ANY edit to an already-published post whose referenced media has gone unready,
-		// even an edit that has nothing to do with the media.
-		const itemId = await makeItem(owner, `Regress ${id}`);
+	it("lets a published post keep its link when the Work goes back to processing", async () => {
+		// Formerly a 409: a PATCH to a published post whose media went unready was refused.
+		// Publishing is not media-gated any more, so the announcement simply stands while
+		// the Work re-encodes — and the Work's own gate is what stops anyone consuming it.
+		const workId = await makeReleasedWork(owner, "Re-encoding build", "video");
 		const create = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({
-				title: `Regress ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", workId: itemId }],
-				isPublished: true,
-			}),
+			body: JSON.stringify({ title: `Unready ${id}`, workIds: [workId], isPublished: true }),
 		});
-		expect(create.status).toBe(201);
 		const slug = (await create.json()).post.slug;
 
-		// The media regresses to processing after the post went live.
-		await db.insert(transcodingJobs).values({
-			workId: itemId,
-			mediaType: "video",
-			status: "processing",
-			progress: 10,
-		});
+		await db
+			.insert(transcodingJobs)
+			.values({ workId, mediaType: "video", status: "processing", progress: 10 });
 
-		// A title-only edit — nothing to do with media — is still refused.
 		const res = await req(`/api/content/posts/${slug}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title: `Regress renamed ${id}` }),
+			body: JSON.stringify({ title: `Unready edited ${id}` }),
 		});
-		expect(res.status).toBe(409);
-		expect((await res.json()).code).toBe("media_not_ready");
+		expect(res.status).toBe(200);
 	});
 
 	it("registers publish-scheduled as a per-minute cron", async () => {
