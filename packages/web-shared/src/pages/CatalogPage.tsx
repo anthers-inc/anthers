@@ -9,13 +9,13 @@
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import ContentItemCard from "../components/content/ContentItemCard";
-import ContentItemEditor from "../components/content/ContentItemEditor";
-import { processingState } from "../components/content/contentItems";
+import WorkCard from "../components/content/WorkCard";
+import WorkEditor from "../components/content/WorkEditor";
+import { processingState } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
-import type { ContentItem } from "../lib/types";
+import type { Work } from "../lib/types";
 
 /** A post referencing a library item, as returned by the 409 `item_in_use` body. */
 interface UsingPost {
@@ -24,25 +24,25 @@ interface UsingPost {
 	isPublished: boolean;
 }
 
-export default function ContentLibraryPage() {
-	const [items, setItems] = useState<ContentItem[]>([]);
+export default function CatalogPage() {
+	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
 
 	// Editor: null = closed; { item: null } = create; { item } = edit.
-	const [editor, setEditor] = useState<{ item: ContentItem | null } | null>(null);
-	const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
+	const [editor, setEditor] = useState<{ item: Work | null } | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	const [deleting, setDeleting] = useState(false);
 	/** Posts blocking an unflagged delete — non-null once the server has named them. */
 	const [inUse, setInUse] = useState<UsingPost[] | null>(null);
 
 	const fetchItems = () =>
-		client.api.content["content-items"]
-			.$get({ query: { mine: "true" } })
+		client.api.content.works
+			.$get()
 			.then(async (res) => {
-				if (!res.ok) return { items: [] as ContentItem[] };
-				return (await res.json()) as unknown as { items: ContentItem[] };
+				if (!res.ok) return { works: [] as Work[] };
+				return (await res.json()) as unknown as { works: Work[] };
 			})
-			.then((data) => setItems(data.items))
+			.then((data) => setItems(data.works))
 			.catch(() => setItems([]));
 
 	useEffect(() => {
@@ -73,7 +73,7 @@ export default function ContentLibraryPage() {
 		return () => clearInterval(interval);
 	}, [anyProcessing]);
 
-	const upsert = (item: ContentItem) =>
+	const upsert = (item: Work) =>
 		setItems((prev) =>
 			prev.some((i) => i.id === item.id)
 				? prev.map((i) => (i.id === item.id ? item : i))
@@ -86,11 +86,11 @@ export default function ContentLibraryPage() {
 	 * preview call fails the dialog still opens, and the server's 409 remains the
 	 * backstop that makes the destructive path impossible to take blind.
 	 */
-	const openDelete = async (item: ContentItem) => {
+	const openDelete = async (item: Work) => {
 		setDeleteTarget(item);
 		setInUse(null);
 		try {
-			const res = await client.api.content["content-items"][":id"].usage.$get({
+			const res = await client.api.content.works[":id"].usage.$get({
 				param: { id: String(item.id) },
 			});
 			if (res.ok) setInUse(((await res.json()) as { posts: UsingPost[] }).posts ?? []);
@@ -110,7 +110,7 @@ export default function ContentLibraryPage() {
 		if (!deleteTarget) return;
 		setDeleting(true);
 		try {
-			const res = await client.api.content["content-items"][":id"].$delete({
+			const res = await client.api.content.works[":id"].$delete({
 				param: { id: String(deleteTarget.id) },
 				query: inUse && inUse.length > 0 ? { force: "1" } : {},
 			});
@@ -172,7 +172,7 @@ export default function ContentLibraryPage() {
 			) : (
 				<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
 					{items.map((item) => (
-						<ContentItemCard
+						<WorkCard
 							key={item.id}
 							item={item}
 							onEdit={(it) => setEditor({ item: it })}
@@ -183,7 +183,7 @@ export default function ContentLibraryPage() {
 			)}
 
 			{editor && (
-				<ContentItemEditor
+				<WorkEditor
 					item={editor.item}
 					onClose={() => setEditor(null)}
 					onSaved={(item) => {

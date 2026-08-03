@@ -11,7 +11,7 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
-import { posts } from "./content.js";
+import { works } from "./content.js";
 
 export const stripeAccounts = pgTable("stripe_accounts", {
 	id: serial("id").primaryKey(),
@@ -33,8 +33,10 @@ export const purchases = pgTable("purchases", {
 	buyerId: integer("buyer_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
-	// Null for one-time charges that aren't a post purchase (e.g. a Seed buy).
-	postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
+	// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
+	// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
+	// one-time charges that aren't a Work purchase (e.g. a Seed buy).
+	workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 	type: text("type").notNull().default("digital"), // digital | physical | service | seeds
 	amount: numeric("amount").notNull(),
 	processingFee: numeric("processing_fee").notNull(),

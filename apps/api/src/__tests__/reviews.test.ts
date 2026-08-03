@@ -57,7 +57,7 @@ interface ReviewList {
 }
 
 const readReviews = async (cookie?: string): Promise<ReviewList> => {
-	const res = await req(`/api/content/posts/${slug}/ratings`, {
+	const res = await req(`/api/content/works/${workId}/ratings`, {
 		headers: cookie ? { Cookie: cookie } : undefined,
 	});
 	expect(res.status).toBe(200);
@@ -73,8 +73,7 @@ const FREE = [{ threshold: 0, allow: true, price: "0" }];
 let creator: string;
 let viewerA: string;
 let viewerB: string;
-let slug: string;
-let postId: number;
+let workId: number;
 
 beforeAll(async () => {
 	await db.execute(
@@ -84,35 +83,34 @@ beforeAll(async () => {
 	viewerA = await signUp(viewerAName);
 	viewerB = await signUp(viewerBName);
 
-	const itemRes = await post("/api/content/content-items", creator, {
+	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Review fixture ${id}`,
 	});
 	expect(itemRes.status).toBe(201);
-	const itemId = (await itemRes.json()).item.id;
+	workId = (await itemRes.json()).work.id;
 
-	const postRes = await post("/api/content/posts", creator, {
-		title: `Reviewed post ${id}`,
-		streamEnabled: false,
-		downloadEnabled: true,
-		seedAccess: FREE,
-		contents: [{ kind: "content", contentItemId: itemId }],
-		isPublished: true,
+	// Released and open to everyone — reviewing requires access, so a locked fixture
+	// would make every case below a 403 for a reason that isn't what's under test.
+	const release = await req(`/api/content/works/${workId}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
+		body: JSON.stringify({
+			visibility: "released",
+			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+		}),
 	});
-	expect(postRes.status).toBe(201);
-	const created = (await postRes.json()).post;
-	slug = created.slug;
-	postId = created.id;
+	expect(release.status).toBe(200);
 });
 
 describe("A score cannot be left without words", () => {
 	it("rejects a score with no body at all", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, { score: 5 });
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, { score: 5 });
 		expect(res.status).toBe(400);
 	});
 
 	it("rejects a body that is only whitespace", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 5,
 			body: "        ",
 		});
@@ -120,7 +118,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("rejects a body under the minimum", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 5,
 			body: "x".repeat(REVIEW_MIN - 1),
 		});
@@ -128,7 +126,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("rejects a body over the maximum", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 5,
 			body: "x".repeat(REVIEW_MAX + 1),
 		});
@@ -136,7 +134,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("still rejects an out-of-range score", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 6,
 			body: "a perfectly reasonable body",
 		});
@@ -144,7 +142,7 @@ describe("A score cannot be left without words", () => {
 	});
 
 	it("accepts a score with words, and publishes both", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 4,
 			body: "  the pacing is the thing — nothing overstays  ",
 		});
@@ -162,7 +160,7 @@ describe("A score cannot be left without words", () => {
 
 describe("Editing a review", () => {
 	it("updates the score AND the text, not just the score", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 2,
 			body: "came back to it and it did not hold up",
 		});
@@ -187,14 +185,14 @@ describe("Editing a review", () => {
 			.from(ratings)
 			.where(
 				and(
-					eq(ratings.postId, postId),
+					eq(ratings.workId, workId),
 					eq(ratings.userId, sql`(SELECT id FROM users WHERE username = ${viewerAName})`),
 				),
 			)
 			.limit(1);
 		await db.update(ratings).set({ moderationStatus: "hidden" }).where(eq(ratings.id, row.id));
 
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 5,
 			body: "actually I have changed my mind again",
 		});
@@ -218,7 +216,7 @@ describe("Reviews written before text was required", () => {
 		const [viewer] = (await db.execute(
 			sql`SELECT id FROM users WHERE username = ${viewerBName}`,
 		)) as unknown as { id: number }[];
-		await db.insert(ratings).values({ userId: viewer.id, postId, score: 3 });
+		await db.insert(ratings).values({ userId: viewer.id, workId, score: 3 });
 
 		const list = await readReviews();
 		expect(list.count).toBe(1);

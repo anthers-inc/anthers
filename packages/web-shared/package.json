@@ -37,7 +37,7 @@
 		"./PostFormPage": "./src/pages/PostFormPage.tsx",
 		"./DashboardPage": "./src/pages/DashboardPage.tsx",
 		"./ProjectFormPage": "./src/pages/ProjectFormPage.tsx",
-		"./ContentLibraryPage": "./src/pages/ContentLibraryPage.tsx",
+		"./CatalogPage": "./src/pages/CatalogPage.tsx",
 		"./JamFormPage": "./src/pages/JamFormPage.tsx",
 		"./ImportPage": "./src/pages/ImportPage.tsx",
 		"./AnalyticsDashboardPage": "./src/pages/AnalyticsDashboardPage.tsx",

@@ -16,7 +16,7 @@ interface Track {
 	creator: string;
 	creatorId?: number;
 	thumbnail?: string | null;
-	postId: number;
+	workId: number;
 	waveform?: number[] | null;
 }
 
@@ -113,7 +113,7 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	// about the other.
 	useAttentionClaim({
 		creatorId: currentTrack?.creatorId ?? null,
-		postId: currentTrack?.postId ?? null,
+		workId: currentTrack?.workId ?? null,
 		contentType: "audio",
 		playing: isPlaying,
 		active: !!currentTrack,

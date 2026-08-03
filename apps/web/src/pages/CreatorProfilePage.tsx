@@ -12,6 +12,7 @@ import type {
 	PostListItem,
 	Project,
 	PublicUser,
+	Work,
 } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import FormField from "@anthers/web-shared/ui/FormField";
@@ -26,8 +27,14 @@ import {
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import ContentCard from "../components/cards/ContentCard";
+import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
+import WorkCard from "../components/cards/WorkCard";
+
+/** A Work as the public Catalog listing returns it. */
+type CatalogWork = Work & {
+	creator?: { username: string; displayName?: string | null; avatar?: string | null };
+};
 
 type Tab = "all" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
 
@@ -171,77 +178,11 @@ function anthersBadgeForRank(rank: number): Badge | null {
 	return (ANTHERS_BADGES.find((b) => b.threshold === rank)?.name as Badge | undefined) ?? null;
 }
 
-/** Resolve display access for a post from its per-viewer AccessResult. */
-function isPostAccessible(
-	post: PostListItem,
-	isOwnProfile: boolean,
-): { accessible: boolean; reason: string } {
-	if (isOwnProfile) return { accessible: true, reason: "creator" };
-	const access = post.access;
-	if (!access || access.canAccess) return { accessible: true, reason: access?.reason ?? "free" };
-	return {
-		accessible: false,
-		reason: access.requiresPurchase ? "payment_required" : "gate_locked",
-	};
-}
-
-/* ------------------------------------------------------------------ */
-/*  Gated content wrapper                                              */
-/* ------------------------------------------------------------------ */
-
-function GatedContentWrapper({
-	children,
-	post,
-	access,
-}: {
-	children: React.ReactNode;
-	post: PostListItem;
-	access: { accessible: boolean; reason: string };
-}) {
-	const isLocked = !access.accessible;
-	const isFree = post.access?.isFree ?? true;
-
-	// Freely accessible content renders without any lock chrome.
-	if (!isLocked && isFree) return <>{children}</>;
-
-	let lockLabel = "";
-	if (isLocked) {
-		lockLabel =
-			post.access?.requiresPurchase && post.access.price ? `$${post.access.price}` : "Gated";
-	}
-
-	return (
-		<div className="relative group">
-			{/* Content (blurred if locked) */}
-			<div className={isLocked ? "blur-[2px] opacity-60 select-none" : ""}>{children}</div>
-
-			{/* Badge overlay */}
-			<div className="absolute top-2 right-2 z-10 pointer-events-none">
-				{isLocked ? (
-					<div className="badge badge-sm gap-1 bg-base-300/90 border-base-content/20">
-						<LockClosedIcon className="w-3 h-3" />
-						{lockLabel || "Locked"}
-					</div>
-				) : (
-					<div className="badge badge-sm gap-1 bg-success/20 border-success/40 text-success">
-						<LockOpenIcon className="w-3 h-3" />
-						Unlocked
-					</div>
-				)}
-			</div>
-
-			{/* Click-through overlay for locked content */}
-			{isLocked && (
-				<div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-					<div className="bg-base-300/90 rounded-lg px-4 py-2 text-center">
-						<LockClosedIcon className="w-5 h-5 mx-auto mb-1 text-base-content/50" />
-						<p className="text-xs text-base-content/60">{lockLabel || "Locked content"}</p>
-					</div>
-				</div>
-			)}
-		</div>
-	);
-}
+/**
+ * The per-card lock chrome that used to live here is gone with the post-level gate.
+ * A Work carries its own access and `WorkCard` renders its own locked state, so there is
+ * no wrapper deciding what a *post* card may show.
+ */
 
 /* ------------------------------------------------------------------ */
 /*  Badges tab                                                          */
@@ -448,6 +389,7 @@ export default function CreatorProfilePage() {
 	const [creator, setCreator] = useState<PublicUser | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [posts, setPosts] = useState<PostListItem[]>([]);
+	const [works, setWorks] = useState<CatalogWork[]>([]);
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// viewer here to act, and dropping them on the default tab loses the intent they arrived with.
 	const tabParam = searchParams.get("tab") as Tab | null;
@@ -608,17 +550,21 @@ export default function CreatorProfilePage() {
 			}),
 			client.api.content.projects.$get({ query: { creator: username } }).then((res) => res.json()),
 			client.api.content.posts.$get({ query: { creator: username } }).then((res) => res.json()),
+			client.api.content.catalog[":username"]
+				.$get({ param: { username } })
+				.then(async (res) => (res.ok ? await res.json() : { works: [] })),
 			apiFetch(`/api/subscriptions/creator-status/${username}`, {})
 				.then((res) => (res.ok ? res.json() : null))
 				.catch(() => null),
 		])
-			.then(([creatorData, projectData, postData, statusData]) => {
+			.then(([creatorData, projectData, postData, catalogData, statusData]) => {
 				const userData = creatorData.user;
 				setCreator(userData);
 				setIsFollowing(userData.isFollowing);
 				setFollowerCount(userData.followerCount);
 				setProjects(projectData.projects);
 				setPosts(postData.posts);
+				setWorks(((catalogData as { works?: CatalogWork[] }).works ?? []) as CatalogWork[]);
 				if (statusData) setCreatorStatus(statusData as CreatorStatus);
 			})
 			.catch(console.error)
@@ -663,18 +609,26 @@ export default function CreatorProfilePage() {
 		);
 	}
 
-	// Filter content by tab
-	const videoPosts = posts.filter((p) => p.contentType === "video");
-	const audioPosts = posts.filter((p) => p.contentType === "audio");
-	const textPosts = posts.filter((p) => p.contentType === "text");
+	// The type tabs are views over the CATALOG — they are asking "what has this creator
+	// made?", which is a question about Works, not about announcements.
+	const gameWorks = works.filter((w) => w.type === "game" || w.type === "software");
+	const videoWorks = works.filter((w) => w.type === "video");
+	const audioWorks = works.filter((w) => w.type === "audio");
+	const textWorks = works.filter((w) => w.type === "text");
 
-	// All tab: interleave projects and posts by date
-	const allItems: { type: "project" | "post"; item: Project | PostListItem; date: string }[] = [];
+	// The "All" tab is the Catalog timeline: everything this creator has made, in the order
+	// they made it. The API already sorts by the creator-asserted Created date; projects
+	// interleave on their own dates.
+	const allItems: { type: "project" | "work"; item: Project | CatalogWork; date: string }[] = [];
 	projects.forEach((p) => {
 		allItems.push({ type: "project", item: p, date: p.createdAt });
 	});
-	posts.forEach((p) => {
-		allItems.push({ type: "post", item: p, date: p.createdAt });
+	works.forEach((w) => {
+		allItems.push({
+			type: "work",
+			item: w,
+			date: w.authoredAt ?? w.releasedAt ?? w.createdAt ?? "",
+		});
 	});
 	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -907,10 +861,10 @@ export default function CreatorProfilePage() {
 					{(
 						[
 							["all", "All"],
-							["games", `Games (${projects.length})`],
-							["videos", `Videos (${videoPosts.length})`],
-							["audio", `Audio (${audioPosts.length})`],
-							["writing", `Writing (${textPosts.length})`],
+							["games", `Games (${gameWorks.length})`],
+							["videos", `Videos (${videoWorks.length})`],
+							["audio", `Audio (${audioWorks.length})`],
+							["writing", `Writing (${textWorks.length})`],
 							["badges", "Badges"],
 							["about", "About"],
 						] as const
@@ -937,13 +891,8 @@ export default function CreatorProfilePage() {
 											<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
 										);
 									}
-									const post = entry.item as PostListItem;
-									const access = isPostAccessible(post, isOwnProfile);
-									return (
-										<GatedContentWrapper key={`post-${post.id}`} post={post} access={access}>
-											<ContentCard post={post} />
-										</GatedContentWrapper>
-									);
+									const work = entry.item as CatalogWork;
+									return <WorkCard key={`work-${work.id}`} work={work} />;
 								})}
 							</div>
 						) : (
@@ -956,8 +905,8 @@ export default function CreatorProfilePage() {
 					{tab === "games" &&
 						(projects.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{projects.map((project) => (
-									<ProjectCard key={project.id} project={project} />
+								{gameWorks.map((w) => (
+									<WorkCard key={w.id} work={w} />
 								))}
 							</div>
 						) : (
@@ -968,16 +917,11 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "videos" &&
-						(videoPosts.length > 0 ? (
+						(videoWorks.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{videoPosts.map((post) => {
-									const access = isPostAccessible(post, isOwnProfile);
-									return (
-										<GatedContentWrapper key={post.id} post={post} access={access}>
-											<ContentCard post={post} />
-										</GatedContentWrapper>
-									);
-								})}
+								{videoWorks.map((w) => (
+									<WorkCard key={w.id} work={w} />
+								))}
 							</div>
 						) : (
 							<EmptyState
@@ -987,16 +931,11 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "audio" &&
-						(audioPosts.length > 0 ? (
+						(audioWorks.length > 0 ? (
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{audioPosts.map((post) => {
-									const access = isPostAccessible(post, isOwnProfile);
-									return (
-										<GatedContentWrapper key={post.id} post={post} access={access}>
-											<ContentCard post={post} />
-										</GatedContentWrapper>
-									);
-								})}
+								{audioWorks.map((w) => (
+									<WorkCard key={w.id} work={w} />
+								))}
 							</div>
 						) : (
 							<EmptyState
@@ -1006,16 +945,11 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "writing" &&
-						(textPosts.length > 0 ? (
+						(textWorks.length > 0 ? (
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
-								{textPosts.map((post) => {
-									const access = isPostAccessible(post, isOwnProfile);
-									return (
-										<GatedContentWrapper key={post.id} post={post} access={access}>
-											<ContentCard post={post} />
-										</GatedContentWrapper>
-									);
-								})}
+								{textWorks.map((w) => (
+									<WorkCard key={w.id} work={w} />
+								))}
 							</div>
 						) : (
 							<EmptyState

@@ -10,7 +10,7 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { contentItems, transcodingJobs } from "@anthers/db/schema";
+import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 
@@ -158,12 +158,8 @@ export async function processAudio(data: ProcessAudioData) {
 		.set({ status: "processing", progress: 0 })
 		.where(eq(transcodingJobs.id, jobId));
 
-	const [item] = await db
-		.select()
-		.from(contentItems)
-		.where(eq(contentItems.id, job.contentItemId))
-		.limit(1);
-	if (!item) throw new Error(`Content item ${job.contentItemId} not found`);
+	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
+	if (!item) throw new Error(`Content item ${job.workId} not found`);
 
 	const storageKey = item.sourceKey ?? "";
 	if (!storageKey) throw new Error("No source file on content item");
@@ -180,9 +176,9 @@ export async function processAudio(data: ProcessAudioData) {
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		if (duration > 0) {
 			await db
-				.update(contentItems)
+				.update(works)
 				.set({ durationSeconds: Math.round(duration) })
-				.where(eq(contentItems.id, item.id));
+				.where(eq(works.id, item.id));
 		}
 		await updateJobProgress(jobId, 20);
 

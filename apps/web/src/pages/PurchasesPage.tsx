@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { postUrl } from "@anthers/web-shared/postUrl";
+import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Purchase } from "@anthers/web-shared/types";
@@ -201,16 +201,16 @@ export default function PurchasesPage() {
 										<div className="flex items-start justify-between gap-3">
 											<div className="flex items-center gap-3 min-w-0">
 												{/* Cover image */}
-												{p.post?.coverImage ? (
+												{p.work?.coverImage ? (
 													<Link
 														to={
-															p.post.publicId != null
-																? postUrl({ slug: p.post.slug, publicId: p.post.publicId })
-																: `/posts/${p.post.slug}`
+															p.work.publicId != null
+																? workUrl({ slug: p.work.slug, publicId: p.work.publicId })
+																: `/posts/${p.work.slug}`
 														}
 													>
 														<img
-															src={p.post.coverImage}
+															src={p.work.coverImage}
 															alt=""
 															className="w-12 h-12 rounded object-cover flex-shrink-0"
 														/>
@@ -223,13 +223,13 @@ export default function PurchasesPage() {
 													{/* Post title → detail link */}
 													<Link
 														to={
-															p.post?.publicId != null
-																? postUrl({ slug: p.post.slug, publicId: p.post.publicId })
-																: `/posts/${p.post?.slug}`
+															p.work?.publicId != null
+																? workUrl({ slug: p.work.slug, publicId: p.work.publicId })
+																: `/posts/${p.work?.slug}`
 														}
 														className="font-medium link link-hover block truncate"
 													>
-														{p.post?.title ?? "Unknown"}
+														{p.work?.title ?? "Unknown"}
 													</Link>
 
 													{/* Creator → profile link */}

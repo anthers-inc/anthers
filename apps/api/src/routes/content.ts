@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Content routes — the unified Post model over a creator-owned content library.
+ * Content routes — the creator's **Catalog** of Works, and their feed of **Posts**.
  *
- * A **content item** (`content_items`) is a creator's first-class, reusable piece of
- * media/product — it OWNS its source media, downloadable variants (`assets`), and
- * transcodes (`transcoding_jobs`); processing runs once on upload to the library.
- * A **Post** is an ordered list of entries (`post_contents`): each entry is either an
- * inline TEXT block (post-native prose) or a REFERENCE to a library content item. The
- * post is the access point — a referenced item inherits the post's access rules — so a
- * post can be deleted without destroying content. Delivery (stream and/or download) and
- * access (the two OR-gated access tables) are orthogonal per-post switches. Projects are
- * collections that group posts via a many-to-many join — not a content type.
+ * A **Work** (`works`) is the unit of published creative work: a game, a video, a track,
+ * an image, an essay, software, a physical good, a service. It OWNS its source media,
+ * downloadable variants (`assets`) and transcodes (`transcoding_jobs`), and it carries its
+ * own visibility, dates, delivery switches and access gates. Processing runs once on
+ * upload to the Catalog, before the Work is released or referenced anywhere. A Work can be
+ * released, gated, purchased and consumed with **no Post ever existing**.
  *
- * Posts are addressed by a durable numeric `publicId`; the canonical URL is
- * `/posts/{slug}-{publicId}` and a route param of either the bare publicId or the
- * slug-publicId form resolves to the same post (slug alone still works too).
+ * A **Post** is an announcement — rich text, links and body-embedded images, and nothing
+ * else. It may *reference* Works (`post_work_refs`), which renders as a card and gives the
+ * Work its posting history in return, but **that reference is inert: it confers no access
+ * whatsoever.** A Post may freely link a Work its reader cannot open. Projects are
+ * collections that group posts (and, from stage 4, Works) via many-to-many joins.
  *
- * See Architecture › "30.1 - Unified Post & Content Model".
+ * Both are addressed by a durable numeric `publicId`; the canonical URLs are
+ * `/posts/{slug}-{publicId}` and `/works/{slug}-{publicId}`, and a route param of either
+ * the bare publicId or the slug-publicId form resolves the same row (slug alone works too).
+ *
+ * See Architecture › "40.08 Catalog and Posts".
  */
 
 import { db } from "@anthers/db/client";
@@ -24,19 +27,25 @@ import {
 	assets,
 	bookmarks,
 	comments,
-	contentItems,
 	inlineImages,
-	postContents,
 	postEdits,
 	posts,
+	postWorkRefs,
+	projectItems,
 	projectPosts,
 	projects,
 	ratings,
 	stripeAccounts,
 	transcodingJobs,
 	users,
+	works,
 } from "@anthers/db/schema";
-import { COMMENT_MAX, REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
+import {
+	COMMENT_MAX,
+	type CommentSubjectType,
+	REVIEW_MAX,
+	REVIEW_MIN,
+} from "@anthers/shared/content";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, avg, count, desc, eq, inArray, like, ne, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -45,7 +54,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
-	type AccessiblePost,
+	type AccessibleWork,
 	buildAccessContext,
 	defaultAnthersAccess,
 	defaultSeedAccess,
@@ -76,6 +85,26 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
  */
 const visibleComment = eq(comments.moderationStatus, "visible");
 const visibleRating = eq(ratings.moderationStatus, "visible");
+
+/**
+ * A subject's visible comments, newest first.
+ *
+ * One function for both subject types — the Post thread and the Work thread differ only in
+ * which `(subject_type, subject_id)` pair is asked about, so they cannot drift apart in how
+ * they filter. That matters here more than most places: `visibleComment` is the whole of
+ * moderation at read time, and a second copy of this query is a second place to forget it.
+ */
+async function listComments(subjectType: CommentSubjectType, subjectId: number) {
+	const rows = await db
+		.select({ comment: comments, username: users.username, avatar: users.avatar })
+		.from(comments)
+		.innerJoin(users, eq(comments.userId, users.id))
+		.where(
+			and(eq(comments.subjectType, subjectType), eq(comments.subjectId, subjectId), visibleComment),
+		)
+		.orderBy(desc(comments.createdAt));
+	return rows.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar }));
+}
 
 async function getOptionalUserId(c: any): Promise<number | null> {
 	const token = getCookie(c, "session");
@@ -115,14 +144,24 @@ async function postSlugExists(slug: string): Promise<boolean> {
 	return !!row;
 }
 
-/** Allocate an unused 9-digit public id (Patreon-style durable key). */
-async function makeUniquePublicId(): Promise<number> {
+async function workSlugExists(slug: string): Promise<boolean> {
+	const [row] = await db.select({ id: works.id }).from(works).where(eq(works.slug, slug)).limit(1);
+	return !!row;
+}
+
+/**
+ * Allocate an unused 9-digit public id (Patreon-style durable key).
+ *
+ * Posts and Works keep separate id spaces — they are different things at different URLs,
+ * and forcing one shared space would only add contention.
+ */
+async function makeUniquePublicId(table: typeof posts | typeof works): Promise<number> {
 	for (let i = 0; i < 12; i++) {
 		const id = 100_000_000 + Math.floor(Math.random() * 900_000_000);
 		const [row] = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(eq(posts.publicId, id))
+			.select({ id: table.id })
+			.from(table)
+			.where(eq(table.publicId, id))
 			.limit(1);
 		if (!row) return id;
 	}
@@ -130,11 +169,11 @@ async function makeUniquePublicId(): Promise<number> {
 }
 
 /**
- * Parse a post route param that may be a bare publicId, a `slug-publicId`, or a
+ * Parse a route param that may be a bare publicId, a `slug-publicId`, or a
  * plain slug. publicIds are ≥6 digits, so a slug's trailing number rarely misfires
  * (and a miss just falls back to the slug lookup).
  */
-function parsePostParam(param: string): { publicId: number | null; slug: string } {
+function parsePublicParam(param: string): { publicId: number | null; slug: string } {
 	if (/^\d+$/.test(param)) return { publicId: Number(param), slug: param };
 	const m = param.match(/-(\d{6,})$/);
 	if (m) return { publicId: Number(m[1]), slug: param };
@@ -143,7 +182,7 @@ function parsePostParam(param: string): { publicId: number | null; slug: string 
 
 /** Resolve the full post row from a route param (publicId preferred, slug fallback). */
 async function findPostRow(param: string): Promise<typeof posts.$inferSelect | null> {
-	const { publicId, slug } = parsePostParam(param);
+	const { publicId, slug } = parsePublicParam(param);
 	if (publicId != null) {
 		const [byId] = await db.select().from(posts).where(eq(posts.publicId, publicId)).limit(1);
 		if (byId) return byId;
@@ -152,36 +191,39 @@ async function findPostRow(param: string): Promise<typeof posts.$inferSelect | n
 	return bySlug ?? null;
 }
 
-/** A post entry — either an inline text block or a reference to a library content item. */
-type PostEntryLike = { kind: string; contentItemId?: number | null };
-
 /**
- * Post primary type for cards/badges/filter — derived from the FIRST content-ref's
- * item type. A post with only text blocks (no content refs) is "text".
+ * Resolve a Work from a route param, which may be a numeric row id, a publicId, or a
+ * slug/`slug-publicId`. The bare-number case checks the row id first because internal
+ * callers (delivery URLs, pickers) address Works by id, while public URLs carry the
+ * slug-publicId form.
  */
-function deriveContentType(
-	entries: PostEntryLike[],
-	itemsById: Map<number, { type: string }>,
-): string {
-	const first = entries.find((e) => e.kind === "content" && e.contentItemId != null);
-	if (!first || first.contentItemId == null) return "text";
-	return itemsById.get(first.contentItemId)?.type ?? "text";
-}
-
-/** Denormalized card image: the FIRST content-ref item's thumbnail (text-only → ""). */
-function deriveThumbnail(
-	entries: PostEntryLike[],
-	itemsById: Map<number, { thumbnail?: string | null }>,
-): string {
-	const first = entries.find((e) => e.kind === "content" && e.contentItemId != null);
-	if (!first || first.contentItemId == null) return "";
-	return itemsById.get(first.contentItemId)?.thumbnail ?? "";
+async function findWorkRow(param: string): Promise<typeof works.$inferSelect | null> {
+	if (/^\d+$/.test(param)) {
+		const n = Number(param);
+		const [byId] = await db.select().from(works).where(eq(works.id, n)).limit(1);
+		if (byId) return byId;
+		const [byPublic] = await db.select().from(works).where(eq(works.publicId, n)).limit(1);
+		return byPublic ?? null;
+	}
+	const { publicId, slug } = parsePublicParam(param);
+	if (publicId != null) {
+		const [byPublic] = await db.select().from(works).where(eq(works.publicId, publicId)).limit(1);
+		if (byPublic) return byPublic;
+	}
+	const [bySlug] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
+	return bySlug ?? null;
 }
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-/** Library content-item types (rich text/prose is NOT a library item — it stays post-native). */
-const CONTENT_ITEM_TYPES = [
+/**
+ * Work types. `text` is here now: prose is a Work, not post-native content. Under the old
+ * model rich text was deliberately excluded from the library, which produced the strangest
+ * rule in the system — prose in a post body earned nothing while the same prose as a
+ * content element earned. The rule was right; the earning form just had no home.
+ */
+const WORK_TYPES = [
+	"text",
 	"video",
 	"audio",
 	"image",
@@ -190,6 +232,9 @@ const CONTENT_ITEM_TYPES = [
 	"physical",
 	"service",
 ] as const;
+
+/** Work types whose media is processed asynchronously before the Work can be released. */
+const PROCESSED_WORK_TYPES = new Set(["video", "audio"]);
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
@@ -208,43 +253,67 @@ const accessRowSchema = z.object({
 const anthersAccessRowSchema = accessRowSchema;
 const seedAccessRowSchema = accessRowSchema;
 
-// A post's ordered content list is an array of entries: an inline text block, or a
-// reference to a library content item. Each may carry an `id` for reconcile-by-id on patch.
-const postEntrySchema = z.discriminatedUnion("kind", [
-	z.object({
-		kind: z.literal("text"),
-		id: z.number().int().optional(),
+/**
+ * The Works a post points at. A bare id list — there is nothing to configure, because
+ * the reference carries no access, no caption-as-content and no ordering semantics beyond
+ * display order. Anything richer would be the post owning the Work again.
+ */
+const postWorkRefsSchema = z.array(z.number().int()).max(50);
+
+// ── Works (the Catalog) ──
+
+/** A creator-asserted Created date: when the work was MADE, with the precision they claim. */
+const authoredSchema = z.object({
+	authoredAt: z.string().datetime().nullable().optional(),
+	authoredPrecision: z.enum(["year", "month", "day"]).nullable().optional(),
+});
+
+const workBaseSchema = z
+	.object({
+		title: z.string().max(255).optional().default(""),
+		slug: z
+			.string()
+			.min(1)
+			.max(255)
+			.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens")
+			.optional(),
+		description: z.string().max(50000).optional().default(""),
+		thumbnail: z.string().max(500).optional().default(""),
+		sourceKey: z.string().max(500).optional().default(""),
+		embedUrl: z.string().max(500).optional().default(""),
+		durationSeconds: z.number().int().optional(),
+		// type = "text": the prose itself.
+		body: z.string().optional().default(""),
 		bodyHtml: z.string().optional().default(""),
-	}),
-	z.object({
-		kind: z.literal("content"),
-		id: z.number().int().optional(),
-		contentItemId: z.number().int(),
-		caption: z.string().max(1000).optional().default(""),
-	}),
-]);
+		metadata: z.record(z.unknown()).optional().default({}),
 
-// ── Content library items ──
-const createContentItemSchema = z.object({
-	type: z.enum(CONTENT_ITEM_TYPES),
-	title: z.string().max(255).optional().default(""),
-	description: z.string().max(50000).optional().default(""),
-	thumbnail: z.string().max(500).optional().default(""),
-	sourceKey: z.string().max(500).optional().default(""),
-	embedUrl: z.string().max(500).optional().default(""),
-	durationSeconds: z.number().int().optional(),
-	metadata: z.record(z.unknown()).optional().default({}),
-});
+		// Visibility. `released` is public listing, NOT public access — the gates decide that.
+		visibility: z.enum(["private", "released"]).optional(),
 
-const updateContentItemSchema = z.object({
-	title: z.string().max(255).optional(),
-	description: z.string().max(50000).optional(),
-	thumbnail: z.string().max(500).optional(),
-	sourceKey: z.string().max(500).optional(),
-	embedUrl: z.string().max(500).optional(),
-	durationSeconds: z.number().int().optional(),
-	metadata: z.record(z.unknown()).optional(),
-});
+		// Delivery (≥1 enforced on release)
+		streamEnabled: z.boolean().optional(),
+		downloadEnabled: z.boolean().optional(),
+
+		// Access tables (default "free but fully locked" applied server-side when omitted)
+		anthersAccess: z.array(anthersAccessRowSchema).optional(),
+		seedAccess: z.array(seedAccessRowSchema).optional(),
+
+		// Presentation & metadata
+		isPinned: z.boolean().optional(),
+		tags: z.array(z.string()).optional(),
+		websiteUrl: z.string().max(500).optional(),
+		sourceUrl: z.string().max(500).optional(),
+	})
+	.merge(authoredSchema);
+
+const createWorkSchema = workBaseSchema
+	.extend({ type: z.enum(WORK_TYPES) })
+	.refine((d) => d.authoredAt == null || d.authoredPrecision != null, {
+		message: "A Created date needs its precision (year, month or day)",
+		path: ["authoredPrecision"],
+	});
+
+const updateWorkSchema = workBaseSchema.partial();
 
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
@@ -257,16 +326,8 @@ const postBaseSchema = z.object({
 	body: z.string().optional().default(""),
 	bodyHtml: z.string().optional().default(""),
 
-	// Delivery / access type (≥1 enforced by the refine on create)
-	streamEnabled: z.boolean().optional().default(true),
-	downloadEnabled: z.boolean().optional().default(false),
-
-	// Access tables (default "free but fully locked" applied server-side when omitted)
-	anthersAccess: z.array(anthersAccessRowSchema).optional(),
-	seedAccess: z.array(seedAccessRowSchema).optional(),
-
-	// The post's ordered content list: text blocks and/or references to library items.
-	contents: z.array(postEntrySchema).optional().default([]),
+	// Works this post points at. Inert references — they confer no access.
+	workIds: postWorkRefsSchema.optional().default([]),
 
 	// Presentation
 	showOnTimeline: z.boolean().optional().default(true),
@@ -274,8 +335,6 @@ const postBaseSchema = z.object({
 
 	// Metadata
 	tags: z.array(z.string()).optional().default([]),
-	websiteUrl: z.string().max(500).optional().default(""),
-	sourceUrl: z.string().max(500).optional().default(""),
 	isPublished: z.boolean().optional().default(false),
 	// ISO datetime at which a still-unpublished draft should auto-publish; null clears the
 	// schedule. Publishing now (isPublished=true) supersedes and clears any schedule.
@@ -285,18 +344,15 @@ const postBaseSchema = z.object({
 	projectId: z.number().int().optional(),
 });
 
-const createPostSchema = postBaseSchema.refine((d) => d.streamEnabled || d.downloadEnabled, {
-	message: "A post must enable at least one access type (stream or download)",
-	path: ["streamEnabled"],
-});
+const createPostSchema = postBaseSchema;
 
 const updatePostSchema = postBaseSchema.partial();
 
-/** Query flags for DELETE /posts/:slug — purgeMedia opts into removing orphaned library media. */
+/** Query flags for DELETE /posts/:slug — kept for API compatibility; a post owns no media now. */
 const deletePostQuerySchema = z.object({ purgeMedia: z.enum(["true", "1"]).optional() });
 
-/** Query flags for DELETE /content-items/:id — force opts into deleting an in-use item. */
-const deleteItemQuerySchema = z.object({ force: z.enum(["true", "1"]).optional() });
+/** Query flags for DELETE /works/:id — force opts into deleting a Work a post still references. */
+const deleteWorkQuerySchema = z.object({ force: z.enum(["true", "1"]).optional() });
 
 const createProjectSchema = z.object({
 	title: z.string().min(1).max(255),
@@ -337,6 +393,11 @@ const createAssetSchema = z.object({
 	isPrimary: z.boolean().optional().default(false),
 });
 
+const addWorkToCollectionSchema = z.object({
+	workId: z.number().int(),
+	sortOrder: z.number().int().optional(),
+});
+
 const addToCollectionSchema = z.object({
 	postId: z.number().int(),
 	sortOrder: z.number().int().optional(),
@@ -344,10 +405,9 @@ const addToCollectionSchema = z.object({
 
 // ─── Content library items ────────────────────────────────────────────────────
 
-type ContentItemRow = typeof contentItems.$inferSelect;
+type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
-type PostEntryInput = z.infer<typeof postEntrySchema>;
 
 /**
  * Client-transcode transport: a browser upload may hand us a pre-encoded MP4 variant
@@ -386,7 +446,7 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
 /**
  * Queue processing for a library content item that has a source needing it. Video →
  * HLS transcode (or a cheap remux when the browser pre-encoded a variant ladder); audio
- * → normalize. Fired on library upload (POST /content-items) and when the source changes
+ * → normalize. Fired on library upload (POST /works) and when the source changes
  * (PATCH), NEVER on post save — processing is a library concern, not a post concern.
  *
  * Returns the queued job (null when the item needs no processing) so the caller can
@@ -396,11 +456,11 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * poll-while-processing loop switched off, so a freshly uploaded item sat unlabelled
  * until a manual refresh.
  */
-async function queueTranscodeForItem(item: ContentItemRow): Promise<TranscodingJobRow | null> {
+async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow | null> {
 	if (item.type === "video" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: item.id, mediaType: "video", status: "pending" })
+			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
 		// Browser-encoded ladder → cheap remux; otherwise the server encodes from source.
 		const variants = readClientVariants(item.metadata);
@@ -422,7 +482,7 @@ async function queueTranscodeForItem(item: ContentItemRow): Promise<TranscodingJ
 	if (item.type === "audio" && item.sourceKey) {
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: item.id, mediaType: "audio", status: "pending" })
+			.values({ workId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
 		await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
 		return job;
@@ -434,7 +494,7 @@ async function queueTranscodeForItem(item: ContentItemRow): Promise<TranscodingJ
  * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
  * of a URL — resolve those to public URLs in place (new uploads already store URLs).
  */
-async function resolveItemThumbnail(item: ContentItemRow): Promise<void> {
+async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 	if (
 		item.thumbnail &&
 		!/^(https?:)?\/\//.test(item.thumbnail) &&
@@ -445,13 +505,15 @@ async function resolveItemThumbnail(item: ContentItemRow): Promise<void> {
 }
 
 /** Serialize a library content item (owner-facing: full media keys + latest transcode). */
-function serializeItem(
-	item: ContentItemRow,
-	itemAssets: AssetRow[] = [],
+function serializeWork(
+	item: WorkRow,
+	workAssets: AssetRow[] = [],
 	job: TranscodingJobRow | null = null,
 ) {
 	return {
 		id: item.id,
+		publicId: item.publicId,
+		slug: item.slug,
 		creatorId: item.creatorId,
 		type: item.type,
 		title: item.title,
@@ -460,10 +522,28 @@ function serializeItem(
 		sourceKey: item.sourceKey,
 		embedUrl: item.embedUrl,
 		durationSeconds: item.durationSeconds,
+		body: item.body,
+		bodyHtml: item.bodyHtml,
+		estimatedReadMinutes: item.estimatedReadMinutes,
 		metadata: stripInternalMetadata(item.metadata),
+		visibility: item.visibility,
+		releasedAt: item.releasedAt,
+		authoredAt: item.authoredAt,
+		authoredPrecision: item.authoredPrecision,
+		streamEnabled: item.streamEnabled,
+		downloadEnabled: item.downloadEnabled,
+		anthersAccess: item.anthersAccess,
+		seedAccess: item.seedAccess,
+		isPinned: item.isPinned,
+		tags: item.tags,
+		websiteUrl: item.websiteUrl,
+		sourceUrl: item.sourceUrl,
+		viewCount: item.viewCount,
+		downloadCount: item.downloadCount,
+		/** The UPLOAD date. Creator-facing only — the public sees authoredAt and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
-		assets: itemAssets,
+		assets: workAssets,
 		transcoding: job,
 	};
 }
@@ -493,9 +573,9 @@ function urlToKey(urlOrKey: string): string {
  * completed video transcode's HLS output prefix, and any processed-audio output. Failures
  * are logged and swallowed so a storage hiccup never blocks the DB delete.
  */
-async function purgeItemMedia(
-	item: ContentItemRow,
-	itemAssets: AssetRow[],
+async function purgeWorkMedia(
+	item: WorkRow,
+	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
 ): Promise<void> {
 	const keys = new Set<string>();
@@ -503,7 +583,7 @@ async function purgeItemMedia(
 
 	if (item.sourceKey) keys.add(urlToKey(item.sourceKey));
 	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
-	for (const a of itemAssets) if (a.file) keys.add(urlToKey(a.file));
+	for (const a of workAssets) if (a.file) keys.add(urlToKey(a.file));
 	for (const job of jobRows) {
 		if (job.hlsManifestUrl) {
 			const masterKey = urlToKey(job.hlsManifestUrl);
@@ -517,7 +597,7 @@ async function purgeItemMedia(
 		try {
 			await storage.deletePrefix(prefix);
 		} catch (err) {
-			console.error(`[content-item delete] deletePrefix failed for ${prefix}:`, err);
+			console.error(`[work delete] deletePrefix failed for ${prefix}:`, err);
 		}
 	}
 	for (const key of keys) {
@@ -525,49 +605,38 @@ async function purgeItemMedia(
 		try {
 			await storage.delete(key);
 		} catch (err) {
-			console.error(`[content-item delete] delete failed for ${key}:`, err);
+			console.error(`[work delete] delete failed for ${key}:`, err);
 		}
 	}
 }
 
 // ─── Publish / edit / delete helpers ────────────────────────────────────────────
 
-/** Distinct content-item IDs referenced by a set of validated post entries. */
-function entryItemIds(entries: PostEntryInput[]): number[] {
-	return [
-		...new Set(
-			entries
-				.filter(
-					(e): e is Extract<PostEntryInput, { kind: "content" }> =>
-						e.kind === "content" && e.contentItemId != null,
-				)
-				.map((e) => e.contentItemId),
-		),
-	];
-}
-
 /**
- * The publish-readiness gate: given referenced content-item IDs, return the ones whose
- * latest transcoding job hasn't reached "completed" (still pending/processing, or failed).
- * Items with no transcoding job (images, games, software) are always ready and never
- * appear here. Publish is blocked while this is non-empty; save/draft is not.
+ * The release-readiness gate: given Work IDs, return the ones whose latest transcoding job
+ * hasn't reached "completed" (still pending/processing, or failed). Works with no
+ * transcoding job (text, images, games, software) are always ready and never appear here.
+ *
+ * This now gates **release**, not publish. Media readiness was always a property of the
+ * media, and the media belongs to the Work — a post that merely links a Work has nothing
+ * to wait for, and blocking it would be blocking an announcement on someone else's encode.
  */
-async function unreadyItems(itemIds: number[]): Promise<Array<{ itemId: number; status: string }>> {
-	if (itemIds.length === 0) return [];
+async function unreadyWorks(workIds: number[]): Promise<Array<{ workId: number; status: string }>> {
+	if (workIds.length === 0) return [];
 	const jobs = await db
 		.select({
-			itemId: transcodingJobs.contentItemId,
+			workId: transcodingJobs.workId,
 			status: transcodingJobs.status,
 			createdAt: transcodingJobs.createdAt,
 		})
 		.from(transcodingJobs)
-		.where(inArray(transcodingJobs.contentItemId, itemIds))
+		.where(inArray(transcodingJobs.workId, workIds))
 		.orderBy(desc(transcodingJobs.createdAt));
 	const latest = new Map<number, string>();
-	for (const j of jobs) if (!latest.has(j.itemId)) latest.set(j.itemId, j.status);
-	const unready: Array<{ itemId: number; status: string }> = [];
-	for (const [itemId, status] of latest)
-		if (status !== "completed") unready.push({ itemId, status });
+	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j.status);
+	const unready: Array<{ workId: number; status: string }> = [];
+	for (const [workId, status] of latest)
+		if (status !== "completed") unready.push({ workId, status });
 	return unready;
 }
 
@@ -575,11 +644,14 @@ async function unreadyItems(itemIds: number[]): Promise<Array<{ itemId: number; 
  * Which content-bearing fields a PATCH actually changed, as human labels — this drives a
  * post's edit history. Publish/unpublish and schedule changes are actions, not content
  * edits, so they're deliberately excluded and never produce a history entry.
+ *
+ * Delivery and access are gone from this list because they are gone from the post: they
+ * belong to the Work now, and a Work's own history is its own concern.
  */
 function changedPostFields(
 	existing: typeof posts.$inferSelect,
 	data: z.infer<typeof updatePostSchema>,
-	contentsChanged: boolean,
+	refsChanged: boolean,
 ): string[] {
 	const changed: string[] = [];
 	if (data.title !== undefined && data.title !== (existing.title ?? "")) changed.push("title");
@@ -588,195 +660,126 @@ function changedPostFields(
 		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
 		(data.bodyHtml !== undefined && sanitizePostHtml(data.bodyHtml) !== (existing.bodyHtml ?? ""));
 	if (bodyChanged) changed.push("body");
-	if (contentsChanged) changed.push("content");
-	if (
-		(data.streamEnabled !== undefined && data.streamEnabled !== existing.streamEnabled) ||
-		(data.downloadEnabled !== undefined && data.downloadEnabled !== existing.downloadEnabled)
-	)
-		changed.push("delivery");
-	if (
-		(data.anthersAccess !== undefined &&
-			JSON.stringify(data.anthersAccess) !== JSON.stringify(existing.anthersAccess ?? [])) ||
-		(data.seedAccess !== undefined &&
-			JSON.stringify(data.seedAccess) !== JSON.stringify(existing.seedAccess ?? []))
-	)
-		changed.push("access");
+	if (refsChanged) changed.push("linked works");
 	if (data.showOnTimeline !== undefined && data.showOnTimeline !== existing.showOnTimeline)
 		changed.push("timeline visibility");
 	if (data.isPinned !== undefined && data.isPinned !== existing.isPinned) changed.push("pin");
 	if (data.tags !== undefined && JSON.stringify(data.tags) !== JSON.stringify(existing.tags ?? []))
 		changed.push("tags");
-	if (data.websiteUrl !== undefined && data.websiteUrl !== (existing.websiteUrl ?? ""))
-		changed.push("website link");
-	if (data.sourceUrl !== undefined && data.sourceUrl !== (existing.sourceUrl ?? ""))
-		changed.push("source link");
 	return changed;
 }
 
-/** A stable signature of a post's ordered entries, for cheap change detection. */
-function entriesSignature(
-	entries: {
-		kind: string;
-		contentItemId?: number | null;
-		bodyHtml?: string | null;
-		caption?: string | null;
-	}[],
-): string {
-	return entries
-		.map((e) =>
-			e.kind === "content" ? `c:${e.contentItemId}:${e.caption ?? ""}` : `t:${e.bodyHtml ?? ""}`,
-		)
-		.join("|");
-}
-
 /**
- * Content-item IDs referenced by this post and by no other post — i.e. those left orphaned
- * if the post is deleted. Storage/media live on the item, so purging them is opt-in.
+ * Works referenced by this post and by no other — i.e. those left with no posting history
+ * if the post is deleted. NOT orphaned in any meaningful sense any more: a Work stands on
+ * its own in the Catalog whether or not a post ever pointed at it, so deleting a post
+ * never proposes deleting a Work. Retained only to tell the creator what will lose its
+ * link, which is why the delete route no longer purges anything.
  */
-async function orphanedItemIds(postId: number): Promise<number[]> {
+async function worksOnlyLinkedFrom(postId: number): Promise<number[]> {
 	const mine = await db
-		.select({ itemId: postContents.contentItemId })
-		.from(postContents)
-		.where(and(eq(postContents.postId, postId), eq(postContents.kind, "content")));
-	const ids = [...new Set(mine.map((r) => r.itemId).filter((x): x is number => x != null))];
+		.select({ workId: postWorkRefs.workId })
+		.from(postWorkRefs)
+		.where(eq(postWorkRefs.postId, postId));
+	const ids = [...new Set(mine.map((r) => r.workId))];
 	if (ids.length === 0) return [];
 	const others = await db
-		.select({ itemId: postContents.contentItemId })
-		.from(postContents)
-		.where(and(inArray(postContents.contentItemId, ids), ne(postContents.postId, postId)));
-	const stillUsed = new Set(others.map((r) => r.itemId));
-	return ids.filter((id) => !stillUsed.has(id));
+		.select({ workId: postWorkRefs.workId })
+		.from(postWorkRefs)
+		.where(and(inArray(postWorkRefs.workId, ids), ne(postWorkRefs.postId, postId)));
+	const stillLinked = new Set(others.map((r) => r.workId));
+	return ids.filter((id) => !stillLinked.has(id));
 }
 
 /**
- * The posts referencing a library item — `orphanedItemIds` asked from the other end.
- * Used both to preview a library delete and to refuse an unflagged destructive one.
+ * A Work's posting history — where it has been announced, and when. This is the record
+ * Parker asked for: "a clean record of when the content has been posted". Carries the
+ * post date, since a Work may be posted many times over its life.
  */
-async function postsUsingItem(
-	itemId: number,
-): Promise<Array<{ slug: string; title: string | null; isPublished: boolean }>> {
-	const rows = await db
+async function postsUsingWork(workId: number): Promise<
+	Array<{
+		slug: string;
+		title: string | null;
+		isPublished: boolean;
+		postedAt: Date | null;
+	}>
+> {
+	return await db
 		.selectDistinct({
 			slug: posts.slug,
 			title: posts.title,
 			isPublished: posts.isPublished,
+			postedAt: posts.publishedAt,
 		})
-		.from(postContents)
-		.innerJoin(posts, eq(postContents.postId, posts.id))
-		.where(and(eq(postContents.contentItemId, itemId), eq(postContents.kind, "content")));
-	return rows;
+		.from(postWorkRefs)
+		.innerJoin(posts, eq(postWorkRefs.postId, posts.id))
+		.where(eq(postWorkRefs.workId, workId));
 }
 
-// ─── Post entry persistence ─────────────────────────────────────────────────────
-
-/** Map a validated post entry to its post_contents column values. */
-function entryValues(entry: PostEntryInput, postId: number, position: number) {
-	if (entry.kind === "text") {
-		return {
-			postId,
-			position,
-			kind: "text",
-			bodyHtml: entry.bodyHtml ? sanitizePostHtml(entry.bodyHtml) : "",
-			contentItemId: null,
-			caption: "",
-		};
-	}
-	return {
-		postId,
-		position,
-		kind: "content",
-		bodyHtml: "",
-		contentItemId: entry.contentItemId,
-		caption: entry.caption ?? "",
-	};
-}
+// ─── Post → Work references ─────────────────────────────────────────────────────
 
 /**
- * Load the caller-owned content items referenced by a set of entries. `ok` is false when
- * any `content` entry points at an item the caller doesn't own (or that doesn't exist) —
- * the create/patch handlers turn that into a 400.
+ * Verify the caller owns every Work they're linking. A post may only reference the
+ * creator's own Works for now — cross-creator references are a real future feature
+ * (collabs, bundles) but they need their own consent story first.
  */
-async function loadOwnedItemsForEntries(
-	entries: PostEntryInput[],
-	creatorId: number,
-): Promise<{ ok: boolean; itemsById: Map<number, ContentItemRow> }> {
-	const ids = [
-		...new Set(
-			entries
-				.filter((e): e is Extract<PostEntryInput, { kind: "content" }> => e.kind === "content")
-				.map((e) => e.contentItemId),
-		),
-	];
-	if (ids.length === 0) return { ok: true, itemsById: new Map() };
+async function ownedWorkIds(workIds: number[], creatorId: number): Promise<Set<number>> {
+	if (workIds.length === 0) return new Set();
 	const rows = await db
-		.select()
-		.from(contentItems)
-		.where(and(inArray(contentItems.id, ids), eq(contentItems.creatorId, creatorId)));
-	const itemsById = new Map(rows.map((r) => [r.id, r]));
-	return { ok: ids.every((id) => itemsById.has(id)), itemsById };
-}
-
-/** Insert a fresh ordered set of post entries (create path). No transcode queueing. */
-async function insertPostEntries(postId: number, entries: PostEntryInput[]): Promise<void> {
-	for (let i = 0; i < entries.length; i++) {
-		await db.insert(postContents).values(entryValues(entries[i], postId, i));
-	}
+		.select({ id: works.id })
+		.from(works)
+		.where(and(inArray(works.id, workIds), eq(works.creatorId, creatorId)));
+	return new Set(rows.map((r) => r.id));
 }
 
 /**
- * Reconcile a post's entries against a submitted array (update path): keep+update entries
- * referenced by id, insert new ones, and delete those dropped — preserving order via
- * `position`. Processing is a library concern, so nothing is queued here.
+ * Replace a post's Work references wholesale. There is nothing to reconcile field-by-field
+ * — a reference has no state of its own beyond its position, which is exactly the point of
+ * keeping it inert. Returns true when the set actually changed, for the edit history.
  */
-async function reconcilePostEntries(postId: number, entries: PostEntryInput[]): Promise<void> {
-	const existing = await db.select().from(postContents).where(eq(postContents.postId, postId));
-	const existingById = new Map(existing.map((e) => [e.id, e]));
-	const keep = new Set<number>();
+async function setPostWorkRefs(postId: number, workIds: number[]): Promise<boolean> {
+	const existing = await db
+		.select({ workId: postWorkRefs.workId, position: postWorkRefs.position })
+		.from(postWorkRefs)
+		.where(eq(postWorkRefs.postId, postId))
+		.orderBy(asc(postWorkRefs.position));
 
-	for (let i = 0; i < entries.length; i++) {
-		const entry = entries[i];
-		const prev = entry.id != null ? existingById.get(entry.id) : undefined;
-		if (prev) {
-			keep.add(prev.id);
-			await db
-				.update(postContents)
-				.set({ ...entryValues(entry, postId, i), updatedAt: new Date() })
-				.where(eq(postContents.id, prev.id));
-		} else {
-			await db.insert(postContents).values(entryValues(entry, postId, i));
-		}
-	}
+	const wanted = [...new Set(workIds)];
+	const before = existing.map((e) => e.workId).join(",");
+	if (before === wanted.join(",")) return false;
 
-	const toDelete = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
-	if (toDelete.length > 0) {
-		await db.delete(postContents).where(inArray(postContents.id, toDelete));
+	await db.delete(postWorkRefs).where(eq(postWorkRefs.postId, postId));
+	for (let i = 0; i < wanted.length; i++) {
+		await db.insert(postWorkRefs).values({ postId, workId: wanted[i], position: i });
 	}
+	return true;
 }
 
 /**
- * Where a post's media should be delivered from. When set, a completed transcode's
+ * Where a Work's media should be delivered from. When set, a completed transcode's
  * stored URL is rewritten to the matching access-checked endpoint — signed HLS for
  * video, a signed redirect for audio — instead of a raw CDN URL. Stored media is
  * private, so the raw URL 403s; the endpoints are how an entitled viewer actually
  * plays it. Null in local dev, where /content serves everything unsigned.
+ *
+ * The post slug used to be part of this, because delivery was reached *through* a post
+ * and each endpoint had to re-check that the item it was handed actually belonged to the
+ * post being used to reach it — otherwise one accessible post unlocked every item on the
+ * platform. Gates live on the Work now, so the Work addresses itself and that entire
+ * class of cross-reference check disappears with the indirection that created it.
  */
 interface DeliveryCtx {
-	slug: string;
 	origin: string;
 }
 
-/** URL of the access-checked HLS master for a video item referenced by a post. */
-function buildHlsManifestUrl(
-	ctx: DeliveryCtx,
-	contentItemId: number,
-	file = "master.m3u8",
-): string {
-	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/hls/${contentItemId}/${file}`;
+/** URL of the access-checked HLS master for a video Work. */
+function buildHlsManifestUrl(ctx: DeliveryCtx, workId: number, file = "master.m3u8"): string {
+	return `${ctx.origin}/api/content/works/${workId}/hls/${file}`;
 }
 
-/** URL of the access-checked audio endpoint for an audio item referenced by a post. */
-function buildAudioUrl(ctx: DeliveryCtx, contentItemId: number): string {
-	return `${ctx.origin}/api/content/posts/${encodeURIComponent(ctx.slug)}/audio/${contentItemId}`;
+/** URL of the access-checked audio endpoint for an audio Work. */
+function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
+	return `${ctx.origin}/api/content/works/${workId}/audio`;
 }
 
 /**
@@ -801,134 +804,171 @@ function viewerTranscoding(
 	if (!delivery || job.status !== "completed") return job;
 
 	if (job.mediaType === "video" && job.hlsManifestUrl) {
-		return { ...job, hlsManifestUrl: buildHlsManifestUrl(delivery, job.contentItemId) };
+		return { ...job, hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId) };
 	}
 	if (job.mediaType === "audio" && job.outputFileUrl) {
-		return { ...job, outputFileUrl: buildAudioUrl(delivery, job.contentItemId) };
+		return { ...job, outputFileUrl: buildAudioUrl(delivery, job.workId) };
 	}
 	return job;
 }
 
-/** Parse a `:contentId` path param, rejecting anything that isn't a positive integer. */
-function parseContentId(raw: string): number | null {
+/** Parse an `:id` path param, rejecting anything that isn't a positive integer. */
+function parseNumericId(raw: string): number | null {
 	const n = Number(raw);
 	return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-/** Serialize one post entry for a response, blanking the referenced item's media when gated. */
-function serializeEntry(
-	entry: typeof postContents.$inferSelect,
-	item: ContentItemRow | null,
-	itemAssets: AssetRow[],
+/**
+ * Resolve the calling viewer's access to one Work.
+ *
+ * Every delivery endpoint goes through here, which is the point: access is re-resolved
+ * live, per request, against the Work's own gates. Nothing is inherited from a post, a
+ * project, or the URL that got the caller here.
+ */
+async function workAccessFor(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: WorkRow,
+): Promise<AccessResultLike> {
+	const viewerId = await getOptionalUserId(c);
+	const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+	return resolveAccessSync(work as AccessibleWork, ctx);
+}
+
+/**
+ * Serialize a Work for a viewer, withholding the deliverable when they lack access.
+ *
+ * The split is the load-bearing part. Everything a *listing* needs — title, type,
+ * thumbnail, duration, dates, the access verdict itself — is always present, so a locked
+ * Work still renders a proper card with a working unlock prompt. Everything that IS the
+ * deliverable — source key, embed URL, asset files, playable media URLs — is handed out
+ * only on access. A denied viewer gets no pointer at the payload at all: not a signed
+ * one, not an expired one, none.
+ */
+function serializeWorkForViewer(
+	work: WorkRow,
+	workAssets: AssetRow[],
 	job: TranscodingJobRow | null,
-	canAccess: boolean,
+	access: AccessResultLike,
 	delivery: DeliveryCtx | null,
 ) {
-	if (entry.kind === "text") {
-		return {
-			kind: "text" as const,
-			id: entry.id,
-			postId: entry.postId,
-			position: entry.position,
-			// Inline prose is part of the post's gated deliverable — blanked when locked.
-			bodyHtml: canAccess ? entry.bodyHtml : "",
-		};
-	}
-
-	// Media URLs are the deliverable: rewritten to the access-checked delivery routes for
-	// a viewer with access, and withheld entirely from one without. Library content is
-	// processed before it is attached to any post, so access isn't knowable at upload
-	// time — every accessible post, free or gated, routes through the signing endpoints
-	// in S3 mode; local dev serves the stored URLs directly (no ACLs).
-	const transcoding = viewerTranscoding(job, canAccess, delivery);
-
-	const contentItem = item
-		? {
-				id: item.id,
-				type: item.type,
-				title: item.title,
-				thumbnail: item.thumbnail,
-				durationSeconds: item.durationSeconds,
-				// `clientVariants` are an internal packaging detail (storage keys) — never expose.
-				metadata: stripInternalMetadata(item.metadata),
-				// Media payload is the deliverable — only handed out when the viewer has access.
-				sourceKey: canAccess ? item.sourceKey : "",
-				embedUrl: canAccess ? item.embedUrl : "",
-				// Download keys are only handed out through the access-checked download route.
-				assets: itemAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
-				transcoding,
-			}
-		: null;
-
+	const canAccess = access.canAccess;
 	return {
-		kind: "content" as const,
-		id: entry.id,
-		postId: entry.postId,
-		position: entry.position,
-		caption: entry.caption,
-		contentItem,
+		id: work.id,
+		publicId: work.publicId,
+		slug: work.slug,
+		creatorId: work.creatorId,
+		type: work.type,
+		title: work.title,
+		description: work.description,
+		thumbnail: work.thumbnail,
+		durationSeconds: work.durationSeconds,
+		estimatedReadMinutes: work.estimatedReadMinutes,
+		visibility: work.visibility,
+		releasedAt: work.releasedAt,
+		authoredAt: work.authoredAt,
+		authoredPrecision: work.authoredPrecision,
+		streamEnabled: work.streamEnabled,
+		downloadEnabled: work.downloadEnabled,
+		isPinned: work.isPinned,
+		tags: work.tags,
+		websiteUrl: work.websiteUrl,
+		sourceUrl: work.sourceUrl,
+		viewCount: work.viewCount,
+		downloadCount: work.downloadCount,
+		createdAt: work.createdAt,
+		updatedAt: work.updatedAt,
+		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
+		metadata: stripInternalMetadata(work.metadata),
+		// The creator's prose. For a text Work this IS the deliverable; for any other type
+		// it is the notes that come with it. Either way it rides with the payload and is
+		// gated — `description` is the public blurb that stays visible when locked.
+		bodyHtml: canAccess ? work.bodyHtml : "",
+		body: canAccess ? work.body : "",
+		sourceKey: canAccess ? work.sourceKey : "",
+		embedUrl: canAccess ? work.embedUrl : "",
+		// Download keys are only handed out through the access-checked download route.
+		assets: workAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
+		transcoding: viewerTranscoding(job, canAccess, delivery),
+		access,
 	};
 }
 
-/** Load a post's entries, resolving each content ref to its item + assets + latest job, gated. */
-async function loadPostContents(
+/** The shape `resolveAccessSync` returns; declared structurally so serialization stays pure. */
+type AccessResultLike = ReturnType<typeof resolveAccessSync>;
+
+/** Load Works by id with their assets and latest transcode, ready for serialization. */
+async function loadWorkBundles(workIds: number[]): Promise<{
+	worksById: Map<number, WorkRow>;
+	assetsByWork: Map<number, AssetRow[]>;
+	jobByWork: Map<number, TranscodingJobRow>;
+}> {
+	const worksById = new Map<number, WorkRow>();
+	const assetsByWork = new Map<number, AssetRow[]>();
+	const jobByWork = new Map<number, TranscodingJobRow>();
+	if (workIds.length === 0) return { worksById, assetsByWork, jobByWork };
+
+	const [workRows, assetRows, jobRows] = await Promise.all([
+		db.select().from(works).where(inArray(works.id, workIds)),
+		db.select().from(assets).where(inArray(assets.workId, workIds)),
+		db
+			.select()
+			.from(transcodingJobs)
+			.where(inArray(transcodingJobs.workId, workIds))
+			.orderBy(desc(transcodingJobs.createdAt)),
+	]);
+
+	await Promise.all(workRows.map(resolveWorkThumbnail));
+	for (const w of workRows) worksById.set(w.id, w);
+	for (const a of assetRows) {
+		const list = assetsByWork.get(a.workId) ?? [];
+		list.push(a);
+		assetsByWork.set(a.workId, list);
+	}
+	for (const j of jobRows) {
+		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
+	}
+	return { worksById, assetsByWork, jobByWork };
+}
+
+/**
+ * The Works a post references, each resolved against the viewer's own standing.
+ *
+ * Note what is NOT happening here: the post contributes nothing to access. Each Work is
+ * resolved on its own gates, so one post can carry a free Work and a locked one side by
+ * side, and a post the viewer can read may link a Work they cannot open.
+ */
+async function loadPostWorks(
 	postId: number,
-	canAccess: boolean,
+	viewerId: number | null,
 	delivery: DeliveryCtx | null = null,
 ) {
-	const entries = await db
-		.select()
-		.from(postContents)
-		.where(eq(postContents.postId, postId))
-		.orderBy(asc(postContents.position));
-	if (entries.length === 0) return [];
+	const refs = await db
+		.select({ workId: postWorkRefs.workId, position: postWorkRefs.position })
+		.from(postWorkRefs)
+		.where(eq(postWorkRefs.postId, postId))
+		.orderBy(asc(postWorkRefs.position));
+	if (refs.length === 0) return [];
 
-	const itemIds = [
-		...new Set(
-			entries
-				.filter((e) => e.kind === "content" && e.contentItemId != null)
-				.map((e) => e.contentItemId as number),
-		),
-	];
+	const workIds = refs.map((r) => r.workId);
+	const { worksById, assetsByWork, jobByWork } = await loadWorkBundles(workIds);
+	const ctx = await buildAccessContext(viewerId, { workIds });
 
-	const itemsById = new Map<number, ContentItemRow>();
-	const assetsByItem = new Map<number, AssetRow[]>();
-	const jobByItem = new Map<number, TranscodingJobRow>();
-
-	if (itemIds.length > 0) {
-		const [itemRows, assetRows, jobRows] = await Promise.all([
-			db.select().from(contentItems).where(inArray(contentItems.id, itemIds)),
-			db.select().from(assets).where(inArray(assets.contentItemId, itemIds)),
-			db
-				.select()
-				.from(transcodingJobs)
-				.where(inArray(transcodingJobs.contentItemId, itemIds))
-				.orderBy(desc(transcodingJobs.createdAt)),
-		]);
-
-		await Promise.all(itemRows.map(resolveItemThumbnail));
-		for (const item of itemRows) itemsById.set(item.id, item);
-		for (const a of assetRows) {
-			const list = assetsByItem.get(a.contentItemId) ?? [];
-			list.push(a);
-			assetsByItem.set(a.contentItemId, list);
-		}
-		for (const j of jobRows) {
-			if (!jobByItem.has(j.contentItemId)) jobByItem.set(j.contentItemId, j);
-		}
-	}
-
-	return entries.map((entry) => {
-		const item = entry.contentItemId != null ? (itemsById.get(entry.contentItemId) ?? null) : null;
-		return serializeEntry(
-			entry,
-			item,
-			item ? (assetsByItem.get(item.id) ?? []) : [],
-			item ? (jobByItem.get(item.id) ?? null) : null,
-			canAccess,
-			delivery,
-		);
-	});
+	return refs
+		.map((ref) => {
+			const work = worksById.get(ref.workId);
+			if (!work) return null;
+			return {
+				position: ref.position,
+				work: serializeWorkForViewer(
+					work,
+					assetsByWork.get(work.id) ?? [],
+					jobByWork.get(work.id) ?? null,
+					resolveAccessSync(work as AccessibleWork, ctx),
+					delivery,
+				),
+			};
+		})
+		.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**
@@ -941,18 +981,19 @@ function publicOrigin(): string {
 }
 
 /**
- * Decide where a post's media should be delivered from. In S3 mode ALL video and audio
+ * Decide where a Work's media should be delivered from. In S3 mode ALL video and audio
  * goes through the access-checked endpoints, because access is enforced live at request
- * time — which is the only way it *can* work: media is processed in the library before
- * it is attached to any post, so there is no access table to consult at upload time, and
- * a post's access can change after the transcode besides. That is also why the stored
- * objects are uniformly private and this layer signs per request, rather than the jobs
- * trying to bake an ACL. Local dev serves media directly (the /content route serves
- * everything, unsigned).
+ * time — which is the only way it *can* work: media is processed when a Work is uploaded
+ * to the Catalog, before it is released or gated, so there is no access table to consult
+ * at upload time, and a Work's access can change after the transcode besides. That is
+ * also why the stored objects are uniformly private and this layer signs per request,
+ * rather than the jobs trying to bake an ACL. Local dev serves media directly (the
+ * /content route serves everything, unsigned) — which is why a delivery leak cannot be
+ * reproduced locally, and why the tests assert URLs rather than access reasons.
  */
-function deliveryCtxFor(post: typeof posts.$inferSelect): DeliveryCtx | null {
+function deliveryCtx(): DeliveryCtx | null {
 	if (isLocalStorage) return null;
-	return { slug: post.slug, origin: publicOrigin() };
+	return { origin: publicOrigin() };
 }
 
 /**
@@ -968,7 +1009,7 @@ const SIGNED_MEDIA_TTL_SECONDS = 6 * 60 * 60;
  */
 async function rewriteHlsPlaylist(
 	text: string,
-	opts: { isMaster: boolean; prefixKey: string; ctx: DeliveryCtx; contentItemId: number },
+	opts: { isMaster: boolean; prefixKey: string; ctx: DeliveryCtx; workId: number },
 ): Promise<string> {
 	const out: string[] = [];
 	for (const raw of text.split("\n")) {
@@ -979,7 +1020,7 @@ async function rewriteHlsPlaylist(
 		}
 		if (opts.isMaster) {
 			// A variant playlist (e.g. "720p.m3u8") → back through this endpoint.
-			out.push(buildHlsManifestUrl(opts.ctx, opts.contentItemId, encodeURIComponent(line)));
+			out.push(buildHlsManifestUrl(opts.ctx, opts.workId, encodeURIComponent(line)));
 		} else {
 			// A segment (e.g. "720p_000.ts") → a short-lived signed CDN URL.
 			out.push(
@@ -1042,7 +1083,13 @@ const contentRoutes = new Hono()
 			);
 		}
 
-		if (contentType) conditions.push(eq(posts.contentType, contentType));
+		// Content-type and delivery filters belong to the Catalog now — a post has neither a
+		// type nor a delivery method. Filtering the feed by them would mean "posts that
+		// mention a video", which is a different question from "videos", and the Catalog
+		// answers the one people actually mean. Accepted and ignored so an older client
+		// degrades to an unfiltered feed rather than a 400.
+		void contentType;
+		void delivery;
 
 		// The public feed shows timeline posts only; a creator's own view or a
 		// collection view shows everything (including off-timeline posts).
@@ -1050,25 +1097,22 @@ const contentRoutes = new Hono()
 			conditions.push(eq(posts.showOnTimeline, true));
 		}
 
-		if (delivery === "stream") conditions.push(eq(posts.streamEnabled, true));
-		else if (delivery === "download") conditions.push(eq(posts.downloadEnabled, true));
-
 		if (tag) conditions.push(sql`${posts.tags} @> ${JSON.stringify([tag])}::jsonb`);
 
 		if (search) {
 			conditions.push(or(like(posts.title, `%${search}%`), like(posts.body, `%${search}%`)) as SQL);
 		}
 
+		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
+		// for drafts (the creator's own view), so fall back to createdAt to keep them ordered.
+		const feedOrder = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`;
 		let orderClause: SQL[];
 		switch (sort) {
 			case "popular":
-				orderClause = [desc(posts.viewCount), desc(posts.createdAt)];
-				break;
-			case "downloads":
-				orderClause = [desc(posts.downloadCount), desc(posts.createdAt)];
+				orderClause = [desc(posts.viewCount), feedOrder];
 				break;
 			default:
-				orderClause = [desc(posts.createdAt)];
+				orderClause = [feedOrder];
 		}
 
 		const result = await db
@@ -1086,51 +1130,47 @@ const contentRoutes = new Hono()
 
 		const postIds = result.map((r) => r.post.id);
 
-		// Latest transcoding status per post (across the items its content entries reference).
-		const transcodingMap = new Map<number, { status: string; progress: number }>();
+		// The Works each post links, for a card thumbnail and a count. Deliberately NOT
+		// resolved for access here: the feed lists announcements, and a post's readability
+		// has nothing to do with whether the Works it mentions are open.
+		const refsByPost = new Map<number, Array<{ id: number; type: string; thumbnail: string }>>();
 		if (postIds.length > 0) {
-			const jobs = await db
+			const refRows = await db
 				.select({
-					postId: postContents.postId,
-					status: transcodingJobs.status,
-					progress: transcodingJobs.progress,
+					postId: postWorkRefs.postId,
+					workId: works.id,
+					type: works.type,
+					thumbnail: works.thumbnail,
+					position: postWorkRefs.position,
 				})
-				.from(transcodingJobs)
-				.innerJoin(postContents, eq(transcodingJobs.contentItemId, postContents.contentItemId))
-				.where(inArray(postContents.postId, postIds))
-				.orderBy(desc(transcodingJobs.createdAt));
-			for (const job of jobs) {
-				if (!transcodingMap.has(job.postId)) {
-					transcodingMap.set(job.postId, { status: job.status, progress: job.progress ?? 0 });
-				}
+				.from(postWorkRefs)
+				.innerJoin(works, eq(postWorkRefs.workId, works.id))
+				.where(inArray(postWorkRefs.postId, postIds))
+				.orderBy(asc(postWorkRefs.position));
+			for (const r of refRows) {
+				const list = refsByPost.get(r.postId) ?? [];
+				list.push({ id: r.workId, type: r.type, thumbnail: r.thumbnail ?? "" });
+				refsByPost.set(r.postId, list);
 			}
 		}
-
-		// Access summary for the viewer, resolved from one loaded context.
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds });
 
 		return c.json({
 			posts: result.map((r) => {
 				const p = r.post;
+				const linked = refsByPost.get(p.id) ?? [];
 				return {
 					id: p.id,
 					publicId: p.publicId,
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
-					contentType: p.contentType,
-					streamEnabled: p.streamEnabled,
-					downloadEnabled: p.downloadEnabled,
-					thumbnail: p.thumbnail,
 					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
+					publishedAt: p.publishedAt,
 					scheduledFor: p.scheduledFor,
 					viewCount: p.viewCount,
-					downloadCount: p.downloadCount,
-					estimatedReadMinutes: p.estimatedReadMinutes,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
 					creator: {
@@ -1138,8 +1178,10 @@ const contentRoutes = new Hono()
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					},
-					access: resolveAccessSync(p as AccessiblePost, ctx),
-					latestTranscodingStatus: transcodingMap.get(p.id) ?? null,
+					// A card image, if the post links anything. Thumbnails are public — they are
+					// the preview a locked Work is *supposed* to show.
+					thumbnail: linked[0]?.thumbnail ?? "",
+					linkedWorkCount: linked.length,
 				};
 			}),
 		});
@@ -1149,28 +1191,17 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
-		// Every content ref must point at a library item the caller owns (a ref inherently
-		// points at an already-uploaded item, so there are no "empty media slots").
-		const { ok, itemsById } = await loadOwnedItemsForEntries(data.contents, user.id);
-		if (!ok) {
-			return c.json({ error: "A referenced content item was not found in your library." }, 400);
+		// A post may only link the caller's own Works. Cross-creator references are a real
+		// future feature (collabs, bundles) but they need a consent story first.
+		const owned = await ownedWorkIds(data.workIds, user.id);
+		if (data.workIds.some((id) => !owned.has(id))) {
+			return c.json({ error: "A linked Work was not found in your Catalog." }, 400);
 		}
 
-		// Publish is gated on media readiness: a post can't go live while a referenced item is
-		// still transcoding (it would render with no playable media). Draft/save stays free.
-		if (data.isPublished) {
-			const unready = await unreadyItems(entryItemIds(data.contents));
-			if (unready.length > 0) {
-				return c.json(
-					{
-						error: "Can't publish yet — referenced media is still processing.",
-						code: "media_not_ready",
-						unready,
-					},
-					409,
-				);
-			}
-		}
+		// NOTE: publishing is deliberately NOT gated on media readiness any more. Readiness is
+		// a property of the media, the media belongs to the Work, and a post that merely links
+		// a Work has nothing to wait for — blocking an announcement on someone's encode was an
+		// artefact of the post owning the media. The gate moved to RELEASE, on the Work.
 
 		// Explicit slug must be free; otherwise derive a unique one from the title.
 		let slug: string;
@@ -1184,14 +1215,7 @@ const contentRoutes = new Hono()
 		}
 
 		const bodyHtml = sanitizePostHtml(data.bodyHtml);
-		const contentType = deriveContentType(data.contents, itemsById);
-		const thumbnail = deriveThumbnail(data.contents, itemsById);
-
-		// Read time comes from the post body (the always-visible rich text).
-		const readText = bodyHtml || data.body;
-		const estimatedReadMinutes = readText ? estimateReadMinutes(readText) : null;
-
-		const publicId = await makeUniquePublicId();
+		const publicId = await makeUniquePublicId(posts);
 
 		const [post] = await db
 			.insert(posts)
@@ -1202,19 +1226,12 @@ const contentRoutes = new Hono()
 				title: data.title,
 				body: data.body,
 				bodyHtml,
-				contentType,
-				thumbnail,
-				streamEnabled: data.streamEnabled,
-				downloadEnabled: data.downloadEnabled,
-				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
-				seedAccess: data.seedAccess ?? defaultSeedAccess(),
 				showOnTimeline: data.showOnTimeline,
 				isPinned: data.isPinned,
 				tags: data.tags,
-				websiteUrl: data.websiteUrl,
-				sourceUrl: data.sourceUrl,
-				estimatedReadMinutes,
 				isPublished: data.isPublished,
+				// The feed's sort key. Set exactly when the post becomes live.
+				publishedAt: data.isPublished ? new Date() : null,
 				// Publishing now clears any schedule; otherwise store the requested publish time.
 				scheduledFor: data.isPublished
 					? null
@@ -1224,7 +1241,7 @@ const contentRoutes = new Hono()
 			})
 			.returning();
 
-		await insertPostEntries(post.id, data.contents);
+		await setPostWorkRefs(post.id, data.workIds);
 
 		// Optionally attach to a project (collection) the creator owns.
 		if (data.projectId != null) {
@@ -1245,8 +1262,8 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		const contents = await loadPostContents(post.id, true, deliveryCtxFor(post));
-		return c.json({ post: { ...post, contents } }, 201);
+		const linkedWorks = await loadPostWorks(post.id, user.id, deliveryCtx());
+		return c.json({ post: { ...post, linkedWorks } }, 201);
 	})
 
 	.get("/posts/:slug", async (c) => {
@@ -1279,10 +1296,8 @@ const contentRoutes = new Hono()
 			.limit(1);
 		const creatorHasStripe = !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled;
 
-		const [agg] = await db
-			.select({ average: avg(ratings.score), count: count(ratings.id) })
-			.from(ratings)
-			.where(and(eq(ratings.postId, post.id), visibleRating));
+		// No review aggregate here: a review is a verdict on a WORK, and a post is an
+		// announcement. The Works this post links carry their own.
 
 		// Fire-and-forget view count.
 		db.update(posts)
@@ -1290,15 +1305,11 @@ const contentRoutes = new Hono()
 			.where(eq(posts.id, post.id))
 			.execute();
 
-		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
-		const access = resolveAccessSync(post as AccessiblePost, ctx);
-
-		const contents = await loadPostContents(post.id, access.canAccess, deliveryCtxFor(post));
-
-		// When the post is locked to this viewer, the WHOLE post locks: the body (like
-		// the content elements) is gated content, not a teaser. Only the title, cover
-		// thumbnail, and meta remain so the client can render a "locked post" preview.
-		const gatedBody = access.canAccess ? {} : { bodyHtml: "", body: "" };
+		// A post has no gates of its own: it is an announcement, and announcements are for
+		// the audience. Each Work it links resolves on its OWN gates, so this page can show
+		// a readable post alongside a Work the viewer cannot open — which is exactly the
+		// separation the model is for, and why there is no post-level `access` any more.
+		const linkedWorks = await loadPostWorks(post.id, viewerId, deliveryCtx());
 
 		// Transparent edit history — every content edit is logged with a timestamp.
 		const edits = await db
@@ -1314,12 +1325,8 @@ const contentRoutes = new Hono()
 		return c.json({
 			post: {
 				...post,
-				...gatedBody,
 				creator: { ...creator, hasStripe: creatorHasStripe },
-				ratingAverage: agg.average ? Number(agg.average) : null,
-				ratingCount: Number(agg.count),
-				contents,
-				access,
+				linkedWorks,
 				edits,
 			},
 		});
@@ -1334,74 +1341,12 @@ const contentRoutes = new Hono()
 		if (!existing) return c.json({ error: "Post not found" }, 404);
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		// When entries are provided, every content ref must belong to the caller — validate
-		// before any writes so a bad ref never partially applies.
-		if (data.contents !== undefined) {
-			const { ok } = await loadOwnedItemsForEntries(data.contents, user.id);
-			if (!ok) {
-				return c.json({ error: "A referenced content item was not found in your library." }, 400);
-			}
-		}
-
-		// Capture whether this edit actually changes the content list (before reconcile) so the
-		// edit-history entry below only records real content changes, not no-op re-saves.
-		let contentsChanged = false;
-		if (data.contents !== undefined) {
-			const before = await db
-				.select({
-					kind: postContents.kind,
-					contentItemId: postContents.contentItemId,
-					bodyHtml: postContents.bodyHtml,
-					caption: postContents.caption,
-				})
-				.from(postContents)
-				.where(eq(postContents.postId, existing.id))
-				.orderBy(asc(postContents.position));
-			contentsChanged = entriesSignature(before) !== entriesSignature(data.contents);
-		}
-
-		// Delivery-method floor, evaluated on the state this edit RESULTS IN.
-		//
-		// `updatePostSchema` is `postBaseSchema.partial()`, and `.partial()` silently drops
-		// the create-time `.refine()` that requires at least one of stream/download — so
-		// without this a PATCH could switch both off and leave a PUBLISHED post with no way
-		// to consume it at all. It has to live here rather than on the schema: a request
-		// sending only `streamEnabled: false` is valid or not depending on the post's stored
-		// `downloadEnabled`, which a schema refine can't see.
-		const willStream = data.streamEnabled ?? existing.streamEnabled;
-		const willDownload = data.downloadEnabled ?? existing.downloadEnabled;
-		if (!willStream && !willDownload) {
-			return c.json(
-				{ error: "A post must enable at least one access type (stream or download)" },
-				400,
-			);
-		}
-
-		// Publish-readiness gate: block going (or staying) published while a referenced item is
-		// still transcoding. Save/draft and scheduling stay free.
-		const willPublish = data.isPublished ?? existing.isPublished;
-		if (willPublish) {
-			const intendedItemIds =
-				data.contents !== undefined
-					? entryItemIds(data.contents)
-					: (
-							await db
-								.select({ itemId: postContents.contentItemId })
-								.from(postContents)
-								.where(and(eq(postContents.postId, existing.id), eq(postContents.kind, "content")))
-						)
-							.map((r) => r.itemId)
-							.filter((x): x is number => x != null);
-			const unready = await unreadyItems(intendedItemIds);
-			if (unready.length > 0) {
-				return c.json(
-					{
-						error: "Can't publish yet — referenced media is still processing.",
-						code: "media_not_ready",
-						unready,
-					},
-					409,
-				);
+		// Linked Works must belong to the caller — validated before any writes so a bad
+		// reference never partially applies.
+		if (data.workIds !== undefined) {
+			const owned = await ownedWorkIds(data.workIds, user.id);
+			if (data.workIds.some((id) => !owned.has(id))) {
+				return c.json({ error: "A linked Work was not found in your Catalog." }, 400);
 			}
 		}
 
@@ -1409,63 +1354,26 @@ const contentRoutes = new Hono()
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
-		// Reconcile content entries first (if provided), then derive post-level fields.
-		if (data.contents !== undefined) {
-			await reconcilePostEntries(existing.id, data.contents);
-		}
-		const currentEntries = await db
-			.select({ kind: postContents.kind, contentItemId: postContents.contentItemId })
-			.from(postContents)
-			.where(eq(postContents.postId, existing.id))
-			.orderBy(asc(postContents.position));
-		// Denormalized type/thumbnail derive from the first content ref's item.
-		const currentItemIds = [
-			...new Set(
-				currentEntries
-					.filter((e) => e.kind === "content" && e.contentItemId != null)
-					.map((e) => e.contentItemId as number),
-			),
-		];
-		const currentItems = currentItemIds.length
-			? await db
-					.select({
-						id: contentItems.id,
-						type: contentItems.type,
-						thumbnail: contentItems.thumbnail,
-					})
-					.from(contentItems)
-					.where(inArray(contentItems.id, currentItemIds))
-			: [];
-		const currentItemsById = new Map(currentItems.map((i) => [i.id, i]));
+		// Replacing the reference set reports whether it actually changed, for the history.
+		const refsChanged =
+			data.workIds !== undefined ? await setPostWorkRefs(existing.id, data.workIds) : false;
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
 		if (data.title !== undefined) updates.title = data.title;
 		if (data.body !== undefined) updates.body = data.body;
 		if (data.bodyHtml !== undefined) updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
-		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
-		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
-		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
-		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
 		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
-		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
-		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
 		if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
 		if (data.scheduledFor !== undefined)
 			updates.scheduledFor = data.scheduledFor ? new Date(data.scheduledFor) : null;
 		// Publishing now supersedes and clears any pending schedule.
 		if (data.isPublished === true) updates.scheduledFor = null;
-
-		// Keep the denormalized type/thumbnail + read time in sync.
-		updates.contentType = deriveContentType(currentEntries, currentItemsById);
-		updates.thumbnail = deriveThumbnail(currentEntries, currentItemsById);
-		const readText =
-			(data.bodyHtml !== undefined ? updates.bodyHtml : existing.bodyHtml) ||
-			(data.body !== undefined ? data.body : existing.body) ||
-			"";
-		updates.estimatedReadMinutes = readText ? estimateReadMinutes(readText as string) : null;
+		// Stamp the publication time on the transition INTO published, and only then — a
+		// re-publish of something already live must not rewrite its place in the feed.
+		if (data.isPublished === true && !existing.isPublished) updates.publishedAt = new Date();
 
 		const [updated] = await db
 			.update(posts)
@@ -1475,7 +1383,7 @@ const contentRoutes = new Hono()
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
-		const editedFields = changedPostFields(existing, data, contentsChanged);
+		const editedFields = changedPostFields(existing, data, refsChanged);
 		if (editedFields.length > 0) {
 			await db.insert(postEdits).values({
 				postId: existing.id,
@@ -1484,27 +1392,31 @@ const contentRoutes = new Hono()
 			});
 		}
 
-		const contents = await loadPostContents(updated.id, true, deliveryCtxFor(updated));
-		return c.json({ post: { ...updated, contents } });
+		const linkedWorks = await loadPostWorks(updated.id, user.id, deliveryCtx());
+		return c.json({ post: { ...updated, linkedWorks } });
 	})
 
-	// Preview which library items would be orphaned by deleting this post — powers the
-	// "also remove now-unused media?" prompt on the delete confirmation. Owner-only.
+	/**
+	 * Which Works would be left with no posting history if this post went away. Nothing is
+	 * deleted with the post any more — a Work stands on its own in the Catalog whether or
+	 * not a post ever pointed at it — so this is informational only, and the delete route
+	 * purges nothing. Owner-only.
+	 */
 	.get("/posts/:slug/orphaned-media", requireAuth, async (c) => {
 		const user = c.get("user");
 		const existing = await findPostRow(c.req.param("slug"));
 		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
-		const ids = await orphanedItemIds(existing.id);
+		const ids = await worksOnlyLinkedFrom(existing.id);
 		if (ids.length === 0) return c.json({ items: [] });
 		const items = await db
 			.select({
-				id: contentItems.id,
-				title: contentItems.title,
-				type: contentItems.type,
-				thumbnail: contentItems.thumbnail,
+				id: works.id,
+				title: works.title,
+				type: works.type,
+				thumbnail: works.thumbnail,
 			})
-			.from(contentItems)
-			.where(inArray(contentItems.id, ids));
+			.from(works)
+			.where(inArray(works.id, ids));
 		return c.json({ items });
 	})
 
@@ -1515,47 +1427,37 @@ const contentRoutes = new Hono()
 		const existing = await findPostRow(slug);
 		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
-		// Optionally purge library media left orphaned by this delete (opt-in via ?purgeMedia=1).
-		// Media lives on reusable content items, not the post, so purging is deliberately explicit.
-		// Compute orphans BEFORE deleting the post (the query reads its post_contents rows).
-		const purge = purgeMedia === "true" || purgeMedia === "1";
-		const orphanIds = purge ? await orphanedItemIds(existing.id) : [];
+		// `purgeMedia` is accepted and deliberately ignored — deleting an announcement must
+		// never destroy the work it announced. Under the old model a post OWNED its content,
+		// so an opt-in purge was the careful thing to offer; now a Work stands on its own in
+		// the Catalog and is deleted from there, on purpose, by its own route. Kept in the
+		// schema so an older client's `?purgeMedia=1` is a no-op rather than a 400.
+		void purgeMedia;
+
+		// Comments are polymorphic, so there is no FK to cascade them — the price the
+		// moderation tables already pay for the same shape. Removing them explicitly is
+		// what keeps a deleted post from leaving a thread nothing can reach and nothing
+		// will ever clean up. (Their moderation reports survive on purpose: a report is a
+		// record, and `subjectStillExists` filters them out of the queue and the counts.)
+		await db
+			.delete(comments)
+			.where(and(eq(comments.subjectType, "post"), eq(comments.subjectId, existing.id)));
 
 		await db.delete(posts).where(eq(posts.id, existing.id));
-
-		if (orphanIds.length > 0) {
-			const [orphanRows, orphanAssets, orphanJobs] = await Promise.all([
-				db.select().from(contentItems).where(inArray(contentItems.id, orphanIds)),
-				db.select().from(assets).where(inArray(assets.contentItemId, orphanIds)),
-				db.select().from(transcodingJobs).where(inArray(transcodingJobs.contentItemId, orphanIds)),
-			]);
-			for (const item of orphanRows) {
-				await purgeItemMedia(
-					item,
-					orphanAssets.filter((a) => a.contentItemId === item.id),
-					orphanJobs.filter((j) => j.contentItemId === item.id),
-				);
-			}
-			await db.delete(contentItems).where(inArray(contentItems.id, orphanIds));
-		}
 		return c.body(null, 204);
 	})
 
-	// ── Post Comments ──────────────────────────────────────────────────────────
+	// ── Comments (polymorphic: a Post or a Work) ───────────────────────────────
+	//
+	// Both surfaces are the same three queries over `(subject_type, subject_id)`, so they
+	// share them. A Work needed its own thread because it can be released, consumed and
+	// paid for with no post in sight — under the old model there was nowhere to say
+	// anything about it.
+
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
-
-		const result = await db
-			.select({ comment: comments, username: users.username, avatar: users.avatar })
-			.from(comments)
-			.innerJoin(users, eq(comments.userId, users.id))
-			.where(and(eq(comments.postId, post.id), visibleComment))
-			.orderBy(desc(comments.createdAt));
-
-		return c.json({
-			comments: result.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar })),
-		});
+		return c.json({ comments: await listComments("post", post.id) });
 	})
 
 	.post(
@@ -1570,25 +1472,56 @@ const contentRoutes = new Hono()
 			const { body } = c.req.valid("json");
 			const [comment] = await db
 				.insert(comments)
-				.values({ userId: user.id, postId: post.id, body })
+				.values({ userId: user.id, subjectType: "post", subjectId: post.id, body })
 				.returning();
 
 			return c.json({ comment: { ...comment, username: user.username } }, 201);
 		},
 	)
 
-	// ── Post Reviews ───────────────────────────────────────────────────────────
-	// A review is a score plus written text — a score can't be left on its own.
-	// The route path stays `/ratings` (and the table stays `ratings`): "review" is
-	// a copy rule, not a schema rule, exactly like the Seed vocabulary changes.
-	.get("/posts/:slug/ratings", async (c) => {
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	.get("/works/:id/comments", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		return c.json({ comments: await listComments("work", work.id) });
+	})
+
+	.post("/works/:id/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		// Discussion follows access. Commenting on a Work you cannot open would be talking
+		// about something you have not seen, and it would leak the existence of a thread
+		// to people the gate is keeping out.
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+		const { body } = c.req.valid("json");
+		const [comment] = await db
+			.insert(comments)
+			.values({ userId: user.id, subjectType: "work", subjectId: work.id, body })
+			.returning();
+
+		return c.json({ comment: { ...comment, username: user.username } }, 201);
+	})
+
+	// ── Reviews (Works only) ───────────────────────────────────────────────────
+	//
+	// A review is "a reader's verdict on a work" (63.01), and reviews are floor-level
+	// moderation because "a creator moderating reviews of their own work is the conflict
+	// reviews exist to avoid" (40.06). Both are about works, so unlike comments this is
+	// NOT polymorphic — reviewing an announcement is a category error.
+	//
+	// The route path stays `/ratings` (and the table stays `ratings`): "review" is a copy
+	// rule, not a schema rule, exactly like the Seed vocabulary changes.
+	.get("/works/:id/ratings", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
-			.where(and(eq(ratings.postId, post.id), visibleRating));
+			.where(and(eq(ratings.workId, work.id), visibleRating));
 
 		// The written reviews themselves. Hidden ones are withheld here for the same
 		// reason they're excluded from the aggregate — this is a public read.
@@ -1604,7 +1537,7 @@ const contentRoutes = new Hono()
 			})
 			.from(ratings)
 			.innerJoin(users, eq(ratings.userId, users.id))
-			.where(and(eq(ratings.postId, post.id), visibleRating))
+			.where(and(eq(ratings.workId, work.id), visibleRating))
 			.orderBy(desc(ratings.createdAt));
 
 		let userRating: number | null = null;
@@ -1617,7 +1550,7 @@ const contentRoutes = new Hono()
 			const [row] = await db
 				.select({ score: ratings.score, body: ratings.body })
 				.from(ratings)
-				.where(and(eq(ratings.postId, post.id), eq(ratings.userId, currentUserId)))
+				.where(and(eq(ratings.workId, work.id), eq(ratings.userId, currentUserId)))
 				.limit(1);
 			userRating = row?.score ?? null;
 			userReview = row?.body ?? null;
@@ -1634,10 +1567,16 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	.post("/posts/:slug/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
+	.post("/works/:id/ratings", requireAuth, zValidator("json", createRatingSchema), async (c) => {
 		const user = c.get("user");
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		// You may only review what you can actually consume. This is stricter than the old
+		// post route, which let anyone who could reach the page leave a verdict on content
+		// they had never seen.
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
 		const { score, body } = c.req.valid("json");
 		// The conflict branch sets `score` and `body` and nothing else — notably not
@@ -1647,9 +1586,9 @@ const contentRoutes = new Hono()
 		// and this set clause; forgetting the set clause silently makes edits no-ops.
 		const [rating] = await db
 			.insert(ratings)
-			.values({ userId: user.id, postId: post.id, score, body: body.trim() })
+			.values({ userId: user.id, workId: work.id, score, body: body.trim() })
 			.onConflictDoUpdate({
-				target: [ratings.userId, ratings.postId],
+				target: [ratings.userId, ratings.workId],
 				set: { score, body: body.trim() },
 			})
 			.returning();
@@ -1658,62 +1597,55 @@ const contentRoutes = new Hono()
 	})
 
 	// ── Access-checked asset download ─────────────────────────────────────────────
-	// Assets belong to content items; a post can deliver an item's asset only while it
-	// references that item. Access is enforced at the post level (the access point).
-	.post("/posts/:slug/assets/:id/download", async (c) => {
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	// Assets belong to a Work, and the Work carries the gate. No post is involved: an
+	// entitled viewer can download from the Catalog whether or not anything was announced.
+	.post("/works/:id/assets/:assetId/download", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		// Resolve the asset via its content item, and confirm the item is referenced by
-		// this post (a post_contents row with that contentItemId).
-		const [row] = await db
-			.select({ asset: assets })
+		const [asset] = await db
+			.select()
 			.from(assets)
-			.innerJoin(postContents, eq(postContents.contentItemId, assets.contentItemId))
-			.where(and(eq(assets.id, Number(c.req.param("id"))), eq(postContents.postId, post.id)))
+			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.workId, work.id)))
 			.limit(1);
-		if (!row) return c.json({ error: "Asset not found" }, 404);
+		if (!asset) return c.json({ error: "Asset not found" }, 404);
 
 		// Enforce access server-side — the UI gate is not the source of truth.
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
-		const access = resolveAccessSync(post as AccessiblePost, ctx);
+		const access = await workAccessFor(c, work);
 		if (!access.canAccess) {
 			return c.json({ error: "Purchase or subscription required", access }, 403);
 		}
 
-		db.update(posts)
-			.set({ downloadCount: sql`${posts.downloadCount} + 1` })
-			.where(eq(posts.id, post.id))
+		db.update(works)
+			.set({ downloadCount: sql`${works.downloadCount} + 1` })
+			.where(eq(works.id, work.id))
 			.execute();
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).
-		const url = await storage.getUrl(row.asset.file, { signed: true, expiresIn: 300 });
+		const url = await storage.getUrl(asset.file, { signed: true, expiresIn: 300 });
 		return c.json({ url });
 	})
 
-	// ── Transcoding status (across the items the post's content entries reference) ──
-	.get("/posts/:slug/transcoding", async (c) => {
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	// ── Transcoding status for a Work ────────────────────────────────────────────
+	.get("/works/:id/transcoding", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const jobs = await db
-			.select({ job: transcodingJobs })
+			.select()
 			.from(transcodingJobs)
-			.innerJoin(postContents, eq(transcodingJobs.contentItemId, postContents.contentItemId))
-			.where(eq(postContents.postId, post.id))
+			.where(eq(transcodingJobs.workId, work.id))
 			.orderBy(desc(transcodingJobs.createdAt));
 
-		// Serialized exactly as post detail does — same helper, same rule. That matters:
-		// this route is a second way to reach the same rows, so anything post detail
+		// Serialized exactly as Work detail does — same helper, same rule. That matters:
+		// this route is a second way to reach the same rows, so anything Work detail
 		// withholds has to be withheld here too or the poller becomes the side channel
 		// around it. Status still flows to a denied viewer; only the payload URLs don't.
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
-		const canAccess = resolveAccessSync(post as AccessiblePost, ctx).canAccess;
-		const delivery = deliveryCtxFor(post);
-		return c.json({ jobs: jobs.map(({ job }) => viewerTranscoding(job, canAccess, delivery)) });
+		const access = await workAccessFor(c, work);
+		return c.json({
+			jobs: jobs.map((job) => viewerTranscoding(job, access.canAccess, deliveryCtx())),
+		});
 	})
 
 	// ── Audio delivery (access-checked, signed) ──────────────────────────────────
@@ -1721,31 +1653,17 @@ const contentRoutes = new Hono()
 	// so this is the only way to reach it: access is re-checked here on every request,
 	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
 	// range requests (seeking) go straight to the CDN instead of through the API.
-	.get("/posts/:slug/audio/:contentId", async (c) => {
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+	.get("/works/:id/audio", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
-		const access = resolveAccessSync(post as AccessiblePost, ctx);
+		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
-
-		const contentItemId = parseContentId(c.req.param("contentId"));
-		if (contentItemId == null) return c.json({ error: "Not found" }, 404);
-
-		// Confirm the item is referenced by this post before serving its audio — otherwise
-		// any post the viewer can reach would unlock every item on the platform.
-		const [ref] = await db
-			.select({ id: postContents.id })
-			.from(postContents)
-			.where(and(eq(postContents.contentItemId, contentItemId), eq(postContents.postId, post.id)))
-			.limit(1);
-		if (!ref) return c.json({ error: "Not found" }, 404);
 
 		const [job] = await db
 			.select()
 			.from(transcodingJobs)
-			.where(eq(transcodingJobs.contentItemId, contentItemId))
+			.where(eq(transcodingJobs.workId, work.id))
 			.orderBy(desc(transcodingJobs.createdAt))
 			.limit(1);
 		if (!job?.outputFileUrl) return c.json({ error: "Not found" }, 404);
@@ -1761,38 +1679,26 @@ const contentRoutes = new Hono()
 	})
 
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
-	// Serves the master + variant playlists for a video, rewriting segment refs to
-	// short-lived signed CDN URLs. `:contentId` is a content-item id referenced by the
-	// post. Library segments are always private, so EVERY accessible post (free or gated)
-	// is pointed here by serializeEntry; the access check below is the gate.
-	.get("/posts/:slug/hls/:contentId/:file", async (c) => {
+	// Serves the master + variant playlists for a video Work, rewriting segment refs to
+	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
+	// (free or gated) is pointed here by serializeWorkForViewer; this check is the gate.
+	.get("/works/:id/hls/:file", async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
 		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);
 
-		const post = await findPostRow(c.req.param("slug"));
-		if (!post) return c.json({ error: "Post not found" }, 404);
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		// Enforce access server-side — this is the gate for private segments.
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: [post.id] });
-		const access = resolveAccessSync(post as AccessiblePost, ctx);
+		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 
-		const contentItemId = parseContentId(c.req.param("contentId"));
-		if (contentItemId == null) return c.json({ error: "Not found" }, 404);
-		// Confirm the item is referenced by this post before serving its transcode.
-		const [ref] = await db
-			.select({ id: postContents.id })
-			.from(postContents)
-			.where(and(eq(postContents.contentItemId, contentItemId), eq(postContents.postId, post.id)))
-			.limit(1);
-		if (!ref) return c.json({ error: "Not found" }, 404);
-
+		const workId = work.id;
 		const [job] = await db
 			.select()
 			.from(transcodingJobs)
-			.where(eq(transcodingJobs.contentItemId, contentItemId))
+			.where(eq(transcodingJobs.workId, workId))
 			.orderBy(desc(transcodingJobs.createdAt))
 			.limit(1);
 		const manifestUrl = job?.hlsManifestUrl;
@@ -1821,8 +1727,8 @@ const contentRoutes = new Hono()
 		const rewritten = await rewriteHlsPlaylist(new TextDecoder().decode(bytes), {
 			isMaster: file === "master.m3u8",
 			prefixKey,
-			ctx: { slug: post.slug, origin: publicOrigin() },
-			contentItemId,
+			ctx: { origin: publicOrigin() },
+			workId,
 		});
 		return c.body(rewritten, 200, {
 			"Content-Type": "application/vnd.apple.mpegurl",
@@ -1838,14 +1744,42 @@ const contentRoutes = new Hono()
 	 * Create a library content item owned by the caller. Media items with a source that
 	 * needs processing are queued here (once, in the library) — never on post save.
 	 */
-	.post("/content-items", requireAuth, zValidator("json", createContentItemSchema), async (c) => {
+	.post("/works", requireAuth, zValidator("json", createWorkSchema), async (c) => {
 		const user = c.get("user");
 		const data = c.req.valid("json");
 
-		const [item] = await db
-			.insert(contentItems)
+		// A Work is born private. Nothing is visible on upload — release is a separate,
+		// deliberate act, which is the whole point of separating the Catalog from posting.
+		const requestedVisibility = data.visibility ?? "private";
+		if (requestedVisibility === "released") {
+			return c.json(
+				{
+					error: "Create the Work first, then release it once its media is ready.",
+					code: "release_on_create",
+				},
+				400,
+			);
+		}
+
+		let slug: string;
+		if (data.slug) {
+			if (await workSlugExists(data.slug)) {
+				return c.json({ error: "A Work with this slug already exists" }, 409);
+			}
+			slug = data.slug;
+		} else {
+			slug = await makeUniqueSlug(data.title || data.type, workSlugExists);
+		}
+
+		const bodyHtml = data.type === "text" ? sanitizePostHtml(data.bodyHtml ?? "") : "";
+		const publicId = await makeUniquePublicId(works);
+
+		const [work] = await db
+			.insert(works)
 			.values({
 				creatorId: user.id,
+				publicId,
+				slug,
 				type: data.type,
 				title: data.title,
 				description: data.description,
@@ -1853,227 +1787,403 @@ const contentRoutes = new Hono()
 				sourceKey: data.sourceKey,
 				embedUrl: data.embedUrl,
 				durationSeconds: data.durationSeconds ?? null,
+				body: data.body ?? "",
+				bodyHtml,
+				estimatedReadMinutes:
+					data.type === "text" && (bodyHtml || data.body)
+						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
+						: null,
 				metadata: data.metadata ?? {},
+				visibility: "private",
+				authoredAt: data.authoredAt ? new Date(data.authoredAt) : null,
+				authoredPrecision: data.authoredPrecision ?? null,
+				streamEnabled: data.streamEnabled ?? true,
+				downloadEnabled: data.downloadEnabled ?? false,
+				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
+				seedAccess: data.seedAccess ?? defaultSeedAccess(),
+				isPinned: data.isPinned ?? false,
+				tags: data.tags ?? [],
+				websiteUrl: data.websiteUrl ?? "",
+				sourceUrl: data.sourceUrl ?? "",
 			})
 			.returning();
 
-		const job = await queueTranscodeForItem(item);
-		await resolveItemThumbnail(item);
-		return c.json({ item: serializeItem(item, [], job) }, 201);
+		const job = await queueTranscodeForWork(work);
+		await resolveWorkThumbnail(work);
+		return c.json({ work: serializeWork(work, [], job) }, 201);
 	})
 
-	/** The caller's library, each item with its latest transcode + assets for the UI. */
-	.get("/content-items", requireAuth, async (c) => {
+	/** The caller's own Catalog — every Work, private and released, with processing state. */
+	.get("/works", requireAuth, async (c) => {
 		const user = c.get("user");
 
 		const items = await db
 			.select()
-			.from(contentItems)
-			.where(eq(contentItems.creatorId, user.id))
-			.orderBy(desc(contentItems.createdAt));
-		if (items.length === 0) return c.json({ items: [] });
+			.from(works)
+			.where(eq(works.creatorId, user.id))
+			.orderBy(desc(works.createdAt));
+		if (items.length === 0) return c.json({ works: [] });
 
 		const ids = items.map((i) => i.id);
 		const [assetRows, jobRows] = await Promise.all([
-			db.select().from(assets).where(inArray(assets.contentItemId, ids)),
+			db.select().from(assets).where(inArray(assets.workId, ids)),
 			db
 				.select()
 				.from(transcodingJobs)
-				.where(inArray(transcodingJobs.contentItemId, ids))
+				.where(inArray(transcodingJobs.workId, ids))
 				.orderBy(desc(transcodingJobs.createdAt)),
 		]);
 
-		const assetsByItem = new Map<number, AssetRow[]>();
+		const assetsByWork = new Map<number, AssetRow[]>();
 		for (const a of assetRows) {
-			const list = assetsByItem.get(a.contentItemId) ?? [];
+			const list = assetsByWork.get(a.workId) ?? [];
 			list.push(a);
-			assetsByItem.set(a.contentItemId, list);
+			assetsByWork.set(a.workId, list);
 		}
-		const jobByItem = new Map<number, TranscodingJobRow>();
+		const jobByWork = new Map<number, TranscodingJobRow>();
 		for (const j of jobRows) {
-			if (!jobByItem.has(j.contentItemId)) jobByItem.set(j.contentItemId, j);
+			if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
 		}
 
-		await Promise.all(items.map(resolveItemThumbnail));
+		await Promise.all(items.map(resolveWorkThumbnail));
 		return c.json({
-			items: items.map((i) =>
-				serializeItem(i, assetsByItem.get(i.id) ?? [], jobByItem.get(i.id) ?? null),
+			works: items.map((i) =>
+				serializeWork(i, assetsByWork.get(i.id) ?? [], jobByWork.get(i.id) ?? null),
 			),
 		});
 	})
 
-	/** One library item (owner-only) with its assets + latest transcode. */
-	.get("/content-items/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const id = Number(c.req.param("id"));
-		const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) {
-			return c.json({ error: "Content item not found" }, 404);
+	/**
+	 * One Work — the Catalog's public detail endpoint, and the owner's editor payload.
+	 *
+	 * Deliberately one route serving both. The owner gets the full row (including the
+	 * access tables they edit); everyone else gets the viewer serialization, which withholds
+	 * the deliverable unless their access resolves. Two routes would mean two places for
+	 * "what may this viewer see?" to drift apart, and the whole point of this layer is that
+	 * the question has one answer.
+	 *
+	 * A `private` Work 404s for everyone but its creator — not 403, because the existence
+	 * of unreleased work is itself not public information.
+	 */
+	.get("/works/:id", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const viewerId = await getOptionalUserId(c);
+		const isOwner = viewerId != null && viewerId === work.creatorId;
+		if (work.visibility !== "released" && !isOwner) {
+			return c.json({ error: "Work not found" }, 404);
 		}
 
-		const [itemAssets, jobRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.contentItemId, id)),
+		const [workAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
 				.select()
 				.from(transcodingJobs)
-				.where(eq(transcodingJobs.contentItemId, id))
+				.where(eq(transcodingJobs.workId, work.id))
 				.orderBy(desc(transcodingJobs.createdAt)),
 		]);
 
-		await resolveItemThumbnail(item);
-		return c.json({ item: serializeItem(item, itemAssets, jobRows[0] ?? null) });
+		await resolveWorkThumbnail(work);
+
+		if (isOwner) {
+			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null) });
+		}
+
+		// Fire-and-forget view count, owners excluded.
+		db.update(works)
+			.set({ viewCount: sql`${works.viewCount} + 1` })
+			.where(eq(works.id, work.id))
+			.execute();
+
+		const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+		const [creator] = await db
+			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
+			.from(users)
+			.where(eq(users.id, work.creatorId))
+			.limit(1);
+
+		// Can the creator actually receive a direct-purchase payout? Drives whether the
+		// buyer is offered a live checkout or told the creator can't take payments yet.
+		const [creatorStripe] = await db
+			.select({
+				payoutsEnabled: stripeAccounts.payoutsEnabled,
+				onboardingComplete: stripeAccounts.onboardingComplete,
+			})
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, work.creatorId))
+			.limit(1);
+
+		return c.json({
+			work: {
+				...serializeWorkForViewer(
+					work,
+					workAssets,
+					jobRows[0] ?? null,
+					resolveAccessSync(work as AccessibleWork, ctx),
+					deliveryCtx(),
+				),
+				creator,
+				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
+				// Where this Work has been announced — the other half of the reference.
+				postedIn: await postsUsingWork(work.id),
+			},
+		});
 	})
 
-	/** Update a library item (owner-only). Re-queues processing when the source changes. */
-	.patch(
-		"/content-items/:id",
-		requireAuth,
-		zValidator("json", updateContentItemSchema),
-		async (c) => {
-			const user = c.get("user");
-			const id = Number(c.req.param("id"));
-			const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
-			if (!item || item.creatorId !== user.id) {
-				return c.json({ error: "Content item not found" }, 404);
+	/**
+	 * A creator's public Catalog — their released Works, newest-made first.
+	 *
+	 * Sorted by the creator-asserted **Created** date by default, so it reads as a body of
+	 * work in the order it was made rather than the order it happened to be uploaded.
+	 * `sort=released` gives "what's new here" instead. Works with no Created date fall back
+	 * to their release date so they can't vanish to the bottom.
+	 */
+	.get("/catalog/:username", async (c) => {
+		const username = c.req.param("username");
+		const sort = c.req.query("sort") ?? "authored";
+		const type = c.req.query("type");
+
+		const [creator] = await db
+			.select({ id: users.id, username: users.username, displayName: users.displayName })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+		if (!creator) return c.json({ error: "Creator not found" }, 404);
+
+		const viewerId = await getOptionalUserId(c);
+		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
+		// A creator browsing their own Catalog sees drafts too; nobody else does.
+		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
+		if (type) conditions.push(eq(works.type, type));
+
+		const order =
+			sort === "released"
+				? sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`
+				: sql`COALESCE(${works.authoredAt}, ${works.releasedAt}, ${works.createdAt}) DESC`;
+
+		const rows = await db
+			.select()
+			.from(works)
+			.where(and(...conditions))
+			.orderBy(desc(works.isPinned), order)
+			.limit(200);
+		if (rows.length === 0) return c.json({ creator, works: [] });
+
+		const ids = rows.map((r) => r.id);
+		const { assetsByWork, jobByWork } = await loadWorkBundles(ids);
+		const ctx = await buildAccessContext(viewerId, { workIds: ids });
+		await Promise.all(rows.map(resolveWorkThumbnail));
+
+		return c.json({
+			creator,
+			works: rows.map((w) =>
+				serializeWorkForViewer(
+					w,
+					assetsByWork.get(w.id) ?? [],
+					jobByWork.get(w.id) ?? null,
+					resolveAccessSync(w as AccessibleWork, ctx),
+					deliveryCtx(),
+				),
+			),
+		});
+	})
+
+	/**
+	 * Update a Work (owner-only) — including releasing it. Re-queues processing when the
+	 * source changes.
+	 *
+	 * **Release is the gate that matters here.** A Work may only go public once its media
+	 * is actually ready and it has some way to be consumed; this is where the readiness
+	 * check that used to sit on post-publish now lives, because readiness was always a
+	 * property of the media and the media belongs to the Work.
+	 */
+	.patch("/works/:id", requireAuth, zValidator("json", updateWorkSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!work || work.creatorId !== user.id) {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		const data = c.req.valid("json");
+
+		if (data.slug && data.slug !== work.slug) {
+			if (await workSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
+		}
+
+		// Delivery floor, evaluated on the state this edit RESULTS IN. `updateWorkSchema` is
+		// `.partial()`, which silently drops any create-time refine, so a PATCH sending only
+		// `streamEnabled: false` is valid or not depending on the STORED `downloadEnabled` —
+		// something a schema refine cannot see.
+		const willStream = data.streamEnabled ?? work.streamEnabled;
+		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
+		if (!willStream && !willDownload) {
+			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
+		}
+
+		const releasing = data.visibility === "released" && work.visibility !== "released";
+		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
+			const unready = await unreadyWorks([work.id]);
+			if (unready.length > 0) {
+				return c.json(
+					{
+						error: "Can't release yet — the media is still processing.",
+						code: "media_not_ready",
+						unready,
+					},
+					409,
+				);
 			}
+		}
 
-			const data = c.req.valid("json");
-			const updates: Record<string, unknown> = { updatedAt: new Date() };
-			if (data.title !== undefined) updates.title = data.title;
-			if (data.description !== undefined) updates.description = data.description;
-			if (data.thumbnail !== undefined) updates.thumbnail = data.thumbnail;
-			if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
-			if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
-			if (data.metadata !== undefined) updates.metadata = data.metadata;
-			const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== item.sourceKey;
-			if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
+		const updates: Record<string, unknown> = { updatedAt: new Date() };
+		if (data.slug !== undefined) updates.slug = data.slug;
+		if (data.title !== undefined) updates.title = data.title;
+		if (data.description !== undefined) updates.description = data.description;
+		if (data.thumbnail !== undefined) updates.thumbnail = data.thumbnail;
+		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
+		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
+		if (data.metadata !== undefined) updates.metadata = data.metadata;
+		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
+		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
+		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
+		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
+		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
+		if (data.tags !== undefined) updates.tags = data.tags;
+		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
+		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
+		if (data.body !== undefined) updates.body = data.body;
+		if (data.bodyHtml !== undefined && work.type === "text") {
+			updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
+			updates.estimatedReadMinutes = estimateReadMinutes(updates.bodyHtml as string);
+		}
 
-			const [updated] = await db
-				.update(contentItems)
-				.set(updates)
-				.where(eq(contentItems.id, id))
-				.returning();
+		// The creator-asserted Created date. Clearing it clears its precision with it —
+		// a precision without a date would claim accuracy about nothing.
+		if (data.authoredAt !== undefined) {
+			updates.authoredAt = data.authoredAt ? new Date(data.authoredAt) : null;
+			if (!data.authoredAt) updates.authoredPrecision = null;
+		}
+		if (data.authoredPrecision !== undefined && data.authoredPrecision !== null) {
+			updates.authoredPrecision = data.authoredPrecision;
+		}
 
-			// A new source means the old transcode is stale — re-process from the library.
-			if (sourceChanged && updated.sourceKey) await queueTranscodeForItem(updated);
+		if (data.visibility !== undefined) {
+			updates.visibility = data.visibility;
+			// Stamped on the FIRST release only. Un-releasing and re-releasing must not
+			// rewrite a Work's place in the Catalog's "what's new" ordering.
+			if (releasing && !work.releasedAt) updates.releasedAt = new Date();
+		}
 
-			const [itemAssets, jobRows] = await Promise.all([
-				db.select().from(assets).where(eq(assets.contentItemId, id)),
-				db
-					.select()
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.contentItemId, id))
-					.orderBy(desc(transcodingJobs.createdAt)),
-			]);
+		const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== work.sourceKey;
+		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
 
-			await resolveItemThumbnail(updated);
-			return c.json({ item: serializeItem(updated, itemAssets, jobRows[0] ?? null) });
-		},
-	)
+		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+
+		// A new source means the old transcode is stale — re-process.
+		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
+
+		const [workAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, id)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.workId, id))
+				.orderBy(desc(transcodingJobs.createdAt)),
+		]);
+
+		await resolveWorkThumbnail(updated);
+		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null) });
+	})
 
 	/**
-	 * Delete a library item (owner-only). Best-effort purges its stored media first, then
-	 * deletes the row — cascade removes its assets, transcodes, and any post_contents refs.
+	 * A Work's posting history — where it has been announced, and when. Doubles as the
+	 * preview that has to exist before a delete can be an informed choice.
 	 */
-	/**
-	 * Which of the caller's posts reference this library item — the preview that has to
-	 * exist before a delete can be an informed choice. Mirror image of
-	 * `GET /posts/:slug/orphaned-media`, which answers the same question from the other end.
-	 */
-	.get("/content-items/:id/usage", requireAuth, async (c) => {
+	.get("/works/:id/usage", requireAuth, async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db
-			.select({ id: contentItems.id })
-			.from(contentItems)
-			.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
+			.select({ id: works.id })
+			.from(works)
+			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
 			.limit(1);
-		if (!item) return c.json({ error: "Content item not found" }, 404);
+		if (!item) return c.json({ error: "Work not found" }, 404);
 
-		return c.json({ posts: await postsUsingItem(id) });
+		return c.json({ posts: await postsUsingWork(id) });
 	})
 
-	.delete(
-		"/content-items/:id",
-		requireAuth,
-		zValidator("query", deleteItemQuerySchema),
-		async (c) => {
-			const user = c.get("user");
-			const id = Number(c.req.param("id"));
-			const [item] = await db.select().from(contentItems).where(eq(contentItems.id, id)).limit(1);
-			if (!item || item.creatorId !== user.id) {
-				return c.json({ error: "Content item not found" }, 404);
+	.delete("/works/:id", requireAuth, zValidator("query", deleteWorkQuerySchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		// `post_work_refs.workId` cascades, so deleting a linked Work silently strips it
+		// from every post referencing it — including published ones. Refuse unless the
+		// caller has seen the damage and opted in, and hand back the list so a client can
+		// show it. Failing closed is deliberate: the destructive reading of an ambiguous
+		// request is the unrecoverable one.
+		const force = c.req.valid("query").force;
+		if (!force) {
+			const inUse = await postsUsingWork(id);
+			if (inUse.length > 0) {
+				return c.json(
+					{
+						error: `This Work is linked from ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
+						code: "work_in_use",
+						posts: inUse,
+					},
+					409,
+				);
 			}
+		}
 
-			// `post_contents.contentItemId` cascades, so deleting an in-use item silently strips
-			// it from every post referencing it — including published ones. Refuse unless the
-			// caller has seen the damage and opted in, and hand back the list so a client can
-			// show it. This is the same care the post-delete path takes with orphaned media,
-			// pointed the other way; failing closed here is deliberate, since the destructive
-			// reading of an ambiguous request is the unrecoverable one.
-			const force = c.req.valid("query").force;
-			if (!force) {
-				const inUse = await postsUsingItem(id);
-				if (inUse.length > 0) {
-					return c.json(
-						{
-							error: `This item is used by ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
-							code: "item_in_use",
-							posts: inUse,
-						},
-						409,
-					);
-				}
-			}
+		const [workAssets, jobRows] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, id)),
+			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
+		]);
+		await purgeWorkMedia(item, workAssets, jobRows);
 
-			const [itemAssets, jobRows] = await Promise.all([
-				db.select().from(assets).where(eq(assets.contentItemId, id)),
-				db.select().from(transcodingJobs).where(eq(transcodingJobs.contentItemId, id)),
-			]);
-			await purgeItemMedia(item, itemAssets, jobRows);
-
-			await db.delete(contentItems).where(eq(contentItems.id, id));
-			return c.body(null, 204);
-		},
-	)
+		await db.delete(works).where(eq(works.id, id));
+		return c.body(null, 204);
+	})
 
 	// ── Content-item downloadable assets (builds/variants) ────────────────────────
-	.post(
-		"/content-items/:id/assets",
-		requireAuth,
-		zValidator("json", createAssetSchema),
-		async (c) => {
-			const user = c.get("user");
-			const id = Number(c.req.param("id"));
-			const [item] = await db
-				.select({ id: contentItems.id })
-				.from(contentItems)
-				.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
-				.limit(1);
-			if (!item) return c.json({ error: "Content item not found" }, 404);
-
-			const data = c.req.valid("json");
-			const [asset] = await db
-				.insert(assets)
-				.values({ contentItemId: id, ...data })
-				.returning();
-			return c.json({ asset }, 201);
-		},
-	)
-
-	.delete("/content-items/:id/assets/:assetId", requireAuth, async (c) => {
+	.post("/works/:id/assets", requireAuth, zValidator("json", createAssetSchema), async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db
-			.select({ id: contentItems.id })
-			.from(contentItems)
-			.where(and(eq(contentItems.id, id), eq(contentItems.creatorId, user.id)))
+			.select({ id: works.id })
+			.from(works)
+			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.limit(1);
+		if (!item) return c.json({ error: "Work not found" }, 404);
+
+		const data = c.req.valid("json");
+		const [asset] = await db
+			.insert(assets)
+			.values({ workId: id, ...data })
+			.returning();
+		return c.json({ asset }, 201);
+	})
+
+	.delete("/works/:id/assets/:assetId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db
+			.select({ id: works.id })
+			.from(works)
+			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
 			.limit(1);
 		if (!item) return c.json({ error: "Not found" }, 404);
 
 		const deleted = await db
 			.delete(assets)
-			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.contentItemId, id)))
+			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.workId, id)))
 			.returning({ id: assets.id });
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
@@ -2171,6 +2281,7 @@ const contentRoutes = new Hono()
 
 	.get("/projects/:slug", async (c) => {
 		const { slug } = c.req.param();
+		const viewerId = await getOptionalUserId(c);
 
 		const result = await db
 			.select({
@@ -2198,11 +2309,38 @@ const contentRoutes = new Hono()
 			.from(projectPosts)
 			.innerJoin(posts, eq(projectPosts.postId, posts.id))
 			.innerJoin(users, eq(posts.creatorId, users.id))
-			.where(eq(projectPosts.projectId, row.project.id))
+			.where(
+				and(
+					eq(projectPosts.projectId, row.project.id),
+					// Draft members are the creator's own business. This route is
+					// unauthenticated and filtered neither the project's `isPublished` nor its
+					// members', so a draft added to a project leaked its title, slug and
+					// thumbnail to anyone holding the project URL. Metadata only — post detail
+					// already 404'd and the delivery routes re-resolve — but a leak all the same.
+					viewerId === row.project.creatorId ? undefined : eq(posts.isPublished, true),
+				),
+			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
 
-		const viewerId = await getOptionalUserId(c);
-		const ctx = await buildAccessContext(viewerId, { postIds: memberRows.map((m) => m.post.id) });
+		// The Works in this collection, each resolved on its own gates. A project is a
+		// shelf: putting a Work on it changes nothing about who can open it.
+		const itemRows = await db
+			.select({ work: works, sortOrder: projectItems.sortOrder })
+			.from(projectItems)
+			.innerJoin(works, eq(projectItems.workId, works.id))
+			.where(
+				and(
+					eq(projectItems.projectId, row.project.id),
+					// A creator browsing their own project sees drafts; nobody else does.
+					viewerId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
+				),
+			)
+			.orderBy(asc(projectItems.sortOrder));
+
+		const memberWorkIds = itemRows.map((r) => r.work.id);
+		const { assetsByWork, jobByWork } = await loadWorkBundles(memberWorkIds);
+		const workCtx = await buildAccessContext(viewerId, { workIds: memberWorkIds });
+		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
 		return c.json({
 			project: {
@@ -2212,22 +2350,31 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				},
+				works: itemRows.map((m) => ({
+					sortOrder: m.sortOrder,
+					...serializeWorkForViewer(
+						m.work,
+						assetsByWork.get(m.work.id) ?? [],
+						jobByWork.get(m.work.id) ?? null,
+						resolveAccessSync(m.work as AccessibleWork, workCtx),
+						deliveryCtx(),
+					),
+				})),
+				// No per-post access verdict: a post has no gates. The Works a member post
+				// links resolve on their own gates, at the post's own endpoint.
 				posts: memberRows.map((m) => ({
 					id: m.post.id,
 					publicId: m.post.publicId,
 					slug: m.post.slug,
 					title: m.post.title,
-					contentType: m.post.contentType,
-					thumbnail: m.post.thumbnail,
-					streamEnabled: m.post.streamEnabled,
-					downloadEnabled: m.post.downloadEnabled,
+					isPublished: m.post.isPublished,
+					publishedAt: m.post.publishedAt,
 					sortOrder: m.sortOrder,
 					creator: {
 						username: m.creatorUsername,
 						displayName: m.creatorDisplayName,
 						avatar: m.creatorAvatar,
 					},
-					access: resolveAccessSync(m.post as AccessiblePost, ctx),
 				})),
 			},
 		});
@@ -2273,6 +2420,74 @@ const contentRoutes = new Hono()
 			.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
 			.returning({ id: projects.id });
 
+		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+		return c.body(null, 204);
+	})
+
+	// ── Collection membership (Works) ────────────────────────────────────────────
+	//
+	// The half that was always missing. A project could only hold announcements, which
+	// meant an album could not hold its tracks — 40.02's own worked example ("a track in
+	// both an album and a best-of") was not expressible in the schema it described.
+	.post(
+		"/projects/:slug/works",
+		requireAuth,
+		zValidator("json", addWorkToCollectionSchema),
+		async (c) => {
+			const user = c.get("user");
+			const { slug } = c.req.param();
+			const { workId, sortOrder } = c.req.valid("json");
+
+			const [project] = await db
+				.select({ id: projects.id })
+				.from(projects)
+				.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
+				.limit(1);
+			if (!project) return c.json({ error: "Project not found" }, 404);
+
+			const [work] = await db
+				.select({ id: works.id })
+				.from(works)
+				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			let order = sortOrder;
+			if (order === undefined) {
+				const [maxRow] = await db
+					.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+					.from(projectItems)
+					.where(eq(projectItems.projectId, project.id));
+				order = Number(maxRow.max) + 1;
+			}
+
+			const [link] = await db
+				.insert(projectItems)
+				.values({ projectId: project.id, workId: work.id, sortOrder: order })
+				.onConflictDoNothing({ target: [projectItems.projectId, projectItems.workId] })
+				.returning();
+
+			if (!link) return c.json({ error: "Work is already in this collection" }, 409);
+			return c.json({ projectItem: link }, 201);
+		},
+	)
+
+	.delete("/projects/:slug/works/:workId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const { slug, workId } = c.req.param();
+
+		const deleted = await db
+			.delete(projectItems)
+			.where(
+				and(
+					eq(projectItems.workId, Number(workId)),
+					sql`${projectItems.projectId} IN (SELECT id FROM projects WHERE slug = ${slug} AND creator_id = ${user.id})`,
+				),
+			)
+			.returning({ id: projectItems.id });
+
+		// Removing a Work from a collection never touches the Work. It stays in the
+		// Catalog, released, with its gates — a collection is a shelf, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
@@ -2527,8 +2742,11 @@ const contentRoutes = new Hono()
 				postTitle: posts.title,
 				postSlug: posts.slug,
 				postPublicId: posts.publicId,
-				postContentType: posts.contentType,
-				postThumbnail: posts.thumbnail,
+				workTitle: works.title,
+				workSlug: works.slug,
+				workPublicId: works.publicId,
+				workType: works.type,
+				workThumbnail: works.thumbnail,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
@@ -2536,6 +2754,7 @@ const contentRoutes = new Hono()
 			.from(bookmarks)
 			.leftJoin(projects, eq(bookmarks.projectId, projects.id))
 			.leftJoin(posts, eq(bookmarks.postId, posts.id))
+			.leftJoin(works, eq(bookmarks.workId, works.id))
 			.leftJoin(users, eq(bookmarks.creatorId, users.id))
 			.where(eq(bookmarks.userId, user.id))
 			.orderBy(asc(bookmarks.sortOrder));
@@ -2547,12 +2766,15 @@ const contentRoutes = new Hono()
 					? { title: r.projectTitle, slug: r.projectSlug, coverImage: r.projectCoverImage }
 					: null,
 				post: r.bookmark.postId
+					? { title: r.postTitle, slug: r.postSlug, publicId: r.postPublicId }
+					: null,
+				work: r.bookmark.workId
 					? {
-							title: r.postTitle,
-							slug: r.postSlug,
-							publicId: r.postPublicId,
-							contentType: r.postContentType,
-							thumbnail: r.postThumbnail,
+							title: r.workTitle,
+							slug: r.workSlug,
+							publicId: r.workPublicId,
+							type: r.workType,
+							thumbnail: r.workThumbnail,
 						}
 					: null,
 				creator: r.bookmark.creatorId

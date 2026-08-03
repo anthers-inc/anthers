@@ -1,18 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { consumptionModeFor } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
-import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type {
-	Comment,
-	ContentItem,
-	Post,
-	PostEntry,
-	TranscodingJob,
-} from "@anthers/web-shared/types";
+import type { Comment, Post } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ClockIcon,
@@ -24,80 +16,18 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import AudioPlayer from "../components/media/AudioPlayer";
-import TranscodingStatus from "../components/media/TranscodingStatus";
-import VideoPlayer from "../components/media/VideoPlayer";
-import InlineUnlock from "../components/post/InlineUnlock";
-import ProjectDownloads from "../components/project/ProjectDownloads";
-import ProjectEmbed from "../components/project/ProjectEmbed";
-import ProjectPricing from "../components/project/ProjectPricing";
-import ProjectRating from "../components/project/ProjectRating";
+import WorkCard from "../components/cards/WorkCard";
+import CommentThread from "../components/post/CommentThread";
 import ReportDialog from "../components/ui/ReportDialog";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
-import { useAttentionClaim } from "../lib/attention";
-import { useMediaPlayer } from "../lib/media-player";
 import { studioEditPostUrl } from "../lib/studio";
 
 /** Whether a transcoding job is still in-flight (show a status card, not a player). */
-function isJobPending(status: string): boolean {
-	return status !== "completed";
-}
-
-/** Thumbnail-only preview shown when a content item lacks a playable payload. */
-function MediaPreview({ item, icon }: { item: ContentItem; icon: React.ReactNode }) {
-	if (item.thumbnail) {
-		return (
-			<div className="relative rounded-lg overflow-hidden bg-base-200">
-				<img src={item.thumbnail} alt={item.title ?? "Preview"} className="w-full object-cover" />
-			</div>
-		);
-	}
-	return (
-		<div className="aspect-video bg-base-200 rounded-lg flex items-center justify-center text-base-content/30">
-			{icon}
-		</div>
-	);
-}
-
-/** Card describing a physical good or service (no media payload). */
-function PhysicalServiceCard({ item }: { item: ContentItem }) {
-	const meta = item.metadata ?? {};
-	const scalarEntries = Object.entries(meta).filter(
-		([, v]) => typeof v === "string" || typeof v === "number",
-	);
-	return (
-		<div className="card bg-base-200">
-			<div className="card-body gap-2">
-				<div className="flex items-center gap-2">
-					<h3 className="card-title text-base">
-						{item.title ?? (item.type === "service" ? "Service" : "Physical item")}
-					</h3>
-					<span className="badge badge-outline badge-sm capitalize">{item.type}</span>
-				</div>
-				{item.description && (
-					<p className="text-sm text-base-content/70 whitespace-pre-line">{item.description}</p>
-				)}
-				{scalarEntries.length > 0 && (
-					<dl className="text-sm">
-						{scalarEntries.map(([k, v]) => (
-							<div key={k} className="flex gap-2">
-								<dt className="text-base-content/50 capitalize">{k}</dt>
-								<dd>{String(v)}</dd>
-							</div>
-						))}
-					</dl>
-				)}
-			</div>
-		</div>
-	);
-}
-
 export default function PostPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { isAuthenticated, user } = useAuth();
-	const mediaPlayer = useMediaPlayer();
 	const [post, setPost] = useState<Post | null>(null);
 	const [comments, setComments] = useState<Comment[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -125,7 +55,9 @@ export default function PostPage() {
 			if (res.ok) {
 				const data = (await res.json()) as unknown as { post: Post };
 				setPost(data.post);
-				if (data.post.access?.canAccess) return;
+				// A post is never gated, so there is nothing to poll for here — one fetch is
+				// the whole story. (Unlocking a WORK re-fetches on its own page.)
+				return;
 			}
 			await new Promise((r) => setTimeout(r, 800));
 		}
@@ -167,71 +99,8 @@ export default function PostPage() {
 		}
 	}, [post, location.pathname, navigate]);
 
-	// While a referenced item is still transcoding, poll its status so the progress bar
-	// advances live and the player swaps in on completion — no manual refresh.
-	const hasActiveTranscode = (post?.contents ?? []).some(
-		(entry) =>
-			entry.kind === "content" &&
-			entry.contentItem?.transcoding != null &&
-			entry.contentItem.transcoding.status !== "completed" &&
-			entry.contentItem.transcoding.status !== "failed",
-	);
-	useEffect(() => {
-		if (!slug || !hasActiveTranscode) return;
-		const tick = async () => {
-			try {
-				const res = await client.api.content.posts[":slug"].transcoding.$get({ param: { slug } });
-				if (!res.ok) return;
-				const { jobs } = (await res.json()) as unknown as { jobs: TranscodingJob[] };
-				const latest = new Map<number, TranscodingJob>();
-				for (const j of jobs) if (!latest.has(j.contentItemId)) latest.set(j.contentItemId, j);
-				setPost((prev) => {
-					if (!prev?.contents) return prev;
-					let changed = false;
-					const contents = prev.contents.map((entry) => {
-						if (entry.kind !== "content" || !entry.contentItem) return entry;
-						const job = latest.get(entry.contentItem.id);
-						const cur = entry.contentItem.transcoding;
-						if (
-							job &&
-							(cur?.status !== job.status ||
-								cur?.progress !== job.progress ||
-								cur?.etaSeconds !== job.etaSeconds)
-						) {
-							changed = true;
-							return { ...entry, contentItem: { ...entry.contentItem, transcoding: job } };
-						}
-						return entry;
-					});
-					return changed ? { ...prev, contents } : prev;
-				});
-			} catch {
-				// transient — keep polling
-			}
-		};
-		const interval = setInterval(tick, 2000);
-		return () => clearInterval(interval);
-	}, [slug, hasActiveTranscode]);
-
-	// Attention is earned by the post's CONTENT ELEMENTS, never by the page itself
-	// — the post body is connective tissue, so a body-only announcement earns
-	// nothing. Timed media (video/audio) claims its own time from inside its
-	// player, gated on real playback; this claim covers the attended elements
-	// (text blocks, images, embedded games) that are consumed by being present.
-	const attendedContentType = useMemo(() => {
-		for (const entry of post?.contents ?? []) {
-			const type = entry.kind === "text" ? "text" : entry.contentItem?.type;
-			if (type && consumptionModeFor(type) === "presence") return type;
-		}
-		return null;
-	}, [post]);
-
-	useAttentionClaim({
-		creatorId: post?.creatorId ?? null,
-		postId: post?.id ?? null,
-		contentType: attendedContentType ?? "",
-		active: !!post && !!attendedContentType && (post.access?.canAccess ?? true),
-	});
+	// No transcode poller and no Time Pool claim here, deliberately. A post owns no media
+	// and earns nothing — both belong to the Work, and both live on WorkPage now.
 
 	const handleComment = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -278,9 +147,7 @@ export default function PostPage() {
 		year: "numeric",
 	});
 
-	const access = post.access;
-	const canAccess = !access || access.canAccess;
-	const contents = post.contents ?? [];
+	const linkedWorks = post.linkedWorks ?? [];
 
 	const isOwner = isAuthenticated && user?.id === post.creatorId;
 	const edits = post.edits ?? [];
@@ -333,133 +200,6 @@ export default function PostPage() {
 		}
 	};
 
-	const playAudioInMiniPlayer = (item: ContentItem, src: string) => {
-		mediaPlayer.playTrack({
-			src,
-			title: item.title || post.title || "Untitled",
-			creator: post.creator?.username || "",
-			creatorId: post.creatorId,
-			thumbnail: item.thumbnail || post.thumbnail,
-			postId: post.id,
-			waveform: item.transcoding?.waveformData,
-		});
-	};
-
-	/** The media/body for one content item (null → nothing to render). */
-	const renderContentItem = (item: ContentItem): React.ReactNode => {
-		switch (item.type) {
-			case "video": {
-				const job = item.transcoding;
-				const src = job?.hlsManifestUrl || item.sourceKey || "";
-				if (job && isJobPending(job.status)) {
-					return (
-						<TranscodingStatus
-							status={job.status}
-							progress={job.progress ?? 0}
-							etaSeconds={job.etaSeconds}
-							errorMessage={job.errorMessage ?? undefined}
-						/>
-					);
-				}
-				if (src)
-					return (
-						<VideoPlayer
-							src={src}
-							poster={item.thumbnail ?? undefined}
-							attention={canAccess ? { creatorId: post.creatorId, postId: post.id } : undefined}
-						/>
-					);
-				return <MediaPreview item={item} icon={<FilmIcon className="w-16 h-16" />} />;
-			}
-			case "audio": {
-				const job = item.transcoding;
-				const src = job?.outputFileUrl || item.sourceKey || "";
-				if (job && isJobPending(job.status)) {
-					return (
-						<TranscodingStatus
-							status={job.status}
-							progress={job.progress ?? 0}
-							etaSeconds={job.etaSeconds}
-							errorMessage={job.errorMessage ?? undefined}
-						/>
-					);
-				}
-				if (src)
-					return (
-						<AudioPlayer
-							src={src}
-							waveform={item.transcoding?.waveformData}
-							onPlayInMiniPlayer={() => playAudioInMiniPlayer(item, src)}
-							attention={canAccess ? { creatorId: post.creatorId, postId: post.id } : undefined}
-						/>
-					);
-				return <MediaPreview item={item} icon={<MusicalNoteIcon className="w-12 h-12" />} />;
-			}
-			case "image":
-				return item.sourceKey ? (
-					<img
-						src={item.sourceKey}
-						alt={item.title ?? ""}
-						className="w-full rounded-lg object-contain bg-base-200"
-					/>
-				) : (
-					<MediaPreview item={item} icon={<PhotoIcon className="w-16 h-16" />} />
-				);
-			case "game":
-			case "software":
-				return item.embedUrl ? (
-					<ProjectEmbed
-						embedUrl={item.embedUrl}
-						title={item.title || post.title || "Embedded content"}
-					/>
-				) : null;
-			case "physical":
-			case "service":
-				return <PhysicalServiceCard item={item} />;
-			default:
-				return null;
-		}
-	};
-
-	/** Render one ordered post entry (text block or content reference). */
-	const renderEntry = (entry: PostEntry): React.ReactNode => {
-		if (entry.kind === "text") {
-			return entry.bodyHtml ? (
-				<SanitizedHtml className="prose prose-sm max-w-none" html={entry.bodyHtml} />
-			) : null;
-		}
-
-		const item = entry.contentItem;
-		if (!item) {
-			return (
-				<div className="rounded-lg bg-base-200 p-4 text-sm text-base-content/50">
-					This content is no longer available.
-				</div>
-			);
-		}
-
-		const media = renderContentItem(item);
-		const showDownloads = post.downloadEnabled && item.assets.length > 0;
-		if (!media && !showDownloads) return null;
-
-		return (
-			<>
-				{media}
-				{entry.caption && <p className="text-sm text-base-content/60 mt-2">{entry.caption}</p>}
-				{showDownloads && (
-					<div className="mt-4">
-						<ProjectDownloads
-							assets={item.assets}
-							contentType={item.type}
-							postSlug={post.slug}
-							canAccess={canAccess}
-						/>
-					</div>
-				)}
-			</>
-		);
-	};
-
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
 			<article>
@@ -502,14 +242,6 @@ export default function PostPage() {
 							)}
 						</p>
 					</div>
-					{post.estimatedReadMinutes && (
-						<div className="flex items-center gap-2 ml-auto">
-							<span className="flex items-center gap-1 text-xs text-base-content/50">
-								<ClockIcon className="w-3 h-3" />
-								{post.estimatedReadMinutes} min read
-							</span>
-						</div>
-					)}
 				</div>
 
 				{/* Owner status + controls (only the creator reaches an unpublished post). */}
@@ -577,60 +309,32 @@ export default function PostPage() {
 					</div>
 				)}
 
-				{canAccess ? (
-					<>
-						{/* Post body (sanitized server-side; withheld when locked). */}
-						{(post.bodyHtml || post.body) && (
-							<div className="prose prose-sm max-w-none mb-8">
-								{post.bodyHtml ? (
-									<SanitizedHtml html={post.bodyHtml} />
-								) : (
-									<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-								)}
-							</div>
+				{/* The post body. Always visible — a post is an announcement, and an
+				    announcement nobody can read is not one. */}
+				{(post.bodyHtml || post.body) && (
+					<div className="prose prose-sm max-w-none mb-8">
+						{post.bodyHtml ? (
+							<SanitizedHtml html={post.bodyHtml} />
+						) : (
+							<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 						)}
+					</div>
+				)}
 
-						{/* Deliverable — the ordered post entries. */}
-						{contents.map((entry) => {
-							const node = renderEntry(entry);
-							if (!node) return null;
-							return (
-								<div key={entry.id} className="mb-6">
-									{node}
-								</div>
-							);
-						})}
-
-						{/* Reviews */}
-						<div className="mb-8 mt-8">
-							<ProjectRating slug={post.slug} />
+				{/* The Works this post is about. Each resolves on its OWN gates, so a post
+				    the reader can read may well link something they cannot open — which is
+				    the separation working, not a bug. */}
+				{linkedWorks.length > 0 && (
+					<section className="mb-8">
+						<h2 className="text-lg font-semibold mb-3">
+							{linkedWorks.length === 1 ? "The work" : "The works"}
+						</h2>
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							{linkedWorks.map((ref) => (
+								<WorkCard key={ref.work.id} work={{ ...ref.work, creator: post.creator }} />
+							))}
 						</div>
-					</>
-				) : (
-					// Locked: the whole post is gated — blurred cover + reason-aware unlock CTA.
-					// The title/creator/date above stay visible; body + media are withheld server-side.
-					access && (
-						<div className="mb-8">
-							<LockedCover
-								thumbnail={post.thumbnail}
-								className="aspect-video rounded-lg mb-6"
-								lockedBy={lockedByBadge(
-									access,
-									post.creator?.displayName || post.creator?.username || "this creator",
-								)}
-							/>
-							{access.requiresPurchase ? (
-								<ProjectPricing
-									slug={post.slug}
-									access={access}
-									creatorHasStripe={post.creator?.hasStripe ?? false}
-									onPurchaseComplete={refetchPost}
-								/>
-							) : (
-								<InlineUnlock post={post} access={access} onUnlocked={refetchPost} />
-							)}
-						</div>
-					)
+					</section>
 				)}
 			</article>
 
@@ -692,89 +396,7 @@ export default function PostPage() {
 				</div>
 			)}
 
-			{/* Comments */}
-			<div className="border-t border-base-300 pt-6">
-				<h2 className="text-xl font-bold mb-4">Comments ({comments.length})</h2>
-
-				{isAuthenticated && (
-					<form onSubmit={handleComment} className="mb-6">
-						<textarea
-							className="textarea textarea-bordered w-full"
-							placeholder="Write a comment..."
-							rows={3}
-							value={commentBody}
-							onChange={(e) => setCommentBody(e.target.value)}
-						/>
-						<button
-							type="submit"
-							className="btn btn-primary btn-sm mt-2"
-							disabled={submitting || !commentBody.trim()}
-						>
-							{submitting ? (
-								<span className="loading loading-spinner loading-sm" />
-							) : (
-								"Post comment"
-							)}
-						</button>
-					</form>
-				)}
-
-				{comments.length === 0 ? (
-					<p className="text-base-content/50 text-sm">
-						No comments yet. {isAuthenticated ? "Be the first!" : "Log in to comment."}
-					</p>
-				) : (
-					<div className="flex flex-col gap-4">
-						{comments.map((comment) => (
-							<div key={comment.id} className="flex gap-3">
-								{comment.avatar ? (
-									<img
-										src={comment.avatar}
-										alt={comment.username}
-										className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-									/>
-								) : (
-									<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-										{comment.username.charAt(0).toUpperCase()}
-									</div>
-								)}
-								<div className="flex-1">
-									<div className="flex items-center gap-2 text-sm">
-										<span className="font-medium">{comment.username}</span>
-										<span className="text-base-content/40 text-xs">
-											{new Date(comment.createdAt).toLocaleDateString()}
-										</span>
-										{/* Reporting needs a session — there's nobody to hold accountable
-										    for an anonymous report, and the one-per-person rule that keeps
-										    the queue honest needs a person to count. */}
-										{isAuthenticated && (
-											<button
-												type="button"
-												className="ml-auto text-base-content/30 hover:text-base-content/70"
-												onClick={() => setReportingComment(comment.id)}
-												title="Report this comment"
-												aria-label={`Report ${comment.username}'s comment`}
-											>
-												<FlagIcon className="w-3.5 h-3.5" />
-											</button>
-										)}
-									</div>
-									<p className="text-sm mt-1">{comment.body}</p>
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-			</div>
-
-			{reportingComment !== null && (
-				<ReportDialog
-					subjectType="comment"
-					subjectId={reportingComment}
-					label="this comment"
-					onClose={() => setReportingComment(null)}
-				/>
-			)}
+			<CommentThread subject={{ kind: "post", slug: post.slug }} />
 		</div>
 	);
 }

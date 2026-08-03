@@ -39,6 +39,7 @@ import Stripe from "stripe";
 import app from "../index";
 import { settleCycle } from "../jobs/settle-cycle";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -229,14 +230,14 @@ let creatorId: number;
 let buyerId: number;
 let subscriberId: number;
 let paidSlug: string;
-let paidPostId: number;
+let paidWorkId: number;
 /**
  * A second priced post, used by the webhook tests only. They insert *completed* purchase
  * rows, and a completed purchase is permanent access — pointed at the checkout post it
  * would make every later checkout 400 with "you already have access", which is a fixture
  * accident rather than a finding.
  */
-let webhookPostId: number;
+let webhookWorkId: number;
 
 /** Sign up and mark the address verified — `requireVerified` gates checkout and billing. */
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
@@ -279,45 +280,35 @@ beforeAll(async () => {
 
 	const paid = await makePaidPost(`Paid post ${run}`);
 	paidSlug = paid.slug;
-	paidPostId = paid.id;
-	webhookPostId = (await makePaidPost(`Webhook post ${run}`)).id;
+	paidWorkId = paid.id;
+	webhookWorkId = (await makePaidPost(`Webhook work ${run}`)).id;
 });
 
 /**
  * A $5 post backed by a real-sized downloadable asset, so delivery bandwidth and the
  * Digital AFF are both non-zero and the fee math under test isn't all zeroes.
  */
+/**
+ * A released, download-only Work that is for sale. Checkout names a WORK now — that is
+ * where the gate lives, and what a permanent unlock has to be permanent about.
+ */
 async function makePaidPost(title: string): Promise<{ slug: string; id: number }> {
-	const itemRes = await req("/api/content/content-items", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-		body: JSON.stringify({ type: "game", title: `${title} build` }),
+	const work = await insertWork({
+		creatorId,
+		type: "game",
+		title,
+		streamEnabled: false,
+		downloadEnabled: true,
+		anthersAccess: FOR_SALE,
+		seedAccess: LOCKED,
 	});
-	expect(itemRes.status).toBe(201);
-	const itemId = (await itemRes.json()).item.id as number;
 	await db.insert(assets).values({
-		contentItemId: itemId,
+		workId: work.id,
 		file: `creators/${creatorId}/builds/${uid()}.zip`,
 		filename: `${uid()}.zip`,
 		fileSize: ASSET_BYTES,
 	});
-
-	const postRes = await req("/api/content/posts", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-		body: JSON.stringify({
-			title,
-			streamEnabled: false,
-			downloadEnabled: true,
-			anthersAccess: FOR_SALE,
-			seedAccess: LOCKED,
-			contents: [{ kind: "content", contentItemId: itemId }],
-			isPublished: true,
-		}),
-	});
-	expect(postRes.status).toBe(201);
-	const post = (await postRes.json()).post;
-	return { slug: post.slug, id: post.id };
+	return { slug: work.slug, id: work.id };
 }
 
 afterAll(async () => {
@@ -525,7 +516,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 			.insert(purchases)
 			.values({
 				buyerId,
-				postId: webhookPostId,
+				workId: webhookWorkId,
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
@@ -566,7 +557,8 @@ describe("Webhook: payment_intent.succeeded", () => {
 			.insert(purchases)
 			.values({
 				buyerId,
-				postId: null,
+				// A Seed buy unlocks nothing, so it names no Work.
+				workId: null,
 				type: "seeds",
 				amount: "9.00",
 				processingFee: "0.56",
@@ -612,7 +604,7 @@ describe("Webhook: payment_intent.payment_failed", () => {
 			.insert(purchases)
 			.values({
 				buyerId,
-				postId: webhookPostId,
+				workId: webhookWorkId,
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
@@ -638,7 +630,7 @@ describe("Webhook: payment_intent.payment_failed", () => {
 			.insert(purchases)
 			.values({
 				buyerId,
-				postId: webhookPostId,
+				workId: webhookWorkId,
 				type: "digital",
 				amount: "5.00",
 				processingFee: "0.45",
@@ -847,7 +839,7 @@ describe("Checkout — destination charge construction", () => {
 		expect(params.currency).toBe("usd");
 		expect(params.metadata).toMatchObject({
 			kind: "direct_purchase",
-			postId: String(paidPostId),
+			workId: String(paidWorkId),
 			buyerId: String(buyerId),
 		});
 	});
@@ -924,26 +916,26 @@ describe("Checkout — destination charge construction", () => {
 		expect(row).toBeDefined();
 		expect(row.status).toBe("pending");
 		expect(row.buyerId).toBe(buyerId);
-		expect(row.postId).toBe(paidPostId);
+		expect(row.workId).toBe(paidWorkId);
 		expect(new Decimal(row.amount).toFixed(2)).toBe(PRICE);
 		expect(new Decimal(row.creatorEarnings).toFixed(2)).toBe(PRICE);
 		expect(new Decimal(row.crfFee).toFixed(2)).toBe(expected.crfFee.toFixed(2));
 	});
 
-	it("refuses to sell a post the buyer can already access", async () => {
+	it("refuses to sell a Work the buyer can already access", async () => {
 		// Mark the newest pending purchase completed → resolveAccess now says "purchased",
 		// and a second checkout must be rejected rather than charging twice.
 		const [row] = await db
 			.select()
 			.from(purchases)
-			.where(and(eq(purchases.buyerId, buyerId), eq(purchases.postId, paidPostId)))
+			.where(and(eq(purchases.buyerId, buyerId), eq(purchases.workId, paidWorkId)))
 			.orderBy(sql`${purchases.id} DESC`)
 			.limit(1);
 		await db.update(purchases).set({ status: "completed" }).where(eq(purchases.id, row.id));
 
 		const { res, body } = await checkout();
 		expect(res.status).toBe(400);
-		expect(body.error).toBe("You already have access to this post");
+		expect(body.error).toBe("You already have access to this work");
 	});
 });
 
@@ -977,7 +969,7 @@ describe("Foundation remainder — the clamp that persists it", () => {
 		await db.insert(attentionEvents).values({
 			userId: heavyId,
 			creatorId,
-			postId: paidPostId,
+			workId: paidWorkId,
 			eventType: "watch",
 			durationSeconds: 120 * 3600,
 		});
@@ -1038,36 +1030,27 @@ describe("Checkout — what isn't for sale", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("refuses a hard-gated post with no price path", async () => {
+	it("refuses a hard-gated Work with no price path", async () => {
 		fake.reset();
-		const itemRes = await req("/api/content/content-items", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({ type: "game", title: `Locked ${run}` }),
+		// Every row present, none allowed, no price anywhere — reaching a threshold would
+		// still not open it, so there is nothing to sell.
+		const work = await insertWork({
+			creatorId,
+			type: "game",
+			title: `Locked ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			anthersAccess: LOCKED,
+			seedAccess: LOCKED,
 		});
-		const itemId = (await itemRes.json()).item.id as number;
-		const postRes = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
-			body: JSON.stringify({
-				title: `Locked post ${run}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				anthersAccess: LOCKED,
-				seedAccess: LOCKED,
-				contents: [{ kind: "content", contentItemId: itemId }],
-				isPublished: true,
-			}),
-		});
-		const slug = (await postRes.json()).post.slug;
 
-		const res = await req(`/api/payments/checkout/${slug}`, {
+		const res = await req(`/api/payments/checkout/${work.slug}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
 		});
 		expect(res.status).toBe(400);
-		expect((await res.json()).error).toBe("This post is not available for direct purchase");
-		// Nothing was sent to Stripe for a post that was never purchasable.
+		expect((await res.json()).error).toBe("This work is not available for direct purchase");
+		// Nothing was sent to Stripe for a Work that was never purchasable.
 		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
 	});
 });

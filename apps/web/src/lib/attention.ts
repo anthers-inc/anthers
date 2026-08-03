@@ -35,7 +35,7 @@ const MAX_PENDING_EVENTS = 500;
 
 interface AttentionEvent {
 	creatorId: number;
-	postId?: number | null;
+	workId?: number | null;
 	eventType: ReturnType<typeof eventTypeFor>;
 	durationSeconds: number;
 }
@@ -143,7 +143,7 @@ function flushAccrued() {
 			entry.seconds -= whole;
 			pushEvent({
 				creatorId: entry.claim.creatorId,
-				postId: entry.claim.postId,
+				workId: entry.claim.workId,
 				eventType: eventTypeFor(entry.claim.contentType),
 				durationSeconds: Math.min(whole, MAX_EVENT_SECONDS),
 			});
@@ -174,7 +174,7 @@ async function flushEvents() {
 					creatorId: e.creatorId,
 					eventType: e.eventType,
 					durationSeconds: e.durationSeconds,
-					...(e.postId != null ? { postId: e.postId } : {}),
+					...(e.workId != null ? { workId: e.workId } : {}),
 				})),
 			},
 		});
@@ -222,14 +222,14 @@ function stopEngineIfIdle() {
  */
 export function useAttentionClaim(params: {
 	creatorId: number | null;
-	postId?: number | null;
+	workId?: number | null;
 	contentType: string;
 	/** Required for playback-mode content (video/audio); ignored otherwise. */
 	playing?: boolean;
-	/** Set false to suspend the claim (e.g. the viewer can't access the post). */
+	/** Set false to suspend the claim (e.g. the viewer can't access the Work). */
 	active?: boolean;
 }) {
-	const { creatorId, postId = null, contentType, playing, active = true } = params;
+	const { creatorId, workId = null, contentType, playing, active = true } = params;
 	const { isAuthenticated: authStatus } = useAuth();
 	const idRef = useRef<number | null>(null);
 	if (idRef.current === null) idRef.current = nextId++;
@@ -248,14 +248,14 @@ export function useAttentionClaim(params: {
 			return;
 		}
 
-		claims.set(id, { creatorId, postId, contentType, playing });
+		claims.set(id, { creatorId, workId, contentType, playing });
 		startEngine();
 
 		return () => {
 			claims.delete(id);
 			stopEngineIfIdle();
 		};
-	}, [authStatus, creatorId, postId, contentType, playing, active]);
+	}, [authStatus, creatorId, workId, contentType, playing, active]);
 }
 
 /**
@@ -263,8 +263,8 @@ export function useAttentionClaim(params: {
  * Time Pool minutes. This is what non-content surfaces use: a project page is a
  * shelf, not a work, so it registers the visit and earns nothing.
  */
-export function useReportVisit(params: { creatorId: number | null; postId?: number | null }) {
-	const { creatorId, postId = null } = params;
+export function useReportVisit(params: { creatorId: number | null; workId?: number | null }) {
+	const { creatorId, workId = null } = params;
 	const { isAuthenticated: authStatus } = useAuth();
 	const reportedRef = useRef<number | null>(null);
 
@@ -276,7 +276,7 @@ export function useReportVisit(params: { creatorId: number | null; postId?: numb
 		if (!authStatus || creatorId === null || reportedRef.current === creatorId) return;
 		reportedRef.current = creatorId;
 
-		pushEvent({ creatorId, postId, eventType: "page_view", durationSeconds: 0 });
+		pushEvent({ creatorId, workId, eventType: "page_view", durationSeconds: 0 });
 		void flushEvents();
-	}, [authStatus, creatorId, postId]);
+	}, [authStatus, creatorId, workId]);
 }

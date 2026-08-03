@@ -30,7 +30,7 @@ const IDLE: AttentionContext = { visible: true, msSinceInteraction: IDLE_TIMEOUT
 const HIDDEN: AttentionContext = { visible: false, msSinceInteraction: 0 };
 
 function claim(over: Partial<AttentionClaim> & { contentType: string }): AttentionClaim {
-	return { creatorId: 1, postId: 10, ...over };
+	return { creatorId: 1, workId: 10, ...over };
 }
 
 describe("consumption modes", () => {
@@ -157,8 +157,8 @@ describe("dedupe — one credit per creator/post pair", () => {
 	});
 
 	test("different posts by the same creator are separate claims", () => {
-		const a = claim({ contentType: "video", playing: true, postId: 10 });
-		const b = claim({ contentType: "video", playing: true, postId: 11 });
+		const a = claim({ contentType: "video", playing: true, workId: 10 });
+		const b = claim({ contentType: "video", playing: true, workId: 11 });
 		expect(creditableClaims([a, b], ATTENTIVE)).toHaveLength(2);
 	});
 
@@ -168,9 +168,9 @@ describe("dedupe — one credit per creator/post pair", () => {
 		expect(creditableClaims([a, b], ATTENTIVE)).toHaveLength(2);
 	});
 
-	test("a null postId is its own key, not a wildcard", () => {
-		const withPost = claim({ contentType: "text", postId: 10 });
-		const withoutPost = claim({ contentType: "text", postId: null });
+	test("a null workId is its own key, not a wildcard", () => {
+		const withPost = claim({ contentType: "text", workId: 10 });
+		const withoutPost = claim({ contentType: "text", workId: null });
 		expect(claimKey(withPost)).not.toBe(claimKey(withoutPost));
 		expect(creditableClaims([withPost, withoutPost], ATTENTIVE)).toHaveLength(2);
 	});
@@ -184,15 +184,15 @@ describe("equal-time conservation", () => {
 	test("nothing live credits nothing", () => {
 		const claims = [
 			claim({ contentType: "video", playing: false }),
-			claim({ contentType: "text", postId: 11 }),
-			claim({ contentType: "physical", postId: 12 }),
+			claim({ contentType: "text", workId: 11 }),
+			claim({ contentType: "physical", workId: 12 }),
 		];
 		expect(creditableClaims(claims, HIDDEN)).toEqual([]);
 	});
 
 	test("a listing never dilutes anyone else's share", () => {
-		const real = claim({ contentType: "video", playing: true, postId: 10 });
-		const listing = claim({ contentType: "physical", postId: 11 });
+		const real = claim({ contentType: "video", playing: true, workId: 10 });
+		const listing = claim({ contentType: "physical", workId: 11 });
 		expect(creditableClaims([real, listing], ATTENTIVE)).toEqual([real]);
 	});
 

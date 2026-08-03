@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Content-library references — the server half of the content-model pivot. Content is a
- * first-class, creator-owned library item; posts REFERENCE items instead of owning media.
- * Covers: library CRUD, a post that mixes a text block with a content ref, ownership
- * enforcement on refs (a non-owner can't attach another creator's item), reconcile-by-id
- * on patch, and that deleting a library item cascades away the post's reference.
+ * Catalog CRUD and a post's references to Works.
  *
- * Items are game/text so nothing hits real media processing (no pg-boss).
+ * The pivot this covers: a Work is a creator-owned, first-class thing that carries its own
+ * visibility, dates, delivery and gates, and a post merely LINKS it. The link is inert —
+ * confers no access, no ownership — so most of what this file asserts is what linking
+ * *doesn't* do.
+ *
+ * Works are game/text so nothing hits real media processing (no pg-boss).
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -37,13 +38,11 @@ const strangerName = `lib_other_${id}`;
 /** Free baseline so the created posts are readable back by the owner. */
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 
-describe("Content-library references", () => {
+describe("Catalog CRUD and post links", () => {
 	let ownerCookie: string;
 	let strangerCookie: string;
-	let itemId: number;
+	let workId: number;
 	let postSlug: string;
-	let textEntryId: number;
-	let contentEntryId: number;
 
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${ownerName}, ${strangerName})`);
@@ -56,142 +55,202 @@ describe("Content-library references", () => {
 		expect(strangerCookie).toBeTruthy();
 	});
 
-	it("creates a library content item and fetches it back (owner-only)", async () => {
-		const create = await req("/api/content/content-items", {
+	it("creates a Work, private by default", async () => {
+		const create = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({ type: "game", title: "Library Build", description: "A build" }),
 		});
 		expect(create.status).toBe(201);
-		itemId = (await create.json()).item.id;
-		expect(itemId).toBeGreaterThan(0);
+		const { work } = await create.json();
+		workId = work.id;
+		expect(workId).toBeGreaterThan(0);
+		// Nothing is visible on upload. Release is a separate, deliberate act — the whole
+		// point of separating the Catalog from posting.
+		expect(work.visibility).toBe("private");
+		expect(work.slug).toBeTruthy();
+		expect(work.publicId).toBeGreaterThan(0);
 
-		// The stranger can't read someone else's library item.
-		const forbidden = await req(`/api/content/content-items/${itemId}`, {
+		// A private Work is invisible to everyone else, and 404s rather than 403s.
+		const forbidden = await req(`/api/content/works/${workId}`, {
 			headers: { Cookie: strangerCookie },
 		});
 		expect(forbidden.status).toBe(404);
 
-		const mine = await req(`/api/content/content-items/${itemId}`, {
-			headers: { Cookie: ownerCookie },
-		});
+		const mine = await req(`/api/content/works/${workId}`, { headers: { Cookie: ownerCookie } });
 		expect(mine.status).toBe(200);
-		expect((await mine.json()).item.title).toBe("Library Build");
+		expect((await mine.json()).work.title).toBe("Library Build");
 	});
 
-	it("patches the item (owner-only)", async () => {
-		const res = await req(`/api/content/content-items/${itemId}`, {
+	it("refuses to create a Work already released", async () => {
+		const res = await req("/api/content/works", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
+			body: JSON.stringify({ type: "game", title: "Too Eager", visibility: "released" }),
+		});
+		expect(res.status).toBe(400);
+		expect((await res.json()).code).toBe("release_on_create");
+	});
+
+	it("patches the Work (owner-only) and records a Created date with its precision", async () => {
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({ title: "Renamed Build" }),
+			body: JSON.stringify({
+				title: "Renamed Build",
+				authoredAt: "2015-06-01T00:00:00.000Z",
+				authoredPrecision: "year",
+			}),
 		});
 		expect(res.status).toBe(200);
-		expect((await res.json()).item.title).toBe("Renamed Build");
+		const { work } = await res.json();
+		expect(work.title).toBe("Renamed Build");
+		// The migration case: made long before it was uploaded, and we store how precisely
+		// the creator actually knows that, rather than inventing a day.
+		expect(work.authoredPrecision).toBe("year");
+		expect(new Date(work.authoredAt).getUTCFullYear()).toBe(2015);
 	});
 
-	it("creates a post mixing a text block with a content ref", async () => {
-		const res = await req("/api/content/posts", {
+	it("rejects a Created date with no precision", async () => {
+		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({
-				title: `Mixed ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [
-					{ kind: "text", bodyHtml: "<p>Read me first.</p>" },
-					{ kind: "content", contentItemId: itemId },
-				],
-				isPublished: true,
-			}),
-		});
-		expect(res.status).toBe(201);
-		const { post } = await res.json();
-		expect(post.contentType).toBe("game"); // first CONTENT ref's item type
-		expect(post.contents.length).toBe(2);
-		expect(post.contents[0].kind).toBe("text");
-		expect(post.contents[0].bodyHtml).toContain("Read me first");
-		expect(post.contents[1].kind).toBe("content");
-		expect(post.contents[1].contentItem.id).toBe(itemId);
-		postSlug = post.slug;
-		textEntryId = post.contents[0].id;
-		contentEntryId = post.contents[1].id;
-	});
-
-	it("refuses to reference another creator's library item (400)", async () => {
-		const res = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: strangerCookie },
-			body: JSON.stringify({
-				title: `Nope ${id}`,
-				streamEnabled: false,
-				downloadEnabled: true,
-				seedAccess: FREE,
-				contents: [{ kind: "content", contentItemId: itemId }],
-				isPublished: false,
+				type: "game",
+				title: "Undated",
+				authoredAt: "2015-06-01T00:00:00.000Z",
 			}),
 		});
 		expect(res.status).toBe(400);
 	});
 
-	it("reconciles entries by id on patch (drop the text block, keep the ref)", async () => {
-		const res = await req(`/api/content/posts/${postSlug}`, {
+	it("releases the Work, and only then does it become publicly visible", async () => {
+		const before = await req(`/api/content/works/${workId}`, {
+			headers: { Cookie: strangerCookie },
+		});
+		expect(before.status).toBe(404);
+
+		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({
-				contents: [{ kind: "content", id: contentEntryId, contentItemId: itemId }],
-			}),
+			body: JSON.stringify({ visibility: "released", streamEnabled: false, downloadEnabled: true }),
 		});
 		expect(res.status).toBe(200);
-		const { post } = await res.json();
-		expect(post.contents.length).toBe(1);
-		expect(post.contents[0].id).toBe(contentEntryId);
-		expect(post.contents[0].kind).toBe("content");
-		// The dropped text entry is gone.
-		expect(post.contents.some((e: any) => e.id === textEntryId)).toBe(false);
+		const { work } = await res.json();
+		expect(work.visibility).toBe("released");
+		expect(work.releasedAt).toBeTruthy();
+
+		const after = await req(`/api/content/works/${workId}`, {
+			headers: { Cookie: strangerCookie },
+		});
+		expect(after.status).toBe(200);
 	});
 
-	it("still allows publishing a text-only post (no content refs)", async () => {
+	it("refuses a PATCH that leaves a Work with no delivery method", async () => {
+		// The floor moved to the Work with delivery itself, and is still evaluated on the
+		// state the edit RESULTS IN — the stored value a schema refine can't see.
+		const res = await req(`/api/content/works/${workId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
+			body: JSON.stringify({ downloadEnabled: false }),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("creates a post linking the Work", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({
-				title: `Text ${id}`,
-				body: "No media here.",
-				streamEnabled: true,
-				downloadEnabled: false,
-				seedAccess: FREE,
-				contents: [{ kind: "text", bodyHtml: "<p>hi</p>" }],
+				title: `Announcing ${id}`,
+				bodyHtml: "<p>it's out</p>",
+				workIds: [workId],
+				isPublished: true,
+			}),
+		});
+		expect(res.status).toBe(201);
+		const { post } = await res.json();
+		postSlug = post.slug;
+		expect(post.linkedWorks.length).toBe(1);
+		expect(post.linkedWorks[0].work.id).toBe(workId);
+		// A post has no gate of its own — there is no post-level access verdict at all.
+		expect(post.access).toBeUndefined();
+	});
+
+	it("refuses to link another creator's Work (400)", async () => {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: strangerCookie },
+			body: JSON.stringify({ title: `Thief ${id}`, workIds: [workId] }),
+		});
+		expect(res.status).toBe(400);
+	});
+
+	it("replaces the link set wholesale on patch", async () => {
+		const res = await req(`/api/content/posts/${postSlug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
+			body: JSON.stringify({ workIds: [] }),
+		});
+		expect(res.status).toBe(200);
+		expect((await res.json()).post.linkedWorks.length).toBe(0);
+	});
+
+	it("publishes a post with no links at all", async () => {
+		// A post is allowed to be just words. It always was, but it used to be the odd case;
+		// now it is the ordinary one.
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
+			body: JSON.stringify({
+				title: `Words only ${id}`,
+				bodyHtml: "<p>just saying hello</p>",
 				isPublished: true,
 			}),
 		});
 		expect(res.status).toBe(201);
 		const { post } = await res.json();
 		expect(post.isPublished).toBe(true);
-		expect(post.contentType).toBe("text");
+		expect(post.publishedAt).toBeTruthy();
 	});
 
-	it("deleting the library item cascades away the post's reference", async () => {
-		// `?force=1` because the item IS in use here — that's the whole premise of this
-		// test. An unflagged delete now 409s rather than silently stripping the reference
-		// (see "Library delete refuses to silently strip posts" in post-lifecycle). What's
-		// under test is the cascade itself, so it opts in explicitly.
-		const del = await req(`/api/content/content-items/${itemId}?force=1`, {
+	it("refuses to delete a linked Work without force, and reports where it is linked", async () => {
+		const relink = await req(`/api/content/posts/${postSlug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
+			body: JSON.stringify({ workIds: [workId] }),
+		});
+		expect(relink.status).toBe(200);
+
+		const res = await req(`/api/content/works/${workId}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: ownerCookie },
+		});
+		expect(res.status).toBe(409);
+		const body = await res.json();
+		expect(body.code).toBe("work_in_use");
+		expect(body.posts.length).toBe(1);
+	});
+
+	it("deletes a post without touching the Work it announced", async () => {
+		// Deleting an announcement must never destroy the work it announced.
+		const del = await req(`/api/content/posts/${postSlug}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: ownerCookie },
 		});
 		expect(del.status).toBe(204);
 
-		// The item is gone from the library.
-		const gone = await req(`/api/content/content-items/${itemId}`, {
-			headers: { Cookie: ownerCookie },
-		});
-		expect(gone.status).toBe(404);
+		const still = await req(`/api/content/works/${workId}`, { headers: { Cookie: ownerCookie } });
+		expect(still.status).toBe(200);
+	});
 
-		// The post survives, but its content ref (cascaded) is gone → back to text.
-		const post = await req(`/api/content/posts/${postSlug}`, { headers: { Cookie: ownerCookie } });
-		expect(post.status).toBe(200);
-		const { post: p } = await post.json();
-		expect(p.contents.length).toBe(0);
+	it("deletes the Work once nothing links it", async () => {
+		const res = await req(`/api/content/works/${workId}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: ownerCookie },
+		});
+		expect(res.status).toBe(204);
+		const gone = await req(`/api/content/works/${workId}`, { headers: { Cookie: ownerCookie } });
+		expect(gone.status).toBe(404);
 	});
 });

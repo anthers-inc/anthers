@@ -5,14 +5,15 @@ import {
 	assets,
 	bookmarks,
 	comments,
-	contentItems,
 	inlineImages,
-	postContents,
 	posts,
+	postWorkRefs,
+	projectItems,
 	projectPosts,
 	projects,
 	ratings,
 	transcodingJobs,
+	works,
 } from "./content.js";
 import {
 	crossPublishResults,
@@ -42,6 +43,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	followers: many(follows, { relationName: "creator" }),
 
 	// Content
+	works: many(works), // the creator's Catalog
 	posts: many(posts),
 	projects: many(projects), // collections the creator owns
 	inlineImages: many(inlineImages),
@@ -103,24 +105,29 @@ export const followsRelations = relations(follows, ({ one }) => ({
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
-// Posts — the universal content unit.
+// Posts — announcements. They reference Works; they never contain them.
 export const postsRelations = relations(posts, ({ one, many }) => ({
 	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts), // collections this post belongs to
-	contents: many(postContents),
-	comments: many(comments),
-	ratings: many(ratings),
-	purchases: many(purchases),
+	workRefs: many(postWorkRefs),
 	attentionEvents: many(attentionEvents),
 	crossPublishResults: many(crossPublishResults),
 	jamEntries: many(jamEntries),
 }));
 
 // Projects — collections that group posts.
+// A project collects BOTH kinds, in separate ordered lists — a game project holds its
+// builds and soundtrack (Works) alongside its devlogs and patch notes (Posts).
 export const projectsRelations = relations(projects, ({ one, many }) => ({
 	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts),
+	projectItems: many(projectItems),
 	bookmarks: many(bookmarks),
+}));
+
+export const projectItemsRelations = relations(projectItems, ({ one }) => ({
+	project: one(projects, { fields: [projectItems.projectId], references: [projects.id] }),
+	work: one(works, { fields: [projectItems.workId], references: [works.id] }),
 }));
 
 export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
@@ -128,48 +135,44 @@ export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
 	post: one(posts, { fields: [projectPosts.postId], references: [posts.id] }),
 }));
 
-// Content library items — own their media, downloadable variants, and transcodes.
-export const contentItemsRelations = relations(contentItems, ({ one, many }) => ({
-	creator: one(users, { fields: [contentItems.creatorId], references: [users.id] }),
+// Works — the Catalog. Own their media, downloadable variants, transcodes and gates.
+export const worksRelations = relations(works, ({ one, many }) => ({
+	creator: one(users, { fields: [works.creatorId], references: [users.id] }),
 	assets: many(assets),
 	transcodingJobs: many(transcodingJobs),
-	postContents: many(postContents),
+	postRefs: many(postWorkRefs), // where this Work has been posted
+	projectItems: many(projectItems), // collections this Work belongs to
+	purchases: many(purchases),
+	bookmarks: many(bookmarks),
+	ratings: many(ratings),
 }));
 
-export const postContentsRelations = relations(postContents, ({ one }) => ({
-	post: one(posts, { fields: [postContents.postId], references: [posts.id] }),
-	contentItem: one(contentItems, {
-		fields: [postContents.contentItemId],
-		references: [contentItems.id],
-	}),
+export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({
+	post: one(posts, { fields: [postWorkRefs.postId], references: [posts.id] }),
+	work: one(works, { fields: [postWorkRefs.workId], references: [works.id] }),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({
-	contentItem: one(contentItems, {
-		fields: [assets.contentItemId],
-		references: [contentItems.id],
-	}),
+	work: one(works, { fields: [assets.workId], references: [works.id] }),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({
-	contentItem: one(contentItems, {
-		fields: [transcodingJobs.contentItemId],
-		references: [contentItems.id],
-	}),
+	work: one(works, { fields: [transcodingJobs.workId], references: [works.id] }),
 }));
 
 export const inlineImagesRelations = relations(inlineImages, ({ one }) => ({
 	creator: one(users, { fields: [inlineImages.creatorId], references: [users.id] }),
 }));
 
+// No `subject` relation on comments: the subject is polymorphic, so there is nothing for
+// the relational API to point at. Every read joins explicitly, as moderation's do.
 export const commentsRelations = relations(comments, ({ one }) => ({
 	user: one(users, { fields: [comments.userId], references: [users.id] }),
-	post: one(posts, { fields: [comments.postId], references: [posts.id] }),
 }));
 
 export const ratingsRelations = relations(ratings, ({ one }) => ({
 	user: one(users, { fields: [ratings.userId], references: [users.id] }),
-	post: one(posts, { fields: [ratings.postId], references: [posts.id] }),
+	work: one(works, { fields: [ratings.workId], references: [works.id] }),
 }));
 
 export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
@@ -179,6 +182,7 @@ export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
 		relationName: "bookmarkOwner",
 	}),
 	post: one(posts, { fields: [bookmarks.postId], references: [posts.id] }),
+	work: one(works, { fields: [bookmarks.workId], references: [works.id] }),
 	project: one(projects, { fields: [bookmarks.projectId], references: [projects.id] }),
 	creator: one(users, {
 		fields: [bookmarks.creatorId],
@@ -195,7 +199,7 @@ export const stripeAccountsRelations = relations(stripeAccounts, ({ one }) => ({
 
 export const purchasesRelations = relations(purchases, ({ one, many }) => ({
 	buyer: one(users, { fields: [purchases.buyerId], references: [users.id] }),
-	post: one(posts, { fields: [purchases.postId], references: [posts.id] }),
+	work: one(works, { fields: [purchases.workId], references: [works.id] }),
 	crfLedgerEntries: many(crfLedger),
 }));
 
@@ -228,7 +232,7 @@ export const attentionEventsRelations = relations(attentionEvents, ({ one }) => 
 		references: [users.id],
 		relationName: "attentionCreator",
 	}),
-	post: one(posts, { fields: [attentionEvents.postId], references: [posts.id] }),
+	work: one(works, { fields: [attentionEvents.workId], references: [works.id] }),
 }));
 
 export const seedAllocationsRelations = relations(seedAllocations, ({ one }) => ({

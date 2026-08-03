@@ -71,6 +71,34 @@
       "when": 1785471772852,
       "tag": "0009_review_text",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785698497109,
+      "tag": "0010_catalog_works",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785699979717,
+      "tag": "0011_attention_works",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785707470101,
+      "tag": "0012_comments_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785708258551,
+      "tag": "0013_project_items",
+      "breakpoints": true
     }
   ]
 }

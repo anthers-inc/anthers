@@ -192,8 +192,10 @@ const jamRoutes = new Hono()
 				entry: jamEntries,
 				postTitle: posts.title,
 				postSlug: posts.slug,
-				postCoverImage: posts.thumbnail,
-				postContentType: posts.contentType,
+				// NOTE: a jam entry is still a POST reference. Cover/type came off the post
+				// when Works took them; a jam entry arguably wants to reference the Work
+				// itself, which is a design change rather than a rename — left for when
+				// jams are next touched.
 				submitterUsername: users.username,
 			})
 			.from(jamEntries)
@@ -208,8 +210,6 @@ const jamRoutes = new Hono()
 				post: {
 					title: r.postTitle,
 					slug: r.postSlug,
-					coverImage: r.postCoverImage,
-					contentType: r.postContentType,
 				},
 				submitter: { username: r.submitterUsername },
 			})),
@@ -325,8 +325,10 @@ const jamRoutes = new Hono()
 				entry: jamEntries,
 				postTitle: posts.title,
 				postSlug: posts.slug,
-				postCoverImage: posts.thumbnail,
-				postContentType: posts.contentType,
+				// NOTE: a jam entry is still a POST reference. Cover/type came off the post
+				// when Works took them; a jam entry arguably wants to reference the Work
+				// itself, which is a design change rather than a rename — left for when
+				// jams are next touched.
 				submitterUsername: users.username,
 				avgScore: sql<number>`COALESCE(AVG(${jamVotes.score}), 0)::float`,
 				voteCount: sql<number>`COUNT(${jamVotes.id})::int`,
@@ -336,14 +338,7 @@ const jamRoutes = new Hono()
 			.innerJoin(users, eq(jamEntries.submittedById, users.id))
 			.leftJoin(jamVotes, eq(jamVotes.entryId, jamEntries.id))
 			.where(eq(jamEntries.jamId, jam.id))
-			.groupBy(
-				jamEntries.id,
-				posts.title,
-				posts.slug,
-				posts.thumbnail,
-				posts.contentType,
-				users.username,
-			)
+			.groupBy(jamEntries.id, posts.title, posts.slug, users.username)
 			.orderBy(desc(sql`COALESCE(AVG(${jamVotes.score}), 0)`));
 
 		return c.json({
@@ -354,8 +349,6 @@ const jamRoutes = new Hono()
 				post: {
 					title: r.postTitle,
 					slug: r.postSlug,
-					coverImage: r.postCoverImage,
-					contentType: r.postContentType,
 				},
 				submitter: { username: r.submitterUsername },
 				avgScore: Number(Number(r.avgScore).toFixed(2)),

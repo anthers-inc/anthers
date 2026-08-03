@@ -4,16 +4,16 @@
  * a derived processing-state badge, and Edit / Delete controls.
  */
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import type { ContentItem } from "../../lib/types";
-import { itemPreviewUrl, ProcessingBadge, TypeBadge, TypeIcon } from "./contentItems";
+import type { Work } from "../../lib/types";
+import { itemPreviewUrl, ProcessingBadge, TypeBadge, TypeIcon } from "./works";
 
 interface ContentItemCardProps {
-	item: ContentItem;
-	onEdit: (item: ContentItem) => void;
-	onDelete: (item: ContentItem) => void;
+	item: Work;
+	onEdit: (item: Work) => void;
+	onDelete: (item: Work) => void;
 }
 
-export default function ContentItemCard({ item, onEdit, onDelete }: ContentItemCardProps) {
+export default function WorkCard({ item, onEdit, onDelete }: ContentItemCardProps) {
 	const preview = itemPreviewUrl(item);
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">

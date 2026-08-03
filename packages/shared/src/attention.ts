@@ -86,8 +86,11 @@ export const IDLE_TIMEOUT_MS = 60_000;
 /** A registered claim on the user's attention for one tick. */
 export interface AttentionClaim {
 	creatorId: number;
-	/** Null for surfaces with no post context; part of the dedupe key either way. */
-	postId: number | null;
+	/**
+	 * The Work this claim is about. Null for surfaces that aren't a Work — a post, a
+	 * profile, discovery — which earn nothing; part of the dedupe key either way.
+	 */
+	workId: number | null;
 	contentType: string;
 	/** Only consulted when the claim's mode is `playback`. */
 	playing?: boolean;
@@ -161,7 +164,7 @@ export function clampToWindow<T extends CreditableEvent>(
 
 /** The dedupe key: one credit per creator/post pair per tick, never two. */
 export function claimKey(claim: AttentionClaim): string {
-	return `${claim.creatorId}:${claim.postId ?? "none"}`;
+	return `${claim.creatorId}:${claim.workId ?? "none"}`;
 }
 
 /** Whether this claim has the evidence its consumption mode requires, right now. */

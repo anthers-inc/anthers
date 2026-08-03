@@ -27,7 +27,7 @@
 import { badgeLabel, heldBadgeName, SEED_PRICE, seedsFromDollars } from "@anthers/shared/constants";
 import { and, eq } from "drizzle-orm";
 import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
-import { accounts, db, posts, purchases, seedAllocations, users } from "./index.js";
+import { accounts, db, posts, purchases, seedAllocations, users, works } from "./index.js";
 
 const TAG = "[gauntlet-state]";
 
@@ -131,14 +131,16 @@ async function main(): Promise<void> {
 	// PaymentIntent id makes the row unmistakably a hop and the insert idempotent.
 	if (purchaseSlug !== undefined) {
 		if (!purchaseSlug.startsWith(GAUNTLET_SLUG_PREFIX)) {
-			throw new Error(`--purchase only accepts gauntlet posts (${GAUNTLET_SLUG_PREFIX}*)`);
+			throw new Error(`--purchase only accepts gauntlet Works (${GAUNTLET_SLUG_PREFIX}*)`);
 		}
-		const [post] = await db
-			.select({ id: posts.id })
-			.from(posts)
-			.where(eq(posts.slug, purchaseSlug))
+		// A purchase unlocks a WORK — that is where access lives, so that is what a
+		// permanent unlock has to name.
+		const [work] = await db
+			.select({ id: works.id })
+			.from(works)
+			.where(eq(works.slug, purchaseSlug))
 			.limit(1);
-		if (!post) throw new Error(`Post "${purchaseSlug}" not found. Run \`make gauntlet-reset\`.`);
+		if (!work) throw new Error(`Work "${purchaseSlug}" not found. Run \`make gauntlet-reset\`.`);
 
 		const syntheticPi = `pi_gauntlet_hop_${viewerId}_${purchaseSlug}`;
 		const [existing] = await db
@@ -149,7 +151,7 @@ async function main(): Promise<void> {
 		if (!existing) {
 			await db.insert(purchases).values({
 				buyerId: viewerId,
-				postId: post.id,
+				workId: work.id,
 				type: "digital",
 				amount: DOWNLOAD_PRICE,
 				processingFee: "0.00",

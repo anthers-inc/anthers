@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import AnalyticsDashboardPage from "@anthers/web-shared/AnalyticsDashboardPage";
-import ContentLibraryPage from "@anthers/web-shared/ContentLibraryPage";
+import CatalogPage from "@anthers/web-shared/CatalogPage";
 import DashboardPage from "@anthers/web-shared/DashboardPage";
 import ImportPage from "@anthers/web-shared/ImportPage";
 import JamFormPage from "@anthers/web-shared/JamFormPage";
@@ -34,7 +34,9 @@ export default function App() {
 		<Routes>
 			<Route element={<StudioLayout />}>
 				<Route path="/" element={<DashboardPage />} />
-				<Route path="/library" element={<ContentLibraryPage />} />
+				<Route path="/catalog" element={<CatalogPage />} />
+				{/* /library kept so existing Studio links and bookmarks don't break. */}
+				<Route path="/library" element={<CatalogPage />} />
 				<Route path="/analytics" element={<AnalyticsDashboardPage />} />
 				<Route path="/posts/new" element={<PostFormPage />} />
 				<Route path="/posts/:slug/edit" element={<PostFormPage />} />

@@ -1,43 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Attach-content picker for the post authoring editor: a modal grid of the creator's
- * library items (filterable by type), plus an "Upload new" affordance that runs the
- * full content-item create flow and attaches the result. Selecting an item returns it
- * to the caller to attach as a post content entry.
+ * Work picker: a modal grid of the creator's Catalog (filterable by type), plus an
+ * "Upload new" affordance that runs the full Work create flow and links the result.
+ *
+ * Used when a post wants to LINK a Work. The link confers nothing — no access, no
+ * ownership — so picking here never changes what the Work costs or who can open it.
  */
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
-import type { ContentItem, LibraryContentType } from "../../lib/types";
+import type { UploadableWorkType, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
-import ContentItemEditor from "./ContentItemEditor";
+import WorkEditor from "./WorkEditor";
 import {
 	itemPreviewUrl,
 	LIBRARY_TYPE_OPTIONS,
 	ProcessingBadge,
 	TypeBadge,
 	TypeIcon,
-} from "./contentItems";
+} from "./works";
 
-interface ContentPickerProps {
-	onSelect: (item: ContentItem) => void;
+interface WorkPickerProps {
+	onSelect: (item: Work) => void;
 	onClose: () => void;
 }
 
-export default function ContentPicker({ onSelect, onClose }: ContentPickerProps) {
-	const [items, setItems] = useState<ContentItem[]>([]);
+export default function WorkPicker({ onSelect, onClose }: WorkPickerProps) {
+	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [typeFilter, setTypeFilter] = useState<"all" | LibraryContentType>("all");
+	const [typeFilter, setTypeFilter] = useState<"all" | UploadableWorkType>("all");
 	const [creating, setCreating] = useState(false);
 
 	useEffect(() => {
-		client.api.content["content-items"]
-			.$get({ query: { mine: "true" } })
+		client.api.content.works
+			.$get()
 			.then(async (res) => {
-				if (!res.ok) return { items: [] as ContentItem[] };
-				return (await res.json()) as unknown as { items: ContentItem[] };
+				if (!res.ok) return { works: [] as Work[] };
+				return (await res.json()) as unknown as { works: Work[] };
 			})
-			.then((data) => setItems(data.items))
+			.then((data) => setItems(data.works))
 			.catch(() => setItems([]))
 			.finally(() => setLoading(false));
 	}, []);
@@ -46,14 +47,14 @@ export default function ContentPicker({ onSelect, onClose }: ContentPickerProps)
 
 	if (creating) {
 		// A freshly created item is attached immediately.
-		return <ContentItemEditor onSaved={onSelect} onClose={() => setCreating(false)} />;
+		return <WorkEditor onSaved={onSelect} onClose={() => setCreating(false)} />;
 	}
 
 	return (
 		<div className="modal modal-open" role="dialog">
 			<div className="modal-box max-w-3xl max-h-[90vh] flex flex-col gap-4">
 				<div className="flex items-center justify-between">
-					<h2 className="text-lg font-bold">Attach content</h2>
+					<h2 className="text-lg font-bold">Link a Work</h2>
 					<button
 						type="button"
 						className="btn btn-sm btn-circle btn-ghost"
@@ -68,7 +69,7 @@ export default function ContentPicker({ onSelect, onClose }: ContentPickerProps)
 					<select
 						className="select select-bordered select-sm"
 						value={typeFilter}
-						onChange={(e) => setTypeFilter(e.target.value as "all" | LibraryContentType)}
+						onChange={(e) => setTypeFilter(e.target.value as "all" | UploadableWorkType)}
 					>
 						<option value="all">All types</option>
 						{LIBRARY_TYPE_OPTIONS.map((opt) => (

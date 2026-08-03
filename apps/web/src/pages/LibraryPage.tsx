@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { postUrl } from "@anthers/web-shared/postUrl";
+import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Purchase } from "@anthers/web-shared/types";
@@ -50,7 +50,7 @@ export default function LibraryPage() {
 
 	// Filter purchases by the purchased post's content type.
 	const filteredPurchases = activeTab
-		? purchases.filter((p) => p.post?.contentType === activeTab)
+		? purchases.filter((p) => p.work?.type === activeTab)
 		: purchases;
 
 	if (loading) {
@@ -131,17 +131,17 @@ export default function LibraryPage() {
 						<Link
 							key={purchase.id}
 							to={
-								purchase.post?.publicId != null
-									? postUrl({ slug: purchase.post.slug, publicId: purchase.post.publicId })
-									: `/posts/${purchase.post?.slug}`
+								purchase.work?.publicId != null
+									? workUrl({ slug: purchase.work.slug, publicId: purchase.work.publicId })
+									: `/posts/${purchase.work?.slug}`
 							}
 							className="card bg-base-200 hover:shadow-lg transition-shadow"
 						>
-							{purchase.post?.coverImage ? (
+							{purchase.work?.coverImage ? (
 								<figure>
 									<img
-										src={purchase.post.coverImage}
-										alt={purchase.post?.title ?? ""}
+										src={purchase.work.coverImage}
+										alt={purchase.work?.title ?? ""}
 										className="w-full h-40 object-cover"
 									/>
 								</figure>
@@ -151,7 +151,7 @@ export default function LibraryPage() {
 								</div>
 							)}
 							<div className="card-body p-4">
-								<h2 className="card-title text-sm">{purchase.post?.title}</h2>
+								<h2 className="card-title text-sm">{purchase.work?.title}</h2>
 								<p className="text-xs text-base-content/60">
 									Purchased {new Date(purchase.createdAt).toLocaleDateString()}
 								</p>

@@ -51,7 +51,7 @@ import {
 	GAUNTLET_MEDIA_POSTS,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
-import { contentItems, postContents, posts, transcodingJobs, users } from "@anthers/db/schema";
+import { posts, postWorkRefs, transcodingJobs, users, works } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -138,28 +138,28 @@ async function creatorId(): Promise<number | null> {
 }
 
 /**
- * Attach real media to one post. Idempotent by deletion: any content item already hanging
- * off this post is removed first, so re-running never accumulates duplicates (and a stale
- * item from a previous shape can't linger and be served).
+ * Give one fixture **Work** real media. `db:gauntlet` already created the Work (and an
+ * announcement post pointing at it); this replaces its source with an actual encoded clip
+ * and runs the real job in-process.
+ *
+ * It updates the existing Work rather than inserting a new one, because the gauntlet walks
+ * access against a Work whose gates `db:gauntlet` set — creating a second Work here would
+ * strand those gates on a row nothing links.
  */
 async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, creator: number) {
-	const [row] = await db
-		.select({ id: posts.id })
-		.from(posts)
-		.where(and(eq(posts.creatorId, creator), eq(posts.slug, post.slug)))
+	const [work] = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(and(eq(works.creatorId, creator), eq(works.slug, post.slug)))
 		.limit(1);
-	if (!row) {
+	if (!work) {
 		throw new Error(
-			`${TAG} fixture post ${post.slug} not found — run \`bun run db:gauntlet\` first`,
+			`${TAG} fixture Work ${post.slug} not found — run \`bun run db:gauntlet\` first`,
 		);
 	}
 
-	const existing = await db
-		.select({ contentItemId: postContents.contentItemId })
-		.from(postContents)
-		.where(eq(postContents.postId, row.id));
-	const staleIds = existing.map((e) => e.contentItemId).filter((id): id is number => id != null);
-	if (staleIds.length > 0) await db.delete(contentItems).where(inArray(contentItems.id, staleIds));
+	// Drop any transcode from a previous run so re-running never serves stale output.
+	await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
 
 	const clipPath = await generateClip(post.media);
 	try {
@@ -174,22 +174,14 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 		);
 
 		const [item] = await db
-			.insert(contentItems)
-			.values({
-				creatorId: creator,
-				type: post.media,
-				title: post.title,
-				description: post.body,
-				sourceKey,
-			})
-			.returning({ id: contentItems.id });
-		await db
-			.insert(postContents)
-			.values({ postId: row.id, position: 0, kind: "content", contentItemId: item.id });
+			.update(works)
+			.set({ sourceKey, updatedAt: new Date() })
+			.where(eq(works.id, work.id))
+			.returning({ id: works.id });
 
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ contentItemId: item.id, mediaType: post.media, status: "pending", progress: 0 })
+			.values({ workId: item.id, mediaType: post.media, status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
 
 		// The real job, in-process. pg-boss isn't running; this is the code it would run.

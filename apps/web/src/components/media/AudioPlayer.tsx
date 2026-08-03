@@ -12,7 +12,7 @@ interface AudioPlayerProps {
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
 	 */
-	attention?: { creatorId: number | null; postId: number | null };
+	attention?: { creatorId: number | null; workId: number | null };
 }
 
 function formatTime(seconds: number): string {
@@ -36,7 +36,7 @@ export default function AudioPlayer({
 	// in a hidden tab, because listening while working elsewhere is real listening.
 	useAttentionClaim({
 		creatorId: attention?.creatorId ?? null,
-		postId: attention?.postId ?? null,
+		workId: attention?.workId ?? null,
 		contentType: "audio",
 		playing: isPlaying,
 		active: !!attention,

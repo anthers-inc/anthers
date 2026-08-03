@@ -14,10 +14,11 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { attentionEvents, contentItems } from "@anthers/db/schema";
+import { attentionEvents } from "@anthers/db/schema";
 import { CREDIT_WINDOW_SECONDS } from "@anthers/shared/attention";
 import { and, eq, gte, sql } from "drizzle-orm";
 import app from "../index";
+import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -40,7 +41,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 }
 
 /**
- * Every timed event names `postId` because the endpoint now re-decides eligibility
+ * Every timed event names `workId` because the endpoint re-decides eligibility
  * server-side: time is only credited against a post that exists, belongs to the
  * claimed creator, is accessible to the viewer, and carries a content element that
  * earns the claimed event type. The clamp under test here runs *after* that filter,
@@ -48,13 +49,13 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
  */
 function postAttention(
 	cookie: string,
-	events: { creatorId: number; eventType: string; durationSeconds: number; postId?: number }[],
+	events: { creatorId: number; eventType: string; durationSeconds: number; workId?: number }[],
 ) {
 	return req("/api/subscriptions/attention", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 		body: JSON.stringify({
-			events: events.map((e) => (e.durationSeconds > 0 ? { postId: earningPostId, ...e } : e)),
+			events: events.map((e) => (e.durationSeconds > 0 ? { workId: earningWorkId, ...e } : e)),
 		}),
 	});
 }
@@ -72,35 +73,24 @@ async function creditedSeconds(userId: number): Promise<number> {
 let viewer: { cookie: string; id: number };
 let creator: { cookie: string; id: number };
 /** A free post carrying both a video and a text element, so "watch" and "read" both earn. */
-let earningPostId: number;
+let earningWorkId: number;
 
 beforeAll(async () => {
 	const stamp = Date.now().toString(36);
 	viewer = await signUp(`clampviewer${stamp}`);
 	creator = await signUp(`clampcreator${stamp}`);
 
-	// Inserted rather than created through the API: a video item queues a transcode,
-	// and pg-boss isn't running in the test process.
-	const [video] = await db
-		.insert(contentItems)
-		.values({ creatorId: creator.id, type: "video", title: "Clamp Fixture" })
-		.returning();
-
-	const res = await req("/api/content/posts", {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator.cookie },
-		body: JSON.stringify({
-			title: `Clamp fixture ${stamp}`,
-			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
-			contents: [
-				{ kind: "content", contentItemId: video.id },
-				{ kind: "text", bodyHtml: "<p>a text element, which earns as read</p>" },
-			],
-			isPublished: true,
-		}),
-	});
-	expect(res.status).toBe(201);
-	earningPostId = (await res.json()).post.id;
+	// Inserted rather than created through the API: a video Work queues a transcode,
+	// and pg-boss isn't running in the test process. Free and released, so the clamp is
+	// the only thing that can refuse anything here — which is the point of this suite.
+	earningWorkId = (
+		await insertWork({
+			creatorId: creator.id,
+			type: "video",
+			title: "Clamp Fixture",
+			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+		})
+	).id;
 });
 
 describe("attention wall-clock clamp", () => {
@@ -164,7 +154,7 @@ describe("attention wall-clock clamp", () => {
 	it("clamps each user independently", async () => {
 		const fresh = await signUp(`clampother${Date.now().toString(36)}`);
 		const res = await postAttention(fresh.cookie, [
-			{ creatorId: creator.id, eventType: "read", durationSeconds: 45 },
+			{ creatorId: creator.id, eventType: "watch", durationSeconds: 45 },
 		]);
 		expect(res.status).toBe(200);
 		expect((await res.json()).granted).toBe(45);

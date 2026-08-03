@@ -14,13 +14,13 @@ import { db } from "@anthers/db";
 import {
 	accounts,
 	assets,
-	contentItems,
 	crfLedger,
 	crfSubsidies,
 	poolDistributions,
 	posts,
 	purchases,
 	users,
+	works,
 } from "@anthers/db/schema";
 import { estimateStorageCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -63,10 +63,10 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 			total: sum(purchases.creatorEarnings),
 		})
 		.from(purchases)
-		.innerJoin(posts, eq(purchases.postId, posts.id))
+		.innerJoin(works, eq(purchases.workId, works.id))
 		.where(
 			and(
-				eq(posts.creatorId, creatorId),
+				eq(works.creatorId, creatorId),
 				eq(purchases.status, "completed"),
 				sql`${purchases.createdAt} >= ${monthStart}`,
 				sql`${purchases.createdAt} < ${monthEnd}`,
@@ -125,8 +125,8 @@ export async function calculateCrfSubsidies() {
 		const [storageResult] = await db
 			.select({ total: sum(assets.fileSize) })
 			.from(assets)
-			.innerJoin(contentItems, eq(assets.contentItemId, contentItems.id))
-			.where(eq(contentItems.creatorId, creator.id));
+			.innerJoin(works, eq(assets.workId, works.id))
+			.where(eq(works.creatorId, creator.id));
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 

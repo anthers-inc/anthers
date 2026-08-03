@@ -2,7 +2,7 @@
 /**
  * Create / edit a creator-owned library content item. This is the single authoring
  * surface for the content library (used by the Library page and the post content
- * picker's "Upload new"): a modal that picks a `LibraryContentType`, runs the type's
+ * picker's "Upload new"): a modal that picks a `UploadableWorkType`, runs the type's
  * upload flow (client-transcode for video, raw upload for audio, image upload, embed
  * URL for game/software, details for physical/service), then POSTs the item. Media
  * items with a source are processed once, server-side, on create. Game/software items
@@ -11,7 +11,7 @@
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { client, isDesktop } from "../../lib/rpc";
-import type { Asset, ContentItem, ContentItemInput, LibraryContentType } from "../../lib/types";
+import type { Asset, UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import {
 	canTranscodeInBrowser,
 	type UploadedVariant,
@@ -23,19 +23,19 @@ import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import LoadingSpinner from "../ui/LoadingSpinner";
-import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./contentItems";
+import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
 
 type EncodeMode = "device" | "server";
 
 interface ContentItemEditorProps {
 	/** Present → edit an existing item; absent → create a new one. */
-	item?: ContentItem | null;
+	item?: Work | null;
 	/** Called with the saved item after a successful create/save (closes the editor). */
-	onSaved: (item: ContentItem) => void;
+	onSaved: (item: Work) => void;
 	onClose: () => void;
 }
 
-function metaNote(item: ContentItem | null | undefined): string {
+function metaNote(item: Work | null | undefined): string {
 	const note = item?.metadata?.note;
 	return typeof note === "string" ? note : "";
 }
@@ -53,14 +53,14 @@ function formatFileSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export default function ContentItemEditor({ item, onSaved, onClose }: ContentItemEditorProps) {
+export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditorProps) {
 	const editing = item ?? null;
 
 	// Once created (or when editing), the item has an id — the type is then fixed and
 	// downloadable builds become manageable.
-	const [current, setCurrent] = useState<ContentItem | null>(editing);
-	const [type, setType] = useState<LibraryContentType>(
-		(editing?.type as LibraryContentType) ?? "video",
+	const [current, setCurrent] = useState<Work | null>(editing);
+	const [type, setType] = useState<UploadableWorkType>(
+		(editing?.type as UploadableWorkType) ?? "video",
 	);
 	const hasId = current != null;
 
@@ -259,7 +259,9 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 	const handleCreate = async () => {
 		setSaving(true);
 		setError(null);
-		const input: ContentItemInput = { type };
+		// `type` is required on create and immutable afterwards, so it is narrowed here
+		// rather than left optional on the shared input type.
+		const input: WorkInput & { type: UploadableWorkType } = { type };
 		if (title.trim()) input.title = title.trim();
 		if (description.trim()) input.description = description.trim();
 		if (thumbnailUrl) input.thumbnail = thumbnailUrl;
@@ -291,12 +293,12 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 				break;
 		}
 		try {
-			const res = await client.api.content["content-items"].$post({ json: input });
+			const res = await client.api.content.works.$post({ json: input });
 			if (!res.ok) {
 				setError("Failed to create content.");
 				return;
 			}
-			const { item: created } = (await res.json()) as unknown as { item: ContentItem };
+			const { work: created } = (await res.json()) as unknown as { work: Work };
 			setCurrent(created);
 			// Games/software gain a builds section; everything else is done on create.
 			if (!isBuildType(type)) onSaved(created);
@@ -327,7 +329,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 		if (type === "physical" || type === "service") json.metadata = { note: detailsNote.trim() };
 		if (type === "image" && imageUrl) json.sourceKey = imageUrl;
 		try {
-			const res = await client.api.content["content-items"][":id"].$patch({
+			const res = await client.api.content.works[":id"].$patch({
 				param: { id: String(current.id) },
 				json,
 			});
@@ -335,7 +337,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 				setError("Failed to save content.");
 				return;
 			}
-			const { item: updated } = (await res.json()) as unknown as { item: ContentItem };
+			const { item: updated } = (await res.json()) as unknown as { item: Work };
 			onSaved(updated);
 		} catch {
 			setError("Failed to save content.");
@@ -360,7 +362,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 		setError(null);
 		try {
 			const key = await uploadMediaFile(buildFile, "asset");
-			const res = await client.api.content["content-items"][":id"].assets.$post({
+			const res = await client.api.content.works[":id"].assets.$post({
 				param: { id: String(current.id) },
 				json: {
 					file: key,
@@ -388,7 +390,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 	const handleDeleteBuild = async (assetId: number) => {
 		if (!current) return;
 		try {
-			const res = await client.api.content["content-items"][":id"].assets[":assetId"].$delete({
+			const res = await client.api.content.works[":id"].assets[":assetId"].$delete({
 				param: { id: String(current.id), assetId: String(assetId) },
 			});
 			if (!res.ok) throw new Error("Delete failed");
@@ -432,7 +434,7 @@ export default function ContentItemEditor({ item, onSaved, onClose }: ContentIte
 							<select
 								className="select select-bordered w-full"
 								value={type}
-								onChange={(e) => setType(e.target.value as LibraryContentType)}
+								onChange={(e) => setType(e.target.value as UploadableWorkType)}
 							>
 								{LIBRARY_TYPE_OPTIONS.map((opt) => (
 									<option key={opt.value} value={opt.value}>

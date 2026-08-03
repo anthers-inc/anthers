@@ -82,7 +82,7 @@ const adminRoutes = new Hono()
 				(SELECT count(*) FROM posts WHERE created_at >= now() - interval '7 days')::int AS posts_new_7d,
 				(SELECT count(*) FROM comments WHERE created_at >= now() - interval '24 hours')::int AS comments_new_24h,
 				(SELECT count(*) FROM comments WHERE created_at >= now() - interval '7 days')::int AS comments_new_7d,
-				(SELECT count(*) FROM content_items)::int AS uploads_total
+				(SELECT count(*) FROM works)::int AS uploads_total
 		`);
 		const s = rowsOf<Record<string, number>>(summaryRes)[0] ?? {};
 

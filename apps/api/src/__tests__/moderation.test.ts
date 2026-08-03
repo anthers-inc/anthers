@@ -56,7 +56,7 @@ interface QueueItem {
 	reasons: string[];
 	details: string[];
 	author: { username: string } | null;
-	post: { slug: string } | null;
+	context: { kind: "post" | "work"; slug: string } | null;
 	lastAction: { action: string; reason: string; actor: string | null } | null;
 }
 
@@ -82,6 +82,7 @@ let admin: string;
 let viewerA: string;
 let viewerB: string;
 let slug: string;
+let workId: number;
 /** viewerA's comment — the one we report and hide. */
 let commentId: number;
 /** viewerB's comment — the control that must stay visible throughout. */
@@ -98,23 +99,31 @@ beforeAll(async () => {
 	viewerB = await signUp(viewerBName);
 	await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
 
-	const itemRes = await post("/api/content/content-items", creator, {
+	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Mod fixture ${id}`,
 	});
 	expect(itemRes.status).toBe(201);
-	const itemId = (await itemRes.json()).item.id;
+	workId = (await itemRes.json()).work.id;
 
 	const postRes = await post("/api/content/posts", creator, {
 		title: `Moderated post ${id}`,
-		streamEnabled: false,
-		downloadEnabled: true,
-		seedAccess: FREE,
-		contents: [{ kind: "content", contentItemId: itemId }],
+		workIds: [workId],
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);
 	slug = (await postRes.json()).post.slug;
+
+	// Reviewing requires access, so the fixture Work has to be released and open.
+	const release = await req(`/api/content/works/${workId}`, {
+		method: "PATCH",
+		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
+		body: JSON.stringify({
+			visibility: "released",
+			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+		}),
+	});
+	expect(release.status).toBe(200);
 
 	const c1 = await post(`/api/content/posts/${slug}/comments`, viewerA, {
 		body: "buy cheap followers at example.com",
@@ -129,7 +138,7 @@ beforeAll(async () => {
 	otherCommentId = (await c2.json()).comment.id;
 
 	// Two ratings: 1 star from A (the one we'll hide), 5 stars from B.
-	const r1 = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+	const r1 = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 		score: 1,
 		body: "did not work for me at all",
 	});
@@ -137,7 +146,7 @@ beforeAll(async () => {
 	ratingId = (await r1.json()).rating.id;
 	expect(
 		(
-			await post(`/api/content/posts/${slug}/ratings`, viewerB, {
+			await post(`/api/content/works/${workId}/ratings`, viewerB, {
 				score: 5,
 				body: "one of the best things I have played this year",
 			})
@@ -244,7 +253,10 @@ describe("The operator queue", () => {
 		expect(entry?.openReports).toBe(1);
 		expect(entry?.reasons).toContain("harassment");
 		expect(entry?.author?.username).toBe(viewerAName);
-		expect(entry?.post?.slug).toBe(slug);
+		// The queue names WHERE the item lives, and that is no longer always a post — so
+		// the context carries its kind. A comment on a post reads as one.
+		expect(entry?.context?.kind).toBe("post");
+		expect(entry?.context?.slug).toBe(slug);
 		expect(entry?.moderationStatus).toBe("visible");
 		expect(summary.openReports).toBeGreaterThanOrEqual(1);
 	});
@@ -343,7 +355,7 @@ describe("Hiding a comment", () => {
 
 describe("Hiding a rating", () => {
 	it("drops it out of the aggregate on the ratings endpoint", async () => {
-		const before = await (await req(`/api/content/posts/${slug}/ratings`)).json();
+		const before = await (await req(`/api/content/works/${workId}/ratings`)).json();
 		expect(before.count).toBe(2);
 		expect(before.average).toBe(3); // (1 + 5) / 2
 
@@ -354,26 +366,31 @@ describe("Hiding a rating", () => {
 		});
 		expect(res.status).toBe(200);
 
-		const after = await (await req(`/api/content/posts/${slug}/ratings`)).json();
+		const after = await (await req(`/api/content/works/${workId}/ratings`)).json();
 		expect(after.count).toBe(1);
 		expect(after.average).toBe(5);
 	});
 
-	it("drops it out of the aggregate embedded in post detail too", async () => {
+	it("has no second aggregate to leak through — post detail carries none", async () => {
+		// There used to be TWO places computing this: the ratings endpoint and an aggregate
+		// embedded in post detail, and forgetting the moderation filter at either one was a
+		// live hazard the Agents Hub called out by name. A review is a verdict on a WORK, so
+		// post detail carries no aggregate at all now and the second site is gone rather
+		// than merely being remembered about.
 		const res = await req(`/api/content/posts/${slug}`);
 		expect(res.status).toBe(200);
 		const body = await res.json();
-		expect(body.post.ratingCount).toBe(1);
-		expect(body.post.ratingAverage).toBe(5);
+		expect(body.post.ratingCount).toBeUndefined();
+		expect(body.post.ratingAverage).toBeUndefined();
 	});
 
 	it("still shows the author their own score rather than lying about it", async () => {
-		const res = await req(`/api/content/posts/${slug}/ratings`, { headers: { Cookie: viewerA } });
+		const res = await req(`/api/content/works/${workId}/ratings`, { headers: { Cookie: viewerA } });
 		expect((await res.json()).userRating).toBe(1);
 	});
 
 	it("cannot be resurrected by re-rating — the upsert only touches the score", async () => {
-		const res = await post(`/api/content/posts/${slug}/ratings`, viewerA, {
+		const res = await post(`/api/content/works/${workId}/ratings`, viewerA, {
 			score: 4,
 			body: "came back to it and warmed up considerably",
 		});
@@ -383,7 +400,7 @@ describe("Hiding a rating", () => {
 		expect(row.score).toBe(4);
 		expect(row.moderationStatus).toBe("hidden");
 
-		const agg = await (await req(`/api/content/posts/${slug}/ratings`)).json();
+		const agg = await (await req(`/api/content/works/${workId}/ratings`)).json();
 		expect(agg.count).toBe(1);
 		expect(agg.average).toBe(5);
 	});

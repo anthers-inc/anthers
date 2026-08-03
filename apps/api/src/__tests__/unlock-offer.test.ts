@@ -18,7 +18,7 @@ import { describe, expect, it } from "bun:test";
 import { ANTHERS_BADGES, SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
-	type AccessiblePost,
+	type AccessibleWork,
 	resolveAccessSync,
 	unlockRoute,
 } from "../services/access";
@@ -31,12 +31,12 @@ function ctx(anthersSeeds: number, seedsGiven = 0): AccessContext {
 		userId: VIEWER,
 		anthersSeeds,
 		seedByCreator: new Map(seedsGiven > 0 ? [[CREATOR, seedsGiven]] : []),
-		purchasedPostIds: new Set(),
+		purchasedWorkIds: new Set(),
 	};
 }
 
 /** A post gated on the Anthers side at `threshold`, locked everywhere else. */
-function anthersGatedAt(threshold: number, price = "0"): AccessiblePost {
+function anthersGatedAt(threshold: number, price = "0"): AccessibleWork {
 	return {
 		id: 1,
 		creatorId: CREATOR,
@@ -51,7 +51,7 @@ function anthersGatedAt(threshold: number, price = "0"): AccessiblePost {
 }
 
 /** A post gated on the creator side at `threshold`, locked everywhere else. */
-function creatorGatedAt(threshold: number): AccessiblePost {
+function creatorGatedAt(threshold: number): AccessibleWork {
 	return {
 		id: 2,
 		creatorId: CREATOR,
@@ -155,7 +155,7 @@ describe("unlock offer — routes that would not actually open the post", () => 
 	});
 
 	it("reports each side independently when both gates are open routes", () => {
-		const both: AccessiblePost = {
+		const both: AccessibleWork = {
 			id: 3,
 			creatorId: CREATOR,
 			streamEnabled: true,
@@ -175,7 +175,7 @@ describe("unlock offer — routes that would not actually open the post", () => 
 	});
 
 	it("picks the LOWEST allowed rung when a table has several", () => {
-		const ladder: AccessiblePost = {
+		const ladder: AccessibleWork = {
 			id: 4,
 			creatorId: CREATOR,
 			streamEnabled: true,
@@ -194,7 +194,7 @@ describe("unlock offer — routes that would not actually open the post", () => 
 
 describe("unlock offer — when it is absent", () => {
 	it("is absent for a viewer who already has access", () => {
-		const free: AccessiblePost = {
+		const free: AccessibleWork = {
 			id: 5,
 			creatorId: CREATOR,
 			streamEnabled: true,
@@ -212,7 +212,7 @@ describe("unlock offer — when it is absent", () => {
 			userId: null,
 			anthersSeeds: 0,
 			seedByCreator: new Map(),
-			purchasedPostIds: new Set(),
+			purchasedWorkIds: new Set(),
 		};
 		const got = resolveAccessSync(anthersGatedAt(2), anon);
 		expect(got.reason).toBe("login_required");
@@ -220,7 +220,7 @@ describe("unlock offer — when it is absent", () => {
 	});
 
 	it("is absent for a purchasable post — ProjectPricing owns that path", () => {
-		const buyable: AccessiblePost = {
+		const buyable: AccessibleWork = {
 			id: 6,
 			creatorId: CREATOR,
 			streamEnabled: false,

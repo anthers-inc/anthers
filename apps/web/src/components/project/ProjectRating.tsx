@@ -22,7 +22,11 @@ import { useCallback, useEffect, useState } from "react";
 import ReportDialog from "../ui/ReportDialog";
 import StarRating from "../ui/StarRating";
 
-export default function ProjectRating({ slug }: { slug: string }) {
+/**
+ * Reviews for a **Work**. Keyed on the Work's id rather than a post slug, because a review
+ * is a verdict on a work and a work is reachable without any post existing.
+ */
+export default function ProjectRating({ workId }: { workId: number }) {
 	const { isAuthenticated, user } = useAuth();
 	const [rating, setRating] = useState<RatingAggregate | null>(null);
 	const [draftScore, setDraftScore] = useState<number | null>(null);
@@ -32,14 +36,14 @@ export default function ProjectRating({ slug }: { slug: string }) {
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
 
 	const fetchRating = useCallback(() => {
-		client.api.content.posts[":slug"].ratings
-			.$get({ param: { slug } })
+		client.api.content.works[":id"].ratings
+			.$get({ param: { id: String(workId) } })
 			.then(async (res) => {
 				if (!res.ok) return;
 				setRating((await res.json()) as unknown as RatingAggregate);
 			})
 			.catch(console.error);
-	}, [slug]);
+	}, [workId]);
 
 	useEffect(() => {
 		fetchRating();
@@ -60,8 +64,8 @@ export default function ProjectRating({ slug }: { slug: string }) {
 		setSubmitting(true);
 		setError(null);
 		try {
-			const res = await client.api.content.posts[":slug"].ratings.$post({
-				param: { slug },
+			const res = await client.api.content.works[":id"].ratings.$post({
+				param: { id: String(workId) },
 				json: { score: draftScore, body: draftBody.trim() },
 			});
 			if (!res.ok) {
