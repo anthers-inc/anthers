@@ -497,11 +497,10 @@ export default function ForCreatorsPage() {
 						</h3>
 						<p className="text-sm leading-relaxed text-base-content/70">
 							Work <em className="not-italic font-medium">you</em> hand out—behind your own Seed
-							Gate, or sold—is paid by direct support, and draws nothing from the Time
-							Pool. Work <em className="not-italic font-medium">Anthers</em> hands out—free to the
-							public, or behind an Anthers Gate—is paid from the Time Pool, funded by everyone
-							backing the commons. Every piece of work pays you exactly once, from the side that
-							carried it.
+							Gate, or sold—is paid by direct support, and draws nothing from the Time Pool. Work{" "}
+							<em className="not-italic font-medium">Anthers</em> hands out—free to the public, or
+							behind an Anthers Gate—is paid from the Time Pool, funded by everyone backing the
+							commons. Every piece of work pays you exactly once, from the side that carried it.
 						</p>
 					</Card>
 				</Reveal>

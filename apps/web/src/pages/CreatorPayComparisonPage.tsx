@@ -18,10 +18,12 @@
 //   • On a Seed there is no platform fee at all; only the pro-rata share of the
 //     at-cost card fee on the fan's whole monthly charge comes out.
 //
-// TODO: this page still compares Anthers's ALL-IN take-home against rivals'
-// headline cuts in places, which is the apples-to-oranges error 63.01 Comparisons
-// forbids. The numbers below are now true; the structure still wants rebuilding
-// around take-home-at-the-same-list-price. See the Pricing Model Revamp doc.
+// EVERY row is all-in take-home at the same list price, per 63.01 § Comparisons.
+// Rival figures include THEIR payment processing, because every platform pays the
+// same card cost — comparing our all-in against their headline cut would flatter us
+// and a creator would catch it. Where a rival wins (Steam below ~$1.15) or ties
+// (Bandcamp Friday), the row says so. Competitor rates checked 2026-08-03 and
+// perishable — re-check before publishing.
 //   • On streaming the creator earns their watch-time share of every viewer's Time
 //     Pool ($1.50 per Anthers-Seed), the same rate for every medium (equal-time).
 //     Anthers profits $0.
@@ -189,8 +191,12 @@ const PLATFORMS: Platform[] = [
 				scenario: "A fan buys your $10 game",
 				kind: "Digital purchase",
 				anthers: aPrice("$10.00", "$9.40"),
-				rival: { keep: "$7.00", keepSub: "70%", cut: "30% (≈ $3.00)" },
-				note: "Anthers's only add here is the Foundation fee on the download bandwidth — about a cent, added on top for the buyer and funding free access, so your $10 reaches you whole. Steam's 30% comes out of your sale.",
+				rival: {
+					keep: "$7.00",
+					keepSub: "70% — Valve absorbs card processing inside its 30%",
+					cut: "30% (≈ $3.00)",
+				},
+				note: "Both figures are all-in take-home. Anthers takes $0; the $0.60 that leaves your $10 is card processing and the buyer's first download, paid to third parties. Steam's $3.00 is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.",
 			},
 		],
 	},
@@ -205,18 +211,22 @@ const PLATFORMS: Platform[] = [
 				kind: "Digital purchase",
 				anthers: aPrice("$10.00", "$9.40"),
 				rival: {
-					keep: "$8.50",
-					keepSub: "85%, before payment processing",
-					cut: "15% (→ 10% after $5k/yr)",
+					keep: "$7.91",
+					keepSub: "85% less the same card processing everyone pays (→ 90% after $5k in sales)",
+					cut: "15% (→ 10% after $5k)",
 				},
-				note: "Our only add is the Foundation fee on delivery — pennies, added on top; your $10 is untouched. Bandcamp takes 15% of your sale and also deducts payment processing from your cut.",
+				note: "Both figures are all-in. Bandcamp's headline is 15%, but processing comes out of the remainder too, so the honest comparison is $9.40 against $7.91 — not $9.40 against $8.50. Worth conceding: on Bandcamp Friday they waive the revenue share entirely, which puts an artist at about $9.41 — their best day is our every day.",
 			},
 			{
 				scenario: "A fan buys your $25 vinyl",
 				kind: "Physical purchase",
 				anthers: aPrice("$25.00", "$23.97"),
-				rival: { keep: "$22.50", keepSub: "90%, before processing", cut: "10% (≈ $2.50)" },
-				note: "Nothing ships through us, so the Foundation fee is a flat 1% ($0.25), added on top for the buyer — your $25 is whole. Excludes production & shipping, a real cost on any platform.",
+				rival: {
+					keep: "$21.47",
+					keepSub: "90% less the same card processing",
+					cut: "10% (≈ $2.50)",
+				},
+				note: "Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $25 is card processing. Excludes production & shipping, a real cost on any platform.",
 			},
 		],
 	},
@@ -231,21 +241,22 @@ const PLATFORMS: Platform[] = [
 				kind: "Seeds",
 				anthers: A_SEED,
 				rival: {
-					keep: rivalKeeps(0.1),
-					keepSub: `90% before processing → nets ~${RIVAL_SEED_NET}`,
+					keep: RIVAL_SEED_NET,
+					keepSub: `${rivalKeeps(0.1)} after their 10%, less the same card processing`,
 					cut: "10% + processing",
 				},
-				note: `A Seed is $${SEED_PRICE} sent straight to a creator — no fee, no payout processing; the supporter covers the card cost on top (~${CARD_ON_SEEDS} on a $${SEED_SPEND} charge). Patreon takes 10%, then card processing comes out of what's left.`,
+				note: `Both figures are all-in take-home on the same $${SEED_SPEND}. Anthers takes $0 — the only deduction is the at-cost card fee (~${CARD_ON_SEEDS} here), charged once on the fan's WHOLE monthly charge. That is the structural difference: Patreon bills per creator, so a fan backing four creators pays four separate flat fees, while every Seed rides one transaction. Back more creators on Patreon and each one nets less; on Anthers each one nets more.`,
 			},
 			{
 				scenario: "A fan buys a $10 one-time item",
 				kind: "Purchase",
 				anthers: aPrice("$10.00", "$9.40"),
 				rival: {
-					keep: "$8.80–9.50",
-					keepSub: "88–95% before processing",
+					keep: "$8.21–8.91",
+					keepSub: "88–95% after their cut, less the same card processing",
 					cut: "5–12% + processing",
 				},
+				note: "Patreon now sells one-time digital products too, at the same 10% plus processing — so they belong in this row, not only the membership one.",
 			},
 		],
 	},
@@ -259,11 +270,11 @@ const PLATFORMS: Platform[] = [
 				kind: "Seeds",
 				anthers: A_SEED,
 				rival: {
-					keep: rivalKeeps(0.1),
-					keepSub: `90% before processing → nets ~${RIVAL_SEED_NET}`,
+					keep: RIVAL_SEED_NET,
+					keepSub: `${rivalKeeps(0.1)} after their 10%, less Stripe processing and a recurring-billing fee`,
 					cut: "10% + processing",
 				},
-				note: `${SEED_COUNT} × $${SEED_PRICE} Seeds reach you in full — no fee and no payout processing; the supporter covers the card cost on top. Substack takes 10%, then Stripe processing (~${CARD_ON_SEEDS} on $${SEED_SPEND}) comes out of your cut.`,
+				note: `Both all-in on the same $${SEED_SPEND}. Anthers takes no cut; the only deduction is the at-cost card fee (~${CARD_ON_SEEDS}), charged once on the fan's whole monthly charge. Substack's 10% is before Stripe, and subscriptions started after mid-2024 also carry a recurring-billing fee of roughly 0.5–0.7% that is easy to miss.`,
 			},
 		],
 	},
