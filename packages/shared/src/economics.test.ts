@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Coverage for the support-model money functions. The central invariant is that
-// each Anthers-Seed's $3 conserves exactly into bandwidth + Time Pool + Foundation
-// (Payments rides on top, never inside a Seed), so a stray edit to a dial that
-// breaks the sum — or that lets Payments leak into a Seed — is caught here.
+// each Anthers-Seed's $3 conserves exactly into bandwidth + Time Pool + Payments +
+// Foundation, so a stray edit to a dial that breaks the sum is caught here.
+// Payments moved INSIDE the price on 2026-08-03 — it is charged on the whole batched
+// monthly charge and split pro-rata, and only sales tax is ever added on top.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import { BADGE_ORDER, SEED_PRICE, TIME_POOL_PER_SEED, timePoolFor } from "./constants.js";
@@ -21,9 +22,10 @@ const PAID_SEEDS = [1, 2, 3, 4];
 describe("anthersSeedBreakdown", () => {
 	test("seed value + Time Pool + bandwidth + Foundation conserve exactly, every count", () => {
 		for (const n of PAID_SEEDS) {
-			const b = anthersSeedBreakdown(n, { bandwidthGiB: 30 * n });
+			const payments = paymentsSplit(n, 0).anthers;
+			const b = anthersSeedBreakdown(n, { bandwidthGiB: 30 * n, payments });
 			expect(b.seedValue.toFixed(2)).toBe((SEED_PRICE * n).toFixed(2));
-			const sum = b.timePool.plus(b.bandwidth).plus(b.foundation);
+			const sum = b.timePool.plus(b.bandwidth).plus(b.payments).plus(b.foundation);
 			expect(sum.toFixed(2)).toBe(b.seedValue.toFixed(2));
 		}
 	});
@@ -76,10 +78,19 @@ describe("anthersSeedBreakdown", () => {
 	});
 });
 
-describe("cardFee (Payments, on top)", () => {
+describe("cardFee (Payments, inside the price)", () => {
 	test("is 2.9% + $0.30 on the charge, and $0 when nothing is charged", () => {
 		expect(cardFee(3).toFixed(2)).toBe("0.39");
 		expect(cardFee(0).toNumber()).toBe(0);
+	});
+
+	test("the flat $0.30 is per CHARGE, so batching is what makes the rate fall", () => {
+		// The whole argument for a $3 Seed rather than a $1 one, and for one monthly
+		// charge rather than per-creator billing.
+		// cardFee rounds to whole cents, so these are the rates a user actually pays.
+		expect(cardFee(3).div(3).toNumber()).toBeCloseTo(0.13, 2); // ~13% borne alone
+		expect(cardFee(12).div(12).toNumber()).toBeCloseTo(0.054, 3); // ~5.4% batched
+		expect(cardFee(12).lessThan(cardFee(3).mul(4))).toBe(true); // one charge beats four
 	});
 });
 
@@ -104,7 +115,12 @@ describe("supportBreakdown", () => {
 		expect(s.toCreators.toFixed(2)).toBe(s.creatorNet.plus(s.timePool).toFixed(2));
 		// The whole charge is fully accounted for, with nothing left over for Anthers.
 		expect(
-			s.creatorNet.plus(s.timePool).plus(s.bandwidth).plus(s.payments).plus(s.foundation).toFixed(2),
+			s.creatorNet
+				.plus(s.timePool)
+				.plus(s.bandwidth)
+				.plus(s.payments)
+				.plus(s.foundation)
+				.toFixed(2),
 		).toBe("9.00");
 	});
 

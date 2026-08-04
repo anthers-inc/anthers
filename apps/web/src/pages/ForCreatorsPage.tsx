@@ -7,13 +7,13 @@
 //
 // Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one
 // primitive, a Seed at $3/month, pointed either at a creator (a directed Seed —
-// 100% theirs, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
+// no platform cut, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
 // (an Anthers-Seed — the fan's streaming at cost, $1.50 into the Time Pool, and the
 // remainder to the Foundation). A fan's rank IS their Anthers-Seed count (Root →
 // Blossom = 1 → 4, "+" beyond). Bandwidth is folded in — no wallet.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
-// ① direct support (Seeds given to you + direct sales) reaches you in full — the
+// ① direct support (Seeds given to you + direct sales) carries no platform cut — the
 // wedge, and where the 0%-cut claim is unconditionally true; ② the commons (the
 // Time Pool, by watch-time) pays for the work Anthers distributes for you. The
 // distributor-pays rule ties them together: whoever distributes a piece of work is
@@ -22,8 +22,11 @@
 //
 // Anthers figures derive from @anthers/shared/constants (never hardcoded); competitor
 // figures are rough public estimates (illustrative). Claims follow the Copy Style
-// Guide (63.01): "0% cut / 100%" only where it is unconditionally true (directed
-// Seeds and direct sales), "non-profit" never "501(c)(3)" until the IRS letter lands.
+// Guide (63.01): "0% cut" is now unconditionally true of EVERY creator transaction,
+// but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
+// of the price. Where a cut and a price appear together the take-home figure must
+// appear with them, or a reader concludes the creator gets the whole list price.
+// "non-profit", never "501(c)(3)", until the IRS determination letter lands.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
 // sets up "The solution" — an interactive matrix (how a fan supports you × the
@@ -34,6 +37,8 @@ import {
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	badgeLabel,
+	CARD_FLAT,
+	CARD_RATE,
 	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
 	SEED_PRICE,
@@ -107,8 +112,9 @@ export default function ForCreatorsPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is Patreon, Bandcamp, Steam, and itch in one place—games, videos, music, and
-							writing under one roof, one identity, one audience. Every Seed given to you and every
-							sale reaches you in full: 0% cut, no fee, no processing skim.
+							writing under one roof, one identity, one audience. Anthers takes <strong>0%</strong>{" "}
+							of every Seed given to you and every sale — no cut, no fee, no skim. The only thing
+							that ever comes out is the at-cost card processing, and that goes to the processor.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -179,9 +185,10 @@ export default function ForCreatorsPage() {
 					<Eyebrow>The solution</Eyebrow>
 					<H2>When someone pays you, that's what you get paid.</H2>
 					<Lede>
-						Seeds a fan gives you and anything they buy from you are paid to you 100%—no cut, no
-						fee, no processing skim. Streaming is the other side: it makes your work discoverable,
-						served at cost, and pays you from the Time Pool for the time people spend with it.
+						Seeds a fan gives you and anything they buy from you carry no platform cut at all—no
+						fee, no skim, nothing to us. Streaming is the other side: it makes your work
+						discoverable, served at cost, and pays you from the Time Pool for the time people spend
+						with it.
 					</Lede>
 					<Lede>
 						Try out all the ways a fan can support you, and see what happens when you cut out the
@@ -210,19 +217,16 @@ export default function ForCreatorsPage() {
 								Example: $10 game, 2 GiB download (card payment)
 							</h3>
 							<div className="flex flex-col gap-2 text-sm">
-								<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
-								<ReceiptLine
-									label="Download bandwidth (2 GiB @ $0.01/GiB, at cost)"
-									amount="$0.02"
-								/>
-								<ReceiptLine label="Foundation fee (50% of bandwidth)" amount="$0.01" />
-								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
+								<ReceiptLine label="Listed price — what the buyer pays" amount="$10.00" bold />
+								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="−$0.59" />
+								<ReceiptLine label="First download (2 GiB @ $0.01/GiB, at cost)" amount="−$0.02" />
+								<ReceiptLine label="Anthers" amount="−$0.00" />
 								<div className="my-1 border-t border-base-content/10" />
-								<ReceiptLine label="You pay" amount="$10.62" bold />
+								<ReceiptLine label="You receive" amount="$9.39" bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								Creator receives $10.00—every time. Costs are added on top, never subtracted (plus
-								sales tax where it applies).
+								The buyer pays your listed price plus sales tax and nothing else. What comes out of
+								it goes to the payment processor and the CDN — never to us.
 							</p>
 						</Card>
 					</Reveal>
@@ -235,13 +239,16 @@ export default function ForCreatorsPage() {
 								Every fee is itemized and explained. Buyers understand what they're paying for.
 								Creators understand what they're earning.
 							</PricePoint>
-							<PricePoint icon={<ServerStackIcon className="h-5 w-5" />} title="The Foundation fee">
-								On a sale, Anthers' one markup rides on the infrastructure the transaction actually
-								uses—half of a download's bandwidth (a fraction of a cent), or a nominal 1% where
-								nothing is delivered—plus half of your storage cost past the free {FREE_STORAGE_GIB}{" "}
-								GiB. On streaming there's no markup at all: the Foundation simply receives what's
-								left of a fan's Seed to Anthers after their bandwidth and the Time Pool. It funds
-								free access, charitable programs, and lean operations—Anthers itself never profits.
+							<PricePoint
+								icon={<ServerStackIcon className="h-5 w-5" />}
+								title="No fee on your sales"
+							>
+								Anthers takes <strong>nothing</strong> from a sale or a Seed. The only Foundation
+								fee that touches a creator is half of your storage cost past the free{" "}
+								{FREE_STORAGE_GIB} GiB — your own infrastructure, opt-in, and nothing to do with
+								what you sell. The Foundation is funded by what's left of a fan's Seeds to Anthers
+								after their bandwidth, the Time Pool, and the card cost. It funds free access,
+								charitable programs, and lean operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -261,8 +268,9 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={220} className="h-full">
 						<PricingOption title="Fixed Price">
-							Set your price and receive 100% of it. Transparent fees are added on top for the
-							buyer—never taken from your cut.
+							Set the price a buyer sees, and we show you exactly what you'll receive. The only
+							deductions are the at-cost card processing and the first download—both paid to third
+							parties, neither to us.
 						</PricingOption>
 					</Reveal>
 				</div>
@@ -427,29 +435,29 @@ export default function ForCreatorsPage() {
 					<Lede>
 						There's one thing to support on Anthers: a{" "}
 						<strong className="font-semibold text-base-content/80">Seed</strong>,{" "}
-						{fmtMoney(SEED_PRICE)} a month. A fan points it at you—and it's yours in full—or at
+						{fmtMoney(SEED_PRICE)} a month. A fan points it at you—and we take no cut of it—or at
 						Anthers, where part of it becomes the Time Pool that pays for the work Anthers hands out
 						on your behalf. Both reach creators; neither is a cut of your earnings.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
 					<Reveal delay={0} className="h-full">
-						<SignpostCard step="1" title="Direct support — 100% yours" tone="creator">
+						<SignpostCard step="1" title="Direct support — 0% cut" tone="creator">
 							The wedge, and the part we'll state flatly: nothing is taken.
 							<ul>
 								<li>
 									<strong className="font-semibold text-base-content/85">Seeds given to you</strong>{" "}
-									— {fmtMoney(SEED_PRICE)}/month each, recurring like a membership, 100% to you with
-									no fee and no payout processing
+									— {fmtMoney(SEED_PRICE)}/month each, recurring like a membership, with no platform
+									cut and no fee and no payout processing
 								</li>
 								<li>
 									<strong className="font-semibold text-base-content/85">Anything you sell</strong>{" "}
-									— games, albums, books, prints, merch, services: you receive the full listed
-									price, always
+									— games, albums, books, prints, merch, services: you set the price a buyer sees,
+									and we show you exactly what you'll receive before you publish
 								</li>
 								<li>
-									Your buyer covers the real costs on top—delivery at cost, the Foundation fee on
-									the bytes, card processing and tax—never subtracted from your side
+									The only deductions are the at-cost card processing and your buyer's first
+									download—both paid to third parties, never a cent to Anthers
 								</li>
 							</ul>
 							This is where "0% cut" is simply true, with nothing to qualify.
@@ -489,7 +497,7 @@ export default function ForCreatorsPage() {
 						</h3>
 						<p className="text-sm leading-relaxed text-base-content/70">
 							Work <em className="not-italic font-medium">you</em> hand out—behind your own Seed
-							Gate, or sold—is paid by direct support, in full, and draws nothing from the Time
+							Gate, or sold—is paid by direct support, and draws nothing from the Time
 							Pool. Work <em className="not-italic font-medium">Anthers</em> hands out—free to the
 							public, or behind an Anthers Gate—is paid from the Time Pool, funded by everyone
 							backing the commons. Every piece of work pays you exactly once, from the side that
@@ -547,8 +555,8 @@ export default function ForCreatorsPage() {
 						A fan's Badge is how many Seeds they're giving Anthers right now—a point-in-time choice,
 						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
 						split across every creator they spend time with, so what reaches you is your share of
-						their month, not the whole figure. Seeds they give you directly are separate, and 100%
-						yours. *A free account pays nothing; the Foundation funds its small Time Pool and its
+						their month, not the whole figure. Seeds they give you directly are separate, and carry
+						no yours. *A free account pays nothing; the Foundation funds its small Time Pool and its
 						streaming floor, so even a free viewer pays the creators they watch. Bandwidth is folded
 						into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you get{" "}
 						{FREE_STORAGE_GIB} GiB of free storage.
@@ -872,11 +880,17 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STRE
 const SEED_COUNT = 2;
 const SEED_SPEND = seedCost(SEED_COUNT);
 const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
+/** The at-cost card fee if these Seeds were the fan's ENTIRE monthly charge — the
+ * worst case, and what a creator should plan against. A fan who also gives Seeds
+ * elsewhere spreads the fixed $0.30 further and pays you more. */
+const SEED_CARD = SEED_SPEND * CARD_RATE + CARD_FLAT;
+const SEED_CARD_STR = `$${SEED_CARD.toFixed(2)}`;
+const SEED_NET_STR = `$${(SEED_SPEND - SEED_CARD).toFixed(2)}`;
 /** What a rival keeps of the same $6 after its stated cut. */
 const rivalKeeps = (cutRate: number) => `$${(SEED_SPEND * (1 - cutRate)).toFixed(2)}`;
 const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
 const SEED_SCENARIO = `A fan gives you ${SEED_COUNT} Seeds a month (${SEED_SPEND_STR})`;
-const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and every cent reaches you — the card cost is paid on top, not out of your share. The rival figures are their headline percentage only; their payment processing comes out of the creator's remainder too.`;
+const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are their headline percentage only — their payment processing comes out of the creator's remainder on top of that.`;
 
 /** The Anthers row for a combo. `platform` is what the Anthers Foundation receives —
  * the fee on a sale's infrastructure, or the remainder of a fan's Anthers-Seeds on a
@@ -906,22 +920,24 @@ const streamReceipt: Line[] = [
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
-const purchaseReceipt = (price: string, cs: string, bw: string): Line[] => [
-	{ label: "To you — your price, in full", amount: price },
-	{ label: "Foundation fee — free access & programs", amount: cs },
-	{ label: "Bandwidth — delivery, at cost", amount: bw },
-	{ label: "Anthers profit", amount: "$0.00" },
+/** A sale. `net` is your take-home; `card` and `bw` are the at-cost deductions, both
+ * paid to third parties. There is no Foundation fee on a purchase (removed 2026-08-03). */
+const purchaseReceipt = (net: string, card: string, bw: string): Line[] => [
+	{ label: "To you — the listed price, less the at-cost costs below", amount: net },
+	{ label: "Card processing — to the payment processor", amount: card },
+	{ label: "First download — delivery, at cost", amount: bw },
+	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
-	{ label: "To you — your price, in full", amount: "$25.00" },
-	{ label: "Foundation fee — 1%, free access & programs", amount: "$0.25" },
-	{ label: "Anthers profit", amount: "$0.00" },
+	{ label: "To you — your $25.00 listed, less the card cost", amount: "$23.97" },
+	{ label: "Card processing — to the payment processor", amount: "$1.03" },
+	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const seedReceipt: Line[] = [
-	{ label: "To you — every cent", amount: SEED_SPEND_STR },
+	{ label: "To you — your Seeds, less the at-cost card share", amount: SEED_NET_STR },
+	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: SEED_CARD_STR },
 	{ label: "Foundation fee", amount: "$0.00" },
-	{ label: "Card + processing — the fan pays it on top, never out of your Seeds", amount: "$0.00" },
-	{ label: "Anthers profit", amount: "$0.00" },
+	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 
 // [action][media] → the scenario + who-gets-what + the Anthers breakdown. Anthers
@@ -956,7 +972,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Spotify", creator: "~$0.07", platform: "~30% + labels" },
 				{ name: "Apple Music", creator: "~$0.17", platform: "~30% + labels" },
 			],
-			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through Seeds and album sales, at 100%.`,
+			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through Seeds and album sales, and we take no cut of either.`,
 			breakdown: streamReceipt,
 		},
 		writing: {
@@ -978,7 +994,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Gumroad", creator: "$10.80", platform: "$1.20" },
 				{ name: "Apple / iTunes", creator: "$8.40", platform: "$3.60" },
 			],
-			breakdown: purchaseReceipt("$12.00", "~$0.02", "~$0.03"),
+			breakdown: purchaseReceipt("$11.65", "$0.65", "<$0.01"),
 		},
 		games: {
 			scenario: "A fan buys your $15 game",
@@ -987,7 +1003,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "itch.io", creator: "$13.50", platform: "$1.50" },
 				{ name: "Steam", creator: "$10.50", platform: "$4.50" },
 			],
-			breakdown: purchaseReceipt("$15.00", "~$0.02", "~$0.03"),
+			breakdown: purchaseReceipt("$14.27", "$0.74", "<$0.01"),
 		},
 		music: {
 			scenario: "A fan buys your $10 album",
@@ -996,7 +1012,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Bandcamp", creator: "$8.50", platform: "$1.50" },
 				{ name: "iTunes Store", creator: "$7.00", platform: "$3.00" },
 			],
-			breakdown: purchaseReceipt("$10.00", "<$0.01", "<$0.01"),
+			breakdown: purchaseReceipt("$9.40", "$0.59", "<$0.01"),
 		},
 		writing: {
 			scenario: "A fan buys your $8 ebook",
@@ -1005,7 +1021,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Gumroad", creator: "$7.20", platform: "$0.80" },
 				{ name: "Amazon KDP", creator: "$5.60", platform: "$2.40" },
 			],
-			breakdown: purchaseReceipt("$8.00", "<$0.01", "<$0.01"),
+			breakdown: purchaseReceipt("$7.46", "$0.53", "<$0.01"),
 		},
 		merch: {
 			scenario: "A fan buys your $25 shirt",

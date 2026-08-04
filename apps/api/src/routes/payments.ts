@@ -389,6 +389,22 @@ const paymentRoutes = new Hono()
 				.update(purchases)
 				.set({ status: "failed", updatedAt: new Date() })
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")));
+			// NOT HANDLED: `charge.refunded`. There is no refund route and no handler — only a
+			// `refunded` value in the purchases.status enum. The rule the implementation must
+			// satisfy is settled (51.02 § Refunds) even though the code isn't written:
+			//
+			//   • Reverse the transfer (`reverse_transfer: true`) so the creator is clawed back
+			//     EXACTLY their earnings and never goes negative. A creator is never billed for
+			//     a buyer's refund — that would be a cut, just a negative one.
+			//   • Stripe does NOT return its processing fee on a refund. That ~$0.88 on a $20
+			//     sale, plus any bytes already served, comes out of the Foundation remainder —
+			//     the same shock absorber that carries the free floor.
+			//   • The 14-day payout hold is what keeps this small: in the ordinary case the
+			//     principal has not left yet, so there is nothing to claw back.
+			//
+			// OPEN, and it needs a policy answer before the storefront takes real money: a
+			// buy → download → refund cycle costs the Foundation ~$0.98 each time and returns a
+			// working copy. The bytes cannot be un-sent.
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db
