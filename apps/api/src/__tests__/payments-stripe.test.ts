@@ -820,13 +820,16 @@ describe("Checkout — destination charge construction", () => {
 		await connectCreator();
 	});
 
-	it("quotes the pass-through breakdown and records a pending purchase", async () => {
+	it("quotes the all-in breakdown and records a pending purchase", async () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);
 
-		// Pass-through: the creator's earnings ARE the listed price, untouched by any fee.
-		expect(body.amount).toBe(expected.creatorEarnings.toFixed(2));
-		expect(body.creatorEarnings).toBe(PRICE);
+		// The list price is what the buyer was shown; the creator receives it less the
+		// at-cost card processing and the first download. Anthers retains none of it.
+		expect(body.amount).toBe(PRICE);
+		expect(body.crfFee).toBe("0.00");
+		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
+		expect(new Decimal(body.creatorEarnings).lessThan(new Decimal(PRICE))).toBe(true);
 		expect(body.deliveryFee).toBe(expected.deliveryFee.toFixed(2));
 		expect(body.crfFee).toBe(expected.crfFee.toFixed(2));
 		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
@@ -876,7 +879,7 @@ describe("Checkout — destination charge construction", () => {
 		await connectCreator();
 	});
 
-	it("routes 100% of the listed price to a connected creator, keeping the rest as the application fee", async () => {
+	it("routes the creator their earnings and retains no platform cut", async () => {
 		const acctId = await connectCreator();
 
 		const { res, body } = await checkout();
@@ -888,16 +891,21 @@ describe("Checkout — destination charge construction", () => {
 		expect(params?.transfer_data).toEqual({ destination: acctId });
 
 		const totalCents = Math.round(expected.buyerTotal.toNumber() * 100);
-		const feeCents = Math.round(expected.buyerTotal.minus(new Decimal(PRICE)).toNumber() * 100);
 		expect(params?.amount).toBe(totalCents);
-		expect(params?.application_fee_amount).toBe(feeCents);
 
-		// The invariant the model rests on: what the buyer pays, minus what Anthers takes as
-		// the application fee, is exactly the listed price the creator was promised.
-		expect(totalCents - (params?.application_fee_amount ?? 0)).toBe(
-			Math.round(new Decimal(PRICE).toNumber() * 100),
+		// The invariant the model rests on: what the buyer pays, minus what the platform
+		// retains and minus Stripe's own processing, is exactly the creator's earnings.
+		// The retained amount is sales tax (owed to the state) plus the at-cost delivery —
+		// there is no platform cut anywhere in it.
+		const retainedCents = params?.application_fee_amount ?? 0;
+		const processingCents = Math.round(expected.processingFee.toNumber() * 100);
+		expect(totalCents - retainedCents - processingCents).toBe(
+			Math.round(expected.creatorEarnings.toNumber() * 100),
 		);
-		expect(body.creatorEarnings).toBe(PRICE);
+		expect(retainedCents).toBe(
+			Math.round(expected.salesTax.plus(expected.deliveryFee).toNumber() * 100),
+		);
+		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 	});
 
 	it("writes the pending purchase keyed by the PaymentIntent", async () => {
@@ -918,8 +926,10 @@ describe("Checkout — destination charge construction", () => {
 		expect(row.buyerId).toBe(buyerId);
 		expect(row.workId).toBe(paidWorkId);
 		expect(new Decimal(row.amount).toFixed(2)).toBe(PRICE);
-		expect(new Decimal(row.creatorEarnings).toFixed(2)).toBe(PRICE);
-		expect(new Decimal(row.crfFee).toFixed(2)).toBe(expected.crfFee.toFixed(2));
+		expect(new Decimal(row.creatorEarnings).toFixed(2)).toBe(expected.creatorEarnings.toFixed(2));
+		// The purchase Foundation fee was removed 2026-08-03; the NOT NULL column stays and
+		// is always zero, so a row that ever carries a non-zero value is a regression.
+		expect(new Decimal(row.crfFee).toFixed(2)).toBe("0.00");
 	});
 
 	it("refuses to sell a Work the buyer can already access", async () => {
