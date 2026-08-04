@@ -201,6 +201,68 @@ describe("equal-time conservation", () => {
 	});
 });
 
+describe("multi-claim tick splitting", () => {
+	// The caller divides each tick by `creditableClaims(...).length`, so the
+	// conservation guarantee depends on the returned set being exactly the live
+	// and distinct pairs — no more, no less. These exercise the multi-pair case
+	// that the single-claim surfaces never reach on their own.
+	test("two distinct pairs both credit — the tick splits between them", () => {
+		const a = claim({ creatorId: 1, workId: 10, contentType: "video", playing: true });
+		const b = claim({ creatorId: 2, workId: 20, contentType: "audio", playing: true });
+		const credited = creditableClaims([a, b], ATTENTIVE);
+		expect(credited).toHaveLength(2);
+		expect(credited).toContainEqual(a);
+		expect(credited).toContainEqual(b);
+	});
+
+	test("three distinct pairs all credit — a three-way split", () => {
+		const a = claim({ creatorId: 1, workId: 10, contentType: "video", playing: true });
+		const b = claim({ creatorId: 2, workId: 20, contentType: "text" });
+		const c = claim({ creatorId: 3, workId: 30, contentType: "audio", playing: true });
+		const credited = creditableClaims([a, b, c], ATTENTIVE);
+		expect(credited).toHaveLength(3);
+	});
+
+	test("a mixed batch credits one per live distinct pair, dropping the rest", () => {
+		// Same pair twice (deduped), two distinct pairs, one paused video, one listing.
+		const same1 = claim({ creatorId: 1, workId: 10, contentType: "audio", playing: true });
+		const same2 = claim({ creatorId: 1, workId: 10, contentType: "audio", playing: true });
+		const other = claim({ creatorId: 2, workId: 20, contentType: "text" });
+		const paused = claim({ creatorId: 3, workId: 30, contentType: "video", playing: false });
+		const listing = claim({ creatorId: 4, workId: 40, contentType: "physical" });
+		const credited = creditableClaims([same1, same2, other, paused, listing], ATTENTIVE);
+		expect(credited).toHaveLength(2);
+		expect(credited.map((c) => c.workId).sort()).toEqual([10, 20]);
+	});
+
+	test("a hidden tab zeroes presence claims but leaves playback claims live", () => {
+		// The feed is scrolled away (hidden tab): text claims drop, audio keeps crediting.
+		const text = claim({ creatorId: 1, workId: 10, contentType: "text" });
+		const audio = claim({ creatorId: 2, workId: 20, contentType: "audio", playing: true });
+		const credited = creditableClaims([text, audio], HIDDEN);
+		expect(credited).toEqual([audio]);
+	});
+
+	test("an idle user zeroes presence claims but leaves playback claims live", () => {
+		const text = claim({ creatorId: 1, workId: 10, contentType: "text" });
+		const video = claim({ creatorId: 2, workId: 20, contentType: "video", playing: true });
+		const credited = creditableClaims([text, video], IDLE);
+		expect(credited).toEqual([video]);
+	});
+
+	test("playback and presence on distinct pairs both credit, independently gated", () => {
+		// One user watching a video while reading an essay by another creator — both earn.
+		const video = claim({ creatorId: 1, workId: 10, contentType: "video", playing: true });
+		const text = claim({ creatorId: 2, workId: 20, contentType: "text" });
+		expect(creditableClaims([video, text], ATTENTIVE)).toHaveLength(2);
+		// Pause the video and the text claim still earns on its own.
+		const paused = { ...video, playing: false };
+		expect(creditableClaims([paused, text], ATTENTIVE)).toEqual([text]);
+		// Background the tab and the text claim drops, but the playing video keeps earning.
+		expect(creditableClaims([video, text], HIDDEN)).toEqual([video]);
+	});
+});
+
 describe("wall-clock clamp", () => {
 	const ev = (durationSeconds: number, tag = "x") => ({ durationSeconds, tag });
 
