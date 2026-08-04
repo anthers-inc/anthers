@@ -1299,14 +1299,14 @@ async function seed() {
 				.where(eq(assets.workId, p.id));
 			const deliveryGiB = Number(sz?.bytes ?? 0) / 1073741824;
 
-			// Digital purchase (zero-cut): the creator keeps 100%; the buyer pays delivery at
-			// cost, the Digital AFF (50% of that bandwidth), and card + tax on top.
+			// Digital purchase (zero-cut): the listed price IS the advertised price. Card
+			// processing and the first download come OUT of it, Anthers keeps $0, and sales
+			// tax is the only thing added. Mirrors `calculateFees` in @anthers/shared/fees.
 			let deliveryFee = Math.round(deliveryGiB * 0.01 * 100) / 100;
 			if (deliveryGiB > 0 && deliveryFee <= 0) deliveryFee = 0.01;
-			const crfFee = Math.round(deliveryGiB * 0.005 * 100) / 100; // Digital AFF
-			const subtotal = amount + crfFee + deliveryFee;
-			const processingFee = Math.round((subtotal * 0.029 + 0.3) * 100) / 100;
-			const creatorEarnings = amount;
+			const crfFee = 0; // purchase Foundation fee removed 2026-08-03
+			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
+			const creatorEarnings = Math.round((amount - processingFee - deliveryFee) * 100) / 100;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
 
 			try {

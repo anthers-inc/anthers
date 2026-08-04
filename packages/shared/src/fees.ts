@@ -59,7 +59,8 @@ export function paymentsSplit(
 	const creatorValue = new Decimal(seedCost(c));
 	const charge = anthersValue.plus(creatorValue);
 	const total = cardFee(charge);
-	if (charge.lte(0)) return { total: new Decimal(0), anthers: new Decimal(0), creator: new Decimal(0) };
+	if (charge.lte(0))
+		return { total: new Decimal(0), anthers: new Decimal(0), creator: new Decimal(0) };
 	// Split by value, then give the rounding remainder to the Anthers side so the
 	// two shares always reconstruct `total` exactly and creators are never short a cent.
 	const creator = CENTS(total.mul(creatorValue).div(charge));

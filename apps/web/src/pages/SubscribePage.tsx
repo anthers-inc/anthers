@@ -6,7 +6,7 @@
 //
 //   • Back the ANTHERS COMMONS (left) — the same Seed, pointed at Anthers. Each Seed
 //     scales your streaming allowance, Time Pool, and the Anthers Gates you clear.
-//   • Back a CREATOR (right) — Seeds, $3/mo each, 100% to the creator. Each Seed level
+//   • Back a CREATOR (right) — Seeds, $3/mo each, no platform cut. Each Seed level
 //     unlocks more of their world, and each is branded with the creator's own Badge —
 //     the same mechanic as Anthers's Badges, so users can collect them across creators.
 //
@@ -401,8 +401,8 @@ function CreatorCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 			<h2 className="mb-4 text-2xl font-bold">Support the creators you love</h2>
 
 			<p className="mb-2 mx-auto max-w-2xl leading-relaxed text-base-content/70">
-				When you give a Seed to a creator, it reaches them in full: 100%, no cut, no processing
-				skim. It's recurring support, like a membership, and each Seed level unlocks more of what
+				When you give a Seed to a creator, it goes straight to them — Anthers takes no cut, no fee,
+				no skim. It's recurring support, like a membership, and each Seed level unlocks more of what
 				they make based on Creator Badges they define and design just for their community.
 			</p>
 
@@ -422,7 +422,7 @@ function CreatorCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 					) : (
 						<span>
 							<span className="text-lg font-bold text-base-content/90">{money(cost)}</span>/month ·
-							100% to the creator
+							no platform cut
 						</span>
 					)}
 				</StepperStatus>
@@ -498,15 +498,25 @@ export default function SubscribePage() {
 	};
 
 	// Combined monthly spend, summed across both steppers. Payments is a single at-cost
-	// card fee on the whole batched charge, added ON TOP — never carved out of a Seed.
+	// card fee on the whole batched charge, and it sits INSIDE the price — the Seed
+	// subtotal IS the total, with sales tax the only thing added later. It splits
+	// pro-rata, so directed Seeds amortise the fixed $0.30 and creators net more.
 	const creatorCost = SEED_PRICE * creatorSeeds;
 	const anthersCost = SEED_PRICE * anthersSeeds;
 	const anthersTimePool = TIMEPOOL_PER_SEED * anthersSeeds;
-	// Supports Anthers = your bandwidth (at cost) + the Foundation remainder. No payments inside.
-	const anthersSupportsAnthers = anthersCost - anthersTimePool;
-	const totalPayments = cardFee(creatorCost + anthersCost);
-	const toCreators = creatorCost + anthersTimePool;
-	const totalMonthly = creatorCost + anthersCost + totalPayments;
+	const seedSubtotal = creatorCost + anthersCost;
+	const totalPayments = cardFee(seedSubtotal);
+	// Split the one card fee across the two destinations by their share of the charge.
+	const creatorPayments = seedSubtotal > 0 ? (totalPayments * creatorCost) / seedSubtotal : 0;
+	const anthersPayments = totalPayments - creatorPayments;
+	// What creators actually receive from directed Seeds, net of their share.
+	const creatorDirectNet = creatorCost - creatorPayments;
+	// Supports Anthers = your bandwidth (at cost) + the Foundation remainder, after
+	// this side's share of Payments. The remainder is the shock absorber; Time Pool
+	// is a fixed target and never moves.
+	const anthersSupportsAnthers = anthersCost - anthersTimePool - anthersPayments;
+	const toCreators = creatorDirectNet + anthersTimePool;
+	const totalMonthly = seedSubtotal;
 
 	return (
 		<div className="mx-auto px-4 py-8" style={{ maxWidth: "80rem" }}>
@@ -545,8 +555,8 @@ export default function SubscribePage() {
 						<BreakdownRow
 							dot="bg-success"
 							label="Direct to creators"
-							desc="Seeds you give creators — 100% to them"
-							amount={creatorCost}
+							desc="Seeds you give creators — no platform cut"
+							amount={creatorDirectNet}
 							strong
 						/>
 						<BreakdownRow
@@ -569,7 +579,7 @@ export default function SubscribePage() {
 						<BreakdownRow
 							dot="bg-base-content/30"
 							label="Payments"
-							desc="card & processing, at cost"
+							desc="card & processing, at cost — paid to the processor"
 							amount={totalPayments}
 						/>
 					</div>
@@ -580,6 +590,11 @@ export default function SubscribePage() {
 							<span className="text-sm font-normal text-base-content/50">/mo</span>
 						</span>
 					</div>
+					{totalMonthly > 0 && (
+						<p className="mx-auto max-w-md text-right text-xs text-base-content/45">
+							plus any applicable sales tax
+						</p>
+					)}
 					<p className="mx-auto mt-1 max-w-md text-center text-xs text-base-content/55">
 						{totalMonthly > 0 ? (
 							<>

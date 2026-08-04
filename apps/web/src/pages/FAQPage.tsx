@@ -78,8 +78,8 @@ const FAQ_ITEMS: FAQItem[] = [
 				<p>
 					Bandwidth is folded into the Seeds you give Anthers and billed at cost ($0.01/GiB)—there's
 					no separate wallet. Every account gets a free monthly streaming floor (15 GiB), and each
-					Seed adds a generous allowance on top. Card processing and sales tax are added on top of
-					your Seeds and leave the system entirely.
+					Seed adds a generous allowance. Card processing comes out of your Seeds at cost and leaves
+					the system entirely; sales tax is the only thing added on top of the price.
 				</p>
 			</div>
 		),
@@ -94,13 +94,13 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Subscriptions & Payments",
 		question: "What is the Anthers Foundation?",
 		answer:
-			"The Anthers Foundation is funded by the remainder of each Seed given to Anthers (what's left after your bandwidth at cost and the Time Pool), plus small Foundation fees on creator storage (half of a creator's storage cost) and on direct downloads (half of that download's bandwidth) — never a cut of anyone's earnings. Its budget is read obligations-first: its lean operating overhead and everyone's free access come off the top, and whatever remains funds charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
+			"The Anthers Foundation is funded by the remainder of each Seed given to Anthers — what's left after your bandwidth at cost, the Time Pool, and the at-cost card processing — plus a small fee on creator storage (half of a creator's storage cost above their free allowance). It is never a cut of anyone's earnings, and direct purchases contribute nothing to it: Anthers takes no share of a creator's sale. Its budget is read obligations-first: its lean operating overhead and everyone's free access come off the top, and whatever remains funds charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut: the creator sets a price and keeps 100% of it. On top, the buyer pays the delivery bandwidth at cost, a small Foundation fee (for a digital download, half that bandwidth; for a physical good or service, 1% of the price), and card processing plus sales tax. Every added line is a real cost or a charitable fee on top of the price—never subtracted from what the creator earns.",
+			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut — we keep nothing at all. The creator sets the listed price, and that price plus your state's sales tax is exactly what you pay; there are no other additions. Out of that price come two real costs: card processing, paid to the payment processor, and your first download, at cost. Your first download is always included, so you can get what you bought whatever your Badge; re-downloads later draw your ordinary streaming allowance. The receipt shows every cent, and none of it is ours.",
 	},
 	{
 		category: "Subscriptions & Payments",

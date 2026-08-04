@@ -39,7 +39,9 @@ interface DemoPurchase {
 	item: string;
 	type: "download" | "content" | "experience" | "physical";
 	price: number;
-	/** Anthers Foundation fee (AFF) on this purchase — digital: 50% of download bandwidth; physical/service: 1% of price. Funds the Anthers Foundation, not platform profit. */
+	/** At-cost costs taken OUT of the listed price — card processing plus, on a digital
+	 * purchase, the first download's bandwidth. Anthers keeps none of it; the purchase
+	 * Foundation fee was removed 2026-08-03. */
 	fee: number;
 	date: string;
 }
@@ -60,7 +62,7 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
 // Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
 // creators, by watch-time) and $1.50 "Supports Anthers" (their bandwidth at cost +
-// the Foundation remainder). Directed Seeds ($3 each, 100% to a creator) are on top.
+// the Foundation remainder). Directed Seeds ($3 each, no platform cut) sit alongside.
 // Bandwidth is folded in — a free floor plus a per-Seed allowance, no wallet.
 const DEMO_PLAN = {
 	badge: "Petal",
@@ -433,9 +435,9 @@ function SubscriptionDashboardDemo() {
 
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
-	// Monthly total (pre card/tax): the Time Pool + directed Seeds + "Supports Anthers"
-	// — i.e. the Anthers-Seeds plus the directed Seeds. Bandwidth is folded into the
-	// Anthers-Seeds, at cost. The at-cost Payments line rides on top, like sales tax.
+	// Monthly total (pre tax): the Time Pool + directed Seeds + "Supports Anthers" —
+	// i.e. the Anthers-Seeds plus the directed Seeds. Bandwidth and the at-cost Payments
+	// line are both folded INSIDE the Seeds; sales tax is the only thing added on top.
 	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.supportsAnthers;
 
 	// Seeds are indivisible $3 units, so directing them is a whole-Seed move: give one
