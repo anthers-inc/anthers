@@ -9,8 +9,8 @@
  */
 import { db } from "@anthers/db/client";
 import { accountCycles, accounts, purchases } from "@anthers/db/schema";
-import { CARD_FLAT, CARD_RATE, seedCost } from "@anthers/shared/constants";
-import { anthersSeedBreakdown } from "@anthers/shared/fees";
+import { seedCost } from "@anthers/shared/constants";
+import { anthersSeedBreakdown, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -83,10 +83,16 @@ export async function savedCardFor(
 }
 
 /**
- * Create a one-time charge to buy directed creator-Seeds — the buyer pays the base
- * amount plus card processing (on top, Anthers keeps $0). A pending `purchases`
- * row is keyed by the PaymentIntent so the webhook credits exactly once on success.
- * Returns the client secret to confirm inline.
+ * Create a one-time charge to buy directed creator-Seeds. A Seed is a flat $3 all-in,
+ * so the buyer is charged exactly `base` and the at-cost card fee comes **out** of it —
+ * this path charged `base + processing` until 2026-08-04, which is the posture the
+ * 2026-08-03 revamp retired everywhere else and missed here (mandatory-fee disclosure
+ * law requires the advertised price to contain every mandatory fee). Nothing consumed
+ * the route from the UI, so no buyer was ever overcharged; it was the API contradicting
+ * the model. `cardFee` owns the arithmetic — don't restate it.
+ *
+ * A pending `purchases` row is keyed by the PaymentIntent so the webhook credits exactly
+ * once on success. Returns the client secret to confirm inline.
  */
 export async function createOneTimeCharge(opts: {
 	userId: number;
@@ -97,8 +103,8 @@ export async function createOneTimeCharge(opts: {
 	const stripe = getStripe();
 	if (!stripe) throw new Error("Stripe not configured");
 	const base = new Decimal(opts.base);
-	const processing = base.mul(CARD_RATE).plus(CARD_FLAT); // buyer covers the card fee, on top
-	const buyerTotal = base.plus(processing);
+	const processing = cardFee(base); // at cost, out of the price — never added to it
+	const buyerTotal = base;
 	const pi = await stripe.paymentIntents.create({
 		amount: Math.round(buyerTotal.toNumber() * 100),
 		currency: "usd",
@@ -114,6 +120,9 @@ export async function createOneTimeCharge(opts: {
 		amount: base.toFixed(2),
 		processingFee: processing.toFixed(2),
 		crfFee: "0.00",
+		// A Seed buy carries no sales tax today; recorded explicitly so the column
+		// means "no tax was collected" rather than "nobody filled this in".
+		salesTax: "0.00",
 		creatorEarnings: "0.00",
 		stripePaymentIntentId: pi.id,
 		status: "pending",

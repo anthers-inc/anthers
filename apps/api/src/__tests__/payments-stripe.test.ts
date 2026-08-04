@@ -31,8 +31,8 @@ import {
 	stripeAccounts,
 	users,
 } from "@anthers/db/schema";
-import { DELIVERY_GIB_PER_HOUR } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, calculateFees } from "@anthers/shared/fees";
+import { DELIVERY_GIB_PER_HOUR, seedCost } from "@anthers/shared/constants";
+import { anthersSeedBreakdown, calculateFees, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 import Stripe from "stripe";
@@ -930,6 +930,11 @@ describe("Checkout — destination charge construction", () => {
 		// The purchase Foundation fee was removed 2026-08-03; the NOT NULL column stays and
 		// is always zero, so a row that ever carries a non-zero value is a regression.
 		expect(new Decimal(row.crfFee).toFixed(2)).toBe("0.00");
+		// Sales tax is charged inside `buyerTotal` and owed onward, so the row has to record
+		// it — the amount collected is otherwise unrecoverable from the purchase, which is a
+		// remittance-reporting gap rather than a display bug.
+		expect(new Decimal(row.salesTax).toFixed(2)).toBe(expected.salesTax.toFixed(2));
+		expect(new Decimal(row.salesTax).greaterThan(0)).toBe(true);
 	});
 
 	it("refuses to sell a Work the buyer can already access", async () => {
@@ -946,6 +951,66 @@ describe("Checkout — destination charge construction", () => {
 		const { res, body } = await checkout();
 		expect(res.status).toBe(400);
 		expect(body.error).toBe("You already have access to this work");
+	});
+});
+
+/**
+ * The Seed buy was the one charge the 2026-08-03 revamp missed: it still added the card
+ * fee **on top** (`base + processing`) after every other path moved it inside the price.
+ * Nothing in the UI calls the route, so no buyer was overcharged — which is exactly why
+ * it survived, and why it needs a test rather than a second reading of the code.
+ */
+describe("Seed buy — the price is all-in", () => {
+	const QUANTITY = 2;
+	const base = new Decimal(seedCost(QUANTITY));
+
+	async function buySeeds() {
+		fake.reset();
+		const res = await req("/api/subscriptions/seeds/buy", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: subscriberCookie },
+			body: JSON.stringify({ quantity: QUANTITY }),
+		});
+		return { res, body: await res.json() };
+	}
+
+	it("charges quantity × $3 exactly, with processing taken out of it", async () => {
+		const { res, body } = await buySeeds();
+		expect(res.status).toBe(200);
+
+		// A Seed is a flat $3. The buyer pays the Seed value and nothing more — the at-cost
+		// card fee is a deduction from that charge, never an addition to it.
+		expect(body.buyerTotal).toBe(base.toFixed(2));
+		expect(body.processingFee).toBe(cardFee(base).toFixed(2));
+		expect(new Decimal(body.processingFee).greaterThan(0)).toBe(true);
+
+		// The assertion that would have caught the old behaviour: the amount actually sent
+		// to Stripe, not the number in the response body.
+		const params = fake.lastCall("paymentIntents.create")?.args[0] as
+			| Stripe.PaymentIntentCreateParams
+			| undefined;
+		expect(params?.amount).toBe(Math.round(base.toNumber() * 100));
+	});
+
+	it("records the pending purchase with the fee inside the price", async () => {
+		const { res, body } = await buySeeds();
+		expect(res.status).toBe(200);
+
+		const intentId = String(body.clientSecret).replace(/_secret_test$/, "");
+		const [row] = await db
+			.select()
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, intentId))
+			.limit(1);
+
+		expect(row).toBeDefined();
+		expect(row.type).toBe("seeds");
+		// `amount` is what gets credited to the creator-Seed balance, so it must stay the
+		// Seed value — the fee coming out of the charge must not shrink what the user bought.
+		expect(new Decimal(row.amount).toFixed(2)).toBe(base.toFixed(2));
+		expect(new Decimal(row.processingFee).toFixed(2)).toBe(cardFee(base).toFixed(2));
+		// A Seed buy collects no sales tax; recorded as zero rather than left unset.
+		expect(new Decimal(row.salesTax).toFixed(2)).toBe("0.00");
 	});
 });
 

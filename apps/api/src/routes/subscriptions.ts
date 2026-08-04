@@ -382,7 +382,8 @@ const subscriptionRoutes = new Hono()
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 			await ensureAccount(user.id);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
-			// Charge quantity × $3 (+ card processing on top) via Stripe; the webhook credits on success.
+			// Charge quantity × $3 all-in via Stripe — the card fee comes out of it, not on
+			// top; the webhook credits the balance on success.
 			const charge = await createOneTimeCharge({
 				userId: user.id,
 				customerId,

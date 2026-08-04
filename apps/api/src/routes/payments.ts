@@ -2,11 +2,13 @@
 /**
  * Payment routes — Stripe Connect onboarding, checkout, purchases, Foundation Fee.
  *
- * Direct purchases run as Stripe destination charges: the buyer is charged the
- * full total, the creator's connected account receives 100% of the listed price
- * as the transfer destination, and the platform keeps the rest (Foundation Fee,
- * at-cost bandwidth, sales tax) as the application fee. When the creator has no
- * connected account yet, it falls back to a plain charge held on the platform.
+ * Direct purchases run as Stripe destination charges. Since 2026-08-03 the listed
+ * price IS the advertised price: card processing and the first download's bandwidth
+ * come **out of** it and sales tax is the only thing added on top, so the buyer is
+ * charged price + tax, the creator's connected account receives the price less those
+ * at-cost deductions, and the application fee is the remainder — which is tax and
+ * delivery, never a cut. Anthers keeps $0. A creator with no connected account is a
+ * hard 409, not a platform-held fallback.
  */
 
 import { db } from "@anthers/db/client";
@@ -73,9 +75,9 @@ async function resolvePurchase(slug: string, userId: number) {
 		.from(assets)
 		.where(eq(assets.workId, work.id));
 
-	// Pass-through model: the creator receives the full listed price; the Foundation Fee,
-	// delivery bandwidth, and card + tax are added on top and paid by the buyer.
-	// Digital download → Digital AFF (50% of the download's bandwidth).
+	// All-in list price: card processing and this delivery come OUT of the price, sales
+	// tax is added on top, and Anthers keeps $0 (the purchase Foundation fee was removed
+	// 2026-08-03). `calculateFees` owns that arithmetic — never restate it at a call site.
 	const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
 	return { ok: true as const, work, amount, fees };
 }
@@ -239,6 +241,10 @@ const paymentRoutes = new Hono()
 			processingFee: fees.processingFee.toFixed(2),
 			deliveryFee: fees.deliveryFee.toFixed(2),
 			crfFee: fees.crfFee.toFixed(2),
+			// Recorded because it is collected and owed onward — the row is the
+			// remittance record. It rides inside `buyerTotal`, so without this column
+			// the amount of tax charged could not be recovered from the purchase.
+			salesTax: fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
 			stripePaymentIntentId: paymentIntent.id,
 			status: "pending",

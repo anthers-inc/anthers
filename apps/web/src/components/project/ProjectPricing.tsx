@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { CARD_FLAT, CARD_RATE, SALES_TAX_RATE } from "@anthers/shared/constants";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
@@ -12,26 +11,6 @@ interface ProjectPricingProps {
 	access: AccessResult;
 	creatorHasStripe?: boolean;
 	onPurchaseComplete?: () => void;
-}
-
-function buildReceipt(price: number) {
-	const r2 = (n: number) => Math.round(n * 100) / 100;
-	// Direct purchase: the listed price IS the advertised price. Card processing and the
-	// first download come out of it and Anthers keeps $0, so the only thing added is
-	// sales tax — the sole carve-out mandatory-fee disclosure law allows. Delivery is
-	// byte-based and finalised at checkout, which is why it isn't estimated here.
-	const processing = r2(price * CARD_RATE + CARD_FLAT);
-	const tax = r2(price * SALES_TAX_RATE);
-	const buyerTotal = r2(price + tax);
-
-	return {
-		price,
-		buyerTotal,
-		lines: [
-			{ label: "Card processing", amount: processing, note: "at cost" },
-			{ label: "Sales tax", amount: tax, note: "est.", added: true },
-		],
-	};
 }
 
 interface Quote {
@@ -83,11 +62,9 @@ function toRgb(cssColor: string): string {
 
 function CheckoutForm({
 	slug,
-	price,
 	onPurchaseComplete,
 }: {
 	slug: string;
-	price: number;
 	onPurchaseComplete?: () => void;
 }) {
 	const stripe = useStripe();
@@ -96,25 +73,40 @@ function CheckoutForm({
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
 	const [quote, setQuote] = useState<Quote | null>(null);
+	const [quoteFailed, setQuoteFailed] = useState(false);
 
-	// Pull the exact fees from the server so the shown total matches the charge — the
-	// client estimate can't know the byte-based delivery fee. Fall back until it loads.
+	// The server is the ONLY thing that prices this purchase. There used to be a client
+	// estimate rendered until the quote arrived, and it drifted: it recomputed the card
+	// fee from the bare price while the server grossed up, so the button quoted a total
+	// below what checkout charged. Re-deriving the estimate from `calculateFees` would
+	// have re-synced the formula, but it also pulls decimal.js into the SPA bundle for a
+	// sub-second placeholder — and two implementations that agree today are exactly how
+	// this drifted the first time. So there is no second formula now: the receipt and the
+	// button render from the quote or not at all, and a quote we could not get is a
+	// disabled button rather than a number we guessed.
 	useEffect(() => {
 		let cancelled = false;
+		setQuote(null);
+		setQuoteFailed(false);
 		client.api.payments.quote[":slug"]
 			.$get({ param: { slug } })
 			.then(async (res) => {
-				if (!res.ok) return;
-				const data = (await res.json()) as Quote;
-				if (!cancelled) setQuote(data);
+				if (cancelled) return;
+				if (!res.ok) {
+					setQuoteFailed(true);
+					return;
+				}
+				setQuote((await res.json()) as Quote);
 			})
-			.catch(() => {});
+			.catch(() => {
+				if (!cancelled) setQuoteFailed(true);
+			});
 		return () => {
 			cancelled = true;
 		};
 	}, [slug]);
 
-	const receipt = quote ? receiptFromQuote(quote) : buildReceipt(price);
+	const receipt = quote ? receiptFromQuote(quote) : null;
 
 	// Resolve the themed card colors once; Stripe rejects oklch()/var().
 	const cardStyle = useMemo(
@@ -178,9 +170,22 @@ function CheckoutForm({
 		);
 	}
 
+	if (quoteFailed) {
+		return (
+			<div className="alert alert-warning text-sm">
+				<span>We couldn't price this purchase right now. Please refresh and try again.</span>
+			</div>
+		);
+	}
+
 	return (
 		<form onSubmit={handleSubmit} className="flex flex-col gap-4">
-			<TransparentReceipt {...receipt} />
+			{receipt ? (
+				<TransparentReceipt {...receipt} />
+			) : (
+				/* Decorative: the button below already announces "Loading price…". */
+				<div className="skeleton h-40 w-full" aria-hidden="true" />
+			)}
 
 			<div className="form-control">
 				<div className="border border-base-300 rounded-lg p-3 bg-base-100">
@@ -197,9 +202,13 @@ function CheckoutForm({
 			<button
 				type="submit"
 				className={`btn btn-primary ${processing ? "btn-disabled" : ""}`}
-				disabled={!stripe || processing}
+				disabled={!stripe || processing || !receipt}
 			>
-				{processing ? "Processing..." : `Buy for $${receipt.buyerTotal.toFixed(2)}`}
+				{processing
+					? "Processing..."
+					: receipt
+						? `Buy for $${receipt.buyerTotal.toFixed(2)}`
+						: "Loading price…"}
 			</button>
 		</form>
 	);
@@ -238,7 +247,7 @@ export default function ProjectPricing({
 				</div>
 			) : (
 				<Elements stripe={stripePromise}>
-					<CheckoutForm slug={slug} price={price} onPurchaseComplete={onPurchaseComplete} />
+					<CheckoutForm slug={slug} onPurchaseComplete={onPurchaseComplete} />
 				</Elements>
 			)}
 		</div>

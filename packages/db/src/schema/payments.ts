@@ -42,6 +42,12 @@ export const purchases = pgTable("purchases", {
 	processingFee: numeric("processing_fee").notNull(),
 	deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
 	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee (AFF) amount
+	// Sales tax is the ONE thing added on top of the list price, so it is money we
+	// collect and owe onward rather than money anyone here keeps. Recording it
+	// per-transaction is what makes remittance reportable; without the column the tax
+	// was charged inside `buyer_total` and then unrecoverable from the row. Defaults
+	// to 0.00 for the charges that carry none (a Seed buy).
+	salesTax: numeric("sales_tax").notNull().default("0.00"),
 	creatorEarnings: numeric("creator_earnings").notNull(),
 	stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
 	status: text("status").notNull().default("pending"), // pending | completed | failed | refunded

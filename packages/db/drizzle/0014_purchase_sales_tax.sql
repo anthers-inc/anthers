@@ -1,0 +1,1 @@
+ALTER TABLE "purchases" ADD COLUMN "sales_tax" numeric DEFAULT '0.00' NOT NULL;
