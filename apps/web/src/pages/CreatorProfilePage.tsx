@@ -30,6 +30,7 @@ import { useCallback, useEffect, useState } from "react";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
+import { useReportVisit } from "../lib/attention";
 
 /** A Work as the public Catalog listing returns it. */
 type CatalogWork = Work & {
@@ -406,6 +407,12 @@ export default function CreatorProfilePage() {
 	const [creatorStatus, setCreatorStatus] = useState<CreatorStatus | null>(null);
 
 	const isOwnProfile = currentUser?.username === username;
+
+	// A profile is a single-creator shelf — the Catalog and posts render as cards that
+	// link out to WorkPage, where consumption actually happens and the Time Pool claim
+	// lives. So this records a zero-duration visit (the analytics signal that someone
+	// browsed this creator's catalog) and earns nothing, mirroring ProjectPage's pattern.
+	useReportVisit({ creatorId: creator?.id ?? null });
 
 	/**
 	 * Re-read the viewer's standing with this creator. Giving Seeds changes which gates are
