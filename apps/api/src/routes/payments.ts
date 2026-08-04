@@ -204,7 +204,13 @@ const paymentRoutes = new Hono()
 		}
 
 		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
-		const applicationFeeCents = Math.round(fees.buyerTotal.minus(amount).toNumber() * 100);
+		// What the platform retains from the destination charge: everything the buyer pays
+		// that is not the creator's earnings — i.e. sales tax (remitted to the state) and
+		// the at-cost delivery. Card processing is Stripe's own cut of the charge and is
+		// never part of the application fee, so it must not be counted here.
+		const applicationFeeCents = Math.round(
+			fees.buyerTotal.minus(fees.creatorEarnings).minus(fees.processingFee).toNumber() * 100,
+		);
 
 		const params: Stripe.PaymentIntentCreateParams = {
 			amount: totalCents,
@@ -212,9 +218,10 @@ const paymentRoutes = new Hono()
 			payment_method_types: ["card"],
 			metadata: { kind: "direct_purchase", workId: String(work.id), buyerId: String(user.id) },
 		};
-		// The creator receives 100% of the listed price; the application fee is everything
-		// else the buyer pays on top (Foundation Fee + at-cost bandwidth + processing + tax).
-		// Guarded because a fee at or above the total would be rejected by Stripe anyway.
+		// The buyer pays the all-in list price plus sales tax; the creator receives that
+		// price less the at-cost card processing and the first download's bandwidth, and
+		// Anthers retains $0 of it. Guarded because a fee at or above the total would be
+		// rejected by Stripe anyway.
 		if (applicationFeeCents < totalCents) {
 			params.application_fee_amount = applicationFeeCents;
 			params.transfer_data = { destination: creatorAccount.stripeAccountId };
@@ -238,13 +245,13 @@ const paymentRoutes = new Hono()
 		});
 
 		return c.json({
-			amount: amount.toFixed(2), // listed price — what the creator receives
-			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2), // download bandwidth (at cost)
-			crfFee: fees.crfFee.toFixed(2), // Legacy field name for the Anthers Foundation Fee (AFF)
+			amount: amount.toFixed(2), // the all-in list price the buyer was shown
+			processingFee: fees.processingFee.toFixed(2), // out of the price, to Stripe
+			deliveryFee: fees.deliveryFee.toFixed(2), // first download, at cost
+			crfFee: fees.crfFee.toFixed(2), // always "0.00" — Anthers takes no cut
 			salesTax: fees.salesTax.toFixed(2),
-			creatorEarnings: fees.creatorEarnings.toFixed(2), // == amount (pass-through)
-			buyerTotal: fees.buyerTotal.toFixed(2), // price + fees + tax — what the buyer is charged
+			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing − delivery
+			buyerTotal: fees.buyerTotal.toFixed(2), // price + tax — what the buyer is charged
 			clientSecret: paymentIntent.client_secret,
 		});
 	})
@@ -382,6 +389,22 @@ const paymentRoutes = new Hono()
 				.update(purchases)
 				.set({ status: "failed", updatedAt: new Date() })
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")));
+			// NOT HANDLED: `charge.refunded`. There is no refund route and no handler — only a
+			// `refunded` value in the purchases.status enum. The rule the implementation must
+			// satisfy is settled (51.02 § Refunds) even though the code isn't written:
+			//
+			//   • Reverse the transfer (`reverse_transfer: true`) so the creator is clawed back
+			//     EXACTLY their earnings and never goes negative. A creator is never billed for
+			//     a buyer's refund — that would be a cut, just a negative one.
+			//   • Stripe does NOT return its processing fee on a refund. That ~$0.88 on a $20
+			//     sale, plus any bytes already served, comes out of the Foundation remainder —
+			//     the same shock absorber that carries the free floor.
+			//   • The 14-day payout hold is what keeps this small: in the ordinary case the
+			//     principal has not left yet, so there is nothing to claw back.
+			//
+			// OPEN, and it needs a policy answer before the storefront takes real money: a
+			// buy → download → refund cycle costs the Foundation ~$0.98 each time and returns a
+			// working copy. The bytes cannot be un-sent.
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db

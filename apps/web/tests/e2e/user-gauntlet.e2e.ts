@@ -155,11 +155,6 @@ interface ContentItemView {
 	} | null;
 }
 
-interface ContentEntry {
-	kind: string;
-	contentItem?: ContentItemView | null;
-}
-
 /** The Work as this viewer sees it — media URLs blanked when denied. */
 async function mediaItem(page: Page, key: string): Promise<ContentItemView | null> {
 	const spec = gauntletPost(key);

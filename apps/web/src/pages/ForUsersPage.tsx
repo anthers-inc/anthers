@@ -12,7 +12,7 @@
 // commons (Anthers-Seeds that support Anthers itself, fund free public content via the
 // Time Pool, and set the rank that unlocks Anthers-gated content — with the free rank
 // folded in as the commons' subsidized floor), then direct creator support (Seeds +
-// purchases, 100% to the creator — the wedge). Gates are framed as one primitive with
+// purchases, no platform cut — the wedge). Gates are framed as one primitive with
 // two directions: support the commons (Anthers Gate) or support a creator (Seed Gate).
 // All numbers derive from the support model: a Seed is $3/month, and rank =
 // Anthers-Seed count (Root–Blossom = 1–4, "+" beyond).
@@ -126,13 +126,13 @@ export default function ForUsersPage() {
 							<SignpostCard step="2" title="Support Creators" tone="creator">
 								Each $3/month Seed you direct to a Creator does the following:
 								<ul>
-									<li>Give that creator 100% of that $3 monthly support</li>
+									<li>Send that creator your support with no platform cut</li>
 									<li>Unlock new creator-gated content and interactions</li>
 									<li>Receive special discounts and early access on direct purchases</li>
 								</ul>
-								And remember: Whether supporting a creator with monthly Seeds or with direct
-								purchases, the creator keeps 100% of the listed price, and the most you'll ever pay
-								on top is standard card fees and tax.
+								And remember: whether you back a creator with monthly Seeds or buy from them
+								directly, Anthers takes no cut of it. The price you see is the price you pay, and
+								sales tax is the only thing ever added.
 							</SignpostCard>
 						</Reveal>
 					</div>
@@ -270,9 +270,9 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								A Seed is $3 of direct support you give to a creator—give one, or a handful,
-								whenever you like. It reaches them 100%, with no fee and no processing skim, and it
-								keeps going each month until you change it. Giving Seeds is also how you unlock that
-								creator's own gated content.
+								whenever you like. Anthers takes no cut of it — no fee, no skim — and it keeps going
+								each month until you change it. Giving Seeds is also how you unlock that creator's
+								own gated content.
 							</p>
 						</Card>
 					</Reveal>
@@ -283,9 +283,9 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
-								keep. The creator receives 100% of the listed price. The biggest thing you'll ever
-								pay on top is standard card fees and tax (and card fees drop to near-zero if you pay
-								by bank transfer).
+								keep. You pay the listed price plus your state's sales tax, and nothing else.
+								Anthers keeps none of it: what comes out of that price is card processing and your
+								first download, both at cost.
 							</p>
 						</Card>
 					</Reveal>
@@ -298,7 +298,7 @@ export default function ForUsersPage() {
 						style={serif}
 						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
 					>
-						0% cut. 100% to the creator. That's why Anthers is a non-profit; it's not about us.
+						0% cut. Not a cent of it is ours. That's why Anthers is a non-profit; it's not about us.
 					</p>
 				</Reveal>
 			</Section>

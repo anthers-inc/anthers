@@ -16,11 +16,15 @@ export const APP_NAME = "Anthers";
  * (root/sprout/petal/blossom at 1/2/3/4 Anthers-Seeds). Bandwidth is folded into
  * Anthers-Seeds — no wallet — as a 15 GiB free floor plus 60 GiB per Seed.
  *
- * The at-cost **Payments** line (card + processing) is added ON TOP of the whole
- * monthly charge, like sales tax (ACH-discountable) — never carved out of a Seed,
- * so every $3 reaches its destination in full and "100% to creators" holds for
- * every user. There is no platform margin and no fixed "Community Share": the
- * Foundation is the remainder of each Anthers-Seed, read obligations-first.
+ * The at-cost **Payments** line (card + processing) sits INSIDE the price — it is
+ * charged on the whole batched monthly charge and split pro-rata, then paid to the
+ * processor and never kept. **Sales tax is the only thing added on top**, because a
+ * government-imposed tax is the sole carve-out mandatory-fee disclosure law allows;
+ * a card cost gets none, which is why the old "like sales tax" framing was hollow.
+ * The claim that survives is **"Anthers takes no cut"** — unconditionally true —
+ * not "100% to the creator", which is retired. There is no platform margin and no
+ * fixed "Community Share": the Foundation is the remainder of each Anthers-Seed,
+ * read obligations-first, and it absorbs the Payments line so creator pay does not.
  *
  * Seed price is locked at $3; the allocation dials (Time-Pool-per-Seed, free
  * floor, GiB-per-Seed) are the current tuned values — see the Support Model
@@ -211,15 +215,19 @@ export function allowanceGiB(anthersSeeds: number): number {
 /** Delivery/egress bandwidth, at DigitalOcean cost. Neutral to creators. */
 export const BANDWIDTH_PER_GIB = 0.01;
 
-// ── Foundation Fee rates ─────────────────────────────────────────────────────
+// ── Foundation Fee rate (storage only) ───────────────────────────────────────
 /**
- * AFF as a fraction of the infrastructure it rides on: 50%.
- * Storage AFF = 50% of a creator's storage cost. The Digital AFF on a direct
- * download = 50% of that download's bandwidth (= BANDWIDTH_PER_GIB × this).
+ * Storage AFF: 50% of a creator's storage cost above the free allowance. This is
+ * a creator's own opt-in infrastructure cost, **not a share of anyone's sale**.
+ *
+ * The purchase Foundation fees this constant also used to drive — the Digital AFF
+ * (50% of a download's bandwidth) and the 1% Physical & Service AFF — were
+ * **removed 2026-08-03**. They raised a fraction of a cent per sale, and a
+ * commission on a creator's sale is the exact feature the IRS keyed on in Rev.
+ * Rul. 76-152 and Final Adverse Determination 202521022. Anthers now takes $0
+ * from every creator transaction. Do not reinstate them as a funding fix.
  */
 export const AFF_INFRA_RATE = 0.5;
-/** Physical & Service AFF: 1% of price (no bytes delivered → nominal). */
-export const PHYSICAL_AFF_RATE = 0.01;
 
 /**
  * Coarse accounting split of Foundation-fee dollars into Admin / Programs /

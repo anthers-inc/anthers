@@ -12,7 +12,6 @@ import {
 	CARD_RATE,
 	FOUNDATION_SPLIT,
 	FREE_STORAGE_GIB,
-	PHYSICAL_AFF_RATE,
 	SALES_TAX_RATE,
 	SELF_HOST_FEE,
 	STORAGE_PER_GIB_MONTH,
@@ -30,36 +29,70 @@ export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 // ── Payments (the at-cost card fee, added ON TOP of the charge) ───────────────
 /**
  * The at-cost **Payments** line for a whole batched charge: card + processing,
- * 2.9% + $0.30. Added on top of the user's Seeds (like sales tax) — never carved
- * out of a Seed, so every $3 reaches its destination in full. $0 when nothing is
- * charged. ACH is cheaper to process, so its Payments line is smaller.
+ * 2.9% + $0.30. It sits **inside** the price (moved back inside 2026-08-03) and is
+ * paid to the processor, never kept — mandatory-fee disclosure law requires an
+ * advertised price to contain every mandatory fee, and only government-imposed
+ * taxes get the on-top carve-out. Sales tax is the only thing added on top.
+ * $0 when nothing is charged.
  */
 export function cardFee(amount: Decimal | number): Decimal {
 	const a = new Decimal(amount);
 	return a.gt(0) ? CENTS(a.mul(CARD_RATE).plus(CARD_FLAT)) : new Decimal(0);
 }
 
+/**
+ * Split the at-cost card fee on a whole batched monthly charge between the
+ * Anthers-Seeds and the directed Seeds riding on it, pro-rata by dollar value.
+ *
+ * The fixed $0.30 is per *charge*, not per Seed, so a user who gives directed
+ * Seeds alongside Anthers-Seeds amortises it across a bigger charge — which
+ * leaves a fatter Foundation remainder AND pays their creators more. That effect
+ * is the whole reason every Seed batches onto one monthly transaction.
+ */
+export function paymentsSplit(
+	anthersSeeds: number,
+	creatorSeeds: number,
+): { total: Decimal; anthers: Decimal; creator: Decimal } {
+	const a = Math.max(0, Math.floor(anthersSeeds));
+	const c = Math.max(0, Math.floor(creatorSeeds));
+	const anthersValue = new Decimal(seedCost(a));
+	const creatorValue = new Decimal(seedCost(c));
+	const charge = anthersValue.plus(creatorValue);
+	const total = cardFee(charge);
+	if (charge.lte(0))
+		return { total: new Decimal(0), anthers: new Decimal(0), creator: new Decimal(0) };
+	// Split by value, then give the rounding remainder to the Anthers side so the
+	// two shares always reconstruct `total` exactly and creators are never short a cent.
+	const creator = CENTS(total.mul(creatorValue).div(charge));
+	return { total, anthers: total.minus(creator), creator };
+}
+
 // ── Anthers-Seed decomposition ────────────────────────────────────────────────
 /**
- * Decompose a user's Anthers-Seeds into where each $3 goes. The full $3 per Seed
- * reaches its destination — the at-cost Payments line rides on top of the whole
- * charge (see `cardFee`), never inside a Seed:
+ * Decompose a user's Anthers-Seeds into where each $3 goes:
  *
- *   Anthers-Seed value ($3 × n) = bandwidth (at cost) + Time Pool + Foundation
+ *   Anthers-Seed value ($3 × n) = bandwidth + Time Pool + Payments + Foundation
  *
- * Time Pool ($1.50/Seed) is a fixed target to creators; bandwidth is the user's
- * own at-cost usage; the **Foundation is the remainder** (the shock absorber —
- * lighter streamers leave more for the mission). Free (n = 0) pays $0: its small
- * Time Pool and in-floor bandwidth are subsidised, and it funds no Foundation.
+ * Time Pool ($1.50/Seed) is a fixed target to creators and never moves; bandwidth
+ * is the user's own at-cost usage; `payments` is this side's share of the at-cost
+ * card fee (see `paymentsSplit`); the **Foundation is the remainder** — the shock
+ * absorber, so a heavy streamer or an expensive charge shrinks the mission share
+ * while creator pay stays exactly the same. Free (n = 0) pays $0: its small Time
+ * Pool and in-floor bandwidth are subsidised, and it funds no Foundation.
+ *
+ * `payments` defaults to 0 so a caller that only wants the Time-Pool/bandwidth
+ * view is unaffected — but anything crediting the **Foundation ledger** must pass
+ * it, or the Foundation is over-credited by the card fee.
  */
 export function anthersSeedBreakdown(
 	anthersSeeds: number,
-	opts: { bandwidthGiB?: Decimal | number } = {},
+	opts: { bandwidthGiB?: Decimal | number; payments?: Decimal | number } = {},
 ): {
 	anthersSeeds: number;
 	seedValue: Decimal;
 	timePool: Decimal;
 	bandwidth: Decimal;
+	payments: Decimal;
 	foundation: Decimal;
 	subsidised: boolean;
 } {
@@ -67,26 +100,41 @@ export function anthersSeedBreakdown(
 	const seedValue = new Decimal(seedCost(n));
 	const timePool = new Decimal(timePoolFor(n));
 	const bandwidth = bandwidthCost(opts.bandwidthGiB ?? 0);
+	const payments = new Decimal(opts.payments ?? 0);
 	if (n === 0) {
 		return {
 			anthersSeeds: 0,
 			seedValue: new Decimal(0),
 			timePool,
 			bandwidth,
+			payments: new Decimal(0),
 			foundation: new Decimal(0),
 			subsidised: true,
 		};
 	}
-	const foundation = seedValue.minus(timePool).minus(bandwidth);
-	return { anthersSeeds: n, seedValue, timePool, bandwidth, foundation, subsidised: false };
+	const foundation = seedValue.minus(timePool).minus(bandwidth).minus(payments);
+	return {
+		anthersSeeds: n,
+		seedValue,
+		timePool,
+		bandwidth,
+		payments,
+		foundation,
+		subsidised: false,
+	};
 }
 
 /**
  * The full monthly support breakdown for a user holding `anthersSeeds` Anthers-
  * Seeds and `creatorSeeds` directed Seeds, given their actual `bandwidthGiB`.
  *
- * Directed Seeds reach creators 100%; Anthers-Seeds decompose as above; the
- * at-cost Payments line is one card fee on the whole Seed subtotal, ON TOP.
+ * Anthers takes **no cut** — but the at-cost card fee comes out of the charge
+ * rather than riding on top of it, so a directed Seed reaches its creator less
+ * that Seed's pro-rata share. `total` is therefore the Seed subtotal itself: the
+ * price is all-in, and sales tax is the only thing a caller adds on top.
+ *
+ * `creatorDirect` is the **gross** directed-Seed value; `creatorNet` is what
+ * actually reaches creators. Use `creatorNet` for anything describing payout.
  */
 export function supportBreakdown(params: {
 	anthersSeeds: number;
@@ -94,6 +142,7 @@ export function supportBreakdown(params: {
 	bandwidthGiB?: Decimal | number;
 }): {
 	creatorDirect: Decimal;
+	creatorNet: Decimal;
 	timePool: Decimal;
 	bandwidth: Decimal;
 	foundation: Decimal;
@@ -102,19 +151,24 @@ export function supportBreakdown(params: {
 	payments: Decimal;
 	total: Decimal;
 } {
-	const anthers = anthersSeedBreakdown(params.anthersSeeds, { bandwidthGiB: params.bandwidthGiB });
+	const split = paymentsSplit(params.anthersSeeds, params.creatorSeeds);
+	const anthers = anthersSeedBreakdown(params.anthersSeeds, {
+		bandwidthGiB: params.bandwidthGiB,
+		payments: split.anthers,
+	});
 	const creatorDirect = new Decimal(seedCost(Math.max(0, Math.floor(params.creatorSeeds))));
+	const creatorNet = creatorDirect.minus(split.creator);
 	const seedsSubtotal = creatorDirect.plus(anthers.seedValue);
-	const payments = cardFee(seedsSubtotal);
 	return {
 		creatorDirect,
+		creatorNet,
 		timePool: anthers.timePool,
 		bandwidth: anthers.bandwidth,
 		foundation: anthers.foundation,
-		toCreators: creatorDirect.plus(anthers.timePool),
+		toCreators: creatorNet.plus(anthers.timePool),
 		seedsSubtotal,
-		payments,
-		total: seedsSubtotal.plus(payments),
+		payments: split.total,
+		total: seedsSubtotal,
 	};
 }
 
@@ -245,7 +299,8 @@ export type PurchaseType = "digital" | "physical" | "service";
  * - `physical` / `service`: no bytes are delivered, so the AFF is a nominal
  *   **Physical & Service AFF** of 1% of the price, and there is no delivery fee.
  *
- * `crfFee` keeps its legacy key name but holds the Foundation Fee (AFF) amount.
+ * `crfFee` keeps its legacy key name and is now **always zero** — see the note at
+ * the return statement.
  */
 export function calculateFees(
 	amount: Decimal,
@@ -254,29 +309,34 @@ export function calculateFees(
 	const type = opts.type ?? "digital";
 	const deliveryGiB = new Decimal(opts.deliveryBytes ?? 0).div(GIB);
 
+	// Delivery = the FIRST download, included in the sale and paid out of the
+	// creator's deduction — so nobody ever buys something they cannot download,
+	// whatever their Badge. Redownloads draw the buyer's streaming allowance.
+	// Physical goods and services deliver no bytes, so they carry none of this.
 	let deliveryFee = new Decimal(0);
-	let foundationFee: Decimal;
 	if (type === "digital") {
 		deliveryFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB));
-		foundationFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB).mul(AFF_INFRA_RATE));
 		// Any real download costs at least a cent to deliver — we can't bill sub-cent.
 		if (deliveryGiB.gt(0) && deliveryFee.lte(0)) deliveryFee = new Decimal("0.01");
-	} else {
-		foundationFee = CENTS(amount.mul(PHYSICAL_AFF_RATE));
 	}
 
-	const creatorEarnings = amount;
-	// Card + tax apply to the buyer-paid subtotal (price + AFF + delivery); both leave the system.
-	const subtotal = amount.plus(foundationFee).plus(deliveryFee);
-	const processingFee = CENTS(subtotal.mul(CARD_RATE).plus(CARD_FLAT));
-	const salesTax = CENTS(subtotal.mul(SALES_TAX_RATE));
-	const buyerTotal = subtotal.plus(processingFee).plus(salesTax);
+	// The list price IS the advertised price: card processing comes out of it, not
+	// on top of it. Sales tax is the only thing added, because a government-imposed
+	// tax is the sole carve-out mandatory-fee disclosure law allows.
+	const processingFee = CENTS(amount.mul(CARD_RATE).plus(CARD_FLAT));
+	const salesTax = CENTS(amount.mul(SALES_TAX_RATE));
+	const creatorEarnings = amount.minus(processingFee).minus(deliveryFee);
+	const buyerTotal = amount.plus(salesTax);
 
 	return {
 		processingFee,
 		deliveryFee,
 		salesTax,
-		crfFee: foundationFee,
+		// Anthers takes $0 from a creator transaction. The purchase Foundation fee
+		// was removed 2026-08-03 — a commission on a creator's sale is the exact
+		// feature Rev. Rul. 76-152 keyed on. The `crf_fee` column is NOT NULL, so it
+		// stays and is always zero; dropping it is a separate migration.
+		crfFee: new Decimal(0),
 		creatorEarnings,
 		buyerTotal,
 	};

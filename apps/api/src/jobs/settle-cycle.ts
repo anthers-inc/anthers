@@ -8,9 +8,13 @@
  *    an illustrative stand-in derived from watch-time (× DELIVERY_GIB_PER_HOUR)
  *    until real CDN metering is wired.
  * 2. **Foundation inflow.** The **remainder** of this account's Anthers-Seeds —
- *    what's left of each $3 after its Time Pool ($1.50) and its at-cost bandwidth.
- *    Lighter streamers leave a larger remainder for the mission. Free accounts (0
- *    Anthers-Seeds) contribute nothing (their floor + $0.05 Time Pool are subsidised).
+ *    what's left of each $3 after its Time Pool ($1.50), its at-cost bandwidth, and
+ *    its pro-rata share of the at-cost Payments line. Lighter streamers leave more
+ *    for the mission, and so do users who also give directed Seeds, because the
+ *    fixed card fee is charged once on the whole batched monthly charge. Free
+ *    accounts (0 Anthers-Seeds) contribute nothing — their floor and $0.05 Time
+ *    Pool are subsidised. The remainder is the shock absorber: Time Pool is a fixed
+ *    target and never moves, so cost swings land here, never on creator pay.
  * 3. **Reset** the running consumption counter and record the cycle snapshot.
  *
  * Idempotent per (user, cycle) via a marker row in the Foundation ledger.
@@ -24,8 +28,13 @@ import {
 	crfLedger,
 	seedAllocations,
 } from "@anthers/db/schema";
-import { allowanceGiB, DELIVERY_GIB_PER_HOUR, seedCost } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, drawBandwidth } from "@anthers/shared/fees";
+import {
+	allowanceGiB,
+	DELIVERY_GIB_PER_HOUR,
+	SEED_PRICE,
+	seedCost,
+} from "@anthers/shared/constants";
+import { anthersSeedBreakdown, drawBandwidth, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
@@ -84,24 +93,31 @@ async function settleAccount(
 	// `overageGiB` (streaming past the allowance) is a nudge to hold another Seed.
 	const draw = drawBandwidth({ consumedGiB, allowanceGiB: allowanceGiB(n) });
 
-	// 2. Foundation inflow: the remainder of this account's Anthers-Seeds, after their
-	//    Time Pool and their at-cost bandwidth (lighter streamers leave more).
-	const bd = anthersSeedBreakdown(n, { bandwidthGiB: consumedGiB });
-	const inflow = CENTS(Decimal.max(0, bd.foundation));
-
-	// Directed creator-Seeds this cycle (100% to creators — recorded, not a Foundation inflow).
+	// Directed creator-Seeds this cycle. Needed BEFORE the Foundation inflow, because
+	// the at-cost card fee is charged on the whole batched monthly charge and split
+	// pro-rata — so directed Seeds amortise the fixed $0.30 and leave a fatter
+	// remainder. Anthers takes no cut of these; they are recorded, not an inflow.
 	const [dir] = await db
 		.select({ total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)` })
 		.from(seedAllocations)
 		.where(and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycle)));
 	const directedSeeds = new Decimal(dir?.total ?? 0);
 
+	// 2. Foundation inflow: the remainder of this account's Anthers-Seeds, after their
+	//    Time Pool, their at-cost bandwidth, and their share of the at-cost Payments
+	//    line (lighter streamers and bigger baskets both leave more). Passing
+	//    `payments` here is load-bearing — omit it and the Foundation is over-credited
+	//    by the card fee, which typechecks fine because the option is optional.
+	const split = paymentsSplit(n, directedSeeds.div(SEED_PRICE).toNumber());
+	const bd = anthersSeedBreakdown(n, { bandwidthGiB: consumedGiB, payments: split.anthers });
+	const inflow = CENTS(Decimal.max(0, bd.foundation));
+
 	await db.insert(crfLedger).values({
 		amount: inflow.toFixed(2),
 		description: inflow.gt(0)
 			? `${marker} Foundation remainder $${inflow.toFixed(2)} from ${n} Anthers-Seed${
 					n === 1 ? "" : "s"
-				} (bandwidth $${bd.bandwidth.toFixed(2)}, Time Pool $${bd.timePool.toFixed(2)}${
+				} (bandwidth $${bd.bandwidth.toFixed(2)}, Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)}${
 					draw.overageGiB.gt(0) ? `, over allowance by ${draw.overageGiB.toFixed(1)} GiB` : ""
 				})`
 			: `${marker} no Foundation inflow (free rank)`,

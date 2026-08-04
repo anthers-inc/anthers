@@ -16,19 +16,20 @@ interface ProjectPricingProps {
 
 function buildReceipt(price: number) {
 	const r2 = (n: number) => Math.round(n * 100) / 100;
-	// Direct purchase: the creator keeps 100% of the price they set. Card processing and sales tax are
-	// added on top, along with a small per-download Foundation fee (the Digital AFF) and
-	// delivery at cost — those are byte-based and finalized at checkout.
+	// Direct purchase: the listed price IS the advertised price. Card processing and the
+	// first download come out of it and Anthers keeps $0, so the only thing added is
+	// sales tax — the sole carve-out mandatory-fee disclosure law allows. Delivery is
+	// byte-based and finalised at checkout, which is why it isn't estimated here.
 	const processing = r2(price * CARD_RATE + CARD_FLAT);
 	const tax = r2(price * SALES_TAX_RATE);
-	const buyerTotal = r2(price + processing + tax);
+	const buyerTotal = r2(price + tax);
 
 	return {
 		price,
 		buyerTotal,
 		lines: [
-			{ label: "Payment processing", amount: processing, note: "card" },
-			{ label: "Sales tax", amount: tax, note: "est." },
+			{ label: "Card processing", amount: processing, note: "at cost" },
+			{ label: "Sales tax", amount: tax, note: "est.", added: true },
 		],
 	};
 }
@@ -45,13 +46,19 @@ interface Quote {
 /** The exact server-computed receipt — the total here matches what Stripe charges. */
 function receiptFromQuote(q: Quote) {
 	const n = (s: string) => Number(s);
-	const lines: { label: string; amount: number; note?: string }[] = [];
+	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
+	// Everything except tax comes OUT of the listed price; `crfFee` is always zero now
+	// (Anthers takes no cut of a purchase) and is deliberately not rendered.
+	lines.push({ label: "Card processing", amount: n(q.processingFee), note: "at cost" });
 	if (n(q.deliveryFee) > 0)
-		lines.push({ label: "Delivery", amount: n(q.deliveryFee), note: "at cost" });
-	if (n(q.crfFee) > 0) lines.push({ label: "Foundation Fee", amount: n(q.crfFee) });
-	lines.push({ label: "Payment processing", amount: n(q.processingFee), note: "card" });
-	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est." });
-	return { price: n(q.amount), buyerTotal: n(q.buyerTotal), lines };
+		lines.push({ label: "First download", amount: n(q.deliveryFee), note: "at cost" });
+	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est.", added: true });
+	return {
+		price: n(q.amount),
+		buyerTotal: n(q.buyerTotal),
+		lines,
+		creatorReceives: n(q.amount) - n(q.processingFee) - n(q.deliveryFee),
+	};
 }
 
 /**

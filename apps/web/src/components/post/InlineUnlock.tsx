@@ -102,7 +102,7 @@ export default function InlineUnlock({
 	};
 
 	// Whichever side asks for less is the primary action; a tie goes to the creator, since
-	// Seeds given to a creator reach them in full.
+	// Anthers takes no cut of a Seed given to a creator.
 	const anthersFirst =
 		!!anthersRoute && (!creatorRoute || anthersRoute.moreNeeded < creatorRoute.moreNeeded);
 	const lockedBy = anthersFirst && anthersRoute?.badge ? badgeLabel(anthersRoute.badge) : null;

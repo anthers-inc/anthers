@@ -3,15 +3,15 @@
 // The two Meadow economics cards — the interactive "Where your Seeds to Anthers go"
 // rank picker and the one-time-purchase example — plus the badge ladder and the
 // hover-tooltip (i). All numbers derive from the support model (see
-// @anthers/shared/constants + fees): a Seed is a flat $3, pointed at a creator
-// (100% to them) or at Anthers (an Anthers-Seed). Each Anthers-Seed splits into
-// your bandwidth (at cost, folded in) + Time Pool ($1.50) + the Foundation
-// remainder. The at-cost Payments line (card 2.9%+$0.30) and sales tax ~6.5% ride
-// ON TOP and leave the system; Anthers keeps $0.
+// @anthers/shared/constants + fees): a Seed is a flat $3 ALL IN, pointed at a
+// creator (no platform cut) or at Anthers (an Anthers-Seed). Each Anthers-Seed
+// splits into your bandwidth (at cost, folded in) + Time Pool ($1.50) + the
+// at-cost Payments line (card 2.9%+$0.30) + the Foundation remainder. Sales tax
+// (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
+// sole carve-out mandatory-fee disclosure law allows. Anthers keeps $0.
 
 import type { BrandIconName } from "@anthers/brand";
 import {
-	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	type BadgeKey,
@@ -32,7 +32,6 @@ const serif = { fontFamily: FONTS.fraunces };
 
 // ─── Rates — single source of truth: @anthers/shared (the same numbers the API
 // charges). Only the presentation (badge emoji/wreaths) lives here. ───
-const DIGITAL_AFF_PER_GIB = BANDWIDTH_PER_GIB * AFF_INFRA_RATE; // digital-purchase Foundation fee (= 50% of bandwidth)
 const CARD_PCT = CARD_RATE;
 const TAX_PCT = SALES_TAX_RATE;
 
@@ -199,14 +198,15 @@ export function SubscriptionCalculator() {
 	const price = seedCost(n);
 	const timePool = timePoolFor(n);
 	// "Supports Anthers" bundles your bandwidth (at cost) + the Foundation remainder.
-	const supportsAnthers = n === 0 ? 0 : price - timePool;
+	const supportsAnthers = n === 0 ? 0 : price - timePool - (price * CARD_PCT + CARD_FLAT);
 	const toCreators = n === 0 ? 0 : timePool;
 
-	// The at-cost Payments line + tax ride ON TOP of the Seeds. Free ($0) has none.
+	// The at-cost Payments line sits INSIDE the Seed price; sales tax is the only thing
+	// added on top. Free ($0) has neither.
 	const card = price > 0 ? price * CARD_PCT + CARD_FLAT : 0;
 	const tax = price * TAX_PCT;
-	const processing = card + tax;
-	const total = price + processing;
+	const processing = card;
+	const total = price + tax;
 
 	const barParts = [
 		{ key: "timePool", amount: timePool, cls: "bg-primary" },
@@ -267,11 +267,24 @@ export function SubscriptionCalculator() {
 				<div className="flex items-center justify-between gap-3 text-sm">
 					<span className="text-base-content/75">
 						<span className="font-medium text-base-content/90">Payments</span>
-						<span className="text-base-content/55"> — card fees (on top) + est. sales tax </span>
-						<InfoDot tip={TAX_TIP} />
+						<span className="text-base-content/55">
+							{" "}
+							— card processing, at cost, from inside your Seeds{" "}
+						</span>
 					</span>
 					<span className="shrink-0 font-mono tabular-nums">~{money(processing)}</span>
 				</div>
+
+				{price > 0 && (
+					<div className="flex items-center justify-between gap-3 text-sm">
+						<span className="text-base-content/75">
+							<span className="font-medium text-base-content/90">Sales tax</span>
+							<span className="text-base-content/55"> — added on top, owed to your state </span>
+							<InfoDot tip={TAX_TIP} />
+						</span>
+						<span className="shrink-0 font-mono tabular-nums">~{money(tax)}</span>
+					</div>
+				)}
 			</div>
 
 			<div className="mt-5 border-t border-base-content/10 pt-4">
@@ -287,7 +300,8 @@ export function SubscriptionCalculator() {
 				<p className="mt-1 text-sm text-base-content/65">
 					of which{" "}
 					<span className="font-semibold text-primary tabular-nums">{money(toCreators)}</span> goes
-					to the creators you watch — plus every Seed you give a creator directly, at 100%.
+					to the creators you watch — plus every Seed you give a creator directly, with no platform
+					cut.
 				</p>
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
@@ -307,46 +321,47 @@ export function PurchaseExample({
 	price?: number;
 	sizeGiB?: number;
 }) {
+	// The list price IS the advertised price: card processing and the first download
+	// come out of it, and sales tax is the only thing added. Anthers keeps $0 — there
+	// is no Foundation fee on a purchase (removed 2026-08-03).
+	const card = price * CARD_PCT + CARD_FLAT;
 	const delivery = sizeGiB * BANDWIDTH_PER_GIB; // $0.01/GiB, at cost
-	const foundation = sizeGiB * DIGITAL_AFF_PER_GIB; // Digital AFF = 50% of bandwidth
-	const base = price + delivery + foundation;
-	const card = base * CARD_PCT + CARD_FLAT;
-	const tax = base * TAX_PCT;
-	const processing = card + tax;
-	const total = base + processing;
+	const creator = price - card - delivery;
+	const tax = price * TAX_PCT;
+	const total = price + tax;
 
 	const segments: Seg[] = [
 		{
-			label: "Game Price",
-			desc: "paid directly to the creator, in full",
-			amount: price,
+			label: "To the creator",
+			desc: "what the seller receives — Anthers takes nothing",
+			amount: creator,
 			bar: "bg-primary",
 			dot: "bg-primary",
 		},
 		{
+			label: "Card processing",
+			desc: "paid to the payment processor, at cost",
+			amount: card,
+			bar: "bg-base-content/15",
+			dot: "bg-base-content/20",
+		},
+		{
 			label: "Delivery",
-			desc: "the literal download transfer, provided at cost",
+			desc: "your first download, provided at cost",
 			amount: delivery,
 			bar: "bg-secondary",
 			dot: "bg-secondary",
 		},
 		{
-			label: "Foundation fee",
-			desc: "supports free access for all  + charitable programs",
-			amount: foundation,
-			bar: "bg-info",
-			dot: "bg-info",
-		},
-		{
-			label: "Processing",
+			label: "Sales tax",
 			desc: (
 				<>
-					card fees + est. sales tax <InfoDot tip={TAX_TIP} />
+					added on top, owed to your state <InfoDot tip={TAX_TIP} />
 				</>
 			),
-			amount: processing,
-			bar: "bg-base-content/15",
-			dot: "bg-base-content/20",
+			amount: tax,
+			bar: "bg-info",
+			dot: "bg-info",
 		},
 	];
 
@@ -357,7 +372,7 @@ export function PurchaseExample({
 					Example — a {money(price)} indie game, {sizeGiB} GB
 				</span>
 				<span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-					Creator gets {money(price)}
+					Anthers takes $0
 				</span>
 			</div>
 
@@ -373,12 +388,14 @@ export function PurchaseExample({
 					</span>
 				</div>
 				<p className="mt-1 text-sm text-base-content/65">
-					of which <span className="font-semibold text-primary tabular-nums">{money(price)}</span>{" "}
-					(the full price) goes to the creator.
+					the {money(price)} listed, plus your state's sales tax — of which{" "}
+					<span className="font-semibold text-primary tabular-nums">{money(creator)}</span> reaches
+					the creator.
 				</p>
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
-				That's it—no hidden fees, ever. Card fees drop to ~0.8% if you pay by ACH.
+				That's it — the price you see is the price you pay, and Anthers keeps none of it. Card
+				processing goes to the payment processor; delivery covers the bytes, at cost.
 			</p>
 		</div>
 	);

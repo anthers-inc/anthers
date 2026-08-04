@@ -46,7 +46,6 @@ function DevicesSection() {
 			.catch(() => setError("Could not load your devices."));
 	};
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: load is stable for mount-only fetch
 	useEffect(load, []);
 
 	const revoke = async (id: number) => {
