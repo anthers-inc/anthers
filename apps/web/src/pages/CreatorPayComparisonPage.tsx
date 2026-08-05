@@ -287,7 +287,15 @@ export default function CreatorPayComparisonPage() {
 	const platform = PLATFORMS.find((p) => p.id === platformId) ?? PLATFORMS[0];
 
 	return (
-		<div className="max-w-4xl mx-auto px-4 pb-16">
+		// `min-w-0 w-full` breaks the flex-column min-content cascade — without
+		// `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to `max-w-4xl`), which the inner cards push past
+		// the mobile viewport. The `sticky -mx-4 px-4` segment control below
+		// relies on this wrapper being exactly the viewport-edge width on
+		// mobile, so the negative margin bleeds out to the page edge rather
+		// than past it.
+		<div className="max-w-4xl min-w-0 w-full mx-auto px-4 pb-16">
 			<CalcPageHeader
 				eyebrow="Creator pay · head-to-head"
 				title="How our pay compares"

@@ -59,7 +59,15 @@ export function SegControl<T extends string | number>({
 	ariaLabel: string;
 }) {
 	return (
-		<fieldset className="join w-full min-w-0 border-0 m-0 p-0" aria-label={ariaLabel}>
+		// `overflow-x-auto` lets the segmented control scroll horizontally when
+		// the option labels are too wide or too many for the parent width (e.g.
+		// the 6-platform compare page on mobile). Without it the `flex-1`
+		// buttons' `min-width: auto` (their longest label) overflows the
+		// `w-full` fieldset and pushes the page wider than the viewport.
+		<fieldset
+			className="join w-full min-w-0 overflow-x-auto border-0 m-0 p-0"
+			aria-label={ariaLabel}
+		>
 			{options.map((opt) => (
 				<button
 					type="button"

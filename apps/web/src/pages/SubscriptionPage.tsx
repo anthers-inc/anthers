@@ -534,7 +534,16 @@ export default function SubscriptionPage() {
 		);
 
 	return (
-		<div className="mx-auto px-4 py-8" style={{ maxWidth: "72rem" }}>
+		// `min-w-0 w-full max-w-full` breaks the flex-column min-content cascade
+		// so this wrapper can shrink below its inner content's min-content
+		// width on mobile (the same fix the other top-level pages carry).
+		// Without `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to the cap), which can push past the mobile
+		// viewport. The wide-screen cap is `max-w-[72rem]` (was an inline
+		// style, which wins over `max-w-full` and so defeated the cap below the
+		// cap).
+		<div className="mx-auto min-w-0 w-full max-w-full max-w-[72rem] px-4 py-8">
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>

@@ -191,8 +191,12 @@ export default function LoggedOutLayout() {
 			{/* flex-col so a page can opt into filling the content area (e.g. AuthPage
 				grows a flex-1 child to vertically center its card between header and
 				footer). Ordinary pages render a single non-growing child, so it stacks
-				from the top exactly as a block child would. */}
-			<main className={`relative z-10 flex flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
+				from the top exactly as a block child would. `min-w-0` lets those
+				flex-column children shrink below their min-content size, so wide inner
+				grids/tables (calculators, roadmaps) can't blow the page wider than the
+				viewport on mobile — without it, a flex item's default min-width:auto
+				keeps it at its content's min-content width. */}
+			<main className={`relative z-10 flex min-w-0 flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
 				<Outlet />
 			</main>
 

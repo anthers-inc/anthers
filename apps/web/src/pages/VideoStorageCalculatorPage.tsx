@@ -137,7 +137,12 @@ export default function VideoStorageCalculatorPage() {
 	const masterShare = sumGib > 0 ? Math.round((masterVar.gib / sumGib) * 100) : 0;
 
 	return (
-		<div className="max-w-5xl mx-auto px-4 pb-16">
+		// `min-w-0 w-full` breaks the flex-column min-content cascade — without
+		// `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to `max-w-5xl`), which the wide `md:grid-cols-2`
+		// cards inside push past the mobile viewport.
+		<div className="max-w-5xl min-w-0 w-full mx-auto px-4 pb-16">
 			<Reveal>
 				<CalcPageHeader
 					eyebrow="Original master + AV1 ladder · storage cost"

@@ -167,7 +167,10 @@ function LoggedInLayoutInner() {
 				</aside>
 
 				{/* Main content area — reserve the scrollbar gutter so short and tall pages
-					keep the same width (no content shift when the scrollbar appears). */}
+					keep the same width (no content shift when the scrollbar appears).
+					`min-w-0` also lets flex-column children shrink below their min-content
+					size, so wide inner grids/tables can't blow the page wider than the
+					viewport on mobile — the same guard LoggedOutLayout's <main> carries. */}
 				<main
 					className={`flex-1 min-w-0 overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
 				>

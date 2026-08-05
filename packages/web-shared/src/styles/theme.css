@@ -68,7 +68,7 @@
 	--color-error-content: oklch(17% 0.017 158);
 }
 
-/* Softer form-control borders — the default bordered inputs/selects read as
+/* Soft form-control borders — the default bordered inputs/selects read as
    too intense against the base, so halve the border intensity by default.
    Plain class selectors (not :where) so this wins over DaisyUI's own .input
    rule on source order; focus/hover states still get the stronger accent. */
@@ -77,6 +77,29 @@
 .textarea,
 .file-input {
 	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
+/* The CSS-mask primitive behind <BrandGlyph>. Sized/recolored by utilities
+   (h-/w-/text-*); the mask itself is set inline per instance by the component
+   (the data-URI is content-specific). Lives in the `components` layer so a
+   `hidden` utility (which ships in the `utilities` layer) wins by layer order
+   — `utilities` is declared after `components` in the layer order above, so
+   it wins at equal specificity. That's what lets the auth page's
+   `hidden sm:block` corner flourishes stay off mobile, instead of the old
+   inline `display: inline-block` overriding `hidden` and poking them past
+   the viewport. (Plain unlayered CSS here would WIN over `hidden`, the
+   opposite of what we want — hence the explicit layer.) */
+@layer components {
+	.brand-glyph {
+		display: inline-block;
+		background-color: currentColor;
+		mask-repeat: no-repeat;
+		-webkit-mask-repeat: no-repeat;
+		mask-position: center;
+		-webkit-mask-position: center;
+		mask-size: contain;
+		-webkit-mask-size: contain;
+	}
 }
 
 /* Slightly larger default buttons. DaisyUI sizes `.btn` off the CSS vars below

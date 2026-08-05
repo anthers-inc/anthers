@@ -724,7 +724,12 @@ function AudienceBuilder() {
 
 export default function CreatorMonetizationCalculatorPage() {
 	return (
-		<div className="max-w-5xl mx-auto px-4 pb-16">
+		// `min-w-0 w-full` breaks the flex-column min-content cascade — without
+		// `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to `max-w-5xl`), which the dense tables/cards
+		// inside push past the mobile viewport.
+		<div className="max-w-5xl min-w-0 w-full mx-auto px-4 pb-16">
 			<Reveal>
 				<CalcPageHeader
 					eyebrow="Time Pool · watch-time → revenue"
