@@ -65,9 +65,7 @@ import {
 	DocumentTextIcon,
 	EyeIcon,
 	FilmIcon,
-	GlobeAltIcon,
 	LockClosedIcon,
-	LockOpenIcon,
 	MusicalNoteIcon,
 	PaintBrushIcon,
 	PuzzlePieceIcon,
@@ -113,8 +111,8 @@ export default function ForCreatorsPage() {
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is Patreon, Bandcamp, Steam, and itch in one place—games, videos, music, and
 							writing under one roof, one identity, one audience. Anthers takes <strong>0%</strong>{" "}
-							of every Seed given to you and every sale — no cut, no fee, no skim. The only thing
-							that ever comes out is the at-cost card processing, and that goes to the processor.
+							of every Seed given to you and every sale — no cut, no skim. The only thing that ever
+							comes out is the at-cost card processing, and that goes to the processor.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -448,7 +446,7 @@ export default function ForCreatorsPage() {
 								<li>
 									<strong className="font-semibold text-base-content/85">Seeds given to you</strong>{" "}
 									— {fmtMoney(SEED_PRICE)}/month each, recurring like a membership, with no platform
-									cut and no fee and no payout processing
+									cut and no payout processing
 								</li>
 								<li>
 									<strong className="font-semibold text-base-content/85">Anything you sell</strong>{" "}
@@ -555,10 +553,10 @@ export default function ForCreatorsPage() {
 						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
 						split across every creator they spend time with, so what reaches you is your share of
 						their month, not the whole figure. Seeds they give you directly are separate, and carry
-						no yours. *A free account pays nothing; the Foundation funds its small Time Pool and its
-						streaming floor, so even a free viewer pays the creators they watch. Bandwidth is folded
-						into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you get{" "}
-						{FREE_STORAGE_GIB} GiB of free storage.
+						no platform cut. *A free account pays nothing; the Foundation funds its small Time Pool
+						and its streaming floor, so even a free viewer pays the creators they watch. Bandwidth
+						is folded into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you
+						get {FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -606,8 +604,8 @@ export default function ForCreatorsPage() {
 								👑&nbsp; Your Badges
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Every Seed level of yours carries a Badge you design—a small collectible emblem your
-								supporters wear, the way Anthers's own Badges have their botanical wreaths. The
+								Every Seed threshold of yours carries a Badge you design—a small collectible emblem
+								your supporters wear, the way Anthers's own Badges have their botanical wreaths. The
 								Foundation sponsors emerging illustrators to help creators make them.
 							</p>
 						</Card>
@@ -746,47 +744,6 @@ export default function ForCreatorsPage() {
 				</Reveal>
 			</Section>
 
-			{/* Data portability */}
-			<Section>
-				<Reveal>
-					<Eyebrow>Ownership</Eyebrow>
-					<H2>Your data is yours</H2>
-					<Lede>
-						Anthers is built on the AT Protocol—the same open standard behind Bluesky. Sign in with
-						your Bluesky identity, or create a new one. Your content and audience relationships are
-						portable by design.
-					</Lede>
-				</Reveal>
-				<div className="mx-auto mt-14 grid max-w-4xl gap-8 text-left sm:grid-cols-3">
-					<Reveal delay={0}>
-						<ValueCard
-							icon={<LockOpenIcon className="h-6 w-6" />}
-							title="Portable identity"
-							compact
-						>
-							Your creator identity isn't locked to Anthers. It's a DID—a decentralized identifier
-							you own. If you ever leave, your identity goes with you.
-						</ValueCard>
-					</Reveal>
-					<Reveal delay={110}>
-						<ValueCard
-							icon={<ArrowPathIcon className="h-6 w-6" />}
-							title="Exportable content"
-							compact
-						>
-							Your project pages, devlogs, ratings, and community interactions are stored as ATProto
-							records. They belong to you structurally, not just by policy.
-						</ValueCard>
-					</Reveal>
-					<Reveal delay={220}>
-						<ValueCard icon={<GlobeAltIcon className="h-6 w-6" />} title="Federated future" compact>
-							ATProto enables federation—other nodes can join the network, and content is
-							interoperable across them. No single point of control.
-						</ValueCard>
-					</Reveal>
-				</div>
-			</Section>
-
 			{/* Closing */}
 			<section className="bg-base-200/70">
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
@@ -854,23 +811,29 @@ const RECEIPT_INTRO: Record<ActionKey, string> = {
 
 const CS_NOTE = "funds free access & programs";
 const PASSTHROUGH = "pure passthrough";
+const NO_CUT = "no cut";
 
 // A representative engaged fan for the streaming comparison: Sprout rank — 2
 // Anthers-Seeds ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
 // reference streamer the economics doc uses. Everything below is derived, never
 // typed: the creator earns the fan's Time Pool ÷ their watch-hours per watch-hour —
 // the SAME for every medium (equal-time), and independent of resolution (pay is by
-// time, not bytes). The rest of that $6 is the fan's own bandwidth at cost and the
-// Foundation remainder, which shrinks per hour the more they watch.
+// time, not bytes). The rest of that $6 is the fan's own bandwidth at cost, the
+// at-cost card fee (inside the Seed since 2026-08-03), and the Foundation remainder,
+// which shrinks per hour the more they watch.
 const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
 const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
 const STREAM_FAN_BANDWIDTH = STREAM_FAN_HOURS * DELIVERY_GIB_PER_HOUR * BANDWIDTH_PER_GIB;
+const STREAM_FAN_CARD = STREAM_FAN_SPEND * CARD_RATE + CARD_FLAT;
 const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
 const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
 const STREAM_HR_BANDWIDTH = perHour(STREAM_FAN_BANDWIDTH);
-const STREAM_HR_FOUNDATION = perHour(STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_BANDWIDTH);
+const STREAM_HR_CARD = perHour(STREAM_FAN_CARD);
+const STREAM_HR_FOUNDATION = perHour(
+	STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_BANDWIDTH - STREAM_FAN_CARD,
+);
 /** "a Sprout fan ($6/mo, ~28 hrs/month)" — the shared preamble for the stream notes. */
 const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Seeds to Anthers, ~${STREAM_FAN_HOURS} hrs/month)`;
 
@@ -885,16 +848,31 @@ const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
 const SEED_CARD = SEED_SPEND * CARD_RATE + CARD_FLAT;
 const SEED_CARD_STR = `$${SEED_CARD.toFixed(2)}`;
 const SEED_NET_STR = `$${(SEED_SPEND - SEED_CARD).toFixed(2)}`;
-/** What a rival keeps of the same $6 after its stated cut. */
-const rivalKeeps = (cutRate: number) => `$${(SEED_SPEND * (1 - cutRate)).toFixed(2)}`;
+/** Rival all-in take-home on the same $6 monthly support: list × (1 − cutRate),
+ * minus the at-cost card fee unless the rival absorbs processing (as YouTube
+ * Memberships and Twitch do). Competitor rates are rough public estimates. */
+const rivalSeedAllIn = (cutRate: number, absorbsProcessing = false) => {
+	const afterCut = SEED_SPEND * (1 - cutRate);
+	return `$${(absorbsProcessing ? afterCut : afterCut - SEED_CARD).toFixed(2)}`;
+};
 const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
 const SEED_SCENARIO = `A fan gives you ${SEED_COUNT} Seeds a month (${SEED_SPEND_STR})`;
-const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are their headline percentage only — their payment processing comes out of the creator's remainder on top of that.`;
+const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are all-in take-home at the same $6 — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
+
+/** Rival all-in take-home on a sale: list × (1 − cutRate), minus the at-cost card
+ * fee unless the rival absorbs processing (as Steam and Apple do — they fold the
+ * card cost into their percentage). Competitor rates are rough public estimates. */
+const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = false) => {
+	const afterCut = price * (1 - cutRate);
+	if (absorbsProcessing) return `$${afterCut.toFixed(2)}`;
+	const card = Math.round((price * CARD_RATE + CARD_FLAT) * 100) / 100;
+	return `$${(afterCut - card).toFixed(2)}`;
+};
 
 /** The Anthers row for a combo. `platform` is what the Anthers Foundation receives —
- * the fee on a sale's infrastructure, or the remainder of a fan's Anthers-Seeds on a
- * stream; $0 on a Seed, which is a pure passthrough. It funds free access + Foundation
- * programs and is NOT a platform profit cut. */
+ * the remainder of a fan's Seeds to Anthers on a stream (funds free access +
+ * Foundation programs, NOT a platform profit cut); $0 on a sale (no Foundation fee
+ * — removed 2026-08-03) and on a Seed (a pure passthrough). */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
 	creator,
@@ -904,14 +882,19 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit is
-// always $0 — the Foundation fee funds free access and programs, and bandwidth is an
-// at-cost passthrough. Streaming isn't where Anthers competes on pay; the Time Pool
-// share is small and variable, and the real support comes from Seeds and sales.
+// always $0 — the Foundation remainder funds free access and programs, bandwidth is
+// an at-cost passthrough, and the card fee goes to the processor. Streaming isn't
+// where Anthers competes on pay; the Time Pool share is small and variable, and the
+// real support comes from Seeds and sales.
 const streamReceipt: Line[] = [
 	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
 	{
 		label: "Their bandwidth — folded into their Seeds to Anthers, at cost",
 		amount: STREAM_HR_BANDWIDTH,
+	},
+	{
+		label: "Card processing — their share of the at-cost card fee, to the processor",
+		amount: STREAM_HR_CARD,
 	},
 	{
 		label: "The Foundation — what's left of their Seeds to Anthers, spread across the month",
@@ -938,6 +921,30 @@ const seedReceipt: Line[] = [
 	{ label: "Foundation fee", amount: "$0.00" },
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
+
+/** The Anthers take-home + receipt for a sale, derived from constants: the list
+ * price less at-cost card processing and the first download's bandwidth (both
+ * rounded to cents before subtracting, matching fees.ts calculateFees). A digital
+ * download costs at least $0.01 to deliver. Anthers keeps $0 — there is no
+ * Foundation fee on a purchase (removed 2026-08-03). */
+const anthersPurchase = (price: number, sizeGiB: number): { netStr: string; receipt: Line[] } => {
+	const card = Math.round((price * CARD_RATE + CARD_FLAT) * 100) / 100;
+	let delivery = Math.round(sizeGiB * BANDWIDTH_PER_GIB * 100) / 100;
+	if (sizeGiB > 0 && delivery <= 0) delivery = 0.01;
+	const net = Math.round((price - card - delivery) * 100) / 100;
+	const fmt = (n: number) => `$${n.toFixed(2)}`;
+	return {
+		netStr: fmt(net),
+		receipt: purchaseReceipt(fmt(net), fmt(card), fmt(delivery)),
+	};
+};
+
+// Pre-compute the Anthers take-home + receipt for each purchase scenario (the
+// MATRIX rows + breakdowns reference these — derived from constants, never typed).
+const PURCHASE_VIDEO = anthersPurchase(12, 1);
+const PURCHASE_GAMES = anthersPurchase(15, 2);
+const PURCHASE_MUSIC = anthersPurchase(10, 0.5);
+const PURCHASE_WRITING = anthersPurchase(8, 0.1);
 
 // [action][media] → the scenario + who-gets-what + the Anthers breakdown. Anthers
 // first. Competitor figures are rough public estimates. `stream` has no `merch`
@@ -989,45 +996,45 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		video: {
 			scenario: "A fan buys your $12 video",
 			rows: [
-				anthers("$12.00", "~$0.02", CS_NOTE),
-				{ name: "Gumroad", creator: "$10.80", platform: "$1.20" },
-				{ name: "Apple / iTunes", creator: "$8.40", platform: "$3.60" },
+				anthers(PURCHASE_VIDEO.netStr, "$0.00", NO_CUT),
+				{ name: "Gumroad", creator: rivalPurchaseAllIn(12, 0.1), platform: "$1.20" },
+				{ name: "Apple / iTunes", creator: rivalPurchaseAllIn(12, 0.3, true), platform: "$3.60" },
 			],
-			breakdown: purchaseReceipt("$11.65", "$0.65", "<$0.01"),
+			breakdown: PURCHASE_VIDEO.receipt,
 		},
 		games: {
 			scenario: "A fan buys your $15 game",
 			rows: [
-				anthers("$15.00", "~$0.02", CS_NOTE),
-				{ name: "itch.io", creator: "$13.50", platform: "$1.50" },
-				{ name: "Steam", creator: "$10.50", platform: "$4.50" },
+				anthers(PURCHASE_GAMES.netStr, "$0.00", NO_CUT),
+				{ name: "itch.io", creator: rivalPurchaseAllIn(15, 0.1), platform: "$1.50" },
+				{ name: "Steam", creator: rivalPurchaseAllIn(15, 0.3, true), platform: "$4.50" },
 			],
-			breakdown: purchaseReceipt("$14.27", "$0.74", "<$0.01"),
+			breakdown: PURCHASE_GAMES.receipt,
 		},
 		music: {
 			scenario: "A fan buys your $10 album",
 			rows: [
-				anthers("$10.00", "<$0.01", CS_NOTE),
-				{ name: "Bandcamp", creator: "$8.50", platform: "$1.50" },
-				{ name: "iTunes Store", creator: "$7.00", platform: "$3.00" },
+				anthers(PURCHASE_MUSIC.netStr, "$0.00", NO_CUT),
+				{ name: "Bandcamp", creator: rivalPurchaseAllIn(10, 0.15), platform: "$1.50" },
+				{ name: "iTunes Store", creator: rivalPurchaseAllIn(10, 0.3, true), platform: "$3.00" },
 			],
-			breakdown: purchaseReceipt("$9.40", "$0.59", "<$0.01"),
+			breakdown: PURCHASE_MUSIC.receipt,
 		},
 		writing: {
 			scenario: "A fan buys your $8 ebook",
 			rows: [
-				anthers("$8.00", "<$0.01", CS_NOTE),
-				{ name: "Gumroad", creator: "$7.20", platform: "$0.80" },
-				{ name: "Amazon KDP", creator: "$5.60", platform: "$2.40" },
+				anthers(PURCHASE_WRITING.netStr, "$0.00", NO_CUT),
+				{ name: "Gumroad", creator: rivalPurchaseAllIn(8, 0.1), platform: "$0.80" },
+				{ name: "Amazon KDP", creator: rivalPurchaseAllIn(8, 0.3, true), platform: "$2.40" },
 			],
-			breakdown: purchaseReceipt("$7.46", "$0.53", "<$0.01"),
+			breakdown: PURCHASE_WRITING.receipt,
 		},
 		merch: {
 			scenario: "A fan buys your $25 shirt",
 			rows: [
-				anthers("$25.00", "$0.25", CS_NOTE),
-				{ name: "Etsy", creator: "$22.25", platform: "$2.75" },
-				{ name: "Gumroad", creator: "$22.50", platform: "$2.50" },
+				anthers("$23.97", "$0.00", NO_CUT),
+				{ name: "Etsy", creator: rivalPurchaseAllIn(25, 0.11), platform: "$2.75" },
+				{ name: "Gumroad", creator: rivalPurchaseAllIn(25, 0.1), platform: "$2.50" },
 			],
 			note: "Excludes production & shipping—a real cost on any platform, including Anthers.",
 			breakdown: merchReceipt,
@@ -1037,9 +1044,13 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		video: {
 			scenario: SEED_SCENARIO,
 			rows: [
-				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
-				{ name: "YouTube Memberships", creator: rivalKeeps(0.3), platform: rivalTakes(0.3) },
-				{ name: "Twitch (sub)", creator: rivalKeeps(0.5), platform: rivalTakes(0.5) },
+				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				{
+					name: "YouTube Memberships",
+					creator: rivalSeedAllIn(0.3, true),
+					platform: rivalTakes(0.3),
+				},
+				{ name: "Twitch (sub)", creator: rivalSeedAllIn(0.5, true), platform: rivalTakes(0.5) },
 			],
 			note: SEED_NOTE,
 			breakdown: seedReceipt,
@@ -1047,9 +1058,9 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		games: {
 			scenario: SEED_SCENARIO,
 			rows: [
-				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
-				{ name: "Ko-fi", creator: rivalKeeps(0.05), platform: rivalTakes(0.05) },
+				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Ko-fi", creator: rivalSeedAllIn(0.05), platform: rivalTakes(0.05) },
 			],
 			note: SEED_NOTE,
 			breakdown: seedReceipt,
@@ -1057,9 +1068,13 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		music: {
 			scenario: SEED_SCENARIO,
 			rows: [
-				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
-				{ name: "Bandcamp (subscription)", creator: rivalKeeps(0.15), platform: rivalTakes(0.15) },
+				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				{
+					name: "Bandcamp (subscription)",
+					creator: rivalSeedAllIn(0.15),
+					platform: rivalTakes(0.15),
+				},
 			],
 			note: SEED_NOTE,
 			breakdown: seedReceipt,
@@ -1067,9 +1082,9 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		writing: {
 			scenario: SEED_SCENARIO,
 			rows: [
-				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
-				{ name: "Substack", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
-				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
+				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Substack", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
 			],
 			note: SEED_NOTE,
 			breakdown: seedReceipt,
@@ -1077,9 +1092,9 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 		merch: {
 			scenario: SEED_SCENARIO,
 			rows: [
-				anthers(SEED_SPEND_STR, "$0.00", PASSTHROUGH),
-				{ name: "Patreon", creator: rivalKeeps(0.1), platform: rivalTakes(0.1) },
-				{ name: "Buy Me a Coffee", creator: rivalKeeps(0.05), platform: rivalTakes(0.05) },
+				anthers(SEED_NET_STR, "$0.00", PASSTHROUGH),
+				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
+				{ name: "Buy Me a Coffee", creator: rivalSeedAllIn(0.05), platform: rivalTakes(0.05) },
 			],
 			note: `${SEED_NOTE} Seeds back you, not one thing you made — whatever you turn out next is already covered.`,
 			breakdown: seedReceipt,
@@ -1247,42 +1262,15 @@ function SolutionExplorer() {
 			</div>
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
-				Anthers never profits. On a sale, beyond your price and delivery at cost, the only markup is
-				the Foundation fee, which funds free access for everyone and the Foundation's programs; on a
-				stream the Foundation simply receives what's left of the fan's Seeds to Anthers; a Seed
-				given to you is a pure passthrough. Scenario figures are illustrative; competitor rates are
-				rough public estimates.
+				Anthers never profits. On a sale, the only deductions from your listed price are the at-cost
+				card processing and the buyer's first download — both paid to third parties, never a cent to
+				Anthers (the purchase Foundation fee was removed 2026-08-03). On a stream, the Foundation
+				receives what's left of the fan's Seeds to Anthers after their bandwidth, the Time Pool, and
+				the at-cost card fee — funding free access and the Foundation's programs. A Seed given to
+				you is a pure passthrough. Scenario figures are illustrative; competitor rates are rough
+				public estimates, all-in take-home at the same list price.
 			</p>
 		</Card>
-	);
-}
-
-/** An icon + heading + body card (the data-portability trio). */
-function ValueCard({
-	icon,
-	title,
-	compact,
-	children,
-}: {
-	icon: React.ReactNode;
-	title: string;
-	compact?: boolean;
-	children: React.ReactNode;
-}) {
-	return (
-		<div
-			className={
-				compact ? "" : "h-full rounded-3xl border border-base-content/10 bg-base-100 p-7 shadow-sm"
-			}
-		>
-			<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-				{icon}
-			</div>
-			<h3 style={serif} className="mb-2 text-lg font-medium">
-				{title}
-			</h3>
-			<p className="text-sm leading-relaxed text-base-content/70">{children}</p>
-		</div>
 	);
 }
 
