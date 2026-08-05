@@ -1040,7 +1040,17 @@ export default function RoadmapPage() {
 	}, []);
 
 	return (
-		<div className="mx-auto px-4 py-8" style={{ maxWidth: "110rem" }}>
+		// `min-w-0 w-full` breaks the flex-column min-content cascade so this
+		// wrapper can shrink below its inner timeline's wide min-content —
+		// without `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to the cap), which the SVG timeline (intentionally
+		// wider than the viewport, scrolling inside its own `overflow-x-auto`
+		// container) blows past the mobile viewport. The wide-screen cap is
+		// `max-w-[110rem]` (was an inline style, which wins over `max-w-full`
+		// and so defeated the cap below the cap, leaving the page able to grow
+		// to 1760px on mobile).
+		<div className="mx-auto min-w-0 w-full max-w-full max-w-[110rem] px-4 py-8">
 			{/* Header */}
 			<div className="text-center mb-8">
 				<Reveal>

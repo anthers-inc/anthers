@@ -87,7 +87,9 @@ export default function VideoBandwidthCalculatorPage() {
 	const capped = RES_HEIGHT[res] < 720 && fps > 30;
 
 	return (
-		<div className="max-w-5xl mx-auto px-4 pb-16">
+		// `min-w-0 w-full` breaks the flex-column min-content cascade — see
+		// SubscribePage / VideoStorageCalculatorPage for the same fix.
+		<div className="max-w-5xl min-w-0 w-full mx-auto px-4 pb-16">
 			<Reveal>
 				<CalcPageHeader
 					eyebrow={`${CODECS[codec].label} delivery · bandwidth allowance`}

@@ -247,9 +247,9 @@ function BadgeLadder({
 				const label = active && plus && i === rungs.length - 1 ? `${rung.label}+` : rung.label;
 				return (
 					<div key={rung.label} className="flex flex-col items-center gap-1">
-						<div className="flex h-16 w-16 items-center justify-center">
+						<div className="flex h-14 w-14 items-center justify-center sm:h-16 sm:w-16">
 							<div
-								className={`relative flex h-16 w-16 items-center justify-center transition-transform duration-300 ease-out ${
+								className={`relative flex h-14 w-14 items-center justify-center transition-transform duration-300 ease-out sm:h-16 sm:w-16 ${
 									active ? "scale-100" : "scale-[0.6] opacity-40"
 								}`}
 							>
@@ -519,7 +519,15 @@ export default function SubscribePage() {
 	const totalMonthly = seedSubtotal;
 
 	return (
-		<div className="mx-auto px-4 py-8" style={{ maxWidth: "80rem" }}>
+		// `min-w-0 w-full` breaks the flex-column min-content cascade so this
+		// wrapper can shrink below its inner cards' min-content width — without
+		// `w-full`, `mx-auto` on a flex item disables the default
+		// `align-self: stretch`, so the wrapper falls back to its content's
+		// intrinsic width (up to the cap), which the inner cards push past the
+		// mobile viewport. The wide-screen cap is `max-w-[80rem]` (was an inline
+		// style, which wins over `max-w-full` and so defeated the cap below the
+		// cap, leaving the page able to grow to 1280px on mobile).
+		<div className="mx-auto min-w-0 w-full max-w-full max-w-[80rem] px-4 py-8">
 			<Reveal className="mb-8 text-center">
 				<p className="my-2 text-xs uppercase tracking-wider text-base-content/40">
 					Non-profit · no profit-taking
@@ -541,7 +549,7 @@ export default function SubscribePage() {
 				delay={120}
 				className="rounded-3xl border border-base-300 bg-base-100 p-4 shadow-lg sm:p-6"
 			>
-				<div className="grid items-stretch gap-4 lg:grid-cols-2">
+				<div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
 					<AnthersCard seeds={anthersSeeds} onChange={setAnthersSeeds} />
 					<CreatorCard seeds={creatorSeeds} onChange={setCreatorSeeds} />
 				</div>
