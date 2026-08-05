@@ -263,6 +263,73 @@ describe("multi-claim tick splitting", () => {
 	});
 });
 
+describe("element visibility — presence claims gated on the deliverable being on screen", () => {
+	// `elementVisible` is the per-claim IntersectionObserver signal that the Work's
+	// deliverable is in the viewport. Only presence-mode consults it; playback is
+	// exempt (audio in the mini-player is consumed with nothing visible). Undefined
+	// (not measured) reads as visible so unobserving surfaces and tests are
+	// unaffected — the `claim()` helper doesn't set it, so the existing 41 cases all
+	// still pass without modification.
+	test("a presence claim with elementVisible:false does not credit, tab visible and user active", () => {
+		const c = claim({ contentType: "text", elementVisible: false });
+		expect(creditableClaims([c], ATTENTIVE)).toEqual([]);
+	});
+
+	test("a presence claim with elementVisible:true credits as before", () => {
+		const c = claim({ contentType: "text", elementVisible: true });
+		expect(creditableClaims([c], ATTENTIVE)).toEqual([c]);
+	});
+
+	test("a presence claim with elementVisible undefined credits (backward compatible)", () => {
+		const c = claim({ contentType: "text" });
+		expect(creditableClaims([c], ATTENTIVE)).toEqual([c]);
+	});
+
+	test("a playback claim with elementVisible:false still credits — playback is exempt", () => {
+		const video = claim({ contentType: "video", playing: true, elementVisible: false });
+		expect(creditableClaims([video], ATTENTIVE)).toEqual([video]);
+		// Hidden tab + off-screen element: still credits, because it's playing.
+		expect(creditableClaims([video], HIDDEN)).toEqual([video]);
+	});
+
+	test("a hidden tab still drops a presence claim even when elementVisible:true", () => {
+		// elementVisible is necessary but not sufficient — the tab must also be visible.
+		const c = claim({ contentType: "text", elementVisible: true });
+		expect(creditableClaims([c], HIDDEN)).toEqual([]);
+	});
+
+	test("an idle user with elementVisible:true still drops a presence claim", () => {
+		// The idle gate is independent: visible element + idle user = no credit.
+		const c = claim({ contentType: "text", elementVisible: true });
+		expect(creditableClaims([c], IDLE)).toEqual([]);
+	});
+
+	test("multi-claim: one presence claim visible, one not — only the visible one credits", () => {
+		const visible = claim({ creatorId: 1, workId: 10, contentType: "text", elementVisible: true });
+		const offscreen = claim({
+			creatorId: 2,
+			workId: 20,
+			contentType: "text",
+			elementVisible: false,
+		});
+		const credited = creditableClaims([visible, offscreen], ATTENTIVE);
+		expect(credited).toEqual([visible]);
+	});
+
+	test("elementVisible:false on one claim does not dilute a concurrent playback claim's share", () => {
+		// The off-screen text drops out of the winner set entirely — the playing video
+		// gets the whole tick, not half of it, because the text claim isn't credited.
+		const video = claim({ creatorId: 1, workId: 10, contentType: "video", playing: true });
+		const offscreen = claim({
+			creatorId: 2,
+			workId: 20,
+			contentType: "text",
+			elementVisible: false,
+		});
+		expect(creditableClaims([video, offscreen], ATTENTIVE)).toEqual([video]);
+	});
+});
+
 describe("wall-clock clamp", () => {
 	const ev = (durationSeconds: number, tag = "x") => ({ durationSeconds, tag });
 
