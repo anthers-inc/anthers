@@ -17,13 +17,14 @@
 import {
 	type AttentionClaim,
 	claimKey,
+	consumptionModeFor,
 	creditableClaims,
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 const TICK_MS = 1_000;
 const FLUSH_INTERVAL_MS = 30_000;
@@ -32,6 +33,41 @@ const MAX_EVENT_SECONDS = 300;
 const MAX_EVENTS_PER_REQUEST = 50;
 /** Backstop so a long offline stretch can't grow the queue without bound. */
 const MAX_PENDING_EVENTS = 500;
+
+// ── Element-visibility controls ──────────────────────────────────────────────
+// Tuning dials for the IntersectionObserver that gates presence-mode claims on
+// the Work's deliverable being on screen. Exposed as named constants (not inlined
+// in the hook) so a future tuning pass can adjust them in one place without
+// re-deriving the context. Same separation as the shared policy's IDLE_TIMEOUT_MS:
+// these are mechanism (DOM-observer config), not rules — the policy only sees the
+// boolean `elementVisible` that results.
+//
+// Playback-mode claims (video/audio) are exempt: audio in the mini-player is
+// legitimately consumed with nothing visible, so the observer is only set up for
+// presence-mode claims (text/image/game/software).
+
+/**
+ * IntersectionObserver threshold: the fraction of the deliverable element that must
+ * be in the viewport to count as "visible". `0` means any pixel; `0.1` means 10%.
+ *
+ * Default `0` (any pixel) because the idle gate is the real protection against a
+ * tab left open — element visibility is the first gate ("is it even possible
+ * they're looking at it"), and any-pixel is the honest answer to that. The edge
+ * case (1px sliver visible while reading comments below) is a 1-second over-credit
+ * until the user scrolls that last pixel off, which is negligible. Raising this
+ * risks penalizing long text Works whose 10% is more than a screenful.
+ */
+const ELEMENT_VISIBLE_THRESHOLD = 0;
+
+/**
+ * IntersectionObserver rootMargin, shrinks or grows the effective viewport.
+ * `""` (default) uses the actual viewport. `"−50px 0px"` would require the element
+ * to be 50px inside the viewport on top/bottom before counting, so edge slivers
+ * don't count. Default empty because the idle gate covers "walked away"; the
+ * threshold-default-of-0 edge case is negligible. Tune if real-user feedback shows
+ * the sliver case is actually a problem.
+ */
+const ELEMENT_VISIBLE_ROOT_MARGIN = "";
 
 interface AttentionEvent {
 	creatorId: number;
@@ -72,10 +108,11 @@ let listenersBound = false;
  * `mousemove` would under-credit the real case it exists for: someone reading a
  * screenful of long-form text for a minute without scrolling.
  *
- * The measurement that WOULD sharpen this is per-element visibility (today only
- * tab visibility is measured, so a post earns while its content is scrolled off
- * screen). That's a real change to how claims are registered — see the task
- * "Measure element visibility, not just tab visibility".
+ * Per-element visibility (the IntersectionObserver gating presence claims on the
+ * deliverable being on screen) now covers that long-form-reading case directly —
+ * `elementVisible: true` credits regardless of whether `mousemove` fires. So the
+ * defense for keeping `mousemove` is weaker now than when it was written (2026-07-26).
+ * Revisit whether to drop it as a separate decision; this is the note, not the change.
  */
 const INTERACTION_EVENTS = [
 	"pointerdown",
@@ -219,6 +256,12 @@ function stopEngineIfIdle() {
  * or `"text"` for a post-native text block. That's what decides both the
  * consumption mode and whether this earns anything at all: pages, profiles, and
  * other connective tissue have no content entity and so make no claim.
+ *
+ * `elementRef` is optional and only consulted by presence-mode claims. When
+ * provided, an IntersectionObserver gates the claim on the element being on
+ * screen, so a Work scrolled entirely off-screen stops earning even while the tab
+ * is visible and the user is active (e.g. reading comments below it). Playback
+ * claims (video/audio) are exempt — pass a ref or don't, it's ignored either way.
  */
 export function useAttentionClaim(params: {
 	creatorId: number | null;
@@ -228,8 +271,10 @@ export function useAttentionClaim(params: {
 	playing?: boolean;
 	/** Set false to suspend the claim (e.g. the viewer can't access the Work). */
 	active?: boolean;
+	/** Ref to the deliverable element. Presence-mode only; gates the claim on the element being on screen. */
+	elementRef?: RefObject<HTMLElement | null>;
 }) {
-	const { creatorId, workId = null, contentType, playing, active = true } = params;
+	const { creatorId, workId = null, contentType, playing, active = true, elementRef } = params;
 	const { isAuthenticated: authStatus } = useAuth();
 	const idRef = useRef<number | null>(null);
 	if (idRef.current === null) idRef.current = nextId++;
@@ -248,14 +293,44 @@ export function useAttentionClaim(params: {
 			return;
 		}
 
-		claims.set(id, { creatorId, workId, contentType, playing });
+		// Presence-mode with an element ref: start visible (true) so the first tick
+		// credits while the observer warms up, then let the observer correct it.
+		// Playback-mode claims omit the ref; elementVisible is undefined → treated as
+		// visible by the policy, which never consults it for playback anyway.
+		const presence = consumptionModeFor(contentType) === "presence";
+		claims.set(id, {
+			creatorId,
+			workId,
+			contentType,
+			playing,
+			...(elementRef && presence ? { elementVisible: true } : {}),
+		});
 		startEngine();
 
+		// IntersectionObserver for presence-mode claims with a ref. Mutates the stored
+		// claim's `elementVisible` directly rather than re-running this effect, because
+		// visibility changes on every scroll and re-running the effect that often is
+		// wasteful and would churn the claim Map.
+		let observer: IntersectionObserver | null = null;
+		if (elementRef && presence && typeof IntersectionObserver !== "undefined") {
+			observer = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (!entry) return;
+					const claim = claims.get(id);
+					if (claim) claims.set(id, { ...claim, elementVisible: entry.isIntersecting });
+				},
+				{ threshold: ELEMENT_VISIBLE_THRESHOLD, rootMargin: ELEMENT_VISIBLE_ROOT_MARGIN },
+			);
+			if (elementRef.current) observer.observe(elementRef.current);
+		}
+
 		return () => {
+			observer?.disconnect();
 			claims.delete(id);
 			stopEngineIfIdle();
 		};
-	}, [authStatus, creatorId, workId, contentType, playing, active]);
+	}, [authStatus, creatorId, workId, contentType, playing, active, elementRef]);
 }
 
 /**

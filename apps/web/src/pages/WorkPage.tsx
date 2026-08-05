@@ -22,7 +22,7 @@ import { client } from "@anthers/web-shared/rpc";
 import type { TranscodingJob, Work } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AudioPlayer from "../components/media/AudioPlayer";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
@@ -140,6 +140,10 @@ export default function WorkPage() {
 	// Time Pool. A Work is what earns, and its own type decides how. Playback-mode media
 	// (video/audio) claims from inside its player, gated on real playback; this covers the
 	// presence-mode types (text, image, game, software) that are consumed by being there.
+	// The deliverableRef gates the presence claim on the deliverable being on screen, so a
+	// Work scrolled past into a long comment thread stops earning — the comments are not
+	// the work. Playback claims don't consult the ref (audio in the mini-player is exempt).
+	const deliverableRef = useRef<HTMLElement>(null);
 	const presence = work ? consumptionModeFor(work.type) === "presence" : false;
 	useAttentionClaim({
 		creatorId: work?.creatorId ?? null,
@@ -147,6 +151,7 @@ export default function WorkPage() {
 		contentType: work?.type ?? "",
 		active:
 			!!work && presence && isTimePoolEligible(work.type) && (work.access?.canAccess ?? false),
+		elementRef: presence ? deliverableRef : undefined,
 	});
 
 	if (loading) return <LoadingSpinner />;
@@ -228,7 +233,7 @@ export default function WorkPage() {
 			</header>
 
 			{/* ── The deliverable, or the gate in front of it ── */}
-			<section>
+			<section ref={deliverableRef}>
 				{!canAccess ? (
 					<div className="space-y-4">
 						<LockedCover

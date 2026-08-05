@@ -94,6 +94,14 @@ export interface AttentionClaim {
 	contentType: string;
 	/** Only consulted when the claim's mode is `playback`. */
 	playing?: boolean;
+	/**
+	 * Whether the Work's deliverable element is on screen (IntersectionObserver).
+	 * Only consulted by presence-mode claims — playback-mode content is legitimately
+	 * consumed with nothing visible (audio in the mini-player, a background tab).
+	 * Undefined means "not measured" and is treated as visible, so surfaces that
+	 * don't pass an element ref (the players, the mini-player, tests) are unaffected.
+	 */
+	elementVisible?: boolean;
 }
 
 /** Everything about the user's state that the credit decision depends on. */
@@ -173,7 +181,13 @@ function isLive(claim: AttentionClaim, ctx: AttentionContext): boolean {
 		case "playback":
 			return claim.playing === true;
 		case "presence":
-			return ctx.visible && ctx.msSinceInteraction < IDLE_TIMEOUT_MS;
+			// Tab visible, the Work's deliverable is on screen (when measured), and
+			// the user isn't idle. `elementVisible !== false` is the element-visibility
+			// gate — undefined (not measured) reads as visible so unobserving surfaces
+			// and tests stay unaffected. Playback-mode is exempt by the switch above.
+			return (
+				ctx.visible && claim.elementVisible !== false && ctx.msSinceInteraction < IDLE_TIMEOUT_MS
+			);
 		default:
 			return false;
 	}
