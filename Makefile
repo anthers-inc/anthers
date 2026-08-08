@@ -55,6 +55,15 @@ help: ## Show this help
 
 install: ## Install all dependencies
 	bun install
+	@$(MAKE) --no-print-directory hooks
+
+# Git only runs hooks it finds in .git/hooks, which isn't tracked — so a hook
+# committed to the repo does nothing until each clone is pointed at it. This is
+# that step, folded into `make install` so a fresh clone is covered without
+# anyone remembering. Undo with: git config --unset core.hooksPath
+hooks: ## Point git at the repo's tracked hooks (.githooks/)
+	@git config core.hooksPath .githooks
+	@echo "git hooks → .githooks (pre-push runs 'make verify'; bypass with git push --no-verify)"
 
 dev: db-ready ## Start API + worker + web dev servers
 	@mkdir -p data
