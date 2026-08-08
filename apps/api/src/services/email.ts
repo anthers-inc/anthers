@@ -36,6 +36,22 @@ interface SendArgs {
 
 /** Dispatch an email. Returns true if actually sent, false if skipped or errored. */
 export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolean> {
+	// Never send from the test runner, even with a key present.
+	//
+	// Sign-up sends a verification email inline, so with a local `RESEND_API_KEY` every
+	// test that registers a user made a real HTTPS call to Resend — dozens per run, on a
+	// path with no timeout of its own. When one of those was slow the test hit Bun's 5s
+	// limit, and because the first test in a file usually establishes the session the
+	// rest use, one slow request failed five tests. That read as five unrelated flakes,
+	// including in a pure-Zod test that never touched the network.
+	//
+	// Nothing is lost by skipping: callers already log the verification link for local
+	// use, and the address is `@example.com`, which Resend rejects with a 422 anyway. A
+	// suite whose outcome depends on a third party's latency is not testing our code.
+	if (process.env.NODE_ENV === "test") {
+		console.warn(`[email] test run — not sending "${subject}" to ${to}`);
+		return false;
+	}
 	const client = resendClient();
 	if (!client) {
 		console.warn(`[email] RESEND_API_KEY unset — skipped "${subject}" to ${to}`);
