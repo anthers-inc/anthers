@@ -134,8 +134,8 @@ function GiveSeedsCard({
 					<div>
 						<h4 className="font-medium">Give Seeds to {creatorName}</h4>
 						<p className="text-xs text-base-content/50 mt-0.5">
-							$3 each, 100% to {creatorName}. You have ${remaining.toFixed(2)} of $
-							{budget.toFixed(2)} left to give this month.
+							$3 each, no platform cut — only the at-cost card processing comes out. You have $
+							{remaining.toFixed(2)} of ${budget.toFixed(2)} left to give this month.
 						</p>
 					</div>
 					<SeedStepper

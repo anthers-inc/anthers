@@ -65,8 +65,10 @@ const FAQ_ITEMS: FAQItem[] = [
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
 						<strong>Give Seeds to a creator</strong> — $3/month each, sent straight to creators you
-						pick, Patreon-style. 100% goes to the creator, with nothing skimmed for a fee or
-						processing.
+						pick, Patreon-style. <strong>Anthers takes no cut at all.</strong> The only deduction is
+						the at-cost card processing, paid to the processor — on a single $3 Seed that is $0.39,
+						so the creator receives $2.61. It is one fee on your whole monthly charge, so the more
+						Seeds you hold, the more of each one reaches its creator.
 					</li>
 					<li>
 						<strong>Give Seeds to Anthers</strong> — $3/month each. Each one covers your streaming
@@ -135,7 +137,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.",
+			"Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus the Seeds directed to them. The only deductions anywhere are costs paid to third parties: card processing, and on a digital sale the buyer's first download. A $3 directed Seed reaches its creator as $2.61 at worst, and a $10 game sale with a 1 GiB download returns $9.40. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.",
 	},
 	{
 		category: "Creators",

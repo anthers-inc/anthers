@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { SEED_PRICE } from "@anthers/shared/constants";
+
+import { FREE_FLOOR_GIB, GIB_PER_SEED, SEED_PRICE } from "@anthers/shared/constants";
+import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -65,15 +67,20 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // the remainder funding free access and programs). Directed Seeds ($3 each, no
 // platform cut) sit alongside.
 // Bandwidth is folded in — a free floor plus a per-Seed allowance, no wallet.
+// Derived from the generated figures, never hand-computed. This block used to be
+// typed by hand and silently kept the pre-2026-08-03 arithmetic — `supportsAnthers`
+// was price − Time Pool, which omits the Payments line entirely.
+const PETAL = BADGE_TABLE.find((r) => r.badge === "Petal")!;
 const DEMO_PLAN = {
-	badge: "Petal",
-	anthersSeeds: 3,
-	price: 9.0, // 3 Seeds to Anthers × $3
-	timePool: 4.5, // to creators, distributed by watch-time ($1.50 × 3)
+	badge: PETAL.badge,
+	anthersSeeds: PETAL.seeds,
+	price: Number(PETAL.charge),
+	timePool: Number(PETAL.timePool), // to creators, distributed by watch-time
 	seeds: 3, // directed creator-Seeds (count, $3 each)
 	seedPool: 9.0, // $ value of the directed Seeds
-	supportsAnthers: 4.5, // price − Time Pool = your bandwidth (at cost) + the remainder
-	allowanceGiB: 195, // streaming allowance (15 floor + 60 × 3), folded in — no wallet
+	// bandwidth (at cost) + the remainder — i.e. the charge less Time Pool and Payments.
+	supportsAnthers: Number(PETAL.bandwidth) + Number(PETAL.remainder),
+	allowanceGiB: FREE_FLOOR_GIB + GIB_PER_SEED * PETAL.seeds,
 	month: "February 2026",
 };
 

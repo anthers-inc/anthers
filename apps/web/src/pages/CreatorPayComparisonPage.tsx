@@ -45,13 +45,13 @@
 // it reads as one set with the rest of Resources.
 
 import {
-	CARD_FLAT,
-	CARD_RATE,
+	cardFeeDisplay,
 	SEED_PRICE,
 	TIME_POOL_PER_SEED,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
+import { SALE_TABLE } from "@anthers/shared/figures";
 import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
@@ -100,6 +100,9 @@ interface Platform {
 // watch — the same rate for every medium (equal-time). Anthers takes none of it.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
 const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
+/** Derived, never typed — see scripts/econ-figures.ts. */
+const SALE_10_1GIB = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
+
 const money = (n: number) => `$${n.toFixed(2)}`;
 const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
 /** The reference streamer both this page and /for-creators quote: Sprout (2 Anthers-
@@ -113,11 +116,11 @@ const SEED_COUNT = 2;
 const SEED_SPEND = SEED_PRICE * SEED_COUNT;
 /** What a rival keeps of the same $6 after its headline cut, and its card cost. */
 const rivalKeeps = (cutRate: number) => money(SEED_SPEND * (1 - cutRate));
-const CARD_ON_SEEDS = money(SEED_SPEND * CARD_RATE + CARD_FLAT);
+const CARD_ON_SEEDS = money(cardFeeDisplay(SEED_SPEND));
 /** What Anthers delivers on the same $6: the Seeds less the at-cost card fee, and no cut. */
-const SEED_NET = money(SEED_SPEND - (SEED_SPEND * CARD_RATE + CARD_FLAT));
+const SEED_NET = money(SEED_SPEND - cardFeeDisplay(SEED_SPEND));
 /** What Patreon delivers on the same $6: 10% platform fee, then the same card cost. */
-const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - (SEED_SPEND * CARD_RATE + CARD_FLAT));
+const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND));
 
 // Anthers' per-transaction facts, reused across tabs. Anthers' cut is a literal
 // $0 everywhere; what comes out of a price is at-cost card processing (to the
@@ -190,7 +193,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys your $10 game",
 				kind: "Digital purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$7.00",
 					keepSub: "70% — Valve absorbs card processing inside its 30%",
@@ -209,7 +212,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys your $10 album (download)",
 				kind: "Digital purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$7.91",
 					keepSub: "85% less the same card processing everyone pays (→ 90% after $5k in sales)",
@@ -250,7 +253,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys a $10 one-time item",
 				kind: "Purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$8.21–8.91",
 					keepSub: "88–95% after their cut, less the same card processing",

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -825,10 +826,12 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
-						Anthers Sprout Badge: 2 Seeds to Anthers ($6) → $3 Time Pool to creators, with the
-						remainder (~$2.52) funding free access and the charitable programs; Seeds given straight
-						to a creator are 100% theirs. Time Pool is distributed by watch-time. Bandwidth is
-						folded into each Seed, at cost.
+						Anthers Sprout Badge: {SPROUT.seeds} Seeds to Anthers (${SPROUT.charge}) → $
+						{SPROUT.timePool} Time Pool to creators, ${SPROUT.bandwidth} of their own bandwidth at
+						cost and ${SPROUT.payments} of at-cost card processing, leaving ${SPROUT.remainder} to
+						fund free access and the charitable programs. Seeds given straight to a creator carry no
+						platform cut. Time Pool is distributed by watch-time. Bandwidth is folded into each
+						Seed, at cost.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
@@ -1229,6 +1232,9 @@ const TABS: { id: Tab; label: string; description: string }[] = [
 		description: "Toggle optimization techniques and see cascading cost reductions",
 	},
 ];
+
+/** The Sprout row, derived — never re-typed. See scripts/econ-figures.ts. */
+const SPROUT = BADGE_TABLE.find((r) => r.badge === "Sprout")!;
 
 export default function InfrastructureDemoPage() {
 	const [activeTab, setActiveTab] = useState<Tab>("calculator");

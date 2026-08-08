@@ -10,7 +10,8 @@
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
 		"./moderation": "./src/moderation.ts",
-		"./content": "./src/content.ts"
+		"./content": "./src/content.ts",
+		"./figures": "./src/figures.generated.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

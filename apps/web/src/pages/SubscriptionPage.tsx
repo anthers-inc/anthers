@@ -650,7 +650,7 @@ export default function SubscriptionPage() {
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
 					Creators You Support
-					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your watch-time — video, audio, reading, and gameplay all count equally) and Seeds (whole dollars you direct to specific creators, 100% to them)." />
+					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your watch-time — video, audio, reading, and gameplay all count equally) and Seeds (whole $3 units you direct to specific creators, with no platform cut — only the at-cost card processing comes out)." />
 				</div>
 				{attention && (
 					<p className="text-xs text-base-content/40 text-center mb-3">

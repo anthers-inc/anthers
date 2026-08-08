@@ -122,7 +122,7 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
  * here is the Time Pool only,
  * shared across everyone they watch; a creator's actual take is their watch-time
  * share of it plus any Seeds directed straight to them (those are separate, and
- * 100% theirs). Derived from @anthers/shared/constants.
+ * no platform cut). Derived from @anthers/shared/constants.
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {
@@ -767,10 +767,11 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			<p className="text-xs text-base-content/40 mt-2">
 				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($1.50, distributed to
 				creators by watch-time), the user's own bandwidth (at cost, folded in), and a remainder that
-				funds free access and the charitable programs. Seeds given straight to a creator are 100%
-				theirs. "To creators" here is the Time Pool. {creator.displayName} earns their watch-time
-				share — {creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of
-				a typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
+				funds free access and the charitable programs. Seeds given straight to a creator carry no
+				platform cut. "To creators" here is the Time Pool. {creator.displayName} earns their
+				watch-time share —{" "}
+				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
+				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>
 		</div>
 	);

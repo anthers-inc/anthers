@@ -89,11 +89,12 @@ export default function CompareItchPage() {
 						because itch.io exists.
 					</Lede>
 					<p className="mx-auto mt-6 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Anthers aims to carry that mission forward and expand it. We believe creators deserve
-						100% of their earnings, support for every medium they work in, and true ownership of
-						their identity and data. If itch.io is the place that showed the world what indie game
-						distribution could be, Anthers is our attempt to build the next chapter—for games,
-						videos, music, and writing all in one place.
+						Anthers aims to carry that mission forward and expand it. We believe no platform should
+						take a cut of a creator's earnings, that every medium a creator works in deserves
+						support, and that identity and data should genuinely belong to them. If itch.io is the
+						place that showed the world what indie game distribution could be, Anthers is our
+						attempt to build the next chapter—for games, videos, music, and writing all in one
+						place.
 					</p>
 				</Reveal>
 			</Section>
@@ -108,8 +109,8 @@ export default function CompareItchPage() {
 					<Reveal delay={0}>
 						<DiffCard
 							icon={<CurrencyDollarIcon className="h-6 w-6" />}
-							title="100% to creators—no revenue share"
-							description="itch.io defaults to a 10% revenue share (which creators can adjust, even to 0%). Anthers never takes a percentage. Your price is your revenue. Infrastructure and payment processing costs are shown as transparent line items to the buyer—never subtracted from your earnings."
+							title="0% platform fee—no revenue share"
+							description="itch.io defaults to a 10% revenue share (which creators set themselves, anywhere from 0% to 100%). Anthers never takes a percentage at all. The only deductions from your price are costs paid to third parties—card processing, and the buyer's first download—itemized in full. On a $10 game with a 1 GiB download that is $9.40 to you."
 						/>
 					</Reveal>
 					<Reveal delay={100}>
@@ -280,7 +281,7 @@ export default function CompareItchPage() {
 								<CompRow feature="Long-form writing" anthers />
 								<CompRow feature="Unified creator profile" anthers />
 								<CompRow feature="Follow & feed system" anthers />
-								<CompRow feature="100% to creator (default)" anthers />
+								<CompRow feature="0% platform fee (always)" anthers />
 								<CompRow feature="Adjustable revenue share" patreon />
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="Subscription pool model" anthers />
@@ -379,8 +380,9 @@ export default function CompareItchPage() {
 							Ready to try something new?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use. Your sales are 0% cut—publish your work and keep 100% of your
-							price. If you love itch.io, you'll love what comes next.
+							Anthers is free to use, and takes a 0% cut of your sales—a $10 game with a 1 GiB
+							download returns $9.40 to you, the rest being card processing and delivery, at cost.
+							If you love itch.io, you'll love what comes next.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link
