@@ -17,6 +17,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { publishScheduled } from "../jobs/publish-scheduled";
 import { CRON_SCHEDULES, QUEUES } from "../jobs/queue";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -71,7 +72,7 @@ beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE username IN (${ownerName}, ${strangerName})`);
 	owner = await signUp(ownerName);
 	stranger = await signUp(strangerName);
-});
+}, DB_SETUP_TIMEOUT);
 
 describe("Release-readiness gate", () => {
 	// The gate MOVED rather than vanished. Readiness is a property of the media, the media

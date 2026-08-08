@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -43,7 +44,7 @@ describe("Admin / ops console API", () => {
 		plainCookie = await signUp(plainName);
 		// Promote one — admin is an out-of-band flag, never self-serve.
 		await db.execute(sql`UPDATE users SET is_admin = true WHERE username = ${adminName}`);
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	// ── Gating ────────────────────────────────────────────────────────────────
 	it("rejects unauthenticated requests with 401", async () => {

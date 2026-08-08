@@ -27,6 +27,7 @@ import { db } from "@anthers/db/client";
 import { transcodingJobs, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
@@ -125,7 +126,7 @@ describe("Delivery-layer access", () => {
 			progress: 100,
 			outputFileUrl: AUDIO_URL,
 		});
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	it("publishes a locked post and a free post over the same two items", async () => {});
 

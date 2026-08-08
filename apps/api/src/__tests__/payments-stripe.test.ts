@@ -39,6 +39,7 @@ import Stripe from "stripe";
 import app from "../index";
 import { settleCycle } from "../jobs/settle-cycle";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
@@ -282,7 +283,7 @@ beforeAll(async () => {
 	paidSlug = paid.slug;
 	paidWorkId = paid.id;
 	webhookWorkId = (await makePaidPost(`Webhook work ${run}`)).id;
-});
+}, DB_SETUP_TIMEOUT);
 
 /**
  * A $5 post backed by a real-sized downloadable asset, so delivery bandwidth and the
@@ -709,7 +710,7 @@ describe("Webhook: customer.subscription.*", () => {
 				target: accounts.userId,
 				set: { stripeCustomerId: customerId, anthersSeeds: 0, stripeSubscriptionId: "" },
 			});
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	it("takes the Anthers-Seed count from the line item quantity", async () => {
 		const periodEnd = 1_900_000_000;
@@ -818,7 +819,7 @@ describe("Checkout — destination charge construction", () => {
 
 	beforeAll(async () => {
 		await connectCreator();
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	it("quotes the all-in breakdown and records a pending purchase", async () => {
 		const { res, body } = await checkout();
@@ -1051,7 +1052,7 @@ describe("Foundation remainder — the clamp that persists it", () => {
 
 		const now = new Date();
 		cycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username = ${heavyName}`);

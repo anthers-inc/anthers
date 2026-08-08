@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Use the app directly via .fetch() for testing (no network needed)
 const testFetch = app.fetch;
@@ -22,7 +23,7 @@ describe("Vertical Slice", () => {
 	beforeAll(async () => {
 		// Clean up any leftover test data from previous runs
 		await db.execute(sql`DELETE FROM projects WHERE slug = 'test-game-${sql.raw(testId)}'`);
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	it("health check returns ok", async () => {
 		const res = await makeRequest("/health");

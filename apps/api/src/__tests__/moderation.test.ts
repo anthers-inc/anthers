@@ -20,6 +20,7 @@ import { db } from "@anthers/db/client";
 import { comments, moderationActions, moderationReports, ratings } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -152,7 +153,7 @@ beforeAll(async () => {
 			})
 		).status,
 	).toBe(201);
-});
+}, DB_SETUP_TIMEOUT);
 
 describe("Filing a report", () => {
 	it("requires a session", async () => {
