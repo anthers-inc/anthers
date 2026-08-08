@@ -139,7 +139,13 @@ try {
 					width: number;
 					right: number;
 					overBy: number;
-					computed: { display: string; maxWidth: string; width: string; overflow: string; position: string };
+					computed: {
+						display: string;
+						maxWidth: string;
+						width: string;
+						overflow: string;
+						position: string;
+					};
 					parentClass: string;
 				}[] = [];
 				const all = document.querySelectorAll("*");
@@ -166,8 +172,7 @@ try {
 								position: cs.position,
 							},
 							parentClass:
-								el.parentElement &&
-								typeof (el.parentElement as HTMLElement).className === "string"
+								el.parentElement && typeof (el.parentElement as HTMLElement).className === "string"
 									? (el.parentElement as HTMLElement).className.split(/\s+/).slice(0, 8).join(" ")
 									: "",
 						});
