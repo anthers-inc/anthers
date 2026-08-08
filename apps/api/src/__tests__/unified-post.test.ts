@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -47,14 +48,20 @@ describe("Catalog vertical slice", () => {
 
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${otherName})`);
-	});
+	}, DB_SETUP_TIMEOUT);
 
-	it("signs up a creator and a viewer", async () => {
-		creatorCookie = await signUp(creatorName);
-		otherCookie = await signUp(otherName);
-		expect(creatorCookie).toBeTruthy();
-		expect(otherCookie).toBeTruthy();
-	});
+	// A setup step wearing a test's clothes: the cookies it assigns are what every test
+	// below authenticates with, so its budget is a hook's, not an assertion's.
+	it(
+		"signs up a creator and a viewer",
+		async () => {
+			creatorCookie = await signUp(creatorName);
+			otherCookie = await signUp(otherName);
+			expect(creatorCookie).toBeTruthy();
+			expect(otherCookie).toBeTruthy();
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
 	it("uploads a game to the Catalog, back-dated to the year it was actually made", async () => {
 		const res = await req("/api/content/works", {

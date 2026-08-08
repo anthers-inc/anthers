@@ -25,6 +25,7 @@ import { db } from "@anthers/db/client";
 import { attentionEvents } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
@@ -131,7 +132,7 @@ beforeAll(async () => {
 			anthersAccess: FREE,
 		})
 	).id;
-});
+}, DB_SETUP_TIMEOUT);
 
 describe("attention eligibility is decided server-side", () => {
 	it("credits time against a Work whose type earns it", async () => {

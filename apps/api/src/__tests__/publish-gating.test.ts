@@ -13,6 +13,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -46,14 +47,20 @@ describe("Catalog CRUD and post links", () => {
 
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${ownerName}, ${strangerName})`);
-	});
+	}, DB_SETUP_TIMEOUT);
 
-	it("signs up an owner and a stranger", async () => {
-		ownerCookie = await signUp(ownerName);
-		strangerCookie = await signUp(strangerName);
-		expect(ownerCookie).toBeTruthy();
-		expect(strangerCookie).toBeTruthy();
-	});
+	// A setup step wearing a test's clothes: the cookies it assigns are what every test
+	// below authenticates with, so its budget is a hook's, not an assertion's.
+	it(
+		"signs up an owner and a stranger",
+		async () => {
+			ownerCookie = await signUp(ownerName);
+			strangerCookie = await signUp(strangerName);
+			expect(ownerCookie).toBeTruthy();
+			expect(strangerCookie).toBeTruthy();
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
 	it("creates a Work, private by default", async () => {
 		const create = await req("/api/content/works", {

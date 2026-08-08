@@ -18,6 +18,7 @@ import { attentionEvents } from "@anthers/db/schema";
 import { CREDIT_WINDOW_SECONDS } from "@anthers/shared/attention";
 import { and, eq, gte, sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
 const testFetch = app.fetch;
@@ -91,7 +92,7 @@ beforeAll(async () => {
 			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
 		})
 	).id;
-});
+}, DB_SETUP_TIMEOUT);
 
 describe("attention wall-clock clamp", () => {
 	it("credits an ordinary batch in full", async () => {

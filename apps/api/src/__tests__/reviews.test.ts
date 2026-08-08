@@ -22,6 +22,7 @@ import { ratings } from "@anthers/db/schema";
 import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -101,7 +102,7 @@ beforeAll(async () => {
 		}),
 	});
 	expect(release.status).toBe(200);
-});
+}, DB_SETUP_TIMEOUT);
 
 describe("A score cannot be left without words", () => {
 	it("rejects a score with no body at all", async () => {

@@ -194,6 +194,12 @@
 	::view-transition-group(*),
 	::view-transition-old(*),
 	::view-transition-new(*) {
+		/* biome-ignore lint/complexity/noImportantStyles: this is the case !important is for.
+		   The UA supplies its own default animation for view-transition pseudo-elements, and
+		   the block above sets animation-duration on them at equal specificity — so without
+		   !important a reduced-motion user still gets the crossfade. Biome's offered autofix
+		   is to delete it, which would silently revoke the accessibility guarantee this rule
+		   exists to provide. Keep it. */
 		animation: none !important;
 	}
 }

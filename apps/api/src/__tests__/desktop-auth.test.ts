@@ -13,6 +13,7 @@ import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { pkceChallenge } from "../services/auth";
+import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
@@ -86,7 +87,7 @@ describe("Desktop auth", () => {
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username = ${userName}`);
 		cookie = await signUp(userName);
-	});
+	}, DB_SETUP_TIMEOUT);
 
 	// ── Enrolment ────────────────────────────────────────────────────────────
 
