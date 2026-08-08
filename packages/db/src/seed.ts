@@ -634,7 +634,7 @@ function buildAttentionEvents(
 
 /**
  * Insert a user's `account` (their Anthers-Seed count, held point-in-time) and its
- * current-cycle `account_cycle` snapshot. The cycle's Time Pool and Foundation
+ * current-cycle `account_cycle` snapshot. The cycle's Time Pool and remainder
  * remainder are derived from the Anthers-Seed count and stream usage via
  * `anthersSeedBreakdown`. Bandwidth is folded into the Anthers-Seeds — no wallet.
  */
@@ -1304,7 +1304,7 @@ async function seed() {
 			// tax is the only thing added. Mirrors `calculateFees` in @anthers/shared/fees.
 			let deliveryFee = Math.round(deliveryGiB * 0.01 * 100) / 100;
 			if (deliveryGiB > 0 && deliveryFee <= 0) deliveryFee = 0.01;
-			const crfFee = 0; // purchase Foundation fee removed 2026-08-03
+			const crfFee = 0; // purchase fee removed 2026-08-03
 			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
 			const creatorEarnings = Math.round((amount - processingFee - deliveryFee) * 100) / 100;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
@@ -1372,7 +1372,7 @@ async function seed() {
 		// watch-time. Directed creator-Seeds are different in kind: they are indivisible $3
 		// units the user *points*, so the fixture hands out whole Seeds by largest remainder
 		// rather than splitting a Seed proportionally. Nothing is left undirected — a Seed a
-		// user hasn't pointed is not creator income (it would support the Foundation), so
+		// user hasn't pointed is not creator income (it would fund free access and the charitable programs), so
 		// attributing a fractional leftover to creators by watch-time would seed a state the
 		// model doesn't produce.
 		const timePool = timePoolFor(cfg.anthersSeeds);

@@ -118,7 +118,8 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
  * The Anthers-Seed rank ladder (support model). A fan holds N Anthers-Seeds at $3
  * each — Root 1 … Blossom 4, and up from there — and each Seed puts $1.50 into their
  * Time Pool (to creators, by watch-time), covers their own streaming at cost, and
- * leaves the remainder to the Foundation. "toCreators" here is the Time Pool only,
+ * leaves a remainder funding free access and the charitable programs. "toCreators"
+ * here is the Time Pool only,
  * shared across everyone they watch; a creator's actual take is their watch-time
  * share of it plus any Seeds directed straight to them (those are separate, and
  * 100% theirs). Derived from @anthers/shared/constants.
@@ -765,11 +766,11 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
 				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($1.50, distributed to
-				creators by watch-time), the user's own bandwidth (at cost, folded in), and a remainder for
-				the Anthers Foundation. Seeds given straight to a creator are 100% theirs. "To creators"
-				here is the Time Pool. {creator.displayName} earns their watch-time share —{" "}
-				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
-				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
+				creators by watch-time), the user's own bandwidth (at cost, folded in), and a remainder that
+				funds free access and the charitable programs. Seeds given straight to a creator are 100%
+				theirs. "To creators" here is the Time Pool. {creator.displayName} earns their watch-time
+				share — {creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of
+				a typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>
 		</div>
 	);

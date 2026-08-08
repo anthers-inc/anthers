@@ -414,7 +414,7 @@ export interface CheckoutResponse {
 	amount: string; // listed price — what the creator receives (pass-through)
 	processingFee: string;
 	deliveryFee: string; // download bandwidth
-	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
+	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
 	buyerTotal: string; // price + fees — what the buyer is charged
 	salesTax: string;
@@ -428,7 +428,7 @@ export interface Purchase {
 	workId: number | null;
 	amount: string;
 	processingFee: string;
-	crfFee: string; // Legacy field name; represents Foundation Fee on direct purchases
+	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
 	stripePaymentIntentId: string;
 	status: string;
@@ -712,7 +712,7 @@ export interface JamEntryResult extends JamEntry {
 	rank: number;
 }
 
-// ─── Foundation Types ───
+// ─── Hosting-subsidy Types ───
 
 export interface CrfSubsidy {
 	id: number;

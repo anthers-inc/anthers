@@ -343,7 +343,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "u-sub-tiers",
 							title: "Seeds — to Anthers, and to creators",
 							description:
-								"Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (100% to them). Each Seed to Anthers funds the Time Pool (shared by watch-time), your streaming (at cost, folded in — no wallet), and a remainder for the Anthers Foundation. Every dollar is money to creators, bandwidth at cost, or the Foundation remainder.",
+								"Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (100% to them). Each Seed to Anthers funds the Time Pool (shared by watch-time), your streaming (at cost, folded in — no wallet), and a remainder that funds free access and the charitable programs. Every dollar is money to creators, bandwidth at cost, or that remainder.",
 							status: "active",
 							startQ: 0,
 							endQ: 1,
@@ -426,9 +426,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 
 const FOUNDATION_ROADMAP: RoadmapDef = {
 	id: "foundation",
-	label: "Foundation Roadmap",
+	label: "Non-Profit Roadmap",
 	description:
-		"Milestones and initiatives for the Anthers Foundation — a non-profit. From incorporation to charitable programs at scale.",
+		"Milestones and initiatives for Anthers, Inc. — a Colorado nonprofit corporation. From incorporation to charitable programs at scale.",
 	quarters: QUARTERS,
 	sections: [
 		{

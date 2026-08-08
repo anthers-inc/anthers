@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Foundation subsidy calculation job (V3: discretionary — not an automatic
+ * hosting subsidy calculation job (V3: discretionary — not an automatic
  * net-never-negative guarantee).
  *
  * Runs daily (idempotent per monthly billing cycle). Iterates creators,
- * estimates their storage cost + storage AFF (a self-hosting creator pays a flat
- * fee instead), compares to earnings, and — at the Foundation's discretion, within
+ * estimates their storage cost + the half again on top (a self-hosting creator pays a flat
+ * fee instead), compares to earnings, and — at Anthers' discretion, within
  * its budget — may subsidize the gap for creators who earn less than that cost.
  * Storage is the creator's own opt-in cost (50 GiB free); delivery is viewer-funded.
  */
@@ -83,12 +83,12 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 export async function calculateCrfSubsidies() {
 	const cycleDate = getCycleDate();
 
-	// Get Foundation balance
+	// Get charitable balance
 	const [balanceResult] = await db.select({ total: sum(crfLedger.amount) }).from(crfLedger);
 
 	const crfBalance = new Decimal(balanceResult?.total ?? "0");
 	if (crfBalance.lte(0)) {
-		console.log("Foundation balance is zero or negative. Skipping subsidies.");
+		console.log("charitable balance is zero or negative. Skipping subsidies.");
 		return 0;
 	}
 
@@ -132,7 +132,7 @@ export async function calculateCrfSubsidies() {
 
 		const storageBytes = Number(storageResult?.total ?? 0);
 
-		// Creator cost = storage beyond the free 50 GiB + 50% storage AFF (or a flat
+		// Creator cost = storage beyond the free 50 GiB + half again on top (or a flat
 		// self-host fee). Delivery is viewer-funded, so it is not part of this cost.
 		const hostingCost = estimateStorageCost({
 			storageBytes,
@@ -163,7 +163,7 @@ export async function calculateCrfSubsidies() {
 		let subsidy = Decimal.min(gap, MAX_MONTHLY_SUBSIDY, budgetRemaining);
 
 		if (subsidy.lte(0)) {
-			console.log(`Foundation budget exhausted after ${subsidized} subsidies.`);
+			console.log(`charitable budget exhausted after ${subsidized} subsidies.`);
 			break;
 		}
 
@@ -183,7 +183,7 @@ export async function calculateCrfSubsidies() {
 		// Record CRF outflow
 		await db.insert(crfLedger).values({
 			amount: subsidy.neg().toString(),
-			description: `Foundation subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
+			description: `hosting subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,
 		});
 
 		totalSubsidy = totalSubsidy.plus(subsidy);
@@ -191,7 +191,7 @@ export async function calculateCrfSubsidies() {
 	}
 
 	console.log(
-		`Foundation subsidy calculation complete: ${subsidized} creators subsidized, $${totalSubsidy} total`,
+		`hosting subsidy calculation complete: ${subsidized} creators subsidized, $${totalSubsidy} total`,
 	);
 	return subsidized;
 }

@@ -140,8 +140,8 @@ export default function ForUsersPage() {
 						No matter where you direct your Seeds each month, you can rest assured that you're
 						supporting amazing creators and free public access to their work. No shareholders, no
 						advertisers, no data brokers. Every dollar goes to the real people who make what you
-						love, to delivering streaming content at cost, or to always-free public access and the
-						Anthers Foundation's other charitable programs.
+						love, to delivering streaming content at cost, or to always-free public access and
+						Anthers' other charitable programs.
 					</p>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						Still curious about where exactly it all goes? See our{" "}
@@ -182,9 +182,9 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
-								free viewer's small bandwidth cost is subsidized by the Anthers Foundation, from a
-								pool that every Seed given to Anthers supports. By sharing the load together,
-								mountains diffuse into pebbles—and we all get a healthier internet for it.
+								free viewer's small bandwidth cost is covered as free access, from a pool that every
+								Seed given to Anthers supports. By sharing the load together, mountains diffuse into
+								pebbles—and we all get a healthier internet for it.
 							</p>
 						</Card>
 					</Reveal>

@@ -37,7 +37,7 @@
 // Seeds and direct sales, and Anthers takes no cut of either.
 //
 // Anthers figures derive from packages/shared/src/constants.ts (SEED_PRICE $3,
-// TIME_POOL_PER_SEED $1.50, BANDWIDTH_PER_GIB $0.01 at cost). There is no Foundation
+// TIME_POOL_PER_SEED $1.50, BANDWIDTH_PER_GIB $0.01 at cost). There is no platform
 // fee on a purchase — it was removed 2026-08-03. Competitor figures are their public
 // rates, checked 2026-08-03 and perishable; re-check before publishing.
 //
@@ -306,10 +306,10 @@ export default function CreatorPayComparisonPage() {
 						platform fee at all, and the Time Pool is distributed to creators by watch-time. What
 						does come out of a price is the at-cost card processing, paid to the processor, and on a
 						digital sale the buyer's first download — never a cent to us. The one thing that funds
-						the platform is the <b className="text-base-content">Foundation remainder</b> — what's
-						left of each Seed to Anthers after the fan's own bandwidth and the Time Pool, funding
-						free access and creator programs, never subtracted from your earnings. Here's what
-						actually reaches you, platform by platform.
+						the platform is <b className="text-base-content">the remainder</b> — what's left of each
+						Seed to Anthers after the fan's own bandwidth and the Time Pool, funding free access and
+						the creator programs, never subtracted from your earnings. Here's what actually reaches
+						you, platform by platform.
 					</>
 				}
 			/>
@@ -354,11 +354,11 @@ export default function CreatorPayComparisonPage() {
 					straight to creators ($3, no platform cut) and holds{" "}
 					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
 					Time Pool ($1.50, distributed to the creators they watch by watch-time), the fan's own
-					bandwidth (at cost, folded in — no wallet), and the{" "}
-					<b className="text-base-content/70">Foundation remainder</b> that funds free access and
-					creator programs. On a direct sale the creator receives the full listed price; the only
-					add is a small Foundation fee — a markup on that download's bandwidth (about half of it)
-					or a flat 1% on physical goods, added on top for the buyer.
+					bandwidth (at cost, folded in — no wallet), and{" "}
+					<b className="text-base-content/70">the remainder</b> that funds free access and the
+					creator programs. On a direct sale Anthers takes nothing at all; the only deductions from
+					the listed price are the at-cost card processing and, on a digital sale, the buyer's first
+					download — both paid to third parties.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
@@ -417,14 +417,14 @@ const CUT_STYLE: Record<CutKind, { tone: string; tag: string; tagTone: string }>
 	profit: { tone: "text-error/80", tag: "to the platform", tagTone: "text-error/50" },
 	foundation: {
 		tone: "text-base-content/70",
-		tag: "Foundation fee · on top, not a cut",
+		tag: "funds free access · not a cut",
 		tagTone: "text-primary/70",
 	},
 	none: { tone: "text-success/80", tag: "no cut — $0 to Anthers", tagTone: "text-success/60" },
 };
 
 /** One side of a matchup: who, the take-home headline, its basis, and the cut —
- * with the cut's nature (Foundation fee / profit / none) named, never hidden as "$0". */
+ * with the cut's nature (free access / profit / none) named, never hidden as "$0". */
 function SideCell({ name, side, highlight }: { name: string; side: Side; highlight?: boolean }) {
 	const style = CUT_STYLE[side.cutKind ?? "profit"];
 	return (

@@ -9,7 +9,7 @@ export const APP_NAME = "Anthers";
  *     processing; clears that creator's Seed Gates in $3 increments; or
  *   - at **Anthers** (an *Anthers-Seed*): covers the user's streaming (at cost),
  *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), earns
- *     **Anthers's Badges**, and leaves a **remainder** for the Anthers Foundation.
+ *     **Anthers's Badges**, and leaves a **remainder** for Anthers.
  *
  * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
  * Anthers is a recipient like any creator — it simply defines its own Badge set
@@ -23,7 +23,7 @@ export const APP_NAME = "Anthers";
  * a card cost gets none, which is why the old "like sales tax" framing was hollow.
  * The claim that survives is **"Anthers takes no cut"** — unconditionally true —
  * not "100% to the creator", which is retired. There is no platform margin and no
- * fixed "Community Share": the Foundation is the remainder of each Anthers-Seed,
+ * fixed "Community Share": the the remainder is what's left of each Anthers-Seed,
  * read obligations-first, and it absorbs the Payments line so creator pay does not.
  *
  * Seed price is locked at $3; the allocation dials (Time-Pool-per-Seed, free
@@ -69,7 +69,7 @@ export const SEED_PRICE = 3;
 export const TIME_POOL_PER_SEED = 1.5;
 /** The Free rank's small subsidised Time Pool ($) — the user pays $0. */
 export const FREE_TIME_POOL = 0.05;
-/** Free streaming floor (GiB/mo) on every account, subsidised by the Foundation. */
+/** Free streaming floor (GiB/mo) on every account, funded as free access. */
 export const FREE_FLOOR_GIB = 15;
 /** Streaming allowance (GiB/mo) added per Anthers-Seed, on top of the free floor. */
 export const GIB_PER_SEED = 60;
@@ -215,13 +215,15 @@ export function allowanceGiB(anthersSeeds: number): number {
 /** Delivery/egress bandwidth, at DigitalOcean cost. Neutral to creators. */
 export const BANDWIDTH_PER_GIB = 0.01;
 
-// ── Foundation Fee rate (storage only) ───────────────────────────────────────
+// ── Storage charge rate (creator storage only) ───────────────────────────────
 /**
- * Storage AFF: 50% of a creator's storage cost above the free allowance. This is
- * a creator's own opt-in infrastructure cost, **not a share of anyone's sale**.
+ * Half again on a creator's storage cost above the free allowance. This is a
+ * creator's own opt-in infrastructure cost, **not a share of anyone's sale**.
+ * The branded name ("Anthers Foundation Fee" / "AF Fee" / "AFF") was retired
+ * 2026-08-08 — copy names who pays for what, not a fee. The identifier stays.
  *
- * The purchase Foundation fees this constant also used to drive — the Digital AFF
- * (50% of a download's bandwidth) and the 1% Physical & Service AFF — were
+ * The purchase fees this constant also used to drive — 50% of a download's
+ * bandwidth on a digital sale, and 1% of price on a physical one — were
  * **removed 2026-08-03**. They raised a fraction of a cent per sale, and a
  * commission on a creator's sale is the exact feature the IRS keyed on in Rev.
  * Rul. 76-152 and Final Adverse Determination 202521022. Anthers now takes $0
@@ -230,8 +232,8 @@ export const BANDWIDTH_PER_GIB = 0.01;
 export const AFF_INFRA_RATE = 0.5;
 
 /**
- * Coarse accounting split of Foundation-fee dollars into Admin / Programs /
- * Subsidy (free-access pool). The support model reads the Foundation budget
+ * Coarse accounting split of charitable dollars into Admin / Programs /
+ * Subsidy (free-access pool). The support model reads the charitable budget
  * **obligations-first** (overhead + free access off the top, programs residual,
  * Admin held ≤ 30%); this fixed split is a reporting convenience, not a
  * per-transaction rule. Sums to 1.

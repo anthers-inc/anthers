@@ -160,8 +160,8 @@ export const QUEUES = {
 	PACKAGE_VIDEO: "package-video", // Remux browser-encoded MP4 variants → HLS (no re-encode)
 	PROCESS_AUDIO: "process-audio",
 	DISTRIBUTE_POOL: "distribute-pool",
-	SETTLE_CYCLE: "settle-cycle", // Month-end allowance draw + Foundation inflows
-	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates Foundation subsidy allocations
+	SETTLE_CYCLE: "settle-cycle", // Month-end allowance draw + remainder inflows
+	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
@@ -221,7 +221,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 > = [
 	[QUEUES.DISTRIBUTE_POOL, "0 0 * * *"], // midnight daily
 	[QUEUES.SETTLE_CYCLE, "0 2 1 * *"], // 2 AM on the 1st — settles the prior cycle
-	// Foundation subsidy calculation (legacy queue name: calculate-crf)
+	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
 	[QUEUES.FETCH_METRICS, "0 */6 * * *"], // every 6 hours
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts

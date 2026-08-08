@@ -60,7 +60,7 @@ const FAQ_ITEMS: FAQItem[] = [
 				<p>
 					Support on Anthers is all in the form of <strong>Seeds</strong> — a flat{" "}
 					<strong>$3/month</strong> each — and every dollar goes to creators, to your bandwidth at
-					cost, or to the Anthers Foundation. A Seed goes one of two ways:
+					cost, or to free access and Anthers' charitable programs. A Seed goes one of two ways:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
@@ -71,8 +71,9 @@ const FAQ_ITEMS: FAQItem[] = [
 					<li>
 						<strong>Give Seeds to Anthers</strong> — $3/month each. Each one covers your streaming
 						(at cost), funds the Time Pool (shared out by the time you spend with each creator's
-						work), and leaves a remainder for the Foundation. Your count is your Badge (Root →
-						Blossom, and a "+" beyond) — a point-in-time choice, not a rolling total of past spend.
+						work), and leaves a remainder that funds free access and the charitable programs. Your
+						count is your Badge (Root → Blossom, and a "+" beyond) — a point-in-time choice, not a
+						rolling total of past spend.
 					</li>
 				</ul>
 				<p>
@@ -92,9 +93,9 @@ const FAQ_ITEMS: FAQItem[] = [
 	},
 	{
 		category: "Subscriptions & Payments",
-		question: "What is the Anthers Foundation?",
+		question: "What pays for free access and Anthers' charitable programs?",
 		answer:
-			"The Anthers Foundation is funded by the remainder of each Seed given to Anthers — what's left after your bandwidth at cost, the Time Pool, and the at-cost card processing — plus a small fee on creator storage (half of a creator's storage cost above their free allowance). It is never a cut of anyone's earnings, and direct purchases contribute nothing to it: Anthers takes no share of a creator's sale. Its budget is read obligations-first: its lean operating overhead and everyone's free access come off the top, and whatever remains funds charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
+			"The remainder of each Seed given to Anthers — what's left after your bandwidth at cost, the Time Pool, and the at-cost card processing — plus the half-again on creator storage above the free allowance. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -134,7 +135,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Creators",
 		question: "How much do creators keep?",
 		answer:
-			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus a small Foundation storage fee — which is entirely their choice.",
+			"Nothing is taken out of creator earnings. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them) plus 100% of every Seed directed to them. On direct purchases they keep 100% of their listed price. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.",
 	},
 	{
 		category: "Creators",
@@ -146,7 +147,7 @@ const FAQ_ITEMS: FAQItem[] = [
 		category: "Jams & Contests",
 		question: "What are Jams?",
 		answer:
-			"Jams are creative contests where sponsors put out calls for content and creators compete. They support all media types -- not just games. Jams can be sponsored by companies, educators, organizations, the Anthers Foundation, or individual creators. Some jams are size-gated to ensure emerging creators get fair opportunities.",
+			"Jams are creative contests where sponsors put out calls for content and creators compete. They support all media types -- not just games. Jams can be sponsored by companies, educators, organizations, Anthers itself, or individual creators. Some jams are size-gated to ensure emerging creators get fair opportunities.",
 	},
 	{
 		category: "Platform & Identity",

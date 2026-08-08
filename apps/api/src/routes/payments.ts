@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Payment routes — Stripe Connect onboarding, checkout, purchases, Foundation Fee.
+ * Payment routes — Stripe Connect onboarding, checkout, purchases, charitable ledger.
  *
  * Direct purchases run as Stripe destination charges. Since 2026-08-03 the listed
  * price IS the advertised price: card processing and the first download's bandwidth
@@ -76,7 +76,7 @@ async function resolvePurchase(slug: string, userId: number) {
 		.where(eq(assets.workId, work.id));
 
 	// All-in list price: card processing and this delivery come OUT of the price, sales
-	// tax is added on top, and Anthers keeps $0 (the purchase Foundation fee was removed
+	// tax is added on top, and Anthers keeps $0 (the purchase fee was removed
 	// 2026-08-03). `calculateFees` owns that arithmetic — never restate it at a call site.
 	const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
 	return { ok: true as const, work, amount, fees };
@@ -338,11 +338,11 @@ const paymentRoutes = new Hono()
 		});
 	})
 
-	// ── Foundation Status ────────────────────────────────────────────────────
+	// ── Subsidy Status ────────────────────────────────────────────────────
 	.get("/crf/status", requireAuth, async (c) => {
 		const user = c.get("user");
 
-		// Total Foundation balance
+		// Total charitable balance
 		const [balance] = await db
 			.select({ total: sql<string>`COALESCE(SUM(amount), '0.00')` })
 			.from(crfLedger);
@@ -393,11 +393,11 @@ const paymentRoutes = new Hono()
 					// A Seed buy → credit the account (not a post purchase).
 					await applyCreditForPurchase(completed);
 				} else {
-					// Post purchase → record the Foundation Fee (Digital AFF) to the ledger.
+					// Post purchase → record the (now always zero) purchase fee to the ledger.
 					await db.insert(crfLedger).values({
 						amount: completed.crfFee,
 						purchaseId: completed.id,
-						description: `Digital AFF — purchase #${completed.id}`,
+						description: `Purchase fee (retired, always $0) — purchase #${completed.id}`,
 					});
 				}
 			}
@@ -415,13 +415,13 @@ const paymentRoutes = new Hono()
 			//     EXACTLY their earnings and never goes negative. A creator is never billed for
 			//     a buyer's refund — that would be a cut, just a negative one.
 			//   • Stripe does NOT return its processing fee on a refund. That ~$0.88 on a $20
-			//     sale, plus any bytes already served, comes out of the Foundation remainder —
+			//     sale, plus any bytes already served, comes out of the remainder —
 			//     the same shock absorber that carries the free floor.
 			//   • The 14-day payout hold is what keeps this small: in the ordinary case the
 			//     principal has not left yet, so there is nothing to claw back.
 			//
 			// OPEN, and it needs a policy answer before the storefront takes real money: a
-			// buy → download → refund cycle costs the Foundation ~$0.98 each time and returns a
+			// buy → download → refund cycle costs Anthers ~$0.98 each time and returns a
 			// working copy. The bytes cannot be un-sent.
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;

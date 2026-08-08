@@ -2,7 +2,7 @@
 //
 // Coverage for the support-model money functions. The central invariant is that
 // each Anthers-Seed's $3 conserves exactly into bandwidth + Time Pool + Payments +
-// Foundation, so a stray edit to a dial that breaks the sum is caught here.
+// the remainder, so a stray edit to a dial that breaks the sum is caught here.
 // Payments moved INSIDE the price on 2026-08-03 — it is charged on the whole batched
 // monthly charge and split pro-rata, and only sales tax is ever added on top.
 import { describe, expect, test } from "bun:test";
@@ -20,7 +20,7 @@ import {
 const PAID_SEEDS = [1, 2, 3, 4];
 
 describe("anthersSeedBreakdown", () => {
-	test("seed value + Time Pool + bandwidth + Foundation conserve exactly, every count", () => {
+	test("seed value + Time Pool + bandwidth + remainder conserve exactly, every count", () => {
 		for (const n of PAID_SEEDS) {
 			const payments = paymentsSplit(n, 0).anthers;
 			const b = anthersSeedBreakdown(n, { bandwidthGiB: 30 * n, payments });
@@ -36,14 +36,14 @@ describe("anthersSeedBreakdown", () => {
 		}
 	});
 
-	test("Foundation is the remainder — it shrinks as bandwidth grows (shock absorber)", () => {
+	test("the remainder is what's left — it shrinks as bandwidth grows (shock absorber)", () => {
 		const light = anthersSeedBreakdown(1, { bandwidthGiB: 10 });
 		const heavy = anthersSeedBreakdown(1, { bandwidthGiB: 60 });
 		expect(heavy.foundation.lt(light.foundation)).toBe(true);
 		expect(heavy.timePool.toFixed(2)).toBe(light.timePool.toFixed(2)); // Time Pool stays fixed
 	});
 
-	test("free rank (0 Seeds) pays $0 and funds no Foundation, but has a subsidised Time Pool", () => {
+	test("free rank (0 Seeds) pays $0 and funds no charitable remainder, but has a subsidised Time Pool", () => {
 		const b = anthersSeedBreakdown(0);
 		expect(b.seedValue.toNumber()).toBe(0);
 		expect(b.foundation.toNumber()).toBe(0);
@@ -54,18 +54,18 @@ describe("anthersSeedBreakdown", () => {
 	/**
 	 * The shock absorber has no floor, and that is deliberate rather than an oversight:
 	 * the remainder is a plain subtraction, so a heavy enough streamer drives it negative
-	 * — which is the true statement that this user cost the Foundation money, and the
+	 * — which is the true statement that this user cost Anthers money, and the
 	 * number the accounting wants. Clamping here would silently break the conservation
 	 * invariant asserted above (the parts would no longer sum to the seed value).
 	 *
 	 * The clamp belongs at the boundary that persists it, and lives there: `settle-cycle.ts`
 	 * writes `Decimal.max(0, foundation)` to the ledger and the cycle snapshot, because both
-	 * report what the Foundation *received*, which is never less than nothing. That clamp is
+	 * report what Anthers *received*, which is never less than nothing. That clamp is
 	 * pinned end-to-end in `apps/api/src/__tests__/payments-stripe.test.ts`. (The identical
 	 * line in `billing.ts`'s `snapshotCycle` is defensive only and cannot currently fire —
 	 * that path passes no bandwidth, so its remainder is always $1.50 per Seed.)
 	 */
-	test("Foundation can go negative — the remainder has no floor, by design", () => {
+	test("The remainder can go negative — the remainder has no floor, by design", () => {
 		// One Seed ($3) against 200 GiB at $0.01/GiB: $3.00 − $1.50 Time Pool − $2.00 = −$0.50.
 		const b = anthersSeedBreakdown(1, { bandwidthGiB: 200 });
 		expect(b.foundation.isNegative()).toBe(true);
@@ -131,7 +131,7 @@ describe("supportBreakdown", () => {
 		expect(batched.creatorNet.greaterThan(alone.creatorNet)).toBe(true);
 	});
 
-	test("a pure-direct user pays exactly their Seeds and funds no Foundation", () => {
+	test("a pure-direct user pays exactly their Seeds and funds no charitable remainder", () => {
 		const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
 		expect(s.creatorDirect.toFixed(2)).toBe("3.00");
 		expect(s.foundation.toNumber()).toBe(0);
@@ -161,7 +161,7 @@ describe("calculateFees — direct purchase, all-in list price, zero platform cu
 		expect(f.buyerTotal.toFixed(2)).toBe(new Decimal("20.00").plus(f.salesTax).toFixed(2));
 	});
 
-	test("Anthers takes $0 — the purchase Foundation fee was removed 2026-08-03", () => {
+	test("Anthers takes $0 — the purchase fee was removed 2026-08-03", () => {
 		expect(calculateFees(new Decimal("30.00"), { type: "physical" }).crfFee.toNumber()).toBe(0);
 		expect(calculateFees(new Decimal("10.00"), { type: "service" }).crfFee.toNumber()).toBe(0);
 		const digital = calculateFees(new Decimal("20.00"), { deliveryBytes: 10 * 1024 ** 3 });

@@ -38,7 +38,7 @@ const FOUNDATION_PILLARS = [
 		icon: ShieldCheckIcon,
 		title: "Infrastructure Equity",
 		description:
-			"No creator is priced out of reaching their audience. The Foundation subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
+			"No creator is priced out of reaching their audience. Anthers subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
 	},
 	{
 		icon: AcademicCapIcon,
@@ -309,8 +309,9 @@ export default function AboutPage() {
 							<p className="leading-relaxed text-base-content/65">
 								Creators keep 100% of every Seed and every direct purchase, and the shared Time Pool
 								pays out to creators by watch-time. Every dollar a user spends is money to creators,
-								bandwidth at cost, or the remainder of each Seed given to Anthers that supports the
-								Anthers Foundation—a non-profit, so no investors and no profit-taking.
+								bandwidth at cost, or the remainder of each Seed given to Anthers that funds free
+								access and the charitable programs. Anthers, Inc. is a Colorado nonprofit
+								corporation—no investors, no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -328,16 +329,16 @@ export default function AboutPage() {
 					</Reveal>
 				</div>
 
-				{/* The Anthers Foundation — the heart of the mission */}
+				{/* The charitable programs — the heart of the mission */}
 				<div className="mt-16">
 					<Reveal>
 						<h3 style={serif} className="text-2xl font-medium sm:text-3xl">
-							The Anthers Foundation
+							Anthers' Charitable Programs
 						</h3>
 						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-							The Foundation is the operational heart of Anthers's mission, funded by the remainder
-							of each Seed given to Anthers, plus small fees on creator storage and on direct
-							downloads. The great majority of it is charitable: it funds free access for everyone,
+							The programs are the operational heart of Anthers' mission, funded by the remainder of
+							each Seed given to Anthers, plus the half-again on creator storage above the free
+							allowance. The great majority of it is charitable: it funds free access for everyone,
 							plus infrastructure equity, education, creation grants, and emergency assistance.
 						</p>
 					</Reveal>
@@ -401,7 +402,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Seed given to Anthers that supports the Anthers Foundation. As a non-profit, Anthers takes no profit—the remainder it collects funds free access and the Foundation's programs.",
+								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Seed given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
 							},
 							{
 								num: "04",
@@ -457,13 +458,13 @@ export default function AboutPage() {
 				</Reveal>
 			</Section>
 
-			{/* ───────────── 5. The Anthers Foundation ───────────── */}
+			{/* ───────────── 5. Non-profit by design ───────────── */}
 			<Section>
 				<Reveal>
 					<Eyebrow>Non-profit by design</Eyebrow>
-					<H2>The Anthers Foundation</H2>
+					<H2>A Colorado Nonprofit Corporation</H2>
 					<Lede>
-						Anthers is a non-profit because the only way to guarantee that our platform always
+						Anthers, Inc. is a non-profit because the only way to guarantee that our platform always
 						serves creators is to make it legally impossible for it to act otherwise. Anthers cannot
 						distribute profits to insiders, cannot be acquired, and cannot have its mission diluted
 						by investors. If it ever ceases to operate, its assets go to another exempt
@@ -527,9 +528,9 @@ export default function AboutPage() {
 									cadence: "Annual",
 								},
 								{
-									title: "Foundation Impact Report",
+									title: "Impact Report",
 									description:
-										"Foundation allocations, program outcomes, and grant activity across all four pillars.",
+										"Program allocations, outcomes, and grant activity across all four pillars.",
 									cadence: "Annual",
 								},
 								{

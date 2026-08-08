@@ -62,7 +62,7 @@ export const purchases = pgTable(
 		amount: numeric("amount").notNull(),
 		processingFee: numeric("processing_fee").notNull(),
 		deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
-		crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee (AFF) amount
+		crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores the retired purchase fee; always 0 since 2026-08-03
 		// Sales tax is the ONE thing added on top of the list price, so it is money we
 		// collect and owe onward rather than money anyone here keeps. Recording it
 		// per-transaction is what makes remittance reportable; without the column the tax

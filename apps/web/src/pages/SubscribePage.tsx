@@ -43,7 +43,7 @@ import SubscriptionPaymentModal, {
 /* ── Model dials — all from @anthers/shared/constants, never re-typed here ───── */
 const FREE_GIB = FREE_FLOOR_GIB; // free streaming floor at 0 Seeds (avoids a paywall cliff)
 const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Seed given to Anthers
-const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, Foundation-subsidized
+const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, funded as free access
 const MAX_SEEDS = 10; // stepper cap (a page choice, not a model dial); past 4 the badge gains a "+"
 
 // Anthers Badges map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
@@ -367,7 +367,7 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 					<BenefitRow icon="🌻" label="Time Pool">
 						{seeds === 0 ? (
 							<span>
-								<strong>{money(FREE_TIMEPOOL)}</strong>/mo → creators, subsidized by the Foundation
+								<strong>{money(FREE_TIMEPOOL)}</strong>/mo → creators, covered as free access
 							</span>
 						) : (
 							<span>
@@ -511,9 +511,9 @@ export default function SubscribePage() {
 	const anthersPayments = totalPayments - creatorPayments;
 	// What creators actually receive from directed Seeds, net of their share.
 	const creatorDirectNet = creatorCost - creatorPayments;
-	// Supports Anthers = your bandwidth (at cost) + the Foundation remainder, after
-	// this side's share of Payments. The remainder is the shock absorber; Time Pool
-	// is a fixed target and never moves.
+	// Supports Anthers = your bandwidth (at cost) + the remainder that funds free
+	// access and the charitable programs, after this side's share of Payments. The
+	// remainder is the shock absorber; Time Pool is a fixed target and never moves.
 	const anthersSupportsAnthers = anthersCost - anthersTimePool - anthersPayments;
 	const toCreators = creatorDirectNet + anthersTimePool;
 	const totalMonthly = seedSubtotal;
@@ -572,7 +572,7 @@ export default function SubscribePage() {
 							label="Time Pool"
 							desc={
 								anthersSeeds === 0
-									? `the Foundation sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
+									? `free access sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
 									: "via the Seeds you give Anthers, to creators by watch-time"
 							}
 							amount={anthersTimePool}
@@ -611,7 +611,7 @@ export default function SubscribePage() {
 							</>
 						) : (
 							<>
-								You pay $0 — the Foundation still sends{" "}
+								You pay $0 — Anthers still sends{" "}
 								<span className="font-semibold text-success">{money(FREE_TIMEPOOL)}</span>/mo to
 								creators for you.
 							</>

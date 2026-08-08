@@ -6,7 +6,8 @@
 // @anthers/shared/constants + fees): a Seed is a flat $3 ALL IN, pointed at a
 // creator (no platform cut) or at Anthers (an Anthers-Seed). Each Anthers-Seed
 // splits into your bandwidth (at cost, folded in) + Time Pool ($1.50) + the
-// at-cost Payments line (card 2.9%+$0.30) + the Foundation remainder. Sales tax
+// at-cost Payments line (card 2.9%+$0.30) + the remainder funding free access and
+// the charitable programs. Sales tax
 // (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
 // sole carve-out mandatory-fee disclosure law allows. Anthers keeps $0.
 
@@ -197,7 +198,8 @@ export function SubscriptionCalculator() {
 	const n = thresholdForBadge(badge);
 	const price = seedCost(n);
 	const timePool = timePoolFor(n);
-	// "Supports Anthers" bundles your bandwidth (at cost) + the Foundation remainder.
+	// "Supports Anthers" bundles your bandwidth (at cost) + the remainder that funds
+	// free access and the charitable programs.
 	const supportsAnthers = n === 0 ? 0 : price - timePool - (price * CARD_PCT + CARD_FLAT);
 	const toCreators = n === 0 ? 0 : timePool;
 
@@ -312,7 +314,7 @@ export function SubscriptionCalculator() {
 	);
 }
 
-// ─── (3) One-time purchases — static example (zero-cut, Digital AFF) ───
+// ─── (3) One-time purchases — static example (zero-cut) ───
 
 export function PurchaseExample({
 	price = 20,
@@ -323,7 +325,7 @@ export function PurchaseExample({
 }) {
 	// The list price IS the advertised price: card processing and the first download
 	// come out of it, and sales tax is the only thing added. Anthers keeps $0 — there
-	// is no Foundation fee on a purchase (removed 2026-08-03).
+	// is no platform fee on a purchase (removed 2026-08-03).
 	const card = price * CARD_PCT + CARD_FLAT;
 	const delivery = sizeGiB * BANDWIDTH_PER_GIB; // $0.01/GiB, at cost
 	const creator = price - card - delivery;

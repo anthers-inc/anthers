@@ -113,7 +113,7 @@ async function start() {
 		}
 	});
 
-	// Foundation subsidy calculation (legacy queue name: calculate-crf)
+	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	await queue.work(QUEUES.CALCULATE_CRF, async (jobs) => {
 		for (const job of jobs) {
 			console.log(`[calculate-crf] Processing job ${job.id}`);
