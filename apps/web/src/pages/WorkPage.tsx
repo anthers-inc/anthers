@@ -86,6 +86,9 @@ export default function WorkPage() {
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 
+	/** Path whose Work is already in state — see the skip below. */
+	const loadedPath = useRef<string | null>(null);
+
 	/** Re-read the Work — the access verdict changes under us when a viewer unlocks it. */
 	const refetch = useCallback(async () => {
 		if (!slug) return;
@@ -96,10 +99,23 @@ export default function WorkPage() {
 		}
 		const data = (await res.json()) as unknown as { work: WorkDetail };
 		setWork(data.work);
+		// Record the canonical path this Work answers to, so the redirect that is about to
+		// happen is recognised as "already loaded" rather than a new Work to go and get.
+		loadedPath.current = workUrl(data.work);
 	}, [slug]);
 
 	useEffect(() => {
 		if (!slug) return;
+		// Don't re-fetch when the URL merely settled to its canonical form.
+		//
+		// Arriving at a bare `/works/{slug}` loads the Work and then the effect below
+		// rewrites the URL to `/works/{slug}-{publicId}`. That changes the route param, so
+		// without this guard the very next thing that happens is a SECOND fetch of the
+		// same Work — with `setLoading(true)` in front of it, which tears the rendered
+		// page back down to a spinner and rebuilds it. Imperceptible on a fast machine and
+		// a real double round-trip on a slow one, which is why it went unnoticed: a shared
+		// link, a stale slug, and the gauntlet's own navigation all take this path.
+		if (loadedPath.current === `/works/${slug}`) return;
 		setLoading(true);
 		refetch()
 			.catch(() => setWork(null))

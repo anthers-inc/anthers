@@ -305,6 +305,51 @@ test.beforeAll(async () => {
 	}
 });
 
+/**
+ * A bare `/works/{slug}` settles to the canonical `/works/{slug}-{publicId}`, and that
+ * redirect changes the route param — which used to re-trigger the page's fetch effect,
+ * so every visit of this shape paid for TWO round trips with a `setLoading(true)` between
+ * them that tore the rendered page back down to a spinner.
+ *
+ * Nothing asserted it, and on a fast machine nothing showed it. On a slow CI runner it is
+ * the difference between one render and two, mid-assertion — the most likely explanation
+ * for this walk failing on `Locked ·` not being visible while passing on a plain re-run of
+ * the same commit. Counting the requests is the only way this stays fixed.
+ */
+test("a bare work URL settles to canonical without fetching the Work twice", async ({ page }) => {
+	const spec = gauntletPost("G1");
+	const detailCalls: string[] = [];
+	page.on("request", (r) => {
+		const u = new URL(r.url());
+		// The detail endpoint only — not /transcoding, /audio, /hls or the asset routes.
+		if (/^\/api\/content\/works\/[^/]+$/.test(u.pathname)) detailCalls.push(u.pathname);
+	});
+
+	await page.goto(`/works/${spec.slug}`);
+	await expect(page.getByRole("heading", { name: spec.title })).toBeVisible();
+	// The URL settled…
+	await expect(page).toHaveURL(new RegExp(`/works/${spec.slug}-\\d+$`));
+	// …and settling cost nothing.
+	expect(detailCalls).toHaveLength(1);
+});
+
+/** The post page carries the same canonicalisation, and had the same bug — worse, because
+ *  its effect fetches the post AND its comments, so a bare URL cost four requests. */
+test("a bare post URL settles to canonical without fetching the post twice", async ({ page }) => {
+	const bare = `${gauntletPost("G1").slug}-post`;
+	const calls: string[] = [];
+	page.on("request", (r) => {
+		const u = new URL(r.url());
+		// Detail and comments both — the whole cost of arriving, not just one leg of it.
+		if (/^\/api\/content\/posts\/[^/]+(\/comments)?$/.test(u.pathname)) calls.push(u.pathname);
+	});
+
+	await page.goto(`/posts/${bare}`);
+	await expect(page).toHaveURL(new RegExp(`/posts/${bare}-\\d+$`));
+	// One detail + one comments fetch, not two of each.
+	expect(calls).toHaveLength(2);
+});
+
 test("rung 1 — the floor: free streams, everything else reads locked", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 

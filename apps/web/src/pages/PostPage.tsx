@@ -13,7 +13,7 @@ import {
 	MusicalNoteIcon,
 	PhotoIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
@@ -29,10 +29,7 @@ export default function PostPage() {
 	const navigate = useNavigate();
 	const { isAuthenticated, user } = useAuth();
 	const [post, setPost] = useState<Post | null>(null);
-	const [comments, setComments] = useState<Comment[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [commentBody, setCommentBody] = useState("");
-	const [submitting, setSubmitting] = useState(false);
 	/** Which comment the report dialog is open for, if any. */
 	const [reportingComment, setReportingComment] = useState<number | null>(null);
 
@@ -63,26 +60,30 @@ export default function PostPage() {
 		}
 	}, [slug]);
 
+	/** Path whose post is already in state — see the skip below. */
+	const loadedPath = useRef<string | null>(null);
+
 	useEffect(() => {
 		if (!slug) return;
+		// Don't re-fetch when the URL merely settled to its canonical form. The redirect
+		// below rewrites a bare `/posts/{slug}` to `/posts/{slug}-{publicId}`, which changes
+		// the route param and re-runs this effect — so without the guard the page fetched
+		// itself a second time behind a `setLoading(true)` that tore the rendered page down
+		// to a spinner first.
+		if (loadedPath.current === `/posts/${slug}`) return;
 		setLoading(true);
 
-		Promise.all([
-			client.api.content.posts[":slug"].$get({ param: { slug } }).then(async (res) => {
-				if (!res.ok) return null;
-				return (await res.json()) as unknown as { post: Post };
-			}),
-			client.api.content.posts[":slug"].comments
-				.$get({ param: { slug } })
-				.then(async (res) => {
-					if (!res.ok) return { comments: [] as Comment[] };
-					return (await res.json()) as unknown as { comments: Comment[] };
-				})
-				.catch(() => ({ comments: [] as Comment[] })),
-		])
-			.then(([postData, commentData]) => {
+		// Only the post. Comments belong to <CommentThread>, which fetches and owns them —
+		// this page used to fetch them too, into state nothing rendered, so every post view
+		// asked the API for the same comments twice.
+		client.api.content.posts[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => (res.ok ? ((await res.json()) as unknown as { post: Post }) : null))
+			.then((postData) => {
 				setPost(postData?.post ?? null);
-				setComments(commentData.comments);
+				// The canonical path this post answers to, so the redirect that follows is
+				// recognised as "already loaded" rather than a new post to go and get.
+				if (postData?.post) loadedPath.current = postUrl(postData.post);
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
@@ -101,28 +102,6 @@ export default function PostPage() {
 
 	// No transcode poller and no Time Pool claim here, deliberately. A post owns no media
 	// and earns nothing — both belong to the Work, and both live on WorkPage now.
-
-	const handleComment = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!commentBody.trim() || !slug) return;
-		setSubmitting(true);
-		try {
-			const res = await client.api.content.posts[":slug"].comments.$post({
-				param: { slug },
-				json: { body: commentBody },
-			});
-			if (!res.ok) throw new Error("Failed to post comment");
-			const data = (await res.json()) as unknown as { comment: Comment };
-			// The insert response omits the author avatar (no user join); the comment
-			// is by the current user, so merge it in for the optimistic prepend.
-			setComments([{ ...data.comment, avatar: user?.avatar ?? null }, ...comments]);
-			setCommentBody("");
-		} catch (err) {
-			console.error("Failed to post comment:", err);
-		} finally {
-			setSubmitting(false);
-		}
-	};
 
 	if (loading) {
 		return (
