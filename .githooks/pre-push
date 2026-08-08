@@ -1,0 +1,48 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Run what CI runs, before the push rather than after it.
+#
+# This exists because nothing else can enforce it. GitHub's branch protection —
+# required status checks, "don't merge a red PR" — is a paid feature on a private
+# repo, so the only gate available is a local one. Without it a red commit reaches
+# `main` and simply stays there: an unformatted file landed in #168 and sat on
+# `main` for three days, because `bun run lint` runs the FORMATTER too and nobody
+# ran it locally.
+#
+# `make verify` is deliberately the whole thing (typecheck, lint, migrate, unit
+# tests, full Playwright) rather than a fast subset. A subset is what produced the
+# problem: `bun test` alone is the unit suites, and `--project=gauntlet` skips the
+# project the marketing specs live in, so a copy change sailed through both and
+# failed in CI anyway.
+#
+# Escape hatch: `git push --no-verify`. Use it for a WIP branch nobody builds on;
+# don't use it for anything heading at `main`, which is the one case this catches.
+
+remote="$1"
+
+# Nothing to verify when every ref in this push is a deletion — there's no tree to
+# check, and running the suite against the current checkout would test something
+# the push isn't sending.
+zero="0000000000000000000000000000000000000000"
+has_content=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	[ -z "$local_sha" ] && continue
+	[ "$local_sha" = "$zero" ] && continue
+	has_content=1
+done
+
+if [ "$has_content" -eq 0 ]; then
+	exit 0
+fi
+
+printf '\033[36m→ pre-push: running `make verify` before pushing to %s\033[0m\n' "$remote"
+
+if make verify; then
+	printf '\033[32m✓ pre-push: verify passed\033[0m\n'
+	exit 0
+fi
+
+printf '\n\033[31m✗ pre-push: verify FAILED — push aborted.\033[0m\n'
+printf '  Fix it, or bypass deliberately with: git push --no-verify\n'
+exit 1
