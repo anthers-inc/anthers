@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import {
 	boolean,
+	index,
 	integer,
 	jsonb,
 	pgTable,
@@ -35,31 +36,38 @@ export const users = pgTable("users", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const sessions = pgTable("sessions", {
-	id: serial("id").primaryKey(),
-	token: text("token").notNull().unique(),
-	userId: integer("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	ipAddress: text("ip_address"),
-	userAgent: text("user_agent"),
-	// How the session is carried: "web" = the browser cookie, "desktop" = a bearer
-	// token held by an installed Studio app. Same session primitive either way (an
-	// opaque row with an expiry); `kind` exists so a creator can tell their devices
-	// apart in the revocation list, and so a stolen laptop is killable without
-	// signing every browser out.
-	kind: text("kind").notNull().default("web"),
-	// Human label for the revocation list — the device name the desktop app reports
-	// at enrolment ("parker-thinkpad"). Null for browser sessions, which are
-	// described by user_agent instead.
-	label: text("label"),
-	// Last time this session authenticated a request, throttled to one write per
-	// hour (see touchSession) so a Devices list can show "last used" without a DB
-	// write on every API call.
-	lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
-	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const sessions = pgTable(
+	"sessions",
+	{
+		id: serial("id").primaryKey(),
+		token: text("token").notNull().unique(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		ipAddress: text("ip_address"),
+		userAgent: text("user_agent"),
+		// How the session is carried: "web" = the browser cookie, "desktop" = a bearer
+		// token held by an installed Studio app. Same session primitive either way (an
+		// opaque row with an expiry); `kind` exists so a creator can tell their devices
+		// apart in the revocation list, and so a stolen laptop is killable without
+		// signing every browser out.
+		kind: text("kind").notNull().default("web"),
+		// Human label for the revocation list — the device name the desktop app reports
+		// at enrolment ("parker-thinkpad"). Null for browser sessions, which are
+		// described by user_agent instead.
+		label: text("label"),
+		// Last time this session authenticated a request, throttled to one write per
+		// hour (see touchSession) so a Devices list can show "last used" without a DB
+		// write on every API call.
+		lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// Revoking every session for a user (Settings → Devices, and the cascade when an
+	// account is deleted) filters on user_id, which had no index of its own — `token`
+	// is unique and covers lookup-by-token only.
+	(table) => [index("idx_sessions_user").on(table.userId)],
+);
 
 /**
  * One in-flight desktop enrolment. The desktop app never sees a password: it opens
@@ -74,33 +82,41 @@ export const sessions = pgTable("sessions", {
  * Rows are single-use (`consumedAt`) and short-lived (`expiresAt`); the swept remains
  * carry no secret, since `sessionToken` is cleared on redemption.
  */
-export const desktopAuthRequests = pgTable("desktop_auth_requests", {
-	id: serial("id").primaryKey(),
-	// SHA-256 of the app's PKCE verifier, hex. Supplied when the flow starts.
-	challenge: text("challenge").notNull().unique(),
-	// One-time redemption code, minted at confirm. Null until the creator approves.
-	code: text("code").unique(),
-	// Device label the app asked for, shown on the authorize page so the creator can
-	// see what they are approving.
-	label: text("label"),
-	// The minted session's token, held only between confirm and redemption.
-	sessionToken: text("session_token"),
-	userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
-	consumedAt: timestamp("consumed_at", { withTimezone: true }),
-	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const desktopAuthRequests = pgTable(
+	"desktop_auth_requests",
+	{
+		id: serial("id").primaryKey(),
+		// SHA-256 of the app's PKCE verifier, hex. Supplied when the flow starts.
+		challenge: text("challenge").notNull().unique(),
+		// One-time redemption code, minted at confirm. Null until the creator approves.
+		code: text("code").unique(),
+		// Device label the app asked for, shown on the authorize page so the creator can
+		// see what they are approving.
+		label: text("label"),
+		// The minted session's token, held only between confirm and redemption.
+		sessionToken: text("session_token"),
+		userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+		consumedAt: timestamp("consumed_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_desktop_auth_requests_user").on(table.userId)],
+);
 
-export const verificationTokens = pgTable("verification_tokens", {
-	id: serial("id").primaryKey(),
-	userId: integer("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	token: text("token").notNull().unique(),
-	type: text("type").notNull(), // "email_verify" | "password_reset"
-	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const verificationTokens = pgTable(
+	"verification_tokens",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		token: text("token").notNull().unique(),
+		type: text("type").notNull(), // "email_verify" | "password_reset"
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_verification_tokens_user").on(table.userId)],
+);
 
 export const atprotoSessions = pgTable("atproto_sessions", {
 	id: serial("id").primaryKey(),
@@ -131,5 +147,10 @@ export const follows = pgTable(
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_follows_follower_creator").on(table.followerId, table.creatorId)],
+	(table) => [
+		uniqueIndex("uq_follows_follower_creator").on(table.followerId, table.creatorId),
+		// followerId is already the leading column of the unique index above; creatorId
+		// is not covered by anything, and "who follows this creator" is the read.
+		index("idx_follows_creator").on(table.creatorId),
+	],
 );

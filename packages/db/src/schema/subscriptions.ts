@@ -98,6 +98,8 @@ export const attentionEvents = pgTable(
 	(table) => [
 		index("idx_attention_user_date").on(table.userId, table.createdAt),
 		index("idx_attention_creator_date").on(table.creatorId, table.createdAt),
+		// work_id is ON DELETE SET NULL: deleting a Work rewrites every event naming it.
+		index("idx_attention_work").on(table.workId),
 	],
 );
 
@@ -123,6 +125,9 @@ export const seedAllocations = pgTable(
 	},
 	(table) => [
 		uniqueIndex("uq_seed_user_creator_cycle").on(table.userId, table.creatorId, table.billingCycle),
+		// creatorId sits in the MIDDLE of the unique index, which cannot serve a lookup
+		// by creator alone — the read behind "who gives me Seeds".
+		index("idx_seed_allocations_creator").on(table.creatorId),
 	],
 );
 
@@ -149,6 +154,7 @@ export const poolDistributions = pgTable(
 			table.creatorId,
 			table.billingCycle,
 		),
+		index("idx_pool_distributions_creator").on(table.creatorId),
 	],
 );
 

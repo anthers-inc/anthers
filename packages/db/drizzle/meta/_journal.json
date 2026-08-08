@@ -106,6 +106,13 @@
       "when": 1785861113980,
       "tag": "0014_purchase_sales_tax",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786160493507,
+      "tag": "0015_perfect_psynapse",
+      "breakpoints": true
     }
   ]
 }

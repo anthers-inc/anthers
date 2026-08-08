@@ -1,0 +1,24 @@
+CREATE INDEX "idx_moderation_actions_actor" ON "moderation_actions" USING btree ("actor_id");--> statement-breakpoint
+CREATE INDEX "idx_moderation_reports_resolved_by" ON "moderation_reports" USING btree ("resolved_by");--> statement-breakpoint
+CREATE INDEX "idx_crf_ledger_purchase" ON "crf_ledger" USING btree ("purchase_id");--> statement-breakpoint
+CREATE INDEX "idx_purchases_buyer" ON "purchases" USING btree ("buyer_id");--> statement-breakpoint
+CREATE INDEX "idx_purchases_work" ON "purchases" USING btree ("work_id");--> statement-breakpoint
+CREATE INDEX "idx_game_jams_creator" ON "game_jams" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_jam_entries_post" ON "jam_entries" USING btree ("post_id");--> statement-breakpoint
+CREATE INDEX "idx_jam_entries_submitted_by" ON "jam_entries" USING btree ("submitted_by_id");--> statement-breakpoint
+CREATE INDEX "idx_jam_votes_user" ON "jam_votes" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_desktop_auth_requests_user" ON "desktop_auth_requests" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_follows_creator" ON "follows" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_sessions_user" ON "sessions" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_verification_tokens_user" ON "verification_tokens" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_attention_work" ON "attention_events" USING btree ("work_id");--> statement-breakpoint
+CREATE INDEX "idx_pool_distributions_creator" ON "pool_distributions" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_seed_allocations_creator" ON "seed_allocations" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_bookmarks_post" ON "bookmarks" USING btree ("post_id");--> statement-breakpoint
+CREATE INDEX "idx_bookmarks_work" ON "bookmarks" USING btree ("work_id");--> statement-breakpoint
+CREATE INDEX "idx_bookmarks_project" ON "bookmarks" USING btree ("project_id");--> statement-breakpoint
+CREATE INDEX "idx_bookmarks_creator" ON "bookmarks" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_comments_user" ON "comments" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_cross_publish_post" ON "cross_publish_results" USING btree ("post_id");--> statement-breakpoint
+CREATE INDEX "idx_inline_images_creator" ON "inline_images" USING btree ("creator_id");--> statement-breakpoint
+CREATE INDEX "idx_projects_creator" ON "projects" USING btree ("creator_id");

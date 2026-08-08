@@ -281,23 +281,27 @@ export const postEdits = pgTable(
  * A project collects **both** Works and Posts, in separate ordered lists — a game project
  * holds its builds and soundtrack alongside its devlogs and patch notes.
  */
-export const projects = pgTable("projects", {
-	id: serial("id").primaryKey(),
-	creatorId: integer("creator_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	slug: text("slug").notNull().unique(),
-	title: text("title").notNull(),
-	description: text("description").default(""),
-	shortDescription: text("short_description").default(""),
-	coverImage: text("cover_image").default(""),
-	// Custom-page layout/showcase config (built out in a later phase).
-	pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
-	isPublished: boolean("is_published").notNull().default(false),
-	atprotoUri: text("atproto_uri").unique(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const projects = pgTable(
+	"projects",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		slug: text("slug").notNull().unique(),
+		title: text("title").notNull(),
+		description: text("description").default(""),
+		shortDescription: text("short_description").default(""),
+		coverImage: text("cover_image").default(""),
+		// Custom-page layout/showcase config (built out in a later phase).
+		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
+		isPublished: boolean("is_published").notNull().default(false),
+		atprotoUri: text("atproto_uri").unique(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_projects_creator").on(table.creatorId)],
+);
 
 /**
  * Many-to-many: which **Works** belong to which project, with ordering.
@@ -393,14 +397,18 @@ export const transcodingJobs = pgTable(
 );
 
 /** Images embedded directly in a post body (or a text Work's prose) by the rich-text editor. */
-export const inlineImages = pgTable("inline_images", {
-	id: serial("id").primaryKey(),
-	creatorId: integer("creator_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	image: text("image").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const inlineImages = pgTable(
+	"inline_images",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		image: text("image").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_inline_images_creator").on(table.creatorId)],
+);
 
 /**
  * Comments, polymorphic over what they're attached to.
@@ -439,6 +447,8 @@ export const comments = pgTable(
 			table.subjectId,
 			table.moderationStatus,
 		),
+		// Deleting an account has to find its comments; nothing indexed the author.
+		index("idx_comments_user").on(table.userId),
 	],
 );
 
@@ -456,7 +466,15 @@ export const bookmarks = pgTable(
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_bookmarks_user").on(table.userId, table.sortOrder)],
+	// Four nullable targets, every one a cascade parent: deleting a post, Work, project or
+	// creator has to sweep the bookmarks pointing at it, and only `userId` was indexed.
+	(table) => [
+		index("idx_bookmarks_user").on(table.userId, table.sortOrder),
+		index("idx_bookmarks_post").on(table.postId),
+		index("idx_bookmarks_work").on(table.workId),
+		index("idx_bookmarks_project").on(table.projectId),
+		index("idx_bookmarks_creator").on(table.creatorId),
+	],
 );
 
 /**
