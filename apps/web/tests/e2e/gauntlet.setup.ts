@@ -33,10 +33,11 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
-	// Real playable media for the fixture's two media posts, through the real transcode
-	// job. Separate step because it belongs to `apps/api` (the jobs and the storage
-	// service are the API's, and `packages/db` must not depend upward on an app).
-	execFileSync("bun", ["run", "db:gauntlet:media"], { cwd: REPO_ROOT, stdio: "inherit" });
+	// Media is deliberately NOT seeded here. The walk's own `beforeAll` resets the fixture
+	// again — which deletes the content items, and with them any media attached now — and
+	// then re-attaches it. Generating it here meant running ffmpeg twice per CI run and
+	// throwing the first result away. What this step must leave behind is the viewer, so
+	// the sign-in below has an account to authenticate.
 
 	// Sign in exactly as the SPA would: same route, same Origin, real Set-Cookie.
 	const res = await fetch(`${API_URL}/api/auth/sign-in`, {

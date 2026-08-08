@@ -76,8 +76,27 @@ export default defineConfig({
 		// bundle — it runs from source, so a running `make dev` API is already current. That
 		// asymmetry is the point: reuse what can't go stale, rebuild what can.
 		{
+			// In CI the API is run under a restart loop, because Bun sometimes segfaults it.
+			//
+			// Observed 2026-08-08 on Bun 1.3.9 — the version pinned specifically to dodge the
+			// 1.3.14 crash — as `panic(main thread): Segmentation fault at address 0x0`, and
+			// the decoded report puts it in `uWS::HttpContext<false>::init()` off a socket
+			// closure. That is inside Bun's own HTTP server; nothing in this repo can prevent
+			// it, and it does not reproduce locally.
+			//
+			// What it cost is out of all proportion to how often it happens. Playwright does
+			// not supervise `webServer`, so the API stayed dead for the rest of the run: every
+			// later request got ECONNRESET, `retries: 2` re-ran tests against a corpse, and the
+			// visible failure was whatever assertion happened to be next — a locked heading
+			// that never rendered, three tests away from the crash. Two separate investigations
+			// chased that symptom to real-but-unrelated bugs before anyone read the server log.
+			//
+			// Restarting turns a doomed run into one flaky test that its retry then passes. The
+			// loop is bounded so a genuinely un-startable API still fails fast rather than
+			// spinning, and each restart prints a line — if these appear, the crash is still
+			// happening and the Bun version is worth revisiting, so do not let it go quiet.
 			command: process.env.CI
-				? "bun src/index.ts"
+				? 'for i in 1 2 3 4 5; do bun src/index.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
 				: "make -C ../.. db-ready && bun --env-file=../../.env src/index.ts",
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
