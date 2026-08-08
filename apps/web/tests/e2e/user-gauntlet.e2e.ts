@@ -266,6 +266,16 @@ async function expectMediaWithheld(page: Page, key: string): Promise<void> {
 }
 
 test.beforeAll(async () => {
+	// This hook shells out to two Bun processes and runs a real ffmpeg transcode. That is
+	// ~2s on a development machine and far more on a shared 2-core runner, where every
+	// `bun run` pays workspace startup and ffmpeg has no cores to spare — it exceeded
+	// Playwright's 30s default on CI while passing locally every time, and a timed-out
+	// reset leaves a HALF-RESET fixture, so the next thing you see is `rung 1` failing on
+	// a locked heading that never rendered. The visible failure was three tests away from
+	// its cause. The budget matches the webServer timeouts in playwright.config.ts, which
+	// are generous for the same reason.
+	test.setTimeout(180_000);
+
 	// Reset to the floor through the canonical script — this is what makes re-runs and
 	// retries deterministic. The viewer's session survives (reset never touches sessions).
 	execFileSync("bun", ["run", "db:gauntlet", "--ensure-viewer"], {
