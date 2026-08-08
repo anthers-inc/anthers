@@ -137,7 +137,7 @@ services:
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
-      repo: anthers-org/Anthers
+      repo: anthers-inc/Anthers
       branch: release
       deploy_on_push: true
     run_command: bun run apps/api/src/index.ts
@@ -161,7 +161,7 @@ workers:
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
-      repo: anthers-org/Anthers
+      repo: anthers-inc/Anthers
       branch: release
       deploy_on_push: true
     run_command: bun run apps/api/src/jobs/worker.ts
@@ -174,7 +174,7 @@ jobs:
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
-      repo: anthers-org/Anthers
+      repo: anthers-inc/Anthers
       branch: release
       deploy_on_push: true
     run_command: bun run packages/db/src/migrate.ts
@@ -185,7 +185,7 @@ static_sites:
   - name: web
     source_dir: /
     github:
-      repo: anthers-org/Anthers
+      repo: anthers-inc/Anthers
       branch: release
       deploy_on_push: true
     # `bun run typecheck` (whole monorepo) gates the deploy: a type error in api
