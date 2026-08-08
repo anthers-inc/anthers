@@ -34,6 +34,7 @@ import {
 	projectItems,
 	projectPosts,
 	projects,
+	purchases,
 	ratings,
 	stripeAccounts,
 	transcodingJobs,
@@ -47,7 +48,21 @@ import {
 	REVIEW_MIN,
 } from "@anthers/shared/content";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, avg, count, desc, eq, inArray, like, ne, or, type SQL, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	avg,
+	count,
+	countDistinct,
+	desc,
+	eq,
+	inArray,
+	like,
+	ne,
+	or,
+	type SQL,
+	sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
@@ -2111,7 +2126,15 @@ const contentRoutes = new Hono()
 			.limit(1);
 		if (!item) return c.json({ error: "Work not found" }, 404);
 
-		return c.json({ posts: await postsUsingWork(id) });
+		// Sold count rides along so the delete dialog can warn about the irreversible
+		// half — taking away something people paid for — before the creator commits,
+		// rather than bouncing them off a 409 after they've already decided.
+		const [{ count: purchaseCount } = { count: 0 }] = await db
+			.select({ count: countDistinct(purchases.id) })
+			.from(purchases)
+			.where(and(eq(purchases.workId, id), eq(purchases.status, "completed")));
+
+		return c.json({ posts: await postsUsingWork(id), purchaseCount });
 	})
 
 	.delete("/works/:id", requireAuth, zValidator("query", deleteWorkQuerySchema), async (c) => {
@@ -2136,6 +2159,27 @@ const contentRoutes = new Hono()
 						error: `This Work is linked from ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
 						code: "work_in_use",
 						posts: inUse,
+					},
+					409,
+				);
+			}
+
+			// Someone paid for this. The purchase row itself now survives the delete
+			// (`purchases.work_id` is SET NULL since `0016`, and the receipt carries its
+			// own snapshot of what was bought), so this is not about losing the record —
+			// it is that the buyer loses the thing, permanently and with no way back.
+			// Same reasoning as the post check above: fail closed, say what will happen,
+			// and make the caller opt in.
+			const [{ count: sold } = { count: 0 }] = await db
+				.select({ count: countDistinct(purchases.id) })
+				.from(purchases)
+				.where(and(eq(purchases.workId, id), eq(purchases.status, "completed")));
+			if (sold > 0) {
+				return c.json(
+					{
+						error: `${sold} ${sold === 1 ? "person has" : "people have"} bought this Work. Deleting it takes away access ${sold === 1 ? "they" : "they"} paid for; their receipt is kept.`,
+						code: "work_purchased",
+						purchaseCount: sold,
 					},
 					409,
 				);

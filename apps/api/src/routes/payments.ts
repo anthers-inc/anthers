@@ -236,6 +236,12 @@ const paymentRoutes = new Hono()
 		await db.insert(purchases).values({
 			buyerId: user.id,
 			workId: work.id,
+			// Captured at the moment of sale, so the receipt survives the Work being
+			// deleted or renamed later — see the schema note on these columns.
+			creatorId: work.creatorId,
+			workTitle: work.title,
+			workType: work.type,
+			workPublicId: work.publicId,
 			type: "digital",
 			amount: amount.toFixed(2),
 			processingFee: fees.processingFee.toFixed(2),
@@ -290,21 +296,23 @@ const paymentRoutes = new Hono()
 			conditions.push(lte(purchases.createdAt, end));
 		}
 
+		// Both joins are LEFT joins, and the creator side hangs off `purchases.creatorId`
+		// rather than `works.creatorId` (`0016`). As inner joins through `works` this
+		// endpoint dropped a purchase entirely once its Work was deleted — the buyer's
+		// own receipt vanished from their history, which is the one place it has to
+		// remain. A Seed buy (no Work at all) was never listed here for the same reason.
 		const result = await db
 			.select({
 				purchase: purchases,
-				workTitle: works.title,
 				workSlug: works.slug,
 				workCoverImage: works.thumbnail,
-				workType: works.type,
-				creatorId: works.creatorId,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
 			})
 			.from(purchases)
-			.innerJoin(works, eq(purchases.workId, works.id))
-			.innerJoin(users, eq(works.creatorId, users.id))
+			.leftJoin(works, eq(purchases.workId, works.id))
+			.leftJoin(users, eq(purchases.creatorId, users.id))
 			.where(and(...conditions))
 			.orderBy(desc(purchases.createdAt));
 
@@ -312,10 +320,14 @@ const paymentRoutes = new Hono()
 			purchases: result.map((r) => ({
 				...r.purchase,
 				work: {
-					title: r.workTitle,
+					// Title and type come from the stored snapshot, not the join, so they
+					// still read correctly for a Work that no longer exists. Slug and cover
+					// deliberately do NOT: they only exist to link and illustrate, and a
+					// deleted Work has no page to link to — null is the honest answer.
+					title: r.purchase.workTitle,
 					slug: r.workSlug,
 					coverImage: r.workCoverImage,
-					type: r.workType,
+					type: r.purchase.workType,
 				},
 				creator: {
 					username: r.creatorUsername,

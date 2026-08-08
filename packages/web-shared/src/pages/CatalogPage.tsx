@@ -17,7 +17,7 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { client } from "../lib/rpc";
 import type { Work } from "../lib/types";
 
-/** A post referencing a library item, as returned by the 409 `item_in_use` body. */
+/** A post referencing a library item, as returned by the 409 `work_in_use` body. */
 interface UsingPost {
 	slug: string;
 	title: string | null;
@@ -34,6 +34,8 @@ export default function CatalogPage() {
 	const [deleting, setDeleting] = useState(false);
 	/** Posts blocking an unflagged delete — non-null once the server has named them. */
 	const [inUse, setInUse] = useState<UsingPost[] | null>(null);
+	/** Completed purchases of this Work; null until the preflight answers. */
+	const [sold, setSold] = useState<number | null>(null);
 
 	const fetchItems = () =>
 		client.api.content.works
@@ -89,41 +91,63 @@ export default function CatalogPage() {
 	const openDelete = async (item: Work) => {
 		setDeleteTarget(item);
 		setInUse(null);
+		setSold(null);
 		try {
 			const res = await client.api.content.works[":id"].usage.$get({
 				param: { id: String(item.id) },
 			});
-			if (res.ok) setInUse(((await res.json()) as { posts: UsingPost[] }).posts ?? []);
+			if (res.ok) {
+				const body = (await res.json()) as { posts: UsingPost[]; purchaseCount?: number };
+				setInUse(body.posts ?? []);
+				setSold(body.purchaseCount ?? 0);
+			}
 		} catch {
 			// Preview is best-effort — the 409 still catches it on submit.
 		}
 	};
 
 	/**
-	 * Delete, forcing only when we know the item is in use.
+	 * Delete, forcing only once the creator has been shown what it costs.
 	 *
-	 * `force` is keyed on a NON-EMPTY `inUse` list, not merely on `inUse` being set: the
-	 * preflight above populates it with `[]` for an unused item, and treating that as
-	 * "confirmed" would send `force` on every delete and defeat the server guard.
+	 * Two things can block an unflagged delete — posts referencing the Work, and people
+	 * having bought it — and `force` overrides both, so it may only be sent when the
+	 * dialog is actually displaying the corresponding warning.
 	 */
 	const confirmDelete = async () => {
 		if (!deleteTarget) return;
 		setDeleting(true);
 		try {
+			// Force once the dialog is actually SHOWING a warning — either one. Keyed on the
+			// warnings being non-empty rather than merely fetched, because the preflight
+			// populates both with "nothing here" for a clean item, and treating that as
+			// confirmation would send `force` on every delete and defeat the server guard.
+			const warned = (inUse && inUse.length > 0) || (sold !== null && sold > 0);
 			const res = await client.api.content.works[":id"].$delete({
 				param: { id: String(deleteTarget.id) },
-				query: inUse && inUse.length > 0 ? { force: "1" } : {},
+				query: warned ? { force: "1" } : {},
 			});
 			if (res.ok) {
 				setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
 				setDeleteTarget(null);
 				setInUse(null);
+				setSold(null);
 				return;
 			}
 			if (res.status === 409) {
-				const body = (await res.json()) as { code?: string; posts?: UsingPost[] };
-				if (body.code === "item_in_use") {
+				const body = (await res.json()) as {
+					code?: string;
+					posts?: UsingPost[];
+					purchaseCount?: number;
+				};
+				// `work_in_use`, not `item_in_use` — the server renamed this code with the
+				// Catalog rename and this branch was never updated, so the in-use 409 fell
+				// through to the silent close below and the dialog just vanished.
+				if (body.code === "work_in_use") {
 					setInUse(body.posts ?? []);
+					return;
+				}
+				if (body.code === "work_purchased") {
+					setSold(body.purchaseCount ?? 0);
 					return;
 				}
 			}
@@ -201,6 +225,19 @@ export default function CatalogPage() {
 							"{deleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be
 							permanently removed.
 						</p>
+						{sold !== null && sold > 0 && (
+							<div className="alert alert-error text-sm mb-2">
+								<div>
+									<p className="font-medium">
+										{sold} {sold === 1 ? "person has" : "people have"} bought this.
+									</p>
+									<p className="mt-1">
+										Deleting it takes away access they paid for, and there is no way to give it
+										back. Their receipt is kept.
+									</p>
+								</div>
+							</div>
+						)}
 						{inUse && inUse.length > 0 && (
 							<div className="alert alert-warning text-sm">
 								<div>
@@ -226,6 +263,7 @@ export default function CatalogPage() {
 								onClick={() => {
 									setDeleteTarget(null);
 									setInUse(null);
+									setSold(null);
 								}}
 								disabled={deleting}
 							>
@@ -237,7 +275,11 @@ export default function CatalogPage() {
 								onClick={confirmDelete}
 								disabled={deleting}
 							>
-								{deleting ? "Deleting…" : inUse && inUse.length > 0 ? "Delete anyway" : "Delete"}
+								{deleting
+									? "Deleting…"
+									: (inUse && inUse.length > 0) || (sold !== null && sold > 0)
+										? "Delete anyway"
+										: "Delete"}
 							</button>
 						</div>
 					</div>
@@ -247,6 +289,7 @@ export default function CatalogPage() {
 						onClick={() => {
 							setDeleteTarget(null);
 							setInUse(null);
+							setSold(null);
 						}}
 						aria-label="Close"
 					>
