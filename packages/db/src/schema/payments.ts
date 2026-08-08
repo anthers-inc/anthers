@@ -39,7 +39,25 @@ export const purchases = pgTable(
 		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
 		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
 		// one-time charges that aren't a Work purchase (e.g. a Seed buy).
-		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		//
+		// SET NULL, not cascade (`0016`). It was cascade, which meant a creator deleting a
+		// Work destroyed every row here that named it — the buyer's entitlement, the
+		// financial record, and the `sales_tax` figure that makes remittance reportable.
+		// A receipt is not a detail of the thing bought; it outlives it, the same way
+		// moderation records outlive the account they concern.
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
+		// Who was paid. Denormalised deliberately, because it used to be reachable ONLY by
+		// joining `works` — so a deleted Work took the seller's identity with it and the
+		// sale silently left that creator's own earnings maths (`calculate-crf` joined
+		// through `works` to get here). Null for charges with no creator side (a Seed buy).
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		// A snapshot of what was bought, as it was at the time of sale. These are NOT a
+		// cache of the Work — they are what the row still says after the Work is gone, and
+		// they deliberately do not track later edits: a receipt records the transaction as
+		// it happened, not the current state of the catalogue.
+		workTitle: text("work_title"),
+		workType: text("work_type"),
+		workPublicId: bigint("work_public_id", { mode: "number" }),
 		type: text("type").notNull().default("digital"), // digital | physical | service | seeds
 		amount: numeric("amount").notNull(),
 		processingFee: numeric("processing_fee").notNull(),
@@ -58,10 +76,13 @@ export const purchases = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	// resolveAccess treats a completed purchase as a permanent unlock, so (buyer, work)
-	// is read on every gated view — and neither column was indexed.
+	// is read on every gated view — and neither column was indexed until `0015`.
 	(table) => [
 		index("idx_purchases_buyer").on(table.buyerId),
 		index("idx_purchases_work").on(table.workId),
+		// creator_id arrives already indexed: it is what calculate-crf now sums by, and
+		// an unindexed FK is the exact debt `0015` was written to clear.
+		index("idx_purchases_creator").on(table.creatorId),
 	],
 );
 

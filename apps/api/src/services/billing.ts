@@ -114,8 +114,11 @@ export async function createOneTimeCharge(opts: {
 	});
 	await db.insert(purchases).values({
 		buyerId: opts.userId,
-		// A Seed buy is not a Work purchase — nothing to unlock.
+		// A Seed buy is not a Work purchase — nothing to unlock, and no creator side to
+		// record. Both stated explicitly so the nulls read as "this charge has no such
+		// thing" rather than "nobody filled these in".
 		workId: null,
+		creatorId: null,
 		type: opts.type,
 		amount: base.toFixed(2),
 		processingFee: processing.toFixed(2),

@@ -58,15 +58,17 @@ async function getCreatorEarnings(creatorId: number, cycleDate: string): Promise
 	const monthStart = new Date(y, m - 1, 1);
 	const monthEnd = new Date(y, m, 1);
 
+	// Sums on `purchases.creator_id` rather than joining through `works` (`0016`). The
+	// join was silently lossy: it dropped any sale whose Work had since been deleted, so
+	// a creator's own earnings figure depended on their catalogue still existing.
 	const [salesResult] = await db
 		.select({
 			total: sum(purchases.creatorEarnings),
 		})
 		.from(purchases)
-		.innerJoin(works, eq(purchases.workId, works.id))
 		.where(
 			and(
-				eq(works.creatorId, creatorId),
+				eq(purchases.creatorId, creatorId),
 				eq(purchases.status, "completed"),
 				sql`${purchases.createdAt} >= ${monthStart}`,
 				sql`${purchases.createdAt} < ${monthEnd}`,
