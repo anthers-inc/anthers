@@ -7,21 +7,78 @@ name: ci
 # green/red mark against the exact SHA being deployed — which matters because
 # `release` can be pushed from somewhere other than a fast-forward of `main`
 # (a hotfix branch, a cherry-pick), and that push would otherwise be the first
-# time the code was ever checked. Making this a true gate means setting
-# `deploy_on_push: false` and triggering the deploy after CI, which changes the
-# deploy workflow and is Parker's call.
+# time the code was ever checked.
+#
+# The ordinary deploy, though, is a fast-forward of a SHA `main` just tested, and
+# re-running the whole suite against identical code buys nothing while adding a
+# second set of checks to the same commit — GitHub attaches them to the SHA, not
+# the branch, so a flake in the duplicate paints a commit that passed. The
+# `precheck` job below skips the release run in exactly that case and no other;
+# see its comment.
+#
+# Making this a TRUE gate is a separate question and deliberately not done: it
+# needs `deploy_on_push: false` plus a deploy step after CI, which puts a
+# DigitalOcean token in GitHub secrets and makes deploying wait on CI. Decided
+# 2026-08-08 to revisit before public launch, when a bad deploy starts costing
+# something real. Today a failed build cannot take prod down — App Platform keeps
+# the previously-active deployment serving until a good one replaces it.
 on:
   push:
     branches: [main, release]
   pull_request:
 
 jobs:
+  # Has this exact commit already passed on `main`?
+  #
+  # A deploy fast-forwards `release` to a SHA that `main` has just tested, so the push
+  # triggers a SECOND full run of the same code. That buys nothing and costs something
+  # real: checks attach to a SHA rather than a branch, so a flake in the duplicate run
+  # paints a red mark on a commit that passed — twice now that has cost someone the time
+  # to decode a failure that meant nothing, which is how a team learns to ignore CI.
+  #
+  # So the release run is skipped when, and only when, this SHA already has a green `ci`
+  # run on `main`. What that deliberately preserves is the case the release trigger was
+  # added for: a `release` push that is NOT a fast-forward of `main` — a hotfix branch, a
+  # cherry-pick — has no such run, so it is tested in full. A run still in progress on
+  # `main` counts as "not passed", which errs toward running twice rather than not at all.
+  precheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.decide.outputs.skip }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Only ever skip a push to release. PRs and main pushes always run.
+          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref_name }}" != "release" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Not a release push — running in full."
+            exit 0
+          fi
+          passed=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&branch=main&status=success" \
+            --jq '.total_count' 2>/dev/null || echo 0)
+          if [ "${passed:-0}" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ github.sha }} already passed ci on main — skipping the duplicate release run."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No green ci run for ${{ github.sha }} on main — testing this release push in full."
+          fi
+
   # Static checks + the Bun test suites (API routes, jobs, and the shared money/
   # attention policy). Deliberately its own job with its own database rather than a
   # step in `playwright`: the two suites then share no state, run in parallel, and
   # report independently — a red API suite isn't hidden behind a browser failure.
   # It also skips the Chromium download, and avoids both suites wanting port 8000.
   test:
+    needs: precheck
+    if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -88,6 +145,8 @@ jobs:
   # Build only — nothing is pushed to a registry. App Platform builds its own
   # images from the same Dockerfiles; this proves they build, not what ships.
   images:
+    needs: precheck
+    if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -124,6 +183,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   playwright:
+    needs: precheck
+    if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
