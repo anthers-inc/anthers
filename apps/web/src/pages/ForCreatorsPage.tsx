@@ -38,6 +38,8 @@ import {
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	badgeLabel,
+	CARD_FLAT,
+	CARD_RATE,
 	cardFeeDisplay,
 	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
@@ -47,6 +49,7 @@ import {
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
+import { SALE_TABLE } from "@anthers/shared/figures";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -216,11 +219,17 @@ export default function ForCreatorsPage() {
 							</h3>
 							<div className="flex flex-col gap-2 text-sm">
 								<ReceiptLine label="Listed price — what the buyer pays" amount="$10.00" bold />
-								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="−$0.59" />
-								<ReceiptLine label="First download (2 GiB @ $0.01/GiB, at cost)" amount="−$0.02" />
+								<ReceiptLine
+									label={`Payment processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)})`}
+									amount={`−$${SALE_10_2GIB.cardFee}`}
+								/>
+								<ReceiptLine
+									label={`First download (${SALE_10_2GIB.sizeGiB} GiB @ $${BANDWIDTH_PER_GIB.toFixed(2)}/GiB, at cost)`}
+									amount={`−$${SALE_10_2GIB.delivery}`}
+								/>
 								<ReceiptLine label="Anthers" amount="−$0.00" />
 								<div className="my-1 border-t border-base-content/10" />
-								<ReceiptLine label="You receive" amount="$9.39" bold />
+								<ReceiptLine label="You receive" amount={`$${SALE_10_2GIB.creatorReceives}`} bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
 								The buyer pays your listed price plus sales tax and nothing else. What comes out of
@@ -812,6 +821,9 @@ const RECEIPT_INTRO: Record<ActionKey, string> = {
 const CS_NOTE = "funds free access & programs";
 const PASSTHROUGH = "pure passthrough";
 const NO_CUT = "no cut";
+
+/** Derived, never typed — see scripts/econ-figures.ts. */
+const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 
 // A representative engaged fan for the streaming comparison: Sprout rank — 2
 // Anthers-Seeds ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same

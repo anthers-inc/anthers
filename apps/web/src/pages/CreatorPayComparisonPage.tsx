@@ -51,6 +51,7 @@ import {
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
+import { SALE_TABLE } from "@anthers/shared/figures";
 import { Link } from "@anthers/web-shared/router";
 import { useState } from "react";
 import { CalcNotes, CalcPageHeader, SegControl } from "../components/calculators/ui";
@@ -99,6 +100,9 @@ interface Platform {
 // watch — the same rate for every medium (equal-time). Anthers takes none of it.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
 const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
+/** Derived, never typed — see scripts/econ-figures.ts. */
+const SALE_10_1GIB = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
+
 const money = (n: number) => `$${n.toFixed(2)}`;
 const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
 /** The reference streamer both this page and /for-creators quote: Sprout (2 Anthers-
@@ -189,7 +193,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys your $10 game",
 				kind: "Digital purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$7.00",
 					keepSub: "70% — Valve absorbs card processing inside its 30%",
@@ -208,7 +212,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys your $10 album (download)",
 				kind: "Digital purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$7.91",
 					keepSub: "85% less the same card processing everyone pays (→ 90% after $5k in sales)",
@@ -249,7 +253,7 @@ const PLATFORMS: Platform[] = [
 			{
 				scenario: "A fan buys a $10 one-time item",
 				kind: "Purchase",
-				anthers: aPrice("$10.00", "$9.40"),
+				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$8.21–8.91",
 					keepSub: "88–95% after their cut, less the same card processing",

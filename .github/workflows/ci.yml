@@ -126,6 +126,12 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # Published money figures are generated from fees.ts, never typed. This fails if
+      # a dial or formula changed without regenerating — the drift that put a wrong
+      # remainder in the economics doc for five days after the 2026-08-03 revamp.
+      - name: Economics figures are in sync
+        run: bun run econ:figures --check
+
       - name: Apply database migrations
         run: bun run db:migrate
 

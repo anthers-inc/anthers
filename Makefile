@@ -214,6 +214,7 @@ db-reset: ## Recreate the dev Postgres from scratch and reapply migrations (wipe
 verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Playwright
 	bun run typecheck
 	bun run lint
+	bun run econ:figures --check
 	$(MAKE) db-ready
 	bun test
 	$(MAKE) free-preview-port
