@@ -471,7 +471,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-alpha",
 							title: "Alpha Launch",
 							description:
-								"Invite-only launch with 20-50 creators, a few hundred consumers. CRF operational. IRS determination letter (ideally).",
+								"Invite-only launch with 20-50 creators, a few hundred consumers. Charitable programs operational. IRS determination letter (ideally).",
 							status: "planned",
 							startQ: 2,
 							endQ: 3,
@@ -480,7 +480,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-beta",
 							title: "Beta Launch",
 							description:
-								"Open registration, multiple media formats, CRF expanding, active fundraising, first 990 filed.",
+								"Open registration, multiple media formats, charitable programs expanding, active fundraising, first 990 filed.",
 							status: "planned",
 							startQ: 4,
 							endQ: 5,
@@ -489,7 +489,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-ga",
 							title: "General Availability",
 							description:
-								"Stable public platform, all CRF pillars active, federation functioning, organizational maturity.",
+								"Stable public platform, all four programme pillars active, federation functioning, organizational maturity.",
 							status: "exploring",
 							startQ: 6,
 							endQ: 7,
@@ -575,7 +575,7 @@ const FOUNDATION_ROADMAP: RoadmapDef = {
 							id: "f-25000-subs",
 							title: "25,000 Subscribers",
 							description:
-								"Inflection point: ED salary + admin overhead ($125-164K/yr). All four CRF pillars active. Meaningful creation grants.",
+								"Inflection point: ED salary + admin overhead ($125-164K/yr). All four programme pillars active. Meaningful creation grants.",
 							status: "exploring",
 							startQ: 6,
 							endQ: 7,

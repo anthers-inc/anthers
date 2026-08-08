@@ -180,7 +180,7 @@ export async function calculateCrfSubsidies() {
 			postCount: publishedPostCount?.count ?? 0,
 		});
 
-		// Record CRF outflow
+		// Record the subsidy outflow against the charitable ledger
 		await db.insert(crfLedger).values({
 			amount: subsidy.neg().toString(),
 			description: `hosting subsidy for ${creator.username} — hosting $${hostingCost}, earnings $${earnings}, subsidy $${subsidy}`,

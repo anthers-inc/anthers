@@ -103,7 +103,7 @@ packages/
       migrate.ts        Migration runner
   shared/
     src/
-      fees.ts           Fee calculation (processing + CRF)
+      fees.ts           Fee calculation (card processing + the storage charge)
       constants.ts      Shared constants
 ```
 
