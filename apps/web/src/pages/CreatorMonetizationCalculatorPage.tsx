@@ -17,7 +17,7 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
 // ($1.50, to creators by watch-time) and "Supports Anthers" (their bandwidth at
 // cost + the remainder funding free access and programs). Money to creators = the Time Pool + Seeds a
-// viewer gives directly to a creator ($3 each, 100% to them). The Time Pool is
+// viewer gives directly to a creator ($3 each, no platform cut). The Time Pool is
 // distributed across the creators a viewer watches, in proportion to watch-time
 // (equal-time principle — a minute is a minute across every medium). Bandwidth is
 // folded into the Anthers-Seeds, at cost — never the creator-funding lever, so it
@@ -767,7 +767,7 @@ export default function CreatorMonetizationCalculatorPage() {
 									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($1.50, to creators by
 									watch-time) and <b>Supports Anthers</b> (their bandwidth at cost + the remainder
 									that funds free access and the charitable programs). Directed <b>Seeds</b> ($3
-									each, 100% to a creator) are given on top.
+									each, no platform cut) are given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

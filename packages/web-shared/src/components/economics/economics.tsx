@@ -250,7 +250,7 @@ export function SubscriptionCalculator() {
 						<SplitRow
 							dot="bg-primary"
 							label="Time Pool"
-							desc="to the creators you watch, by time spent — 100% to them"
+							desc="to the creators you watch, by time spent — paid out in full"
 							amount={timePool}
 						/>
 						<SplitRow

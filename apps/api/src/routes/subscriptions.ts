@@ -673,8 +673,10 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── Seed Allocations ─────────────────────────────────────────────────────
-	// The budget is the creator-Seed balance the user holds this cycle; 100% goes to
-	// creators. Directing a Seed to a creator clears that creator's Seed Gates.
+	// The budget is the creator-Seed balance the user holds this cycle, and Anthers
+	// takes no cut of it. Directing a Seed to a creator clears that creator's Seed
+	// Gates. (What actually reaches the creator is net of the Seed's pro-rata share of
+	// the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
 	// Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is
 	// always a multiple of SEED_PRICE — the API rejects anything else rather than
 	// silently storing a fraction of a Seed.

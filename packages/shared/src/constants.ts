@@ -5,8 +5,11 @@ export const APP_NAME = "Anthers";
  * Support-model economics constants (supersedes the V4 "Badge plans" model).
  *
  * One primitive: a **Seed** — a flat **$3/month** — pointed one of two ways:
- *   - at a **creator** (a *directed Seed*): 100% to them, no fee, no payout
- *     processing; clears that creator's Seed Gates in $3 increments; or
+ *   - at a **creator** (a *directed Seed*): **no platform cut** and no payout
+ *     processing — the only deduction is the Seed's pro-rata share of the at-cost
+ *     card fee, paid to Stripe (see `paymentsSplit`), so a lone $3 Seed reaches its
+ *     creator as $2.61 and batching pays them more; clears that creator's Seed
+ *     Gates in $3 increments; or
  *   - at **Anthers** (an *Anthers-Seed*): covers the user's streaming (at cost),
  *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), earns
  *     **Anthers' Badges**, and leaves a **remainder** for Anthers.
@@ -23,8 +26,12 @@ export const APP_NAME = "Anthers";
  * a card cost gets none, which is why the old "like sales tax" framing was hollow.
  * The claim that survives is **"Anthers takes no cut"** — unconditionally true —
  * not "100% to the creator", which is retired. There is no platform margin and no
- * fixed "Community Share": the the remainder is what's left of each Anthers-Seed,
- * read obligations-first, and it absorbs the Payments line so creator pay does not.
+ * fixed "Community Share": the remainder is what's left of each Anthers-Seed, read
+ * obligations-first, and it absorbs the *Anthers side's* share of the Payments line.
+ * It does NOT absorb the creator side's — `supportBreakdown` charges each side its
+ * pro-rata share, which is the only coherent answer for a pure-direct user, who has
+ * no remainder to absorb anything. (This comment used to claim creator pay was never
+ * touched; that contradicted `paymentsSplit` and `economics.test.ts`.)
  *
  * Seed price is locked at $3; the allocation dials (Time-Pool-per-Seed, free
  * floor, GiB-per-Seed) are the current tuned values — see the Support Model

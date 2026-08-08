@@ -185,7 +185,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-boost-income",
 							title: "Seed Income",
 							description:
-								"Additional subscriber-directed Seeds—100% to you—with manual or automatic allocation.",
+								"Additional subscriber-directed Seeds—no platform cut—with manual or automatic allocation.",
 							status: "planned",
 							startQ: 1,
 							endQ: 3,

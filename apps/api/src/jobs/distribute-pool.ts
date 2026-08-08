@@ -7,9 +7,21 @@
  * 2. Time Pool = $1.50 per Anthers-Seed the viewer holds, distributed
  *    proportionally by watch-time. A higher rank = a bigger pool, so all of that
  *    viewer's watch-time pays creators more — no per-item multiplier.
- * 3. Seeds: directed Seeds go 100% to the named creators. There are no undirected
- *    creator-Seeds — a Seed is either directed to a creator or held as an
+ * 3. Seeds: directed Seeds are credited GROSS to the named creators. There are no
+ *    undirected creator-Seeds — a Seed is either directed to a creator or held as an
  *    Anthers-Seed (which funds the Time Pool + the remainder, settled in settle-cycle).
+ *
+ * !! KNOWN DISCREPANCY, not resolved here (found 2026-08-08). The economic model in
+ *    `packages/shared/src/fees.ts` says a directed Seed reaches its creator NET of
+ *    that Seed's pro-rata share of the at-cost card fee — `supportBreakdown` returns
+ *    `creatorNet` with the docstring "use this for anything describing payout", and
+ *    `economics.test.ts` pins a lone $3 Seed at $2.61. This job credits the full
+ *    $3.00 and nothing else deducts the difference, so the ledger and the model
+ *    disagree about roughly $0.39 per unbatched Seed. It matters most for a
+ *    pure-direct user (0 Anthers-Seeds), who has no remainder for the fee to come out
+ *    of, which means today Anthers absorbs it. Resolving it is a money decision —
+ *    either this job deducts `paymentsSplit(...).creator`, or the model stops
+ *    claiming it does. Do not "fix" one side in passing.
  * 4. Create/update PoolDistribution ledger entries.
  */
 
@@ -99,7 +111,8 @@ async function distributeForAccount(acct: {
 		return d;
 	};
 
-	// 2. Directed Seeds → 100% to the named creator. (Undirected Seeds are NOT
+	// 2. Directed Seeds → credited GROSS to the named creator; see the discrepancy
+	//    note at the top of this file before changing that. (Undirected Seeds are NOT
 	//    distributed here — the user must direct them; the remainder is settled to
 	//    the subsidy pool in settle-cycle.ts.)
 	const directed = await db

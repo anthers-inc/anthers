@@ -100,7 +100,8 @@ function StripeOnboardingSection() {
 					<div className="flex flex-col gap-2">
 						<p className="text-sm text-base-content/60">
 							Connect a Stripe account to receive payments for your paid projects. Anthers uses
-							Stripe Connect—you keep 100% of earnings, only real costs are passed through.
+							Stripe Connect and takes no cut—only real costs are deducted, and they go to the
+							processor and the CDN, never to us.
 						</p>
 						<button
 							type="button"
