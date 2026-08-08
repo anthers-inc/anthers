@@ -101,9 +101,9 @@ export interface UnlockRoute {
 	 * Badges (which is legal — a gate needn't sit on a Badge). Never the nearest Badge:
 	 * naming one the viewer would still be short of is the bug this type exists to kill.
 	 *
-	 * A plain `string`, not `BadgeKey`: `BadgeKey` covers only Anthers's own four, and a
+	 * A plain `string`, not `BadgeKey`: `BadgeKey` covers only Anthers' own four, and a
 	 * creator names their Badges whatever they like. Only the Anthers side is populated
-	 * today, but typing it to Anthers's set would have to be undone the moment it isn't.
+	 * today, but typing it to Anthers' set would have to be undone the moment it isn't.
 	 */
 	badge: string | null;
 }

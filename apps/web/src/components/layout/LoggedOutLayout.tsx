@@ -233,7 +233,7 @@ export default function LoggedOutLayout() {
 						))}
 					</div>
 					<p className="mt-9 text-center text-xs text-base-content/45">
-						© 2026 The Anthers Foundation · growing a creative garden for free, forever
+						© 2026 Anthers, Inc. · growing a creative garden for free, forever
 					</p>
 				</div>
 			</footer>

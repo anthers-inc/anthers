@@ -16,7 +16,7 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // Support-model economics. A viewer holds Anthers-Seeds — $3 each; the count is
 // their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
 // ($1.50, to creators by watch-time) and "Supports Anthers" (their bandwidth at
-// cost + the Foundation remainder). Money to creators = the Time Pool + Seeds a
+// cost + the remainder funding free access and programs). Money to creators = the Time Pool + Seeds a
 // viewer gives directly to a creator ($3 each, 100% to them). The Time Pool is
 // distributed across the creators a viewer watches, in proportion to watch-time
 // (equal-time principle — a minute is a minute across every medium). Bandwidth is
@@ -34,7 +34,8 @@ const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
 const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
-/** "Supports Anthers" — the non-Time-Pool half of each Anthers-Seed (bandwidth + Foundation). */
+/** "Supports Anthers" — the non-Time-Pool half of each Seed given to Anthers
+ * (bandwidth at cost + the remainder funding free access and programs). */
 const supportsAnthersOf = (badge: BadgeKey) =>
 	Math.max(0, seedCost(thresholdForBadge(badge)) - timePoolFor(thresholdForBadge(badge)));
 
@@ -764,8 +765,9 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
 									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($1.50, to creators by
-									watch-time) and <b>Supports Anthers</b> (their bandwidth at cost + the Foundation
-									remainder). Directed <b>Seeds</b> ($3 each, 100% to a creator) are given on top.
+									watch-time) and <b>Supports Anthers</b> (their bandwidth at cost + the remainder
+									that funds free access and the charitable programs). Directed <b>Seeds</b> ($3
+									each, 100% to a creator) are given on top.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

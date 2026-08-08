@@ -66,11 +66,11 @@ const wikiAreas: WikiArea[] = [
 			{
 				name: "The Anthers Model",
 				path: "11-The-Anthers-Model",
-				description: "Transparent pricing, the Anthers Foundation, and how money flows",
+				description: "Transparent pricing, the charitable programs, and how money flows",
 				items: [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Transparent Pricing", file: "01-TransparentPricing.md" },
-					{ name: "Anthers Foundation", file: "02-CommunityResilienceFund.md" },
+					{ name: "Charitable Programs", file: "02-CommunityResilienceFund.md" },
 					{ name: "Time Pool", file: "03-CreatorPool.md" },
 				],
 			},
@@ -389,7 +389,7 @@ export default function WikiPage() {
 										The Anthers Model
 									</button>
 									<p className="text-sm text-base-content/60">
-										Understand transparent pricing and the Anthers Foundation
+										Understand transparent pricing and the charitable programs
 									</p>
 								</div>
 							</li>

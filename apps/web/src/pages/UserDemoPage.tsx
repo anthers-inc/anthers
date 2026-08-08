@@ -41,7 +41,7 @@ interface DemoPurchase {
 	price: number;
 	/** At-cost costs taken OUT of the listed price — card processing plus, on a digital
 	 * purchase, the first download's bandwidth. Anthers keeps none of it; the purchase
-	 * Foundation fee was removed 2026-08-03. */
+	 * purchase fee was removed 2026-08-03. */
 	fee: number;
 	date: string;
 }
@@ -62,7 +62,8 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
 // Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
 // creators, by watch-time) and $1.50 "Supports Anthers" (their bandwidth at cost +
-// the Foundation remainder). Directed Seeds ($3 each, no platform cut) sit alongside.
+// the remainder funding free access and programs). Directed Seeds ($3 each, no
+// platform cut) sit alongside.
 // Bandwidth is folded in — a free floor plus a per-Seed allowance, no wallet.
 const DEMO_PLAN = {
 	badge: "Petal",
@@ -71,7 +72,7 @@ const DEMO_PLAN = {
 	timePool: 4.5, // to creators, distributed by watch-time ($1.50 × 3)
 	seeds: 3, // directed creator-Seeds (count, $3 each)
 	seedPool: 9.0, // $ value of the directed Seeds
-	supportsAnthers: 4.5, // price − Time Pool = your bandwidth (at cost) + the Foundation remainder
+	supportsAnthers: 4.5, // price − Time Pool = your bandwidth (at cost) + the remainder
 	allowanceGiB: 195, // streaming allowance (15 floor + 60 × 3), folded in — no wallet
 	month: "February 2026",
 };
@@ -497,7 +498,9 @@ function SubscriptionDashboardDemo() {
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Supports Anthers</p>
 						<p className="text-xl font-bold">${DEMO_PLAN.supportsAnthers.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">Your bandwidth (at cost) + Foundation</p>
+						<p className="text-xs text-base-content/40">
+							Your bandwidth (at cost) + free access &amp; programs
+						</p>
 					</div>
 				</div>
 			</div>

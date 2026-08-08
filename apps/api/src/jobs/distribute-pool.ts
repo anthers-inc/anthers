@@ -9,7 +9,7 @@
  *    viewer's watch-time pays creators more — no per-item multiplier.
  * 3. Seeds: directed Seeds go 100% to the named creators. There are no undirected
  *    creator-Seeds — a Seed is either directed to a creator or held as an
- *    Anthers-Seed (which funds the Time Pool + Foundation, settled in settle-cycle).
+ *    Anthers-Seed (which funds the Time Pool + the remainder, settled in settle-cycle).
  * 4. Create/update PoolDistribution ledger entries.
  */
 

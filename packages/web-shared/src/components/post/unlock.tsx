@@ -61,7 +61,7 @@ export function unlockLabel(access: AccessResult, creatorName = "this creator"):
 export function lockedByBadge(access: AccessResult, creatorName = "this creator"): string | null {
 	const badge = cheapestRoute(access, creatorName)?.route.badge;
 	if (!badge) return null;
-	// `badgeLabel` only knows Anthers's own four. A creator names their Badges whatever
+	// `badgeLabel` only knows Anthers' own four. A creator names their Badges whatever
 	// they like, so anything outside that set is already its display name — passing it
 	// through the lookup would silently blank it.
 	return ANTHERS_BADGE_KEYS.has(badge) ? badgeLabel(badge as BadgeKey) : badge;

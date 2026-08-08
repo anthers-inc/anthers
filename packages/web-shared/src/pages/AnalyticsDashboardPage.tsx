@@ -389,7 +389,7 @@ function CrossPublishHistory() {
 	);
 }
 
-// ─── Foundation Hosting Subsidy ───
+// ─── Hosting Subsidy ───
 
 function FoundationSubsidySection({
 	crfStatus,
@@ -411,7 +411,7 @@ function FoundationSubsidySection({
 	return (
 		<div className="card bg-base-200 mb-8">
 			<div className="card-body p-4">
-				<h3 className="font-semibold text-sm mb-3">Hosting Costs & Foundation Subsidy</h3>
+				<h3 className="font-semibold text-sm mb-3">Hosting Costs &amp; Subsidy</h3>
 				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
 					<div>
 						<div className="text-xs text-base-content/50">Hosting Cost</div>
@@ -422,7 +422,7 @@ function FoundationSubsidySection({
 						<div className="text-lg font-bold">${latest.creatorEarnings}</div>
 					</div>
 					<div>
-						<div className="text-xs text-base-content/50">Foundation Subsidy</div>
+						<div className="text-xs text-base-content/50">Subsidy</div>
 						<div className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}>
 							${latest.subsidyAmount}
 						</div>
@@ -434,7 +434,7 @@ function FoundationSubsidySection({
 				</div>
 				<p className="text-xs text-base-content/40">
 					{hasSubsidy
-						? "The Anthers Foundation is covering part of your hosting costs. As your audience grows, the subsidy decreases."
+						? "Anthers is covering part of your hosting costs. As your audience grows, the subsidy decreases."
 						: "Your earnings cover your hosting costs. Thank you for being part of the community!"}
 				</p>
 				<p className="text-xs text-base-content/40 mt-1">
@@ -480,7 +480,7 @@ export default function AnalyticsDashboardPage() {
 			.catch(() => {})
 			.finally(() => setLoading(false));
 
-		// Fetch earnings and Foundation status (non-blocking, independent of period)
+		// Fetch earnings and subsidy status (non-blocking, independent of period)
 		client.api.subscriptions.earnings
 			.$get()
 			.then((res) => res.json())

@@ -4,7 +4,7 @@
  * **Anthers-Seeds** (`anthersSeeds`) — that count IS their rank (0 = free … 4 =
  * blossom, "+" beyond) and, at $3 each, their Anthers subscription. Each
  * Anthers-Seed covers the user's streaming (at cost, folded in — no wallet),
- * funds the Time Pool, and leaves a remainder for the Foundation. Directed
+ * funds the Time Pool, and leaves a remainder funding free access and the charitable programs. Directed
  * (creator) Seeds are tracked per-creator in `seed_allocations`. This file also
  * holds the shared economics tables: time (attention) events, pool
  * distributions, and creator gates.
@@ -40,7 +40,7 @@ export const accounts = pgTable("accounts", {
 	anthersSeeds: integer("anthers_seeds").notNull().default(0), // count → rank + $3/Seed billing
 	creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators this cycle
 	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed this cycle
-	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage AFF
+	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage charge
 	stripeCustomerId: text("stripe_customer_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Anthers-Seed subscription
 	isActive: boolean("is_active").default(true),
@@ -54,7 +54,7 @@ export const accounts = pgTable("accounts", {
 /**
  * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
  * consumption history/analytics. Records the Anthers-Seeds held and what flowed:
- * Time Pool (to creators), the Foundation remainder, and stream consumption.
+ * Time Pool (to creators), the remainder, and stream consumption.
  */
 export const accountCycles = pgTable(
 	"account_cycles",
@@ -68,7 +68,7 @@ export const accountCycles = pgTable(
 		anthersSpend: numeric("anthers_spend").notNull().default("0.00"), // $ on Anthers-Seeds (count × $3)
 		creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
-		foundation: numeric("foundation").notNull().default("0.00"), // Foundation remainder this cycle
+		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle
 		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

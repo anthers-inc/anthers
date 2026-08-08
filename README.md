@@ -3,9 +3,9 @@
 
 ---
 
-A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing. The model is one primitive: a **Seed**, a flat **$3/month**, pointed one of two ways. Given to a **creator**, it reaches them **100%** and clears that creator's Seed Gates. Pointed at **Anthers**, it covers your own streaming at cost, funds the **Time Pool** that pays creators by watch-time, and leaves a **remainder** to the Anthers Foundation.
+A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing. The model is one primitive: a **Seed**, a flat **$3/month**, pointed one of two ways. Given to a **creator** it goes to them with **no platform cut** and clears that creator's Seed Gates. Pointed at **Anthers**, it covers your own streaming at cost, funds the **Time Pool** that pays creators by watch-time, and leaves a **remainder** that funds free access and Anthers' charitable programs.
 
-Anthers is operated as a non-profit — no investors, no profit-taking. It cannot be acquired and cannot take corrupting investment. Every user dollar is money to a creator, the user's own bandwidth at cost, the Foundation's remainder, or the at-cost Payments line a card transaction carries — never platform profit.
+`Anthers, Inc.` is a Colorado nonprofit corporation — no investors, no profit-taking. It cannot be acquired and cannot take corrupting investment. Every user dollar is money to a creator, the user's own bandwidth at cost, the remainder that funds free access and the charitable programs, or the at-cost Payments line a card transaction carries — never platform profit.
 
 ## Prerequisites
 
@@ -129,7 +129,7 @@ packages/
 
 The API is a Hono application on Bun with session-based authentication (argon2id password hashing, Postgres session store, CSRF via Origin header checking). No JWT or token auth.
 
-Async jobs run on pg-boss (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, Foundation subsidy calculation, and metrics fetching. pg-boss keeps its own tables in the app database's `pgboss` schema and provides cron scheduling with multi-instance dedup.
+Async jobs run on pg-boss (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, hosting-subsidy calculation, and metrics fetching. pg-boss keeps its own tables in the app database's `pgboss` schema and provides cron scheduling with multi-instance dedup.
 
 Storage is abstracted behind a `StorageService` interface with local (dev) and S3 (prod) implementations.
 
@@ -143,13 +143,13 @@ Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables inclu
 
 ## Key Concepts
 
-- **Seeds:** the single support primitive — a flat **$3/month** unit, pointed at a creator or at Anthers. **Given to a creator** it reaches them 100% (no fee, no payout processing) and clears that creator's **Seed Gates**, which are set in whole $3 steps. The verb is *give*. Why $3 and not $1: a $1 card charge loses ~33% to processing, a $3 charge ~13%, so micro-support is batched into a $3 unit.
-- **Anthers-Seeds and rank:** a Seed pointed at Anthers backs the commons. Your **rank simply is your Anthers-Seed count** — Free 0 / **Root** 1 / **Sprout** 2 / **Petal** 3 / **Blossom** 4, with a **"+"** beyond four — held **point-in-time** (you must currently hold a level to reach its gated content). There is no plan to subscribe to; you hold as many Seeds as you choose, in either direction.
-- **Time Pool:** each Anthers-Seed funds **$1.50** of Time Pool — a fixed target, not a remainder — distributed across the creators you spent time with **in proportion to watch-time**: Free $0.05 (subsidized, you pay $0) / $1.50 / $3.00 / $4.50 / $6.00, and up from there. A minute is a minute across media (play/watch/read/listen). A higher rank simply means a bigger pool, with no per-item multiplier. Only **content entities** earn — post bodies, project pages, and other connective tissue don't.
-- **The Foundation remainder:** what's left of each Anthers-Seed after your bandwidth and the Time Pool — derived, not a held slice. It funds the **Anthers Foundation** (free access + programs), read obligations-first with Admin held ≤ 30%. Together with the creators' storage AF Fee it funds all free access. It is program-service revenue, not a donation.
-- **Bandwidth (folded in, no wallet):** billed **at cost** ($0.01/GiB) inside the Anthers-Seeds. Every account gets a **15 GiB** free monthly floor drawn down first, plus ~**60 GiB per Anthers-Seed** on top; unused allowance returns to the subsidy pool. Creators fund storage (first 50 GiB free, then cost + a 50% AF Fee).
-- **Payments ride on top:** the at-cost card + processing line is added **on top** of the whole monthly charge, like sales tax (ACH-discountable) — never carved out of a Seed. That's what makes "every $3 reaches its destination in full" true.
-- **Transparent Pass-Through:** on direct purchases the creator receives the full listed price (0% cut); the Digital AF Fee, delivery bandwidth, and card + tax are added on top.
+- **Seeds:** the single support primitive — a flat **$3/month** unit, pointed at a creator or at Anthers. **Given to a creator** it goes to them with no platform cut (only its share of the at-cost card processing, paid to Stripe) and clears that creator's **Seed Gates**, which are set in whole $3 steps. The verb is *give*. Why $3 and not $1: a $1 card charge loses ~33% to processing, a $3 charge ~13%, so micro-support is batched into a $3 unit.
+- **Seeds given to Anthers, and your Badge:** a Seed pointed at Anthers backs the commons. Your **Badge simply is your count of Seeds given to Anthers** — Free 0 / **Root** 1 / **Sprout** 2 / **Petal** 3 / **Blossom** 4, with a **"+"** beyond four — held **point-in-time** (you must currently hold a level to reach its gated content). There is no plan to subscribe to; you hold as many Seeds as you choose, in either direction.
+- **Time Pool:** each Seed given to Anthers funds **$1.50** of Time Pool — a fixed target, not a remainder — distributed across the creators you spent time with **in proportion to watch-time**: Free $0.05 (subsidized, you pay $0) / $1.50 / $3.00 / $4.50 / $6.00, and up from there. A minute is a minute across media (play/watch/read/listen). A higher Badge simply means a bigger pool, with no per-item multiplier. Only **content entities** earn — post bodies, project pages, and other connective tissue don't.
+- **The remainder:** what's left of each Seed given to Anthers after your bandwidth, the Time Pool and the at-cost Payments line — derived, not a held slice. It funds **free access and Anthers' charitable programs**, read obligations-first with Admin held ≤ 30%. Together with the half-again on creator storage it funds all free access. It is program-service revenue, not a donation.
+- **Bandwidth (folded in, no wallet):** billed **at cost** ($0.01/GiB) inside the Seeds given to Anthers. Every account gets a **15 GiB** free monthly floor drawn down first, plus ~**60 GiB per Seed** on top; unused allowance returns to the subsidy pool. Creators fund their own storage (first 50 GiB free, then DigitalOcean's rate plus half again).
+- **Payments sit inside the price** (moved back inside 2026-08-03): the at-cost card + processing line comes **out of** the whole monthly charge and is split pro-rata across the Seeds on it. Mandatory-fee disclosure law requires an advertised price to contain every mandatory fee; **sales tax is the only thing added on top**.
+- **Direct purchases (all-in list price, 0% cut):** the creator sets the buyer-facing price and the buyer pays that plus sales tax and nothing else. Card processing and the first download's bandwidth come out of it; **Anthers keeps $0** (the purchase fee was removed 2026-08-03).
 
 ## Environment Variables
 

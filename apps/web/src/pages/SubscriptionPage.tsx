@@ -623,7 +623,7 @@ export default function SubscriptionPage() {
 				{/* Where the month's Seeds go */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
-					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the Foundation). The card fee rides on top; there's no wallet." />
+					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the remainder that funds free access and the charitable programs). The card fee is inside the price; there's no wallet." />
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
@@ -635,7 +635,7 @@ export default function SubscriptionPage() {
 						<div className="text-xs text-base-content/50 uppercase">Supports Anthers</div>
 						<div className="text-lg font-bold">{fmt(badgeView.supportsAnthers)}</div>
 						<div className="text-[11px] text-base-content/40">
-							your bandwidth (at cost) + Foundation
+							your bandwidth (at cost) + free access &amp; programs
 						</div>
 					</div>
 					<div>

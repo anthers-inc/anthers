@@ -123,7 +123,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<EyeIcon className="h-6 w-6" />}
 							title="Transparent, itemized pricing"
-							description="On itch.io, the platform's share is deducted from your sale. On Anthers, every cost is itemized at checkout—payment processing, infrastructure, and the Anthers Foundation. Buyers see exactly where their money goes. Creators receive exactly what they charged."
+							description="On itch.io, the platform's share is deducted from your sale. On Anthers there is no platform share at all — the only deductions are card processing and the buyer's first download, both at cost and both itemized. Buyers see exactly where their money goes."
 						/>
 					</Reveal>
 					<Reveal delay={300}>
@@ -144,7 +144,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<ChartBarIcon className="h-6 w-6" />}
 							title="Unified creator dashboard"
-							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers's dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
+							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers' dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
 						/>
 					</Reveal>
 				</div>
@@ -188,22 +188,19 @@ export default function CompareItchPage() {
 							<h3 style={serif} className="mb-1 text-lg font-medium">
 								Anthers
 							</h3>
-							<p className="mb-4 text-xs text-base-content/45">
-								$10 game sale (transparent pass-through)
-							</p>
+							<p className="mb-4 text-xs text-base-content/45">$10 game sale (0% platform fee)</p>
 							<div className="flex flex-col gap-2 text-sm">
-								<ReceiptLine label="Game price (to creator)" amount="$10.00" bold />
-								<ReceiptLine label="Delivery bandwidth (~1 GiB, at cost)" amount="$0.01" />
-								<ReceiptLine label="Anthers Foundation fee (Digital AFF)" amount="$0.005" />
-								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="$0.59" />
+								<ReceiptLine label="Sale price" amount="$10.00" />
+								<ReceiptLine label="Anthers share" amount="-$0.00" />
+								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="-$0.59" negative />
+								<ReceiptLine label="First download (~1 GiB, at cost)" amount="-$0.01" negative />
 								<div className="my-1 border-t border-base-content/10" />
-								<ReceiptLine label="Buyer pays" amount="$10.61" />
-								<div className="text-right font-semibold text-primary">Creator receives $10.00</div>
+								<ReceiptLine label="Creator receives" amount="$9.40" bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								The creator keeps 100% of their $10 price. The Foundation fee on a digital download
-								is half the delivery bandwidth—a fraction of a cent. Every cost is added on top,
-								never subtracted from your earnings.
+								Anthers keeps nothing. The two deductions are the card processing every platform
+								pays, and the buyer's first download at cost — both to third parties. The buyer pays
+								$10.00, plus any applicable tax.
 							</p>
 						</Card>
 					</Reveal>
@@ -347,7 +344,7 @@ export default function CompareItchPage() {
 					<Eyebrow>Come on over</Eyebrow>
 					<H2>Bring your itch.io projects with you</H2>
 					<Lede>
-						Already have projects on itch.io? Anthers's import tool can help you bring your project
+						Already have projects on itch.io? Anthers' import tool can help you bring your project
 						metadata over so you can get started quickly. You don't have to choose one or the
 						other—publish on both, and let your audience find you wherever they prefer.
 					</Lede>

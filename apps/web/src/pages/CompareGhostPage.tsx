@@ -234,7 +234,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<UserGroupIcon className="h-6 w-6" />}
 							title="Audience model"
-							description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers's model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by watch-time."
+							description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers' model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by watch-time."
 						/>
 					</Reveal>
 					<Reveal delay={300}>

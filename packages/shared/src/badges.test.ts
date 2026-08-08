@@ -5,7 +5,7 @@
 //
 // The distinction has teeth. The retired `badgeRank` was `BADGE_ORDER.indexOf(name)`, and
 // the retired `seedsMeetRank` compared a Seed count against that index. It gave correct answers only
-// because Anthers's own Badges sit at 1/2/3/4, where index and threshold coincide — an
+// because Anthers' own Badges sit at 1/2/3/4, where index and threshold coincide — an
 // accident, not a design. Any issuer whose Badges skip a level mis-resolved access
 // *silently*: no error, no crash, just wrong answers about who may read what.
 //
@@ -72,7 +72,7 @@ describe('the "+" rule applies between Badges, not only past the top', () => {
 		expect(heldBadgeLabel(8, SPARSE)).toBe("Beacon+"); // past the top
 	});
 
-	test("Anthers's own consecutive set only ever plusses past Blossom", () => {
+	test("Anthers' own consecutive set only ever plusses past Blossom", () => {
 		expect(heldBadgeLabel(0)).toBe("Free");
 		expect(heldBadgeLabel(1)).toBe("Root");
 		expect(heldBadgeLabel(4)).toBe("Blossom");
@@ -103,7 +103,7 @@ describe("gates are thresholds, and need not sit on a Badge", () => {
 });
 
 describe("thresholdForBadge returns a threshold", () => {
-	test("Anthers's Badges report their Seed cost", () => {
+	test("Anthers' Badges report their Seed cost", () => {
 		expect(thresholdForBadge("free")).toBe(0);
 		expect(thresholdForBadge("root")).toBe(1);
 		expect(thresholdForBadge("blossom")).toBe(4);

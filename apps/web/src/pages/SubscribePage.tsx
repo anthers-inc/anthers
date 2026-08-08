@@ -8,7 +8,7 @@
 //     scales your streaming allowance, Time Pool, and the Anthers Gates you clear.
 //   • Back a CREATOR (right) — Seeds, $3/mo each, no platform cut. Each Seed level
 //     unlocks more of their world, and each is branded with the creator's own Badge —
-//     the same mechanic as Anthers's Badges, so users can collect them across creators.
+//     the same mechanic as Anthers' Badges, so users can collect them across creators.
 //
 // Both cards share the BadgeLadder (Anthers renders its botanical wreaths; a creator
 // renders their own cute emblems). Seeds run 0–10; past 4 you keep the top Badge with a
@@ -43,7 +43,7 @@ import SubscriptionPaymentModal, {
 /* ── Model dials — all from @anthers/shared/constants, never re-typed here ───── */
 const FREE_GIB = FREE_FLOOR_GIB; // free streaming floor at 0 Seeds (avoids a paywall cliff)
 const TIMEPOOL_PER_SEED = TIME_POOL_PER_SEED; // $/month to creators, per Seed given to Anthers
-const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, Foundation-subsidized
+const FREE_TIMEPOOL = FREE_TIME_POOL; // $/month to creators at 0 Seeds, funded as free access
 const MAX_SEEDS = 10; // stepper cap (a page choice, not a model dial); past 4 the badge gains a "+"
 
 // Anthers Badges map onto Seed counts: 1→Root, 2→Sprout, 3→Petal, 4+→Blossom.
@@ -58,7 +58,7 @@ const LADDER: { label: string; badge: Badge }[] = [
 
 // A generic example creator's Badges (one per Seed level) + what each unlocks. Cute and
 // deliberately NOT botanical, so they read as the creator's own brand, distinct from
-// Anthers's flower Badges. Gate i unlocks at i+1 Seeds ($(i+1)*3).
+// Anthers' flower Badges. Gate i unlocks at i+1 Seeds ($(i+1)*3).
 const CREATOR_BADGES = [
 	{ emoji: "🐣", name: "New Friend", perk: "Early access to everything new" },
 	{ emoji: "🌟", name: "Regular", perk: "Behind-the-scenes & extras" },
@@ -367,7 +367,7 @@ function AnthersCard({ seeds, onChange }: { seeds: number; onChange: (v: number)
 					<BenefitRow icon="🌻" label="Time Pool">
 						{seeds === 0 ? (
 							<span>
-								<strong>{money(FREE_TIMEPOOL)}</strong>/mo → creators, subsidized by the Foundation
+								<strong>{money(FREE_TIMEPOOL)}</strong>/mo → creators, covered as free access
 							</span>
 						) : (
 							<span>
@@ -511,9 +511,9 @@ export default function SubscribePage() {
 	const anthersPayments = totalPayments - creatorPayments;
 	// What creators actually receive from directed Seeds, net of their share.
 	const creatorDirectNet = creatorCost - creatorPayments;
-	// Supports Anthers = your bandwidth (at cost) + the Foundation remainder, after
-	// this side's share of Payments. The remainder is the shock absorber; Time Pool
-	// is a fixed target and never moves.
+	// Supports Anthers = your bandwidth (at cost) + the remainder that funds free
+	// access and the charitable programs, after this side's share of Payments. The
+	// remainder is the shock absorber; Time Pool is a fixed target and never moves.
 	const anthersSupportsAnthers = anthersCost - anthersTimePool - anthersPayments;
 	const toCreators = creatorDirectNet + anthersTimePool;
 	const totalMonthly = seedSubtotal;
@@ -572,7 +572,7 @@ export default function SubscribePage() {
 							label="Time Pool"
 							desc={
 								anthersSeeds === 0
-									? `the Foundation sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
+									? `free access sends ${money(FREE_TIMEPOOL)}/mo to creators for you`
 									: "via the Seeds you give Anthers, to creators by watch-time"
 							}
 							amount={anthersTimePool}
@@ -611,7 +611,7 @@ export default function SubscribePage() {
 							</>
 						) : (
 							<>
-								You pay $0 — the Foundation still sends{" "}
+								You pay $0 — Anthers still sends{" "}
 								<span className="font-semibold text-success">{money(FREE_TIMEPOOL)}</span>/mo to
 								creators for you.
 							</>

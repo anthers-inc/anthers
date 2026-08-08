@@ -7,7 +7,7 @@
  * configured" guards, webhook signature verification, webhook idempotency, the
  * destination-charge construction (which creator gets the money, and how much of the
  * buyer's total is the application fee), and — at the far end of the same path — the
- * clamp that stops a negative Foundation remainder reaching the ledger at settlement.
+ * clamp that stops a negative remainder reaching the ledger at settlement.
  *
  * **Nothing here reaches the network.** `setStripeClient` swaps in a recording fake, which
  * is the whole reason `lib/stripe.ts` stopped exporting a `const` — see the note there. The
@@ -261,7 +261,7 @@ const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
 /** $5.00 to anyone, at any Anthers-Seed count — a purchasable post with no ladder route in. */
 const PRICE = "5.00";
 const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
-/** 2 GiB of downloadable asset, so delivery + the Digital AFF are both non-zero. */
+/** 2 GiB of downloadable asset, so the delivery deduction is non-zero. */
 const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 
 beforeAll(async () => {
@@ -287,7 +287,7 @@ beforeAll(async () => {
 
 /**
  * A $5 post backed by a real-sized downloadable asset, so delivery bandwidth and the
- * Digital AFF are both non-zero and the fee math under test isn't all zeroes.
+ * delivery deduction is non-zero and the fee math under test isn't all zeroes.
  */
 /**
  * A released, download-only Work that is for sale. Checkout names a WORK now — that is
@@ -511,7 +511,7 @@ describe("Webhook signature verification", () => {
 });
 
 describe("Webhook: payment_intent.succeeded", () => {
-	it("completes a pending post purchase and books the Foundation Fee once", async () => {
+	it("completes a pending post purchase and books the ledger row once", async () => {
 		const piId = `pi_${uid()}`;
 		const [pending] = await db
 			.insert(purchases)
@@ -576,7 +576,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
 		expect(new Decimal(acct.creatorSeedTotal).toFixed(2)).toBe("9.00");
 
-		// A Seed buy is not a post purchase — it must not touch the Foundation ledger.
+		// A Seed buy is not a post purchase — it must not touch the charitable ledger.
 		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
 		expect(ledger).toHaveLength(0);
 
@@ -928,7 +928,7 @@ describe("Checkout — destination charge construction", () => {
 		expect(row.workId).toBe(paidWorkId);
 		expect(new Decimal(row.amount).toFixed(2)).toBe(PRICE);
 		expect(new Decimal(row.creatorEarnings).toFixed(2)).toBe(expected.creatorEarnings.toFixed(2));
-		// The purchase Foundation fee was removed 2026-08-03; the NOT NULL column stays and
+		// The purchase fee was removed 2026-08-03; the NOT NULL column stays and
 		// is always zero, so a row that ever carries a non-zero value is a regression.
 		expect(new Decimal(row.crfFee).toFixed(2)).toBe("0.00");
 		// Sales tax is charged inside `buyerTotal` and owed onward, so the row has to record
@@ -1015,12 +1015,12 @@ describe("Seed buy — the price is all-in", () => {
 	});
 });
 
-describe("Foundation remainder — the clamp that persists it", () => {
+describe("remainder — the clamp that persists it", () => {
 	/**
 	 * `anthersSeedBreakdown` deliberately has no floor (pinned in `economics.test.ts`), so a
 	 * heavy enough streamer produces a negative remainder — a true statement about that
 	 * account, and one that must never reach the ledger, where the amount means "what the
-	 * Foundation received". The clamp doing that work is `settle-cycle.ts` (`Decimal.max(0, …)`
+	 * remainder received". The clamp doing that work is `settle-cycle.ts` (`Decimal.max(0, …)`
 	 * on the inflow); the identical-looking clamp in `billing.ts`'s `snapshotCycle` is
 	 * defensive only and cannot currently fire, because that path passes no bandwidth.
 	 *
@@ -1081,13 +1081,13 @@ describe("Foundation remainder — the clamp that persists it", () => {
 			.where(and(eq(accountCycles.userId, heavyId), eq(accountCycles.billingCycle, cycle)));
 		expect(new Decimal(snapshot.foundation).toFixed(2)).toBe("0.00");
 		// The creators this user watched are paid the same regardless: the Time Pool is a
-		// fixed target per Seed, and the Foundation absorbed the shortfall.
+		// fixed target per Seed, and the remainder absorbed the shortfall.
 		expect(new Decimal(snapshot.timePool).toFixed(2)).toBe("1.50");
 	});
 
 	it("settles a cycle only once", async () => {
 		// The marker row in the ledger is the whole idempotency mechanism; a second run
-		// double-booking the Foundation would be silent and permanent.
+		// double-booking the charitable ledger would be silent and permanent.
 		expect(await settleCycle({ accountId: heavyAccountId, cycle })).toBe(0);
 		const rows = await db
 			.select()

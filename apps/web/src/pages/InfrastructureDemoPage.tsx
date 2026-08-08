@@ -110,7 +110,7 @@ const REFERENCE_CREATORS: ReferenceCreator[] = [
 		totalInfra: 65,
 		viewMinutes: "155K",
 		infraPerViewMin: 0.000419,
-		infraPctGross: "Foundation",
+		infraPctGross: "Subsidized",
 		ytGross: 11,
 		ytNet: 6,
 		anthersNet: 11,
@@ -125,7 +125,7 @@ const REFERENCE_CREATORS: ReferenceCreator[] = [
 		totalInfra: 200,
 		viewMinutes: "440K",
 		infraPerViewMin: 0.000455,
-		infraPctGross: "Foundation",
+		infraPctGross: "Subsidized",
 		ytGross: 30,
 		ytNet: 16,
 		anthersNet: 30,
@@ -714,11 +714,10 @@ function ReferenceCreatorProfiles() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
+				These are real YouTube creators mapped onto Anthers' model. YouTube takes 45% as a platform
 				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
-				at cost with no markup. The{" "}
-				<span className="font-semibold text-base-content">Anthers Foundation</span>, funded by the
-				remainder of Seeds given to Anthers, covers free access across the platform.
+				at cost with no markup. <span className="font-semibold text-base-content">Free access</span>
+				, funded by the remainder of Seeds given to Anthers, is covered across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -795,7 +794,7 @@ function ReferenceCreatorProfiles() {
 										${c.totalInfra.toLocaleString()}
 									</td>
 									<td
-										className={`text-sm text-right tabular-nums ${c.infraPctGross === "Foundation" ? "text-info" : ""}`}
+										className={`text-sm text-right tabular-nums ${c.infraPctGross === "Subsidized" ? "text-info" : ""}`}
 									>
 										{c.infraPctGross}
 									</td>
@@ -827,16 +826,16 @@ function ReferenceCreatorProfiles() {
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
 						Anthers Sprout Badge: 2 Seeds to Anthers ($6) → $3 Time Pool to creators, with the
-						remainder (~$2.52) funding the Foundation; Seeds given straight to a creator are 100%
-						theirs. Time Pool is distributed by watch-time. Bandwidth is folded into each Seed, at
-						cost.
+						remainder (~$2.52) funding free access and the charitable programs; Seeds given straight
+						to a creator are 100% theirs. Time Pool is distributed by watch-time. Bandwidth is
+						folded into each Seed, at cost.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
 					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
 					<p>
-						The Anthers Foundation, funded by the remainder of Seeds given to Anthers, covers free
-						access — a free monthly streaming floor per viewer (15 GiB) plus a per-Seed allowance,
-						and 50 GiB free storage per creator — from a shared subsidy pool.
+						Free access — a free monthly streaming floor per viewer (15 GiB) plus a per-Seed
+						allowance, and 50 GiB free storage per creator — is funded by the remainder of Seeds
+						given to Anthers, from a shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>
@@ -1222,7 +1221,7 @@ const TABS: { id: Tab; label: string; description: string }[] = [
 	{
 		id: "profiles",
 		label: "Creator Profiles",
-		description: "Real YouTube creators mapped onto Anthers's infrastructure model",
+		description: "Real YouTube creators mapped onto Anthers' infrastructure model",
 	},
 	{
 		id: "optimizations",

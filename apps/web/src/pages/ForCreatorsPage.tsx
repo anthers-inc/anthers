@@ -8,9 +8,10 @@
 // Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one
 // primitive, a Seed at $3/month, pointed either at a creator (a directed Seed —
 // no platform cut, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
-// (an Anthers-Seed — the fan's streaming at cost, $1.50 into the Time Pool, and the
-// remainder to the Foundation). A fan's rank IS their Anthers-Seed count (Root →
-// Blossom = 1 → 4, "+" beyond). Bandwidth is folded in — no wallet.
+// (a Seed given to Anthers — the fan's streaming at cost, $1.50 into the Time Pool, and
+// a remainder funding free access and the charitable programs). A fan's Badge IS their
+// count of Seeds given to Anthers (Root → Blossom = 1 → 4, "+" beyond). Bandwidth is
+// folded in — no wallet.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (Seeds given to you + direct sales) carries no platform cut — the
@@ -241,12 +242,12 @@ export default function ForCreatorsPage() {
 								icon={<ServerStackIcon className="h-5 w-5" />}
 								title="No fee on your sales"
 							>
-								Anthers takes <strong>nothing</strong> from a sale or a Seed. The only Foundation
-								fee that touches a creator is half of your storage cost past the free{" "}
-								{FREE_STORAGE_GIB} GiB — your own infrastructure, opt-in, and nothing to do with
-								what you sell. The Foundation is funded by what's left of a fan's Seeds to Anthers
-								after their bandwidth, the Time Pool, and the card cost. It funds free access,
-								charitable programs, and lean operations—Anthers itself never profits.
+								Anthers takes <strong>nothing</strong> from a sale or a Seed. The only charge that
+								touches a creator is half again on your storage past the free {FREE_STORAGE_GIB} GiB
+								— your own infrastructure, opt-in, and nothing to do with what you sell. Free access
+								and the charitable programs are funded by what's left of a fan's Seeds to Anthers
+								after their bandwidth, the Time Pool, and the card cost, and by lean
+								operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -481,8 +482,8 @@ export default function ForCreatorsPage() {
 								</li>
 							</ul>
 							A fan's own streaming is covered at cost inside the same Seed, and whatever is left
-							over supports the Foundation—not Anthers' pocket. Anthers is a non-profit: no
-							investors, no profit-taking.
+							over funds free access and the charitable programs—not Anthers' pocket. Anthers is a
+							non-profit: no investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
 				</div>
@@ -553,7 +554,7 @@ export default function ForCreatorsPage() {
 						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
 						split across every creator they spend time with, so what reaches you is your share of
 						their month, not the whole figure. Seeds they give you directly are separate, and carry
-						no platform cut. *A free account pays nothing; the Foundation funds its small Time Pool
+						no platform cut. *A free account pays nothing; free access covers its small Time Pool
 						and its streaming floor, so even a free viewer pays the creators they watch. Bandwidth
 						is folded into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you
 						get {FREE_STORAGE_GIB} GiB of free storage.
@@ -605,8 +606,8 @@ export default function ForCreatorsPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Every Seed threshold of yours carries a Badge you design—a small collectible emblem
-								your supporters wear, the way Anthers's own Badges have their botanical wreaths. The
-								Foundation sponsors emerging illustrators to help creators make them.
+								your supporters wear, the way Anthers' own Badges have their botanical wreaths.
+								Anthers sponsors emerging illustrators to help creators make them.
 							</p>
 						</Card>
 					</Reveal>
@@ -819,8 +820,8 @@ const NO_CUT = "no cut";
 // typed: the creator earns the fan's Time Pool ÷ their watch-hours per watch-hour —
 // the SAME for every medium (equal-time), and independent of resolution (pay is by
 // time, not bytes). The rest of that $6 is the fan's own bandwidth at cost, the
-// at-cost card fee (inside the Seed since 2026-08-03), and the Foundation remainder,
-// which shrinks per hour the more they watch.
+// at-cost card fee (inside the Seed since 2026-08-03), and the remainder that funds
+// free access and the charitable programs, which shrinks per hour the more they watch.
 const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
@@ -869,10 +870,10 @@ const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = 
 	return `$${(afterCut - card).toFixed(2)}`;
 };
 
-/** The Anthers row for a combo. `platform` is what the Anthers Foundation receives —
- * the remainder of a fan's Seeds to Anthers on a stream (funds free access +
- * Foundation programs, NOT a platform profit cut); $0 on a sale (no Foundation fee
- * — removed 2026-08-03) and on a Seed (a pure passthrough). */
+/** The Anthers row for a combo. `platform` is what Anthers itself receives — the
+ * remainder of a fan's Seeds to Anthers on a stream (funds free access + the
+ * charitable programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
+ * removed 2026-08-03) and on a Seed (a pure passthrough). */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
 	creator,
@@ -882,7 +883,7 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit is
-// always $0 — the Foundation remainder funds free access and programs, bandwidth is
+// always $0 — the remainder funds free access and the charitable programs, bandwidth is
 // an at-cost passthrough, and the card fee goes to the processor. Streaming isn't
 // where Anthers competes on pay; the Time Pool share is small and variable, and the
 // real support comes from Seeds and sales.
@@ -897,13 +898,14 @@ const streamReceipt: Line[] = [
 		amount: STREAM_HR_CARD,
 	},
 	{
-		label: "The Foundation — what's left of their Seeds to Anthers, spread across the month",
+		label: "Free access & programs — what's left of their Seeds to Anthers, across the month",
 		amount: STREAM_HR_FOUNDATION,
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
 /** A sale. `net` is your take-home; `card` and `bw` are the at-cost deductions, both
- * paid to third parties. There is no Foundation fee on a purchase (removed 2026-08-03). */
+ * paid to third parties. Anthers charges nothing on a purchase (the fee that used to
+ * sit here was removed 2026-08-03). */
 const purchaseReceipt = (net: string, card: string, bw: string): Line[] => [
 	{ label: "To you — the listed price, less the at-cost costs below", amount: net },
 	{ label: "Card processing — to the payment processor", amount: card },
@@ -918,15 +920,14 @@ const merchReceipt: Line[] = [
 const seedReceipt: Line[] = [
 	{ label: "To you — your Seeds, less the at-cost card share", amount: SEED_NET_STR },
 	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: SEED_CARD_STR },
-	{ label: "Foundation fee", amount: "$0.00" },
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 
 /** The Anthers take-home + receipt for a sale, derived from constants: the list
  * price less at-cost card processing and the first download's bandwidth (both
  * rounded to cents before subtracting, matching fees.ts calculateFees). A digital
- * download costs at least $0.01 to deliver. Anthers keeps $0 — there is no
- * Foundation fee on a purchase (removed 2026-08-03). */
+ * download costs at least $0.01 to deliver. Anthers keeps $0 — the purchase fee was
+ * removed 2026-08-03. */
 const anthersPurchase = (price: number, sizeGiB: number): { netStr: string; receipt: Line[] } => {
 	const card = Math.round((price * CARD_RATE + CARD_FLAT) * 100) / 100;
 	let delivery = Math.round(sizeGiB * BANDWIDTH_PER_GIB * 100) / 100;
@@ -1105,7 +1106,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 /** The interactive heart of "the solution": pick how a fan supports you (purchase /
  * Seed / stream) and the medium, and see exactly what reaches the creator vs.
  * the platform on Anthers and elsewhere. Leads with purchase — the categorical 0%-cut
- * win. Scenario assumptions are stated in-card; figures are estimates and Anthers's
+ * win. Scenario assumptions are stated in-card; figures are estimates and Anthers'
  * profit is $0 on every one. */
 function SolutionExplorer() {
 	const [action, setAction] = useState<ActionKey>("purchase");
@@ -1206,9 +1207,9 @@ function SolutionExplorer() {
 							</table>
 						</div>
 						{combo.note && <p className="mt-3 text-sm text-base-content/55">{combo.note}</p>}
-						{/* The honest Anthers breakdown — the comparison's "to the Platform" is the
-							Foundation fee (charity), not profit; this itemizes where the rest goes and
-							lands on the line the table can't show: Anthers profit is always $0. */}
+						{/* The honest Anthers breakdown — the comparison's "to the Platform" funds free
+							access and the charitable programs, not profit; this itemizes where the rest
+							goes and lands on the line the table can't show: Anthers profit is always $0. */}
 						<div className="mt-4 rounded-2xl border border-base-content/10 bg-base-200/40 p-4">
 							<p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-primary/70">
 								On Anthers, {RECEIPT_INTRO[action]} — Anthers profit is $0
@@ -1264,11 +1265,11 @@ function SolutionExplorer() {
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
 				Anthers never profits. On a sale, the only deductions from your listed price are the at-cost
 				card processing and the buyer's first download — both paid to third parties, never a cent to
-				Anthers (the purchase Foundation fee was removed 2026-08-03). On a stream, the Foundation
-				receives what's left of the fan's Seeds to Anthers after their bandwidth, the Time Pool, and
-				the at-cost card fee — funding free access and the Foundation's programs. A Seed given to
-				you is a pure passthrough. Scenario figures are illustrative; competitor rates are rough
-				public estimates, all-in take-home at the same list price.
+				Anthers (the purchase fee was removed 2026-08-03). On a stream, what's left of the fan's
+				Seeds to Anthers after their bandwidth, the Time Pool, and the at-cost card fee funds free
+				access and the charitable programs. A Seed given to you is a pure passthrough. Scenario
+				figures are illustrative; competitor rates are rough public estimates, all-in take-home at
+				the same list price.
 			</p>
 		</Card>
 	);

@@ -23,7 +23,7 @@ import {
 const GIB = new Decimal("1073741824");
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** Maximum discretionary Foundation subsidy per creator per month. */
+/** Maximum discretionary hosting subsidy per creator per month. */
 export const MAX_MONTHLY_SUBSIDY = new Decimal("25.00");
 
 // ── Payments (the at-cost card fee, added ON TOP of the charge) ───────────────
@@ -46,7 +46,7 @@ export function cardFee(amount: Decimal | number): Decimal {
  *
  * The fixed $0.30 is per *charge*, not per Seed, so a user who gives directed
  * Seeds alongside Anthers-Seeds amortises it across a bigger charge — which
- * leaves a fatter Foundation remainder AND pays their creators more. That effect
+ * leaves a fatter remainder AND pays their creators more. That effect
  * is the whole reason every Seed batches onto one monthly transaction.
  */
 export function paymentsSplit(
@@ -71,18 +71,18 @@ export function paymentsSplit(
 /**
  * Decompose a user's Anthers-Seeds into where each $3 goes:
  *
- *   Anthers-Seed value ($3 × n) = bandwidth + Time Pool + Payments + Foundation
+ *   Anthers-Seed value ($3 × n) = bandwidth + Time Pool + Payments + remainder
  *
  * Time Pool ($1.50/Seed) is a fixed target to creators and never moves; bandwidth
  * is the user's own at-cost usage; `payments` is this side's share of the at-cost
- * card fee (see `paymentsSplit`); the **Foundation is the remainder** — the shock
+ * card fee (see `paymentsSplit`); the **the remainder is what's left** — the shock
  * absorber, so a heavy streamer or an expensive charge shrinks the mission share
  * while creator pay stays exactly the same. Free (n = 0) pays $0: its small Time
- * Pool and in-floor bandwidth are subsidised, and it funds no Foundation.
+ * Pool and in-floor bandwidth are subsidised, and it funds no charitable remainder.
  *
  * `payments` defaults to 0 so a caller that only wants the Time-Pool/bandwidth
- * view is unaffected — but anything crediting the **Foundation ledger** must pass
- * it, or the Foundation is over-credited by the card fee.
+ * view is unaffected — but anything crediting the **charitable ledger** must pass
+ * it, or the charitable ledger is over-credited by the card fee.
  */
 export function anthersSeedBreakdown(
 	anthersSeeds: number,
@@ -172,7 +172,7 @@ export function supportBreakdown(params: {
 	};
 }
 
-/** A rung of Anthers's Badge ladder as a display view model — money pre-rounded to 2dp. */
+/** A rung of Anthers' Badge ladder as a display view model — money pre-rounded to 2dp. */
 export interface BadgeView {
 	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
 	id: BadgeKey;
@@ -183,7 +183,7 @@ export interface BadgeView {
 	price: number;
 	/** Time Pool $ at this rank (to creators, by watch-time). */
 	timePool: string;
-	/** "Supports Anthers" — your bandwidth (at cost) + the Foundation remainder. */
+	/** "Supports Anthers" — your bandwidth (at cost) + the remainder. */
 	supportsAnthers: string;
 	/** Streaming allowance (GiB) at this rank. */
 	allowanceGiB: number;
@@ -194,7 +194,7 @@ export interface BadgeView {
  * The rank ladder as view models, low → high (free … blossom). Pure and static —
  * derived from the Seed dials, no per-user data — so the Subscribe page, the
  * `/subscriptions/ranks` route, and inline-unlock all render the same numbers and
- * can't drift. "Supports Anthers" bundles bandwidth (at cost) + the Foundation
+ * can't drift. "Supports Anthers" bundles bandwidth (at cost) + the
  * remainder into one line (as the Subscribe page shows it).
  */
 export function badgeViews(): BadgeView[] {
@@ -267,8 +267,8 @@ export function unusedAllowanceValue(remainingAllowanceGiB: Decimal | number): D
 	return bandwidthCost(remainingAllowanceGiB);
 }
 
-// ── Foundation fee split (coarse accounting view; see FOUNDATION_SPLIT) ────────
-/** Split a Foundation-fee amount into Admin / Programs / Subsidy. */
+// ── Charitable split (coarse accounting view; see FOUNDATION_SPLIT) ────────
+/** Split a charitable-revenue amount into Admin / Programs / Subsidy. */
 export function foundationSplit(feeAmount: Decimal | number): {
 	admin: Decimal;
 	programs: Decimal;
@@ -283,24 +283,23 @@ export function foundationSplit(feeAmount: Decimal | number): {
 }
 
 // ── Direct purchases (zero-cut, pass-through) ─────────────────────────────────
-/** What a direct purchase delivers, which sets its Foundation Fee basis. */
+/** What a direct purchase delivers, which sets its fee basis. */
 export type PurchaseType = "digital" | "physical" | "service";
 
 /**
- * Fee breakdown for a direct purchase (zero-cut, pass-through model).
+ * Fee breakdown for a direct purchase (zero-cut, all-in price).
  *
- * The creator receives the full listed price; the Anthers Foundation Fee, delivery
- * bandwidth, and card + sales tax are added on top and paid by the buyer — never
- * subtracted from earnings. Anthers keeps $0.
+ * The listed price IS what the buyer pays, plus sales tax and nothing else. Card
+ * processing and — on a digital sale — the buyer's first download come **out of**
+ * that price, both paid to third parties. Anthers keeps $0.
  *
- * - `digital`: the AFF is the **Digital AFF** — 50% of the download's bandwidth —
- *   and the buyer also pays that bandwidth at cost (folded into the price, never
- *   drawn from the streaming allowance).
- * - `physical` / `service`: no bytes are delivered, so the AFF is a nominal
- *   **Physical & Service AFF** of 1% of the price, and there is no delivery fee.
+ * - `digital`: the first download is delivered at cost and deducted from the
+ *   creator's earnings, so nobody buys something they cannot download. Redownloads
+ *   draw the buyer's own streaming allowance instead.
+ * - `physical` / `service`: no bytes are delivered, so there is no delivery cost.
  *
- * `crfFee` keeps its legacy key name and is now **always zero** — see the note at
- * the return statement.
+ * `crfFee` keeps its legacy key name and is **always zero** — the purchase fee it
+ * used to carry was removed 2026-08-03. See the note at the return statement.
  */
 export function calculateFees(
 	amount: Decimal,
@@ -332,7 +331,7 @@ export function calculateFees(
 		processingFee,
 		deliveryFee,
 		salesTax,
-		// Anthers takes $0 from a creator transaction. The purchase Foundation fee
+		// Anthers takes $0 from a creator transaction. The purchase fee
 		// was removed 2026-08-03 — a commission on a creator's sale is the exact
 		// feature Rev. Rul. 76-152 keyed on. The `crf_fee` column is NOT NULL, so it
 		// stays and is always zero; dropping it is a separate migration.
@@ -343,10 +342,10 @@ export function calculateFees(
 }
 
 /**
- * A creator's monthly storage cost and the storage-side Foundation Fee.
+ * A creator's monthly storage cost and the half-again on top of it.
  *
- * Storage beyond the free allowance is billed at DigitalOcean rates; the AFF is
- * 50% of that storage cost. Delivery is viewer-funded, so it is not billed here.
+ * Storage beyond the free allowance is billed at DigitalOcean rates, plus half
+ * again — the half is what funds free access and the charitable programs. Delivery is viewer-funded, so it is not billed here.
  * A self-hosting creator (Anthers stores/serves nothing) pays a flat fee instead.
  */
 export function estimateStorageCost(params: { storageBytes: number; isSelfHosting?: boolean }): {

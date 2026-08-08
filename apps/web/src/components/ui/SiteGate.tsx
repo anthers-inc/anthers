@@ -202,10 +202,10 @@ export function SiteGatePanel({
 									</p>
 
 									<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
-										Supporting it all: a charitable foundation dedicated to lifting up new and
-										marginalized creators; building honest, healthy connection between creators and
-										their audiences without corporate interference or middlemen; and making great
-										creative and educational content is available to all, for free, forever.
+										Supporting it all: a non-profit dedicated to lifting up new and marginalized
+										creators; building honest, healthy connection between creators and their
+										audiences without corporate interference or middlemen; and making great creative
+										and educational content available to all, for free, forever.
 									</p>
 								</div>
 
