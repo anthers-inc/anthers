@@ -144,7 +144,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<ChartBarIcon className="h-6 w-6" />}
 							title="Unified creator dashboard"
-							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers's dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
+							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers' dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
 						/>
 					</Reveal>
 				</div>
@@ -344,7 +344,7 @@ export default function CompareItchPage() {
 					<Eyebrow>Come on over</Eyebrow>
 					<H2>Bring your itch.io projects with you</H2>
 					<Lede>
-						Already have projects on itch.io? Anthers's import tool can help you bring your project
+						Already have projects on itch.io? Anthers' import tool can help you bring your project
 						metadata over so you can get started quickly. You don't have to choose one or the
 						other—publish on both, and let your audience find you wherever they prefer.
 					</Lede>

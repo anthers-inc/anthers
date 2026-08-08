@@ -172,7 +172,7 @@ export function supportBreakdown(params: {
 	};
 }
 
-/** A rung of Anthers's Badge ladder as a display view model — money pre-rounded to 2dp. */
+/** A rung of Anthers' Badge ladder as a display view model — money pre-rounded to 2dp. */
 export interface BadgeView {
 	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
 	id: BadgeKey;

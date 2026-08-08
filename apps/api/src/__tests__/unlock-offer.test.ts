@@ -8,7 +8,7 @@
  * as "Unlock with Blossom" — a Badge that by definition does not clear it — with the price
  * silently missing, because the price came from a Badge-rung lookup that found nothing.
  *
- * Anthers's own Badges sit at 1/2/3/4, so that only misfired above 4 and nobody hit it. But
+ * Anthers' own Badges sit at 1/2/3/4, so that only misfired above 4 and nobody hit it. But
  * `accessRowSchema` accepts any non-negative threshold and the whole point of the
  * threshold-not-position work is that a gate needn't sit on a Badge — so the tests below
  * deliberately gate at levels no Badge occupies. It is the same failure mode `badgeRank()`
@@ -110,9 +110,9 @@ describe("unlock offer — naming the Badge", () => {
 	});
 
 	it("names no Badge for a gate BETWEEN two Badges", () => {
-		// Sparse ladders are legal — a creator's 1/3/5/7 is as valid as Anthers's 1/2/3/4 —
+		// Sparse ladders are legal — a creator's 1/3/5/7 is as valid as Anthers' 1/2/3/4 —
 		// so "between" has to work as well as "above". Driven through `unlockRoute` directly
-		// against a deliberately gappy set, because `resolveAccessSync` is bound to Anthers's
+		// against a deliberately gappy set, because `resolveAccessSync` is bound to Anthers'
 		// own consecutive Badges and could never exhibit the gap. Same discipline as
 		// `packages/shared/src/badges.test.ts`.
 		const sparse = [

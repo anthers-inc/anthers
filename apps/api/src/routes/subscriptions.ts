@@ -77,7 +77,7 @@ const BADGE_VIEWS = badgeViews();
 /** The Badge view for a count of Seeds given to Anthers (capped at Blossom for display). */
 function badgeViewFor(anthersSeeds: number) {
 	// Look the rung up by its Badge, never by array position. `thresholdForBadge` returns a
-	// THRESHOLD, and a threshold only doubles as an index while Anthers's Badges sit at
+	// THRESHOLD, and a threshold only doubles as an index while Anthers' Badges sit at
 	// 1/2/3/4; the moment they don't, indexing returns the wrong rung or undefined.
 	const held = heldBadgeName(anthersSeeds);
 	return BADGE_VIEWS.find((v) => v.id === held) ?? BADGE_VIEWS[0];

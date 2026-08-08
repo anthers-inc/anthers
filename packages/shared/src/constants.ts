@@ -9,7 +9,7 @@ export const APP_NAME = "Anthers";
  *     processing; clears that creator's Seed Gates in $3 increments; or
  *   - at **Anthers** (an *Anthers-Seed*): covers the user's streaming (at cost),
  *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), earns
- *     **Anthers's Badges**, and leaves a **remainder** for Anthers.
+ *     **Anthers' Badges**, and leaves a **remainder** for Anthers.
  *
  * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
  * Anthers is a recipient like any creator — it simply defines its own Badge set
@@ -36,11 +36,11 @@ export const APP_NAME = "Anthers";
  * A Badge: a name at a whole-Seed threshold. This shape is the whole point — a
  * Badge is identified by the Seeds it takes to hold, never by its position in a
  * list, because an issuer may place Badges at ANY Seed levels. A creator's set of
- * 1/3/5/7 is exactly as valid as Anthers's 1/2/3/4; the only rule is that the
+ * 1/3/5/7 is exactly as valid as Anthers' 1/2/3/4; the only rule is that the
  * granularity floor is one Seed.
  *
  * This replaced an enum whose *index* was compared against a Seed count. That
- * worked only because Anthers's Badges happen to sit at consecutive integers, so
+ * worked only because Anthers' Badges happen to sit at consecutive integers, so
  * index and threshold coincided — an accident, not a design. Under any
  * non-consecutive set it mis-resolved access silently: no error, just wrong
  * answers. Compare thresholds, never positions.
@@ -51,7 +51,7 @@ export interface BadgeDef {
 	threshold: number;
 }
 
-/** Anthers's own Badge set — ordinary Badges; Anthers just defines its own. */
+/** Anthers' own Badge set — ordinary Badges; Anthers just defines its own. */
 export const ANTHERS_BADGES: readonly BadgeDef[] = [
 	{ name: "root", threshold: 1 },
 	{ name: "sprout", threshold: 2 },
@@ -59,7 +59,7 @@ export const ANTHERS_BADGES: readonly BadgeDef[] = [
 	{ name: "blossom", threshold: 4 },
 ] as const;
 
-/** The names in Anthers's set, for the places that still need a closed union. */
+/** The names in Anthers' set, for the places that still need a closed union. */
 export type Badge = "root" | "sprout" | "petal" | "blossom";
 
 // ── Seed dials (Seed price locked; allocation dials tuned-but-tunable) ────────
@@ -114,7 +114,7 @@ export type BadgeKey = Badge | "free";
  * Badge in ascending threshold order.
  *
  * This is a **display** list, not a ladder to index into. A Badge is identified by its
- * threshold, never by its position here — the two coincide for Anthers's own set (1/2/3/4)
+ * threshold, never by its position here — the two coincide for Anthers' own set (1/2/3/4)
  * and that coincidence is what made the retired `badgeRank = BADGE_ORDER.indexOf(name)`
  * look correct while silently mis-resolving any set with gaps. Never reintroduce an
  * `indexOf` against this; use `thresholdForBadge` or `seedsMeet`.

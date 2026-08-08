@@ -714,7 +714,7 @@ function ReferenceCreatorProfiles() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				These are real YouTube creators mapped onto Anthers's model. YouTube takes 45% as a platform
+				These are real YouTube creators mapped onto Anthers' model. YouTube takes 45% as a platform
 				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
 				at cost with no markup. <span className="font-semibold text-base-content">Free access</span>
 				, funded by the remainder of Seeds given to Anthers, is covered across the platform.
@@ -1221,7 +1221,7 @@ const TABS: { id: Tab; label: string; description: string }[] = [
 	{
 		id: "profiles",
 		label: "Creator Profiles",
-		description: "Real YouTube creators mapped onto Anthers's infrastructure model",
+		description: "Real YouTube creators mapped onto Anthers' infrastructure model",
 	},
 	{
 		id: "optimizations",

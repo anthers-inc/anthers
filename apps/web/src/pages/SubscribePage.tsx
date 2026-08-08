@@ -8,7 +8,7 @@
 //     scales your streaming allowance, Time Pool, and the Anthers Gates you clear.
 //   • Back a CREATOR (right) — Seeds, $3/mo each, no platform cut. Each Seed level
 //     unlocks more of their world, and each is branded with the creator's own Badge —
-//     the same mechanic as Anthers's Badges, so users can collect them across creators.
+//     the same mechanic as Anthers' Badges, so users can collect them across creators.
 //
 // Both cards share the BadgeLadder (Anthers renders its botanical wreaths; a creator
 // renders their own cute emblems). Seeds run 0–10; past 4 you keep the top Badge with a
@@ -58,7 +58,7 @@ const LADDER: { label: string; badge: Badge }[] = [
 
 // A generic example creator's Badges (one per Seed level) + what each unlocks. Cute and
 // deliberately NOT botanical, so they read as the creator's own brand, distinct from
-// Anthers's flower Badges. Gate i unlocks at i+1 Seeds ($(i+1)*3).
+// Anthers' flower Badges. Gate i unlocks at i+1 Seeds ($(i+1)*3).
 const CREATOR_BADGES = [
 	{ emoji: "🐣", name: "New Friend", perk: "Early access to everything new" },
 	{ emoji: "🌟", name: "Regular", perk: "Behind-the-scenes & extras" },

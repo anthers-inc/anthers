@@ -119,7 +119,7 @@ const SEED_NET = money(SEED_SPEND - (SEED_SPEND * CARD_RATE + CARD_FLAT));
 /** What Patreon delivers on the same $6: 10% platform fee, then the same card cost. */
 const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - (SEED_SPEND * CARD_RATE + CARD_FLAT));
 
-// Anthers's per-transaction facts, reused across tabs. Anthers's cut is a literal
+// Anthers' per-transaction facts, reused across tabs. Anthers' cut is a literal
 // $0 everywhere; what comes out of a price is at-cost card processing (to the
 // processor) and, on a digital sale, the buyer's first download (to the CDN).
 const A_STREAM: Side = {
@@ -128,7 +128,7 @@ const A_STREAM: Side = {
 	cut: "$0",
 	cutKind: "none",
 };
-/** A direct sale. Anthers's cut is a literal $0 — what comes out of the listed
+/** A direct sale. Anthers' cut is a literal $0 — what comes out of the listed
  * price is at-cost card processing and the buyer's first download, both paid to
  * third parties. `net` is what actually reaches the creator. */
 const aPrice = (list: string, net: string): Side => ({
@@ -337,7 +337,7 @@ export default function CreatorPayComparisonPage() {
 
 			<div className="mt-6 rounded-xl border border-dashed border-base-300 bg-base-200/40 p-4 text-sm leading-relaxed text-base-content/70">
 				<b className="text-base-content">The bottom line.</b> Nothing Anthers does comes out of your
-				earnings. Anthers's cut is <b className="text-base-content">$0</b> on every Seed and every
+				earnings. Anthers' cut is <b className="text-base-content">$0</b> on every Seed and every
 				sale — the only deductions are the real costs of moving money and bytes, paid to third
 				parties, and the Time Pool reaches creators whole. Where we clearly win is Seeds and
 				purchases. Streaming we treat as a public good, not a paycheck: under equal-time a music
