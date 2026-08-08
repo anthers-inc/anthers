@@ -38,8 +38,7 @@ import {
 	BADGE_ORDER,
 	BANDWIDTH_PER_GIB,
 	badgeLabel,
-	CARD_FLAT,
-	CARD_RATE,
+	cardFeeDisplay,
 	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
 	SEED_PRICE,
@@ -827,7 +826,7 @@ const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
 const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
 const STREAM_FAN_BANDWIDTH = STREAM_FAN_HOURS * DELIVERY_GIB_PER_HOUR * BANDWIDTH_PER_GIB;
-const STREAM_FAN_CARD = STREAM_FAN_SPEND * CARD_RATE + CARD_FLAT;
+const STREAM_FAN_CARD = cardFeeDisplay(STREAM_FAN_SPEND);
 const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
 const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
 const STREAM_HR_BANDWIDTH = perHour(STREAM_FAN_BANDWIDTH);
@@ -846,7 +845,7 @@ const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
 /** The at-cost card fee if these Seeds were the fan's ENTIRE monthly charge — the
  * worst case, and what a creator should plan against. A fan who also gives Seeds
  * elsewhere spreads the fixed $0.30 further and pays you more. */
-const SEED_CARD = SEED_SPEND * CARD_RATE + CARD_FLAT;
+const SEED_CARD = cardFeeDisplay(SEED_SPEND);
 const SEED_CARD_STR = `$${SEED_CARD.toFixed(2)}`;
 const SEED_NET_STR = `$${(SEED_SPEND - SEED_CARD).toFixed(2)}`;
 /** Rival all-in take-home on the same $6 monthly support: list × (1 − cutRate),
@@ -866,7 +865,7 @@ const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur unti
 const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = false) => {
 	const afterCut = price * (1 - cutRate);
 	if (absorbsProcessing) return `$${afterCut.toFixed(2)}`;
-	const card = Math.round((price * CARD_RATE + CARD_FLAT) * 100) / 100;
+	const card = cardFeeDisplay(price);
 	return `$${(afterCut - card).toFixed(2)}`;
 };
 
@@ -929,7 +928,7 @@ const seedReceipt: Line[] = [
  * download costs at least $0.01 to deliver. Anthers keeps $0 — the purchase fee was
  * removed 2026-08-03. */
 const anthersPurchase = (price: number, sizeGiB: number): { netStr: string; receipt: Line[] } => {
-	const card = Math.round((price * CARD_RATE + CARD_FLAT) * 100) / 100;
+	const card = cardFeeDisplay(price);
 	let delivery = Math.round(sizeGiB * BANDWIDTH_PER_GIB * 100) / 100;
 	if (sizeGiB > 0 && delivery <= 0) delivery = 0.01;
 	const net = Math.round((price - card - delivery) * 100) / 100;

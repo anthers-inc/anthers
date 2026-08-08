@@ -20,8 +20,7 @@
 // creator stepper stays illustrative, since giving Seeds to a creator needs a creator.
 
 import {
-	CARD_FLAT,
-	CARD_RATE,
+	cardFeeDisplay,
 	DELIVERY_GIB_PER_HOUR,
 	FREE_FLOOR_GIB,
 	FREE_TIME_POOL,
@@ -72,7 +71,7 @@ function money(n: number): string {
 
 /** The at-cost card fee on a monthly charge (2.9% + $0.30 on the whole batch). */
 function cardFee(cost: number): number {
-	return cost > 0 ? CARD_FLAT + CARD_RATE * cost : 0;
+	return cardFeeDisplay(cost);
 }
 
 /** Rough watch-hours a GiB figure buys at the 1080p60 AV1 reference throughput. */

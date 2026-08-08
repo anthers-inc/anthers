@@ -7,27 +7,32 @@
  * 2. Time Pool = $1.50 per Anthers-Seed the viewer holds, distributed
  *    proportionally by watch-time. A higher rank = a bigger pool, so all of that
  *    viewer's watch-time pays creators more — no per-item multiplier.
- * 3. Seeds: directed Seeds are credited GROSS to the named creators. There are no
- *    undirected creator-Seeds — a Seed is either directed to a creator or held as an
- *    Anthers-Seed (which funds the Time Pool + the remainder, settled in settle-cycle).
- *
- * !! KNOWN DISCREPANCY, not resolved here (found 2026-08-08). The economic model in
- *    `packages/shared/src/fees.ts` says a directed Seed reaches its creator NET of
- *    that Seed's pro-rata share of the at-cost card fee — `supportBreakdown` returns
- *    `creatorNet` with the docstring "use this for anything describing payout", and
- *    `economics.test.ts` pins a lone $3 Seed at $2.61. This job credits the full
- *    $3.00 and nothing else deducts the difference, so the ledger and the model
- *    disagree about roughly $0.39 per unbatched Seed. It matters most for a
- *    pure-direct user (0 Anthers-Seeds), who has no remainder for the fee to come out
- *    of, which means today Anthers absorbs it. Resolving it is a money decision —
- *    either this job deducts `paymentsSplit(...).creator`, or the model stops
- *    claiming it does. Do not "fix" one side in passing.
+ * 3. Seeds: directed Seeds are credited **NET** of the creator side's pro-rata share
+ *    of the at-cost card fee (`paymentsSplit`), which is what `fees.ts` has always
+ *    said a creator actually receives. There are no undirected creator-Seeds — a Seed
+ *    is either directed to a creator or held as an Anthers-Seed (which funds the Time
+ *    Pool + the remainder, settled in settle-cycle).
  * 4. Create/update PoolDistribution ledger entries.
+ *
+ * The Time Pool is NOT reduced by any of this. It is a fixed $1.50-per-Seed target
+ * and the Anthers side's own remainder absorbs its share of the fee, so creator pay
+ * from the Time Pool is exactly what the model promises.
+ *
+ * > Until 2026-08-08 this job credited the GROSS $3.00 while `fees.ts` and
+ * > `economics.test.ts` both said $2.61 for an unbatched Seed, so the ledger and the
+ * > model disagreed by the card fee. Nothing else deducted it, which meant Anthers
+ * > silently absorbed ~$0.39 on every Seed from a pure-direct user — an account with
+ * > no remainder for it to come out of. Parker's call: `fees.ts` is correct in full,
+ * > processing comes out of the creator's side, and a single-Seed card transaction is
+ * > the worst case. **`poolDistributions.seedAmount` is a payout figure, so it holds
+ * > NET.** The gross a user chose to give is still on `seed_allocations.amount`,
+ * > which is the record of the gift rather than of the payment, and is untouched.
  */
 
 import { db } from "@anthers/db";
 import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
-import { timePoolFor } from "@anthers/shared/constants";
+import { SEED_PRICE, timePoolFor } from "@anthers/shared/constants";
+import { paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sum } from "drizzle-orm";
 
@@ -35,6 +40,9 @@ export interface DistributePoolData {
 	/** If set, distribute for a single account. Otherwise all active accounts. */
 	accountId?: number;
 }
+
+/** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
+const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 /** The Time Pool a user funds this cycle = $1.50 per Anthers-Seed (subsidised at rank 0). */
 function computeTimePoolAmount(anthersSeeds: number): Decimal {
@@ -111,10 +119,9 @@ async function distributeForAccount(acct: {
 		return d;
 	};
 
-	// 2. Directed Seeds → credited GROSS to the named creator; see the discrepancy
-	//    note at the top of this file before changing that. (Undirected Seeds are NOT
-	//    distributed here — the user must direct them; the remainder is settled to
-	//    the subsidy pool in settle-cycle.ts.)
+	// 2. Directed Seeds → credited NET of the creator side's share of the at-cost card
+	//    fee. (Undirected Seeds are NOT distributed here — the user must direct them;
+	//    the remainder is settled to the subsidy pool in settle-cycle.ts.)
 	const directed = await db
 		.select()
 		.from(seedAllocations)
@@ -122,8 +129,39 @@ async function distributeForAccount(acct: {
 			and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycleDate)),
 		);
 
+	let grossDirected = new Decimal(0);
 	for (const seed of directed) {
-		ensure(seed.creatorId).seedAmount = new Decimal(seed.amount);
+		const gross = new Decimal(seed.amount);
+		ensure(seed.creatorId).seedAmount = gross;
+		grossDirected = grossDirected.plus(gross);
+	}
+
+	// The card fee is charged once on the WHOLE batched monthly charge and split
+	// pro-rata, so a user who also gives Seeds to Anthers amortises the fixed $0.30
+	// and every creator on that charge is paid more. Worst case is a single directed
+	// Seed alone: $3.00 gross → $2.61 net.
+	if (grossDirected.gt(0)) {
+		const creatorFee = paymentsSplit(
+			acct.anthersSeeds,
+			grossDirected.div(SEED_PRICE).toNumber(),
+		).creator;
+		if (creatorFee.gt(0)) {
+			for (const d of distributions.values()) {
+				if (d.seedAmount.lte(0)) continue;
+				// Each creator bears the fee in proportion to what was directed at them.
+				const share = CENTS(creatorFee.mul(d.seedAmount).div(grossDirected));
+				d.seedAmount = Decimal.max(0, d.seedAmount.minus(share));
+			}
+			// Conserve exactly: rounding must not leave Anthers over- or under-paying.
+			correctDrift(
+				distributions,
+				grossDirected.minus(creatorFee),
+				(d) => d.seedAmount,
+				(d, v) => {
+					d.seedAmount = v;
+				},
+			);
+		}
 	}
 
 	// 3. Distribute the Time Pool proportionally by watch-time.

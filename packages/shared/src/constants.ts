@@ -255,12 +255,34 @@ export const FREE_STORAGE_GIB = 50;
 /** Flat monthly fee for a self-hosting creator (Anthers stores/serves nothing). */
 export const SELF_HOST_FEE = 1;
 
-// ── Payments (added ON TOP of the Seed charge; both leave the system) ─────────
-/** Card processing: 2.9% + $0.30, on the whole batched charge, added on top. */
+// ── Payments (INSIDE the charge since 2026-08-03; it leaves the system) ───────
+/** Card processing: 2.9% + $0.30, charged once on the whole batched charge. */
 export const CARD_RATE = 0.029;
 export const CARD_FLAT = 0.3;
 /** US average combined state+local sales tax, illustrative. */
 export const SALES_TAX_RATE = 0.065;
+
+/**
+ * The card fee, in floats, for **display only** — marketing pages and calculators.
+ *
+ * `cardFee()` in `fees.ts` is the money version and the source of truth, but it is
+ * built on decimal.js and **nothing in the browser bundle may import `fees.ts`** —
+ * that is the one import that would pull decimal.js into the SPA. So the display
+ * side needs its own arithmetic, and the hazard is obvious: a second formula that
+ * can quietly disagree with the first.
+ *
+ * This exists so there is exactly **one** such formula rather than the five
+ * hand-rolled `price * CARD_RATE + CARD_FLAT` copies that had accumulated across the
+ * pages by 2026-08. `cardFeeDisplay` is pinned equal to `cardFee` to the cent across
+ * the whole plausible range by `economics.test.ts`; if that test ever fails, the two
+ * have drifted and the money one wins.
+ *
+ * Never use this to compute what anyone is actually paid.
+ */
+export function cardFeeDisplay(amount: number): number {
+	if (!(amount > 0)) return 0;
+	return Math.round((amount * CARD_RATE + CARD_FLAT) * 100) / 100;
+}
 
 // ── Payouts ──────────────────────────────────────────────────────────────────
 /**

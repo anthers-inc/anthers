@@ -17,8 +17,7 @@ import {
 	BANDWIDTH_PER_GIB,
 	type BadgeKey,
 	badgeLabel,
-	CARD_FLAT,
-	CARD_RATE,
+	cardFeeDisplay,
 	SALES_TAX_RATE,
 	seedCost,
 	thresholdForBadge,
@@ -33,7 +32,6 @@ const serif = { fontFamily: FONTS.fraunces };
 
 // ─── Rates — single source of truth: @anthers/shared (the same numbers the API
 // charges). Only the presentation (badge emoji/wreaths) lives here. ───
-const CARD_PCT = CARD_RATE;
 const TAX_PCT = SALES_TAX_RATE;
 
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -200,12 +198,12 @@ export function SubscriptionCalculator() {
 	const timePool = timePoolFor(n);
 	// "Supports Anthers" bundles your bandwidth (at cost) + the remainder that funds
 	// free access and the charitable programs.
-	const supportsAnthers = n === 0 ? 0 : price - timePool - (price * CARD_PCT + CARD_FLAT);
+	const supportsAnthers = n === 0 ? 0 : price - timePool - cardFeeDisplay(price);
 	const toCreators = n === 0 ? 0 : timePool;
 
 	// The at-cost Payments line sits INSIDE the Seed price; sales tax is the only thing
 	// added on top. Free ($0) has neither.
-	const card = price > 0 ? price * CARD_PCT + CARD_FLAT : 0;
+	const card = cardFeeDisplay(price);
 	const tax = price * TAX_PCT;
 	const processing = card;
 	const total = price + tax;
@@ -326,7 +324,7 @@ export function PurchaseExample({
 	// The list price IS the advertised price: card processing and the first download
 	// come out of it, and sales tax is the only thing added. Anthers keeps $0 — there
 	// is no platform fee on a purchase (removed 2026-08-03).
-	const card = price * CARD_PCT + CARD_FLAT;
+	const card = cardFeeDisplay(price);
 	const delivery = sizeGiB * BANDWIDTH_PER_GIB; // $0.01/GiB, at cost
 	const creator = price - card - delivery;
 	const tax = price * TAX_PCT;

@@ -18,7 +18,7 @@ import {
 	seedCost,
 	timePoolFor,
 } from "@anthers/shared/constants";
-import { anthersSeedBreakdown } from "@anthers/shared/fees";
+import { anthersSeedBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import { eq, like, sql } from "drizzle-orm";
 import {
 	accountCycles,
@@ -1395,14 +1395,25 @@ async function seed() {
 			}
 			for (const r of shares) directed.set(r.username, r.whole * SEED_PRICE);
 
+			// The creator side's share of the at-cost card fee, which `distribute-pool.ts`
+			// deducts before crediting a payout. The fixture has to deduct it too, or dev
+			// shows earnings the real job would never produce.
+			const creatorCardFee = paymentsSplit(cfg.anthersSeeds, seedsToGive).creator.toNumber();
+
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
 				if (!creatorId) continue;
 
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
 				const poolAmt = Math.round(timePool * proportion * 100) / 100;
-				// Settled Seed income is exactly what the user directed — whole Seeds, nothing spread.
-				const seedAmt = directed.get(creatorUsername) ?? 0;
+				// Settled Seed income is what the user directed, NET of that Seed's share of
+				// the card fee — whole Seeds in, a payout figure out.
+				const gross = directed.get(creatorUsername) ?? 0;
+				const share =
+					creatorSeedTotal > 0
+						? Math.round(creatorCardFee * (gross / creatorSeedTotal) * 100) / 100
+						: 0;
+				const seedAmt = Math.max(0, Math.round((gross - share) * 100) / 100);
 
 				try {
 					await db.insert(poolDistributions).values({

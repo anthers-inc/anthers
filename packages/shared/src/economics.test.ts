@@ -7,7 +7,13 @@
 // monthly charge and split pro-rata, and only sales tax is ever added on top.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { BADGE_ORDER, SEED_PRICE, TIME_POOL_PER_SEED, timePoolFor } from "./constants.js";
+import {
+	BADGE_ORDER,
+	cardFeeDisplay,
+	SEED_PRICE,
+	TIME_POOL_PER_SEED,
+	timePoolFor,
+} from "./constants.js";
 import {
 	anthersSeedBreakdown,
 	badgeViews,
@@ -91,6 +97,34 @@ describe("cardFee (Payments, inside the price)", () => {
 		expect(cardFee(3).div(3).toNumber()).toBeCloseTo(0.13, 2); // ~13% borne alone
 		expect(cardFee(12).div(12).toNumber()).toBeCloseTo(0.054, 3); // ~5.4% batched
 		expect(cardFee(12).lessThan(cardFee(3).mul(4))).toBe(true); // one charge beats four
+	});
+});
+
+describe("cardFeeDisplay — the browser's copy of the formula", () => {
+	/**
+	 * The display side cannot import `fees.ts` (decimal.js must stay out of the SPA
+	 * bundle), so it has its own float arithmetic. That is a second formula, and a
+	 * second formula is exactly how the payout ledger drifted from the model before
+	 * 2026-08-08. This pins them together instead of hoping.
+	 */
+	test("agrees with cardFee() to the cent across the whole plausible range", () => {
+		const amounts = [
+			0, 0.01, 0.99, 1, 2.5, 3, 6, 9, 10, 12, 19.99, 20, 25, 33.33, 49.95, 100, 250, 999.99,
+		];
+		for (const a of amounts) {
+			expect(cardFeeDisplay(a)).toBe(cardFee(a).toNumber());
+		}
+		// And across a dense sweep, where float rounding is most likely to disagree.
+		for (let cents = 1; cents <= 20_000; cents += 7) {
+			const a = cents / 100;
+			expect(cardFeeDisplay(a)).toBe(cardFee(a).toNumber());
+		}
+	});
+
+	test("is zero at and below zero, matching cardFee()", () => {
+		expect(cardFeeDisplay(0)).toBe(0);
+		expect(cardFeeDisplay(-5)).toBe(0);
+		expect(cardFee(0).toNumber()).toBe(0);
 	});
 });
 
