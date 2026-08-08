@@ -17,8 +17,8 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, moderationActions, moderationReports, ratings } from "@anthers/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { comments, moderationActions, moderationReports, ratings, users } from "@anthers/db/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
@@ -260,6 +260,51 @@ describe("The operator queue", () => {
 		expect(entry?.context?.slug).toBe(slug);
 		expect(entry?.moderationStatus).toBe("visible");
 		expect(summary.openReports).toBeGreaterThanOrEqual(1);
+	});
+
+	it("does not let orphaned reports crowd a live one out of the queue", async () => {
+		// Reports are polymorphic with no FK on the subject, so deleting a post cascades
+		// its comments away and strands their reports. Hydration drops those — but it used
+		// to run AFTER the `LIMIT 100`, so stranded reports consumed the page and the real
+		// entries fell off it. A dev database had 114 reported subjects of which 113 were
+		// orphaned, and this suite failed roughly half the time as a result.
+		const [reporter] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, viewerAName))
+			.limit(1);
+		const [{ maxId }] = await db
+			.select({ maxId: sql<number>`coalesce(max(${comments.id}), 0)` })
+			.from(comments);
+
+		// Comfortably more than QUEUE_LIMIT, all pointing at comments that never existed.
+		const orphanIds = Array.from({ length: 120 }, (_, i) => Number(maxId) + 1000 + i);
+		await db.insert(moderationReports).values(
+			orphanIds.map((subjectId) => ({
+				subjectType: "comment",
+				subjectId,
+				reporterId: reporter.id,
+				reason: "spam",
+				details: "",
+			})),
+		);
+
+		try {
+			const { items } = await queue(admin, "reported");
+			const entry = items.find((i) => i.subjectType === "comment" && i.subjectId === commentId);
+			expect(entry).toBeDefined();
+			// And none of the orphans are served as queue entries either.
+			expect(items.some((i) => orphanIds.includes(i.subjectId))).toBe(false);
+		} finally {
+			await db
+				.delete(moderationReports)
+				.where(
+					and(
+						eq(moderationReports.subjectType, "comment"),
+						inArray(moderationReports.subjectId, orphanIds),
+					),
+				);
+		}
 	});
 
 	it("lists reviews nobody reported, so an operator can act before anyone complains", async () => {

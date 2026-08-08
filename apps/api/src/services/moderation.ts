@@ -40,7 +40,7 @@ import {
 	type ModerationSubjectType,
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
-import { and, count, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, exists, inArray, max, or, sql } from "drizzle-orm";
 
 /** Subject type → the table it lives in. The only place the mapping is written down. */
 const SUBJECTS = {
@@ -282,16 +282,34 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	let keys: { subjectType: ModerationSubjectType; subjectId: number }[];
 
 	if (filter === "reported") {
+		// Orphans are excluded HERE, in SQL, rather than after hydration below.
+		//
+		// Reports are polymorphic with no FK on the subject, so deleting a post cascades
+		// its comments away and strands their reports. Hydration already drops those — but
+		// it runs *after* this `LIMIT`, so a stranded report still consumed a slot and then
+		// disappeared. With enough of them the queue returns almost nothing while
+		// `summary.openReports` insists there is work, and *which* live items survive comes
+		// down to how Postgres happens to break ties among equal report counts. Observed on
+		// a dev database carrying 114 reported subjects of which 113 were orphaned: the one
+		// real entry made the page only sometimes, which is what made `moderation.test.ts`
+		// flaky rather than any timing.
+		//
+		// Ordering also gains a tie-break. Report counts are mostly 1, so `count DESC` alone
+		// left the order — and therefore the contents of the page — unspecified. Newest
+		// first among equals: an operator refreshing the queue should not see it reshuffle.
+		// `subjectStillExists` is the predicate `moderationSummary` already uses, reused
+		// rather than restated so the queue and its own headline count cannot disagree.
 		const rows = await db
 			.select({
 				subjectType: moderationReports.subjectType,
 				subjectId: moderationReports.subjectId,
 				n: count(moderationReports.id),
+				newest: max(moderationReports.createdAt),
 			})
 			.from(moderationReports)
-			.where(eq(moderationReports.status, "open"))
+			.where(and(eq(moderationReports.status, "open"), subjectStillExists))
 			.groupBy(moderationReports.subjectType, moderationReports.subjectId)
-			.orderBy(desc(count(moderationReports.id)))
+			.orderBy(desc(count(moderationReports.id)), desc(max(moderationReports.createdAt)))
 			.limit(QUEUE_LIMIT);
 		keys = rows.map((r) => ({
 			subjectType: r.subjectType as ModerationSubjectType,
