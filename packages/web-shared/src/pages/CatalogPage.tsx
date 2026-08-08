@@ -127,7 +127,14 @@ export default function CatalogPage() {
 				query: warned ? { force: "1" } : {},
 			});
 			if (res.ok) {
-				setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+				// 204 = deleted, so drop it. 200 = WITHDRAWN, which means the Work is still
+				// there in a different state — refetch rather than remove, or the row would
+				// reappear on the next load and read as a delete that failed.
+				if (res.status === 204) {
+					setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+				} else {
+					await fetchItems();
+				}
 				setDeleteTarget(null);
 				setInUse(null);
 				setSold(null);
@@ -220,20 +227,23 @@ export default function CatalogPage() {
 			{deleteTarget && (
 				<div className="modal modal-open" role="dialog">
 					<div className="modal-box">
-						<h3 className="font-bold text-lg">Delete content?</h3>
+						<h3 className="font-bold text-lg">
+							{sold !== null && sold > 0 ? "Withdraw this work?" : "Delete content?"}
+						</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							"{deleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be
-							permanently removed.
+							{sold !== null && sold > 0
+								? `"${deleteTarget.title || "Untitled"}" will be taken out of public circulation.`
+								: `"${deleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be permanently removed.`}
 						</p>
 						{sold !== null && sold > 0 && (
-							<div className="alert alert-error text-sm mb-2">
+							<div className="alert alert-warning text-sm mb-2">
 								<div>
 									<p className="font-medium">
 										{sold} {sold === 1 ? "person has" : "people have"} bought this.
 									</p>
 									<p className="mt-1">
-										Deleting it takes away access they paid for, and there is no way to give it
-										back. Their receipt is kept.
+										It leaves your Catalog and public view and can no longer be bought.{" "}
+										{sold === 1 ? "The person who" : "People who"} already paid keep access to it.
 									</p>
 								</div>
 							</div>
@@ -276,9 +286,13 @@ export default function CatalogPage() {
 								disabled={deleting}
 							>
 								{deleting
-									? "Deleting…"
+									? sold !== null && sold > 0
+										? "Withdrawing…"
+										: "Deleting…"
 									: (inUse && inUse.length > 0) || (sold !== null && sold > 0)
-										? "Delete anyway"
+										? sold !== null && sold > 0
+											? "Withdraw"
+											: "Delete anyway"
 										: "Delete"}
 							</button>
 						</div>

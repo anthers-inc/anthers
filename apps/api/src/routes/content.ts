@@ -1887,7 +1887,27 @@ const contentRoutes = new Hono()
 		const viewerId = await getOptionalUserId(c);
 		const isOwner = viewerId != null && viewerId === work.creatorId;
 		if (work.visibility !== "released" && !isOwner) {
-			return c.json({ error: "Work not found" }, 404);
+			// A withdrawn Work is out of public circulation but still owed to the people
+			// who bought it — that is the whole point of the state, so this is the one
+			// place a non-released Work is served to someone other than its creator.
+			// `private` still 404s for everyone else: it was never anyone's to buy.
+			const stillOwed =
+				work.visibility === "withdrawn" &&
+				viewerId != null &&
+				(
+					await db
+						.select({ id: purchases.id })
+						.from(purchases)
+						.where(
+							and(
+								eq(purchases.workId, work.id),
+								eq(purchases.buyerId, viewerId),
+								eq(purchases.status, "completed"),
+							),
+						)
+						.limit(1)
+				).length > 0;
+			if (!stillOwed) return c.json({ error: "Work not found" }, 404);
 		}
 
 		const [workAssets, jobRows] = await Promise.all([
@@ -2145,6 +2165,13 @@ const contentRoutes = new Hono()
 			return c.json({ error: "Work not found" }, 404);
 		}
 
+		// Read once: it decides both whether to stop and ask, and — below — whether this
+		// is a deletion at all or a withdrawal.
+		const [{ count: soldCount } = { count: 0 }] = await db
+			.select({ count: countDistinct(purchases.id) })
+			.from(purchases)
+			.where(and(eq(purchases.workId, id), eq(purchases.status, "completed")));
+
 		// `post_work_refs.workId` cascades, so deleting a linked Work silently strips it
 		// from every post referencing it — including published ones. Refuse unless the
 		// caller has seen the damage and opted in, and hand back the list so a client can
@@ -2164,26 +2191,46 @@ const contentRoutes = new Hono()
 				);
 			}
 
-			// Someone paid for this. The purchase row itself now survives the delete
-			// (`purchases.work_id` is SET NULL since `0016`, and the receipt carries its
-			// own snapshot of what was bought), so this is not about losing the record —
-			// it is that the buyer loses the thing, permanently and with no way back.
-			// Same reasoning as the post check above: fail closed, say what will happen,
-			// and make the caller opt in.
-			const [{ count: sold } = { count: 0 }] = await db
-				.select({ count: countDistinct(purchases.id) })
-				.from(purchases)
-				.where(and(eq(purchases.workId, id), eq(purchases.status, "completed")));
-			if (sold > 0) {
+			// Someone paid for this. Say so before doing anything — removing it from
+			// public circulation is still a decision worth confirming, even though
+			// forcing it no longer strands the buyer (see the withdrawal below).
+			if (soldCount > 0) {
 				return c.json(
 					{
-						error: `${sold} ${sold === 1 ? "person has" : "people have"} bought this Work. Deleting it takes away access ${sold === 1 ? "they" : "they"} paid for; their receipt is kept.`,
+						error: `${soldCount} ${soldCount === 1 ? "person has" : "people have"} bought this Work. It will be removed from public view; ${soldCount === 1 ? "they keep" : "they keep"} access to what ${soldCount === 1 ? "they" : "they"} paid for.`,
 						code: "work_purchased",
-						purchaseCount: sold,
+						purchaseCount: soldCount,
 					},
 					409,
 				);
 			}
+		}
+
+		// ── Purchased: withdraw, never destroy ──────────────────────────────────────
+		//
+		// The ruling this implements: *if a user purchases something, they own it,
+		// regardless of what the creator does down the line.* Hard-deleting a purchased
+		// Work took the thing away from everyone who had paid for it — the `0016` work
+		// kept their *receipt*, which is not the same as keeping what they bought.
+		//
+		// So a forced delete on a purchased Work is a WITHDRAWAL: out of the Catalog, out
+		// of the feeds, unpurchasable — every public listing filters *for* `released`, so
+		// they exclude it with no change of their own — while the row, the media and the
+		// buyers' access all stay. Delivery gates on `resolveAccess`, which reads
+		// purchases and never visibility, so their downloads and streams keep working.
+		//
+		// Deliberately NOT built here: the rescue window's expiry. The retention model
+		// gives buyers a notified, funded grace period and then removes the Work for
+		// real, but both its duration and the notification mechanism are open questions
+		// in the privacy-policy work. `withdrawn_at` is stamped so that sweep is a later
+		// job rather than a later migration — and until it exists, erring toward keeping
+		// a buyer's purchase alive is the right way to be wrong.
+		if (soldCount > 0) {
+			await db
+				.update(works)
+				.set({ visibility: "withdrawn", withdrawnAt: new Date(), updatedAt: new Date() })
+				.where(eq(works.id, id));
+			return c.json({ withdrawn: true, purchaseCount: soldCount }, 200);
 		}
 
 		const [workAssets, jobRows] = await Promise.all([

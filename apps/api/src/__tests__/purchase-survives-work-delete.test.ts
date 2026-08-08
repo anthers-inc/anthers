@@ -7,10 +7,15 @@
  * and the `sales_tax` figure that makes remittance reportable. Nothing in the app asked
  * for that deletion or reported it; it was a property of the constraint.
  *
- * The fix has two halves and this file covers both, because either alone is insufficient:
- *   1. the delete now REFUSES when someone has bought the Work, unless forced; and
- *   2. when it is forced, the purchase row SURVIVES, carrying its own snapshot of what
- *      was bought and who was paid.
+ * The fix has three parts and this file covers all of them, because each alone is
+ * insufficient:
+ *   1. the delete REFUSES when someone has bought the Work, unless forced;
+ *   2. forcing it WITHDRAWS rather than destroys — out of public circulation, still
+ *      served to the people who bought it, which is the actual ruling: *if a user
+ *      purchases something, they own it, regardless of what the creator does*; and
+ *   3. the purchase row survives regardless, carrying its own snapshot of what was
+ *      bought and who was paid — so it still reads once the Work row does go, which it
+ *      eventually will when the rescue window expires.
  *
  * The snapshot is the part worth testing hardest. `purchases` never had a `creator_id` —
  * the seller was reachable only by joining `works` — so a deleted Work used to take the
@@ -106,39 +111,101 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(still).toBeTruthy();
 	});
 
-	it("keeps the receipt intact when the delete IS forced", async () => {
-		const { work, purchase } = await soldWork(`Doomed Game ${id}`);
+	it("withdraws rather than destroys when the delete is forced, and the buyer keeps it", async () => {
+		const { work, purchase } = await soldWork(`Withdrawn Game ${id}`);
 
 		const res = await req(`/api/content/works/${work.id}?force=1`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: creatorCookie },
 		});
-		expect(res.status).toBe(204);
+		// 200, not 204 — the Work was not deleted, and the caller is told so.
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ withdrawn: true, purchaseCount: 1 });
 
-		// The Work is gone…
-		const workRows = await db.select().from(works).where(eq(works.id, work.id));
-		expect(workRows.length).toBe(0);
-
-		// …and the purchase is NOT. Under the old cascade this row no longer existed.
-		const [kept] = await db.select().from(purchases).where(eq(purchases.id, purchase.id));
+		// The row and its media survive; only its circulation changed.
+		const [kept] = await db.select().from(works).where(eq(works.id, work.id));
 		expect(kept).toBeTruthy();
-		expect(kept.workId).toBeNull(); // the pointer is severed, as SET NULL requires
+		expect(kept.visibility).toBe("withdrawn");
+		expect(kept.withdrawnAt).toBeTruthy();
 
-		// Everything that makes the row a record still reads, with no `works` row to join.
-		expect(kept.workTitle).toBe(`Doomed Game ${id}`);
-		expect(kept.workType).toBe("game");
-		expect(kept.workPublicId).toBe(work.publicId);
-		expect(kept.creatorId).toBe(creatorId); // who was paid — previously unrecoverable
-		expect(kept.salesTax).toBe("0.41"); // the remittance figure
-		expect(kept.creatorEarnings).toBe("4.53");
+		// THE RULING: the buyer still has what they paid for.
+		const asBuyer = await req(`/api/content/works/${work.id}`, {
+			headers: { Cookie: buyerCookie },
+		});
+		expect(asBuyer.status).toBe(200);
+		expect((await asBuyer.json()).work.title).toBe(`Withdrawn Game ${id}`);
+
+		// And the receipt is of course still intact.
+		const [row] = await db.select().from(purchases).where(eq(purchases.id, purchase.id));
+		expect(row.workId).toBe(work.id);
+		expect(row.creatorId).toBe(creatorId);
+		expect(row.salesTax).toBe("0.41");
 	});
 
-	it("still lists the purchase in the buyer's history after the Work is gone", async () => {
-		const { work, purchase } = await soldWork(`Vanishing Game ${id}`);
+	it("hides a withdrawn Work from the public, and from a stranger who never bought it", async () => {
+		const { work } = await soldWork(`Gone Public ${id}`);
 		await req(`/api/content/works/${work.id}?force=1`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: creatorCookie },
 		});
+
+		// Signed out.
+		const anon = await req(`/api/content/works/${work.id}`);
+		expect(anon.status).toBe(404);
+
+		// Signed in, but not a buyer — 404 rather than 403, matching how the rest of the
+		// route treats non-public work: its existence isn't public information.
+		const strangerName = `psd_stranger_${crypto.randomUUID().slice(0, 6)}`;
+		const strangerCookie = await signUp(strangerName);
+		const stranger = await req(`/api/content/works/${work.id}`, {
+			headers: { Cookie: strangerCookie },
+		});
+		expect(stranger.status).toBe(404);
+
+		// And it is out of the public Catalog, which filters *for* released.
+		const catalog = await req(`/api/content/catalog/${creatorName}`, {
+			headers: { Cookie: strangerCookie },
+		});
+		const listed = (await catalog.json()).works as { id: number }[];
+		expect(listed.some((w) => w.id === work.id)).toBe(false);
+	});
+
+	it("hard-deletes a Work whose only purchase never completed", async () => {
+		// A pending or failed charge bought nothing, so there is nobody to protect and
+		// withdrawal would just be litter. The guard counts COMPLETED purchases only.
+		const work = await insertWork({ creatorId, type: "game", title: `Pending ${id}` });
+		await db.insert(purchases).values({
+			buyerId,
+			workId: work.id,
+			creatorId,
+			workTitle: work.title,
+			workType: work.type,
+			workPublicId: work.publicId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			deliveryFee: "0.00",
+			crfFee: "0.00",
+			salesTax: "0.00",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: `pi_psd_${crypto.randomUUID().slice(0, 12)}`,
+			status: "pending",
+		});
+
+		const res = await req(`/api/content/works/${work.id}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: creatorCookie },
+		});
+		expect(res.status).toBe(204);
+		expect((await db.select().from(works).where(eq(works.id, work.id))).length).toBe(0);
+	});
+
+	it("still lists the purchase in the buyer's history once the Work row is genuinely gone", async () => {
+		const { work, purchase } = await soldWork(`Vanishing Game ${id}`);
+		// The route no longer destroys a purchased Work, so this deletes the row directly
+		// to stand in for the one thing that eventually will: the rescue window expiring.
+		// That sweep isn't built, but the receipt has to outlive it when it is.
+		await db.delete(works).where(eq(works.id, work.id));
 
 		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
 		expect(res.status).toBe(200);
@@ -156,17 +223,14 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(row.creator.username).toBe(creatorName);
 	});
 
-	it("counts the sale toward the creator's earnings even after the Work is deleted", async () => {
+	it("counts the sale toward the creator's earnings even once the Work row is gone", async () => {
 		const { work } = await soldWork(`Earnings Game ${id}`);
 		const before = await db
 			.select({ total: sql<string>`coalesce(sum(${purchases.creatorEarnings}), 0)` })
 			.from(purchases)
 			.where(and(eq(purchases.creatorId, creatorId), eq(purchases.status, "completed")));
 
-		await req(`/api/content/works/${work.id}?force=1`, {
-			method: "DELETE",
-			headers: { Origin: ORIGIN, Cookie: creatorCookie },
-		});
+		await db.delete(works).where(eq(works.id, work.id));
 
 		const after = await db
 			.select({ total: sql<string>`coalesce(sum(${purchases.creatorEarnings}), 0)` })

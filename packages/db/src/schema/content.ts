@@ -103,9 +103,21 @@ export const works = pgTable(
 		// private = staging (uploaded, processing, being written — nobody else's business).
 		// released = publicly listed in the Catalog, which is NOT the same as freely
 		// accessible: what it costs and who can reach it is the job of the gates below.
-		// A third value `unlisted` is anticipated and deliberately not built yet.
-		visibility: text("visibility").notNull().default("private"), // private | released
+		// withdrawn = taken out of public circulation but STILL SERVED to people who
+		// bought it (`0017`). It exists because deleting a purchased Work was the only
+		// way to remove one, and that stranded its buyers — "if a user purchases
+		// something, they own it, regardless of what the creator does down the line."
+		// A creator cannot set this directly; it is what deleting a purchased Work does.
+		// A fourth value `unlisted` is anticipated and deliberately not built yet.
+		visibility: text("visibility").notNull().default("private"), // private | released | withdrawn
 		releasedAt: timestamp("released_at", { withTimezone: true }),
+		// When it left public circulation. Recorded rather than derived because the
+		// retention model gives buyers a *funded rescue window* — notified, with time to
+		// download, after which the Work is removed for real. That sweep is NOT built:
+		// its duration and the notification mechanism are both open questions in the
+		// privacy-policy work. Stamping the timestamp now is what makes the sweep a
+		// later addition rather than a later migration.
+		withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 
 		// ── Dates ──
 		// Three dates exist for a Work and the platform may only assert two of them.
