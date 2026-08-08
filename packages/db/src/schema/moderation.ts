@@ -64,6 +64,9 @@ export const moderationReports = pgTable(
 		),
 		index("idx_moderation_reports_subject").on(table.subjectType, table.subjectId),
 		index("idx_moderation_reports_status").on(table.status, table.createdAt),
+		// Both users FKs are ON DELETE SET NULL, so an account deletion still has to find
+		// every row that names it.
+		index("idx_moderation_reports_resolved_by").on(table.resolvedBy),
 	],
 );
 
@@ -92,6 +95,7 @@ export const moderationActions = pgTable(
 	(table) => [
 		index("idx_moderation_actions_subject").on(table.subjectType, table.subjectId, table.createdAt),
 		index("idx_moderation_actions_created").on(table.createdAt),
+		index("idx_moderation_actions_actor").on(table.actorId),
 	],
 );
 

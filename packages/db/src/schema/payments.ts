@@ -2,6 +2,7 @@
 import {
 	bigint,
 	boolean,
+	index,
 	integer,
 	numeric,
 	pgTable,
@@ -28,40 +29,53 @@ export const stripeAccounts = pgTable("stripe_accounts", {
 });
 
 // Decimal columns are stored as numeric to preserve decimal.js precision (app owns rounding).
-export const purchases = pgTable("purchases", {
-	id: serial("id").primaryKey(),
-	buyerId: integer("buyer_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
-	// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
-	// one-time charges that aren't a Work purchase (e.g. a Seed buy).
-	workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
-	type: text("type").notNull().default("digital"), // digital | physical | service | seeds
-	amount: numeric("amount").notNull(),
-	processingFee: numeric("processing_fee").notNull(),
-	deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
-	crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee (AFF) amount
-	// Sales tax is the ONE thing added on top of the list price, so it is money we
-	// collect and owe onward rather than money anyone here keeps. Recording it
-	// per-transaction is what makes remittance reportable; without the column the tax
-	// was charged inside `buyer_total` and then unrecoverable from the row. Defaults
-	// to 0.00 for the charges that carry none (a Seed buy).
-	salesTax: numeric("sales_tax").notNull().default("0.00"),
-	creatorEarnings: numeric("creator_earnings").notNull(),
-	stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
-	status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const purchases = pgTable(
+	"purchases",
+	{
+		id: serial("id").primaryKey(),
+		buyerId: integer("buyer_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
+		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
+		// one-time charges that aren't a Work purchase (e.g. a Seed buy).
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		type: text("type").notNull().default("digital"), // digital | physical | service | seeds
+		amount: numeric("amount").notNull(),
+		processingFee: numeric("processing_fee").notNull(),
+		deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
+		crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores Anthers Foundation Fee (AFF) amount
+		// Sales tax is the ONE thing added on top of the list price, so it is money we
+		// collect and owe onward rather than money anyone here keeps. Recording it
+		// per-transaction is what makes remittance reportable; without the column the tax
+		// was charged inside `buyer_total` and then unrecoverable from the row. Defaults
+		// to 0.00 for the charges that carry none (a Seed buy).
+		salesTax: numeric("sales_tax").notNull().default("0.00"),
+		creatorEarnings: numeric("creator_earnings").notNull(),
+		stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
+		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// resolveAccess treats a completed purchase as a permanent unlock, so (buyer, work)
+	// is read on every gated view — and neither column was indexed.
+	(table) => [
+		index("idx_purchases_buyer").on(table.buyerId),
+		index("idx_purchases_work").on(table.workId),
+	],
+);
 
-export const crfLedger = pgTable("crf_ledger", {
-	id: serial("id").primaryKey(),
-	amount: numeric("amount").notNull(),
-	purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
-	description: text("description").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const crfLedger = pgTable(
+	"crf_ledger",
+	{
+		id: serial("id").primaryKey(),
+		amount: numeric("amount").notNull(),
+		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
+		description: text("description").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_crf_ledger_purchase").on(table.purchaseId)],
+);
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
 export const crfSubsidies = pgTable(

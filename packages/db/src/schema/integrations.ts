@@ -63,7 +63,10 @@ export const crossPublishResults = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_cross_publish_user_platform").on(table.userId, table.platform)],
+	(table) => [
+		index("idx_cross_publish_user_platform").on(table.userId, table.platform),
+		index("idx_cross_publish_post").on(table.postId),
+	],
 );
 
 // snapshotDate is stored as an ISO date string (YYYY-MM-DD).
