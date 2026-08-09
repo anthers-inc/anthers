@@ -27,6 +27,7 @@ function req(path: string, options?: RequestInit) {
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `filt_${id}`;
+const viewerName = `filt_v_${id}`;
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const PAID = [{ threshold: 0, allow: true, price: "5.00" }];
@@ -47,7 +48,7 @@ describe("project browse filters", () => {
 	let cookie: string;
 
 	beforeAll(async () => {
-		await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
+		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
 
 		const signUp = await req("/api/auth/sign-up", {
 			method: "POST",
@@ -111,6 +112,19 @@ describe("project browse filters", () => {
 				body: JSON.stringify({ workId }),
 			});
 			expect(added.status).toBe(201);
+
+			// Duration and platform arrive from media processing and an upload, neither of
+			// which this suite runs, so they are written directly — the filters read the
+			// columns and don't care how they were populated.
+			if (c.type === "audio") {
+				await db.execute(sql`UPDATE works SET duration_seconds = 90 WHERE id = ${workId}`);
+			}
+			if (c.label === "game") {
+				await db.execute(
+					sql`INSERT INTO assets (work_id, file, filename, platform)
+						VALUES (${workId}, ${`gauntlet/${workId}.zip`}, 'build.zip', 'linux')`,
+				);
+			}
 		}
 	}, DB_SETUP_TIMEOUT);
 
@@ -164,6 +178,66 @@ describe("project browse filters", () => {
 		// sidebar because `works.view_count` is a lifetime counter with no window.
 		const fallback = await listSlugs(`creator=${creatorName}&sort=trending`);
 		expect(fallback.sort()).toEqual([...mine.values()].sort());
+	});
+
+	it("filters by price range, on the cheapest offer the buyer would actually pay", async () => {
+		// The audio Work is the only priced one, at $5.00.
+		expect(await listSlugs("min_price=4")).toEqual([mine.get("audio")!]);
+		expect(await listSlugs("max_price=6&min_price=4")).toEqual([mine.get("audio")!]);
+		expect(await listSlugs("min_price=6")).toEqual([]);
+		// A free Work's cheapest offer is 0, so it falls inside a range that starts there
+		// and outside any range that doesn't — the boundary worth pinning.
+		expect((await listSlugs("max_price=0")).sort()).toEqual(
+			[mine.get("game")!, mine.get("text")!].sort(),
+		);
+	});
+
+	it("filters by the platform of a downloadable build", async () => {
+		expect(await listSlugs("platform=linux")).toEqual([mine.get("game")!]);
+		expect(await listSlugs("platform=windows")).toEqual([]);
+	});
+
+	it("filters by duration, on a scale read from the selected media type", async () => {
+		// 90s of audio is "short" (under 5 min) but the same 90s of video is also short
+		// (under 10 min) — the bands differ, which is the whole reason media_type is
+		// required. Without one, duration is ignored rather than guessed at.
+		expect(await listSlugs("media_type=audio&duration=short")).toEqual([mine.get("audio")!]);
+		expect(await listSlugs("media_type=audio&duration=long")).toEqual([]);
+		expect((await listSlugs(`creator=${creatorName}&duration=short`)).sort()).toEqual(
+			[...mine.values()].sort(),
+		);
+	});
+
+	it("exempts signed-out viewers from the locked filter", async () => {
+		// Everything gated is locked to a signed-out viewer, so applying the filter would
+		// empty the list every time — which reads as a broken page, not as a filter.
+		expect(await listSlugs("pricing=gated")).toEqual([mine.get("text")!]);
+	});
+
+	it("hides gated Works a signed-in viewer cannot open, unless show_locked says otherwise", async () => {
+		const viewer = await req("/api/auth/sign-up", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN },
+			body: JSON.stringify({
+				username: viewerName,
+				email: `${viewerName}@example.com`,
+				password: "testpass123",
+			}),
+		});
+		expect(viewer.status).toBe(201);
+		const cookie = viewer.headers.get("Set-Cookie")!.split(";")[0];
+
+		const asViewer = async (query: string) => {
+			const res = await req(`/api/content/projects?${query}`, { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+			const { projects } = await res.json();
+			const ours = new Set(mine.values());
+			return (projects as { slug: string }[]).map((p) => p.slug).filter((s) => ours.has(s));
+		};
+
+		// This viewer holds no Seeds, so the 2-Seed gate is shut to them.
+		expect(await asViewer("pricing=gated")).toEqual([]);
+		expect(await asViewer("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
 	});
 
 	it("still honours the filters that already worked", async () => {

@@ -120,7 +120,38 @@ for (const [id, entry] of liveEnvs) {
 }
 for (const id of repoEnvs.keys()) if (!liveEnvs.has(id)) onlyRepo.push(id);
 
-const clean = !onlyLive.length && !onlyRepo.length && !differs.length;
+/**
+ * The same key at two different scopes is the dangerous case, and reporting it as one
+ * "only live" plus one "only repo" line buries it — those read as two unrelated
+ * placement nits, and no value comparison runs because the paths don't match.
+ *
+ * That is not hypothetical. `COOKIE_DOMAIN` sat app-level and valueless in the repo
+ * while production ran `.anthers.org` on the api component, and this tool's first
+ * report described it as a scope mismatch. Acting on that reading would have removed
+ * a domain-scoped session cookie: every live session stranded (a cookie set with a
+ * domain can only be cleared with the same domain) and the Studio subdomain, which
+ * authenticates with it, signed out.
+ */
+const relocated: string[] = [];
+const bare = (id: string) => id.split("/")[1] ?? id;
+for (const liveId of onlyLive.slice()) {
+	const twin = onlyRepo.find((r) => bare(r) === bare(liveId));
+	if (!twin) continue;
+	const live = liveEnvs.get(liveId) as EnvEntry;
+	const repo = repoEnvs.get(twin) as EnvEntry;
+	const same = isSecret(live) || isSecret(repo) || (live.value ?? "") === (repo.value ?? "");
+	relocated.push(
+		`${bare(liveId)}\n      live: ${liveId}${isSecret(live) ? " (secret)" : ` = ${live.value ?? ""}`}` +
+			`\n      repo: ${twin}${isSecret(repo) ? " (secret)" : ` = ${repo.value ?? ""}`}` +
+			(same
+				? ""
+				: "\n      ⚠ SAME KEY, DIFFERENT SCOPE **AND** DIFFERENT VALUE — read both before changing either"),
+	);
+	onlyLive.splice(onlyLive.indexOf(liveId), 1);
+	onlyRepo.splice(onlyRepo.indexOf(twin), 1);
+}
+
+const clean = !onlyLive.length && !onlyRepo.length && !differs.length && !relocated.length;
 console.log(`\n## Spec diff — ${appName} (${appId})\n`);
 
 if (onlyLive.length) {
@@ -132,6 +163,11 @@ if (onlyRepo.length) {
 	console.log("  Declared in .do/app.yaml, absent from production:");
 	for (const id of onlyRepo.sort()) console.log(`    - ${id}`);
 	console.log("    → `doctl apps update --spec` if it should be live. Pushing never applies it.\n");
+}
+if (relocated.length) {
+	console.log("  Declared at different scopes in each spec:");
+	for (const r of relocated.sort()) console.log(`    ≠ ${r}`);
+	console.log("");
 }
 if (differs.length) {
 	console.log("  Same key, different value (non-secret):");

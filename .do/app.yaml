@@ -84,16 +84,11 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
-  # Session-cookie domain, read by routes/auth.ts on set AND on delete. Left unset
-  # deliberately: unset means a host-only cookie, which is correct while the SPA and
-  # the API share the apex origin (the Studio calls the apex API, so it's still
-  # same-site). It becomes REQUIRED the moment the API moves to its own subdomain —
-  # and note a cookie set with a domain can only be cleared with the same domain, so
-  # changing this mid-flight strands existing sessions until they expire. Declared
-  # here, valueless, so the knob is visible rather than lore.
-  - key: COOKIE_DOMAIN
-    scope: RUN_TIME
-    value: ""
+  # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
+  # It was declared at app level and valueless in this file for weeks while production
+  # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
+  # catch and very nearly didn't: the two entries sat at different paths, so a key-set
+  # comparison reported "one here, one there" without ever comparing the values.
   # Stripe — TEST MODE in production, deliberately. Prod's STRIPE_PRICE_SEED is a
   # test-mode object ($3/mo recurring, livemode:false), so no real money can move;
   # the site is behind SiteGate besides. This block was missing from this file
@@ -167,6 +162,16 @@ services:
       - key: STUDIO_URL
         scope: RUN_TIME
         value: https://studio.anthers.org
+      # Session-cookie domain, read by routes/auth.ts on set AND on delete.
+      # `.anthers.org` — a DOT-PREFIXED parent domain, so the session cookie is sent to
+      # both the apex and `studio.anthers.org`. That is load-bearing: the web Studio
+      # authenticates with this cookie, and a host-only cookie would simply not reach it.
+      # Do NOT "tidy" this to empty. A cookie set with a domain can only be cleared with
+      # the same domain, so changing it stands every live session up until it expires,
+      # and it signs the Studio out on the way past.
+      - key: COOKIE_DOMAIN
+        scope: RUN_TIME
+        value: .anthers.org
       # SITE_PASSWORD + RESEND_API_KEY live at app level (see the envs: block
       # above) to avoid component-level shadowing.
 
