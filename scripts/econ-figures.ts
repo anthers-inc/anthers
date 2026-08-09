@@ -40,7 +40,9 @@ import {
 } from "../packages/shared/src/constants.js";
 import {
 	badgeTable,
+	cartSaving,
 	directedSeedWorstCase,
+	purchaseExamples,
 	saleTable,
 	sampleReceipt,
 } from "../packages/shared/src/scenarios.js";
@@ -184,6 +186,30 @@ function renderSaleMarkdown(): string {
 	].join("\n");
 }
 
+/**
+ * The creator-facing worked examples, and what a cart is worth at the small end.
+ *
+ * This table is the one a creator reads before deciding whether to sell here, and it
+ * was typed by hand in two docs — including the Copy Style Guide, inside the very rule
+ * that forbids re-typing a figure from another page.
+ */
+function renderPurchaseExamplesMarkdown(): string {
+	const rows = purchaseExamples();
+	const cart = cartSaving();
+	return [
+		"| Item | List | Size | Card | Delivery | **Creator receives** | Deduction |",
+		"|:--|--:|--:|--:|--:|--:|--:|",
+		...rows.map(
+			(r) =>
+				`| ${r.item} | $${r.price} | ${r.sizeLabel} | $${r.cardFee} | $${r.delivery} | **$${r.creatorReceives}** | ${r.deductionPct} |`,
+		),
+		"",
+		`**The percentage is Stripe's flat $${CARD_FLAT.toFixed(2)}, not our design.** At $${rows[0].price} that single fee is **${((CARD_FLAT / (Number(rows[0].price) - Number(rows[0].creatorReceives))) * 100).toFixed(0)}%** of the whole deduction. Delivery is negligible at both ends — a flat penny below ~1 GiB, and about 1% of price even at ${rows[rows.length - 1].sizeLabel} — so the size of a work barely matters and "the creator pays for the first download" costs them almost nothing.`,
+		"",
+		`**The cart is the mechanism that fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one cart they lose **$${cart.inOneCart}**, and every cent of that difference goes to the creators.`,
+	].join("\n");
+}
+
 const BLOCKS: { file: string; key: string; render: () => string }[] = [
 	{
 		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
@@ -204,6 +230,16 @@ const BLOCKS: { file: string; key: string; render: () => string }[] = [
 		file: "20-29 User Experience/20 Support Model/20.01 Badges and Seed Levels.md",
 		key: "badge-table",
 		render: renderBadgeMarkdown,
+	},
+	{
+		file: "30-39 Creator Experience/31 Monetization/31.02 Direct Creator Purchases.md",
+		key: "purchase-examples",
+		render: renderPurchaseExamplesMarkdown,
+	},
+	{
+		file: "60-69 Strategy/63 Brand/63.01 Copy Style Guide.md",
+		key: "sale-table",
+		render: renderSaleMarkdown,
 	},
 ];
 
