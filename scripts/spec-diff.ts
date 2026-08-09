@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Diff the **committed** App Platform spec against the **live** one.
+ *
+ * Pushing to `release` ships code and never the spec, so `.do/app.yaml` and what is
+ * actually running drift silently and by default — only `doctl apps spec get` can tell
+ * you. That is not hypothetical: production ran for weeks with Stripe keys the committed
+ * file didn't mention (which silently disabled seven `503 Payments are not configured`
+ * guards), and as of 2026-08-09 it still carried `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET`
+ * (whose last consumer PR #118 removed) and `SESSION_SECRET` (which **no file in this
+ * repository reads at all**), while `STUDIO_URL` ran in production undeclared here.
+ *
+ * The fix Parker chose is not to make the committed spec authoritative — pushing it on
+ * deploy can clobber live config that exists only in App Platform, including the whole
+ * `anthers-studio` app, whose spec has never been in this repo. It is to make the drift
+ * **loud**: accept that the two diverge, and have something say so out loud.
+ *
+ * WHAT IT COMPARES, and why not a raw diff: live SECRET values come back encrypted
+ * (`EV[1:...]`), so a textual diff is pure noise and would be ignored within a week.
+ * This compares the **set of env keys** per component — the failure class every real
+ * incident above belongs to — plus the *values* of non-secret keys, where a drifted
+ * `STRIPE_PRICE_SEED` would matter. Secrets are compared on presence alone.
+ *
+ * Usage:  make spec-diff            (or: bun run scripts/spec-diff.ts)
+ * Needs:  doctl, authenticated. Exits 0 with a notice when it is absent, so this is
+ *         safe to call from a machine that cannot reach DigitalOcean.
+ */
+
+const COMMITTED = ".do/app.yaml";
+
+type EnvEntry = { key?: string; value?: string; type?: string; scope?: string };
+type Component = { name?: string; envs?: EnvEntry[] };
+type Spec = {
+	name?: string;
+	envs?: EnvEntry[];
+	services?: Component[];
+	workers?: Component[];
+	jobs?: Component[];
+	static_sites?: Component[];
+	functions?: Component[];
+};
+
+const COMPONENT_KINDS = ["services", "workers", "jobs", "static_sites", "functions"] as const;
+
+/** Flatten a spec to `component/KEY` → entry, so a key is compared where it lives. */
+function envMap(spec: Spec): Map<string, EnvEntry> {
+	const out = new Map<string, EnvEntry>();
+	for (const e of spec.envs ?? []) if (e.key) out.set(`(app)/${e.key}`, e);
+	for (const kind of COMPONENT_KINDS) {
+		for (const component of spec[kind] ?? []) {
+			const where = component.name ?? kind;
+			for (const e of component.envs ?? []) if (e.key) out.set(`${where}/${e.key}`, e);
+		}
+	}
+	return out;
+}
+
+const isSecret = (e: EnvEntry) => e.type === "SECRET" || (e.value ?? "").startsWith("EV[");
+
+async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	return { ok: (await proc.exited) === 0, stdout, stderr };
+}
+
+const committedText = await Bun.file(COMMITTED).text();
+const committed = Bun.YAML.parse(committedText) as Spec;
+
+if (!(await run(["which", "doctl"])).ok) {
+	console.log("spec-diff: doctl not installed — skipping the live comparison.");
+	process.exit(0);
+}
+
+// The app id isn't in the committed spec (it's assigned at creation), so resolve it by
+// the spec's own name rather than making every caller pass one.
+const appName = committed.name ?? "anthers";
+let appId = process.env.DO_APP_ID ?? "";
+if (!appId) {
+	const list = await run(["doctl", "apps", "list", "--format", "ID,Spec.Name", "--no-header"]);
+	if (!list.ok) {
+		console.log(`spec-diff: doctl could not list apps — skipping.\n${list.stderr.trim()}`);
+		process.exit(0);
+	}
+	appId =
+		list.stdout
+			.split("\n")
+			.map((l) => l.trim().split(/\s+/))
+			.find(([, name]) => name === appName)?.[0] ?? "";
+	if (!appId) {
+		console.error(`spec-diff: no App Platform app named "${appName}".`);
+		process.exit(1);
+	}
+}
+
+const live = await run(["doctl", "apps", "spec", "get", appId]);
+if (!live.ok) {
+	console.log(`spec-diff: could not fetch the live spec — skipping.\n${live.stderr.trim()}`);
+	process.exit(0);
+}
+
+const repoEnvs = envMap(committed);
+const liveEnvs = envMap(Bun.YAML.parse(live.stdout) as Spec);
+
+const onlyLive: string[] = [];
+const onlyRepo: string[] = [];
+const differs: string[] = [];
+
+for (const [id, entry] of liveEnvs) {
+	if (!repoEnvs.has(id)) onlyLive.push(id);
+	else {
+		const mine = repoEnvs.get(id) as EnvEntry;
+		if (isSecret(entry) || isSecret(mine)) continue; // encrypted live — presence only
+		if ((entry.value ?? "") !== (mine.value ?? "")) {
+			differs.push(`${id}\n      live: ${entry.value ?? ""}\n      repo: ${mine.value ?? ""}`);
+		}
+	}
+}
+for (const id of repoEnvs.keys()) if (!liveEnvs.has(id)) onlyRepo.push(id);
+
+const clean = !onlyLive.length && !onlyRepo.length && !differs.length;
+console.log(`\n## Spec diff — ${appName} (${appId})\n`);
+
+if (onlyLive.length) {
+	console.log("  Running in production, absent from .do/app.yaml:");
+	for (const id of onlyLive.sort()) console.log(`    + ${id}`);
+	console.log("    → either declare it here, or remove it from the live spec if it is dead.\n");
+}
+if (onlyRepo.length) {
+	console.log("  Declared in .do/app.yaml, absent from production:");
+	for (const id of onlyRepo.sort()) console.log(`    - ${id}`);
+	console.log("    → `doctl apps update --spec` if it should be live. Pushing never applies it.\n");
+}
+if (differs.length) {
+	console.log("  Same key, different value (non-secret):");
+	for (const d of differs.sort()) console.log(`    ~ ${d}`);
+	console.log("");
+}
+if (clean) console.log("  Committed and live specs agree ✓\n");
+
+process.exit(clean ? 0 : 1);

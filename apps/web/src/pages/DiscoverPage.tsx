@@ -45,12 +45,14 @@ const EXPLORE_MODES = [
 	},
 ] as const;
 
-// Sort options
+// Sort options. Each one the server can actually order by — "Trending" was here and is
+// gone, because it needs views over a window and `works.view_count` is a lifetime
+// counter. Offering a control the handler can't honour is what made every filter on this
+// page inert; don't re-add one ahead of its signal.
 const SORT_OPTIONS = [
 	{ value: "newest", label: "Newest" },
 	{ value: "popular", label: "Popular" },
 	{ value: "top_rated", label: "Top Rated" },
-	{ value: "trending", label: "Trending" },
 ] as const;
 
 function DiscoverSidebarContent({

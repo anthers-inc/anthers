@@ -1326,7 +1326,20 @@ const contentRoutes = new Hono()
 		// separation the model is for, and why there is no post-level `access` any more.
 		const linkedWorks = await loadPostWorks(post.id, viewerId, deliveryCtx());
 
-		// Transparent edit history — every content edit is logged with a timestamp.
+		// Transparent edit history — every content edit is logged with a timestamp, and it
+		// carries no viewer predicate **on purpose** (settled 2026-08-09).
+		//
+		// It used to want one. Before migration `0010` a post carried its own gates, so a
+		// viewer denied the body still got the full timestamped list of what changed and
+		// when — the shape of gated content, leaked by a query nobody had thought about.
+		// The Catalog separation dissolved that rather than fixing it: a post is an
+		// announcement and has no gates at all, so there is no hidden body here whose
+		// edits could describe it. Publishing the history of a public thing is just
+		// Building in the Open.
+		//
+		// **This is load-bearing for whoever adds an edit log to a Work.** A Work IS
+		// gated, and the same query written against it would recreate the original leak
+		// exactly — so it needs the viewer predicate this one doesn't.
 		const edits = await db
 			.select({
 				editedAt: postEdits.editedAt,
@@ -2289,6 +2302,33 @@ const contentRoutes = new Hono()
 		const mine = c.req.query("mine");
 		const creator = c.req.query("creator");
 		const search = c.req.query("search");
+		// Discover's sidebar has always sent these; until now the handler read none of
+		// them, so every filter control on the page did nothing while looking like it
+		// worked. They key on the project's **Works**, because a project is a collection
+		// and has no type, tags or price of its own.
+		const mediaType = c.req.query("media_type");
+		const tag = c.req.query("tag");
+		const pricing = c.req.query("pricing");
+		const sort = c.req.query("sort") ?? "newest";
+
+		/**
+		 * A project matches when ANY released Work in it matches: a collection is
+		 * described by what it contains, so "games" means "contains a game" rather than
+		 * "contains only games". Private and withdrawn Works never qualify a project for
+		 * a public listing.
+		 */
+		const containsWork = (predicate: SQL) => sql`EXISTS (
+			SELECT 1 FROM project_items pi
+			JOIN works w ON w.id = pi.work_id
+			WHERE pi.project_id = ${projects.id} AND w.visibility = 'released' AND (${predicate})
+		)`;
+
+		/** Both access tables share one row shape, so one scan over their concatenation. */
+		const anyAccessRow = (predicate: SQL) => sql`EXISTS (
+			SELECT 1 FROM jsonb_array_elements(
+				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
+			) r WHERE (r->>'allow')::boolean AND (${predicate})
+		)`;
 
 		const conditions: SQL[] = [];
 		if (mine === "true") {
@@ -2315,6 +2355,48 @@ const contentRoutes = new Hono()
 			);
 		}
 
+		if (mediaType) conditions.push(containsWork(sql`w.type = ${mediaType}`));
+		if (tag) conditions.push(containsWork(sql`w.tags @> ${JSON.stringify([tag])}::jsonb`));
+
+		// `free` is the baseline row the resolver calls universally free; `paid` is any
+		// priced offer; `gated` is a threshold you must hold rather than buy. They overlap
+		// on purpose — a project can hold a free Work and a priced one, and answering
+		// "show me free things" with "only wholly-free collections" would hide it.
+		if (pricing === "free") {
+			conditions.push(
+				containsWork(anyAccessRow(sql`(r->>'threshold')::int = 0 AND (r->>'price')::numeric <= 0`)),
+			);
+		} else if (pricing === "paid") {
+			conditions.push(containsWork(anyAccessRow(sql`(r->>'price')::numeric > 0`)));
+		} else if (pricing === "gated") {
+			conditions.push(containsWork(anyAccessRow(sql`(r->>'threshold')::int > 0`)));
+		}
+
+		// Summed views and mean score both range over the project's released Works, for the
+		// same reason the filters do. `trending` is deliberately absent: it needs views over
+		// a window and `works.view_count` is a lifetime counter, so there is nothing honest
+		// to order by — the option is gone from the sidebar rather than silently aliased.
+		const newest = desc(projects.createdAt);
+		let orderClause: SQL[];
+		switch (sort) {
+			case "popular":
+				orderClause = [
+					sql`(SELECT COALESCE(SUM(w.view_count), 0) FROM project_items pi JOIN works w ON w.id = pi.work_id
+						WHERE pi.project_id = ${projects.id} AND w.visibility = 'released') DESC`,
+					newest as unknown as SQL,
+				];
+				break;
+			case "top_rated":
+				orderClause = [
+					sql`(SELECT AVG(rt.score) FROM project_items pi JOIN ratings rt ON rt.work_id = pi.work_id
+						WHERE pi.project_id = ${projects.id} AND rt.moderation_status = 'visible') DESC NULLS LAST`,
+					newest as unknown as SQL,
+				];
+				break;
+			default:
+				orderClause = [newest as unknown as SQL];
+		}
+
 		const result = await db
 			.select({
 				project: projects,
@@ -2326,7 +2408,7 @@ const contentRoutes = new Hono()
 			.from(projects)
 			.innerJoin(users, eq(projects.creatorId, users.id))
 			.where(and(...conditions))
-			.orderBy(desc(projects.createdAt))
+			.orderBy(...orderClause)
 			.limit(100);
 
 		return c.json({
