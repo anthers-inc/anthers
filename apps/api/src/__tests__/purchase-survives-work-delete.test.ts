@@ -217,8 +217,13 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(row).toBeTruthy();
 		expect(row.work.title).toBe(`Vanishing Game ${id}`);
 		expect(row.work.type).toBe("game");
-		// Slug and cover come from the join and are honestly null — there is no page left.
+		// Slug, publicId and cover come from the join and are honestly null — there is no
+		// page left, and `publicId` is what the client reads to decide whether to offer a
+		// link at all. The SNAPSHOT publicId stays on the row for reconciliation; it must
+		// not be what gets rendered, or the buyer is handed a link straight to a 404.
 		expect(row.work.slug).toBeNull();
+		expect(row.work.publicId).toBeNull();
+		expect(row.workPublicId).toBe(work.publicId);
 		// The creator is resolved from purchases.creatorId, not through the dead Work.
 		expect(row.creator.username).toBe(creatorName);
 	});
@@ -258,6 +263,87 @@ describe("A purchase survives the Work being deleted", () => {
 			headers: { Cookie: creatorCookie },
 		});
 		expect((await res2.json()).purchaseCount).toBe(0);
+	});
+
+	it("gives the buyer a live publicId, so the Library can link back to what they bought", async () => {
+		// The ruling is that a buyer owns it *in their library*, and a library entry that
+		// leads nowhere does not satisfy it. This endpoint never returned `publicId` at all
+		// after the Works rename, so both the Library and Purchases pages fell through to
+		// their `/posts/{slug}` fallback — a different route serving a different entity, so
+		// EVERY purchase led to a not-found page. Typecheck could not catch it: the field
+		// was declared optional.
+		const { work, purchase } = await soldWork(`Linkable Game ${id}`);
+
+		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
+		const row = (await res.json()).purchases.find((p: { id: number }) => p.id === purchase.id) as {
+			work: { publicId: number; slug: string; visibility: string };
+		};
+
+		expect(row.work.publicId).toBe(work.publicId);
+		expect(row.work.slug).toBe(work.slug);
+		expect(row.work.visibility).toBe("released");
+
+		// And that link resolves — the pair is what `/works/{slug}-{publicId}` is built from.
+		const opened = await req(`/api/content/works/${work.slug}-${work.publicId}`, {
+			headers: { Cookie: buyerCookie },
+		});
+		expect(opened.status).toBe(200);
+	});
+
+	it("keeps the link, and says it is withdrawn, once the creator pulls it", async () => {
+		const { work, purchase } = await soldWork(`Withdrawn Link ${id}`);
+		await req(`/api/content/works/${work.id}?force=1`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: creatorCookie },
+		});
+
+		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
+		const row = (await res.json()).purchases.find((p: { id: number }) => p.id === purchase.id) as {
+			work: { publicId: number; visibility: string };
+		};
+
+		// Still openable — that is the whole point of withdrawal — but the buyer is owed
+		// the fact that it left circulation, since the rescue window will eventually end.
+		expect(row.work.publicId).toBe(work.publicId);
+		expect(row.work.visibility).toBe("withdrawn");
+	});
+
+	it("lists a Seed buy as a receipt that bought no Work, and says so in `type`", async () => {
+		// A Seed buy is a real charge with a real receipt, so it belongs in Purchases — it
+		// only started appearing when `0016` stopped this endpoint dropping every row with
+		// no Work. But it unlocks nothing, so it does NOT belong in the Library, and the
+		// client needs something to tell the two apart. `workId` cannot: it is null here
+		// AND null for a Work that has been deleted. `type` is the discriminator.
+		const [seedBuy] = await db
+			.insert(purchases)
+			.values({
+				buyerId,
+				workId: null,
+				creatorId: null,
+				type: "seeds",
+				amount: "9.00",
+				processingFee: "0.56",
+				crfFee: "0.00",
+				salesTax: "0.00",
+				creatorEarnings: "0.00",
+				stripePaymentIntentId: `pi_psd_${crypto.randomUUID().slice(0, 12)}`,
+				status: "completed",
+			})
+			.returning();
+
+		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
+		const row = (await res.json()).purchases.find((p: { id: number }) => p.id === seedBuy.id) as {
+			type: string;
+			work: { title: null; publicId: null };
+			creator: { username: null };
+		};
+
+		expect(row).toBeTruthy();
+		expect(row.type).toBe("seeds");
+		// Nothing to name, nothing to open, nobody to credit.
+		expect(row.work.title).toBeNull();
+		expect(row.work.publicId).toBeNull();
+		expect(row.creator.username).toBeNull();
 	});
 
 	it("leaves a Work nobody bought deletable without a force flag", async () => {

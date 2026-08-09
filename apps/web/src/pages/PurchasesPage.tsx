@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { SEED_PRICE } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -95,6 +96,86 @@ function MonthSelector({
 					<span className="text-sm font-medium text-primary">Pre-Orders</span>
 				</>
 			)}
+		</div>
+	);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Purchase Row                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One receipt.
+ *
+ * Not every purchase names something openable, and this list has to hold all of them:
+ * a **Seed buy** bought no Work at all, and a Work that has since been removed leaves a
+ * receipt with no page behind it. `work.publicId` comes from the live row (null once the
+ * Work is gone), so it — not the title, which is a snapshot and always reads — is what
+ * decides whether a link is offered.
+ */
+function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
+	const to =
+		p.work?.publicId != null ? workUrl({ slug: p.work.slug, publicId: p.work.publicId }) : null;
+
+	// A Seed buy has no title of its own; name it by what it bought. Seeds are sold in
+	// whole $3 units, so the count is recoverable from the amount.
+	const seedCount = Math.round(parseFloat(p.amount) / SEED_PRICE);
+	const label =
+		p.type === "seeds"
+			? `${seedCount} ${seedCount === 1 ? "Seed" : "Seeds"}`
+			: (p.work?.title ?? "Untitled");
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body p-4">
+				<div className="flex items-start justify-between gap-3">
+					<div className="flex items-center gap-3 min-w-0">
+						{/* Cover image */}
+						{p.work?.coverImage && to ? (
+							<Link to={to}>
+								<img
+									src={p.work.coverImage}
+									alt=""
+									className="w-12 h-12 rounded object-cover flex-shrink-0"
+								/>
+							</Link>
+						) : (
+							<div className="w-12 h-12 rounded bg-base-300 flex-shrink-0" />
+						)}
+
+						<div className="min-w-0">
+							{to ? (
+								<Link to={to} className="font-medium link link-hover block truncate">
+									{label}
+								</Link>
+							) : (
+								<span className="font-medium block truncate">{label}</span>
+							)}
+
+							{/* Creator → profile link. A Seed buy has no creator side. */}
+							{p.creator?.username ? (
+								<Link
+									to={`/${p.creator.username}`}
+									className="text-sm text-base-content/50 link link-hover"
+								>
+									@{p.creator.username}
+								</Link>
+							) : (
+								p.type === "seeds" && (
+									<span className="text-sm text-base-content/50">Yours to give to creators</span>
+								)
+							)}
+						</div>
+					</div>
+
+					<div className="text-right flex-shrink-0">
+						<div className="font-medium">{fmt(parseFloat(p.amount))}</div>
+						<div className="text-xs text-base-content/40">
+							{new Date(p.createdAt).toLocaleDateString()}
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -196,63 +277,7 @@ export default function PurchasesPage() {
 					<>
 						<div className="space-y-3">
 							{purchases.map((p) => (
-								<div key={p.id} className="card bg-base-200">
-									<div className="card-body p-4">
-										<div className="flex items-start justify-between gap-3">
-											<div className="flex items-center gap-3 min-w-0">
-												{/* Cover image */}
-												{p.work?.coverImage ? (
-													<Link
-														to={
-															p.work.publicId != null
-																? workUrl({ slug: p.work.slug, publicId: p.work.publicId })
-																: `/posts/${p.work.slug}`
-														}
-													>
-														<img
-															src={p.work.coverImage}
-															alt=""
-															className="w-12 h-12 rounded object-cover flex-shrink-0"
-														/>
-													</Link>
-												) : (
-													<div className="w-12 h-12 rounded bg-base-300 flex-shrink-0" />
-												)}
-
-												<div className="min-w-0">
-													{/* Post title → detail link */}
-													<Link
-														to={
-															p.work?.publicId != null
-																? workUrl({ slug: p.work.slug, publicId: p.work.publicId })
-																: `/posts/${p.work?.slug}`
-														}
-														className="font-medium link link-hover block truncate"
-													>
-														{p.work?.title ?? "Unknown"}
-													</Link>
-
-													{/* Creator → profile link */}
-													{p.creator && (
-														<Link
-															to={`/${p.creator.username}`}
-															className="text-sm text-base-content/50 link link-hover"
-														>
-															@{p.creator.username}
-														</Link>
-													)}
-												</div>
-											</div>
-
-											<div className="text-right flex-shrink-0">
-												<div className="font-medium">{fmt(parseFloat(p.amount))}</div>
-												<div className="text-xs text-base-content/40">
-													{new Date(p.createdAt).toLocaleDateString()}
-												</div>
-											</div>
-										</div>
-									</div>
-								</div>
+								<PurchaseRow key={p.id} purchase={p} />
 							))}
 						</div>
 

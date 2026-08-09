@@ -24,6 +24,57 @@ const MEDIA_TABS = [
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
 ] as const;
 
+/**
+ * One owned Work.
+ *
+ * The card is a link ONLY when the Work still has a page — `publicId` comes from the live
+ * row and goes null with it, so its absence is the signal that there is nowhere to go.
+ * Until now this fell back to `/posts/{slug}`, which is a different route serving a
+ * different entity: every purchase in the Library led to a not-found page.
+ */
+function LibraryCard({ purchase }: { purchase: Purchase }) {
+	const work = purchase.work;
+	const to = work?.publicId != null ? workUrl({ slug: work.slug, publicId: work.publicId }) : null;
+
+	const body = (
+		<>
+			{work?.coverImage ? (
+				<figure>
+					<img src={work.coverImage} alt={work.title ?? ""} className="w-full h-40 object-cover" />
+				</figure>
+			) : (
+				<div className="w-full h-40 bg-base-300 flex items-center justify-center">
+					<span className="text-base-content/30 text-sm">No cover</span>
+				</div>
+			)}
+			<div className="card-body p-4">
+				<h2 className="card-title text-sm">{work?.title ?? "Untitled"}</h2>
+				<p className="text-xs text-base-content/60">
+					Purchased {new Date(purchase.createdAt).toLocaleDateString()}
+				</p>
+				{/* Say what changed rather than letting the card look ordinary while the
+				    thing behind it has quietly left circulation. Deliberately no deadline:
+				    the rescue window's length isn't decided, and inventing urgency is worse
+				    than stating the guarantee. */}
+				{work?.visibility === "withdrawn" && (
+					<p className="text-xs text-warning">
+						Withdrawn by the creator — still yours to open and download.
+					</p>
+				)}
+				{to == null && <p className="text-xs text-base-content/40">No longer available to open.</p>}
+			</div>
+		</>
+	);
+
+	return to ? (
+		<Link to={to} className="card bg-base-200 hover:shadow-lg transition-shadow">
+			{body}
+		</Link>
+	) : (
+		<div className="card bg-base-200 opacity-70">{body}</div>
+	);
+}
+
 export default function LibraryPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -48,10 +99,14 @@ export default function LibraryPage() {
 		}
 	};
 
-	// Filter purchases by the purchased post's content type.
-	const filteredPurchases = activeTab
-		? purchases.filter((p) => p.work?.type === activeTab)
-		: purchases;
+	// The Library is owned CONTENT, so a Seed buy has no place in it — it is a real
+	// charge with a real receipt (see Purchases), but it bought no Work, so it would
+	// render here as a titleless card linking nowhere. It only started appearing at all
+	// when `0016` stopped this endpoint dropping every purchase with no Work row.
+	const owned = purchases.filter((p) => p.type !== "seeds");
+
+	// Filter by the media type of the Work that was bought.
+	const filteredPurchases = activeTab ? owned.filter((p) => p.work?.type === activeTab) : owned;
 
 	if (loading) {
 		return (
@@ -79,8 +134,8 @@ export default function LibraryPage() {
 					>
 						<tab.icon className="w-4 h-4" />
 						{tab.label}
-						{tab.id === "" && purchases.length > 0 && (
-							<span className="badge badge-xs">{purchases.length}</span>
+						{tab.id === "" && owned.length > 0 && (
+							<span className="badge badge-xs">{owned.length}</span>
 						)}
 					</button>
 				))}
@@ -128,35 +183,7 @@ export default function LibraryPage() {
 			) : (
 				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 					{filteredPurchases.map((purchase) => (
-						<Link
-							key={purchase.id}
-							to={
-								purchase.work?.publicId != null
-									? workUrl({ slug: purchase.work.slug, publicId: purchase.work.publicId })
-									: `/posts/${purchase.work?.slug}`
-							}
-							className="card bg-base-200 hover:shadow-lg transition-shadow"
-						>
-							{purchase.work?.coverImage ? (
-								<figure>
-									<img
-										src={purchase.work.coverImage}
-										alt={purchase.work?.title ?? ""}
-										className="w-full h-40 object-cover"
-									/>
-								</figure>
-							) : (
-								<div className="w-full h-40 bg-base-300 flex items-center justify-center">
-									<span className="text-base-content/30 text-sm">No cover</span>
-								</div>
-							)}
-							<div className="card-body p-4">
-								<h2 className="card-title text-sm">{purchase.work?.title}</h2>
-								<p className="text-xs text-base-content/60">
-									Purchased {new Date(purchase.createdAt).toLocaleDateString()}
-								</p>
-							</div>
-						</Link>
+						<LibraryCard key={purchase.id} purchase={purchase} />
 					))}
 				</div>
 			)}
