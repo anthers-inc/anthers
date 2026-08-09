@@ -28,7 +28,8 @@ function FeedSidebarContent({
 	showLocked,
 	minPrice,
 	maxPrice,
-	onSale,
+	platform,
+	duration,
 	tag,
 	onUpdateParams,
 }: {
@@ -37,7 +38,8 @@ function FeedSidebarContent({
 	showLocked: string;
 	minPrice: string;
 	maxPrice: string;
-	onSale: string;
+	platform: string;
+	duration: string;
 	tag: string;
 	onUpdateParams: (updates: Record<string, string>) => void;
 }) {
@@ -148,7 +150,8 @@ function FeedSidebarContent({
 				showLocked={showLocked}
 				minPrice={minPrice}
 				maxPrice={maxPrice}
-				onSale={onSale}
+				platform={platform}
+				duration={duration}
 				tag={tag}
 				onUpdateParams={onUpdateParams}
 			/>
@@ -171,7 +174,8 @@ export default function AuthenticatedHomePage() {
 	const showLocked = searchParams.get("show_locked") ?? "";
 	const minPrice = searchParams.get("min_price") ?? "";
 	const maxPrice = searchParams.get("max_price") ?? "";
-	const onSale = searchParams.get("on_sale") ?? "";
+	const platform = searchParams.get("platform") ?? "";
+	const duration = searchParams.get("duration") ?? "";
 	const tag = searchParams.get("tag") ?? "";
 
 	const updateParams = useCallback(
@@ -203,7 +207,8 @@ export default function AuthenticatedHomePage() {
 				showLocked={showLocked}
 				minPrice={minPrice}
 				maxPrice={maxPrice}
-				onSale={onSale}
+				platform={platform}
+				duration={duration}
 				tag={tag}
 				onUpdateParams={updateParams}
 			/>,
@@ -216,7 +221,8 @@ export default function AuthenticatedHomePage() {
 		showLocked,
 		minPrice,
 		maxPrice,
-		onSale,
+		platform,
+		duration,
 		tag,
 		updateParams,
 	]);
@@ -236,16 +242,6 @@ export default function AuthenticatedHomePage() {
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
 
-		// Fetch featured projects for discovery section
-		client.api.content.projects
-			.$get()
-			.then(async (res) => {
-				if (!res.ok) return;
-				const data = await res.json();
-				setProjects(data.projects.slice(0, 8));
-			})
-			.catch(() => {});
-
 		// Fetch creators for discovery section
 		client.api.accounts.creators
 			.$get()
@@ -256,6 +252,33 @@ export default function AuthenticatedHomePage() {
 			})
 			.catch(() => {});
 	}, []);
+
+	// Featured projects are their own effect because they are the only thing on this page
+	// the sidebar's filters touch — the feed above is a chronological follow feed and
+	// deliberately takes no filtering, and re-fetching it whenever someone drags a price
+	// slider would be work for nothing. Until now this fetch ignored every filter, so the
+	// controls moved the URL and changed no pixels.
+	useEffect(() => {
+		client.api.content.projects
+			.$get({
+				query: {
+					...(contentType ? { media_type: contentType } : {}),
+					...(pricing ? { pricing } : {}),
+					...(tag ? { tag } : {}),
+					...(minPrice ? { min_price: minPrice } : {}),
+					...(maxPrice ? { max_price: maxPrice } : {}),
+					...(platform ? { platform } : {}),
+					...(duration ? { duration } : {}),
+					...(showLocked ? { show_locked: showLocked } : {}),
+				},
+			})
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = await res.json();
+				setProjects(data.projects.slice(0, 8));
+			})
+			.catch(() => {});
+	}, [contentType, pricing, tag, minPrice, maxPrice, platform, duration, showLocked]);
 
 	return (
 		<div className="min-h-full">

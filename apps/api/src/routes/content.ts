@@ -2310,6 +2310,16 @@ const contentRoutes = new Hono()
 		const tag = c.req.query("tag");
 		const pricing = c.req.query("pricing");
 		const sort = c.req.query("sort") ?? "newest";
+		const minPrice = c.req.query("min_price");
+		const maxPrice = c.req.query("max_price");
+		const platform = c.req.query("platform");
+		const duration = c.req.query("duration");
+		const showLocked = c.req.query("show_locked");
+		// `on_sale` is accepted and ignored: there is no discount, sale-price or promotion
+		// concept anywhere in the schema, so there is nothing to filter on. The control was
+		// removed from the sidebar rather than left drawing a checkbox over nothing; this
+		// keeps an older client from 400ing on a param it still remembers.
+		void c.req.query("on_sale");
 
 		/**
 		 * A project matches when ANY released Work in it matches: a collection is
@@ -2328,6 +2338,13 @@ const contentRoutes = new Hono()
 			SELECT 1 FROM jsonb_array_elements(
 				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
 			) r WHERE (r->>'allow')::boolean AND (${predicate})
+		)`;
+
+		/** The cheapest allowed offer on a Work, for the price-range filter. */
+		const cheapestPrice = sql`(
+			SELECT MIN((r->>'price')::numeric) FROM jsonb_array_elements(
+				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
+			) r WHERE (r->>'allow')::boolean
 		)`;
 
 		const conditions: SQL[] = [];
@@ -2370,6 +2387,80 @@ const contentRoutes = new Hono()
 			conditions.push(containsWork(anyAccessRow(sql`(r->>'price')::numeric > 0`)));
 		} else if (pricing === "gated") {
 			conditions.push(containsWork(anyAccessRow(sql`(r->>'threshold')::int > 0`)));
+
+			// "Show locked content" is OFF by default, so a gated browse shows only what
+			// this viewer can actually open. That needs the access rules in SQL rather
+			// than the usual `resolveAccessSync` pass, because filtering in memory would
+			// run AFTER `LIMIT 100` and silently return fewer rows to some viewers than
+			// others — a filter whose result depends on who is asking is exactly the kind
+			// that has to be part of the query.
+			//
+			// Signed-out viewers are exempt: everything gated is locked to them, so the
+			// filter would empty the list every time and read as a broken page rather than
+			// as a filter doing its job. "Hide what I can't open" only means something
+			// once there is something you can.
+			const viewerId = await getOptionalUserId(c);
+			if (showLocked !== "true" && viewerId != null) {
+				const ctx = await buildAccessContext(viewerId);
+				// The Seed table compares against Seeds given to *that Work's creator*, a
+				// different number per row, so the viewer's allocations travel as a jsonb
+				// map keyed by creator id and are looked up per row.
+				const seedMap = JSON.stringify(Object.fromEntries(ctx.seedByCreator));
+				// Coerced explicitly because the ids are inlined rather than bound: they
+				// come from our own `purchases` rows and are integers already, and this is
+				// what keeps that true if the source ever changes.
+				const purchased = [...ctx.purchasedWorkIds].map(Number).filter(Number.isInteger);
+				conditions.push(
+					containsWork(sql`(
+						${viewerId} = w.creator_id
+						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
+						OR EXISTS (
+							SELECT 1 FROM jsonb_array_elements(COALESCE(w.anthers_access, '[]'::jsonb)) r
+							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
+								AND (r->>'threshold')::int <= ${ctx.anthersSeeds}
+						)
+						OR EXISTS (
+							SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
+								AND (r->>'threshold')::int
+									<= COALESCE((${seedMap}::jsonb ->> w.creator_id::text)::int, 0)
+						)
+					)`),
+				);
+			}
+		}
+
+		// Price range applies to the cheapest offer, which is the one the buyer would pay.
+		if (minPrice) conditions.push(containsWork(sql`${cheapestPrice} >= ${minPrice}::numeric`));
+		if (maxPrice) conditions.push(containsWork(sql`${cheapestPrice} <= ${maxPrice}::numeric`));
+
+		// Platform lives on the downloadable build, not the Work — a game ships several.
+		if (platform) {
+			conditions.push(
+				containsWork(
+					sql`EXISTS (SELECT 1 FROM assets a WHERE a.work_id = w.id AND a.platform = ${platform})`,
+				),
+			);
+		}
+
+		// Duration bands differ by medium — half an hour is a long track and a short film —
+		// so they are read against the media type the viewer has already selected, and
+		// ignored without one rather than guessing which scale was meant.
+		// `null` upper bound means unbounded — not a sentinel, because `duration_seconds`
+		// is int4 and any "very large" stand-in either overflows the column type or
+		// invites someone to pick one that doesn't.
+		const BANDS: Record<string, Record<string, [number, number | null]>> = {
+			audio: { short: [0, 300], medium: [300, 1800], long: [1800, null] },
+			video: { short: [0, 600], medium: [600, 3600], long: [3600, null] },
+		};
+		const band = duration && mediaType ? BANDS[mediaType]?.[duration] : undefined;
+		if (band) {
+			const upper = band[1] === null ? sql`` : sql` AND w.duration_seconds < ${band[1]}`;
+			conditions.push(
+				containsWork(
+					sql`w.duration_seconds IS NOT NULL AND w.duration_seconds >= ${band[0]}${upper}`,
+				),
+			);
 		}
 
 		// Summed views and mean score both range over the project's released Works, for the

@@ -127,7 +127,8 @@ export interface ContentFilterParams {
 	showLocked: string;
 	minPrice: string;
 	maxPrice: string;
-	onSale: string;
+	platform: string;
+	duration: string;
 	tag: string;
 }
 
@@ -152,7 +153,8 @@ export default function ContentFilterSections({
 	showLocked,
 	minPrice,
 	maxPrice,
-	onSale,
+	platform,
+	duration,
 	tag,
 	onUpdateParams,
 }: ContentFilterSectionsProps) {
@@ -202,7 +204,6 @@ export default function ContentFilterSections({
 									show_locked: "",
 									min_price: "",
 									max_price: "",
-									on_sale: "",
 								})
 							}
 						>
@@ -252,15 +253,6 @@ export default function ContentFilterSections({
 								/>
 							</div>
 						</div>
-						<label className="flex items-center gap-2 cursor-pointer">
-							<input
-								type="checkbox"
-								className="checkbox checkbox-xs checkbox-secondary"
-								checked={onSale === "true"}
-								onChange={(e) => onUpdateParams({ on_sale: e.target.checked ? "true" : "" })}
-							/>
-							<span className="text-xs text-base-content/70">On sale</span>
-						</label>
 					</div>
 				)}
 			</section>
@@ -276,7 +268,11 @@ export default function ContentFilterSections({
 					{contentType === "game" && (
 						<div className="mb-3">
 							<label className="text-xs text-base-content/50 mb-1 block">Platform</label>
-							<select className="select select-bordered select-xs w-full">
+							<select
+								className="select select-bordered select-xs w-full"
+								value={platform}
+								onChange={(e) => onUpdateParams({ platform: e.target.value })}
+							>
 								<option value="">Any platform</option>
 								<option value="web">Browser</option>
 								<option value="windows">Windows</option>
@@ -289,7 +285,11 @@ export default function ContentFilterSections({
 					{contentType === "audio" && (
 						<div className="mb-3">
 							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
-							<select className="select select-bordered select-xs w-full">
+							<select
+								className="select select-bordered select-xs w-full"
+								value={duration}
+								onChange={(e) => onUpdateParams({ duration: e.target.value })}
+							>
 								<option value="">Any length</option>
 								<option value="short">Under 5 min</option>
 								<option value="medium">5-30 min</option>
@@ -301,7 +301,11 @@ export default function ContentFilterSections({
 					{contentType === "video" && (
 						<div className="mb-3">
 							<label className="text-xs text-base-content/50 mb-1 block">Duration</label>
-							<select className="select select-bordered select-xs w-full">
+							<select
+								className="select select-bordered select-xs w-full"
+								value={duration}
+								onChange={(e) => onUpdateParams({ duration: e.target.value })}
+							>
 								<option value="">Any length</option>
 								<option value="short">Under 10 min</option>
 								<option value="medium">10-60 min</option>

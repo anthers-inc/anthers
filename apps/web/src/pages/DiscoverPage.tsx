@@ -62,7 +62,8 @@ function DiscoverSidebarContent({
 	showLocked,
 	minPrice,
 	maxPrice,
-	onSale,
+	platform,
+	duration,
 	tag,
 	onUpdateParams,
 }: {
@@ -72,7 +73,8 @@ function DiscoverSidebarContent({
 	showLocked: string;
 	minPrice: string;
 	maxPrice: string;
-	onSale: string;
+	platform: string;
+	duration: string;
 	tag: string;
 	onUpdateParams: (updates: Record<string, string>) => void;
 }) {
@@ -115,7 +117,8 @@ function DiscoverSidebarContent({
 				showLocked={showLocked}
 				minPrice={minPrice}
 				maxPrice={maxPrice}
-				onSale={onSale}
+				platform={platform}
+				duration={duration}
 				tag={tag}
 				onUpdateParams={onUpdateParams}
 			/>
@@ -139,7 +142,8 @@ export default function DiscoverPage() {
 	const showLocked = searchParams.get("show_locked") ?? "";
 	const minPrice = searchParams.get("min_price") ?? "";
 	const maxPrice = searchParams.get("max_price") ?? "";
-	const onSale = searchParams.get("on_sale") ?? "";
+	const platform = searchParams.get("platform") ?? "";
+	const duration = searchParams.get("duration") ?? "";
 	const tag = searchParams.get("tag") ?? "";
 
 	const updateParams = useCallback(
@@ -172,7 +176,8 @@ export default function DiscoverPage() {
 				showLocked={showLocked}
 				minPrice={minPrice}
 				maxPrice={maxPrice}
-				onSale={onSale}
+				platform={platform}
+				duration={duration}
 				tag={tag}
 				onUpdateParams={updateParams}
 			/>,
@@ -186,7 +191,8 @@ export default function DiscoverPage() {
 		showLocked,
 		minPrice,
 		maxPrice,
-		onSale,
+		platform,
+		duration,
 		tag,
 		updateParams,
 	]);
@@ -201,6 +207,11 @@ export default function DiscoverPage() {
 		if (sort && sort !== "newest") params.set("sort", sort);
 		if (pricing) params.set("pricing", pricing);
 		if (tag) params.set("tag", tag);
+		if (minPrice) params.set("min_price", minPrice);
+		if (maxPrice) params.set("max_price", maxPrice);
+		if (platform) params.set("platform", platform);
+		if (duration) params.set("duration", duration);
+		if (showLocked) params.set("show_locked", showLocked);
 
 		apiFetch(`/api/content/projects?${params.toString()}`)
 			.then((res) => res.json())
@@ -214,7 +225,19 @@ export default function DiscoverPage() {
 			.then((res) => res.json())
 			.then((data) => setCreators(data.creators))
 			.catch(() => {});
-	}, [exploreMode, contentType, search, sort, pricing, tag]);
+	}, [
+		exploreMode,
+		contentType,
+		search,
+		sort,
+		pricing,
+		tag,
+		minPrice,
+		maxPrice,
+		platform,
+		duration,
+		showLocked,
+	]);
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
