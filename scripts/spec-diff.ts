@@ -21,6 +21,10 @@
  * incident above belongs to — plus the *values* of non-secret keys, where a drifted
  * `STRIPE_PRICE_SEED` would matter. Secrets are compared on presence alone.
  *
+ * It also compares each component's **`deploy_on_push` and branch**, added when the CI
+ * deploy gate landed: `false` in this file is worthless if the live app says `true`, and
+ * an env-only diff would have called that agreement.
+ *
  * Usage:  make spec-diff            (or: bun run scripts/spec-diff.ts)
  * Needs:  doctl, authenticated. Exits 0 with a notice when it is absent, so this is
  *         safe to call from a machine that cannot reach DigitalOcean.
@@ -29,7 +33,8 @@
 const COMMITTED = ".do/app.yaml";
 
 type EnvEntry = { key?: string; value?: string; type?: string; scope?: string };
-type Component = { name?: string; envs?: EnvEntry[] };
+type GitHubSource = { repo?: string; branch?: string; deploy_on_push?: boolean };
+type Component = { name?: string; envs?: EnvEntry[]; github?: GitHubSource };
 type Spec = {
 	name?: string;
 	envs?: EnvEntry[];
@@ -56,6 +61,30 @@ function envMap(spec: Spec): Map<string, EnvEntry> {
 }
 
 const isSecret = (e: EnvEntry) => e.type === "SECRET" || (e.value ?? "").startsWith("EV[");
+
+/**
+ * Per-component source settings — `deploy_on_push` above all.
+ *
+ * Env keys were the whole comparison until 2026-08-09, and that left the tool blind to
+ * the single field the deploy gate rests on. `deploy_on_push: false` in the committed
+ * spec means nothing if the live app still has `true`: App Platform would keep building
+ * on every push, the `deploy` job would be a second deploy racing the first, and CI's
+ * verdict would quietly stop deciding anything — with this tool reporting agreement the
+ * entire time. Anything that can silently un-gate production belongs in the diff.
+ */
+function sourceMap(spec: Spec): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const kind of COMPONENT_KINDS) {
+		for (const component of spec[kind] ?? []) {
+			const g = component.github;
+			if (!g) continue;
+			const where = component.name ?? kind;
+			out.set(`${where}/deploy_on_push`, String(g.deploy_on_push ?? false));
+			out.set(`${where}/branch`, g.branch ?? "");
+		}
+	}
+	return out;
+}
 
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
 	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
@@ -102,7 +131,8 @@ if (!live.ok) {
 }
 
 const repoEnvs = envMap(committed);
-const liveEnvs = envMap(Bun.YAML.parse(live.stdout) as Spec);
+const liveSpec = Bun.YAML.parse(live.stdout) as Spec;
+const liveEnvs = envMap(liveSpec);
 
 const onlyLive: string[] = [];
 const onlyRepo: string[] = [];
@@ -151,7 +181,27 @@ for (const liveId of onlyLive.slice()) {
 	onlyRepo.splice(onlyRepo.indexOf(twin), 1);
 }
 
-const clean = !onlyLive.length && !onlyRepo.length && !differs.length && !relocated.length;
+const repoSource = sourceMap(committed);
+const liveSource = sourceMap(liveSpec);
+const sourceDiffs: string[] = [];
+for (const [id, mineValue] of repoSource) {
+	const theirs = liveSource.get(id);
+	if (theirs === undefined) {
+		sourceDiffs.push(`${id}\n      live: (component absent)\n      repo: ${mineValue}`);
+	} else if (theirs !== mineValue) {
+		const gate = id.endsWith("/deploy_on_push")
+			? "\n      ⚠ THIS IS THE DEPLOY GATE — `true` in production means pushes deploy without CI"
+			: "";
+		sourceDiffs.push(`${id}\n      live: ${theirs}\n      repo: ${mineValue}${gate}`);
+	}
+}
+
+const clean =
+	!onlyLive.length &&
+	!onlyRepo.length &&
+	!differs.length &&
+	!relocated.length &&
+	!sourceDiffs.length;
 console.log(`\n## Spec diff — ${appName} (${appId})\n`);
 
 if (onlyLive.length) {
@@ -167,6 +217,11 @@ if (onlyRepo.length) {
 if (relocated.length) {
 	console.log("  Declared at different scopes in each spec:");
 	for (const r of relocated.sort()) console.log(`    ≠ ${r}`);
+	console.log("");
+}
+if (sourceDiffs.length) {
+	console.log("  Component source settings that disagree:");
+	for (const d of sourceDiffs.sort()) console.log(`    ! ${d}`);
 	console.log("");
 }
 if (differs.length) {
