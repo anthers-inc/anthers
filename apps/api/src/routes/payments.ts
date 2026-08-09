@@ -305,6 +305,13 @@ const paymentRoutes = new Hono()
 			.select({
 				purchase: purchases,
 				workSlug: works.slug,
+				// The LIVE publicId, not the snapshot one on the purchase row. Both exist and
+				// they answer different questions: the snapshot says *which Work this receipt
+				// is for* and survives the Work's removal, while this one says *whether there
+				// is still a page to open* — so it must go null with the Work, exactly as slug
+				// and cover do. Sending the snapshot here would hand the buyer a link to a 404.
+				workLivePublicId: works.publicId,
+				workVisibility: works.visibility,
 				workCoverImage: works.thumbnail,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
@@ -321,11 +328,17 @@ const paymentRoutes = new Hono()
 				...r.purchase,
 				work: {
 					// Title and type come from the stored snapshot, not the join, so they
-					// still read correctly for a Work that no longer exists. Slug and cover
-					// deliberately do NOT: they only exist to link and illustrate, and a
-					// deleted Work has no page to link to — null is the honest answer.
+					// still read correctly for a Work that no longer exists. Slug, publicId,
+					// visibility and cover deliberately do NOT: they only exist to link and
+					// illustrate, and a deleted Work has no page to link to — null is the
+					// honest answer.
 					title: r.purchase.workTitle,
 					slug: r.workSlug,
+					publicId: r.workLivePublicId,
+					// `withdrawn` means the creator pulled it from circulation and the buyer
+					// keeps it (`0017`). They can still open it, but it is no longer public,
+					// and their Library is the only place that can tell them so.
+					visibility: r.workVisibility,
 					coverImage: r.workCoverImage,
 					type: r.purchase.workType,
 				},

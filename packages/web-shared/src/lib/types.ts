@@ -424,8 +424,14 @@ export interface CheckoutResponse {
 export interface Purchase {
 	id: number;
 	buyerId: number;
-	/** The Work this purchase permanently unlocks. Null for a Seed buy, which unlocks nothing. */
+	/**
+	 * The Work this purchase permanently unlocks. Null for a Seed buy, which unlocks
+	 * nothing — and ALSO null once the Work is genuinely gone, since the FK is
+	 * `ON DELETE SET NULL` (`0016`). It therefore cannot tell those two apart; `type` can.
+	 */
 	workId: number | null;
+	/** What kind of charge this was. `seeds` bought no Work and belongs in no Library. */
+	type: "digital" | "physical" | "service" | "seeds";
 	amount: string;
 	processingFee: string;
 	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
@@ -434,12 +440,19 @@ export interface Purchase {
 	status: string;
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * What was bought. `title`/`type` are the snapshot taken at the sale and survive the
+	 * Work's removal; `slug`/`publicId`/`visibility`/`coverImage` come from the live row
+	 * and go null with it. **A link may only be built when `publicId` is present** — that
+	 * is the field that says a page still exists. All of them are null for a Seed buy.
+	 */
 	work?: {
 		title: string | null;
-		slug: string;
-		publicId?: number;
+		slug: string | null;
+		publicId: number | null;
+		visibility: "private" | "released" | "withdrawn" | null;
 		coverImage: string | null;
-		type: string;
+		type: string | null;
 	};
 	creator?: Creator;
 }
