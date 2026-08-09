@@ -241,7 +241,7 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<CodeBracketIcon className="h-6 w-6" />}
 							title="Open-source approach"
-							description="Ghost is fully open-source (MIT license) and self-hostable. Their non-profit foundation has been building in the open since 2013. Anthers is built on the AT Protocol for data portability and federation, with a focus on open identity rather than open infrastructure."
+							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013 — a decade of earned credibility. Anthers is licensed AGPL-3.0 and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -411,11 +411,12 @@ export default function CompareGhostPage() {
 								<ArrowPathIcon className="h-6 w-6" />
 							</div>
 							<h3 style={serif} className="mb-2 text-lg font-medium">
-								Anthers: open protocol
+								Anthers: open source
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Anthers builds on the AT Protocol. Your identity is a portable DID. Your content is
-								interoperable. Federation means no single point of control.
+								Anthers is licensed AGPL-3.0. Creators will be able to store and serve their own
+								content — on their own hardware or their own cloud — while identity, payments and
+								discovery stay with the platform.
 							</p>
 						</div>
 					</Reveal>
