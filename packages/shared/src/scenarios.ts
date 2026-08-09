@@ -178,6 +178,78 @@ export function saleTable(): SaleScenario[] {
 	});
 }
 
+export interface PurchaseExample extends SaleScenario {
+	/** Human label for the row, as the creator-facing table names it. */
+	item: string;
+	sizeLabel: string;
+	/** Share of list price the creator does not receive, e.g. "34.0%". */
+	deductionPct: string;
+}
+
+/**
+ * The creator-facing worked examples — the single-item worst case Studio quotes.
+ *
+ * Single-item on purpose: a multi-item cart amortises the fixed $0.30 and only ever
+ * pays the creator more, so quoting the cart price would be quoting a best case. The
+ * deduction percentage is here rather than in the doc because it is the number a
+ * creator actually reacts to, and a percentage recomputed by hand beside a generated
+ * take-home is precisely how the two drift apart.
+ */
+export const PURCHASE_EXAMPLES: {
+	item: string;
+	price: number;
+	sizeGiB: number;
+	sizeLabel: string;
+}[] = [
+	{ item: "A single track", price: 1, sizeGiB: 30 / 1024, sizeLabel: "30 MB" },
+	{ item: "A small game", price: 5, sizeGiB: 800 / 1024, sizeLabel: "800 MB" },
+	{ item: "An album", price: 10, sizeGiB: 500 / 1024, sizeLabel: "500 MB" },
+	{ item: "A mid-size game", price: 20, sizeGiB: 10, sizeLabel: "10 GiB" },
+	{ item: "A large game", price: 40, sizeGiB: 40, sizeLabel: "40 GiB" },
+];
+
+export function purchaseExamples(): PurchaseExample[] {
+	return PURCHASE_EXAMPLES.map(({ item, price, sizeGiB, sizeLabel }) => {
+		const list = new Decimal(price);
+		const r = calculateFees(list, { deliveryBytes: sizeGiB * GIB, type: "digital" });
+		const deduction = list.minus(r.creatorEarnings).dividedBy(list).times(100);
+		return {
+			label: item,
+			item,
+			sizeLabel,
+			price: money(list),
+			sizeGiB,
+			creatorReceives: money(r.creatorEarnings),
+			cardFee: money(r.processingFee),
+			delivery: money(r.deliveryFee),
+			// One decimal reads right for most rows; the sub-5% rows need two, or the
+			// large-game case rounds to a suspiciously round 4.7%.
+			deductionPct: `${deduction.toFixed(deduction.lessThan(5) ? 2 : 1)}%`,
+		};
+	});
+}
+
+/**
+ * What the cart is worth, at the small end where the flat fee hurts most.
+ *
+ * Five $1 tracks bought one at a time pay the fixed $0.30 five times; bought together
+ * they pay it once. The whole saving goes to the creators — it is the reason carts and
+ * bundles are an economic instrument here rather than a convenience.
+ */
+export function cartSaving(unitPrice = 1, count = 5) {
+	const one = calculateFees(new Decimal(unitPrice), { deliveryBytes: 0, type: "digital" });
+	const together = calculateFees(new Decimal(unitPrice * count), {
+		deliveryBytes: 0,
+		type: "digital",
+	});
+	return {
+		count,
+		unitPrice: money(new Decimal(unitPrice)),
+		separately: money(one.processingFee.times(count)),
+		inOneCart: money(together.processingFee),
+	};
+}
+
 /** A lone directed Seed — the worst case, and the figure creator-facing copy quotes. */
 export function directedSeedWorstCase() {
 	const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });

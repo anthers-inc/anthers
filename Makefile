@@ -249,6 +249,13 @@ format: ## Format code with Biome
 storage-check: ## Inspect the live Spaces bucket's ACL/policy/CORS posture (WRITE_PROBE=1 to round-trip a test object)
 	bun run apps/api/scripts/storage-posture.ts $(if $(WRITE_PROBE),--write-probe,)
 
+# Deliberately NOT part of `verify`: it needs doctl authenticated against DigitalOcean,
+# which CI has no token for and a fresh clone has no reason to. Run it when you touch
+# .do/app.yaml, and after any deploy that was supposed to change configuration — those
+# are the moments the two specs part company. See 42.05 Deployment Runbook.
+spec-diff: ## Compare .do/app.yaml against the LIVE App Platform spec (needs doctl; DO_APP_ID to override lookup)
+	bun run scripts/spec-diff.ts
+
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium
 

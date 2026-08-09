@@ -34,7 +34,13 @@ name: anthers
 region: nyc
 
 databases:
-  - name: anthers-db
+  # `anthersdb`, not `anthers-db` — this is the component name the LIVE app uses, and
+  # `make spec-diff` caught it disagreeing. The name is not cosmetic: it is the
+  # interpolation key in `${anthersdb.DATABASE_URL}` below, so a spec carrying the
+  # other one describes a database binding that does not exist. Applying it would have
+  # been a genuinely bad day, which is a fair illustration of why the committed spec is
+  # not authoritative here.
+  - name: anthersdb
     engine: PG
     version: "16"
     production: true
@@ -53,7 +59,7 @@ databases:
 envs:
   - key: DATABASE_URL
     scope: RUN_TIME
-    value: ${anthers-db.DATABASE_URL}
+    value: ${anthersdb.DATABASE_URL}
   - key: STORAGE_BACKEND
     scope: RUN_TIME
     value: s3
@@ -153,6 +159,14 @@ services:
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: ${APP_URL}
+      # The Creator Studio's origin. `origins.ts` reads it into the CORS + CSRF
+      # allowlist, so without it every Studio mutation gets a 403 from middleware
+      # that never reaches a handler. Production has always set it; this file did
+      # not declare it, which is the same invisible-drift shape as the Stripe block
+      # above — and `make spec-diff` now catches that class outright.
+      - key: STUDIO_URL
+        scope: RUN_TIME
+        value: https://studio.anthers.org
       # SITE_PASSWORD + RESEND_API_KEY live at app level (see the envs: block
       # above) to avoid component-level shadowing.
 
