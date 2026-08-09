@@ -2,7 +2,7 @@
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeCardElement } from "@stripe/stripe-js";
 import { useMemo, useState } from "react";
-import { stripePromise } from "../../lib/stripe";
+import { getStripe } from "../../lib/stripe";
 import { cardElementStyle } from "../../lib/stripeCard";
 
 interface Props {
@@ -122,7 +122,7 @@ function PaymentForm({
 
 export default function OneTimePaymentModal(props: Props) {
 	return (
-		<Elements stripe={stripePromise}>
+		<Elements stripe={getStripe()}>
 			<PaymentForm {...props} />
 		</Elements>
 	);

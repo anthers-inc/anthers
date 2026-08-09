@@ -3,7 +3,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeCardElement } from "@stripe/stripe-js";
 import { useMemo, useState } from "react";
-import { stripePromise } from "../../lib/stripe";
+import { getStripe } from "../../lib/stripe";
 import { cardElementStyle } from "../../lib/stripeCard";
 
 /** What the confirmation modal needs — computed server-side by /subscriptions/preview. */
@@ -199,7 +199,7 @@ function PaymentForm({ anthersSeeds, badgeName, preview, onComplete, onClose }: 
 
 export default function SubscriptionPaymentModal(props: Props) {
 	return (
-		<Elements stripe={stripePromise}>
+		<Elements stripe={getStripe()}>
 			<PaymentForm {...props} />
 		</Elements>
 	);
