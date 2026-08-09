@@ -33,6 +33,7 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	DELIVERY_GIB_PER_HOUR,
+	FREE_FLOOR_GIB,
 	FREE_STORAGE_GIB,
 	SALES_TAX_RATE,
 	SEED_PRICE,
@@ -41,10 +42,15 @@ import {
 import {
 	badgeTable,
 	cartSaving,
+	creatorReceipt,
 	directedSeedWorstCase,
+	FIXED_MONTHLY_OVERHEAD,
+	FREE_USER_STREAM_HOURS,
+	PAYING_BADGE_MIX,
 	purchaseExamples,
 	saleTable,
 	sampleReceipt,
+	selfSufficiency,
 } from "../packages/shared/src/scenarios.js";
 
 const REPO = join(import.meta.dir, "..");
@@ -210,6 +216,57 @@ function renderPurchaseExamplesMarkdown(): string {
 	].join("\n");
 }
 
+/** A mid-size creator's monthly earnings, and the only cost that comes out of them. */
+function renderCreatorReceiptMarkdown(): string {
+	const r = creatorReceipt();
+	const pad = (label: string, amount: string) =>
+		`${label}${" ".repeat(Math.max(1, 62 - label.length - amount.length))}${amount}`;
+	return [
+		"```",
+		"Your Earnings — February 2026                                  @LifeOfRiza",
+		"",
+		"━".repeat(66),
+		pad("Time Pool (by watch-time) + directed Seeds (net of card)", `$${r.gross}`),
+		pad(
+			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB free = ${r.billableGiB} GiB, at cost)`,
+			`−$${r.storage}`,
+		),
+		pad("Storage charge (half again)", `−$${r.storageCharge}`),
+		`${" ".repeat(54)}──────────`,
+		pad("Net earnings", `$${r.net}`),
+		"",
+		"Payouts carry no processing (Connect transfers are free); the only",
+		"deduction from a directed Seed is its share of the card fee.",
+		"```",
+	].join("\n");
+}
+
+/** Whether the charitable budget funds itself, as a function of the paying share. */
+function renderSelfSufficiencyMarkdown(): string {
+	const s = selfSufficiency();
+	const mix = Object.entries(PAYING_BADGE_MIX)
+		.map(([seeds, share]) => `${(Number(share) * 100).toFixed(0)}% at ${seeds}`)
+		.join(", ");
+	return [
+		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each** at ${FREE_USER_STREAM_HOURS} hrs of streaming. So everything turns on the **paying share**:`,
+		"",
+		"| Paying share | Net per paying user | Users to solvency |",
+		"|--:|--:|--:|",
+		...s.rows.map(
+			(r) =>
+				`| ${r.sharePct} | ${r.net.startsWith("-") ? `−$${r.net.slice(1)}` : `$${r.net}`} | ${
+					r.usersToSolvency === null ? "**never**" : `~${r.usersToSolvency.toLocaleString("en-US")}`
+				} |`,
+		),
+		"",
+		`**Below roughly ${s.breakEvenPct} paying, growth never closes the gap** — each new cohort costs more in free access than it brings in, so scale makes the problem worse rather than better. Above it the model self-funds, and the scale required falls away quickly.`,
+		"",
+		`**That floor moves with how much free users stream.** At ${FREE_USER_STREAM_HOURS} hrs/month it is ${s.breakEvenPct}; if every free user drew their whole ${FREE_FLOOR_GIB} GiB floor ($${s.fullFloorCost} each) it rises to ${s.breakEvenFullFloorPct}. **The generosity of the free floor and the platform's self-sufficiency are the same dial** — raising it is a real charitable act with a real price, and the price is paid in the paying share we need. Manage it deliberately; don't drift it.`,
+		"",
+		`Two ASSUMPTIONS drive every number here and neither is a dial: the paying-user Badge mix (${mix} Seeds) and $${FIXED_MONTHLY_OVERHEAD.toLocaleString("en-US")}/month of fixed overhead. The mix matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it.`,
+	].join("\n");
+}
+
 const BLOCKS: { file: string; key: string; render: () => string }[] = [
 	{
 		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
@@ -240,6 +297,16 @@ const BLOCKS: { file: string; key: string; render: () => string }[] = [
 		file: "60-69 Strategy/63 Brand/63.01 Copy Style Guide.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
+	},
+	{
+		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
+		key: "creator-receipt",
+		render: renderCreatorReceiptMarkdown,
+	},
+	{
+		file: "10-19 Overview/11 Model & Mission/11.02 Free Access and Charitable Programs.md",
+		key: "self-sufficiency",
+		render: renderSelfSufficiencyMarkdown,
 	},
 ];
 

@@ -8,9 +8,25 @@
 // wrong remainder in the "source of truth" doc for five days.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { SALES_TAX_RATE, SEED_PRICE } from "./constants.js";
+import {
+	AFF_INFRA_RATE,
+	BANDWIDTH_PER_GIB,
+	DELIVERY_GIB_PER_HOUR,
+	FREE_STORAGE_GIB,
+	FREE_TIME_POOL,
+	SALES_TAX_RATE,
+	SEED_PRICE,
+} from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
-import { badgeTable, directedSeedWorstCase, saleTable, sampleReceipt } from "./scenarios.js";
+import {
+	badgeTable,
+	creatorReceipt,
+	directedSeedWorstCase,
+	FREE_USER_STREAM_HOURS,
+	saleTable,
+	sampleReceipt,
+	selfSufficiency,
+} from "./scenarios.js";
 
 const D = (s: string) => new Decimal(s);
 
@@ -125,5 +141,77 @@ describe("directedSeedWorstCase", () => {
 			const batched = supportBreakdown({ anthersSeeds: n, creatorSeeds: 1 }).creatorNet;
 			expect(batched.greaterThan(worst)).toBe(true);
 		}
+	});
+});
+
+describe("creatorReceipt", () => {
+	test("charges storage only above the free allowance, and nothing else", () => {
+		const r = creatorReceipt(1575, 69);
+		expect(r.billableGiB).toBe(69 - FREE_STORAGE_GIB);
+		// Net is gross less storage and its charge — payouts carry no processing, because
+		// Connect standard transfers are free. Anything else appearing here is a bug.
+		expect(new Decimal(r.net)).toEqual(
+			new Decimal(r.gross).minus(r.storage).minus(r.storageCharge),
+		);
+		expect(new Decimal(r.storageCharge)).toEqual(new Decimal(r.storage).times(AFF_INFRA_RATE));
+	});
+
+	test("a library inside the free allowance costs its creator nothing", () => {
+		const r = creatorReceipt(500, FREE_STORAGE_GIB);
+		expect(r.billableGiB).toBe(0);
+		expect(r.net).toBe("500.00");
+	});
+});
+
+describe("selfSufficiency", () => {
+	const s = selfSufficiency();
+
+	test("a free user costs their bandwidth plus the Time Pool funded for them", () => {
+		const expected = new Decimal(FREE_USER_STREAM_HOURS)
+			.times(DELIVERY_GIB_PER_HOUR)
+			.times(BANDWIDTH_PER_GIB)
+			.plus(FREE_TIME_POOL);
+		expect(s.freeUserCost).toBe(expected.toFixed(2));
+	});
+
+	test("net per paying user is revenue less the free users they carry", () => {
+		// Recomputed from the ROUNDED published figures, so the tolerance has to scale
+		// with the multiplier: at a 10% paying share each paying user carries 9 free ones,
+		// which turns a half-cent of rounding in `freeUserCost` into four and a half. The
+		// implementation works at full precision and rounds once, for display — that is
+		// the correct order, and it is why this asserts closeness rather than equality.
+		for (const row of s.rows) {
+			const freePerPaying = new Decimal(1 - row.share).dividedBy(row.share);
+			const expected = new Decimal(s.revenuePerPayingUser).minus(
+				freePerPaying.times(s.freeUserCost),
+			);
+			const tolerance = freePerPaying.times(0.005).plus(0.005).toNumber();
+			expect(Math.abs(new Decimal(row.net).minus(expected).toNumber())).toBeLessThan(tolerance);
+		}
+	});
+
+	test("net rises with the paying share, and solvency gets easier", () => {
+		const nets = s.rows.map((r) => Number(r.net));
+		expect([...nets].sort((a, b) => a - b)).toEqual(nets);
+		const scales = s.rows.filter((r) => r.usersToSolvency !== null).map((r) => r.usersToSolvency);
+		expect([...scales].sort((a, b) => (b as number) - (a as number))).toEqual(scales);
+	});
+
+	test("the break-even share is exactly where net per paying user reaches zero", () => {
+		const p = Number(s.breakEvenPct.replace("%", "")) / 100;
+		const freePerPaying = new Decimal(1 - p).dividedBy(p);
+		const net = new Decimal(s.revenuePerPayingUser).minus(freePerPaying.times(s.freeUserCost));
+		// Same rounding caveat, plus the share itself is published to one decimal — at
+		// ~10% that last digit alone moves the free-per-paying multiplier by ~0.1.
+		expect(Math.abs(net.toNumber())).toBeLessThan(0.06);
+	});
+
+	test("a more generous free floor raises the share needed to sustain it", () => {
+		// The whole political point of the figure: the floor's generosity and the
+		// platform's self-sufficiency are one dial, so this inequality must hold.
+		expect(Number(s.fullFloorCost)).toBeGreaterThan(Number(s.freeUserCost));
+		expect(Number(s.breakEvenFullFloorPct.replace("%", ""))).toBeGreaterThan(
+			Number(s.breakEvenPct.replace("%", "")),
+		);
 	});
 });
