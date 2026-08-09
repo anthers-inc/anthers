@@ -16,12 +16,19 @@ name: ci
 # `precheck` job below skips the release run in exactly that case and no other;
 # see its comment.
 #
-# Making this a TRUE gate is a separate question and deliberately not done: it
-# needs `deploy_on_push: false` plus a deploy step after CI, which puts a
-# DigitalOcean token in GitHub secrets and makes deploying wait on CI. Decided
-# 2026-08-08 to revisit before public launch, when a bad deploy starts costing
-# something real. Today a failed build cannot take prod down — App Platform keeps
-# the previously-active deployment serving until a good one replaces it.
+# **This IS a true gate now** (2026-08-09), which reverses the note that stood
+# here: `deploy_on_push` is false on every component and the `deploy` job at the
+# bottom is the only path to production. It was deferred on 2026-08-08 on the
+# grounds that a failed build cannot take prod down anyway — App Platform keeps
+# the previously-active deployment serving — and that reasoning was sound but
+# answered a different question. The gate does not buy "prod cannot break"; it
+# buys "nothing untested ever reaches prod", which is worth having in place
+# before launch rather than during it.
+#
+# What it costs, and know this before an incident: a red run now blocks a hotfix
+# too. The escape hatch is `doctl apps create-deployment <app-id>` by hand, which
+# is deliberately not wrapped in a make target — bypassing the gate should take a
+# moment's thought.
 on:
   push:
     branches: [main, release]
@@ -258,3 +265,54 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+
+  # ─── The deploy gate ──────────────────────────────────────────────────────────
+  #
+  # This is what makes CI authoritative instead of advisory. `deploy_on_push` is now
+  # false on every component, so App Platform builds nothing on its own and this job is
+  # the only path to production.
+  #
+  # The `if` is the whole design, and it is not `needs: [test, images]` alone — that
+  # would be wrong in the ORDINARY case. `precheck` skips the test jobs when this exact
+  # SHA already passed on `main`, and a `needs` on a skipped job skips its dependents
+  # too, so the common deploy would never fire. What this asserts instead is the honest
+  # condition: nothing failed, and nothing was cancelled. A skipped suite reaches here
+  # only via precheck, which skips only after confirming a green run on the same SHA.
+  #
+  # `!cancelled()` rather than `success()` for the same reason: `success()` requires
+  # every dependency to have succeeded, which a deliberate skip is not.
+  deploy:
+    needs: [precheck, test, images, playwright]
+    if: >-
+      github.event_name == 'push' && github.ref_name == 'release' &&
+      !cancelled() && !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Two deploys of the same app at once is a race App Platform resolves by superseding
+    # one, which makes the losing run's green mark a lie. Serialize instead, and never
+    # cancel one in flight — an interrupted deploy is the one state worse than a slow one.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Deploy ${{ github.sha }}
+        run: |
+          set -o pipefail
+          echo "::notice::Deploying ${{ github.sha }} to production"
+          # --wait blocks until the deployment settles, so this job is red when the build
+          # fails rather than green-on-submitted. App Platform keeps the previously-active
+          # deployment serving throughout, so a failure here leaves prod on the last good
+          # build rather than down.
+          doctl apps create-deployment ${{ vars.DO_APP_ID || 'e960deee-e9e3-450c-ac83-aa700fab1310' }} \
+            --wait --format ID,Phase
+
+      - name: Report what is now live
+        if: ${{ !cancelled() }}
+        run: |
+          doctl apps list-deployments ${{ vars.DO_APP_ID || 'e960deee-e9e3-450c-ac83-aa700fab1310' }} \
+            --format ID,Cause,Phase | head -3

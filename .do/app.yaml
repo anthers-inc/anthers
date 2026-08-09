@@ -2,7 +2,7 @@
 # DigitalOcean App Platform spec for the Anthers hub.
 #
 # Shape (decided 2026-07-01, hub on Managed Postgres):
-#   - databases: a managed Postgres, bound to the app as ${anthers-db.DATABASE_URL}
+#   - databases: a managed Postgres, bound to the app as ${anthersdb.DATABASE_URL}
 #   - api        service   — Hono API (Dockerfile + FFmpeg), serves /api and /health
 #   - worker     worker    — pg-boss job worker (transcode/audio/cross-publish + crons)
 #   - migrate    PRE_DEPLOY job — runs Drizzle migrations before each release
@@ -133,6 +133,15 @@ ingress:
       component:
         name: web
 
+# `deploy_on_push` is FALSE on every component below, and that is load-bearing rather
+# than a leftover: since 2026-08-09 the `deploy` job in .github/workflows/ci.yml is the
+# only path to production, so a push to `release` builds nothing until CI is green.
+# Flipping any of these back to `true` silently removes the gate — App Platform would
+# start building on push again and the CI verdict would stop mattering.
+#
+# To deploy without CI (a hotfix while the suite is red): `doctl apps create-deployment
+# <app-id>`. Deliberately not a make target; bypassing the gate should take a moment's
+# thought.
 services:
   - name: api
     dockerfile_path: apps/api/Dockerfile
@@ -140,7 +149,7 @@ services:
     github:
       repo: anthers-inc/Anthers
       branch: release
-      deploy_on_push: true
+      deploy_on_push: false
     run_command: bun run apps/api/src/index.ts
     http_port: 8000
     instance_size_slug: basic-xxs
@@ -182,7 +191,7 @@ workers:
     github:
       repo: anthers-inc/Anthers
       branch: release
-      deploy_on_push: true
+      deploy_on_push: false
     run_command: bun run apps/api/src/jobs/worker.ts
     instance_size_slug: basic-xxs
     instance_count: 1
@@ -195,7 +204,7 @@ jobs:
     github:
       repo: anthers-inc/Anthers
       branch: release
-      deploy_on_push: true
+      deploy_on_push: false
     run_command: bun run packages/db/src/migrate.ts
     instance_size_slug: basic-xxs
     instance_count: 1
@@ -206,7 +215,7 @@ static_sites:
     github:
       repo: anthers-inc/Anthers
       branch: release
-      deploy_on_push: true
+      deploy_on_push: false
     # `bun run typecheck` (whole monorepo) gates the deploy: a type error in api
     # or web fails the build before anything ships. The static-site build checks
     # out the full repo, so it can typecheck both workspaces.
