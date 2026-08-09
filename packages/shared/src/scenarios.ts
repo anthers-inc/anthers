@@ -19,10 +19,16 @@
  */
 import Decimal from "decimal.js";
 import {
+	AFF_INFRA_RATE,
 	BADGE_ORDER,
+	BANDWIDTH_PER_GIB,
 	DELIVERY_GIB_PER_HOUR,
+	FREE_FLOOR_GIB,
+	FREE_STORAGE_GIB,
+	FREE_TIME_POOL,
 	SALES_TAX_RATE,
 	SEED_PRICE,
+	STORAGE_PER_GIB_MONTH,
 	thresholdForBadge,
 } from "./constants.js";
 import { anthersSeedBreakdown, calculateFees, paymentsSplit, supportBreakdown } from "./fees.js";
@@ -247,6 +253,111 @@ export function cartSaving(unitPrice = 1, count = 5) {
 		unitPrice: money(new Decimal(unitPrice)),
 		separately: money(one.processingFee.times(count)),
 		inOneCart: money(together.processingFee),
+	};
+}
+
+/**
+ * A mid-size creator's monthly earnings receipt.
+ *
+ * Gross earnings and library size are the two ASSUMPTIONS; everything below them is
+ * derived. A creator's only platform-side cost is their own storage above the free
+ * allowance, plus the storage charge on it — payouts carry no processing, because
+ * Connect standard transfers are free.
+ */
+export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
+	const gross = new Decimal(grossEarnings);
+	const billableGiB = Math.max(0, libraryGiB - FREE_STORAGE_GIB);
+	const storage = new Decimal(billableGiB).times(STORAGE_PER_GIB_MONTH);
+	const storageCharge = storage.times(AFF_INFRA_RATE);
+	return {
+		libraryGiB,
+		freeGiB: FREE_STORAGE_GIB,
+		billableGiB,
+		gross: money(gross),
+		storage: money(storage),
+		storageCharge: money(storageCharge),
+		net: money(gross.minus(storage).minus(storageCharge)),
+	};
+}
+
+/**
+ * What a free user costs the subsidy each month: their bandwidth at cost, plus the
+ * Time Pool Anthers funds on their behalf so a free viewer still pays the creators
+ * they watch. Streaming hours are the assumption.
+ */
+export const FREE_USER_STREAM_HOURS = 8;
+
+/**
+ * The paying-user mix behind the self-sufficiency table — what share of paying users
+ * sit at each Badge. An ASSUMPTION, and the one that moves every number below: the
+ * remainder a paying user generates rises faster than linearly with their Seed count,
+ * because the fixed $0.30 of the card fee does not scale with it.
+ */
+export const PAYING_BADGE_MIX: Record<number, number> = { 1: 0.5, 2: 0.3, 3: 0.15, 4: 0.05 };
+
+/** Fixed monthly overhead the charitable budget must cover before it is self-funding. */
+export const FIXED_MONTHLY_OVERHEAD = 12_600;
+
+/** The paying shares the table reports. */
+export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
+
+export function selfSufficiency() {
+	const freeUserCost = new Decimal(FREE_USER_STREAM_HOURS)
+		.times(DELIVERY_GIB_PER_HOUR)
+		.times(BANDWIDTH_PER_GIB)
+		.plus(FREE_TIME_POOL);
+
+	// The remainder one paying user generates, weighted across the Badge mix. Each rung
+	// carries its own reference watch-hours, because bandwidth is what the remainder
+	// absorbs — a heavier streamer shrinks it while their creators are paid the same.
+	const revenuePerPayingUser = Object.entries(PAYING_BADGE_MIX).reduce((acc, [seeds, share]) => {
+		const n = Number(seeds);
+		const hours = REFERENCE_WATCH_HOURS[n] ?? 0;
+		const bd = anthersSeedBreakdown(n, {
+			bandwidthGiB: hours * DELIVERY_GIB_PER_HOUR,
+			// Seed COUNTS, not dollars — and the `anthers` side, because this user holds
+			// no directed Seeds and the remainder is what the Anthers side has left after
+			// its own share of the card fee. Taking `.creator` here reads as zero and
+			// silently hands the whole fee back to the remainder.
+			payments: paymentsSplit(n, 0).anthers,
+		});
+		return acc.plus(bd.foundation.times(share));
+	}, new Decimal(0));
+
+	const rows = PAYING_SHARES.map((share) => {
+		const freePerPaying = new Decimal(1 - share).dividedBy(share);
+		const net = revenuePerPayingUser.minus(freePerPaying.times(freeUserCost));
+		return {
+			share,
+			sharePct: `${(share * 100).toFixed(0)}%`,
+			net: money(net),
+			// Total users — paying and free together — at which the paying cohort's net
+			// covers fixed overhead. Meaningless when each paying user loses money.
+			usersToSolvency: net.lessThanOrEqualTo(0)
+				? null
+				: Math.round(
+						new Decimal(FIXED_MONTHLY_OVERHEAD).dividedBy(net).dividedBy(share).toNumber() / 1000,
+					) * 1000,
+		};
+	});
+
+	// Below this share each new cohort costs more in free access than it brings in, so
+	// growth makes the gap worse rather than better.
+	const breakEven = (cost: Decimal) => cost.dividedBy(revenuePerPayingUser.plus(cost));
+
+	// The same floor, if every free user drew their whole 15 GiB rather than the 8 hours
+	// above. This is the sensitivity that matters politically: the generosity of the free
+	// floor and the platform's self-sufficiency are the same dial, so the cost of raising
+	// it should be a derived number rather than a remembered one.
+	const fullFloorCost = new Decimal(FREE_FLOOR_GIB).times(BANDWIDTH_PER_GIB).plus(FREE_TIME_POOL);
+
+	return {
+		freeUserCost: money(freeUserCost),
+		fullFloorCost: money(fullFloorCost),
+		revenuePerPayingUser: money(revenuePerPayingUser),
+		breakEvenPct: `${breakEven(freeUserCost).times(100).toFixed(1)}%`,
+		breakEvenFullFloorPct: `${breakEven(fullFloorCost).times(100).toFixed(1)}%`,
+		rows,
 	};
 }
 

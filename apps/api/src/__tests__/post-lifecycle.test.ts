@@ -183,6 +183,54 @@ describe("Edit history", () => {
 	});
 });
 
+describe("Post delete is guarded before it is anything else", () => {
+	// Salvaged from the `delete-posts` branch (b4ccf33, 2026-07-06), whose implementation
+	// was superseded by the Catalog separation but whose authorization cases were never
+	// re-covered: every other delete test here signs in as the owner, so nothing pinned
+	// what happens when someone else asks. That is the wrong gap to leave on a
+	// destructive endpoint.
+	it("refuses a stranger's delete with 404, not 403", async () => {
+		const create = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title: `Guarded ${id}`, body: "mine", isPublished: true }),
+		});
+		expect(create.status).toBe(201);
+		const slug = (await create.json()).post.slug;
+
+		// 404 rather than 403 on purpose: a 403 would confirm the post exists to someone
+		// with no business knowing, which is the same reasoning `requireAdmin` follows.
+		const asStranger = await req(`/api/content/posts/${slug}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: stranger },
+		});
+		expect(asStranger.status).toBe(404);
+
+		// And it really didn't delete it.
+		const stillThere = await req(`/api/content/posts/${slug}`);
+		expect(stillThere.status).toBe(200);
+
+		const anonymous = await req(`/api/content/posts/${slug}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN },
+		});
+		expect(anonymous.status).toBe(401);
+
+		// Owner deletes it, and deleting it again is a 404 rather than a 500 — the same
+		// answer a stranger gets, so a repeated request leaks nothing either.
+		const first = await req(`/api/content/posts/${slug}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(first.status).toBe(204);
+		const second = await req(`/api/content/posts/${slug}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
+		expect(second.status).toBe(404);
+	});
+});
+
 describe("Post delete never destroys the Work it announced", () => {
 	// The opt-in media purge is GONE, deliberately. Under the old model a post OWNED its
 	// content, so an explicit "also remove now-unused media?" was the careful thing to
