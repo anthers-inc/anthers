@@ -3,7 +3,7 @@ import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult, CheckoutResponse } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useEffect, useMemo, useState } from "react";
-import { stripePromise } from "../../lib/stripe";
+import { getStripe } from "../../lib/stripe";
 import TransparentReceipt from "../ui/TransparentReceipt";
 
 interface ProjectPricingProps {
@@ -246,7 +246,7 @@ export default function ProjectPricing({
 					</p>
 				</div>
 			) : (
-				<Elements stripe={stripePromise}>
+				<Elements stripe={getStripe()}>
 					<CheckoutForm slug={slug} onPurchaseComplete={onPurchaseComplete} />
 				</Elements>
 			)}

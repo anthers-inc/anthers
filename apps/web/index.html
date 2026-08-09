@@ -13,12 +13,22 @@
           document.documentElement.setAttribute("data-theme", "dark");
       } catch {}
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Nunito+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;0,900;1,400&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
-    />
+    <!-- Self-hosted, deliberately: loading these from fonts.googleapis.com sent every
+         visitor's IP, user-agent and referer to Google on first paint, before any
+         consent could exist. See public/fonts/THIRD-PARTY.md.
+
+         Why an inline @import and not a <link>: the bundler resolves every <link
+         rel="stylesheet"> href and every url() in the CSS it reaches, and it inlines
+         webfonts as base64 — which collapses all 83 subset cuts into one
+         render-blocking 4.5 MB chunk and throws away the unicode-range split that
+         keeps a latin-only visitor from downloading the cyrillic and vietnamese
+         ones. An inline @import passes through untouched, so public/fonts/ stays
+         plain static files in both dev and prod. `external` fixes only the
+         production build; the dev server reads no such config and still fails to
+         resolve. -->
+    <style>
+      @import "/fonts/fonts.css";
+    </style>
     <link rel="stylesheet" href="./src/styles/globals.css" />
   </head>
   <body>
