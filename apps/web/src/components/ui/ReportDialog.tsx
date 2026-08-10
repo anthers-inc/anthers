@@ -16,6 +16,7 @@ import {
 	MODERATION_REASONS,
 	type ModerationSubjectType,
 	REPORT_DETAILS_MAX,
+	reportRequiresDetails,
 } from "@anthers/shared/moderation";
 import { client } from "@anthers/web-shared/rpc";
 import { useState } from "react";
@@ -23,7 +24,7 @@ import { useState } from "react";
 interface ReportDialogProps {
 	subjectType: ModerationSubjectType;
 	subjectId: number;
-	/** What the reader is reporting, named in their words ("this comment"). */
+	/** What the reader is reporting, named in their words ("this comment", "@ada"). */
 	label: string;
 	onClose: () => void;
 }
@@ -40,8 +41,16 @@ export default function ReportDialog({
 	const [sent, setSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	// Reporting a PERSON has to say where to look. A comment is its own evidence — an
+	// operator opens it and sees what the reporter saw — while "harassment" against an
+	// account names no artifact at all. Read from the shared module rather than
+	// branching on `subjectType` here, so the client and the API can't disagree about
+	// which subjects need it.
+	const detailsRequired = reportRequiresDetails(subjectType);
+	const detailsOk = !detailsRequired || details.trim().length > 0;
+
 	const submit = async () => {
-		if (!reason) return;
+		if (!reason || !detailsOk) return;
 		setSubmitting(true);
 		setError(null);
 		try {
@@ -79,7 +88,16 @@ export default function ReportDialog({
 				) : (
 					<>
 						<h3 className="text-lg font-bold">Report {label}</h3>
-						<p className="pt-2 pb-3 text-sm text-base-content/70">What's wrong with it?</p>
+						<p className="pt-2 pb-3 text-sm text-base-content/70">
+							{detailsRequired ? "What's going on?" : "What's wrong with it?"}
+						</p>
+
+						{detailsRequired && (
+							<p className="pb-3 text-sm text-base-content/60">
+								Reporting someone is separate from blocking them. If you just want them gone from
+								your view, block them — that takes effect straight away and nobody reviews it.
+							</p>
+						)}
 
 						<div className="flex flex-col gap-1">
 							{MODERATION_REASONS.map((r) => (
@@ -107,10 +125,19 @@ export default function ReportDialog({
 							className="textarea textarea-bordered mt-3 w-full"
 							rows={3}
 							maxLength={REPORT_DETAILS_MAX}
-							placeholder="Anything else we should know? (optional)"
+							placeholder={
+								detailsRequired
+									? "What did they do, and where? An operator needs somewhere to look."
+									: "Anything else we should know? (optional)"
+							}
 							value={details}
 							onChange={(e) => setDetails(e.target.value)}
 						/>
+						{detailsRequired && (
+							<p className="mt-1 text-xs text-base-content/50">
+								Required — a report about a person doesn't come with anything to read.
+							</p>
+						)}
 
 						{error && <p className="mt-2 text-sm text-error">{error}</p>}
 
@@ -127,7 +154,7 @@ export default function ReportDialog({
 								type="button"
 								className="btn btn-primary"
 								onClick={submit}
-								disabled={submitting || !reason}
+								disabled={submitting || !reason || !detailsOk}
 							>
 								{submitting ? "Sending..." : "Send report"}
 							</button>

@@ -154,3 +154,47 @@ export const follows = pgTable(
 		index("idx_follows_creator").on(table.creatorId),
 	],
 );
+
+/**
+ * One user's decision that they and another user should not meet.
+ *
+ * **It lives here, beside `follows`, and not in `moderation.ts` — that placement is
+ * the design.** A block is a relationship primitive between two accounts, the same
+ * shape as a follow and its opposite; moderation is an operator's judgment about
+ * content. Keeping them in different files is what stops a block acquiring a review
+ * queue, a reason code, or an appeal, none of which a personal boundary should ever
+ * need. `services/blocks.ts` is the only writer, and it is not the moderation service.
+ *
+ * The row is directed (`blocker` → `blocked`) but **enforcement is symmetric**: every
+ * read asks whether a row exists in *either* direction. Storing it directed keeps
+ * "who chose this" answerable — which matters for an unblock, since only the blocker
+ * may lift it — while the symmetric read is what actually severs contact. A one-way
+ * block would leave the blocked party able to read the blocker's comments, open their
+ * profile and follow them, which removes the wrong half.
+ *
+ * Both FKs cascade, unlike the two in `moderation.ts` that are deliberately `set
+ * null`. The distinction is that a moderation record is a *record* and has to outlive
+ * the account it concerns; a block is a *live relationship* and means nothing once
+ * either end is gone.
+ */
+export const userBlocks = pgTable(
+	"user_blocks",
+	{
+		id: serial("id").primaryKey(),
+		blockerId: integer("blocker_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		blockedId: integer("blocked_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// Blocking twice is idempotent, not a second row.
+		uniqueIndex("uq_user_blocks_pair").on(table.blockerId, table.blockedId),
+		// Enforcement reads the pair from BOTH sides, so the reverse direction needs an
+		// index of its own — `blockerId` is only the leading column of the unique index
+		// above, which does nothing for "who has blocked me?".
+		index("idx_user_blocks_blocked").on(table.blockedId),
+	],
+);

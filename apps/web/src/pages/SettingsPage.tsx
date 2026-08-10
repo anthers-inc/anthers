@@ -116,6 +116,102 @@ function DevicesSection() {
 	);
 }
 
+interface BlockedUser {
+	id: number;
+	username: string;
+	displayName: string | null;
+	createdAt: string;
+}
+
+/**
+ * Blocked accounts — and the only place a block can be lifted.
+ *
+ * It has to exist for the feature to be honest. Blocking makes the other person's
+ * profile 404 for you, so the page you blocked them from can no longer name them —
+ * without this list a block would be a one-way door. `GET /me/blocks` is deliberately
+ * one-directional: it answers "who have I blocked?", never "who has blocked me?",
+ * because answering the second would be Anthers stating a block, which is the one
+ * thing the feature refuses to do.
+ *
+ * Sits beside Devices rather than under anything called moderation. A block is your
+ * own boundary; nobody reviews it and no operator sees it.
+ */
+function BlockedSection() {
+	const [blocks, setBlocks] = useState<BlockedUser[] | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [lifting, setLifting] = useState<number | null>(null);
+
+	const load = () => {
+		apiFetch("/api/accounts/me/blocks")
+			.then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load blocks."))))
+			.then((data) => setBlocks((data as { blocks: BlockedUser[] }).blocks))
+			.catch(() => setError("Could not load your blocked accounts."));
+	};
+
+	useEffect(load, []);
+
+	const unblock = async (u: BlockedUser) => {
+		setLifting(u.id);
+		setError(null);
+		try {
+			const res = await apiFetch(`/api/accounts/users/${u.username}/unblock`, { method: "POST" });
+			if (!res.ok) throw new Error("Failed to unblock.");
+			setBlocks((prev) => prev?.filter((b) => b.id !== u.id) ?? null);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to unblock.");
+		} finally {
+			setLifting(null);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Blocked accounts</h3>
+				<p className="text-sm text-base-content/60">
+					You and a blocked account don't see each other around Anthers. Unblocking doesn't restore
+					any follows that existed before — you'd need to follow again.
+				</p>
+
+				{error && (
+					<div className="alert alert-error text-sm mt-2">
+						<span>{error}</span>
+					</div>
+				)}
+
+				{blocks === null && !error && <p className="text-sm text-base-content/50 mt-2">Loading…</p>}
+
+				{blocks !== null && blocks.length === 0 && (
+					<p className="text-sm text-base-content/50 mt-2">You haven't blocked anyone.</p>
+				)}
+
+				{blocks !== null && blocks.length > 0 && (
+					<ul className="mt-2 divide-y divide-base-300">
+						{blocks.map((b) => (
+							<li key={b.id} className="flex items-center gap-3 py-3">
+								<div className="min-w-0 flex-1">
+									<div className="font-medium truncate">{b.displayName || b.username}</div>
+									<div className="text-xs text-base-content/50 truncate">
+										@{b.username} · blocked {formatWhen(b.createdAt)}
+									</div>
+								</div>
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs"
+									onClick={() => unblock(b)}
+									disabled={lifting === b.id}
+								>
+									{lifting === b.id ? "Unblocking…" : "Unblock"}
+								</button>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		</div>
+	);
+}
+
 function BlueskySection() {
 	const { user, linkBluesky, unlinkBluesky, refreshUser } = useAuth();
 	const [searchParams] = useSearchParams();
@@ -317,6 +413,10 @@ export default function SettingsPage() {
 
 			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
 			<DevicesSection />
+
+			{/* Blocked accounts — the only place a block can be lifted, since a blocked
+			    profile no longer resolves. */}
+			<BlockedSection />
 
 			{/* Creator tools live in the Studio (payouts, connections, Badges). */}
 			{isCreator && (

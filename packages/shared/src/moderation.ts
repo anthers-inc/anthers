@@ -26,13 +26,58 @@
  * vocabulary, so an operator confirming a report doesn't have to translate it.
  */
 
-/** What a report or action points at. Both are user-generated rows on a post. */
-export type ModerationSubjectType = "comment" | "rating";
+/**
+ * What a report or action points at.
+ *
+ * `comment` and `rating` are user-generated rows. `user` is a **person**, added
+ * because a platform where adult creators and 13–17-year-olds share a space needs a
+ * way to report a pattern of behaviour, not only the one artifact that happens to
+ * have survived. It is a new *value* rather than a new column and a branch in every
+ * query, which is the whole reason these tables were built polymorphic.
+ *
+ * The three are not interchangeable in what an operator may *do* with them — see
+ * `isModeratableContent`.
+ */
+export type ModerationSubjectType = "comment" | "rating" | "user";
 
-export const MODERATION_SUBJECT_TYPES: readonly ModerationSubjectType[] = ["comment", "rating"];
+export const MODERATION_SUBJECT_TYPES: readonly ModerationSubjectType[] = [
+	"comment",
+	"rating",
+	"user",
+];
 
 export function isModerationSubjectType(value: string): value is ModerationSubjectType {
 	return (MODERATION_SUBJECT_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Subject types that carry a `moderation_status` and can therefore be hidden and
+ * restored. **A `user` cannot**, and the omission is deliberate rather than pending:
+ * hiding a person is account suspension, which has to answer what becomes of their
+ * Works, their buyers' purchases, the Seeds pointed at them and any payout in
+ * flight. None of that is decided, so a person report routes to a human who acts out
+ * of band, and the only in-app outcome is `dismiss`.
+ *
+ * Stating it as a predicate rather than leaving `hideSubject` to fail on a missing
+ * column is what keeps the refusal legible — a 400 that says why, instead of a 500.
+ */
+export function isModeratableContent(value: ModerationSubjectType): boolean {
+	return value === "comment" || value === "rating";
+}
+
+/**
+ * Whether a report of this subject type must carry the reporter's own words.
+ *
+ * A comment or a review IS the evidence — an operator opens it and sees what the
+ * reporter saw. A person is not: "harassment" against an account names no artifact,
+ * and an operator receiving it has nothing to look at. So the six reasons stay
+ * exactly as they are (renaming one is a data migration, and all six can be true of
+ * a person) and the *intake* changes instead: a person report has to say where to
+ * look. That is the answer to "the taxonomy may not fit a person" — it fits; what
+ * doesn't transfer is the evidence being implied by the subject.
+ */
+export function reportRequiresDetails(value: ModerationSubjectType): boolean {
+	return value === "user";
 }
 
 /**
