@@ -202,6 +202,13 @@ const paymentRoutes = new Hono()
 		// `creatorHasStripe`, so that branch was unreachable from the product and would
 		// have parked buyers' money in a platform balance nobody reconciles. Failing here
 		// is louder and matches what the interface already promises.
+		// A withdrawn Work outlives its creator's account, and nobody new may buy one:
+		// there is no payee. Existing buyers are unaffected — `resolveAccess` reads
+		// purchases, not this.
+		if (work.creatorId == null) {
+			return c.json({ error: "This work is no longer for sale." }, 409);
+		}
+
 		const [creatorAccount] = await db
 			.select()
 			.from(stripeAccounts)

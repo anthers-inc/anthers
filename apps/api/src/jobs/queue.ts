@@ -166,6 +166,7 @@ export const QUEUES = {
 	CROSS_PUBLISH: "cross-publish",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
+	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -191,6 +192,12 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	},
 	[QUEUES.DISTRIBUTE_POOL]: {
 		retryLimit: 1,
+		expireInMinutes: 30,
+	},
+	[QUEUES.RUN_DELETIONS]: {
+		// Each account is its own transaction, so a retry re-selects only what is still
+		// pending and cannot half-erase anyone.
+		retryLimit: 2,
 		expireInMinutes: 30,
 	},
 	[QUEUES.PRUNE_ATTENTION]: {
@@ -237,4 +244,8 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// than privacy. The retention window is months wide, so the ordering has enormous
 	// slack — it is stated here so a future reschedule has to notice the dependency.
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
+	// 4 AM daily. Hourly would honour the grace period more precisely, but the window
+	// is a week — a few hours' latency on the far end of it is not something a user can
+	// perceive, and a wipe that runs once a day is a wipe you can reason about.
+	[QUEUES.RUN_DELETIONS, "0 4 * * *"],
 ] as const;

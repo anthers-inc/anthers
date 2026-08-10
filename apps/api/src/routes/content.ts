@@ -116,10 +116,14 @@ async function listComments(
 	subjectId: number,
 	viewerId: number | null = null,
 ) {
+	// LEFT join, not inner. A **tombstoned** comment has a null author — its writer
+	// deleted their account and the comment stayed so the conversation around it still
+	// reads. An inner join would silently drop exactly those rows, which is the
+	// tombstone promise failing in the one place it is supposed to hold: the thread.
 	const rows = await db
 		.select({ comment: comments, username: users.username, avatar: users.avatar })
 		.from(comments)
-		.innerJoin(users, eq(comments.userId, users.id))
+		.leftJoin(users, eq(comments.userId, users.id))
 		.where(
 			and(
 				eq(comments.subjectType, subjectType),
@@ -132,7 +136,15 @@ async function listComments(
 			),
 		)
 		.orderBy(desc(comments.createdAt));
-	return rows.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar }));
+	return rows.map((r) => ({
+		...r.comment,
+		username: r.username,
+		avatar: r.avatar,
+		// 🚨 Says only WHO, never WHY. A moderation removal is `moderation_status` and
+		// never reaches here at all; this flag means the author left. Conflating the two
+		// would have us telling readers a user deleted something they didn't.
+		deletedByAuthor: r.comment.userId === null,
+	}));
 }
 
 async function getOptionalUserId(c: any): Promise<number | null> {
@@ -1307,22 +1319,33 @@ const contentRoutes = new Hono()
 			return c.json({ error: "Post not found" }, 404);
 		}
 
-		const [creator] = await db
-			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
-			.from(users)
-			.where(eq(users.id, post.creatorId))
-			.limit(1);
+		// A tombstoned post has no creator (the account was deleted; the thread stays
+		// readable). Everything downstream already tolerates an absent creator, so the
+		// lookups are simply skipped rather than defaulted to somebody.
+		const [creator] = post.creatorId
+			? await db
+					.select({
+						username: users.username,
+						displayName: users.displayName,
+						avatar: users.avatar,
+					})
+					.from(users)
+					.where(eq(users.id, post.creatorId))
+					.limit(1)
+			: [undefined];
 
 		// Can the creator receive a direct-purchase payout? (Connected account, onboarded
 		// and payouts-enabled.) Drives whether the buyer sees a live checkout.
-		const [creatorStripe] = await db
-			.select({
-				payoutsEnabled: stripeAccounts.payoutsEnabled,
-				onboardingComplete: stripeAccounts.onboardingComplete,
-			})
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, post.creatorId))
-			.limit(1);
+		const [creatorStripe] = post.creatorId
+			? await db
+					.select({
+						payoutsEnabled: stripeAccounts.payoutsEnabled,
+						onboardingComplete: stripeAccounts.onboardingComplete,
+					})
+					.from(stripeAccounts)
+					.where(eq(stripeAccounts.userId, post.creatorId))
+					.limit(1)
+			: [undefined];
 		const creatorHasStripe = !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled;
 
 		// No review aggregate here: a review is a verdict on a WORK, and a post is an
@@ -1987,22 +2010,31 @@ const contentRoutes = new Hono()
 			.execute();
 
 		const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
-		const [creator] = await db
-			.select({ username: users.username, displayName: users.displayName, avatar: users.avatar })
-			.from(users)
-			.where(eq(users.id, work.creatorId))
-			.limit(1);
+		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
+		const [creator] = work.creatorId
+			? await db
+					.select({
+						username: users.username,
+						displayName: users.displayName,
+						avatar: users.avatar,
+					})
+					.from(users)
+					.where(eq(users.id, work.creatorId))
+					.limit(1)
+			: [undefined];
 
 		// Can the creator actually receive a direct-purchase payout? Drives whether the
 		// buyer is offered a live checkout or told the creator can't take payments yet.
-		const [creatorStripe] = await db
-			.select({
-				payoutsEnabled: stripeAccounts.payoutsEnabled,
-				onboardingComplete: stripeAccounts.onboardingComplete,
-			})
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, work.creatorId))
-			.limit(1);
+		const [creatorStripe] = work.creatorId
+			? await db
+					.select({
+						payoutsEnabled: stripeAccounts.payoutsEnabled,
+						onboardingComplete: stripeAccounts.onboardingComplete,
+					})
+					.from(stripeAccounts)
+					.where(eq(stripeAccounts.userId, work.creatorId))
+					.limit(1)
+			: [undefined];
 
 		return c.json({
 			work: {

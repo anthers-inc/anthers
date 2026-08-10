@@ -62,8 +62,14 @@ type ContentSubjectType = keyof typeof CONTENT_SUBJECTS;
 
 export interface ModerationSubjectRow {
 	id: number;
-	/** The author, for content. For a `user` subject this is the subject itself. */
-	userId: number;
+	/**
+	 * The author, for content. For a `user` subject this is the subject itself.
+	 *
+	 * Null on a **tombstoned** row — the author deleted their account and the comment
+	 * or review stayed so the thread around it still reads. Moderation still applies to
+	 * it: the words are still there, and hiding them is still the operator's call.
+	 */
+	userId: number | null;
 	/** Always `"visible"` for a `user` subject — accounts carry no moderation status. */
 	moderationStatus: string;
 }
@@ -461,7 +467,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		subjectType: ModerationSubjectType,
 		r: {
 			id: number;
-			userId: number;
+			userId: number | null;
 			username: string | null;
 			moderationStatus: string;
 			createdAt: Date;
@@ -473,7 +479,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			subjectId: r.id,
 			moderationStatus: r.moderationStatus,
 			createdAt: r.createdAt.toISOString(),
-			author: r.username ? { id: r.userId, username: r.username } : null,
+			author: r.username && r.userId != null ? { id: r.userId, username: r.username } : null,
 			context,
 			moderatable: isModeratableContent(subjectType),
 			openReports: 0,

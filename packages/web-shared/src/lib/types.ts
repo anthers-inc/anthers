@@ -303,7 +303,13 @@ export interface PostListItem {
 	id: number;
 	publicId: number;
 	slug: string;
-	creatorId: number;
+	/**
+	 * Null on a **tombstoned** post — the creator deleted their account and the post
+	 * stayed so the discussion under it still reads. Tombstoned posts appear at their
+	 * own URL only; every creator-scoped listing filters on this column and so excludes
+	 * them by construction.
+	 */
+	creatorId: number | null;
 	title: string | null;
 	showOnTimeline: boolean;
 	isPinned: boolean;

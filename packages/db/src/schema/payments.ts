@@ -33,9 +33,19 @@ export const purchases = pgTable(
 	"purchases",
 	{
 		id: serial("id").primaryKey(),
-		buyerId: integer("buyer_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// Nullable + SET NULL (settled 2026-08-10, replacing the cascade). Deleting an
+		// account detaches the buyer and KEEPS the financial row: Anthers is a
+		// marketplace facilitator and must be able to evidence the sales tax it collected
+		// and remitted, which it cannot do from a row that no longer exists.
+		//
+		// This is not a walk-back of "deletion should mean deletion" — that ruling put
+		// the safety earlier in the flow (informed consent, a cancel window, no
+		// hoarding), all of which still hold. What survives here is not personal data
+		// once detached: an amount, a tax figure, a Stripe reference and a snapshot of
+		// what was sold, with no route back to a person. GDPR Art. 17(3)(b) exempts
+		// erasure where processing is required by law, and severing the identity link is
+		// the standard remedy rather than a loophole. 51.05 says so in the user's words.
+		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
 		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
 		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
 		// one-time charges that aren't a Work purchase (e.g. a Seed buy).

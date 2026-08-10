@@ -27,10 +27,16 @@ import { follows, posts, users, works } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { getCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { buildAccountExport } from "../services/account-data.js";
+import {
+	cancelDeletion,
+	DELETION_GRACE_DAYS,
+	deletionPreview,
+	requestDeletion,
+} from "../services/account-deletion.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 
@@ -78,6 +84,11 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		atprotoDid: user.atprotoDid,
 		atprotoHandle: user.atprotoHandle,
 		createdAt: user.createdAt,
+		// Surfaced on /me because the cancel path runs through signing back in: someone
+		// who changes their mind has to be TOLD a deletion is pending the moment they
+		// return, or the "oops" window is one they can only use if they remember it
+		// unaided.
+		deletionRequestedAt: user.deletionRequestedAt,
 	};
 }
 
@@ -489,6 +500,45 @@ const accountRoutes = new Hono()
 		}
 
 		return c.body(null, 204);
+	})
+
+	// ── Deletion ─────────────────────────────────────────────────────────────
+	// Scheduled and cancellable, per Parker's 2026-08-07 shape: informed consent, an
+	// "oops" window, no hoarding. Rules and per-table outcomes live in
+	// `services/account-deletion.js`.
+
+	// What deleting would actually do to THIS account, in real counts. The
+	// confirmation screen renders these — a generic "your content will be deleted" is
+	// a sentence people click past, and consent that isn't informed isn't consent.
+	.get("/me/deletion", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const [row] = await db
+			.select({ deletionRequestedAt: users.deletionRequestedAt })
+			.from(users)
+			.where(eq(users.id, sessionUser.id))
+			.limit(1);
+		return c.json({
+			scheduledFor: row?.deletionRequestedAt ?? null,
+			graceDays: DELETION_GRACE_DAYS,
+			preview: await deletionPreview(sessionUser.id),
+		});
+	})
+
+	.delete("/me", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const { scheduledFor } = await requestDeletion(sessionUser.id);
+		// The session that made the request is gone with the rest of them, so clear the
+		// cookie too rather than leaving the browser holding a token the server has
+		// already forgotten.
+		deleteCookie(c, "session", { path: "/" });
+		return c.json({ scheduledFor, graceDays: DELETION_GRACE_DAYS });
+	})
+
+	.post("/me/deletion/cancel", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const { cancelled } = await cancelDeletion(sessionUser.id);
+		if (!cancelled) return c.json({ error: "No deletion was scheduled." }, 404);
+		return c.json({ cancelled: true });
 	})
 
 	// ── Blocks ───────────────────────────────────────────────────────────────
