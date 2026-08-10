@@ -34,6 +34,9 @@ export function allowedOrigins(): string[] {
 			// The Playwright e2e preview (apps/web build + serve) — the SPA client targets
 			// localhost:8000 from any localhost page, so e2e needs CORS/CSRF passage too.
 			"http://localhost:4173",
+			// The API itself serves spike test pages that make credentialed requests back
+			// to the API. Dev-only — no production page is served from the API origin.
+			"http://localhost:8000",
 		]),
 	];
 }
