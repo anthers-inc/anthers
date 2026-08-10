@@ -81,6 +81,28 @@ export const FREE_FLOOR_GIB = 15;
 /** Streaming allowance (GiB/mo) added per Anthers-Seed, on top of the free floor. */
 export const GIB_PER_SEED = 60;
 
+/**
+ * How long raw, per-person attention rows are kept before being rolled up into
+ * identity-free daily totals and deleted (`jobs/prune-attention.ts`).
+ *
+ * 51.05 states the *rule* — kept "only until the billing cycle they belong to has
+ * settled and the card-dispute window for that cycle has closed" — and this is the
+ * number that rule works out to, derived rather than picked:
+ *
+ * - up to **31 days** for the cycle the event falls in to end;
+ * - **120 days** for the Visa dispute window, which is the longest of the card
+ *   networks' ordinary windows and runs from the transaction;
+ * - **~29 days** of margin, so a dispute filed on the last permitted day still has
+ *   its evidence while the response deadline runs.
+ *
+ * ⚠️ **This figure has not been reviewed by counsel.** It is a defensible derivation,
+ * not advice, and it is a single named constant precisely so that a lawyer's number
+ * replaces it in one place. Shortening it below the dispute window would destroy the
+ * evidence a chargeback defence rests on; lengthening it weakens the promise in 51.05
+ * without any stated reason, which is the failure the policy calls hoarding.
+ */
+export const ATTENTION_RAW_RETENTION_DAYS = 180;
+
 // ── Badge helpers ────────────────────────────────────────────────────────────
 /**
  * The Badge a holder of `seeds` currently holds in `badges`, and whether it renders

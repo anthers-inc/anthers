@@ -9,6 +9,7 @@
  * holds the shared economics tables: time (attention) events, pool
  * distributions, and creator gates.
  */
+import { sql } from "drizzle-orm";
 import {
 	boolean,
 	index,
@@ -100,6 +101,74 @@ export const attentionEvents = pgTable(
 		index("idx_attention_creator_date").on(table.creatorId, table.createdAt),
 		// work_id is ON DELETE SET NULL: deleting a Work rewrites every event naming it.
 		index("idx_attention_work").on(table.workId),
+	],
+);
+
+/**
+ * What survives when the raw attention rows are deleted — per (creator, Work, day,
+ * event type) totals, with **no `user_id` column at all.**
+ *
+ * That absence is the whole design. 51.05 promises that raw records connecting a
+ * person to a Work are kept only until their billing cycle has settled and the
+ * card-dispute window has closed, after which they are *"aggregated into per-Work and
+ * per-creator totals and the per-person records are deleted"* — so a complete history
+ * of what someone personally watched stops existing. A rollup table that kept the
+ * column "just in case" would make that sentence false, and the way to be sure it
+ * can't happen is for the column not to be there.
+ *
+ * It also has to carry creator analytics forward. Analytics read raw events today and
+ * accept a `period` of up to a year; once pruning starts, anything older than the
+ * retention window would silently read as zero. So the analytics endpoints union raw
+ * and rolled-up, and the creator's history is preserved at the granularity the policy
+ * says they keep — per Work, per day — rather than lost along with the identities.
+ *
+ * `uniqueViewers` is stored per day and **cannot be summed across days** without
+ * counting a returning viewer twice, which is a real limit of holding no identities:
+ * the number is genuinely unrecoverable once the rows are gone. The analytics layer
+ * reports unique viewers over the raw window only, and says which window that is,
+ * rather than adding daily counts together and calling the total unique.
+ */
+export const attentionDaily = pgTable(
+	"attention_daily",
+	{
+		id: serial("id").primaryKey(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Null where the underlying events had no Work (zero-duration visit pings), and
+		// where a Work was deleted after the fact — `attention_events.work_id` is
+		// ON DELETE SET NULL, so a rollup can inherit a null.
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
+		/** UTC calendar day, ISO `YYYY-MM-DD`, matching the analytics grouping. */
+		day: text("day").notNull(),
+		eventType: text("event_type").notNull(),
+		eventCount: integer("event_count").notNull().default(0),
+		totalSeconds: integer("total_seconds").notNull().default(0),
+		/** Distinct viewers **on that day**. Not summable across days — see the note. */
+		uniqueViewers: integer("unique_viewers").notNull().default(0),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The prune job upserts on this key, so re-running it over a day it already
+		// rolled up updates rather than duplicates — which matters because the job
+		// deletes the rows it summarised, and a crash between the two halves has to be
+		// safe to retry.
+		//
+		// `COALESCE(work_id, -1)` rather than the bare column, and that is load-bearing.
+		// Postgres treats NULLs as distinct in a unique index, so a plain key would let
+		// every null-`work_id` row — visit pings, and any Work deleted after its events
+		// were recorded — conflict with nothing, turning the upsert into an insert and
+		// silently doubling those totals on a retry. `nullsNotDistinct` would say this
+		// more directly but isn't in drizzle-orm 0.45's builder; the expression is
+		// equivalent and works on any supported Postgres. `-1` is safe as a sentinel
+		// because `works.id` is a positive serial.
+		uniqueIndex("uq_attention_daily_key").on(
+			table.creatorId,
+			sql`COALESCE(${table.workId}, -1)`,
+			table.day,
+			table.eventType,
+		),
+		index("idx_attention_daily_creator_day").on(table.creatorId, table.day),
 	],
 );
 

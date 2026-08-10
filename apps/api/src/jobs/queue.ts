@@ -165,6 +165,7 @@ export const QUEUES = {
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
+	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -190,6 +191,12 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	},
 	[QUEUES.DISTRIBUTE_POOL]: {
 		retryLimit: 1,
+		expireInMinutes: 30,
+	},
+	[QUEUES.PRUNE_ATTENTION]: {
+		// Safe to retry: each day is aggregated and deleted in one transaction, and the
+		// rollup upsert re-derives totals rather than adding to them.
+		retryLimit: 2,
 		expireInMinutes: 30,
 	},
 	[QUEUES.CALCULATE_CRF]: {
@@ -225,4 +232,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
 	[QUEUES.FETCH_METRICS, "0 */6 * * *"], // every 6 hours
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
+	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
+	// creators out of these rows, so pruning ahead of it would cost earnings rather
+	// than privacy. The retention window is months wide, so the ordering has enormous
+	// slack — it is stated here so a future reschedule has to notice the dependency.
+	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
 ] as const;
