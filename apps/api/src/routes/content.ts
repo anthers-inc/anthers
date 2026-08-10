@@ -76,6 +76,7 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
+import { markPurchaseDownloaded } from "../services/refunds.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
@@ -1648,6 +1649,18 @@ const contentRoutes = new Hono()
 			.set({ downloadCount: sql`${works.downloadCount} + 1` })
 			.where(eq(works.id, work.id))
 			.execute();
+
+		// Stamp the buyer's own purchase the first time they take the bytes. That
+		// column is what the refund cap turns on — refunds *after download* are the
+		// capped ones, because an un-sendable file is the loss the cap bounds — and
+		// `works.download_count` above cannot answer it, being a Work-wide counter
+		// with no idea who pulled. Fire-and-forget for the same reason the counter
+		// is: nothing about bookkeeping may stand between a buyer and their file.
+		// (This route has no `requireAuth` — access can be free or entitled — so the
+		// viewer comes from the optional session, and a signed-out one stamps
+		// nothing because there is no purchase of theirs to stamp.)
+		const viewerId = await getOptionalUserId(c);
+		if (viewerId) void markPurchaseDownloaded(viewerId, work.id);
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).

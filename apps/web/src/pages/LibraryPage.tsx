@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -23,6 +24,22 @@ const MEDIA_TABS = [
 	{ id: "video", label: "Video", icon: VideoCameraIcon },
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
 ] as const;
+
+/**
+ * The last day a withdrawn Work can still be rescued, or null when we don't know
+ * when it was withdrawn (a row from before `0017` stamped the column).
+ *
+ * Null is why the copy below branches rather than always printing a date: without
+ * a withdrawal date there is no honest deadline to give, and a made-up one is
+ * worse than none.
+ */
+function rescueDeadline(withdrawnAt: string | null | undefined): string | null {
+	if (!withdrawnAt) return null;
+	const at = new Date(withdrawnAt);
+	if (Number.isNaN(at.getTime())) return null;
+	at.setDate(at.getDate() + WITHDRAWN_RESCUE_DAYS);
+	return at.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
 
 /**
  * One owned Work.
@@ -53,12 +70,20 @@ function LibraryCard({ purchase }: { purchase: Purchase }) {
 					Purchased {new Date(purchase.createdAt).toLocaleDateString()}
 				</p>
 				{/* Say what changed rather than letting the card look ordinary while the
-				    thing behind it has quietly left circulation. Deliberately no deadline:
-				    the rescue window's length isn't decided, and inventing urgency is worse
-				    than stating the guarantee. */}
+				    thing behind it has quietly left circulation. The deadline is now
+				    stated, because it is decided: 90 days from withdrawal, uniform for
+				    every buyer (51.06 § If a creator removes a Work). Three surfaces quote
+				    that number and `WITHDRAWN_RESCUE_DAYS` is the one place it lives — the
+				    Terms and the creator terms are the other two, and they must agree.
+				    Note the sweep that enforces it and the notification that warns of it
+				    are both still unbuilt, so this card is currently the ONLY warning a
+				    buyer gets. */}
 				{work?.visibility === "withdrawn" && (
 					<p className="text-xs text-warning">
-						Withdrawn by the creator — still yours to open and download.
+						Withdrawn by the creator — still yours
+						{rescueDeadline(work.withdrawnAt)
+							? `, and free to download until ${rescueDeadline(work.withdrawnAt)}.`
+							: " to open and download."}
 					</p>
 				)}
 				{to == null && <p className="text-xs text-base-content/40">No longer available to open.</p>}

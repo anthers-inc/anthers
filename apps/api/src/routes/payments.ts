@@ -21,6 +21,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
@@ -30,6 +31,11 @@ import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
+import {
+	refundPurchase,
+	refundsAfterDownloadInWindow,
+	settleRefundedPurchase,
+} from "../services/refunds.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
@@ -312,6 +318,10 @@ const paymentRoutes = new Hono()
 				// and cover do. Sending the snapshot here would hand the buyer a link to a 404.
 				workLivePublicId: works.publicId,
 				workVisibility: works.visibility,
+				// Stamped by `0017` when a purchased Work is withdrawn rather than
+				// destroyed. The Library counts the rescue window from it, and the
+				// buyer's card is the only surface that can tell them the clock exists.
+				workWithdrawnAt: works.withdrawnAt,
 				workCoverImage: works.thumbnail,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
@@ -339,6 +349,7 @@ const paymentRoutes = new Hono()
 					// keeps it (`0017`). They can still open it, but it is no longer public,
 					// and their Library is the only place that can tell them so.
 					visibility: r.workVisibility,
+					withdrawnAt: r.workWithdrawnAt,
 					coverImage: r.workCoverImage,
 					type: r.purchase.workType,
 				},
@@ -348,6 +359,54 @@ const paymentRoutes = new Hono()
 					avatar: r.creatorAvatar,
 				},
 			})),
+		});
+	})
+
+	// ── Refund ───────────────────────────────────────────────────────────────
+	// Buyer-initiated. "Ask us and we will refund you" — no justification is
+	// required and none is asked for, so `reason` is optional and free text kept
+	// for our own reading, never a condition of the refund (51.06 § Refunds).
+	.post("/purchases/:id/refund", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		if (!Number.isInteger(id)) return c.json({ error: "Purchase not found" }, 404);
+
+		const body = await c.req.json().catch(() => ({}) as { reason?: unknown });
+		const reason = typeof body.reason === "string" ? body.reason.slice(0, 500).trim() : undefined;
+
+		// Scoped to the caller's own purchases: a buyer may only refund what they
+		// bought, and a stranger must not learn whether a purchase id exists.
+		const [purchase] = await db
+			.select()
+			.from(purchases)
+			.where(and(eq(purchases.id, id), eq(purchases.buyerId, user.id)))
+			.limit(1);
+		if (!purchase) return c.json({ error: "Purchase not found" }, 404);
+
+		const result = await refundPurchase(purchase, { initiator: "buyer", reason });
+		if (!result.ok) {
+			// 409 for the cap, because the request is well-formed and the purchase is
+			// real — it just needs a person. 503 keeps parity with every other route
+			// here when Stripe isn't configured.
+			const status =
+				result.code === "review_required"
+					? (409 as const)
+					: result.code === "not_configured"
+						? (503 as const)
+						: result.code === "not_refundable"
+							? (400 as const)
+							: (502 as const);
+			return c.json({ error: result.message, code: result.code }, status);
+		}
+
+		return c.json({
+			refunded: true,
+			alreadyRefunded: result.alreadyRefunded,
+			amount: new Decimal(purchase.amount).plus(purchase.salesTax).toFixed(2),
+			refundsRemaining: Math.max(
+				0,
+				REFUND_AUTO_CAP - (await refundsAfterDownloadInWindow(user.id)),
+			),
 		});
 	})
 
@@ -420,22 +479,37 @@ const paymentRoutes = new Hono()
 				.update(purchases)
 				.set({ status: "failed", updatedAt: new Date() })
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")));
-			// NOT HANDLED: `charge.refunded`. There is no refund route and no handler — only a
-			// `refunded` value in the purchases.status enum. The rule the implementation must
-			// satisfy is settled (51.02 § Refunds) even though the code isn't written:
-			//
-			//   • Reverse the transfer (`reverse_transfer: true`) so the creator is clawed back
-			//     EXACTLY their earnings and never goes negative. A creator is never billed for
-			//     a buyer's refund — that would be a cut, just a negative one.
-			//   • Stripe does NOT return its processing fee on a refund. That ~$0.88 on a $20
-			//     sale, plus any bytes already served, comes out of the remainder —
-			//     the same shock absorber that carries the free floor.
-			//   • The 14-day payout hold is what keeps this small: in the ordinary case the
-			//     principal has not left yet, so there is nothing to claw back.
-			//
-			// OPEN, and it needs a policy answer before the storefront takes real money: a
-			// buy → download → refund cycle costs Anthers ~$0.98 each time and returns a
-			// working copy. The bytes cannot be un-sent.
+		} else if (event.type === "charge.refunded") {
+			const charge = event.data.object as Stripe.Charge;
+			// Only a FULL refund unwinds the purchase. `charge.refunded` also fires for
+			// partials, where `refunded` stays false — and a partial refund must not
+			// revoke access, because the buyer still paid for part of what they hold.
+			// Partial refunds aren't a thing this model issues; ignoring them here is
+			// deliberate rather than an omission.
+			if (charge.refunded && charge.payment_intent) {
+				const intentId =
+					typeof charge.payment_intent === "string"
+						? charge.payment_intent
+						: charge.payment_intent.id;
+				const [purchase] = await db
+					.select()
+					.from(purchases)
+					.where(eq(purchases.stripePaymentIntentId, intentId))
+					.limit(1);
+				// The refund our own route just made arrives back here as an event; the
+				// row is already `refunded` by then and `settleRefundedPurchase` no-ops on
+				// it. What this branch really exists for is the refund issued from the
+				// Stripe dashboard, which reaches us no other way — and that is an
+				// operator action, so it books as platform-initiated and does not spend
+				// the buyer's automatic allowance.
+				if (purchase)
+					await settleRefundedPurchase(purchase, {
+						initiator: "platform",
+						reason: "Refunded at Stripe",
+						stripeRefundId:
+							typeof charge.refunds?.data?.[0]?.id === "string" ? charge.refunds.data[0].id : null,
+					});
+			}
 		} else if (event.type === "account.updated") {
 			const acct = event.data.object as Stripe.Account;
 			await db

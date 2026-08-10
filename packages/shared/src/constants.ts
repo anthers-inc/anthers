@@ -284,6 +284,42 @@ export function cardFeeDisplay(amount: number): number {
 	return Math.round((amount * CARD_RATE + CARD_FLAT) * 100) / 100;
 }
 
+// ── Refunds ──────────────────────────────────────────────────────────────────
+/**
+ * How many refunds **after download** are issued automatically, per buyer, in a
+ * rolling window. Beyond it a human looks; nothing is refused outright.
+ *
+ * The cap exists because the bytes cannot be un-sent and Stripe does not return
+ * its processing fee on a refund — so a buy → download → refund cycle costs real
+ * money every time. Whose money matters, and it is the reason the Terms give
+ * openly rather than hiding behind "to prevent abuse": Anthers keeps nothing from
+ * a sale, so a refund comes out of the **remainder** — the same pool that funds
+ * the free bandwidth floor and free access. Refund abuse is paid for by free
+ * access. Don't soften that wording (51.06 § Refunds).
+ *
+ * A refund **before** any download is uncapped and unconditional: nothing was
+ * delivered, so the only loss is the sunk card fee.
+ *
+ * Three-per-twelve-months is shape rather than data — generous enough that no
+ * honest buyer meets it. Note a per-account cap is defeated by a new account; the
+ * durable identifier would be the payment instrument, which is deliberately not
+ * built yet (51.06 notes).
+ */
+export const REFUND_AUTO_CAP = 3;
+/** The rolling window the cap is counted over, in months. */
+export const REFUND_CAP_WINDOW_MONTHS = 12;
+/**
+ * How long a **withdrawn** Work stays downloadable for the people who bought it,
+ * counted in days from the withdrawal — uniform for every buyer, not from each
+ * buyer's last download (which would make the storage obligation unbounded, and is
+ * backwards protectively: the inactive buyer who most needs time would get the
+ * shortest window).
+ *
+ * Three surfaces state this number and must state the same one: 51.06, 51.07, and
+ * the Library card. Import it; never retype the 90.
+ */
+export const WITHDRAWN_RESCUE_DAYS = 90;
+
 // ── Payouts ──────────────────────────────────────────────────────────────────
 /**
  * Minimum accrued creator balance before a Connect payout fires ($). Higher →
