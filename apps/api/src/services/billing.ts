@@ -143,11 +143,16 @@ export async function createOneTimeCharge(opts: {
  * exactly once per PaymentIntent.
  */
 export async function applyCreditForPurchase(purchase: {
-	buyerId: number;
+	// Null once the buyer has deleted their account. A Seed credit is applied at
+	// purchase time, long before any deletion could land, so in practice this is never
+	// null here — it is typed honestly and guarded rather than asserted away.
+	buyerId: number | null;
 	type: string;
 	amount: string;
 }): Promise<void> {
 	if (purchase.type !== "seeds") return;
+	// Nothing to credit if there is no longer an account to credit it to.
+	if (purchase.buyerId == null) return;
 	const [acct] = await db
 		.select()
 		.from(accounts)

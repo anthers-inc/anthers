@@ -9,6 +9,7 @@
 import { db } from "@anthers/db";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { runDueDeletions } from "../services/account-deletion.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
@@ -126,6 +127,13 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[fetch-metrics] Processing job ${job.id}`);
 			await fetchExternalMetrics();
+		}
+	});
+
+	await queue.work(QUEUES.RUN_DELETIONS, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[run-deletions] Processing job ${job.id}`);
+			await runDueDeletions();
 		}
 	});
 

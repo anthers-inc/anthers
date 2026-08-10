@@ -138,7 +138,12 @@ async function getOptionalUserId(c: any): Promise<number | null> {
  * to do with the post.
  */
 interface WorkEligibility {
-	creatorId: number;
+	/**
+	 * Null on a withdrawn Work whose creator deleted their account. Attention against
+	 * one is ineligible by construction — the claim has to name a creator that matches,
+	 * and null matches nobody, so there is no creator left to pay.
+	 */
+	creatorId: number | null;
 	/** Event types this Work can earn — empty means it earns nothing. */
 	earns: Set<AttentionEventType>;
 	/** Whether the claiming viewer may actually consume it. */

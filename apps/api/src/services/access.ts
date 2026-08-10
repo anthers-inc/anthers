@@ -47,7 +47,13 @@ const ANTHERS_THRESHOLDS = [0, ...ANTHERS_BADGES.map((b) => b.threshold)];
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
 export interface AccessibleWork {
 	id: number;
-	creatorId: number;
+	/**
+	 * Null on a Work whose creator deleted their account — it was WITHDRAWN rather than
+	 * destroyed so its buyers keep it. No creator means no creator-Seed gate can be
+	 * cleared (there is nobody to have given Seeds to) and no owner bypass, both of
+	 * which fall out of the null comparisons below rather than needing a branch.
+	 */
+	creatorId: number | null;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
 	anthersAccess: AnthersAccessRow[] | null;
@@ -255,7 +261,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 
 	// The same comparison, twice — once against Anthers-Seeds held, once against Seeds
 	// given to this creator. OR across both: qualifying anywhere is qualifying.
-	const givenSeeds = ctx.seedByCreator.get(work.creatorId) ?? 0;
+	const givenSeeds = work.creatorId == null ? 0 : (ctx.seedByCreator.get(work.creatorId) ?? 0);
 
 	const offers = [
 		...offersFor(work.anthersAccess ?? [], ctx.anthersSeeds),

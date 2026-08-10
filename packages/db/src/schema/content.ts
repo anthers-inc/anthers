@@ -72,9 +72,17 @@ export const works = pgTable(
 	"works",
 	{
 		id: serial("id").primaryKey(),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// Nullable + SET NULL, and this one is load-bearing for a promise rather than for
+		// tidiness. A **withdrawn** Work has to outlive its creator's account: account
+		// deletion withdraws anything somebody bought rather than destroying it, and a
+		// cascade here would delete it again three lines later when the user row goes —
+		// silently taking away exactly what a buyer paid for.
+		//
+		// This is the same defect `0016` fixed on `purchases.work_id`, one level up: a
+		// cascade that looks like cleanup and is actually the destruction of somebody
+		// else's entitlement. Unpurchased Works are still deleted explicitly by
+		// `eraseAccount`, so nothing is left orphaned that shouldn't be.
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		// Stable, non-sequential public id — the durable part of the canonical URL
 		// /works/{slug}-{publicId}; the slug may change on rename without breaking links.
 		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
@@ -188,9 +196,14 @@ export const posts = pgTable(
 	"posts",
 	{
 		id: serial("id").primaryKey(),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// Nullable + SET NULL, same reasoning as `comments.userId`: a deleted account's
+		// posts are TOMBSTONED rather than destroyed, because `DELETE /posts/:slug`
+		// explicitly removes the comment thread with them — so hard-deleting a departing
+		// user's posts would destroy THIRD PARTIES' contributions. A null creator drops
+		// the post out of every creator-scoped listing (all of which filter on this
+		// column) while leaving it readable at its own URL, which is exactly the
+		// intended shape.
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		// Stable, non-sequential public id — the durable part of the canonical URL
 		// /posts/{slug}-{publicId}; the slug may change on rename without breaking links.
 		publicId: bigint("public_id", { mode: "number" }).notNull().unique(),
@@ -440,9 +453,14 @@ export const comments = pgTable(
 	"comments",
 	{
 		id: serial("id").primaryKey(),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// Nullable + SET NULL: when an account is deleted its comments are TOMBSTONED,
+		// not removed. 51.05 — "conversations other people took part in stay readable"; a
+		// thread full of holes is worse for everyone still in it, and replies to a
+		// vanished comment stop making sense. A null author renders "deleted by user",
+		// which is deliberately distinguishable from a moderation removal (that is
+		// `moderation_status`, and the two must never be confused — we do not say a user
+		// deleted something they didn't).
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 		subjectType: text("subject_type").notNull().default("post"), // post | work
 		subjectId: integer("subject_id").notNull(),
 		body: text("body").notNull(),
@@ -507,9 +525,11 @@ export const ratings = pgTable(
 	"ratings",
 	{
 		id: serial("id").primaryKey(),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// Nullable + SET NULL: a deleted account's reviews are ANONYMISED, not removed.
+		// A bare 1–5 score is the least personal thing in the system, and deleting it
+		// would move a creator's average through no fault of theirs. The score stays and
+		// counts; the link to a person goes.
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		score: integer("score").notNull(), // 1-5, validated at application layer
 		// A score cannot be left without words — the API requires `body` on write.

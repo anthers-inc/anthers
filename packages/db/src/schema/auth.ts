@@ -33,6 +33,22 @@ export const users = pgTable("users", {
 	atprotoDid: text("atproto_did").unique(),
 	atprotoHandle: text("atproto_handle").default(""),
 	atprotoPdsUrl: text("atproto_pds_url").default(""),
+	/**
+	 * When this account is due to be erased. Null means no deletion is pending.
+	 *
+	 * Deletion is **scheduled, not immediate** — Parker's ruling, 2026-08-07: the user
+	 * has to understand what they lose (stated at the point of deletion, not buried in
+	 * the policy), and there has to be an "oops" window long enough for a change of
+	 * mind. Cancelling is simply clearing this column.
+	 *
+	 * The window is a **grace period, not an archive**, and the distinction is the rule
+	 * that keeps this honest: nothing may start retaining data *because* a deletion is
+	 * pending, nothing may extend the window, and when it elapses the wipe runs. An
+	 * account with this set is already gone as far as the user is concerned — it cannot
+	 * be signed into, and every session is revoked at request time — so the row's
+	 * remaining life is bookkeeping rather than continued use.
+	 */
+	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -140,7 +140,11 @@ export async function refundPurchase(
 	// The cap bites only on a buyer's own request for something they downloaded.
 	// Over it, a human looks — this is not a refusal, and the copy must not read
 	// like one (51.06: "if you do and it is genuine, we will still sort it out").
-	if (opts.initiator === "buyer" && purchase.downloadedAt) {
+	// `buyerId` is null once the buyer deleted their account, and a detached purchase
+	// has nobody left to be asking — the cap counts a *person's* refunds, so there is
+	// no window to look at. Guarded rather than defaulted: passing a null through to a
+	// count would silently make the cap unenforceable for everyone.
+	if (opts.initiator === "buyer" && purchase.downloadedAt && purchase.buyerId != null) {
 		const used = await refundsAfterDownloadInWindow(purchase.buyerId, now);
 		if (used >= REFUND_AUTO_CAP)
 			return {
