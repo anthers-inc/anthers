@@ -2,7 +2,33 @@
 /**
  * P2P delivery spike routes.
  *
- * Two endpoints, mounted under /api/spike-p2p:
+ * ⚠️ UNMOUNTED — this router is reference material, not a live surface. Nothing imports
+ * it. It was briefly wired into apps/api/src/index.ts at /api/spike-p2p and removed on
+ * 2026-08-10, for two reasons worth keeping straight because only the first was loud:
+ *
+ *   - Mounting it meant intercepting a WebSocket upgrade before Hono, which changed the
+ *     shape of index.ts's default export and broke typecheck in all 28 API test files.
+ *   - It is spike code in production. `/webrtc-client` serves a page carrying the
+ *     gauntlet password in its markup; the signaling relay it paired with authenticated
+ *     nobody and bypassed cors, csrf and secureHeaders by running ahead of Hono; and
+ *     `seederStore` holds whole asset files in memory, which its own note below admits
+ *     the real implementation would not do.
+ *
+ * The production replacements live in apps/api/src/p2p/ and are a strict improvement:
+ * `manifest.ts` supersedes chunking.ts (same 256 KiB chunks, plus chunkRange/verifyChunk/
+ * verifyFile), `routes.ts` supersedes this file, and `token.ts` supersedes token.ts by
+ * replacing HMAC with the Ed25519 of 45.05 — which is a correctness change, not just a
+ * newer one, since a symmetric token cannot be verified by a peer without handing that
+ * peer the hub's signing secret.
+ *
+ * What is NOT superseded, and the reason these files are kept: signaling.ts and
+ * webrtc-client.ts. Nothing in p2p/ does signaling or speaks WebRTC, and those are
+ * milestones 9 and 10 of the Creator-Hosted Delivery lane. Read them as protocol
+ * sketches when that work starts; they are not promotable as written.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Two endpoints, formerly mounted under /api/spike-p2p:
  *
  * 1. POST /works/:id/assets/:assetId/manifest
  *    Access-checked (reuses the real resolveAccessSync via workAccessFor). If access is
