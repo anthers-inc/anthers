@@ -894,16 +894,24 @@ describe("Checkout — destination charge construction", () => {
 		const totalCents = Math.round(expected.buyerTotal.toNumber() * 100);
 		expect(params?.amount).toBe(totalCents);
 
-		// The invariant the model rests on: what the buyer pays, minus what the platform
-		// retains and minus Stripe's own processing, is exactly the creator's earnings.
-		// The retained amount is sales tax (owed to the state) plus the at-cost delivery —
-		// there is no platform cut anywhere in it.
-		const retainedCents = params?.application_fee_amount ?? 0;
+		// The assertion that matters, stated in STRIPE's terms rather than ours: on a
+		// destination charge the connected account receives `amount −
+		// application_fee_amount`, so that difference has to BE the creator's earnings.
+		// Anything else and the transfer disagrees with the `creator_earnings` we
+		// record, which is how money goes missing without an error.
+		//
+		// This is deliberately not written as `total − fee − processing === earnings`.
+		// That was the old assertion, and it passed for two months against a fee that
+		// was short by exactly the card processing — because it restated the route's own
+		// formula instead of Stripe's semantics, so it could only ever agree with the
+		// code. Stripe debits its processing from the PLATFORM, never from the transfer.
+		const feeCents = params?.application_fee_amount ?? 0;
+		expect(totalCents - feeCents).toBe(Math.round(expected.creatorEarnings.toNumber() * 100));
+
+		// And what the platform is left holding, once Stripe has taken its cut, is sales
+		// tax owed to the state plus the at-cost delivery — no platform cut anywhere.
 		const processingCents = Math.round(expected.processingFee.toNumber() * 100);
-		expect(totalCents - retainedCents - processingCents).toBe(
-			Math.round(expected.creatorEarnings.toNumber() * 100),
-		);
-		expect(retainedCents).toBe(
+		expect(feeCents - processingCents).toBe(
 			Math.round(expected.salesTax.plus(expected.deliveryFee).toNumber() * 100),
 		);
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));

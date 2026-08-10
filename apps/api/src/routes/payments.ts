@@ -212,12 +212,25 @@ const paymentRoutes = new Hono()
 		}
 
 		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
-		// What the platform retains from the destination charge: everything the buyer pays
-		// that is not the creator's earnings — i.e. sales tax (remitted to the state) and
-		// the at-cost delivery. Card processing is Stripe's own cut of the charge and is
-		// never part of the application fee, so it must not be counted here.
+		// On a destination charge, the connected account receives `amount −
+		// application_fee_amount`. So this figure is not "what Anthers keeps" — it is
+		// **everything the buyer pays that is not the creator's transfer**, and the
+		// creator's earnings are defined as the price less card processing and
+		// delivery. Subtract exactly that, and nothing else.
+		//
+		// It used to subtract `processingFee` a second time here, reasoning that
+		// "card processing is Stripe's own cut and is never part of the application
+		// fee". True of a direct charge and false of this one: Stripe debits its fee
+		// from the **platform**, not from the transfer, so leaving processing out of
+		// the application fee doesn't route it to Stripe — it routes it to the
+		// creator. On a $5.00 sale that transferred $4.98 against a recorded
+		// `creator_earnings` of $4.53 and left Anthers holding $0.35 against a $0.45
+		// Stripe fee and a $0.33 sales-tax liability: net −$0.10 held, $0.33 owed, on
+		// every direct purchase. Same shape as the gross-vs-net Seed bug of
+		// 2026-08-08 — the model said net, the code paid gross, and Anthers silently
+		// absorbed the difference.
 		const applicationFeeCents = Math.round(
-			fees.buyerTotal.minus(fees.creatorEarnings).minus(fees.processingFee).toNumber() * 100,
+			fees.buyerTotal.minus(fees.creatorEarnings).toNumber() * 100,
 		);
 
 		const params: Stripe.PaymentIntentCreateParams = {
@@ -226,9 +239,11 @@ const paymentRoutes = new Hono()
 			payment_method_types: ["card"],
 			metadata: { kind: "direct_purchase", workId: String(work.id), buyerId: String(user.id) },
 		};
-		// The buyer pays the all-in list price plus sales tax; the creator receives that
-		// price less the at-cost card processing and the first download's bandwidth, and
-		// Anthers retains $0 of it. Guarded because a fee at or above the total would be
+		// The buyer pays the all-in list price plus sales tax; the creator's transfer is
+		// that price less the at-cost card processing and the first download's
+		// bandwidth. Of what the platform is left holding, Stripe takes its processing
+		// fee and the rest is sales tax owed to the state plus the delivery it pays for
+		// — Anthers retains $0. Guarded because a fee at or above the total would be
 		// rejected by Stripe anyway.
 		if (applicationFeeCents < totalCents) {
 			params.application_fee_amount = applicationFeeCents;
