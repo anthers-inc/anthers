@@ -24,9 +24,9 @@ import { db } from "@anthers/db/client";
 import { assets, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { buildManifest, CHUNK_SIZE, chunkRange, verifyChunk, verifyFile } from "../p2p/manifest";
+import { _resetKeyCache, _setPrivateKeyForTest, generateKeyPair } from "../p2p/token";
 import { storage } from "../services/storage/index.js";
-import { generateKeyPair, _setPrivateKeyForTest, _resetKeyCache } from "../p2p/token";
-import { buildManifest, chunkRange, verifyChunk, verifyFile, CHUNK_SIZE } from "../p2p/manifest";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -61,7 +61,11 @@ const deniedName = `p2p_denied_${id}`;
 const FILE_SIZE = 1024 * 1024;
 const STORAGE_KEY = `test/p2p-${id}/test-file.zip`;
 
-function generateTestBytes(size: number): Uint8Array {
+// Annotated Uint8Array<ArrayBuffer>, not a bare Uint8Array: bare widens to
+// Uint8Array<ArrayBufferLike>, which no longer compares against the Uint8Array<ArrayBuffer>
+// that `new Uint8Array(await res.arrayBuffer())` produces on the other side of the
+// byte-for-byte assertions below.
+function generateTestBytes(size: number): Uint8Array<ArrayBuffer> {
 	const bytes = new Uint8Array(size);
 	let state = 0x12345678;
 	for (let i = 0; i < size; i++) {
@@ -78,7 +82,7 @@ describe("P2P delivery", () => {
 	let creatorId: number;
 	let workId: number;
 	let assetId: number;
-	let testBytes: Uint8Array;
+	let testBytes: Uint8Array<ArrayBuffer>;
 	let manifestFromServer: any;
 	let token: string;
 
@@ -88,7 +92,9 @@ describe("P2P delivery", () => {
 		_setPrivateKeyForTest(kp.privateKeyB64);
 
 		// Clean up any prior test data
-		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName}, ${deniedName})`);
+		await db.execute(
+			sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName}, ${deniedName})`,
+		);
 
 		// Sign up three users
 		creatorCookie = await signUp(creatorName);
