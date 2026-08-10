@@ -218,6 +218,18 @@ function LoggedInLayoutInner() {
 										Resources
 									</Link>
 								</nav>
+								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+									<h6 className="footer-title text-xs">Legal</h6>
+									<Link to="/privacy" className="link link-hover">
+										Privacy
+									</Link>
+									<Link to="/terms" className="link link-hover">
+										Terms
+									</Link>
+									<Link to="/parents" className="link link-hover">
+										For Parents
+									</Link>
+								</nav>
 							</div>
 						</div>
 					</footer>

@@ -31,7 +31,17 @@ interface AuthContextValue {
 	isLoading: boolean;
 	isAuthenticated: boolean;
 	signIn: (login: string, password: string) => Promise<void>;
-	signUp: (username: string, email: string, password: string) => Promise<void>;
+	/**
+	 * `acceptTerms` is required rather than defaulted, deliberately. A default would
+	 * let any caller create an account that never agreed to anything, which is the
+	 * state this replaced — the 13+ floor lived in a document nobody had seen.
+	 */
+	signUp: (
+		username: string,
+		email: string,
+		password: string,
+		acceptTerms: boolean,
+	) => Promise<void>;
 	signOut: () => Promise<void>;
 	signInWithBluesky: (handle: string) => Promise<void>;
 	linkBluesky: (handle: string) => Promise<void>;
@@ -107,16 +117,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		setUser(data.user as User);
 	}, []);
 
-	const signUp = useCallback(async (username: string, email: string, password: string) => {
-		const res = await client.api.auth["sign-up"].$post({
-			json: { username, email, password },
-		});
-		if (!res.ok) {
-			throw new Error(await errorText(res, "Sign up failed."));
-		}
-		const data = await res.json();
-		setUser(data.user as User);
-	}, []);
+	const signUp = useCallback(
+		async (username: string, email: string, password: string, acceptTerms: boolean) => {
+			const res = await client.api.auth["sign-up"].$post({
+				// Cast because the API schema types this as the literal `true` — `false` is
+				// not a value it accepts, it is a request that cannot be granted. The
+				// client still sends whatever the user actually did, so an unticked box
+				// gets a 400 from the server rather than being quietly coerced here.
+				json: { username, email, password, acceptTerms: acceptTerms as true },
+			});
+			if (!res.ok) {
+				throw new Error(await errorText(res, "Sign up failed."));
+			}
+			const data = await res.json();
+			setUser(data.user as User);
+		},
+		[],
+	);
 
 	const signOut = useCallback(async () => {
 		await client.api.auth["sign-out"].$post();

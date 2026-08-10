@@ -35,7 +35,12 @@ describe("Auth System", () => {
 
 	describe("sign-up", () => {
 		it("creates user with valid input", async () => {
-			const res = await jsonPost("/api/auth/sign-up", { username, email, password });
+			const res = await jsonPost("/api/auth/sign-up", {
+				username,
+				email,
+				password,
+				acceptTerms: true,
+			});
 			expect(res.status).toBe(201);
 			const data = await res.json();
 			expect(data.user.username).toBe(username);
@@ -50,6 +55,7 @@ describe("Auth System", () => {
 				username,
 				email: `other_${testId}@example.com`,
 				password,
+				acceptTerms: true,
 			});
 			expect(res.status).toBe(409);
 			const data = await res.json();
@@ -61,6 +67,7 @@ describe("Auth System", () => {
 				username: `other_${testId}`,
 				email,
 				password,
+				acceptTerms: true,
 			});
 			expect(res.status).toBe(409);
 			const data = await res.json();
@@ -72,6 +79,7 @@ describe("Auth System", () => {
 				username: "bad user name!",
 				email: "valid@email.com",
 				password,
+				acceptTerms: true,
 			});
 			expect(res.status).toBe(400);
 		});
@@ -81,6 +89,7 @@ describe("Auth System", () => {
 				username: "validname",
 				email: "valid@email.com",
 				password: "short",
+				acceptTerms: true,
 			});
 			expect(res.status).toBe(400);
 		});

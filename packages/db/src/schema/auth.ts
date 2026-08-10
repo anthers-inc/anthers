@@ -62,6 +62,49 @@ export const users = pgTable("users", {
 });
 
 /**
+ * A formal request to exercise a data right, and the clock it started.
+ *
+ * 51.05 extends GDPR/CPRA-level rights to everyone and promises a response **within
+ * 30 days**. Two of those rights are self-serve — export and deletion both have
+ * buttons — and this exists for the rest: rectification beyond what settings can edit,
+ * objection to a particular use, and "tell me exactly what you hold about me".
+ *
+ * The row exists because **a promise with a deadline needs somewhere the deadline is
+ * visible.** Requests arriving as email into one person's inbox is not a mechanism; it
+ * is a hope. `dueAt` is stamped at creation rather than computed at read time so the
+ * commitment is fixed at the moment it was made, and cannot quietly move if the policy
+ * later changes the window.
+ *
+ * `userId` is `set null` rather than cascade for the same reason the moderation
+ * records are: a request to be forgotten, and the record that it was honoured, must
+ * outlive the account it concerned — otherwise the evidence disappears exactly when it
+ * would be needed.
+ */
+export const rightsRequests = pgTable(
+	"rights_requests",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+		/** Captured at request time: the account may be gone before this is answered. */
+		email: text("email").notNull(),
+		/** access | rectification | objection | portability | other */
+		kind: text("kind").notNull(),
+		details: text("details").notNull().default(""),
+		/** open | resolved */
+		status: text("status").notNull().default("open"),
+		/** Stamped at creation — the commitment is fixed when it is made. */
+		dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		resolutionNote: text("resolution_note").notNull().default(""),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_rights_requests_status").on(table.status, table.dueAt),
+		index("idx_rights_requests_user").on(table.userId),
+	],
+);
+
+/**
  * One thing Anthers needed to tell one person — and the **record** that it did.
  *
  * The record is the point, not the delivery. 51.05 promises *"we will tell you before

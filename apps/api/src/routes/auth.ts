@@ -43,6 +43,18 @@ const signUpSchema = z.object({
 		.refine((name) => !isReservedUsername(name), "That username is reserved"),
 	email: z.string().email().max(254),
 	password: z.string().min(8).max(128),
+	/**
+	 * Must be `true`. Enforced at the API rather than only in the form, because the
+	 * 13+ floor is the **one** thing Anthers asserts about age and an unaccepted
+	 * assertion is not one — "you must be 13 or older" lived in a document no user had
+	 * ever seen, which made it closer to a wish than a term.
+	 *
+	 * A literal rather than a boolean: `false` is not a value that should be accepted
+	 * and silently recorded, it is a request that cannot be granted.
+	 */
+	acceptTerms: z.literal(true, {
+		errorMap: () => ({ message: "You need to accept the terms to create an account." }),
+	}),
 });
 
 const signInSchema = z.object({

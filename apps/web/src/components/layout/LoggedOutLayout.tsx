@@ -55,6 +55,14 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 			["Roadmap", "/roadmap"],
 		],
 	},
+	{
+		title: "Legal",
+		links: [
+			["Privacy", "/privacy"],
+			["Terms", "/terms"],
+			["For Parents", "/parents"],
+		],
+	},
 ];
 
 export default function LoggedOutLayout() {

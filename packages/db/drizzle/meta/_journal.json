@@ -176,6 +176,13 @@
       "when": 1786380229991,
       "tag": "0024_vengeful_triton",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786381385778,
+      "tag": "0025_puzzling_supernaut",
+      "breakpoints": true
     }
   ]
 }

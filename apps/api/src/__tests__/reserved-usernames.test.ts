@@ -18,6 +18,7 @@ function signUp(username: string) {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({
+				acceptTerms: true,
 				username,
 				email: `${crypto.randomUUID().slice(0, 8)}@example.com`,
 				password: "securepass123",

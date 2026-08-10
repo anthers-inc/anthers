@@ -4,7 +4,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import FormField from "@anthers/web-shared/ui/FormField";
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 type Mode = "login" | "signup";
 
@@ -35,6 +35,7 @@ export default function AuthPage({ initialMode = "login" }: { initialMode?: Mode
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [passwordConfirm, setPasswordConfirm] = useState("");
+	const [acceptTerms, setAcceptTerms] = useState(false);
 
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
@@ -69,7 +70,7 @@ export default function AuthPage({ initialMode = "login" }: { initialMode?: Mode
 		}
 		setLoading(true);
 		try {
-			await signUp(username, email, password);
+			await signUp(username, email, password, acceptTerms);
 			navigate(redirectTo, { replace: true });
 		} catch (err) {
 			setErrors({
@@ -217,7 +218,35 @@ export default function AuthPage({ initialMode = "login" }: { initialMode?: Mode
 											required
 										/>
 									</FormField>
-									<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
+									{/* Unchecked by default, and the button stays disabled until it isn't.
+									    A pre-ticked box is not acceptance, and the 13+ statement is the one
+									    thing Anthers asserts about age — it has to be something the person
+									    actually did. The API enforces it too; this is the honest surface,
+									    not the enforcement. */}
+									<label className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 mt-1">
+										<input
+											type="checkbox"
+											className="checkbox checkbox-sm mt-0.5"
+											checked={acceptTerms}
+											onChange={(e) => setAcceptTerms(e.target.checked)}
+										/>
+										<span className="text-sm">
+											I'm 13 or older, and I agree to the{" "}
+											<Link to="/terms" className="link link-primary" target="_blank">
+												Terms of Service
+											</Link>{" "}
+											and{" "}
+											<Link to="/privacy" className="link link-primary" target="_blank">
+												Privacy Policy
+											</Link>
+											.
+										</span>
+									</label>
+									<button
+										type="submit"
+										className="btn btn-primary w-full mt-2"
+										disabled={loading || !acceptTerms}
+									>
 										{loading ? <span className="loading loading-spinner loading-sm" /> : "Sign Up"}
 									</button>
 								</form>

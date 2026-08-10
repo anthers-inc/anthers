@@ -43,6 +43,7 @@ describe("Vertical Slice", () => {
 				username: testUsername,
 				email: testEmail,
 				password: "testpass123",
+				acceptTerms: true,
 			}),
 		});
 		expect(res.status).toBe(201);

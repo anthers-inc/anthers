@@ -32,7 +32,9 @@ import ForCreatorsPage from "./pages/ForCreatorsPage";
 import InfrastructureDemoPage from "./pages/InfrastructureDemoPage";
 import JamPage from "./pages/JamPage";
 import JamsPage from "./pages/JamsPage";
+import LegalPage from "./pages/LegalPage";
 import LibraryPage from "./pages/LibraryPage";
+import ParentsPage from "./pages/ParentsPage";
 import PostPage from "./pages/PostPage";
 import ProjectPage from "./pages/ProjectPage";
 import PurchasesPage from "./pages/PurchasesPage";
@@ -200,6 +202,13 @@ export default function App() {
 				<Route path="/jams" element={<JamsPage />} />
 				<Route path="/jams/:slug" element={<JamPage />} />
 				<Route path="/faq" element={<FAQPage />} />
+				{/* Published PENDING — no effective date, and a banner saying so. See
+				    pages/LegalPage.tsx: the date is what turns a draft into a
+				    representation, and it is a deliberate act rather than a tidy-up. */}
+				<Route path="/privacy" element={<LegalPage slug="privacy" />} />
+				<Route path="/terms" element={<LegalPage slug="terms" />} />
+				<Route path="/creator-terms" element={<LegalPage slug="creator-terms" />} />
+				<Route path="/parents" element={<ParentsPage />} />
 				<Route path="/roadmap" element={<RoadmapPage />} />
 
 				{/* Resource tools / calculators — public, work logged-in or out.
