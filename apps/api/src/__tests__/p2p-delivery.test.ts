@@ -24,7 +24,16 @@ import { db } from "@anthers/db/client";
 import { assets, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
-import { buildManifest, CHUNK_SIZE, chunkRange, verifyChunk, verifyFile } from "../p2p/manifest";
+import {
+	buildManifest,
+	buildManifestFromStorage,
+	CHUNK_SIZE,
+	chunkRange,
+	type Manifest,
+	verifyChunk,
+	verifyFile,
+} from "../p2p/manifest";
+import { _resetSeederCacheForTest } from "../p2p/routes";
 import { _resetKeyCache, _setPrivateKeyForTest, generateKeyPair } from "../p2p/token";
 import { storage } from "../services/storage/index.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -361,5 +370,142 @@ describe("P2P delivery", () => {
 		expect(report[assetId].filename).toBe("test-game.zip");
 		expect(report[assetId].hubBytesServed).toBeGreaterThan(0);
 		expect(report[assetId].fileSize).toBe(FILE_SIZE);
+	});
+
+	// ── The streaming seeder ──────────────────────────────────────────────────────
+	//
+	// The seeder used to read each asset into memory in full and keep it there for the
+	// life of the process. These cover the replacement: ranged reads out of storage, a
+	// manifest built by streaming, and the cache-miss rebuild that a bounded cache makes
+	// an ordinary event rather than an error.
+
+	it("readRange returns exactly the requested slice", async () => {
+		const slice = await storage.readRange(STORAGE_KEY, 1000, 256);
+		expect(slice).not.toBeNull();
+		expect(slice?.length).toBe(256);
+		expect(new Uint8Array(slice as Uint8Array)).toEqual(testBytes.subarray(1000, 1256));
+	});
+
+	it("readRange past the end returns what exists, not an error", async () => {
+		// The manifest walk relies on this to discover end-of-file: a short read means the
+		// last chunk, and an empty read means there is nothing more.
+		const tail = await storage.readRange(STORAGE_KEY, FILE_SIZE - 100, CHUNK_SIZE);
+		expect(tail?.length).toBe(100);
+
+		const past = await storage.readRange(STORAGE_KEY, FILE_SIZE, CHUNK_SIZE);
+		expect(past?.length ?? 0).toBe(0);
+	});
+
+	it("readRange returns null for a key that does not exist", async () => {
+		expect(await storage.readRange(`${STORAGE_KEY}.nope`, 0, 16)).toBeNull();
+	});
+
+	it("the streaming manifest is identical to the in-memory one", async () => {
+		// The anti-drift assertion. Both entry points delegate to one loop, and this is
+		// what would fail if someone re-implemented either of them separately.
+		const subject = {
+			workId,
+			workPublicId: manifestFromServer.workPublicId,
+			assetId,
+			assetFilename: "test-game.zip",
+			assetMimeType: "application/zip",
+		};
+		const fromBytes = await buildManifest({ ...subject, bytes: testBytes });
+		const fromStorage = await buildManifestFromStorage({ ...subject, storageKey: STORAGE_KEY });
+		expect(fromStorage).not.toBeNull();
+		expect(fromStorage).toEqual(fromBytes);
+		expect(fromStorage?.assetSize).toBe(FILE_SIZE);
+	});
+
+	it("returns null rather than an empty manifest for a missing object", async () => {
+		// The caller has to be able to tell "no such asset" from "an asset of zero bytes",
+		// because only one of them is an error.
+		const missing = await buildManifestFromStorage({
+			workId,
+			workPublicId: manifestFromServer.workPublicId,
+			assetId,
+			assetFilename: "gone.zip",
+			assetMimeType: "application/zip",
+			storageKey: `${STORAGE_KEY}.gone`,
+		});
+		expect(missing).toBeNull();
+	});
+
+	it("serves the last chunk of a file that is not a whole number of chunks", async () => {
+		// FILE_SIZE is exactly 4 chunks, so the partial-final-chunk path — where an
+		// inclusive-vs-exclusive byte range is off by one — is not otherwise exercised.
+		const oddSize = CHUNK_SIZE * 2 + 1000;
+		const oddBytes = generateTestBytes(oddSize);
+		const oddKey = `test/p2p-${id}/odd-size.zip`;
+		await storage.upload(oddKey, oddBytes, "application/zip", "private");
+
+		const manifest = await buildManifestFromStorage({
+			workId,
+			workPublicId: manifestFromServer.workPublicId,
+			assetId,
+			assetFilename: "odd-size.zip",
+			assetMimeType: "application/zip",
+			storageKey: oddKey,
+		});
+
+		expect(manifest).not.toBeNull();
+		expect(manifest?.assetSize).toBe(oddSize);
+		expect(manifest?.chunks.length).toBe(3);
+
+		const { offset, size } = chunkRange(2, 3, CHUNK_SIZE, oddSize);
+		expect(size).toBe(1000);
+		const last = await storage.readRange(oddKey, offset, size);
+		expect(last?.length).toBe(1000);
+		expect(await verifyChunk(last as Uint8Array, manifest as Manifest, 2)).toBe(true);
+
+		await storage.delete(oddKey);
+	});
+
+	it("the manifest reports the size it FINDS, not the size the database claims", async () => {
+		// `assets.file_size` is a column and can disagree with the object in storage. A
+		// manifest that trusted it would compute a wrong final-chunk size, which surfaces
+		// as a hash mismatch on the last chunk of an otherwise healthy download.
+		await db.update(assets).set({ fileSize: 999_999_999 }).where(eq(assets.id, assetId));
+		_resetSeederCacheForTest();
+
+		const res = await req(`/api/p2p/works/${workId}/assets/${assetId}/manifest`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: viewerCookie },
+		});
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.manifest.assetSize).toBe(FILE_SIZE);
+
+		await db.update(assets).set({ fileSize: FILE_SIZE }).where(eq(assets.id, assetId));
+	});
+
+	it("rebuilds the manifest and serves a chunk after the cache is dropped", async () => {
+		// A restart, a redeploy, or the 65th asset all drop an entry while valid 15-minute
+		// tokens are still in flight. This used to 404 — a download the hub had already
+		// authorized, failed by a cache miss.
+		_resetSeederCacheForTest();
+
+		const chunkIndex = 3;
+		const res = await req(`/api/p2p/works/${workId}/assets/${assetId}/chunks/${chunkIndex}`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		expect(res.status).toBe(200);
+
+		const chunkBytes = new Uint8Array(await res.arrayBuffer());
+		const { offset, size } = chunkRange(chunkIndex, 4, CHUNK_SIZE, FILE_SIZE);
+		expect(chunkBytes).toEqual(testBytes.subarray(offset, offset + size));
+		expect(await verifyChunk(chunkBytes, manifestFromServer, chunkIndex)).toBe(true);
+	});
+
+	it("still refuses a chunk to a token scoped to another asset after a cache drop", async () => {
+		// The rebuild path skips the access re-check by design (the token carries the
+		// authorization). That makes the token's own scoping the whole guard, so it has to
+		// hold on the rebuild path too — not just on the cached one.
+		_resetSeederCacheForTest();
+
+		const res = await req(`/api/p2p/works/${workId}/assets/${assetId + 12345}/chunks/0`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		expect(res.status).toBe(403);
 	});
 });

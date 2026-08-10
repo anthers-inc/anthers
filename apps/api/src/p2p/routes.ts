@@ -19,11 +19,17 @@
  *    Unauthenticated. Returns the hub's Ed25519 public key so peers can verify tokens
  *    without calling the hub per chunk (45.05 § Public key distribution).
  *
- * The seeder reads the file on first request and caches the manifest + raw bytes in
- * memory. For production, the cache should be bounded (LRU with size limit); for now,
- * the gauntlet test file (10 MiB) is the only thing in it. The real implementation
- * would read chunks from storage on demand rather than holding the whole file, but the
- * manifest format and token protocol are the same regardless.
+ * The seeder hashes an asset on first request and caches the resulting MANIFEST — never
+ * the bytes. Chunks are read from storage per request via `storage.readRange`, so the
+ * resident cost is bounded by the manifest cache rather than by asset size. The cache is
+ * bounded too (`MANIFEST_CACHE_LIMIT`), and a miss rebuilds rather than failing, because
+ * with eviction and restarts a miss is ordinary while the token is still valid.
+ *
+ * Known cost, and the next thing to fix here: building a manifest is one full pass over
+ * the object, and it happens inside the request that first asks for it. Memory is fine —
+ * a chunk at a time — but a large asset makes that request slow. Manifests are immutable
+ * per asset version (45.04), so the real answer is to precompute one at release time and
+ * persist it, leaving this path as the fallback.
  *
  * Bandwidth accounting: every chunk served from the seeder is counted as "hub-served
  * bytes." Swarm-served bytes (from peers) are free (45.01 § Milestone 6). The counter
@@ -39,16 +45,51 @@ import { bearerToken } from "../middleware/bearer.js";
 import { buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { storage } from "../services/storage/index.js";
-import { buildManifest, chunkRange, type Manifest } from "./manifest.js";
+import { buildManifestFromStorage, chunkRange, type Manifest } from "./manifest.js";
 import { getPublicKeyB64, mintP2pToken, verifyP2pToken } from "./token.js";
 
-// In-memory cache: assetId -> { manifest, bytes, hubBytesServed }
+/**
+ * How many assets' manifests to keep hashed. A manifest is one hex hash per 256 KiB, so
+ * a 5 GiB asset costs roughly 1.3 MB here — small, but not free, and the map used to be
+ * unbounded. The eviction cost is re-reading that asset from storage on its next request,
+ * which is a latency cost rather than a correctness one.
+ */
+const MANIFEST_CACHE_LIMIT = 64;
+
+/**
+ * In-memory cache: assetId -> manifest + bytes-served counter.
+ *
+ * 🚨 **It holds no file bytes, deliberately.** It used to cache the complete asset
+ * alongside its manifest, which made the first request for any real Work a whole-file
+ * read into a 512 MB instance that was then never released — an OOM of the entire hub,
+ * reachable by one download. Chunks are read from storage per request instead
+ * (`storage.readRange`), so the resident cost here is bounded by the manifests alone.
+ * If you find yourself adding a `bytes` field back, that is the bug.
+ */
 interface SeederEntry {
 	manifest: Manifest;
-	bytes: Uint8Array;
+	/** The object key chunks are read from. Held so serving a chunk costs no database hit. */
+	storageKey: string;
 	hubBytesServed: number;
 }
 const seederStore = new Map<number, SeederEntry>();
+
+/**
+ * Drop every cached manifest. Tests use this to reach the rebuild path that a restart,
+ * a redeploy or an eviction would otherwise be needed to produce.
+ */
+export function _resetSeederCacheForTest(): void {
+	seederStore.clear();
+}
+
+/** Insertion-ordered eviction — Map preserves insertion order, so the first key is oldest. */
+function rememberManifest(assetId: number, entry: SeederEntry): void {
+	if (seederStore.size >= MANIFEST_CACHE_LIMIT) {
+		const oldest = seederStore.keys().next();
+		if (!oldest.done) seederStore.delete(oldest.value);
+	}
+	seederStore.set(assetId, entry);
+}
 
 /** Resolve a viewer from either a bearer token or the session cookie. */
 async function resolveViewer(c: Parameters<typeof getCookie>[0]): Promise<number | null> {
@@ -78,7 +119,13 @@ async function findWork(workIdParam: string) {
 	return bySlug ?? null;
 }
 
-/** Load the asset file from storage and build the manifest. Caches in seederStore. */
+/**
+ * Build (or return the cached) manifest for an asset, streaming it out of storage.
+ *
+ * Hashing still costs one full pass over the object, but a chunk at a time — the asset is
+ * never resident in full. `assetSize` comes back from the walk rather than from
+ * `assets.file_size`, so a stale column cannot desynchronize the manifest from the bytes.
+ */
 async function getOrCreateSeederEntry(
 	workId: number,
 	workPublicId: string,
@@ -88,26 +135,54 @@ async function getOrCreateSeederEntry(
 	const cached = seederStore.get(assetRow.id);
 	if (cached) return cached;
 
-	const fileBytes = await storage.read(assetRow.file);
-	if (!fileBytes) throw new Error(`Asset file not found in storage: ${assetRow.file}`);
-
-	const manifest = await buildManifest({
+	const manifest = await buildManifestFromStorage({
 		workId,
 		workPublicId,
 		assetId: assetRow.id,
 		assetFilename: assetRow.filename,
-		assetSize: assetRow.fileSize ?? fileBytes.length,
 		assetMimeType: assetRow.mimeType ?? "application/octet-stream",
-		bytes: fileBytes,
+		storageKey: assetRow.file,
 	});
 
-	const entry: SeederEntry = {
-		manifest,
-		bytes: fileBytes,
-		hubBytesServed: 0,
-	};
-	seederStore.set(assetRow.id, entry);
+	if (!manifest) throw new Error(`Asset file not found in storage: ${assetRow.file}`);
+
+	const entry: SeederEntry = { manifest, storageKey: assetRow.file, hubBytesServed: 0 };
+	rememberManifest(assetRow.id, entry);
 	return entry;
+}
+
+/**
+ * The seeder entry for a token-bearing chunk request, rebuilding it if it isn't cached.
+ *
+ * A cache miss is normal rather than exceptional: the manifest cache is per-process and
+ * bounded, so a restart, a redeploy, or simply the 65th asset all drop an entry while
+ * perfectly valid 15-minute tokens are still in flight. Returning 404 there — which is
+ * what this did — fails a download that the hub has already authorized, and it fails it
+ * more often the busier the hub gets.
+ *
+ * Rebuilding needs no access re-check, and that is a property of the token rather than an
+ * omission: it is Ed25519-signed by the hub, scoped to exactly this Work and asset, and
+ * short-lived. `verifyP2pToken` has already established all of that. Re-resolving access
+ * here would additionally be wrong for the case the swarm exists to serve — a peer
+ * presenting a token it was legitimately given is not necessarily the user it was minted
+ * for, which is precisely why the token is the credential at this endpoint and the
+ * session is not.
+ */
+async function seederEntryForToken(workId: number, assetId: number): Promise<SeederEntry | null> {
+	const cached = seederStore.get(assetId);
+	if (cached) return cached;
+
+	const [asset] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+	if (!asset || asset.workId !== workId) return null;
+
+	const [work] = await db.select().from(works).where(eq(works.id, workId)).limit(1);
+	if (!work) return null;
+
+	try {
+		return await getOrCreateSeederEntry(work.id, work.publicId.toString(), [asset]);
+	} catch {
+		return null;
+	}
 }
 
 export const p2pRoutes = new Hono()
@@ -185,8 +260,8 @@ export const p2pRoutes = new Hono()
 			return c.json({ error: "Token not valid for this asset" }, 403);
 		}
 
-		const entry = seederStore.get(assetId);
-		if (!entry) return c.json({ error: "Manifest not built yet" }, 404);
+		const entry = await seederEntryForToken(payload.w, assetId);
+		if (!entry) return c.json({ error: "Asset not available" }, 404);
 
 		if (chunkIndex < 0 || chunkIndex >= entry.manifest.chunks.length) {
 			return c.json({ error: "Chunk not found" }, 404);
@@ -198,7 +273,15 @@ export const p2pRoutes = new Hono()
 			entry.manifest.chunkSize,
 			entry.manifest.assetSize,
 		);
-		const bytes = entry.bytes.subarray(offset, offset + size);
+
+		// Read just this chunk out of storage. The seeder holds no file bytes — see the
+		// note on SeederEntry for why that matters more than the extra read costs.
+		const bytes = await storage.readRange(entry.storageKey, offset, size);
+		if (!bytes || bytes.length !== size) {
+			// The object changed or vanished under a manifest built from it. Serving a
+			// short chunk would fail the peer's hash check with no explanation, so say so.
+			return c.json({ error: "Chunk unavailable" }, 404);
+		}
 
 		// Bandwidth accounting: count hub-served bytes
 		entry.hubBytesServed += size;

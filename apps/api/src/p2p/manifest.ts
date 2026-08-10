@@ -16,7 +16,31 @@
  * per the spec. A third party can build a conformant puller from 45.04 alone.
  */
 
+import { createHash } from "node:crypto";
+import { storage } from "../services/storage/index.js";
+
 export const CHUNK_SIZE = 256 * 1024; // 256 KiB
+
+/**
+ * How the walk below knows when to stop, and why it is a count rather than a sentinel.
+ *
+ * An earlier draft discovered the file's length by reading until it got a short read. That
+ * is elegant and wrong: termination then depends on the range reader honouring `offset`,
+ * and a reader that ignored it would return a full chunk forever — looping inside a
+ * request handler, hashing as it went. That is not hypothetical. Sabotaging `readRange` to
+ * ignore its offset, as a check on these tests, hung the suite for 30 seconds with nothing
+ * to say why, and a chunk-count ceiling did not help because reaching any defensible
+ * ceiling means hashing tens of gigabytes first.
+ *
+ * Asking storage for the size up front fixes both halves: the loop is bounded by
+ * arithmetic rather than by a sentinel, and because every read's expected length is then
+ * known exactly, a reader that misbehaves is caught on the first iteration instead of the
+ * millionth. The size comes from storage rather than `assets.file_size` deliberately —
+ * see `StorageService.size`.
+ */
+const READ_MISMATCH = (assetId: number, index: number, want: number, got: number) =>
+	`Manifest read mismatch for asset ${assetId} chunk ${index}: expected ${want} bytes, got ${got}. ` +
+	"The object changed underneath the walk, or the range reader is not honouring its offset.";
 
 export interface Manifest {
 	/** The manifest format version (per 45.04). Currently 1. */
@@ -49,44 +73,102 @@ export async function sha256hex(data: Uint8Array): Promise<string> {
 		.join("");
 }
 
-/**
- * Build a manifest for a file in storage.
- *
- * Reads the whole file, chunks it into 256 KiB pieces, computes the SHA-256 of each
- * chunk and of the complete file, and returns the manifest. The seeder calls this once
- * (on first request for a given asset) and caches the result.
- */
-export async function buildManifest(params: {
+/** Identity fields a manifest carries about the thing it describes. */
+interface ManifestSubject {
 	workId: number;
 	workPublicId: string;
 	assetId: number;
 	assetFilename: string;
-	assetSize: number;
 	assetMimeType: string;
-	bytes: Uint8Array;
-}): Promise<Manifest> {
-	const { workId, workPublicId, assetId, assetFilename, assetSize, assetMimeType, bytes } = params;
+}
 
+/**
+ * Hands back up to `length` bytes starting at `offset`. Fewer bytes means end-of-file;
+ * null or empty means there is nothing at or past that offset.
+ */
+type RangeReader = (offset: number, length: number) => Promise<Uint8Array | null>;
+
+/**
+ * Build a manifest by walking a file one chunk at a time.
+ *
+ * This is the only manifest algorithm — the byte-array and storage-backed entry points
+ * below both delegate here, so a manifest built in a test and one built by the seeder
+ * cannot drift apart.
+ *
+ * **Memory is O(chunk size), not O(file size), and that is the point.** The previous
+ * implementation took the whole file as a `Uint8Array`, which meant the seeder read a
+ * complete asset into the API's heap and then held it there forever. Assets here are
+ * games; the api component is a 512 MB instance. Streaming keeps a 256 KiB window
+ * resident no matter how large the asset is.
+ *
+ * **`assetSize` comes from the bytes, never from `assets.file_size`.** That column can
+ * disagree with the object in storage — the spike's own seed script had to rewrite it by
+ * hand — and a manifest whose `assetSize` is wrong produces a wrong final-chunk size in
+ * `chunkRange`, which surfaces as a hash mismatch on the last chunk of an otherwise
+ * healthy download. Callers pass the size they got from the byte source itself.
+ */
+async function buildManifestFromReader(
+	subject: ManifestSubject,
+	assetSize: number,
+	read: RangeReader,
+): Promise<Manifest> {
 	const chunks: string[] = [];
-	const fileSha256 = await sha256hex(bytes);
+	// Node's incremental hasher, because crypto.subtle.digest is one-shot and a one-shot
+	// whole-file digest is exactly the thing this function exists to avoid.
+	const fileHash = createHash("sha256");
+	const totalChunks = Math.ceil(assetSize / CHUNK_SIZE);
 
-	for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
-		const chunk = bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, bytes.length));
+	for (let index = 0; index < totalChunks; index++) {
+		const offset = index * CHUNK_SIZE;
+		const want = Math.min(CHUNK_SIZE, assetSize - offset);
+		const chunk = await read(offset, want);
+		if (!chunk || chunk.length !== want) {
+			throw new Error(READ_MISMATCH(subject.assetId, index, want, chunk?.length ?? 0));
+		}
+		fileHash.update(chunk);
 		chunks.push(await sha256hex(chunk));
 	}
 
 	return {
 		specVersion: 1,
-		workId,
-		workPublicId,
-		assetId,
-		assetFilename,
+		...subject,
 		assetSize,
-		assetMimeType,
-		assetSha256: fileSha256,
+		assetSha256: fileHash.digest("hex"),
 		chunkSize: CHUNK_SIZE,
 		chunks,
 	};
+}
+
+/**
+ * Build a manifest from bytes already in memory.
+ *
+ * For callers that legitimately hold the whole file — tests, and any future in-process
+ * packaging step. The seeder must NOT use this; it uses `buildManifestFromStorage`.
+ */
+export async function buildManifest(
+	params: ManifestSubject & { bytes: Uint8Array },
+): Promise<Manifest> {
+	const { bytes, ...subject } = params;
+	return buildManifestFromReader(subject, bytes.length, async (offset, length) =>
+		bytes.subarray(offset, Math.min(offset + length, bytes.length)),
+	);
+}
+
+/**
+ * Build a manifest by streaming an object out of storage — what the seeder uses.
+ *
+ * Never holds more than one chunk. Returns null when there is no such object, which the
+ * caller should distinguish from a manifest describing an empty one.
+ */
+export async function buildManifestFromStorage(
+	params: ManifestSubject & { storageKey: string },
+): Promise<Manifest | null> {
+	const { storageKey, ...subject } = params;
+	const assetSize = await storage.size(storageKey);
+	if (assetSize === null) return null;
+	return buildManifestFromReader(subject, assetSize, (offset, length) =>
+		storage.readRange(storageKey, offset, length),
+	);
 }
 
 /**

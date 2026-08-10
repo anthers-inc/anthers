@@ -51,6 +51,21 @@ export class LocalStorageService implements StorageService {
 		return new Uint8Array(await file.arrayBuffer());
 	}
 
+	async size(key: string): Promise<number | null> {
+		const file = Bun.file(join(CONTENT_ROOT, key));
+		if (!(await file.exists())) return null;
+		return file.size;
+	}
+
+	async readRange(key: string, offset: number, length: number): Promise<Uint8Array | null> {
+		const file = Bun.file(join(CONTENT_ROOT, key));
+		if (!(await file.exists())) return null;
+		if (length <= 0) return new Uint8Array(0);
+		// Bun.file().slice() is lazy — it describes the range and only the sliced bytes are
+		// read when it is realized, so this never materializes the whole file.
+		return new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
+	}
+
 	async getUrl(key: string, _opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		// Local dev — no signing, just return a URL the static middleware serves
 		return `${getBaseUrl()}/content/${key}`;
