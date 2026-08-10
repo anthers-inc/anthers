@@ -16,13 +16,14 @@
  */
 
 import { db } from "@anthers/db/client";
+import { rightsRequests } from "@anthers/db/schema";
 import {
 	isModerationReason,
 	isModerationSubjectType,
 	MODERATION_NOTE_MAX,
 } from "@anthers/shared/moderation";
 import { zValidator } from "@hono/zod-validator";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
@@ -35,6 +36,7 @@ import {
 	type QueueFilter,
 	restoreSubject,
 } from "../services/moderation.js";
+import { notify } from "../services/notifications.js";
 
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
@@ -222,6 +224,61 @@ const adminRoutes = new Hono()
 			transcodes: { counts: transcodeCounts, problems: transcodeProblems },
 		});
 	})
+
+	// ── Data-rights requests ────────────────────────────────────────────────
+	// The operator's side of 51.05's 30-day promise. This exists because a deadline
+	// nobody can see is not a mechanism — requests landing in one person's inbox was
+	// the state this replaces. Overdue is computed here rather than stored so it
+	// cannot go stale.
+	.get("/rights-requests", async (c) => {
+		const rows = await db
+			.select()
+			.from(rightsRequests)
+			.orderBy(rightsRequests.status, rightsRequests.dueAt);
+		const now = Date.now();
+		return c.json({
+			requests: rows.map((r) => ({
+				...r,
+				overdue: r.status === "open" && new Date(r.dueAt).getTime() < now,
+				daysLeft: Math.ceil((new Date(r.dueAt).getTime() - now) / 86_400_000),
+			})),
+			open: rows.filter((r) => r.status === "open").length,
+			overdue: rows.filter((r) => r.status === "open" && new Date(r.dueAt).getTime() < now).length,
+		});
+	})
+
+	.post(
+		"/rights-requests/:id/resolve",
+		zValidator("json", z.object({ note: z.string().max(2000).optional() })),
+		async (c) => {
+			const id = Number(c.req.param("id"));
+			const [row] = await db
+				.update(rightsRequests)
+				.set({
+					status: "resolved",
+					resolvedAt: new Date(),
+					resolutionNote: (c.req.valid("json").note ?? "").trim(),
+				})
+				.where(and(eq(rightsRequests.id, id), eq(rightsRequests.status, "open")))
+				.returning();
+			if (!row) return c.json({ error: "Not found or already resolved" }, 404);
+
+			// The requester is told it was answered. Closing a ticket silently is how a
+			// 30-day promise becomes a 30-day silence.
+			if (row.userId != null) {
+				await notify({
+					userId: row.userId,
+					category: "essential",
+					kind: "rights_request_resolved",
+					title: "Your data request has been answered",
+					body: row.resolutionNote || "We've responded to the request you made.",
+					linkPath: "/settings",
+					dedupeKey: `rights-request-resolved:${row.id}`,
+				});
+			}
+			return c.json({ resolved: true });
+		},
+	)
 
 	// ── Moderation ──────────────────────────────────────────────────────────
 	// The operator queue and the two decisions that act on it. Everything here

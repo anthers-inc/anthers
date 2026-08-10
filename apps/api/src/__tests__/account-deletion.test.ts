@@ -58,7 +58,12 @@ async function signUp(username: string): Promise<string> {
 	const res = await req("/api/auth/sign-up", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({ username, email: `${username}@example.com`, password: "testpass123" }),
+		body: JSON.stringify({
+			username,
+			email: `${username}@example.com`,
+			password: "testpass123",
+			acceptTerms: true,
+		}),
 	});
 	expect(res.status).toBe(201);
 	return res.headers.get("Set-Cookie")!.split(";")[0];
@@ -207,7 +212,7 @@ describe("the request is scheduled, informed, and reversible", () => {
 		const signIn = await req("/api/auth/sign-in", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({ login: leaverName, password: "testpass123" }),
+			body: JSON.stringify({ login: leaverName, password: "testpass123", acceptTerms: true }),
 		});
 		expect(signIn.status).toBe(200);
 		leaver = signIn.headers.get("Set-Cookie")!.split(";")[0];
@@ -346,7 +351,7 @@ describe("what 'deleted' means, table by table", () => {
 		const buyerCookie = await req("/api/auth/sign-in", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
-			body: JSON.stringify({ login: buyerName, password: "testpass123" }),
+			body: JSON.stringify({ login: buyerName, password: "testpass123", acceptTerms: true }),
 		});
 		expect(buyerCookie.status).toBe(200);
 

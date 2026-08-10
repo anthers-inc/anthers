@@ -10,6 +10,7 @@
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
 		"./moderation": "./src/moderation.ts",
+		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
 		"./figures": "./src/figures.generated.ts"
 	},

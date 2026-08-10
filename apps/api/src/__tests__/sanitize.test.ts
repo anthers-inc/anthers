@@ -102,6 +102,7 @@ describe("post routes sanitize bodyHtml end to end", () => {
 				username: `xss_${testId}`,
 				email: `xss_${testId}@example.com`,
 				password: "testpass123",
+				acceptTerms: true,
 			}),
 		});
 		expect(res.status).toBe(201);

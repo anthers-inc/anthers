@@ -23,7 +23,12 @@
  */
 
 import { db } from "@anthers/db/client";
-import { follows, posts, users, works } from "@anthers/db/schema";
+import { follows, posts, rightsRequests, users, works } from "@anthers/db/schema";
+import {
+	isRightsRequestKind,
+	RIGHTS_DETAILS_MAX,
+	RIGHTS_RESPONSE_DAYS,
+} from "@anthers/shared/rights";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -39,7 +44,7 @@ import {
 } from "../services/account-deletion.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
-import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
+import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -507,6 +512,66 @@ const accountRoutes = new Hono()
 
 		return c.body(null, 204);
 	})
+
+	// ── Data-rights requests ─────────────────────────────────────────────────
+	// The non-self-serve half of 51.05's rights section. Export and deletion are
+	// buttons; this is for rectification, objection and "tell me what you hold".
+	// `dueAt` is stamped here so the 30-day commitment is fixed when it is made.
+
+	.get("/me/rights-requests", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const rows = await db
+			.select()
+			.from(rightsRequests)
+			.where(eq(rightsRequests.userId, sessionUser.id))
+			.orderBy(desc(rightsRequests.createdAt));
+		return c.json({ requests: rows, responseDays: RIGHTS_RESPONSE_DAYS });
+	})
+
+	.post(
+		"/me/rights-requests",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				kind: z.string().refine(isRightsRequestKind, "Unknown request kind"),
+				details: z.string().max(RIGHTS_DETAILS_MAX).optional(),
+			}),
+		),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const { kind, details } = c.req.valid("json");
+			const dueAt = new Date(Date.now() + RIGHTS_RESPONSE_DAYS * 24 * 60 * 60 * 1000);
+
+			const [row] = await db
+				.insert(rightsRequests)
+				.values({
+					userId: sessionUser.id,
+					// Snapshot: the account may be deleted before this is answered, and an
+					// unanswerable request is worse than a slow one.
+					email: sessionUser.email,
+					kind,
+					details: (details ?? "").trim(),
+					dueAt,
+				})
+				.returning();
+
+			// Confirmed in writing, with the deadline in it. A rights request that
+			// vanishes into a queue with no acknowledgement is the thing people file
+			// complaints about, and the record here is also our evidence of the clock.
+			await notify({
+				userId: sessionUser.id,
+				category: "essential",
+				kind: "rights_request_received",
+				title: "We've got your request",
+				body: `We'll reply by ${dueAt.toISOString().slice(0, 10)}. If what you wanted was a copy of your data or to delete your account, both of those are immediate — you don't have to wait for us.`,
+				linkPath: "/settings",
+				dedupeKey: `rights-request:${row.id}`,
+			});
+
+			return c.json({ request: row, dueAt: dueAt.toISOString() }, 201);
+		},
+	)
 
 	// ── Notifications ────────────────────────────────────────────────────────
 	// The in-app half. Email is the floor and this is the addition — see

@@ -32,7 +32,12 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	const res = await req("/api/auth/sign-up", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN },
-		body: JSON.stringify({ username, email: `${username}@example.com`, password: "testpass123" }),
+		body: JSON.stringify({
+			username,
+			email: `${username}@example.com`,
+			password: "testpass123",
+			acceptTerms: true,
+		}),
 	});
 	expect(res.status).toBe(201);
 	return {

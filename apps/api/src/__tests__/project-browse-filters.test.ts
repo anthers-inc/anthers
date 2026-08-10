@@ -57,6 +57,7 @@ describe("project browse filters", () => {
 				username: creatorName,
 				email: `${creatorName}@example.com`,
 				password: "testpass123",
+				acceptTerms: true,
 			}),
 		});
 		expect(signUp.status).toBe(201);
@@ -222,6 +223,7 @@ describe("project browse filters", () => {
 				username: viewerName,
 				email: `${viewerName}@example.com`,
 				password: "testpass123",
+				acceptTerms: true,
 			}),
 		});
 		expect(viewer.status).toBe(201);
