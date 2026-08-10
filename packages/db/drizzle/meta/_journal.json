@@ -169,6 +169,13 @@
       "when": 1786379248855,
       "tag": "0023_absurd_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786380229991,
+      "tag": "0024_vengeful_triton",
+      "breakpoints": true
     }
   ]
 }

@@ -49,8 +49,67 @@ export const users = pgTable("users", {
 	 * remaining life is bookkeeping rather than continued use.
 	 */
 	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+	/**
+	 * Whether ACTIVITY email is wanted. Defaults on; the user may turn it off.
+	 *
+	 * There is deliberately no equivalent for the `essential` category — deadlines,
+	 * money and legal changes are not things anyone gets to be un-told, and offering a
+	 * switch that quietly doesn't apply to half the messages would be worse than not
+	 * offering one. The split is enforced in `services/notifications.ts`.
+	 */
+	notifyActivityEmail: boolean("notify_activity_email").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * One thing Anthers needed to tell one person — and the **record** that it did.
+ *
+ * The record is the point, not the delivery. 51.05 promises *"we will tell you before
+ * it takes effect — not by quietly updating a date at the bottom"*, and a promise to
+ * have told someone is worth exactly as much as the evidence behind it. Sending an
+ * email and keeping nothing is the same failure as the fingerprinting claim and the
+ * *"we do not sell paid content to minors"* line: a protection asserted, not held.
+ *
+ * `dedupeKey` is what makes a **daily sweep** safe. The rescue-window job and the
+ * withdrawn-Work notice both run on a schedule and both re-evaluate the same rows every
+ * time; without a unique key they would mail somebody every morning until the deadline
+ * they were being warned about. It is a caller-supplied natural key — `work-withdrawn:
+ * <purchaseId>` — rather than a hash of the body, because the body is copy and copy
+ * gets edited.
+ *
+ * `emailSentAt` is separate from `createdAt` on purpose: an in-app notification that
+ * was never emailed (because the user opted out of that category, or because email
+ * failed) is a real and different state from one that was, and collapsing them would
+ * make the evidence unreliable in the direction that matters.
+ */
+export const notifications = pgTable(
+	"notifications",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `essential` | `activity` — see `notifyActivityEmail`. */
+		category: text("category").notNull(),
+		/** What happened, as a stable machine value. Copy lives in the service. */
+		kind: text("kind").notNull(),
+		title: text("title").notNull(),
+		body: text("body").notNull().default(""),
+		/** Where to go about it, app-relative. Empty when there is nowhere to go. */
+		linkPath: text("link_path").notNull().default(""),
+		/** Caller-supplied natural key. One notification per key, ever. */
+		dedupeKey: text("dedupe_key").notNull(),
+		emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+		readAt: timestamp("read_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// Global rather than per-user: the key already names its subject, and a scheduled
+		// job that resolves the same fact twice must land on the same row both times.
+		uniqueIndex("uq_notifications_dedupe").on(table.dedupeKey),
+		index("idx_notifications_user").on(table.userId, table.createdAt),
+	],
+);
 
 export const sessions = pgTable(
 	"sessions",

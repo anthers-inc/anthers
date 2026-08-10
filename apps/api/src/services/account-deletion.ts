@@ -43,16 +43,17 @@
  * must never be conflated, because the one thing worth guaranteeing is that **we never
  * claim a user deleted something they didn't.**
  *
- * What this deliberately does NOT do is notify anyone — the app has no notification
- * path at all (51.05 marker 8), which is the same gap the withdrawn-Work rescue window
- * hits. A deletion that silently withdraws a purchased Work is visible to its buyers in
- * their Library and nowhere else, and that is a stated shortfall rather than a
- * pretence.
+ * **Buyers of a withdrawn Work are now told** (2026-08-10). This was the shortfall the
+ * deletion work shipped with and then closed: a creator leaving withdraws Works other
+ * people paid for, and until the notification path existed those buyers found out by
+ * noticing, or not at all. The notice is `essential` — it is about something they paid
+ * for — and is keyed per purchase so it is sent exactly once.
  */
 
 import { db } from "@anthers/db/client";
 import { comments, posts, purchases, ratings, sessions, users, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { notifyMany } from "./notifications.js";
 
 /**
  * How long a user has to change their mind.
@@ -210,6 +211,29 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 	const purchasedWorkIds = await purchasedAmong(workIds);
 	const unpurchased = workIds.filter((id) => !purchasedWorkIds.includes(id));
 
+	// Collected BEFORE the wipe: `purchases.buyer_id` survives, but the Work rows and
+	// the join back to them are about to change under us, and a buyer we failed to
+	// enumerate is a buyer who never learns their purchase was withdrawn.
+	const buyersToTell =
+		purchasedWorkIds.length > 0
+			? (
+					await db
+						.select({
+							purchaseId: purchases.id,
+							buyerId: purchases.buyerId,
+							workTitle: purchases.workTitle,
+						})
+						.from(purchases)
+						.where(
+							and(inArray(purchases.workId, purchasedWorkIds), eq(purchases.status, "completed")),
+						)
+				).filter(
+					(r): r is { purchaseId: number; buyerId: number; workTitle: string } =>
+						// A buyer who deleted their own account first has nobody to notify.
+						r.buyerId != null && r.workTitle != null,
+				)
+			: [];
+
 	await db.transaction(async (tx) => {
 		// Purchased Works are WITHDRAWN, never destroyed — a buyer owns what they bought
 		// regardless of what the creator does later, and `resolveAccess` reads purchases
@@ -247,6 +271,27 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 		// moderation reports and actions do not, by design.
 		await tx.delete(users).where(eq(users.id, userId));
 	});
+
+	// Told AFTER the transaction commits, never inside it. A notification is an
+	// unsendable-back side effect: emailing "your purchase was withdrawn" and then
+	// rolling the withdrawal back would be a lie we cannot retract. Doing it after
+	// means a crash here loses the notice rather than inventing one, and losing it is
+	// the failure worth preferring.
+	if (buyersToTell.length > 0) {
+		await notifyMany(
+			buyersToTell.map((b) => ({
+				userId: b.buyerId,
+				category: "essential" as const,
+				kind: "work_withdrawn_creator_left",
+				title: `“${b.workTitle}” has been withdrawn`,
+				body: "The creator closed their Anthers account. You still own this and it stays in your library — but it is no longer publicly available, so download a copy if you want one you keep.",
+				linkPath: "/library",
+				// Per purchase, so two people who bought the same Work each get told, and
+				// neither gets told twice.
+				dedupeKey: `work-withdrawn:${b.purchaseId}`,
+			})),
+		);
+	}
 
 	return { erased: true };
 }
