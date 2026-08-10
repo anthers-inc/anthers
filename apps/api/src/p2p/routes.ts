@@ -120,11 +120,20 @@ async function findWork(workIdParam: string) {
 }
 
 /**
- * Build (or return the cached) manifest for an asset, streaming it out of storage.
+ * The manifest for an asset — from the row if the release job has built it, otherwise
+ * hashed on the spot.
  *
- * Hashing still costs one full pass over the object, but a chunk at a time — the asset is
- * never resident in full. `assetSize` comes back from the walk rather than from
- * `assets.file_size`, so a stale column cannot desynchronize the manifest from the bytes.
+ * The stored half is content-only (`assetSize`, `assetSha256`, `chunkSize`, `chunks`), so
+ * the identity fields are composed here from the live Work and asset rows. That is what
+ * makes a rename show up immediately in the served manifest while the immutable half stays
+ * exactly as it was hashed — 45.04 requires both: manifests are immutable in their content,
+ * and the hub always serves the current one.
+ *
+ * The on-demand path is the fallback rather than the norm. It still exists because Works
+ * released before the job did have no stored manifest, and because a job can fail; what it
+ * costs is a slow first request, not a broken download. When it runs, it does NOT write the
+ * result back — persisting is the job's responsibility, and a request handler that writes
+ * would make a burst of first-requests race each other over the same row.
  */
 async function getOrCreateSeederEntry(
 	workId: number,
@@ -135,14 +144,18 @@ async function getOrCreateSeederEntry(
 	const cached = seederStore.get(assetRow.id);
 	if (cached) return cached;
 
-	const manifest = await buildManifestFromStorage({
+	const identity = {
 		workId,
 		workPublicId,
 		assetId: assetRow.id,
 		assetFilename: assetRow.filename,
 		assetMimeType: assetRow.mimeType ?? "application/octet-stream",
-		storageKey: assetRow.file,
-	});
+	};
+
+	const stored = assetRow.p2pManifest;
+	const manifest: Manifest | null = stored
+		? { specVersion: 1, ...identity, ...stored }
+		: await buildManifestFromStorage({ ...identity, storageKey: assetRow.file });
 
 	if (!manifest) throw new Error(`Asset file not found in storage: ${assetRow.file}`);
 
