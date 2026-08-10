@@ -393,6 +393,30 @@ export const assets = pgTable(
 		platform: text("platform").default(""), // windows | mac | linux | web | … (games/software)
 		version: text("version").default(""),
 		isPrimary: boolean("is_primary").default(false),
+		/**
+		 * The P2P manifest's CONTENT half, per 45.04 — `{ assetSize, assetSha256, chunkSize,
+		 * chunks }`. Null until built.
+		 *
+		 * Only the content half is stored, and the split is the spec's own: 45.04 makes a
+		 * manifest immutable in `assetSha256` and `chunks`, while the identity fields it also
+		 * carries (`workPublicId`, `assetFilename`, `assetMimeType`) can change without the
+		 * bytes changing — a rename does exactly that. Freezing those into the row would
+		 * serve a stale manifest after a rename, which contradicts the spec's "the hub always
+		 * serves the current manifest". So they are composed at request time and only the
+		 * part that is genuinely immutable is persisted.
+		 *
+		 * `assetSize` lives here as well as in `file_size` on purpose: this one is the size
+		 * the hashes were computed over, so a later correction to `file_size` cannot
+		 * silently invalidate the chunk boundaries.
+		 */
+		p2pManifest: jsonb("p2p_manifest").$type<{
+			assetSize: number;
+			assetSha256: string;
+			chunkSize: number;
+			chunks: string[];
+		} | null>(),
+		/** When the manifest above was built. Null whenever `p2p_manifest` is null. */
+		p2pManifestBuiltAt: timestamp("p2p_manifest_built_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [index("idx_assets_work").on(table.workId)],

@@ -27,6 +27,7 @@ import { db } from "@anthers/db/client";
 import { moderationActions, moderationReports, users } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { QUEUE_LIMIT } from "../services/moderation.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -338,7 +339,18 @@ describe("a deleted account strands its reports, and the queue has to agree", ()
 		// person report while this one runs.
 		const after = await queue(admin, "people");
 		expect(after.items.some((i) => i.subjectId === ghostId)).toBe(false);
-		expect(after.summary.reportedPeople).toBe(peopleInQueue(after.items));
-		expect(before.summary.reportedPeople).toBe(peopleInQueue(before.items));
+
+		// The count-equals-queue invariant only holds while the queue is showing everything.
+		// It is a page, capped at QUEUE_LIMIT, and `reportedPeople` is a global headline —
+		// so once a database holds more reported people than one page, the two legitimately
+		// differ and the assertion becomes a false failure. This is not hypothetical: it
+		// went off against a dev database that had accumulated 140 reported people over many
+		// runs, reporting 101 vs 100, which reads exactly like an orphan-filter regression
+		// and is not one. Guarding on the cap keeps the assertion meaningful where it means
+		// something and silent where it cannot.
+		if (before.items.length < QUEUE_LIMIT && after.items.length < QUEUE_LIMIT) {
+			expect(after.summary.reportedPeople).toBe(peopleInQueue(after.items));
+			expect(before.summary.reportedPeople).toBe(peopleInQueue(before.items));
+		}
 	});
 });

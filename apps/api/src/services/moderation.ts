@@ -320,7 +320,7 @@ export interface QueueItem {
 
 export type QueueFilter = "reported" | "comments" | "ratings" | "people" | "hidden";
 
-const QUEUE_LIMIT = 100;
+export const QUEUE_LIMIT = 100;
 
 /**
  * Assemble the operator's list.
