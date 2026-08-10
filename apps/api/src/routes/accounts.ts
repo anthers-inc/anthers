@@ -39,6 +39,7 @@ import {
 } from "../services/account-deletion.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
+import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		// return, or the "oops" window is one they can only use if they remember it
 		// unaided.
 		deletionRequestedAt: user.deletionRequestedAt,
+		notifyActivityEmail: user.notifyActivityEmail,
 	};
 }
 
@@ -111,6 +113,7 @@ const updateProfileSchema = z.object({
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
+	notifyActivityEmail: z.boolean().optional(),
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -152,6 +155,9 @@ const accountRoutes = new Hono()
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.location !== undefined) updates.location = data.location;
 		if (data.themePreference !== undefined) updates.themePreference = data.themePreference;
+		// `essential` mail has no switch by design — see services/notifications.ts.
+		if (data.notifyActivityEmail !== undefined)
+			updates.notifyActivityEmail = data.notifyActivityEmail;
 
 		if (Object.keys(updates).length === 0) {
 			return c.json({ error: "No fields to update" }, 400);
@@ -501,6 +507,32 @@ const accountRoutes = new Hono()
 
 		return c.body(null, 204);
 	})
+
+	// ── Notifications ────────────────────────────────────────────────────────
+	// The in-app half. Email is the floor and this is the addition — see
+	// `services/notifications.ts` on why it is that way round rather than the reverse.
+
+	.get("/me/notifications", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const [items, unread] = await Promise.all([
+			listNotifications(sessionUser.id),
+			unreadCount(sessionUser.id),
+		]);
+		return c.json({ notifications: items, unread });
+	})
+
+	.post(
+		"/me/notifications/read",
+		requireAuth,
+		zValidator("json", z.object({ ids: z.array(z.number().int().positive()).optional() })),
+		async (c) => {
+			const sessionUser = c.get("user");
+			// Scoped to the owner inside the service, not here — "mark read" taking a bare
+			// id list is exactly the shape that reads somebody else's rows if the filter
+			// lives at the route.
+			return c.json(await markRead(sessionUser.id, c.req.valid("json").ids));
+		},
+	)
 
 	// ── Deletion ─────────────────────────────────────────────────────────────
 	// Scheduled and cancellable, per Parker's 2026-08-07 shape: informed consent, an
