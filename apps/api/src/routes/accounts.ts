@@ -1,16 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Account routes — profiles, follows, feed, creator list.
+ * Account routes — profiles, follows, feed, creator list, blocks.
  *
  * Endpoints:
  *   GET    /me                      — current user profile (full)
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
  *   GET    /me/feed                 — posts AND releases from followed creators
+ *   GET    /me/blocks               — who the current user has blocked
  *   GET    /creators                — list all creators
  *   GET    /users/:username         — public user profile
  *   POST   /users/:username/follow  — follow a creator
  *   POST   /users/:username/unfollow — unfollow a creator
+ *   POST   /users/:username/block   — block a user
+ *   POST   /users/:username/unblock — lift a block
+ *
+ * **Blocking lives here, not under `/moderation`.** A block is a relationship
+ * primitive between two accounts — the same shape as a follow and its opposite — and
+ * an operator's judgment about content is a different thing entirely. Routing them
+ * separately is what keeps a personal boundary free of a review queue. The rules are
+ * in `services/blocks.ts`.
  */
 
 import { db } from "@anthers/db/client";
@@ -22,6 +31,7 @@ import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { validateSession } from "../services/auth.js";
+import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -164,7 +174,12 @@ const accountRoutes = new Hono()
 			.innerJoin(
 				follows,
 				and(eq(follows.creatorId, users.id), eq(follows.followerId, sessionUser.id)),
-			);
+			)
+			// Blocking deletes the follow in both directions, so this list is already clean
+			// by construction. Filtered anyway: "it can't happen because of what another
+			// function does" is the reasoning that leaves a leak behind when that other
+			// function changes, and a block that leaks is worse than no block.
+			.where(notBlockedBy(sessionUser.id, users.id));
 
 		return c.json({
 			users: followedUsers.map((row) =>
@@ -181,11 +196,18 @@ const accountRoutes = new Hono()
 	.get("/me/feed", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 
-		// Get followed creator IDs
+		// Get followed creator IDs. Blocked either way is excluded here rather than at each
+		// of the two queries below — the feed's whole input is this id list, so one filter
+		// at the source is also the one that can't be forgotten by a third feed query later.
 		const followedIds = await db
 			.select({ creatorId: follows.creatorId })
 			.from(follows)
-			.where(eq(follows.followerId, sessionUser.id));
+			.where(
+				and(
+					eq(follows.followerId, sessionUser.id),
+					notBlockedBy(sessionUser.id, follows.creatorId),
+				),
+			);
 
 		const creatorIds = followedIds.map((f) => f.creatorId);
 
@@ -338,7 +360,10 @@ const accountRoutes = new Hono()
 					: {}),
 			})
 			.from(users)
-			.where(eq(users.isCreator, true));
+			// Discover's people half. A blocked creator is absent from the listing entirely,
+			// in both directions — this is the surface where two users are most likely to
+			// run into each other without going looking.
+			.where(and(eq(users.isCreator, true), notBlockedBy(currentUserId, users.id)));
 
 		return c.json({
 			creators: creatorList.map((row) =>
@@ -377,7 +402,13 @@ const accountRoutes = new Hono()
 					: {}),
 			})
 			.from(users)
-			.where(eq(users.username, username))
+			// A blocked profile is not found — the same answer a username nobody has ever
+			// registered gets. It is the least informative response available: no
+			// blocked-state screen, no "this user has blocked you", nothing that states the
+			// block. That is not the same as concealing it, and we don't claim it is; a
+			// profile that used to load and now 404s is inferrable. What Anthers holds is
+			// that it never *says* so, and offers no surface reporting who blocked whom.
+			.where(and(eq(users.username, username), notBlockedBy(currentUserId, users.id)))
 			.limit(1);
 
 		if (result.length === 0) {
@@ -411,6 +442,13 @@ const accountRoutes = new Hono()
 
 		if (creator.id === sessionUser.id) {
 			return c.json({ error: "You cannot follow yourself" }, 400);
+		}
+
+		// A block refuses the follow in both directions, and answers 404 rather than 403
+		// so it matches what the profile said a moment earlier. A 403 here would be the
+		// endpoint announcing the block the profile route just declined to.
+		if (await isBlocked(sessionUser.id, creator.id)) {
+			return c.json({ error: "User not found" }, 404);
 		}
 
 		// Idempotent: insert if not exists
@@ -448,6 +486,56 @@ const accountRoutes = new Hono()
 		if (deleted.length === 0) {
 			return c.json({ error: "You were not following this user" }, 404);
 		}
+
+		return c.body(null, 204);
+	})
+
+	// ── Blocks ───────────────────────────────────────────────────────────────
+	// A personal boundary, not a moderation action. Nothing here writes to
+	// `moderation_actions`, nothing enters the operator queue, and no one reviews it.
+	// Rules and reasoning: `services/blocks.ts`.
+
+	.get("/me/blocks", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json({ blocks: await listBlocks(sessionUser.id) });
+	})
+
+	.post("/users/:username/block", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const { username } = c.req.param();
+
+		const [target] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+
+		if (!target) return c.json({ error: "User not found" }, 404);
+
+		const result = await blockUser(sessionUser.id, target.id);
+		if ("error" in result) return c.json({ error: "You cannot block yourself" }, 400);
+
+		return c.json({ blocked: true }, 201);
+	})
+
+	.post("/users/:username/unblock", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const { username } = c.req.param();
+
+		// Resolved WITHOUT the block filter — deliberately. Every other lookup of a
+		// username goes through `notBlockedBy`, which would make the blocked user
+		// invisible to the one person who needs to name them: their blocker. Unblocking
+		// is the one operation where the block must not hide its own subject.
+		const [target] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+
+		if (!target) return c.json({ error: "User not found" }, 404);
+
+		const { unblocked } = await unblockUser(sessionUser.id, target.id);
+		if (!unblocked) return c.json({ error: "You had not blocked this user" }, 404);
 
 		return c.body(null, 204);
 	});

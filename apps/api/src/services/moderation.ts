@@ -34,6 +34,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import {
+	isModeratableContent,
 	MODERATION_NOTE_MAX,
 	type ModerationActionType,
 	type ModerationActorRole,
@@ -42,24 +43,52 @@ import {
 } from "@anthers/shared/moderation";
 import { and, count, desc, eq, exists, inArray, max, or, sql } from "drizzle-orm";
 
-/** Subject type → the table it lives in. The only place the mapping is written down. */
-const SUBJECTS = {
+/**
+ * Subject type → the table it lives in. The only place the mapping is written down.
+ *
+ * `user` is deliberately absent. The two entries here are *content* tables sharing a
+ * shape — an `id`, an author, and a `moderation_status` — and everything keyed off
+ * this map (hide, restore, the browse filters) assumes all three columns. A `users`
+ * row has none of them in that sense: it has no author but is one, and it carries no
+ * moderation status because suspending an account is not built. Adding it here to
+ * make the map look complete is what would produce a hide path that half-works.
+ */
+const CONTENT_SUBJECTS = {
 	comment: comments,
 	rating: ratings,
 } as const;
 
+type ContentSubjectType = keyof typeof CONTENT_SUBJECTS;
+
 export interface ModerationSubjectRow {
 	id: number;
+	/** The author, for content. For a `user` subject this is the subject itself. */
 	userId: number;
+	/** Always `"visible"` for a `user` subject — accounts carry no moderation status. */
 	moderationStatus: string;
 }
 
-/** Load a subject row, or null if it doesn't exist. Every write path resolves first. */
+/**
+ * Load a subject row, or null if it doesn't exist. Every write path resolves first.
+ *
+ * The `user` branch exists so a person report can be validated the same way a comment
+ * report is — a report naming an account that isn't there would sit in the queue with
+ * nothing to render, exactly the orphan case `subjectStillExists` cleans up after.
+ */
 export async function findSubject(
 	subjectType: ModerationSubjectType,
 	subjectId: number,
 ): Promise<ModerationSubjectRow | null> {
-	const table = SUBJECTS[subjectType];
+	if (subjectType === "user") {
+		const [row] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.id, subjectId))
+			.limit(1);
+		return row ? { id: row.id, userId: row.id, moderationStatus: "visible" } : null;
+	}
+
+	const table = CONTENT_SUBJECTS[subjectType as ContentSubjectType];
 	const [row] = await db
 		.select({
 			id: table.id,
@@ -77,9 +106,11 @@ export async function findSubject(
  * item by the same person updates their reason rather than adding a queue entry,
  * so one user can't inflate the count the queue sorts by.
  *
- * Self-reporting is allowed on purpose. Neither a comment nor a rating can be
- * deleted by anyone today — not even its author — so a report is currently the
- * only way an author can ask for their own words to come down.
+ * Self-reporting is allowed on purpose FOR CONTENT. Neither a comment nor a rating
+ * can be deleted by anyone today — not even its author — so a report is currently the
+ * only way an author can ask for their own words to come down. It is refused for a
+ * `user` subject, where it means nothing: the route rejects that case before getting
+ * here, since "report yourself" has no reading that helps anyone.
  */
 export async function fileReport(input: {
 	subjectType: ModerationSubjectType;
@@ -113,7 +144,15 @@ export async function fileReport(input: {
 }
 
 /**
- * Hide a subject and record why. Returns null if the subject doesn't exist.
+ * Hide a subject and record why. Returns null if the subject doesn't exist, and
+ * `"not_moderatable"` for a subject type that cannot be hidden at all.
+ *
+ * That second outcome is what a **person** report gets. Hiding an account is
+ * suspension, and suspension has to answer what becomes of the person's Works, their
+ * buyers' purchases, the Seeds pointed at them and any payout mid-flight — none of
+ * which is decided. So a person report reaches the queue and an operator dismisses it
+ * or acts out of band; the account action is stated as missing rather than stubbed
+ * into something that half-works.
  *
  * Both writes are one transaction: a hidden row with no record of who hid it is
  * exactly the state this feature exists to prevent. Open reports against the
@@ -128,11 +167,13 @@ export async function hideSubject(input: {
 	actorRole?: ModerationActorRole;
 	reason: string;
 	note?: string;
-}): Promise<{ status: "hidden" } | null> {
+}): Promise<{ status: "hidden" } | "not_moderatable" | null> {
+	if (!isModeratableContent(input.subjectType)) return "not_moderatable";
+
 	const subject = await findSubject(input.subjectType, input.subjectId);
 	if (!subject) return null;
 
-	const table = SUBJECTS[input.subjectType];
+	const table = CONTENT_SUBJECTS[input.subjectType as ContentSubjectType];
 	const note = (input.note ?? "").trim().slice(0, MODERATION_NOTE_MAX);
 
 	await db.transaction(async (tx) => {
@@ -178,11 +219,16 @@ export async function restoreSubject(input: {
 	actorId: number;
 	actorRole?: ModerationActorRole;
 	note?: string;
-}): Promise<{ status: "visible" } | null> {
+}): Promise<{ status: "visible" } | "not_moderatable" | null> {
+	// Symmetric with `hideSubject`: nothing that can't be hidden can be restored, and
+	// saying so here means the pair can't drift into a state where one accepts a
+	// subject type the other rejects.
+	if (!isModeratableContent(input.subjectType)) return "not_moderatable";
+
 	const subject = await findSubject(input.subjectType, input.subjectId);
 	if (!subject) return null;
 
-	const table = SUBJECTS[input.subjectType];
+	const table = CONTENT_SUBJECTS[input.subjectType as ContentSubjectType];
 	const note = (input.note ?? "").trim().slice(0, MODERATION_NOTE_MAX);
 
 	await db.transaction(async (tx) => {
@@ -242,9 +288,17 @@ export interface QueueItem {
 	 *
 	 * `kind` exists because that is no longer always a post: comments hang off a Post or a
 	 * Work, and reviews only off a Work. Calling this `post` and quietly filling it with a
-	 * Work's slug would send the operator to a 404.
+	 * Work's slug would send the operator to a 404. A reported *person* carries a
+	 * `profile` context pointing at their own profile — the report is about a pattern, so
+	 * the place to go look is everything they've said.
 	 */
-	context: { kind: "post" | "work"; slug: string; title: string } | null;
+	context: { kind: "post" | "work" | "profile"; slug: string; title: string } | null;
+	/**
+	 * Whether an operator can hide this from the console at all. False for a person —
+	 * see `hideSubject`. The console needs to know before it renders a button that
+	 * would only ever return 400.
+	 */
+	moderatable: boolean;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -258,7 +312,7 @@ export interface QueueItem {
 	} | null;
 }
 
-export type QueueFilter = "reported" | "comments" | "ratings" | "hidden";
+export type QueueFilter = "reported" | "comments" | "ratings" | "people" | "hidden";
 
 const QUEUE_LIMIT = 100;
 
@@ -272,7 +326,12 @@ const QUEUE_LIMIT = 100;
  *   browse was the only way it was reachable at all. Reviews now carry text and
  *   a report control, so the queue is fed properly — browse stays because acting
  *   before anyone complains is still worth being able to do.
- * `hidden` — what we've already taken down, which is how a restore gets found.
+ * `people` — reported accounts only. Unlike the two above, this is NOT a browse over
+ *   recent rows: "every account, newest first" is a user directory, not a moderation
+ *   surface, and reading one under a moderation header invites acting on someone
+ *   nobody complained about.
+ * `hidden` — what we've already taken down, which is how a restore gets found. It
+ *   cannot contain a person: an account has no hidden state to be in.
  */
 export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	const subjectTypes: ModerationSubjectType[] =
@@ -315,10 +374,31 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			subjectType: r.subjectType as ModerationSubjectType,
 			subjectId: r.subjectId,
 		}));
+	} else if (filter === "people") {
+		// Reported accounts only — see the note on the filter. Same orphan predicate and
+		// same tie-break as `reported`, restricted to the one subject type.
+		const rows = await db
+			.select({
+				subjectId: moderationReports.subjectId,
+				n: count(moderationReports.id),
+				newest: max(moderationReports.createdAt),
+			})
+			.from(moderationReports)
+			.where(
+				and(
+					eq(moderationReports.status, "open"),
+					eq(moderationReports.subjectType, "user"),
+					subjectStillExists,
+				),
+			)
+			.groupBy(moderationReports.subjectId)
+			.orderBy(desc(count(moderationReports.id)), desc(max(moderationReports.createdAt)))
+			.limit(QUEUE_LIMIT);
+		keys = rows.map((r) => ({ subjectType: "user" as const, subjectId: r.subjectId }));
 	} else {
 		keys = [];
-		for (const subjectType of subjectTypes) {
-			const table = SUBJECTS[subjectType];
+		for (const subjectType of subjectTypes as ContentSubjectType[]) {
+			const table = CONTENT_SUBJECTS[subjectType];
 			const rows = await db
 				.select({ id: table.id })
 				.from(table)
@@ -331,14 +411,15 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 
 	if (keys.length === 0) return [];
 
-	// 2. Hydrate each subject type in one query, then stitch. The two branches
-	//    differ only in the column carrying the thing an operator has to judge —
-	//    a comment's text, a rating's score — so the row they produce is shared.
+	// 2. Hydrate each subject type in one query, then stitch. The branches differ only
+	//    in the column carrying the thing an operator has to judge — a comment's text,
+	//    a rating's score, a person's profile — so the row they produce is shared.
 	const items = new Map<string, QueueItem>();
 	const key = (t: string, id: number) => `${t}:${id}`;
 
 	const commentIds = keys.filter((k) => k.subjectType === "comment").map((k) => k.subjectId);
 	const ratingIds = keys.filter((k) => k.subjectType === "rating").map((k) => k.subjectId);
+	const userIds = keys.filter((k) => k.subjectType === "user").map((k) => k.subjectId);
 
 	type QueueContext = QueueItem["context"];
 
@@ -394,6 +475,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			createdAt: r.createdAt.toISOString(),
 			author: r.username ? { id: r.userId, username: r.username } : null,
 			context,
+			moderatable: isModeratableContent(subjectType),
 			openReports: 0,
 			totalReports: 0,
 			reasons: [],
@@ -457,6 +539,44 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				// `body` is empty on rows predating the write-time text requirement.
 				excerpt: r.body ? `${r.score}/5 — ${r.body}` : `${r.score}/5`,
 				score: r.score,
+			});
+		}
+	}
+
+	// A reported person. The subject IS the author here, which is why `base` takes the
+	// user row twice — a person's report is about them, not about something of theirs.
+	//
+	// The excerpt is the profile the operator would land on: display name and bio, the
+	// only text an account carries. It is deliberately thin, and it is meant to be: a
+	// person report is judged from the reporter's `details` plus the profile it points
+	// at, which is exactly why `details` is required for this subject type.
+	if (userIds.length > 0) {
+		const rows = await db
+			.select({
+				id: users.id,
+				username: users.username,
+				displayName: users.displayName,
+				bio: users.bio,
+				createdAt: users.createdAt,
+			})
+			.from(users)
+			.where(inArray(users.id, userIds));
+		for (const r of rows) {
+			const label = r.displayName ? `${r.displayName} (@${r.username})` : `@${r.username}`;
+			items.set(key("user", r.id), {
+				...base(
+					"user",
+					{
+						id: r.id,
+						userId: r.id,
+						username: r.username,
+						moderationStatus: "visible",
+						createdAt: r.createdAt,
+					},
+					{ kind: "profile", slug: r.username, title: label },
+				),
+				excerpt: r.bio ? `${label} — ${r.bio}` : label,
+				score: null,
 			});
 		}
 	}
@@ -557,6 +677,13 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
  * side rather than deleting reports at each cascade point is the version that
  * can't be forgotten by the next thing that deletes content — and it keeps the
  * reports themselves, which are records, rather than quietly erasing them.
+ *
+ * The `user` branch matters more than the other two, not less: `users` is the row
+ * everything else cascades FROM, so a deleted account strands not only its own
+ * reports but every report about it. Both `users` FKs on the report are `set null`
+ * for the actor and reporter side — deliberately, so the record outlives the account
+ * — and the *subject* side has no FK at all, so this predicate is the only thing
+ * standing between a deleted account and a permanently unclearable queue entry.
  */
 const subjectStillExists = or(
 	and(
@@ -571,12 +698,24 @@ const subjectStillExists = or(
 			db.select({ one: sql`1` }).from(ratings).where(eq(ratings.id, moderationReports.subjectId)),
 		),
 	),
+	and(
+		eq(moderationReports.subjectType, "user"),
+		exists(db.select({ one: sql`1` }).from(users).where(eq(users.id, moderationReports.subjectId))),
+	),
 );
 
-/** Headline counts for the console: open reports, and what's currently hidden. */
+/**
+ * Headline counts for the console: open reports, and what's currently hidden.
+ *
+ * `reportedPeople` is counted separately from `openReports` rather than being
+ * inferred from it, because it is the one bucket with no in-app remedy — an operator
+ * seeing it needs to know it is there precisely because clearing it means acting
+ * somewhere other than this console.
+ */
 export async function moderationSummary(): Promise<{
 	openReports: number;
 	reportedSubjects: number;
+	reportedPeople: number;
 	hiddenComments: number;
 	hiddenRatings: number;
 }> {
@@ -584,6 +723,7 @@ export async function moderationSummary(): Promise<{
 		.select({
 			reports: count(moderationReports.id),
 			subjects: sql<number>`count(DISTINCT (${moderationReports.subjectType}, ${moderationReports.subjectId}))::int`,
+			people: sql<number>`count(DISTINCT ${moderationReports.subjectId}) FILTER (WHERE ${moderationReports.subjectType} = 'user')::int`,
 		})
 		.from(moderationReports)
 		.where(and(eq(moderationReports.status, "open"), subjectStillExists));
@@ -600,6 +740,7 @@ export async function moderationSummary(): Promise<{
 	return {
 		openReports: Number(open?.reports ?? 0),
 		reportedSubjects: Number(open?.subjects ?? 0),
+		reportedPeople: Number(open?.people ?? 0),
 		hiddenComments: Number(hiddenC?.n ?? 0),
 		hiddenRatings: Number(hiddenR?.n ?? 0),
 	};

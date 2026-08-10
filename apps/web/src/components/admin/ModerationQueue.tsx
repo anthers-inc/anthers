@@ -3,14 +3,26 @@
  * Moderation queue — the operator's half of the surface, and the ops console's
  * first mutating control.
  *
- * Four views over one list. "Reported" is the queue proper; "Comments" and
+ * Five views over one list. "Reported" is the queue proper; "Comments" and
  * "Reviews" are recent activity so an operator can act on something nobody
- * flagged; "Hidden" is how a takedown gets found again and reversed.
+ * flagged; "People" is reported accounts; "Hidden" is how a takedown gets found
+ * again and reversed.
+ *
+ * "People" is deliberately NOT a browse the way Comments and Reviews are — it shows
+ * reported accounts only. "Every account, newest first" is a user directory, and
+ * reading one under a moderation header invites acting on somebody nobody complained
+ * about.
  *
  * Two outcomes, kept distinct on purpose. **Hide** takes the content down and
  * records why. **Dismiss** clears the reports and leaves the content alone — the
  * "I looked, it's fine" answer. Without it the only way to empty the queue would
  * be to take things down, which is a queue that teaches the wrong reflex.
+ *
+ * **A reported person can only be dismissed**, and the row says so rather than
+ * offering a disabled button with no explanation. Hiding an account is suspension,
+ * which has to answer what becomes of their Works, their buyers' purchases, the
+ * Seeds pointed at them and any payout in flight — none of it decided. So the
+ * operator acts out of band and the console is honest about that being the case.
  *
  * Nothing here deletes. Hiding is a state transition on the row; the content, its
  * author and its timestamps survive it, which is what keeps appeals and
@@ -37,11 +49,13 @@ interface QueueItem {
 	createdAt: string;
 	author: { id: number; username: string } | null;
 	/**
-	 * Where the item lives. `kind` matters: a comment can sit on a Post or a Work, and a
-	 * review only on a Work — linking every one of them to /posts/ would send the operator
-	 * to a 404 for half the queue.
+	 * Where the item lives. `kind` matters: a comment can sit on a Post or a Work, a
+	 * review only on a Work, and a reported person on their own profile — linking every
+	 * one of them to /posts/ would send the operator to a 404 for most of the queue.
 	 */
-	context: { kind: "post" | "work"; slug: string; title: string } | null;
+	context: { kind: "post" | "work" | "profile"; slug: string; title: string } | null;
+	/** False for a person. The server decides this; the row must not guess at it. */
+	moderatable: boolean;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -61,6 +75,7 @@ interface QueueResponse {
 	summary: {
 		openReports: number;
 		reportedSubjects: number;
+		reportedPeople: number;
 		hiddenComments: number;
 		hiddenRatings: number;
 	};
@@ -70,8 +85,15 @@ const FILTERS = [
 	{ value: "reported", label: "Reported" },
 	{ value: "comments", label: "Comments" },
 	{ value: "ratings", label: "Reviews" },
+	{ value: "people", label: "People" },
 	{ value: "hidden", label: "Hidden" },
 ] as const;
+
+/** Where an operator goes to look at this item. A profile is the bare `/:username`. */
+function contextHref(context: NonNullable<QueueItem["context"]>): string {
+	if (context.kind === "profile") return `/${context.slug}`;
+	return `/${context.kind === "work" ? "works" : "posts"}/${context.slug}`;
+}
 
 type Filter = (typeof FILTERS)[number]["value"];
 
@@ -180,10 +202,15 @@ export default function ModerationQueue() {
 				</button>
 			</div>
 
+			{/* "People reported" gets its own chip rather than folding into "Items
+			    reported", because it is the one bucket with no in-app remedy — clearing it
+			    means acting somewhere other than this console, so an operator needs to see
+			    it separately to know it is there at all. */}
 			{data && (
-				<div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+				<div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
 					<SummaryChip label="Open reports" value={data.summary.openReports} alert />
 					<SummaryChip label="Items reported" value={data.summary.reportedSubjects} alert />
+					<SummaryChip label="People reported" value={data.summary.reportedPeople} alert />
 					<SummaryChip label="Hidden comments" value={data.summary.hiddenComments} />
 					<SummaryChip label="Hidden ratings" value={data.summary.hiddenRatings} />
 				</div>
@@ -215,7 +242,9 @@ export default function ModerationQueue() {
 						? "Nothing reported. The queue is empty."
 						: filter === "hidden"
 							? "Nothing is hidden."
-							: "Nothing here yet."}
+							: filter === "people"
+								? "Nobody has been reported."
+								: "Nothing here yet."}
 				</p>
 			) : (
 				<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
@@ -242,12 +271,14 @@ export default function ModerationQueue() {
 										<div className="mt-1 text-sm break-words">{item.excerpt}</div>
 										{item.context && (
 											<a
-												href={`/${item.context.kind === "work" ? "works" : "posts"}/${item.context.slug}`}
+												href={contextHref(item.context)}
 												target="_blank"
 												rel="noopener noreferrer"
 												className="link link-hover text-xs text-base-content/50"
 											>
-												on “{item.context.title}”
+												{item.context.kind === "profile"
+													? "open their profile"
+													: `on “${item.context.title}”`}
 											</a>
 										)}
 									</td>
@@ -278,7 +309,14 @@ export default function ModerationQueue() {
 										)}
 									</td>
 									<td>
-										{item.moderationStatus === "hidden" ? (
+										{!item.moderatable ? (
+											<span
+												className="badge badge-sm badge-ghost"
+												title="Suspending an account isn't built — act out of band."
+											>
+												account
+											</span>
+										) : item.moderationStatus === "hidden" ? (
 											<>
 												<span className="badge badge-sm badge-error">hidden</span>
 												{item.lastAction && (
@@ -296,7 +334,15 @@ export default function ModerationQueue() {
 										)}
 									</td>
 									<td className="whitespace-nowrap text-right">
-										{item.moderationStatus === "hidden" ? (
+										{/* A person gets no hide button, and a sentence instead of a disabled
+										    control — "greyed out with no explanation" reads as a bug, and this
+										    is a decision. Dismiss below is still offered: it is the one
+										    outcome that exists for a reported account. */}
+										{!item.moderatable ? (
+											<span className="text-xs text-base-content/50">
+												Act out of band — no account action exists
+											</span>
+										) : item.moderationStatus === "hidden" ? (
 											<button
 												type="button"
 												className="btn btn-xs btn-ghost"

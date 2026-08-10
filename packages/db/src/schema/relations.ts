@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { relations } from "drizzle-orm";
-import { atprotoSessions, follows, sessions, users, verificationTokens } from "./auth.js";
+import {
+	atprotoSessions,
+	follows,
+	sessions,
+	userBlocks,
+	users,
+	verificationTokens,
+} from "./auth.js";
 import {
 	assets,
 	bookmarks,
@@ -41,6 +48,12 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Follows (both directions)
 	following: many(follows, { relationName: "follower" }),
 	followers: many(follows, { relationName: "creator" }),
+
+	// Blocks. Both directions are declared because enforcement reads both — a block is
+	// stored directed so an unblock knows whose decision it was, but "can these two
+	// meet?" is answered from either side.
+	blocking: many(userBlocks, { relationName: "blocker" }),
+	blockedBy: many(userBlocks, { relationName: "blocked" }),
 
 	// Content
 	works: many(works), // the creator's Catalog
@@ -100,6 +113,19 @@ export const followsRelations = relations(follows, ({ one }) => ({
 		fields: [follows.creatorId],
 		references: [users.id],
 		relationName: "creator",
+	}),
+}));
+
+export const userBlocksRelations = relations(userBlocks, ({ one }) => ({
+	blocker: one(users, {
+		fields: [userBlocks.blockerId],
+		references: [users.id],
+		relationName: "blocker",
+	}),
+	blocked: one(users, {
+		fields: [userBlocks.blockedId],
+		references: [users.id],
+		relationName: "blocked",
 	}),
 }));
 

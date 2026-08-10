@@ -36,7 +36,13 @@ import {
 	restoreSubject,
 } from "../services/moderation.js";
 
-const QUEUE_FILTERS: readonly QueueFilter[] = ["reported", "comments", "ratings", "hidden"];
+const QUEUE_FILTERS: readonly QueueFilter[] = [
+	"reported",
+	"comments",
+	"ratings",
+	"people",
+	"hidden",
+];
 
 const subjectSchema = z.object({
 	subjectType: z.string().refine(isModerationSubjectType, "Unknown subject type"),
@@ -232,6 +238,11 @@ const adminRoutes = new Hono()
 		return c.json({ filter, items, summary });
 	})
 
+	// `not_moderatable` is what a person report gets, and it is a 400 rather than a 501
+	// because the request is well-formed and simply asks for something that does not
+	// exist as an action: hiding an account is suspension, which is not built. The
+	// console reads `moderatable` off the queue item and doesn't offer the button —
+	// this is the backstop for a client that does anyway.
 	.post("/moderation/hide", zValidator("json", hideSchema), async (c) => {
 		const user = c.get("user");
 		const { subjectType, subjectId, reason, note } = c.req.valid("json");
@@ -242,6 +253,12 @@ const adminRoutes = new Hono()
 			reason,
 			note,
 		});
+		if (result === "not_moderatable") {
+			return c.json(
+				{ error: "An account can't be hidden — suspension isn't built.", code: "not_moderatable" },
+				400,
+			);
+		}
 		if (!result) return c.json({ error: "Subject not found" }, 404);
 		return c.json(result);
 	})
@@ -250,6 +267,12 @@ const adminRoutes = new Hono()
 		const user = c.get("user");
 		const { subjectType, subjectId, note } = c.req.valid("json");
 		const result = await restoreSubject({ subjectType, subjectId, actorId: user.id, note });
+		if (result === "not_moderatable") {
+			return c.json(
+				{ error: "An account can't be restored — it was never hideable.", code: "not_moderatable" },
+				400,
+			);
+		}
 		if (!result) return c.json({ error: "Subject not found" }, 404);
 		return c.json(result);
 	})

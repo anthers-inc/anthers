@@ -76,6 +76,7 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
+import { notBlockedBy } from "../services/blocks.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { aclForMediaType } from "../services/storage/acl.js";
@@ -110,13 +111,25 @@ const visibleRating = eq(ratings.moderationStatus, "visible");
  * they filter. That matters here more than most places: `visibleComment` is the whole of
  * moderation at read time, and a second copy of this query is a second place to forget it.
  */
-async function listComments(subjectType: CommentSubjectType, subjectId: number) {
+async function listComments(
+	subjectType: CommentSubjectType,
+	subjectId: number,
+	viewerId: number | null = null,
+) {
 	const rows = await db
 		.select({ comment: comments, username: users.username, avatar: users.avatar })
 		.from(comments)
 		.innerJoin(users, eq(comments.userId, users.id))
 		.where(
-			and(eq(comments.subjectType, subjectType), eq(comments.subjectId, subjectId), visibleComment),
+			and(
+				eq(comments.subjectType, subjectType),
+				eq(comments.subjectId, subjectId),
+				visibleComment,
+				// A blocked pair does not meet in a thread, in either direction. This is the
+				// densest contact surface in the app, and it is one function precisely so
+				// there is one place to apply it — the same argument `visibleComment` makes.
+				notBlockedBy(viewerId, comments.userId),
+			),
 		)
 		.orderBy(desc(comments.createdAt));
 	return rows.map((r) => ({ ...r.comment, username: r.username, avatar: r.avatar }));
@@ -1486,7 +1499,7 @@ const contentRoutes = new Hono()
 	.get("/posts/:slug/comments", async (c) => {
 		const post = await findPostRow(c.req.param("slug"));
 		if (!post) return c.json({ error: "Post not found" }, 404);
-		return c.json({ comments: await listComments("post", post.id) });
+		return c.json({ comments: await listComments("post", post.id, await getOptionalUserId(c)) });
 	})
 
 	.post(
@@ -1511,7 +1524,7 @@ const contentRoutes = new Hono()
 	.get("/works/:id/comments", async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
-		return c.json({ comments: await listComments("work", work.id) });
+		return c.json({ comments: await listComments("work", work.id, await getOptionalUserId(c)) });
 	})
 
 	.post("/works/:id/comments", requireAuth, zValidator("json", createCommentSchema), async (c) => {
@@ -1547,13 +1560,24 @@ const contentRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
+		const currentUserId = await getOptionalUserId(c);
+
+		// The aggregate is deliberately NOT filtered by blocks, unlike the review list
+		// below. A score is a fact about the Work, not about who is reading it: making it
+		// viewer-dependent would mean two people see different ratings for the same thing,
+		// and it would let one user move a creator's public average by blocking a
+		// reviewer. The small honest cost is that a blocker can see "4.2 from 10" over
+		// nine listed reviews — which is already true of a hidden review, and is the right
+		// side of the trade.
 		const [agg] = await db
 			.select({ average: avg(ratings.score), count: count(ratings.id) })
 			.from(ratings)
 			.where(and(eq(ratings.workId, work.id), visibleRating));
 
 		// The written reviews themselves. Hidden ones are withheld here for the same
-		// reason they're excluded from the aggregate — this is a public read.
+		// reason they're excluded from the aggregate — this is a public read. Blocked
+		// pairs are withheld for a different reason: a review carries a name and words,
+		// so it is a place two people meet.
 		const reviewRows = await db
 			.select({
 				id: ratings.id,
@@ -1566,12 +1590,17 @@ const contentRoutes = new Hono()
 			})
 			.from(ratings)
 			.innerJoin(users, eq(ratings.userId, users.id))
-			.where(and(eq(ratings.workId, work.id), visibleRating))
+			.where(
+				and(
+					eq(ratings.workId, work.id),
+					visibleRating,
+					notBlockedBy(currentUserId, ratings.userId),
+				),
+			)
 			.orderBy(desc(ratings.createdAt));
 
 		let userRating: number | null = null;
 		let userReview: string | null = null;
-		const currentUserId = await getOptionalUserId(c);
 		if (currentUserId) {
 			// Deliberately unfiltered by moderation status: the score and words a
 			// viewer submitted shouldn't silently change under them. Their review

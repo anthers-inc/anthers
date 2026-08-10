@@ -20,16 +20,19 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	CameraIcon,
 	CheckCircleIcon,
+	EllipsisHorizontalIcon,
 	LinkIcon,
 	LockClosedIcon,
 	LockOpenIcon,
 	MapPinIcon,
+	NoSymbolIcon,
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
+import ReportDialog from "../components/ui/ReportDialog";
 import { useReportVisit } from "../lib/attention";
 
 /** A Work as the public Catalog listing returns it. */
@@ -405,6 +408,11 @@ export default function CreatorProfilePage() {
 	const [isFollowing, setIsFollowing] = useState(false);
 	const [followerCount, setFollowerCount] = useState(0);
 	const [creatorStatus, setCreatorStatus] = useState<CreatorStatus | null>(null);
+	const [reporting, setReporting] = useState(false);
+	const [confirmingBlock, setConfirmingBlock] = useState(false);
+	const [blocking, setBlocking] = useState(false);
+	/** Set once a block succeeds — the profile 404s on reload, so we say so before then. */
+	const [blocked, setBlocked] = useState(false);
 
 	const isOwnProfile = currentUser?.username === username;
 
@@ -577,6 +585,25 @@ export default function CreatorProfilePage() {
 			.catch(console.error)
 			.finally(() => setLoading(false));
 	}, [username]);
+
+	/**
+	 * Block this person. Confirmed first, because it is the one control here that
+	 * changes what BOTH people can see — and because unblocking, while possible from
+	 * Settings, is not reachable from this page once the profile stops resolving.
+	 */
+	const handleBlock = async () => {
+		if (!username) return;
+		setBlocking(true);
+		try {
+			const res = await apiFetch(`/api/accounts/users/${username}/block`, { method: "POST" });
+			if (!res.ok) return;
+			setConfirmingBlock(false);
+			setBlocked(true);
+			setIsFollowing(false);
+		} finally {
+			setBlocking(false);
+		}
+	};
 
 	const handleFollow = async () => {
 		if (!isAuthenticated || !username) return;
@@ -838,13 +865,44 @@ export default function CreatorProfilePage() {
 						)}
 						{isAuthenticated && !isOwnProfile && (
 							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
-								<button
-									type="button"
-									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
-									onClick={handleFollow}
-								>
-									{isFollowing ? "Following" : "Follow"}
-								</button>
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
+										onClick={handleFollow}
+									>
+										{isFollowing ? "Following" : "Follow"}
+									</button>
+
+									{/* Block and Report sit together and read differently on purpose.
+									    Blocking is yours and takes effect immediately; reporting asks an
+									    operator to look. Someone who wants to be left alone should not have
+									    to file a report to get it, and someone reporting abuse should not
+									    have to keep seeing it while they wait. */}
+									<div className="dropdown dropdown-end">
+										<button
+											type="button"
+											tabIndex={0}
+											className="btn btn-ghost btn-square"
+											aria-label={`More options for ${creator.username}`}
+										>
+											<EllipsisHorizontalIcon className="w-5 h-5" />
+										</button>
+										<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
+											<li>
+												<button type="button" onClick={() => setConfirmingBlock(true)}>
+													<NoSymbolIcon className="w-4 h-4" />
+													Block @{creator.username}
+												</button>
+											</li>
+											<li>
+												<button type="button" onClick={() => setReporting(true)}>
+													Report @{creator.username}
+												</button>
+											</li>
+										</ul>
+									</div>
+								</div>
 								{/* Badge/seed badges */}
 								{creatorStatus && creatorStatus.badge !== "free" && (
 									<div className="flex items-center gap-2 text-xs">
@@ -978,6 +1036,15 @@ export default function CreatorProfilePage() {
 						/>
 					)}
 
+					{blocked && (
+						<div className="alert alert-info mb-4">
+							<span>
+								You've blocked @{creator.username}. Neither of you will see the other around
+								Anthers, and you're no longer following each other. You can undo this in Settings.
+							</span>
+						</div>
+					)}
+
 					{tab === "about" && (
 						<div className="max-w-2xl">
 							{creator.bio ? (
@@ -1000,6 +1067,57 @@ export default function CreatorProfilePage() {
 					)}
 				</div>
 			</div>
+
+			{/* Confirmed, because it changes what BOTH people see and because this page
+			    stops resolving afterwards — the undo lives in Settings, so the copy says
+			    where it is rather than leaving someone stuck. Deliberately says nothing
+			    about the other person being told, because they aren't. */}
+			{confirmingBlock && (
+				<div className="modal modal-open">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Block @{creator.username}?</h3>
+						<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
+							<li>Neither of you will see the other's profile, comments or reviews.</li>
+							<li>Any follows between you are removed, in both directions.</li>
+							<li>Their published work stays where it is — blocking isn't a content filter.</li>
+							<li>You can undo this from Settings.</li>
+						</ul>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setConfirmingBlock(false)}
+								disabled={blocking}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={handleBlock}
+								disabled={blocking}
+							>
+								{blocking ? "Blocking…" : "Block"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setConfirmingBlock(false)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
+
+			{reporting && (
+				<ReportDialog
+					subjectType="user"
+					subjectId={creator.id}
+					label={`@${creator.username}`}
+					onClose={() => setReporting(false)}
+				/>
+			)}
 		</div>
 	);
 }

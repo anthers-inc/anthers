@@ -18,6 +18,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import {
+	isModeratableContent,
 	isModerationReason,
 	isModerationSubjectType,
 	MODERATION_REASON_VALUES,
@@ -25,6 +26,7 @@ import {
 	MODERATION_STATUSES,
 	MODERATION_SUBJECT_TYPES,
 	moderationReasonLabel,
+	reportRequiresDetails,
 } from "./moderation.js";
 
 describe("Report taxonomy", () => {
@@ -77,9 +79,34 @@ describe("Moderation states", () => {
 });
 
 describe("Subject types", () => {
-	it("covers the two user-generated row types and validates membership", () => {
-		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating"]);
+	it("covers the two user-generated row types plus a person, and validates membership", () => {
+		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating", "user"]);
 		expect(isModerationSubjectType("comment")).toBe(true);
+		expect(isModerationSubjectType("user")).toBe(true);
 		expect(isModerationSubjectType("post")).toBe(false);
+	});
+
+	it("says a person is reportable but NOT hideable", () => {
+		// The distinction is the whole reason `user` could be added as a value rather
+		// than as a new table: it goes through the same report path, and stops short of
+		// the same action path. Hiding an account is suspension, which has to answer what
+		// becomes of their Works, their buyers' purchases, the Seeds pointed at them and
+		// any payout in flight — none of it decided.
+		expect(isModeratableContent("comment")).toBe(true);
+		expect(isModeratableContent("rating")).toBe(true);
+		expect(isModeratableContent("user")).toBe(false);
+	});
+
+	it("requires the reporter's own words for a person, and not for content", () => {
+		// A comment IS the evidence; a person is not. That asymmetry is why the six
+		// reasons did NOT need a seventh entry for people — the taxonomy fits, and what
+		// doesn't transfer is the subject implying its own evidence.
+		expect(reportRequiresDetails("user")).toBe(true);
+		expect(reportRequiresDetails("comment")).toBe(false);
+		expect(reportRequiresDetails("rating")).toBe(false);
+		// Adding a person did not touch the taxonomy — pinned here because "the reasons
+		// don't fit a person" is the reasonable-sounding change that would make renaming
+		// a stored value look like a copy edit.
+		expect(MODERATION_REASON_VALUES.length).toBe(6);
 	});
 });

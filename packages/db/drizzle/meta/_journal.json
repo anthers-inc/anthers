@@ -134,6 +134,13 @@
       "when": 1786325724300,
       "tag": "0018_striped_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786374148002,
+      "tag": "0019_empty_pet_avengers",
+      "breakpoints": true
     }
   ]
 }
