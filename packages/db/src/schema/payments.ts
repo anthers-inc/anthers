@@ -72,6 +72,24 @@ export const purchases = pgTable(
 		creatorEarnings: numeric("creator_earnings").notNull(),
 		stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
 		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
+		// ── Delivery & refunds (`0018`) ──────────────────────────────────────────
+		// When this buyer first pulled the actual payload down. Null = never
+		// downloaded, and that distinction is what the refund policy turns on: the
+		// cap applies only to refunds *after* download, because the un-sendable
+		// bytes are the loss it exists to bound (51.06 § Refunds).
+		//
+		// Stamped by the asset-download route only — not by streaming. `works.
+		// download_count` is a Work-wide counter and cannot answer "did *this*
+		// buyer download it", which is the question the cap needs.
+		downloadedAt: timestamp("downloaded_at", { withTimezone: true }),
+		refundedAt: timestamp("refunded_at", { withTimezone: true }),
+		// Who caused the refund, and it is NOT decoration: a platform-initiated
+		// refund (a takedown, a defect, a charge the buyer never made) refunds
+		// someone who may well have downloaded, and must not consume their cap.
+		// Only `buyer` rows are counted. buyer | platform
+		refundInitiator: text("refund_initiator"),
+		refundReason: text("refund_reason"),
+		stripeRefundId: text("stripe_refund_id"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

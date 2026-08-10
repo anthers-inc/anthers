@@ -451,6 +451,8 @@ export interface Purchase {
 		slug: string | null;
 		publicId: number | null;
 		visibility: "private" | "released" | "withdrawn" | null;
+		/** When the creator pulled it. The rescue window is counted from here. */
+		withdrawnAt: string | null;
 		coverImage: string | null;
 		type: string | null;
 	};

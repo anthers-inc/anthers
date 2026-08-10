@@ -127,6 +127,13 @@
       "when": 1786199187277,
       "tag": "0017_rainy_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786325724300,
+      "tag": "0018_striped_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }
