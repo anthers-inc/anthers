@@ -15,6 +15,7 @@ import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { fetchExternalMetrics } from "./fetch-metrics.js";
 import { type PackageVideoData, packageVideo } from "./package-video.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
+import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
@@ -125,6 +126,13 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[fetch-metrics] Processing job ${job.id}`);
 			await fetchExternalMetrics();
+		}
+	});
+
+	await queue.work<PruneAttentionData>(QUEUES.PRUNE_ATTENTION, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[prune-attention] Processing job ${job.id}`);
+			await handlePruneAttention(job.data ?? {});
 		}
 	});
 
