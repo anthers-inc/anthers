@@ -94,6 +94,40 @@ export class S3StorageService implements StorageService {
 		}
 	}
 
+	async size(key: string): Promise<number | null> {
+		try {
+			const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+			return head.ContentLength ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	async readRange(key: string, offset: number, length: number): Promise<Uint8Array | null> {
+		if (length <= 0) return new Uint8Array(0);
+		try {
+			// HTTP byte ranges are INCLUSIVE at both ends, so the last byte is
+			// offset + length - 1. Off-by-one here reads one byte too many into every
+			// chunk, which fails the manifest hash rather than corrupting silently —
+			// but only on the chunks that aren't last, so test the final chunk too.
+			const response = await s3.send(
+				new GetObjectCommand({
+					Bucket: bucket,
+					Key: key,
+					Range: `bytes=${offset}-${offset + length - 1}`,
+				}),
+			);
+			if (!response.Body) return null;
+			return await response.Body.transformToByteArray();
+		} catch {
+			// Same reasoning as `read`: a missing key is a 404 from the SDK and every
+			// caller wants "not found". Note this also swallows a 416 (range past the end
+			// of the object), which is the correct answer for a chunk index that doesn't
+			// exist — the route turns null into its own 404.
+			return null;
+		}
+	}
+
 	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		if (opts?.signed) {
 			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {

@@ -44,6 +44,32 @@ export interface StorageService {
 	read(key: string): Promise<Uint8Array | null>;
 
 	/**
+	 * Read a byte range out of an object. Null when the object doesn't exist.
+	 *
+	 * This is the large-object counterpart to `read`, and it exists because that method's
+	 * "small objects only" restriction is real rather than stylistic: the P2P seeder serves
+	 * 256 KiB chunks out of assets that can be gigabytes, and `read`-ing the whole file to
+	 * hand back a slice of it puts the entire asset in the API's heap. The api component is
+	 * a 512 MB instance, so that is an OOM of the whole hub, triggered by one download.
+	 *
+	 * `offset` is the first byte to return and `length` is how many bytes are wanted; a
+	 * range running past the end of the object yields the bytes that exist rather than an
+	 * error, so the caller does not have to special-case the final chunk. A zero `length`
+	 * yields an empty array without touching storage, because S3 has no way to express a
+	 * zero-length range and would read to the end of the object instead.
+	 */
+	readRange(key: string, offset: number, length: number): Promise<Uint8Array | null>;
+
+	/**
+	 * The size of an object in bytes, without fetching it. Null when it doesn't exist.
+	 *
+	 * Storage is the authority on how big a stored object is — `assets.file_size` is a
+	 * database column that can disagree with it, and the P2P manifest's chunk boundaries
+	 * have to match the bytes a peer will actually receive or every hash check fails.
+	 */
+	size(key: string): Promise<number | null>;
+
+	/**
 	 * Get a URL for a file.
 	 * - Public files: bare URL (no signing).
 	 * - Private files with `signed: true`: time-limited signed URL.

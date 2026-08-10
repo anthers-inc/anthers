@@ -84,6 +84,21 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
+  # The hub's Ed25519 signing key for P2P delivery tokens, base64url PKCS8 DER.
+  # Peers verify chunk tokens against the PUBLIC half, served at /api/p2p/pubkey — the
+  # private half never leaves the hub, which is the property 45.05 is built on and the
+  # reason this is asymmetric rather than an HMAC secret.
+  #
+  # Every /api/p2p route throws without it (getSigningKey has no fallback, deliberately —
+  # a self-generated key would differ per process and per restart, so tokens would verify
+  # only against whichever instance minted them, intermittently, and a rotation would look
+  # identical to a bug). Generate with `bun run p2p:keygen`.
+  #
+  # Rotating it invalidates every token in flight, which is at most a 15-minute window of
+  # failed chunk requests rather than lost access — the manifest endpoint re-mints.
+  - key: P2P_HUB_PRIVATE_KEY
+    scope: RUN_TIME
+    type: SECRET
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
