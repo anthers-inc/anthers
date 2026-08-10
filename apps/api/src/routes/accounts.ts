@@ -30,6 +30,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { buildAccountExport } from "../services/account-data.js";
 import { validateSession } from "../services/auth.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 
@@ -498,6 +499,31 @@ const accountRoutes = new Hono()
 	.get("/me/blocks", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		return c.json({ blocks: await listBlocks(sessionUser.id) });
+	})
+
+	// ── Export ───────────────────────────────────────────────────────────────
+	// 51.05's "get a copy of your information and your content, in an openly
+	// readable format", and Article I(c)'s commitment to *access*. Rules about what
+	// is and isn't in it — especially the credentials and other people's data that
+	// deliberately are not — live in `services/account-data.ts`.
+	.get("/me/export", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const data = await buildAccountExport(sessionUser.id);
+		if (!data) return c.json({ error: "User not found" }, 404);
+
+		// Served as a download rather than an inline body: this is the one document
+		// containing everything about a person, and a browser rendering it in a tab is
+		// a thing that ends up in shared screenshots and back-button history.
+		const stamp = new Date().toISOString().slice(0, 10);
+		c.header("Content-Type", "application/json; charset=utf-8");
+		c.header(
+			"Content-Disposition",
+			`attachment; filename="anthers-export-${sessionUser.username}-${stamp}.json"`,
+		);
+		// Never cached: it is personal data, and a shared or proxy cache holding it is
+		// the failure this header exists for.
+		c.header("Cache-Control", "no-store");
+		return c.body(JSON.stringify(data, null, 2));
 	})
 
 	.post("/users/:username/block", requireAuth, async (c) => {
