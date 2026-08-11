@@ -58,8 +58,10 @@ type Component = {
 	github?: GitHubSource;
 	instance_count?: number;
 };
+type Domain = { domain?: string; type?: string };
 type Spec = {
 	name?: string;
+	domains?: Domain[];
 	envs?: EnvEntry[];
 	services?: Component[];
 	workers?: Component[];
@@ -112,6 +114,26 @@ function sourceMap(spec: Spec): Map<string, string> {
 			out.set(`${where}/branch`, g.branch ?? "");
 		}
 	}
+	return out;
+}
+
+/**
+ * Custom domains, as `domain → type`.
+ *
+ * Added 2026-08-11, after this tool reported "specs agree ✓" throughout an outage it was
+ * the designated check for. `anthers.org` returned 404 for everything on the rebuilt app:
+ * DNS was correct and the app was healthy, but App Platform routes on the Host header and
+ * the new app claimed no domains. The committed spec had never declared them either — so
+ * the drift was invisible for as long as the old app existed, and surfaced only when
+ * production was rebuilt from the file.
+ *
+ * A missing domain is not a cosmetic difference; it is the difference between an app that
+ * serves and one that 404s. Comparing env keys and source settings while ignoring it made
+ * the green tick actively misleading.
+ */
+function domainMap(spec: Spec): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const d of spec.domains ?? []) if (d.domain) out.set(d.domain, d.type ?? "PRIMARY");
 	return out;
 }
 
@@ -245,6 +267,21 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		onlyRepo.splice(onlyRepo.indexOf(twin), 1);
 	}
 
+	const domainDiffs: string[] = [];
+	const repoDomains = domainMap(committed);
+	const liveDomains = domainMap(liveSpec);
+	for (const [d, type] of liveDomains)
+		if (!repoDomains.has(d)) domainDiffs.push(`${d}\n      live: ${type}\n      repo: (absent)`);
+	for (const [d, type] of repoDomains) {
+		if (!liveDomains.has(d)) {
+			domainDiffs.push(
+				`${d}\n      live: (absent) — the app does not claim this name, so it 404s\n      repo: ${type}`,
+			);
+		} else if (liveDomains.get(d) !== type) {
+			domainDiffs.push(`${d}\n      live: ${liveDomains.get(d)}\n      repo: ${type}`);
+		}
+	}
+
 	const repoSource = sourceMap(committed);
 	const liveSource = sourceMap(liveSpec);
 	const sourceDiffs: string[] = [];
@@ -263,6 +300,7 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 	}
 
 	const clean =
+		!domainDiffs.length &&
 		!onlyLive.length &&
 		!onlyRepo.length &&
 		!differs.length &&
@@ -286,6 +324,12 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		console.log("  Declared at different scopes in each spec:");
 		for (const r of relocated.sort()) console.log(`    ≠ ${r}`);
 		console.log("");
+	}
+	if (domainDiffs.length) {
+		console.log("  Custom domains that disagree:");
+		for (const d of domainDiffs.sort()) console.log(`    ! ${d}`);
+		console.log("    → App Platform routes on the Host header: a name the app does not");
+		console.log("      claim returns 404 however correct DNS is.\n");
 	}
 	if (sourceDiffs.length) {
 		console.log("  Component source settings that disagree:");

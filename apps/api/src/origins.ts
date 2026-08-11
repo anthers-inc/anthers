@@ -14,15 +14,17 @@
 const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
 
 /**
- * Origins allowed to make credentialed requests to the API — the consumer site
- * (`FRONTEND_URL`) and the Creator Studio (`STUDIO_URL`, a separate subdomain), plus
- * the desktop Studio's own origins. Shared by CORS and CSRF so they never drift.
- * Localhost dev origins for both apps are added outside production.
+ * Origins allowed to make credentialed requests to the API — the site (`FRONTEND_URL`)
+ * plus the desktop Studio's own origins. Shared by CORS and CSRF so they never drift.
+ * Localhost dev origins are added outside production.
+ *
+ * `STUDIO_URL` was here until 2026-08-11, for the Studio's separate subdomain. The Studio
+ * is a section of the site now (`/studio`), so it is same-origin and needs no entry — and
+ * an allowlist entry for a host that no longer resolves is worse than none, because it
+ * reads as intentional.
  */
 export function allowedOrigins(): string[] {
-	const configured = [process.env.FRONTEND_URL, process.env.STUDIO_URL].filter(
-		(o): o is string => !!o,
-	);
+	const configured = [process.env.FRONTEND_URL].filter((o): o is string => !!o);
 	if (process.env.NODE_ENV === "production")
 		return [...new Set([...configured, ...DESKTOP_ORIGINS])];
 	return [
