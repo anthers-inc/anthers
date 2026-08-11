@@ -48,6 +48,7 @@ import { validateSession } from "../services/auth.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { storage } from "../services/storage/index.js";
 import { chunkRange, type Manifest } from "./manifest.js";
+import { announcePeer, livePeersFor, PEER_LEASE_SECONDS, withdrawPeer } from "./peers.js";
 import { getPublicKeyB64, mintP2pToken, verifyP2pToken } from "./token.js";
 
 /**
@@ -236,6 +237,71 @@ async function manifestFor(
 	return { specVersion: 1, ...identity, ...refreshed.p2pManifest };
 }
 
+/**
+ * Resolve the Work, the asset, and whether this caller may have the asset at all.
+ *
+ * Shared by every endpoint that deals in an asset's identity, because "can you download it"
+ * is also the answer to "may you seed it" and "may you learn who else is seeding it". A
+ * seeder holds a copy it must have been entitled to obtain, and a peer list for a Work you
+ * cannot open would leak that the Work exists and is popular enough to have peers — the
+ * private-by-default rule (40.03) reads on all three.
+ */
+async function resolveAssetAccess(
+	c: Parameters<typeof getCookie>[0],
+	workIdParam: string,
+	assetId: number,
+): Promise<
+	| {
+			ok: true;
+			work: typeof works.$inferSelect;
+			asset: typeof assets.$inferSelect;
+			viewerId: number;
+	  }
+	| { ok: false; status: 403 | 404; body: Record<string, unknown> }
+> {
+	const work = await findWork(workIdParam);
+	if (!work) return { ok: false, status: 404, body: { error: "Work not found" } };
+
+	const [asset] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+	if (!asset || asset.workId !== work.id) {
+		return { ok: false, status: 404, body: { error: "Asset not found" } };
+	}
+
+	const viewerId = await resolveViewer(c);
+	const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+	const access = resolveAccessSync(work as any, ctx);
+	if (!access.canAccess) {
+		return {
+			ok: false,
+			status: 403,
+			body: { error: "Purchase or subscription required", access },
+		};
+	}
+	// Announcing and withdrawing write a row keyed by account, so an anonymous caller with
+	// access to a free Work can read the peer list but has no identity to announce under.
+	return { ok: true, work, asset, viewerId: viewerId ?? 0 };
+}
+
+/**
+ * Why an announcement was refused, in words the operator of the refused host can act on.
+ *
+ * Each one names the fix rather than the rule, because the person reading it is trying to
+ * get their own seeder listed and "private_address" on its own tells them nothing.
+ */
+const ANNOUNCE_REASONS: Record<string, string> = {
+	not_a_url: "That is not a URL. Give an origin, like https://seed.example.org.",
+	scheme: "Peers must be https. A browser on an https page cannot fetch http chunks at all.",
+	credentials: "Remove the username and password from the URL.",
+	path: "Give the origin only — no path, query or fragment. The path shape is the hub's.",
+	private_address:
+		"That address is inside a private network, so nobody outside it could reach you.",
+	unresolvable: "That hostname does not resolve.",
+	unreachable:
+		"Nothing there answered as a seeder for this asset. Check the host is running " +
+		"`anthersp2p seed` for this asset and is reachable from the internet.",
+	too_many: "You are already advertising as many peers as one account may for this asset.",
+};
+
 export const p2pRoutes = new Hono()
 	// ── Public key endpoint ──────────────────────────────────────────────────────
 	.get("/pubkey", async (c) => {
@@ -371,6 +437,80 @@ export const p2pRoutes = new Hono()
 				"Cache-Control": "no-store",
 			},
 		});
+	})
+	// ── Bandwidth accounting report ───────────────────────────────────────────────
+	// ── Peer discovery: who else is serving this asset ───────────────────────────
+	/**
+	 * The membership list. Access-gated, bounded, origins only.
+	 *
+	 * Returns the hub's own lease length so a client knows how stale the answer can be
+	 * without hard-coding a number that only this file knows.
+	 */
+	.get("/works/:id/assets/:assetId/peers", async (c) => {
+		const assetId = Number(c.req.param("assetId"));
+		if (!Number.isInteger(assetId)) return c.json({ error: "Asset not found" }, 404);
+
+		const resolved = await resolveAssetAccess(c, c.req.param("id"), assetId);
+		if (!resolved.ok) return c.json(resolved.body, resolved.status);
+
+		return c.json({ peers: await livePeersFor(assetId), leaseSeconds: PEER_LEASE_SECONDS });
+	})
+	// ── Announce: "I am serving this asset, here" ────────────────────────────────
+	/**
+	 * A lease, held by re-announcing. The response carries `expiresAt` so a seeder renews
+	 * on the hub's clock rather than on its own guess about when it was accepted.
+	 *
+	 * Every rejection answers 400 with a machine-readable `reason`, which reverses the
+	 * usual rule about not explaining refusals. The caller here is the *operator of the
+	 * host being refused* — they are entitled to know whether their URL was malformed,
+	 * plain-HTTP, or simply unreachable, and telling them leaks nothing, because they
+	 * already know everything there is to know about their own server.
+	 */
+	.post("/works/:id/assets/:assetId/announce", async (c) => {
+		const assetId = Number(c.req.param("assetId"));
+		if (!Number.isInteger(assetId)) return c.json({ error: "Asset not found" }, 404);
+
+		const resolved = await resolveAssetAccess(c, c.req.param("id"), assetId);
+		if (!resolved.ok) return c.json(resolved.body, resolved.status);
+		if (!resolved.viewerId) return c.json({ error: "Sign in to announce a peer" }, 401);
+
+		const body = (await c.req.json().catch(() => ({}))) as { url?: unknown };
+		if (typeof body.url !== "string" || !body.url) {
+			return c.json({ error: "An origin is required", reason: "not_a_url" }, 400);
+		}
+
+		const result = await announcePeer({
+			rawUrl: body.url,
+			workId: resolved.work.id,
+			assetId,
+			userId: resolved.viewerId,
+		});
+		if (!result.ok) {
+			return c.json({ error: ANNOUNCE_REASONS[result.reason], reason: result.reason }, 400);
+		}
+		return c.json({
+			origin: result.origin,
+			expiresAt: result.expiresAt.toISOString(),
+			renewed: result.renewed,
+			leaseSeconds: PEER_LEASE_SECONDS,
+		});
+	})
+	// ── Withdraw: stop advertising a peer before its lease lapses ────────────────
+	.delete("/works/:id/assets/:assetId/announce", async (c) => {
+		const assetId = Number(c.req.param("assetId"));
+		if (!Number.isInteger(assetId)) return c.json({ error: "Asset not found" }, 404);
+
+		const resolved = await resolveAssetAccess(c, c.req.param("id"), assetId);
+		if (!resolved.ok) return c.json(resolved.body, resolved.status);
+		if (!resolved.viewerId) return c.json({ error: "Sign in to withdraw a peer" }, 401);
+
+		const body = (await c.req.json().catch(() => ({}))) as { url?: unknown };
+		if (typeof body.url !== "string") return c.json({ error: "An origin is required" }, 400);
+
+		// Idempotent: a seeder shutting down should not have to care whether its lease had
+		// already lapsed, and "it is not listed" is the outcome either way.
+		const removed = await withdrawPeer({ rawUrl: body.url, assetId, userId: resolved.viewerId });
+		return c.json({ withdrawn: removed });
 	})
 	// ── Bandwidth accounting report ───────────────────────────────────────────────
 	.get("/bandwidth-report", async (c) => {

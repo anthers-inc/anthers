@@ -578,3 +578,75 @@ export const ratings = pgTable(
 		index("idx_ratings_work_visible").on(table.workId, table.moderationStatus),
 	],
 );
+
+/**
+ * Announced HTTP peers — who else is serving an asset's chunks right now (45.01 § 3).
+ *
+ * A seeder that can accept inbound connections tells the hub where it is; downloaders ask
+ * the hub who is nearby. Without this the swarm has members but no membership list, and
+ * `anthersp2p pull --peer <url>` is a URL somebody has to pass by hand.
+ *
+ * ── Why this is a table and the WebSocket registry is a Map ─────────────────────────
+ *
+ * `apps/api/src/p2p/registry.ts` carries a 🚨 warning that it fragments the swarm above
+ * `instance_count: 1`, and it is in memory anyway because a WebSocket is an object owned by
+ * the process that accepted it — no row can hold a socket. An HTTP peer is the opposite: a
+ * URL and an expiry, pure data, reachable by anyone. So it goes in Postgres, and the
+ * scaling hazard that hangs over the relay does not apply here at all. Discovery for HTTP
+ * peers already works at any instance count.
+ *
+ * ── Leases, not registrations ───────────────────────────────────────────────────────
+ *
+ * `expiresAt` is short and the seeder re-announces to hold it. A peer that crashes, loses
+ * its network, or is simply closed stops renewing and falls off the list on its own —
+ * whereas a row that had to be deleted to disappear would leave the hub confidently
+ * advertising a host that has been gone for weeks. Nothing sweeps this table on a timer;
+ * reads filter on `expiresAt` and the announce path deletes what it replaces, which keeps
+ * the table's size proportional to peers that have recently existed rather than to every
+ * peer that ever did.
+ *
+ * ── What a row is NOT ───────────────────────────────────────────────────────────────
+ *
+ * It is not a trust statement. The hub probes a peer before listing it (see
+ * `apps/api/src/p2p/peers.ts`), which establishes that something at that URL is a real
+ * seeder for this asset — nothing more. Every downloader still verifies every chunk against
+ * the manifest, exactly as it does for the hub's own bytes, so the worst a listed peer can
+ * do is waste a request.
+ */
+export const p2pPeers = pgTable(
+	"p2p_peers",
+	{
+		id: serial("id").primaryKey(),
+		assetId: integer("asset_id")
+			.notNull()
+			.references(() => assets.id, { onDelete: "cascade" }),
+		/** Carried so a Work takedown can clear its peers without joining through assets. */
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** Origin only — scheme, host, optional port. The path shape is the hub's, not theirs. */
+		url: text("url").notNull(),
+		/**
+		 * Who announced it. Held to cap how many peers one account can advertise for an
+		 * asset, and to have someone to talk to about a misbehaving host. Never returned to
+		 * downloaders: which account runs a seeder is not something the swarm needs to know.
+		 */
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** When the hub last confirmed something real was serving this asset there. */
+		verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow().notNull(),
+		/** Lease end. Rows past it are invisible to reads and replaced by the next announce. */
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One row per URL per asset: a seeder that re-announces updates its lease instead of
+		// stacking duplicates, and two accounts cannot both claim the same host.
+		uniqueIndex("uq_p2p_peers_asset_url").on(table.assetId, table.url),
+		// The discovery read: live peers for one asset.
+		index("idx_p2p_peers_asset_live").on(table.assetId, table.expiresAt),
+		// The per-account cap, and the withdrawal path.
+		index("idx_p2p_peers_user_asset").on(table.userId, table.assetId),
+	],
+);

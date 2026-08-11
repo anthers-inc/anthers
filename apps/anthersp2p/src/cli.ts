@@ -31,6 +31,7 @@
  */
 
 import { basename } from "node:path";
+import { discoverPeers } from "./peers.js";
 import { AccessDeniedError, fetchManifest, pullAsset, VerificationError } from "./pull.js";
 import { SeedError, startSeeder } from "./seed.js";
 
@@ -50,7 +51,9 @@ Options:
   --skip-verify       (seed) don't check the local file first — see the docs, it's a foot-gun
   --resume            re-verify what is on disk and fetch only what is missing
   --concurrency N     chunks in flight (default 4)
-  --peer ORIGIN       (pull) fetch chunks from this peer; manifest still comes from the hub
+  --peer ORIGIN       (pull) prefer this peer; may be repeated, hub is still the fallback
+  --no-discover       (pull) don't ask the hub which peers are serving; hub only
+  --announce ORIGIN   (seed) the public origin to advertise, e.g. https://seed.example.org
   --url ORIGIN        hub origin (default ${DEFAULT_BASE_URL}, or ANTHERS_URL)
   --token TOKEN       session token (or ANTHERS_TOKEN)
 
@@ -59,25 +62,35 @@ file is checked end to end. Manifest format: 45.04.`);
 	process.exit(2);
 }
 
+type Flag = string | boolean | string[];
+
 function parseArgs(argv: string[]) {
 	const positional: string[] = [];
-	const flags: Record<string, string | boolean> = {};
+	const flags: Record<string, Flag> = {};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
 		if (arg.startsWith("--")) {
 			const key = arg.slice(2);
 			const next = argv[i + 1];
-			if (next !== undefined && !next.startsWith("--")) {
-				flags[key] = next;
-				i++;
-			} else {
-				flags[key] = true;
-			}
+			const value: Flag = next !== undefined && !next.startsWith("--") ? next : true;
+			if (typeof value === "string") i++;
+			// Repeats accumulate rather than overwrite, so `--peer a --peer b` means both.
+			// Last-wins would silently honour one of two peers a user deliberately listed.
+			const prev = flags[key];
+			if (prev === undefined) flags[key] = value;
+			else if (Array.isArray(prev)) prev.push(String(value));
+			else flags[key] = [String(prev), String(value)];
 		} else {
 			positional.push(arg);
 		}
 	}
 	return { positional, flags };
+}
+
+/** A flag that may appear more than once, as a list. Absent and `--flag` alike give []. */
+function list(flag: Flag | undefined): string[] {
+	if (Array.isArray(flag)) return flag;
+	return typeof flag === "string" ? [flag] : [];
 }
 
 function humanBytes(n: number): string {
@@ -125,6 +138,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 				assetId,
 				filePath,
 				port: flags.port ? Number(flags.port) : undefined,
+				announceUrl: typeof flags.announce === "string" ? flags.announce : undefined,
 				skipVerify: flags["skip-verify"] === true,
 				onLog: (line) => console.error(line),
 			});
@@ -132,9 +146,30 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 				`seeding ${seeder.manifest.assetFilename} (${seeder.manifest.chunks.length} chunks) ` +
 					`on port ${seeder.port}`,
 			);
+			if (!flags.announce) {
+				console.error(
+					"  not announced — pass --announce https://your.host to have the hub list this " +
+						"seeder so downloaders find it on their own",
+				);
+			}
 			console.error(
 				"  peers present a hub-minted token; every request is verified. Ctrl-C to stop.",
 			);
+			// Withdraw the hub listing on the way out rather than leaving a lease pointing at
+			// a host that has stopped serving. The lease would lapse on its own; this makes
+			// the gap seconds instead of minutes.
+			for (const signal of ["SIGINT", "SIGTERM"] as const) {
+				process.on(signal, () => {
+					// Await the withdrawal before exiting, or it never leaves the machine —
+					// `process.exit` is immediate and a fire-and-forget request dies with the
+					// process. Bounded, because a hub that is unreachable must not turn Ctrl-C
+					// into a hang; the lease expires by itself either way.
+					void Promise.race([
+						seeder.stop(),
+						new Promise((resolve) => setTimeout(resolve, 2000)),
+					]).then(() => process.exit(0));
+				});
+			}
 			// Resolve never: the process IS the service. Ctrl-C is the exit.
 			await new Promise<void>(() => {});
 			return 0;
@@ -151,6 +186,20 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 					`${manifest.chunks.length} chunks  →  ${outputPath}`,
 			);
 
+			// Peers named on the command line come first — an explicit choice outranks the
+			// hub's suggestion — and discovery fills in the rest unless it was turned off.
+			// Neither is required: with no peers at all this is a hub download, which is the
+			// supported floor rather than a degraded mode.
+			const named = list(flags.peer).map((p) => p.replace(/\/$/, ""));
+			const discovered =
+				flags.discover === false || flags["no-discover"] === true
+					? []
+					: await discoverPeers({ baseUrl, token, workId, assetId });
+			const peers = [...named, ...discovered.filter((p) => !named.includes(p))];
+			if (peers.length > 0) {
+				console.error(`  ${peers.length} peer(s): ${peers.join(", ")}`);
+			}
+
 			let lastPct = -1;
 			const result = await pullAsset({
 				baseUrl,
@@ -158,6 +207,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 				workId,
 				assetId,
 				outputPath,
+				peers,
 				resume: flags.resume === true,
 				concurrency: flags.concurrency ? Number(flags.concurrency) : undefined,
 				onProgress: (done, total) => {

@@ -123,6 +123,34 @@ function swarmGateWarning(spec: Spec): string | null {
 	);
 }
 
+/**
+ * 🚨 `P2P_ALLOW_INSECURE_PEERS` turns off the SSRF guard on peer announcements.
+ *
+ * With it set, the hub will accept an `http:` origin and will probe — and then publish —
+ * an address inside its own network. It exists because local development has no public
+ * TLS host and because the guard's own tests need to stand up a peer the guard would
+ * refuse. In production it converts the one endpoint that takes a URL from a user and
+ * makes a request to it into an open relay for pointing downloaders anywhere.
+ *
+ * Same reasoning as the swarm gate above: whoever adds an environment variable is not
+ * reading `apps/api/src/p2p/peers.ts`, and this is the check they run before deploying.
+ */
+function insecurePeersWarning(spec: Spec): string | null {
+	const offenders: string[] = [];
+	for (const [where, entry] of envMap(spec)) {
+		if (!where.endsWith("/P2P_ALLOW_INSECURE_PEERS")) continue;
+		if ((entry.value ?? "") === "1") offenders.push(where);
+	}
+	if (!offenders.length) return null;
+	return (
+		`  🚨 P2P_ALLOW_INSECURE_PEERS=1 is set on ${offenders.join(", ")}.\n` +
+		"     That disables the announce guard: the hub will accept http peers and will\n" +
+		"     probe and publish private addresses, which is an SSRF surface and a way to\n" +
+		"     aim downloaders at a host that never volunteered.\n" +
+		"     → It is a development-only flag. Remove it from anything public.\n"
+	);
+}
+
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
 	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
 	const [stdout, stderr] = await Promise.all([
@@ -240,6 +268,7 @@ for (const [id, mineValue] of repoSource) {
 // Fires on the LIVE spec as well as on a committed edit, because the state that matters is
 // what is actually running — two agreeing specs both saying `2` is not a clean report.
 const swarmGate = swarmGateWarning(liveSpec) ?? swarmGateWarning(committed);
+const insecurePeers = insecurePeersWarning(liveSpec) ?? insecurePeersWarning(committed);
 
 const clean =
 	!onlyLive.length &&
@@ -247,7 +276,8 @@ const clean =
 	!differs.length &&
 	!relocated.length &&
 	!sourceDiffs.length &&
-	!swarmGate;
+	!swarmGate &&
+	!insecurePeers;
 console.log(`\n## Spec diff — ${appName} (${appId})\n`);
 
 if (onlyLive.length) {
@@ -274,6 +304,9 @@ if (differs.length) {
 	console.log("  Same key, different value (non-secret):");
 	for (const d of differs.sort()) console.log(`    ~ ${d}`);
 	console.log("");
+}
+if (insecurePeers) {
+	console.log(insecurePeers);
 }
 if (swarmGate) {
 	console.log(swarmGate);

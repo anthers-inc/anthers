@@ -24,7 +24,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chunkRange, type Manifest, sha256hex, totalChunks } from "@anthers/shared/p2p";
-import { pullAsset, VerificationError } from "./pull";
+import { discoverPeers } from "./peers";
+import { pullAsset } from "./pull";
 import { type Seeder, startSeeder } from "./seed";
 
 const CHUNK = 1024;
@@ -34,8 +35,11 @@ let dir: string;
 let priv: CryptoKey;
 let publicKeyB64: string;
 const running: Seeder[] = [];
+/** The hub's peer list, as `announce` writes it and `peers` reads it back. */
+let hubPeers: string[] = [];
 
 beforeEach(async () => {
+	hubPeers = [];
 	dir = mkdtempSync(join(tmpdir(), "anthersp2p-swarm-"));
 	const kp = (await crypto.subtle.generateKey("Ed25519", true, [
 		"sign",
@@ -115,11 +119,45 @@ function hubStub(manifest: Manifest): typeof fetch {
 		if (url.endsWith("/pubkey")) {
 			return new Response(JSON.stringify({ keyId: 1, publicKey: publicKeyB64 }), { status: 200 });
 		}
+		if (url.includes("/peers")) {
+			return new Response(JSON.stringify({ peers: hubPeers, leaseSeconds: 600 }), { status: 200 });
+		}
+		if (url.includes("/announce")) {
+			const origin = JSON.parse(String(init?.body)).url as string;
+			if (init?.method === "DELETE") {
+				hubPeers = hubPeers.filter((p) => p !== origin);
+				return new Response(JSON.stringify({ withdrawn: true }), { status: 200 });
+			}
+			hubPeers.push(origin);
+			return new Response(JSON.stringify({ origin, leaseSeconds: 600 }), { status: 200 });
+		}
 		if (url.includes("/chunks/")) {
 			throw new Error("the hub was asked for a chunk — the peer should have served it");
 		}
 		throw new Error(`unexpected hub fetch ${url}`);
 	}) as typeof fetch;
+}
+
+/**
+ * A hub that WILL serve chunks — for the tests about surviving a bad peer.
+ *
+ * Every other test here uses `hubStub`, which throws on a chunk request so that a silent
+ * fallback cannot be mistaken for a working peer. These tests need the opposite: they are
+ * about the fallback itself, and a hub that refuses to participate could not demonstrate it.
+ * The counter is the assertion — it says the hub finished what the peer would not.
+ */
+function servingHubStub(manifest: Manifest, file: Uint8Array) {
+	const base = hubStub(manifest);
+	let hubChunks = 0;
+	const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = String(input);
+		const m = url.startsWith(HUB) ? url.match(/\/chunks\/(\d+)$/) : null;
+		if (!m) return base(input, init);
+		hubChunks++;
+		const { offset, size } = chunkRange(Number(m[1]), CHUNK, file.length);
+		return new Response(file.slice(offset, offset + size).buffer as ArrayBuffer, { status: 200 });
+	}) as typeof fetch;
+	return { impl, served: () => hubChunks };
 }
 
 async function startPeer(file: Uint8Array, onDisk?: Uint8Array): Promise<Seeder> {
@@ -147,7 +185,7 @@ describe("a download served by a peer", () => {
 
 		const result = await pullAsset({
 			baseUrl: HUB,
-			chunkBaseUrl: `http://localhost:${peer.port}`,
+			peers: [`http://localhost:${peer.port}`],
 			token: "viewer-session",
 			workId: "5",
 			assetId: 12,
@@ -171,7 +209,7 @@ describe("a download served by a peer", () => {
 
 		await pullAsset({
 			baseUrl: HUB,
-			chunkBaseUrl: `http://localhost:${peer.port}`,
+			peers: [`http://localhost:${peer.port}`],
 			token: "viewer-session",
 			workId: "5",
 			assetId: 12,
@@ -195,7 +233,7 @@ describe("a download served by a peer", () => {
 
 		const result = await pullAsset({
 			baseUrl: HUB,
-			chunkBaseUrl: `http://localhost:${peer.port}`,
+			peers: [`http://localhost:${peer.port}`],
 			token: "viewer-session",
 			workId: "5",
 			assetId: 12,
@@ -207,6 +245,132 @@ describe("a download served by a peer", () => {
 		expect(result.chunksSkipped).toBe(4);
 		expect(peer.served().chunks).toBe(2);
 		expect(new Uint8Array(readFileSync(out))).toEqual(file);
+	});
+});
+
+describe("finding a peer nobody told you about", () => {
+	/**
+	 * The whole point of discovery, in one test: **the puller is never given a peer URL.**
+	 *
+	 * Every other test in this file hands `pullAsset` the peer's origin, which is what the
+	 * swarm looked like before this existed — peers could serve, and only someone who
+	 * already knew where they were could use them. Here the seeder announces itself, the
+	 * puller asks the hub who is serving, and the bytes arrive from a host that entered the
+	 * test as a port number the download side never saw.
+	 */
+	it("announces, discovers, and pulls from a peer the downloader never named", async () => {
+		const file = bytes(CHUNK * 5, 11);
+		const path = join(dir, "seeded.zip");
+		writeFileSync(path, file);
+		const manifest = await makeManifest(file);
+
+		// The seeder announces on boot. `announceUrl` is its public origin, which is a
+		// different fact from its listen port — here they coincide, in production they do not.
+		const port = 39_517;
+		const peer = await startSeeder({
+			baseUrl: HUB,
+			token: "creator-session",
+			workId: "5",
+			assetId: 12,
+			filePath: path,
+			port,
+			announceUrl: `http://localhost:${port}`,
+			fetchImpl: hubStub(manifest),
+		});
+		running.push(peer);
+		expect(peer.listed).toBe(true);
+
+		// The downloader asks the hub who is serving, and is told.
+		const discovered = await discoverPeers({
+			baseUrl: HUB,
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			fetchImpl: hubStub(manifest),
+		});
+		expect(discovered).toEqual([`http://localhost:${port}`]);
+
+		const out = join(dir, "discovered.zip");
+		await pullAsset({
+			baseUrl: HUB,
+			peers: discovered,
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			outputPath: out,
+			fetchImpl: hubStub(manifest),
+		});
+
+		expect(new Uint8Array(readFileSync(out))).toEqual(file);
+		// `hubStub` throws on any chunk request, so every one of these came off the peer.
+		expect(peer.served().chunks).toBe(totalChunks(file.length, CHUNK));
+	});
+
+	it("withdraws its listing when it stops, rather than leaving a lease pointing at nothing", async () => {
+		// The lease would expire on its own, so this is about the gap: minutes of the hub
+		// recommending a host that is already gone. `stop()` returns a promise for exactly
+		// this round-trip — a caller that ignores it still stops serving immediately.
+		const file = bytes(CHUNK * 2, 13);
+		const path = join(dir, "seeded.zip");
+		writeFileSync(path, file);
+		const port = 39_518;
+
+		const peer = await startSeeder({
+			baseUrl: HUB,
+			token: "creator-session",
+			workId: "5",
+			assetId: 12,
+			filePath: path,
+			port,
+			announceUrl: `http://localhost:${port}`,
+			fetchImpl: hubStub(await makeManifest(file)),
+		});
+		expect(hubPeers).toEqual([`http://localhost:${port}`]);
+
+		await peer.stop();
+		expect(hubPeers).toEqual([]);
+	});
+
+	it("downloads from the hub when discovery finds nobody", async () => {
+		// "No peers" is the supported floor, not a failure. A client that treated an empty
+		// list as an error would make the swarm a dependency rather than an optimization.
+		const file = bytes(CHUNK * 2, 12);
+		const hub = servingHubStub(await makeManifest(file), file);
+
+		const discovered = await discoverPeers({
+			baseUrl: HUB,
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			fetchImpl: hub.impl,
+		});
+		expect(discovered).toEqual([]);
+
+		const out = join(dir, "hub-only.zip");
+		await pullAsset({
+			baseUrl: HUB,
+			peers: discovered,
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			outputPath: out,
+			fetchImpl: hub.impl,
+		});
+		expect(new Uint8Array(readFileSync(out))).toEqual(file);
+		expect(hub.served()).toBe(2);
+	});
+
+	it("treats a hub that cannot answer as no peers, rather than as a failure", async () => {
+		// Discovery is best-effort by design. A 500 from the peer list must not take down a
+		// download that would work perfectly against the hub.
+		const peers = await discoverPeers({
+			baseUrl: HUB,
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			fetchImpl: (async () => new Response("nope", { status: 500 })) as unknown as typeof fetch,
+		});
+		expect(peers).toEqual([]);
 	});
 });
 
@@ -236,9 +400,11 @@ describe("the peer is not trusted", () => {
 		});
 	}
 
-	it("rejects bytes from a peer that lies, and never writes them", async () => {
-		// The whole trust model in one test: a peer supplies bytes, the hub's manifest
-		// decides whether they are the file. Nothing the peer does can make them accepted.
+	it("never writes bytes that fail the manifest, even when there is nowhere else to go", async () => {
+		// The trust model with the safety net removed: the hub here refuses to serve chunks,
+		// so a peer that lies leaves the download with no source at all. The download fails,
+		// and — the actual assertion — the corrupt bytes are not on disk. Verification
+		// happens before the write, not after.
 		const file = bytes(CHUNK * 3, 4);
 		const liar = hostilePeer(file, 1);
 		const out = join(dir, "poisoned.zip");
@@ -246,7 +412,7 @@ describe("the peer is not trusted", () => {
 			await expect(
 				pullAsset({
 					baseUrl: HUB,
-					chunkBaseUrl: `http://localhost:${liar.port}`,
+					peers: [`http://localhost:${liar.port}`],
 					token: "viewer-session",
 					workId: "5",
 					assetId: 12,
@@ -254,9 +420,8 @@ describe("the peer is not trusted", () => {
 					concurrency: 1,
 					fetchImpl: hubStub(await makeManifest(file)),
 				}),
-			).rejects.toBeInstanceOf(VerificationError);
+			).rejects.toThrow(/No source could supply chunk 1/);
 
-			// The corrupt chunk must not be on disk — verification happens before the write.
 			const written = new Uint8Array(readFileSync(out));
 			const { offset, size } = chunkRange(1, CHUNK, file.length);
 			expect(written.subarray(offset, offset + size).every((b) => b === 0)).toBe(true);
@@ -265,27 +430,71 @@ describe("the peer is not trusted", () => {
 		}
 	});
 
-	it("fails the download rather than completing it when a peer serves a stale chunk", async () => {
-		// Our own seeder's 409, seen from the client side. A peer whose file changed under it
-		// stops the download loudly instead of quietly handing over a wrong file.
+	it("drops a lying peer and finishes from the hub, so a bad peer cannot deny a download", async () => {
+		/**
+		 * 🚨 The security property that peer DISCOVERY created, and the reason `pullAsset`
+		 * stopped aborting on a bad chunk.
+		 *
+		 * While peer URLs were passed by hand this did not matter — you chose the host that
+		 * lied to you. Now the hub hands out peer lists, so if one wrong byte could fail a
+		 * download, anyone who got themselves listed could break every download of an asset
+		 * for everyone. Failing over demotes that from denial-of-service to a slow start.
+		 */
+		const file = bytes(CHUNK * 4, 7);
+		const liar = hostilePeer(file, 1);
+		const out = join(dir, "recovered.zip");
+		const hub = servingHubStub(await makeManifest(file), file);
+		try {
+			const result = await pullAsset({
+				baseUrl: HUB,
+				peers: [`http://localhost:${liar.port}`],
+				token: "viewer-session",
+				workId: "5",
+				assetId: 12,
+				outputPath: out,
+				concurrency: 1,
+				fetchImpl: hub.impl,
+			});
+
+			// Complete and correct, despite a peer actively trying to corrupt it.
+			expect(new Uint8Array(readFileSync(out))).toEqual(file);
+			expect(result.bytesWritten).toBe(file.length);
+
+			// And the liar was DROPPED, not merely retried: chunk 0 came from it (honest),
+			// chunk 1 was the lie, and chunks 2 and 3 went to the hub without asking again.
+			expect(hub.served()).toBe(3);
+		} finally {
+			liar.stop(true);
+		}
+	});
+
+	it("survives a peer whose file changed underneath it", async () => {
+		// Our own seeder's 409, seen from the client side. A peer whose copy was replaced
+		// mid-session stops being a source; it does not stop the download.
 		const file = bytes(CHUNK * 3, 5);
 		const peer = await startPeer(file);
 		const replaced = new Uint8Array(file);
 		replaced[CHUNK + 9] ^= 0xff;
 		writeFileSync(join(dir, "seeded.zip"), replaced);
+		const out = join(dir, "stale.zip");
+		const hub = servingHubStub(await makeManifest(file), file);
 
-		await expect(
-			pullAsset({
-				baseUrl: HUB,
-				chunkBaseUrl: `http://localhost:${peer.port}`,
-				token: "viewer-session",
-				workId: "5",
-				assetId: 12,
-				outputPath: join(dir, "stale.zip"),
-				concurrency: 1,
-				fetchImpl: hubStub(await makeManifest(file)),
-			}),
-		).rejects.toThrow(/HTTP 409/);
+		await pullAsset({
+			baseUrl: HUB,
+			peers: [`http://localhost:${peer.port}`],
+			token: "viewer-session",
+			workId: "5",
+			assetId: 12,
+			outputPath: out,
+			concurrency: 1,
+			fetchImpl: hub.impl,
+		});
+
+		expect(new Uint8Array(readFileSync(out))).toEqual(file);
+		// Chunk 0 still matched, so the peer served it; chunk 1 answered 409 and cost it the
+		// rest. A stale peer contributes what it can and is not asked twice.
+		expect(peer.served().chunks).toBe(1);
+		expect(hub.served()).toBe(2);
 	});
 
 	it("gets nothing from a peer without presenting the hub's token", async () => {
