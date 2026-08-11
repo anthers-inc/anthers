@@ -2,12 +2,15 @@
 /**
  * Storage configuration, and the URL↔key invariant a provider migration can silently break.
  *
- * Two jobs, and the first is the reason this file exists tonight rather than later.
+ * Two jobs.
  *
- * **1. Prove the Spaces→configurable change is a no-op.** The endpoint and public URL base
- * used to be hard-coded; they are now resolved from the environment. Every default has to
- * reproduce the old string exactly, or "we only made it configurable" is a claim rather
- * than a fact.
+ * **1. Prove the configuration is REQUIRED rather than guessed.** This file was written to
+ * prove the opposite — that every default reproduced the old hard-coded DigitalOcean Spaces
+ * string exactly, so making the provider configurable was a no-op. That property did its
+ * job and expired with the migration: Spaces is gone, and the `nyc3` region default it
+ * pinned is the specific value that made every Cloudflare R2 call fail. The defaults are
+ * removed, so what needs pinning now is that a half-configured environment fails loudly at
+ * boot instead of on the first upload.
  *
  * **2. Pin the invariant `urlToKey(getUrl(key)) === key`.** Absolute URLs are persisted —
  * playlists, HLS manifests, processed audio and some thumbnails go into the database as
@@ -22,7 +25,24 @@ import { describe, expect, it } from "bun:test";
 import { urlToKey } from "../routes/content";
 import { publicUrlFor, resolveStorageConfig } from "../services/storage/config";
 
-const SPACES = { SPACES_REGION: "nyc3", SPACES_BUCKET: "anthers-media" };
+/**
+ * A complete, valid environment — production's shape, with the two buckets split.
+ *
+ * Spread it and override only what a test is about. Every variable here is now REQUIRED, so
+ * a partial object throws; that is the point, and `base()` keeps it from becoming noise in
+ * tests that care about something else.
+ */
+const base = (over: Record<string, string> = {}) => ({
+	STORAGE_ENDPOINT: "https://abc123.r2.cloudflarestorage.com",
+	STORAGE_REGION: "auto",
+	STORAGE_BUCKET: "anthers-media-private",
+	STORAGE_PUBLIC_BUCKET: "anthers-media-public",
+	STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org",
+	STORAGE_FORCE_PATH_STYLE: "true",
+	STORAGE_KEY: "test-key",
+	STORAGE_SECRET: "test-secret",
+	...over,
+});
 
 /** Keys as the application actually mints them — see the media-upload presign route. */
 const REAL_KEYS = [
@@ -33,57 +53,57 @@ const REAL_KEYS = [
 	"creators/7/audio/originals/1234abcd.flac",
 ];
 
-describe("the defaults reproduce DigitalOcean Spaces exactly", () => {
-	it("builds the endpoint and public base that were hard-coded before", () => {
-		// The two literal strings this change replaced. If either drifts, an environment
-		// that sets nothing new starts talking to a different place — which is precisely
-		// what "no-op" is supposed to rule out.
-		const config = resolveStorageConfig(SPACES);
-		expect(config.endpoint).toBe("https://nyc3.digitaloceanspaces.com");
-		expect(config.publicBaseUrl).toBe("https://anthers-media.nyc3.digitaloceanspaces.com");
-		expect(config.forcePathStyle).toBe(false);
-		expect(publicUrlFor(config, "creators/1/x.zip")).toBe(
-			"https://anthers-media.nyc3.digitaloceanspaces.com/creators/1/x.zip",
-		);
+describe("the configuration is required, not guessed", () => {
+	/**
+	 * 🚨 These replace a suite that asserted the opposite — that every unset variable fell
+	 * back to a DigitalOcean Spaces string. That was correct while Spaces was live and became
+	 * a liability the moment it wasn't: `STORAGE_REGION` defaulting to `nyc3` is exactly what
+	 * made every R2 call fail, and because SigV4 folds region into the credential scope it
+	 * surfaced on presigned URLs as `SignatureDoesNotMatch` rather than as anything about a
+	 * region. A default that is right for a vendor you have left is worse than no default.
+	 */
+	it("throws when nothing is set, rather than inventing an endpoint", () => {
+		expect(() => resolveStorageConfig({})).toThrow(/Storage is not configured/);
 	});
 
-	it("defaults the region the way the old constant did", () => {
-		expect(resolveStorageConfig({}).endpoint).toBe("https://nyc3.digitaloceanspaces.com");
+	it("names every missing variable at once, so it takes one round trip to fix", () => {
+		try {
+			resolveStorageConfig({ STORAGE_ENDPOINT: "https://x.example", STORAGE_REGION: "auto" });
+			throw new Error("expected resolveStorageConfig to throw");
+		} catch (e) {
+			const m = (e as Error).message;
+			expect(m).toContain("STORAGE_BUCKET");
+			expect(m).toContain("STORAGE_PUBLIC_BASE_URL");
+			expect(m).toContain("STORAGE_KEY");
+			expect(m).toContain("STORAGE_SECRET");
+			// The two that WERE supplied must not be reported as missing.
+			expect(m).not.toContain("STORAGE_ENDPOINT");
+			expect(m).not.toContain("STORAGE_REGION");
+		}
 	});
 
-	it("still reads the SPACES_* names, because production has not been re-specced", () => {
-		// 🚨 Pushing to `release` does not apply the committed spec — production keeps
-		// whatever `doctl` last set. Without this fallback the rename would deploy cleanly,
-		// start cleanly, and fail every upload with empty credentials.
-		const config = resolveStorageConfig({
-			...SPACES,
-			SPACES_KEY: " AKIA ",
-			SPACES_SECRET: "s3cr3t",
-		});
-		expect(config.accessKeyId).toBe("AKIA");
-		expect(config.bucket).toBe("anthers-media");
-		expect(config.secretAccessKey).toBe("s3cr3t");
+	it("no longer honours the SPACES_* names at all", () => {
+		// The fallback existed because a live Spaces deployment would have failed every
+		// upload on empty credentials during a rename. That deployment is deleted, so an
+		// environment carrying only the old names is now a misconfiguration and says so.
+		expect(() =>
+			resolveStorageConfig({
+				SPACES_REGION: "nyc3",
+				SPACES_BUCKET: "anthers-media",
+				SPACES_KEY: "AKIA",
+				SPACES_SECRET: "s3cr3t",
+			}),
+		).toThrow(/Storage is not configured/);
 	});
 
-	it("prefers the new names when both are present", () => {
-		const config = resolveStorageConfig({
-			...SPACES,
-			SPACES_BUCKET: "old-bucket",
-			STORAGE_BUCKET: "new-bucket",
-		});
-		expect(config.bucket).toBe("new-bucket");
+	it("treats whitespace as unset, because a dashboard paste can leave a space", () => {
+		expect(() => resolveStorageConfig(base({ STORAGE_KEY: "   " }))).toThrow(/STORAGE_KEY/);
 	});
 });
 
 describe("pointing it somewhere else", () => {
 	it("takes an explicit endpoint and public base", () => {
-		const config = resolveStorageConfig({
-			STORAGE_REGION: "auto",
-			STORAGE_BUCKET: "anthers-media-private",
-			STORAGE_ENDPOINT: "https://abc123.r2.cloudflarestorage.com",
-			STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org",
-			STORAGE_FORCE_PATH_STYLE: "true",
-		});
+		const config = resolveStorageConfig(base());
 		expect(config.endpoint).toBe("https://abc123.r2.cloudflarestorage.com");
 		expect(config.publicBaseUrl).toBe("https://cdn.anthers.org");
 		expect(config.forcePathStyle).toBe(true);
@@ -92,41 +112,44 @@ describe("pointing it somewhere else", () => {
 	it("tolerates a trailing slash on the public base", () => {
 		// Otherwise the URL gets a double slash, the pathname keeps it, and the key comes
 		// back with a leading empty segment. A trailing slash is exactly what someone pastes.
-		const config = resolveStorageConfig({ STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org/" });
+		const config = resolveStorageConfig(
+			base({ STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org/" }),
+		);
 		expect(publicUrlFor(config, "a/b.zip")).toBe("https://cdn.anthers.org/a/b.zip");
 	});
 });
 
 describe("the URL↔key invariant", () => {
-	it("round-trips every key shape the app mints, on Spaces", () => {
-		const config = resolveStorageConfig(SPACES);
+	it("round-trips every key shape the app mints, on the CDN custom domain", () => {
+		const config = resolveStorageConfig(base());
 		for (const key of REAL_KEYS) {
 			expect({ key, back: urlToKey(publicUrlFor(config, key)) }).toEqual({ key, back: key });
 		}
 	});
 
-	it("round-trips them on a CDN custom domain — the post-migration shape", () => {
-		const config = resolveStorageConfig({ STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org" });
-		for (const key of REAL_KEYS) {
-			expect({ key, back: urlToKey(publicUrlFor(config, key)) }).toEqual({ key, back: key });
+	it("recovers keys from any host, so the CDN domain can change without a backfill", () => {
+		// `urlToKey` takes the pathname and ignores the host, which is what made the Spaces→R2
+		// move need no data migration. Nothing in the database points at Spaces any more, so
+		// that specific rescue is spent — but the property is the same one that would save the
+		// next domain change, and it is cheap to keep asserted rather than rediscovered.
+		for (const host of [
+			"https://anthers-media.nyc3.digitaloceanspaces.com", // the retired provider
+			"https://cdn.anthers.org", // today
+			"https://media.example.net", // whatever comes next
+		]) {
+			expect(urlToKey(`${host}/creators/9/audio/x.mp3`)).toBe("creators/9/audio/x.mp3");
 		}
-	});
-
-	it("still recovers keys from URLs written against the OLD provider", () => {
-		// The rows already in the database. `urlToKey` is hostname-agnostic, so a migration
-		// needs no backfill — this asserts the property that makes that true, rather than
-		// leaving it as an assumption somebody has to re-derive under time pressure.
-		const stored = "https://anthers-media.nyc3.digitaloceanspaces.com/creators/9/audio/x.mp3";
-		expect(urlToKey(stored)).toBe("creators/9/audio/x.mp3");
 	});
 
 	it("🚨 BREAKS against a path-style endpoint, which is why the custom domain is required", () => {
 		// R2's S3 API is path-style: the bucket sits in the path, so the pathname is no
 		// longer the key. This is the one configuration that must never reach production,
 		// and the test exists to make the consequence concrete rather than cautionary.
-		const config = resolveStorageConfig({
-			STORAGE_PUBLIC_BASE_URL: "https://abc123.r2.cloudflarestorage.com/anthers-media-public",
-		});
+		const config = resolveStorageConfig(
+			base({
+				STORAGE_PUBLIC_BASE_URL: "https://abc123.r2.cloudflarestorage.com/anthers-media-public",
+			}),
+		);
 		const key = "creators/1/assets/game.zip";
 		expect(urlToKey(publicUrlFor(config, key))).toBe(
 			"anthers-media-public/creators/1/assets/game.zip",
@@ -139,7 +162,7 @@ describe("the URL↔key invariant", () => {
 		// reachable rather than theoretical. Pinned so that adding encoding later is a
 		// deliberate change with a failing test to update, not a silent one — fixing it
 		// properly means encoding on the way out AND migrating stored URLs.
-		const config = resolveStorageConfig(SPACES);
+		const config = resolveStorageConfig(base());
 		expect(urlToKey(publicUrlFor(config, "creators/1/assets/a%20b.zip"))).toBe(
 			"creators/1/assets/a b.zip",
 		);

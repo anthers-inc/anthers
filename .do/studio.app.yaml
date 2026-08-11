@@ -12,7 +12,7 @@
 # 🚨 THIS IS A RECOVERY ARTIFACT, NOT A SOURCE OF TRUTH. Read the same warning
 # on .do/app.yaml and believe it here too: pushing to `release` never applies a
 # committed spec, so this file drifts by default and describes intent, not
-# reality. `doctl apps spec get 627305e3-ba1d-4991-8454-63fc140bbb07` is the only
+# reality. `doctl apps spec get 2b499de4-d71b-41c2-8200-e926c0c181f8 --context anthers` is the only
 # authority. `make spec-diff` compares both apps and is what makes the drift loud.
 #
 # Apply with:

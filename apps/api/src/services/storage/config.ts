@@ -7,14 +7,24 @@
  * taking an env-shaped object can be tested against every provider's URL shape without
  * credentials, a network, or a bucket.
  *
- * ── Vendor-neutral names, with the old ones still honoured ──────────────────────────
+ * ── Vendor-neutral names, and nothing else ─────────────────────────────────────────
  *
  * The variables were `SPACES_*`, which named DigitalOcean in the configuration as well as
- * in the code. The new names are `STORAGE_*` and the old ones remain as fallbacks, because
- * **pushing to `release` does not apply the committed spec** — production keeps whatever
- * `doctl` last set. A rename with no fallback would deploy fine, start, and then fail every
- * upload with empty credentials. The fallback is what lets the code ship before the spec
- * catches up, in either order.
+ * in the code. They became `STORAGE_*` with the old names kept as fallbacks, and every
+ * default composed a DigitalOcean Spaces URL, so an environment that set nothing new
+ * behaved identically — the property that made introducing this file a no-op.
+ *
+ * **Both are gone as of 2026-08-11, because the thing they protected is gone.** The
+ * fallbacks existed because pushing to `release` never applies the committed spec, so a
+ * rename could have deployed cleanly and then failed every upload on empty credentials
+ * against a *live* Spaces deployment. That deployment has been deleted: Anthers runs on
+ * Cloudflare R2 under an Anthers-owned account, and there is no Spaces bucket, cluster or
+ * app left to fall back to. Keeping them would leave a configuration path nothing
+ * exercises — and one of those defaults (`nyc3`) is the specific value that made every R2
+ * call fail, which is a poor thing to leave loaded.
+ *
+ * So the required variables are now **required**, and `resolveStorageConfig` throws naming
+ * the missing ones rather than composing a URL for a vendor we left.
  *
  * ── 🚨 `publicBaseUrl` is load-bearing beyond cost, and this is the subtle part ─────
  *
@@ -95,54 +105,62 @@ export interface StorageConfig {
 	sendObjectAcl: boolean;
 }
 
-/** Read a variable under its current name, then its legacy one. */
-function env(source: Record<string, string | undefined>, name: string, legacy: string): string {
-	return (source[`STORAGE_${name}`] ?? source[legacy] ?? "").trim();
+/** Read `STORAGE_<name>`, trimmed. */
+function env(source: Record<string, string | undefined>, name: string): string {
+	return (source[`STORAGE_${name}`] ?? "").trim();
 }
+
+/**
+ * Every variable that must be present for S3 storage to work at all.
+ *
+ * There are no defaults for these any more. Each used to have one that composed a
+ * DigitalOcean Spaces URL — which was correct while Spaces was what we ran on, and became
+ * actively harmful the moment it wasn't: `STORAGE_REGION` defaulting to `nyc3` is precisely
+ * what made every R2 call fail, with presigned URLs reporting `SignatureDoesNotMatch`
+ * rather than anything about a region.
+ *
+ * `STORAGE_PUBLIC_BUCKET` is deliberately NOT here. Falling back to the private bucket is a
+ * real posture (one bucket, per-object ACLs) rather than a vendor guess, and it is what
+ * `sendObjectAcl` keys on.
+ */
+const REQUIRED = ["ENDPOINT", "REGION", "BUCKET", "PUBLIC_BASE_URL", "KEY", "SECRET"] as const;
 
 /**
  * Resolve the storage configuration.
  *
- * Every default reproduces the DigitalOcean Spaces behaviour that preceded this file, so an
- * environment that sets nothing new behaves **identically** — which is the property that
- * makes introducing this a no-op rather than a change.
+ * Throws when a required variable is missing, naming all of them at once. That is louder
+ * than the alternative and deliberately so: the failure it replaces was a boot that
+ * *succeeded* against a half-configured environment and then failed on the first upload,
+ * somewhere far from the cause.
+ *
+ * Only reached when `STORAGE_BACKEND=s3` — `index.ts` builds `LocalStorageService` otherwise
+ * — so local dev never has to satisfy any of this.
  */
 export function resolveStorageConfig(
 	source: Record<string, string | undefined> = process.env,
 ): StorageConfig {
-	// ⚠️ `nyc3` is a DigitalOcean region and is the right default only for Spaces, where it
-	// also composes the endpoint and the public URL below. **R2 rejects it.** R2 ignores
-	// region for placement but still validates the name (`wnam|enam|weur|eeur|apac|oc|auto`),
-	// so an R2 deployment must set `STORAGE_REGION=auto` or every call fails — direct ones
-	// with `InvalidRegionName`, and presigned ones as `SignatureDoesNotMatch`, because SigV4
-	// folds the region into the credential scope and the mismatch surfaces as a bad signature
-	// rather than as a bad region. That second symptom is the one that wastes an afternoon.
-	const region = env(source, "REGION", "SPACES_REGION") || "nyc3";
-	const bucket = env(source, "BUCKET", "SPACES_BUCKET");
+	const missing = REQUIRED.filter((name) => !env(source, name));
+	if (missing.length) {
+		throw new Error(
+			`Storage is not configured: missing ${missing.map((m) => `STORAGE_${m}`).join(", ")}. ` +
+				"See .env.example — every one of these is required and none has a default.",
+		);
+	}
+
+	const bucket = env(source, "BUCKET");
 	// Same bucket unless told otherwise — see the field docs for why that is the safe default.
-	const publicBucket = env(source, "PUBLIC_BUCKET", "") || bucket;
-
-	// Defaults to the Spaces endpoint for the region, exactly as before.
-	const endpoint = env(source, "ENDPOINT", "") || `https://${region}.digitaloceanspaces.com`;
-
-	// Defaults to the Spaces virtual-hosted bucket URL, exactly as before. A deployment
-	// that fronts storage with a CDN sets this to that hostname and nothing else changes.
-	// Built from the PUBLIC bucket, since that is what it addresses. Identical to the old
-	// hard-coded string while the two buckets are the same.
-	const publicBaseUrl =
-		env(source, "PUBLIC_BASE_URL", "") ||
-		`https://${publicBucket}.${region}.digitaloceanspaces.com`;
+	const publicBucket = env(source, "PUBLIC_BUCKET") || bucket;
 
 	return {
-		region,
+		region: env(source, "REGION"),
 		bucket,
 		publicBucket,
-		endpoint,
-		// Trim: a stray newline/space pasted into a dashboard secret silently corrupts the
-		// SigV4 HMAC and yields a baffling SignatureDoesNotMatch.
-		accessKeyId: env(source, "KEY", "SPACES_KEY"),
-		secretAccessKey: env(source, "SECRET", "SPACES_SECRET"),
-		publicBaseUrl: publicBaseUrl.replace(/\/+$/, ""),
+		endpoint: env(source, "ENDPOINT"),
+		// Trim (in `env`): a stray newline/space pasted into a dashboard secret silently
+		// corrupts the SigV4 HMAC and yields a baffling SignatureDoesNotMatch.
+		accessKeyId: env(source, "KEY"),
+		secretAccessKey: env(source, "SECRET"),
+		publicBaseUrl: env(source, "PUBLIC_BASE_URL").replace(/\/+$/, ""),
 		forcePathStyle: (source.STORAGE_FORCE_PATH_STYLE ?? "").trim() === "true",
 		// One bucket → the ACL is the only thing carrying access. Two → the bucket is.
 		sendObjectAcl: publicBucket === bucket,

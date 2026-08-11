@@ -96,16 +96,19 @@ describe("presigned upload ACL", () => {
 	 * R2 migration. Injecting both cases makes each one say what it means.
 	 */
 	const ONE_BUCKET = resolveStorageConfig({
-		SPACES_REGION: "nyc3",
-		SPACES_BUCKET: "test-bucket",
-		SPACES_KEY: "test-key",
-		SPACES_SECRET: "test-secret",
+		STORAGE_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
+		STORAGE_REGION: "nyc3",
+		STORAGE_BUCKET: "test-bucket",
+		STORAGE_PUBLIC_BASE_URL: "https://test-bucket.nyc3.digitaloceanspaces.com",
+		STORAGE_KEY: "test-key",
+		STORAGE_SECRET: "test-secret",
 	});
 	const TWO_BUCKETS = resolveStorageConfig({
 		STORAGE_REGION: "auto",
 		STORAGE_BUCKET: "test-private",
 		STORAGE_PUBLIC_BUCKET: "test-public",
 		STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+		STORAGE_PUBLIC_BASE_URL: "https://cdn.example.org",
 		STORAGE_FORCE_PATH_STYLE: "true",
 		STORAGE_KEY: "test-key",
 		STORAGE_SECRET: "test-secret",
