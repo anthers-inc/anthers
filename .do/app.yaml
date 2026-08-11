@@ -84,21 +84,6 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
-  # The hub's Ed25519 signing key for P2P delivery tokens, base64url PKCS8 DER.
-  # Peers verify chunk tokens against the PUBLIC half, served at /api/p2p/pubkey — the
-  # private half never leaves the hub, which is the property 45.05 is built on and the
-  # reason this is asymmetric rather than an HMAC secret.
-  #
-  # Every /api/p2p route throws without it (getSigningKey has no fallback, deliberately —
-  # a self-generated key would differ per process and per restart, so tokens would verify
-  # only against whichever instance minted them, intermittently, and a rotation would look
-  # identical to a bug). Generate with `bun run p2p:keygen`.
-  #
-  # Rotating it invalidates every token in flight, which is at most a 15-minute window of
-  # failed chunk requests rather than lost access — the manifest endpoint re-mints.
-  - key: P2P_HUB_PRIVATE_KEY
-    scope: RUN_TIME
-    type: SECRET
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
@@ -168,23 +153,6 @@ services:
     run_command: bun run apps/api/src/server.ts
     http_port: 8000
     instance_size_slug: basic-xxs
-    # 🚨 DO NOT RAISE THIS TO 2 WITHOUT REPLACING THE PEER REGISTRY FIRST.
-    #
-    # This component holds the P2P signaling relay, and peer presence lives in process
-    # memory — a WebSocket is an object owned by the process that accepted it, so a row
-    # saying "peer X is online" cannot hold the socket. With two instances the load
-    # balancer puts peer A on one and peer B on the other; B asks who has the asset, its
-    # instance consults its own Map, and answers "nobody". Both are online, both hold the
-    # bytes, and they never meet. The swarm fragments into one swarm per instance and every
-    # download falls back to hub-served chunks, which work perfectly — so there is no
-    # error, no log, and no symptom except the bandwidth bill.
-    #
-    # Replace `InMemoryPeerRegistry` (apps/api/src/p2p/registry.ts) with Postgres presence
-    # plus LISTEN/NOTIFY first. `make spec-diff` fails loudly if this goes above 1.
-    #
-    # Note the trap in the sequencing: signaling is ~100× cheaper than chunk serving, so
-    # whatever eventually forces a second instance will have nothing to do with P2P — and
-    # scaling for that unrelated reason is what breaks the swarm.
     instance_count: 1
     health_check:
       http_path: /health

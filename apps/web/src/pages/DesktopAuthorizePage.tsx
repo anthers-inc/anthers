@@ -7,19 +7,6 @@
  * click mints a separate, independently revocable desktop token. The token itself is
  * never shown here or put in the URL: the page hands back a one-time `code`, which the
  * app redeems with the PKCE verifier only it holds. See 42.06 § Desktop auth.
- *
- * ── `?client=cli` ───────────────────────────────────────────────────────────────────
- *
- * `anthersp2p` uses the same flow with one difference: it has no `anthers://` scheme to
- * be called back on, so it POLLS for the result instead. Two things follow, and both are
- * about not lying to the person looking at this page. The deep-link redirect is skipped —
- * navigating to a scheme nothing handles produces an OS error dialog, on a screen that
- * has just told the user everything worked. And the copy stops saying "Studio", because
- * for this visitor it is a terminal on a machine that may not even have a desktop.
- *
- * The parameter changes presentation only. Authorization is the same call under the same
- * cookie session, and the poll is authorized by the PKCE verifier regardless of what any
- * query string claims.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch } from "@anthers/web-shared/rpc";
@@ -34,8 +21,6 @@ export default function DesktopAuthorizePage() {
 	const location = useLocation();
 	const [params] = useSearchParams();
 	const challenge = params.get("challenge") ?? "";
-	// Presentation only — see the header. Nothing here is trusted for authorization.
-	const isCli = params.get("client") === "cli";
 
 	const [phase, setPhase] = useState<Phase>("loading");
 	const [label, setLabel] = useState<string | null>(null);
@@ -81,9 +66,6 @@ export default function DesktopAuthorizePage() {
 			}
 			const { code } = (await res.json()) as { code: string };
 			setPhase("done");
-			// A polling client is already waiting on its verifier and has no scheme
-			// registered; opening one would raise an OS error dialog for nothing.
-			if (isCli) return;
 			// Hand the code back over the app's registered scheme. Only the code travels
 			// here — it is useless without the verifier the app kept to itself.
 			window.location.href = `anthers://auth/callback?code=${encodeURIComponent(code)}`;
@@ -120,23 +102,19 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">This sign-in request has expired</h1>
 							<p className="text-sm text-base-content/60">
-								Sign-in requests are only valid for a few minutes. Start again from{" "}
-								{isCli ? "your terminal" : "Anthers Studio on your computer"}.
+								Sign-in requests are only valid for a few minutes. Start again from Anthers Studio
+								on your computer.
 							</p>
 						</>
 					)}
 
 					{(phase === "ready" || phase === "authorizing" || phase === "error") && (
 						<>
-							<h1 className="card-title text-lg">
-								{isCli ? "Sign in on this device?" : "Sign in to Anthers Studio?"}
-							</h1>
+							<h1 className="card-title text-lg">Sign in to Anthers Studio?</h1>
 							<p className="text-sm text-base-content/60">
 								This will let{" "}
 								{label ? (
 									<span className="font-medium text-base-content">{label}</span>
-								) : isCli ? (
-									"the command-line client"
 								) : (
 									"the Studio app on your computer"
 								)}{" "}
@@ -157,11 +135,7 @@ export default function DesktopAuthorizePage() {
 									onClick={confirm}
 									disabled={phase === "authorizing"}
 								>
-									{phase === "authorizing"
-										? "Signing in…"
-										: isCli
-											? "Sign in"
-											: "Sign in to Studio"}
+									{phase === "authorizing" ? "Signing in…" : "Sign in to Studio"}
 								</button>
 							</div>
 						</>
@@ -171,9 +145,8 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">You're signed in</h1>
 							<p className="text-sm text-base-content/60">
-								{isCli
-									? "Return to your terminal — it should be signed in within a few seconds. You can close this tab."
-									: "Return to Anthers Studio on your computer — it should be signed in already. You can close this tab."}
+								Return to Anthers Studio on your computer — it should be signed in already. You can
+								close this tab.
 							</p>
 						</>
 					)}

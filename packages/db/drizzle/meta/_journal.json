@@ -197,6 +197,13 @@
       "when": 1786418936181,
       "tag": "0027_regular_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786433141071,
+      "tag": "0028_wonderful_maverick",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { P2pDownloadButton } from "@anthers/web-shared/content/P2pDownloadButton";
+import { client } from "@anthers/web-shared/rpc";
 import type { Asset } from "@anthers/web-shared/types";
-import { LockClosedIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -86,19 +86,33 @@ export default function ProjectDownloads({
 										<td className="text-base-content/60">{asset.version}</td>
 									)}
 									<td>
-										{/*
-										 * The ONLY download path. Parker, 2026-08-10: all downloads use the
-										 * P2P architecture even when the hub is the sole host, so there are
-										 * not two protocols to maintain (45.01 § 3, "one architecture, not
-										 * two"). The signed-URL button that used to sit here is gone; the
-										 * endpoint behind it remains for API and CLI consumers.
-										 */}
-										<P2pDownloadButton
-											workId={workId}
-											assetId={asset.id}
-											filename={asset.filename}
-											mimeType={asset.mimeType ?? undefined}
-										/>
+										<button
+											type="button"
+											className="btn btn-sm btn-primary"
+											onClick={async () => {
+												try {
+													// Downloads are Work-scoped: the asset belongs to a Work, and the
+													// Work carries the gate the endpoint re-checks.
+													const res = await client.api.content.works[":id"].assets[
+														":assetId"
+													].download.$post({
+														param: { id: String(workId), assetId: String(asset.id) },
+													});
+													if (!res.ok) {
+														window.location.href = asset.file;
+														return;
+													}
+													const data = await res.json();
+													window.location.href = data.url;
+												} catch {
+													// Fallback to direct link
+													window.location.href = asset.file;
+												}
+											}}
+										>
+											<ArrowDownTrayIcon className="w-4 h-4" />
+											Download
+										</button>
 									</td>
 								</tr>
 							)),

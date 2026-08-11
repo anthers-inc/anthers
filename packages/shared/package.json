@@ -12,9 +12,7 @@
 		"./moderation": "./src/moderation.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
-		"./figures": "./src/figures.generated.ts",
-		"./p2p": "./src/p2p.ts",
-		"./p2p-token": "./src/p2p-token.ts"
+		"./figures": "./src/figures.generated.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

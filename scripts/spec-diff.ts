@@ -82,8 +82,11 @@ function sourceMap(spec: Spec): Map<string, string> {
 	for (const kind of COMPONENT_KINDS) {
 		for (const component of spec[kind] ?? []) {
 			const where = component.name ?? kind;
-			// Compared for every component, not only ones with a github source — see the
-			// swarm-fragmentation note below for why this one is here.
+			// Compared for every component, not only ones with a github source. It was
+			// added for a P2P hazard that no longer exists (the peer registry it guarded
+			// was removed 2026-08-11), and it stays because a silent instance-count drift
+			// is worth seeing on its own: it changes both the bill and the concurrency
+			// assumptions of anything holding per-process state.
 			out.set(`${where}/instance_count`, String(component.instance_count ?? 1));
 			const g = component.github;
 			if (!g) continue;
@@ -92,63 +95,6 @@ function sourceMap(spec: Spec): Map<string, string> {
 		}
 	}
 	return out;
-}
-
-/**
- * 🚨 The P2P swarm fragments silently at `instance_count: 2` on the api component.
- *
- * Peer presence for the signaling relay lives in process memory, because a WebSocket is an
- * object owned by the process that accepted it. With two instances behind the load
- * balancer, peer A lands on one and peer B on the other; B asks who has the asset, its
- * instance checks its own Map, and answers "nobody". Both are online, both hold the bytes,
- * and they never meet — every download falls back to hub-served chunks, which work
- * perfectly. Nothing errors and nothing logs. The symptom is a bandwidth bill.
- *
- * That is why this check is here rather than only in a comment in `p2p/registry.ts`: the
- * person scaling the API has no reason to be reading the P2P code, and `make spec-diff` is
- * the standing pre-deploy check they WILL run. Replace the registry with Postgres presence
- * plus LISTEN/NOTIFY first, then scale.
- */
-function swarmGateWarning(spec: Spec): string | null {
-	const api = (spec.services ?? []).find((s) => s.name === "api");
-	const count = api?.instance_count ?? 1;
-	if (count <= 1) return null;
-	return (
-		`  🚨 api is running ${count} instances, and the P2P signaling relay holds peer\n` +
-		"     presence in process memory. Peers on different instances cannot find each\n" +
-		"     other: the swarm fragments into one swarm per instance, silently, and every\n" +
-		"     download quietly falls back to hub-served chunks.\n" +
-		"     → Replace InMemoryPeerRegistry (apps/api/src/p2p/registry.ts) with a\n" +
-		"       cross-instance implementation before running more than one api instance.\n"
-	);
-}
-
-/**
- * 🚨 `P2P_ALLOW_INSECURE_PEERS` turns off the SSRF guard on peer announcements.
- *
- * With it set, the hub will accept an `http:` origin and will probe — and then publish —
- * an address inside its own network. It exists because local development has no public
- * TLS host and because the guard's own tests need to stand up a peer the guard would
- * refuse. In production it converts the one endpoint that takes a URL from a user and
- * makes a request to it into an open relay for pointing downloaders anywhere.
- *
- * Same reasoning as the swarm gate above: whoever adds an environment variable is not
- * reading `apps/api/src/p2p/peers.ts`, and this is the check they run before deploying.
- */
-function insecurePeersWarning(spec: Spec): string | null {
-	const offenders: string[] = [];
-	for (const [where, entry] of envMap(spec)) {
-		if (!where.endsWith("/P2P_ALLOW_INSECURE_PEERS")) continue;
-		if ((entry.value ?? "") === "1") offenders.push(where);
-	}
-	if (!offenders.length) return null;
-	return (
-		`  🚨 P2P_ALLOW_INSECURE_PEERS=1 is set on ${offenders.join(", ")}.\n` +
-		"     That disables the announce guard: the hub will accept http peers and will\n" +
-		"     probe and publish private addresses, which is an SSRF surface and a way to\n" +
-		"     aim downloaders at a host that never volunteered.\n" +
-		"     → It is a development-only flag. Remove it from anything public.\n"
-	);
 }
 
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
@@ -258,26 +204,17 @@ for (const [id, mineValue] of repoSource) {
 		if (id.endsWith("/deploy_on_push")) {
 			gate =
 				"\n      ⚠ THIS IS THE DEPLOY GATE — `true` in production means pushes deploy without CI";
-		} else if (id === "api/instance_count") {
-			gate = "\n      ⚠ THIS IS THE P2P SWARM GATE — see the warning below before changing it";
 		}
 		sourceDiffs.push(`${id}\n      live: ${theirs}\n      repo: ${mineValue}${gate}`);
 	}
 }
-
-// Fires on the LIVE spec as well as on a committed edit, because the state that matters is
-// what is actually running — two agreeing specs both saying `2` is not a clean report.
-const swarmGate = swarmGateWarning(liveSpec) ?? swarmGateWarning(committed);
-const insecurePeers = insecurePeersWarning(liveSpec) ?? insecurePeersWarning(committed);
 
 const clean =
 	!onlyLive.length &&
 	!onlyRepo.length &&
 	!differs.length &&
 	!relocated.length &&
-	!sourceDiffs.length &&
-	!swarmGate &&
-	!insecurePeers;
+	!sourceDiffs.length;
 console.log(`\n## Spec diff — ${appName} (${appId})\n`);
 
 if (onlyLive.length) {
@@ -304,12 +241,6 @@ if (differs.length) {
 	console.log("  Same key, different value (non-secret):");
 	for (const d of differs.sort()) console.log(`    ~ ${d}`);
 	console.log("");
-}
-if (insecurePeers) {
-	console.log(insecurePeers);
-}
-if (swarmGate) {
-	console.log(swarmGate);
 }
 if (clean) console.log("  Committed and live specs agree ✓\n");
 

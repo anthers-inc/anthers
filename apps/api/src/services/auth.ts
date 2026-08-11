@@ -242,61 +242,6 @@ export async function redeemDesktopAuth(code: string, verifier: string): Promise
 	return row.sessionToken;
 }
 
-/**
- * The polling half of enrolment, for a client with no callback to be called back on.
- *
- * ── Why this exists beside `redeemDesktopAuth` rather than reusing it ───────────────
- *
- * The one-time `code` is a **courier**. It carries authorization across the one hop the
- * desktop flow cannot avoid: the browser holds the proof, the app needs it, and the two are
- * separate processes joined only by a registered `anthers://` scheme. A CLI has no such
- * hop. It can simply ask, repeatedly, whether the browser has confirmed yet — so there is
- * nothing for a code to carry, and inventing one would mean shipping a credential through a
- * channel that exists only to be intercepted.
- *
- * ── This is not weaker than the code path; it is the same proof with a step removed ──
- *
- * PKCE's whole claim is that possession of the **verifier** identifies the client that
- * started the flow. `redeemDesktopAuth` checks exactly that, after using the code to find
- * the row. Here the verifier finds the row *and* proves possession in one step, because the
- * stored challenge IS its hash — so an attacker needs the same secret either way.
- *
- * 🚨 **A poll keyed on the challenge instead would have been a denial-of-service.** The
- * challenge travels in the authorize URL — visible in the address bar, in history, over
- * whatever channel the user forwarded it. Anyone who saw it could have fetched the code and
- * burned the row with a wrong verifier (`redeemDesktopAuth` consumes on *any* attempt, by
- * design), leaving the real client permanently pending. Keying on the verifier, which never
- * leaves the client, closes that: the URL stays as harmless as it looks.
- *
- * Returns `"pending"` while the browser has not confirmed, `null` when there is nothing to
- * wait for — expired, consumed, or never started — and the session token exactly once.
- */
-export async function pollDesktopAuth(verifier: string): Promise<string | "pending" | null> {
-	const challenge = await pkceChallenge(verifier);
-	const [row] = await db
-		.select()
-		.from(desktopAuthRequests)
-		.where(
-			and(
-				eq(desktopAuthRequests.challenge, challenge),
-				gt(desktopAuthRequests.expiresAt, new Date()),
-			),
-		)
-		.limit(1);
-
-	if (!row || row.consumedAt) return null;
-	if (!row.sessionToken) return "pending";
-
-	// Burn on handover, same as the code path: the row's job is done and leaving a live
-	// session token in a table that an unauthenticated endpoint reads is not a thing to do.
-	await db
-		.update(desktopAuthRequests)
-		.set({ consumedAt: new Date(), sessionToken: null, code: null })
-		.where(eq(desktopAuthRequests.id, row.id));
-
-	return row.sessionToken;
-}
-
 /** Drop expired/consumed enrolment rows. Safe to call opportunistically. */
 export async function cleanupDesktopAuthRequests(): Promise<void> {
 	await db.delete(desktopAuthRequests).where(lt(desktopAuthRequests.expiresAt, new Date()));

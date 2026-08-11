@@ -2206,29 +2206,6 @@ const contentRoutes = new Hono()
 		// A new source means the old transcode is stale — re-process.
 		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
 
-		// Chunk-hash the Work's assets for P2P delivery, off the request path. Only on the
-		// release transition: hashing is a full pass over every asset, and a creator editing
-		// a title should not pay for it.
-		//
-		// Failing to enqueue must not fail the release, which is why this swallows. The
-		// manifest is an optimization over a path that still works without it — the endpoint
-		// builds on demand for any asset with no stored manifest, which is also how Works
-		// released before this existed keep working. So the worst case here is one slow
-		// first request. Letting a pg-boss hiccup 500 a creator's release instead would
-		// trade a latency problem for a publishing outage, and `queue.send` does throw when
-		// the queue is not up — a test caught exactly that.
-		if (releasing) {
-			try {
-				await queue.send(
-					QUEUES.BUILD_P2P_MANIFEST,
-					{ workId: updated.id },
-					JOB_OPTIONS[QUEUES.BUILD_P2P_MANIFEST],
-				);
-			} catch (err) {
-				console.error(`[content] could not queue P2P manifest build for work ${id}:`, err);
-			}
-		}
-
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, id)),
 			db
