@@ -124,9 +124,17 @@ describe("P2P precomputed manifests", () => {
 		expect(row.p2pManifestBuiltAt).toBeNull();
 	});
 
-	it("serves a manifest on demand before the job has ever run", async () => {
-		// The compatibility path. Works released before this job existed have no stored
-		// manifest, and must not become undownloadable.
+	it("serving a manifest for an unbuilt asset builds AND persists it", async () => {
+		// The compatibility path — Works released before this job existed have no stored
+		// manifest and must not become undownloadable.
+		//
+		// It persists, which reverses an earlier decision. This deliberately did NOT write
+		// back at first, reasoning that persisting is the job's business and a handler that
+		// wrote would let a burst of first-requests race over one row. The race is real and
+		// benign: every racer hashes the same bytes and writes the same value. Not writing
+		// is the more expensive mistake, because the chunk endpoint reads its per-chunk hash
+		// out of this column — an asset that never gets persisted would serve a manifest and
+		// then 404 every chunk in it.
 		_resetSeederCacheForTest();
 		const res = await req(`/api/p2p/works/${workId}/assets/${assetId}/manifest`, {
 			method: "POST",
@@ -137,13 +145,18 @@ describe("P2P precomputed manifests", () => {
 		expect(manifest.assetSize).toBe(FILE_SIZE);
 		expect(manifest.chunks.length).toBe(2);
 
-		// Serving on demand must NOT write back — persisting is the job's business, and a
-		// handler that wrote would race a burst of first-requests over one row.
 		const [row] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
-		expect(row.p2pManifest).toBeNull();
+		expect(row.p2pManifest).not.toBeNull();
+		expect(row.p2pManifest?.assetSha256).toBe(manifest.assetSha256);
 	});
 
 	it("the job persists a manifest that agrees exactly with a fresh build", async () => {
+		// Cleared first so this asserts "built" on its own terms rather than depending on
+		// whether an earlier test in this file happened to leave the column empty.
+		await db
+			.update(assets)
+			.set({ p2pManifest: null, p2pManifestBuiltAt: null })
+			.where(eq(assets.id, assetId));
 		expect(await buildManifestForAsset(assetId)).toBe("built");
 
 		const [row] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
