@@ -167,6 +167,95 @@ export function hubSource(workId: number | string, assetId: number): ChunkSource
 	};
 }
 
+/**
+ * An announced HTTP peer as a chunk source.
+ *
+ * The same request the hub would answer, at somebody else's origin — that sameness is the
+ * architecture (45.01 § 3), and it is why this function is nine lines rather than a second
+ * protocol. Three details are load-bearing:
+ *
+ * - **`mode: "cors"` with no credentials.** A peer is a machine Anthers does not control,
+ *   so nothing ambient may travel to it. The delivery token is a header this code sets
+ *   deliberately, which is the whole of what the peer is allowed to learn.
+ * - **`markPoisoned` sets `healthy = false` and it is never reset.** A source that served
+ *   bytes failing the manifest is finished for this download. Anything softer lets one bad
+ *   peer be re-tried on every chunk.
+ * - **A peer that simply fails stays healthy**, because a timeout is not evidence of
+ *   dishonesty and the engine already moves to the next candidate.
+ */
+export function httpPeerSource(
+	origin: string,
+	workId: number | string,
+	assetId: number,
+): ChunkSource {
+	// `healthy` is readonly on the interface, so the flag lives in the closure and is
+	// exposed through a getter — the engine reads it fresh on every candidate list, which
+	// is what makes poisoning take effect on the very next chunk.
+	let healthy = true;
+	return {
+		id: origin,
+		get healthy() {
+			return healthy;
+		},
+		markPoisoned: () => {
+			healthy = false;
+		},
+		async fetchChunk(index, token) {
+			const url = `${origin}/api/p2p/works/${workId}/assets/${assetId}/chunks/${index}`;
+			const res = await fetch(url, {
+				headers: { Authorization: `Bearer ${token}` },
+				mode: "cors",
+				credentials: "omit",
+			});
+			// A peer's 401 means *its* view of the token, not the hub's. Renewing on a peer's
+			// say-so would let a peer force token churn, so this is simply a source that did
+			// not work and the engine tries the next one.
+			if (!res.ok) return null;
+			return new Uint8Array(await res.arrayBuffer());
+		},
+	};
+}
+
+/**
+ * Can this page fetch from that origin at all?
+ *
+ * Mixed content is *blocked*, so an `http:` peer is unreachable from an `https:` page no
+ * matter how willing either side is — filtering here turns a console error nobody reads
+ * into a source the engine simply never had. The hub already refuses to list `http:` peers
+ * in production; this is what keeps local development, where the page is `http://localhost`
+ * and so are the peers, working through the same code path rather than a special case.
+ */
+function usableFromThisPage(origin: string): boolean {
+	if (origin.startsWith("https://")) return true;
+	return typeof location !== "undefined" && location.protocol === "http:";
+}
+
+/**
+ * Ask the hub which peers are serving an asset, and turn them into sources.
+ *
+ * Returns `[]` on any failure. "No peers" is the supported floor (45.01 § 3) — the hub is
+ * always in the swarm — so a discovery failure must degrade to a hub download rather than
+ * fail one. A client that treated this as required would make the swarm a dependency.
+ */
+export async function discoverPeerSources(
+	workId: number | string,
+	assetId: number,
+): Promise<ChunkSource[]> {
+	try {
+		const res = await fetch(`${apiBaseUrl()}/api/p2p/works/${workId}/assets/${assetId}/peers`, {
+			credentials: "include",
+		});
+		if (!res.ok) return [];
+		const body = (await res.json()) as { peers?: unknown };
+		if (!Array.isArray(body.peers)) return [];
+		return body.peers
+			.filter((p): p is string => typeof p === "string" && usableFromThisPage(p))
+			.map((origin) => httpPeerSource(origin, workId, assetId));
+	} catch {
+		return [];
+	}
+}
+
 /** Internal signal that the token lapsed mid-flight and the caller should renew once. */
 class TokenExpired extends Error {}
 

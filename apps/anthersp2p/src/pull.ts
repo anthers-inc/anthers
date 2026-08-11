@@ -43,7 +43,7 @@ export interface PullOptions {
 	/** Hub origin, e.g. "https://anthers.org". No trailing slash. */
 	baseUrl: string;
 	/**
-	 * Where to fetch CHUNKS from, when that is not the hub — a peer's origin.
+	 * Peer origins to try before the hub, in order. From `discoverPeers`, or `--peer`.
 	 *
 	 * The manifest and the token always come from the hub, because only the hub can check
 	 * entitlement and only the hub can sign. Chunks can come from anywhere that verifies
@@ -51,9 +51,12 @@ export interface PullOptions {
 	 * peer never sees a credential the hub didn't mint, and the client verifies every
 	 * chunk against the hub's manifest regardless of who served it.
 	 *
-	 * A peer serves the hub's own URL shape, so this is a origin swap and nothing more.
+	 * A peer serves the hub's own URL shape, so an entry here is an origin and nothing more.
+	 *
+	 * 🚨 **The hub is always appended as the last resort and is never removed.** That is
+	 * what makes a listed peer unable to deny anyone a download — see `pullAsset`.
 	 */
-	chunkBaseUrl?: string;
+	peers?: string[];
 	/** A session token — the same opaque `sessions` row the desktop app carries. */
 	token: string;
 	workId: string;
@@ -198,6 +201,41 @@ export async function pullAsset(opts: PullOptions): Promise<PullResult> {
 			manifest = renewed.manifest;
 		};
 
+		/**
+		 * Sources, in the order they are tried, with the hub pinned last.
+		 *
+		 * A source is dropped the moment it returns bytes that fail their hash — not
+		 * retried, not given another chunk. `dropped` is what remembers that, and the hub
+		 * is deliberately absent from it: dropping the hub would leave the download with
+		 * nowhere to go.
+		 */
+		const sources = [...(opts.peers ?? []), opts.baseUrl];
+		const dropped = new Set<string>();
+
+		const fetchFrom = async (origin: string, index: number): Promise<Uint8Array | null> => {
+			const url = `${origin}/api/p2p/works/${opts.workId}/assets/${opts.assetId}/chunks/${index}`;
+			let res: Response;
+			try {
+				res = await doFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+			} catch {
+				// A peer that is down, refusing connections, or has a bad certificate. It is a
+				// source that did not work, which is the only fact this loop needs.
+				return null;
+			}
+			if (res.status === 401) {
+				// The clock-based renewal missed. Re-mint once and try this source again.
+				expiresAt = 0;
+				await ensureToken();
+				const retry = await doFetch(url, {
+					headers: { Authorization: `Bearer ${token}` },
+				}).catch(() => null);
+				if (!retry?.ok) return null;
+				return new Uint8Array(await retry.arrayBuffer());
+			}
+			if (!res.ok) return null;
+			return new Uint8Array(await res.arrayBuffer());
+		};
+
 		const worker = async (): Promise<void> => {
 			while (true) {
 				const index = next++;
@@ -205,35 +243,67 @@ export async function pullAsset(opts: PullOptions): Promise<PullResult> {
 				if (present[index]) continue;
 
 				const { offset, size } = chunkRange(index, chunkSize, manifest.assetSize);
-				await ensureToken();
+				let written = false;
+				// Why the last source that tried gave up. Failover means the final error is
+				// "nobody could serve this", which on its own tells a person nothing about
+				// what went wrong — so the reason travels with it.
+				let lastFailure = "no sources were available";
 
-				const chunkOrigin = opts.chunkBaseUrl ?? opts.baseUrl;
-				const url = `${chunkOrigin}/api/p2p/works/${opts.workId}/assets/${opts.assetId}/chunks/${index}`;
-				const res = await doFetch(url, { headers: { Authorization: `Bearer ${token}` } });
-				if (res.status === 401) {
-					// The clock-based renewal missed. Re-mint once and retry this chunk.
-					expiresAt = 0;
+				for (const origin of sources) {
+					if (dropped.has(origin)) continue;
 					await ensureToken();
-					next = Math.min(next, index);
-					continue;
-				}
-				if (!res.ok) throw new Error(`Chunk ${index} unavailable (HTTP ${res.status}).`);
 
-				const bytes = new Uint8Array(await res.arrayBuffer());
-				if (bytes.length !== size) {
-					throw new VerificationError(`Chunk ${index} is ${bytes.length} bytes, expected ${size}.`);
-				}
-				// Verify BEFORE writing. Once a bad chunk is on disk it is indistinguishable
-				// from a good one without re-hashing the whole file.
-				if ((await sha256hex(bytes)) !== manifest.chunks[index]) {
-					throw new VerificationError(`Chunk ${index} failed its hash check.`);
+					const bytes = await fetchFrom(origin, index);
+					if (!bytes) {
+						lastFailure = `${origin} did not answer`;
+						if (origin !== opts.baseUrl) dropped.add(origin);
+						continue;
+					}
+					if (bytes.length !== size) {
+						lastFailure = `${origin} sent ${bytes.length} bytes, expected ${size}`;
+						if (origin !== opts.baseUrl) dropped.add(origin);
+						continue;
+					}
+
+					// Verify BEFORE writing. Once a bad chunk is on disk it is
+					// indistinguishable from a good one without re-hashing the whole file.
+					if ((await sha256hex(bytes)) !== manifest.chunks[index]) {
+						lastFailure = `${origin} failed the hash check`;
+						/**
+						 * 🚨 A bad chunk drops the source; it does **not** fail the download.
+						 *
+						 * This reverses what this loop used to do, and peer discovery is what
+						 * forced it. When a peer's URL had to be passed by hand, aborting was
+						 * right — you chose that host, and it lied to you. Now the hub hands
+						 * out peer lists, so anyone who can get listed could otherwise break
+						 * every download of an asset by serving one wrong byte. Failing over
+						 * makes a lying peer a slow peer.
+						 *
+						 * The hub is never dropped, so a hub that failed this check would loop
+						 * — which cannot happen, because the manifest it is checked against is
+						 * the hub's own. If it ever did, the `!written` throw below ends it.
+						 */
+						if (origin !== opts.baseUrl) {
+							dropped.add(origin);
+							continue;
+						}
+						throw new VerificationError(
+							`Chunk ${index} failed its hash check against the hub's own manifest.`,
+						);
+					}
+
+					writeSync(fd, bytes, 0, size, offset);
+					bytesWritten += size;
+					present[index] = true;
+					completed++;
+					written = true;
+					opts.onProgress?.(completed, count, chunksSkipped);
+					break;
 				}
 
-				writeSync(fd, bytes, 0, size, offset);
-				bytesWritten += size;
-				present[index] = true;
-				completed++;
-				opts.onProgress?.(completed, count, chunksSkipped);
+				if (!written) {
+					throw new Error(`No source could supply chunk ${index}: ${lastFailure}.`);
+				}
 			}
 		};
 

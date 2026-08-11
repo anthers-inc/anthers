@@ -203,7 +203,10 @@ describe("refusing bad bytes", () => {
 				concurrency: 1,
 				fetchImpl: stub({ manifest: await makeManifest(file), file, short: [0] }),
 			}),
-		).rejects.toThrow(/is \d+ bytes, expected \d+/);
+			// The size mismatch names itself in the failure. Since sources fail over, the
+			// outer error is "nobody could serve chunk 0" — which on its own would be a
+			// worse message than the one this replaced, so the reason rides along with it.
+		).rejects.toThrow(/sent \d+ bytes, expected \d+/);
 	});
 
 	it("rejects a manifest whose chunk count disagrees with its own size", async () => {

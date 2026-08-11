@@ -39,6 +39,7 @@ import { useCallback, useRef, useState } from "react";
 import {
 	AccessError,
 	type DownloadProgress,
+	discoverPeerSources,
 	downloadAsset,
 	IntegrityError,
 	saveBlob,
@@ -138,10 +139,15 @@ export function useP2pDownload(params: {
 			}
 
 			setState("downloading");
+			// Ask who else is serving. Best-effort by construction: `discoverPeerSources`
+			// answers `[]` for every failure, so a hub that cannot produce a peer list still
+			// produces a download. The hub is always the last candidate inside the engine.
+			const peers = await discoverPeerSources(params.workId, params.assetId);
 			const result = await downloadAsset({
 				workId: params.workId,
 				assetId: params.assetId,
 				sink,
+				peers,
 				onProgress: setProgress,
 				signal: controller.signal,
 			});

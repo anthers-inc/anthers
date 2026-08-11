@@ -55,6 +55,7 @@ import {
 	totalChunks,
 } from "@anthers/shared/p2p";
 import { bearerFromHeader, verifyForAsset } from "@anthers/shared/p2p-token";
+import { startAnnouncing } from "./peers.js";
 import { fetchManifest } from "./pull.js";
 
 export interface SeedOptions {
@@ -65,6 +66,16 @@ export interface SeedOptions {
 	assetId: number;
 	filePath: string;
 	port?: number;
+	/**
+	 * The origin other hosts can reach this seeder at, e.g. `https://seed.example.org`.
+	 *
+	 * Set it and the seeder announces itself to the hub and holds the lease; leave it unset
+	 * and the seeder serves anyone who is told its URL by other means. It is separate from
+	 * `port` because they are genuinely different facts: a seeder behind a TLS terminator
+	 * listens on 8080 and is reached at 443, and guessing one from the other would advertise
+	 * an address that only works from inside the same machine.
+	 */
+	announceUrl?: string;
 	/** Skip the boot-time file verification. Documented as a foot-gun, not a convenience. */
 	skipVerify?: boolean;
 	fetchImpl?: typeof fetch;
@@ -77,6 +88,13 @@ export interface Seeder {
 	stop(): void;
 	/** Chunks served since boot — the peer-side half of 45.01 § 6's accounting. */
 	served(): { chunks: number; bytes: number };
+	/**
+	 * Whether the hub accepted this seeder into its peer list.
+	 *
+	 * False covers both "did not try" and "was refused", which are the same thing from the
+	 * outside: the seeder is serving and downloaders will not find it on their own.
+	 */
+	listed: boolean;
 }
 
 export class SeedError extends Error {}
@@ -252,10 +270,30 @@ export async function startSeeder(opts: SeedOptions): Promise<Seeder> {
 		},
 	});
 
+	// Announce only once the server is listening. Announcing first would have the hub probe
+	// a port nothing is bound to yet, and the seeder would be refused for being exactly as
+	// unreachable as it was at that moment.
+	const announcement = opts.announceUrl
+		? await startAnnouncing({
+				baseUrl: opts.baseUrl,
+				token: opts.token,
+				workId: opts.workId,
+				assetId: opts.assetId,
+				publicUrl: opts.announceUrl,
+				fetchImpl: opts.fetchImpl,
+				onLog: log,
+			})
+		: null;
+
 	return {
 		port: server.port ?? opts.port ?? 8080,
 		manifest,
+		listed: announcement?.listed ?? false,
 		stop() {
+			// Withdrawal is best-effort and not awaited: `stop` is called from a signal
+			// handler and from test teardown, and neither should hang on the network. The
+			// lease is short so an unwithdrawn peer expires on its own within minutes.
+			void announcement?.stop();
 			server.stop(true);
 			closeSync(fd);
 		},

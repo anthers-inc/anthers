@@ -17,7 +17,9 @@ import { CHUNK_SIZE, chunkRange, type Manifest, sha256hex, totalChunks } from "@
 import {
 	AccessError,
 	type ChunkSource,
+	discoverPeerSources,
 	downloadAsset,
+	httpPeerSource,
 	IntegrityError,
 	tokenExpiry,
 } from "./download";
@@ -531,5 +533,124 @@ describe("cleanup", () => {
 			}),
 		).rejects.toThrow();
 		expect(aborted).toHaveBeenCalled();
+	});
+});
+
+describe("peer discovery", () => {
+	/**
+	 * Discovery is the difference between "peers can serve" and "peers get used". Until the
+	 * hub published a membership list, a browser had no way to learn that anyone else held
+	 * the file, so every download went to the hub no matter how warm the swarm was.
+	 *
+	 * The failure policy is the interesting half and gets most of the assertions: the hub is
+	 * always in the swarm as the floor (45.01 § 3), so *every* way discovery can go wrong
+	 * has to degrade to a hub download rather than fail one.
+	 */
+	function stubPeerList(body: unknown, status = 200): void {
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const url = typeof input === "string" ? input : input.toString();
+			if (!url.includes("/peers")) throw new Error(`unexpected fetch: ${url}`);
+			if (status !== 200) return new Response("no", { status });
+			return new Response(JSON.stringify(body), { status: 200 });
+		}) as typeof fetch;
+	}
+
+	it("turns announced origins into usable chunk sources", async () => {
+		stubPeerList({ peers: ["https://a.example.org", "https://b.example.org"] });
+		const sources = await discoverPeerSources(7, 9);
+		expect(sources.map((s) => s.id)).toEqual(["https://a.example.org", "https://b.example.org"]);
+		expect(sources.every((s) => s.healthy)).toBe(true);
+	});
+
+	it("degrades to no peers on every failure, rather than failing the download", async () => {
+		// Each of these is a different way the hub can let a client down, and all four have
+		// to mean the same thing: hub-only, which works.
+		stubPeerList(null, 500);
+		expect(await discoverPeerSources(7, 9)).toEqual([]);
+
+		stubPeerList({ peers: "not-an-array" });
+		expect(await discoverPeerSources(7, 9)).toEqual([]);
+
+		stubPeerList({});
+		expect(await discoverPeerSources(7, 9)).toEqual([]);
+
+		globalThis.fetch = (async () => {
+			throw new TypeError("network down");
+		}) as unknown as typeof fetch;
+		expect(await discoverPeerSources(7, 9)).toEqual([]);
+	});
+
+	it("drops peers this page could not fetch from anyway", async () => {
+		// Mixed content is blocked, so an http peer on an https page is a source that would
+		// only ever produce console errors. Filtering here is what keeps that from looking
+		// like an unreliable peer.
+		stubPeerList({ peers: ["https://good.example.org", "http://blocked.example.org", 42, ""] });
+		const sources = await discoverPeerSources(7, 9);
+		expect(sources.map((s) => s.id)).toEqual(["https://good.example.org"]);
+	});
+
+	it("keeps http peers when the page itself is http, which is local development", async () => {
+		// The other half of the mixed-content rule, and the reason this is a check on the
+		// page rather than a flat `startsWith("https://")`: on `http://localhost` the peers
+		// are also http, and a blanket filter would make dev the one place peers never work.
+		const previous = Object.getOwnPropertyDescriptor(globalThis, "location");
+		Object.defineProperty(globalThis, "location", {
+			// `hostname` matters as much as `protocol`: `apiBaseUrl()` reads it, and a
+			// location without one throws inside the try/catch and looks like "no peers".
+			value: { protocol: "http:", hostname: "localhost" },
+			configurable: true,
+		});
+		try {
+			stubPeerList({ peers: ["http://localhost:8080", "https://good.example.org"] });
+			const sources = await discoverPeerSources(7, 9);
+			expect(sources.map((s) => s.id)).toEqual([
+				"http://localhost:8080",
+				"https://good.example.org",
+			]);
+		} finally {
+			if (previous) Object.defineProperty(globalThis, "location", previous);
+			else delete (globalThis as { location?: unknown }).location;
+		}
+	});
+
+	it("sends the delivery token and nothing ambient to a peer", async () => {
+		// A peer is a machine Anthers does not control. The token is a header this code sets
+		// deliberately; cookies must never ride along.
+		let seen: RequestInit | undefined;
+		let seenUrl = "";
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			seenUrl = typeof input === "string" ? input : input.toString();
+			seen = init;
+			return new Response(new Uint8Array([1, 2, 3]).buffer as ArrayBuffer, { status: 200 });
+		}) as typeof fetch;
+
+		const peer = httpPeerSource("https://peer.example.org", 7, 9);
+		await peer.fetchChunk(3, "tok-123");
+
+		expect(seenUrl).toBe("https://peer.example.org/api/p2p/works/7/assets/9/chunks/3");
+		expect((seen?.headers as Record<string, string>).Authorization).toBe("Bearer tok-123");
+		expect(seen?.credentials).toBe("omit");
+	});
+
+	it("stops using a peer the moment it serves bytes that fail the manifest", async () => {
+		// Poisoning has to stick, and it has to be visible to the engine on the very next
+		// chunk — a peer re-tried after lying is a peer that gets to lie once per chunk.
+		globalThis.fetch = (async () =>
+			new Response(new Uint8Array([9]).buffer as ArrayBuffer, {
+				status: 200,
+			})) as unknown as typeof fetch;
+		const peer = httpPeerSource("https://liar.example.org", 7, 9);
+		expect(peer.healthy).toBe(true);
+		peer.markPoisoned?.();
+		expect(peer.healthy).toBe(false);
+	});
+
+	it("treats a peer's own 401 as a dead source, not as an expired token", async () => {
+		// A peer's view of the token is not the hub's. Renewing on a peer's say-so would let
+		// any listed peer force token churn on every downloader.
+		globalThis.fetch = (async () =>
+			new Response("nope", { status: 401 })) as unknown as typeof fetch;
+		const peer = httpPeerSource("https://peer.example.org", 7, 9);
+		expect(await peer.fetchChunk(0, "tok")).toBeNull();
 	});
 });
