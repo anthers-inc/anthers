@@ -34,6 +34,22 @@
 name: anthers
 region: nyc
 
+# 🚨 DECLARED HERE, and it is not decoration. A custom domain has to be attached to the
+# APP as well as pointed at in DNS: App Platform routes on the Host header, so a correct
+# CNAME to an app that does not claim the name returns 404 for everything. That is exactly
+# what happened on 2026-08-11 — DNS was right, the app was healthy on its own ingress, and
+# the apex 404'd until these four lines existed. Recreating this app from the spec without
+# them would reproduce the outage.
+#
+# Note App Platform enforces domain uniqueness ACROSS accounts: attaching a name another
+# app still holds returns `409 App domain already exists`, so a migration has to release it
+# from the old app first.
+domains:
+  - domain: anthers.org
+    type: PRIMARY
+  - domain: www.anthers.org
+    type: ALIAS
+
 databases:
   # `anthersdb`, not `anthers-db` — this is the component name the LIVE app uses, and
   # `make spec-diff` caught it disagreeing. The name is not cosmetic: it is the
