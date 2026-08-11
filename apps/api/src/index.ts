@@ -6,7 +6,6 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { csrfProtection } from "./middleware/csrf.js";
 import { allowedOrigins } from "./origins.js";
-import { p2pRoutes } from "./p2p/routes.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
@@ -61,9 +60,7 @@ const app = new Hono()
 	.route("/api/jams", jamRoutes)
 	.route("/api/moderation", moderationRoutes)
 	.route("/api/waitlist", waitlistRoutes)
-	.route("/api/admin", adminRoutes)
-	// Production P2P delivery routes — manifest, chunk, pubkey (per 45.04 + 45.05).
-	.route("/api/p2p", p2pRoutes);
+	.route("/api/admin", adminRoutes);
 
 // This module is the Hono app and nothing else. It is never a process entry point —
 // `server.ts` is, and it owns the Bun.serve object (port, fetch, websocket).

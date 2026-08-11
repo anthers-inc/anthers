@@ -24,7 +24,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, users, works } from "@anthers/db/schema";
+import { assets, purchases, transcodingJobs, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -71,6 +71,9 @@ describe("Delivery-layer access", () => {
 	let videoItemId: number;
 	/** A released, free audio Work — the "entitled viewer" side of every assertion below. */
 	let freeAudioId: number;
+	/** A free, downloadable Work plus its asset — for the delivery-stamp assertion. */
+	let freeWorkId: number;
+	let freeAssetId: number;
 
 	beforeAll(async () => {
 		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
@@ -131,6 +134,27 @@ describe("Delivery-layer access", () => {
 			progress: 100,
 			outputFileUrl: AUDIO_URL,
 		});
+		const game = await insertWork({
+			creatorId,
+			type: "game",
+			title: "Open Game",
+			downloadEnabled: true,
+			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		freeWorkId = game.id;
+		const [gameAsset] = await db
+			.insert(assets)
+			.values({
+				workId: freeWorkId,
+				file: "creators/x/games/open-game.zip",
+				filename: "open-game.zip",
+				fileSize: 1024,
+				mimeType: "application/zip",
+				platform: "windows",
+				isPrimary: true,
+			})
+			.returning();
+		freeAssetId = gameAsset.id;
 	}, DB_SETUP_TIMEOUT);
 
 	it("publishes a locked post and a free post over the same two items", async () => {});
@@ -313,6 +337,70 @@ describe("Delivery-layer access", () => {
 		for (const p of posts) {
 			expect(p.body).toBeUndefined();
 			expect(p.bodyHtml).toBeUndefined();
+		}
+	});
+
+	/**
+	 * The delivery stamp, from the route rather than from the service.
+	 *
+	 * 🚨 `markPurchaseDownloaded` is now called from exactly ONE place — this route — since
+	 * the P2P chunk endpoint that also called it was removed on 2026-08-11. Everything that
+	 * reads `purchases.downloaded_at` is downstream of this single call: the refund cap
+	 * counts only refunds where it is set, and `refunds.ts` books the delivery fee only when
+	 * it is set. `refunds.test.ts` proves the service works when handed a row; nothing proved
+	 * the route reaches it, which is precisely the shape of bug that survives a suite this
+	 * size — a well-tested function nobody calls.
+	 */
+	it("stamps the buyer's purchase when they take the bytes", async () => {
+		const [buyer] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, viewerName))
+			.limit(1);
+
+		const [purchase] = await db
+			.insert(purchases)
+			.values({
+				buyerId: buyer.id,
+				workId: freeWorkId,
+				creatorId,
+				workTitle: "Delivery stamp",
+				workType: "game",
+				workPublicId: null,
+				type: "digital",
+				amount: "5.00",
+				processingFee: "0.45",
+				deliveryFee: "0.10",
+				crfFee: "0.00",
+				salesTax: "0.00",
+				creatorEarnings: "4.45",
+				stripePaymentIntentId: `pi_${crypto.randomUUID().slice(0, 12)}`,
+				status: "completed",
+				downloadedAt: null,
+			})
+			.returning();
+
+		try {
+			const res = await req(`/api/content/works/${freeWorkId}/assets/${freeAssetId}/download`, {
+				method: "POST",
+				headers: { Origin: ORIGIN, Cookie: viewerCookie },
+			});
+			expect(res.status).toBe(200);
+
+			// Fire-and-forget on the route, so the write may land just after the response.
+			let stamped: Date | null = null;
+			for (let i = 0; i < 40 && !stamped; i++) {
+				await new Promise((r) => setTimeout(r, 25));
+				const [row] = await db
+					.select({ downloadedAt: purchases.downloadedAt })
+					.from(purchases)
+					.where(eq(purchases.id, purchase.id))
+					.limit(1);
+				stamped = row?.downloadedAt ?? null;
+			}
+			expect(stamped).not.toBeNull();
+		} finally {
+			await db.delete(purchases).where(eq(purchases.id, purchase.id));
 		}
 	});
 });

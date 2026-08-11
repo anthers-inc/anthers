@@ -16,17 +16,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  *   the entire point of the exchange. Neither is CSRF-forgeable to any effect:
  *   `/start` only records a pending challenge the caller invented and touches no user
  *   state, and `/exchange` demands a code AND the PKCE verifier, possession of which
- *   IS the proof. `/desktop/poll` is the same exchange with the code removed — it is
- *   how `anthersp2p` enrols, having no URL scheme to be called back on — and the
- *   verifier is its whole proof rather than half of it. `/desktop/authorize` is
- *   deliberately NOT exempt — that one runs under the browser's cookie session and
- *   needs the check.
+ *   IS the proof. `/desktop/authorize` is deliberately NOT exempt — that one runs
+ *   under the browser's cookie session and needs the check.
  */
 const CSRF_EXEMPT_PATHS = new Set([
 	"/api/payments/stripe/webhook",
 	"/api/auth/desktop/start",
 	"/api/auth/desktop/exchange",
-	"/api/auth/desktop/poll",
 ]);
 
 /**

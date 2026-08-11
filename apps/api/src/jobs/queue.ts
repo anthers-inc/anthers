@@ -167,7 +167,6 @@ export const QUEUES = {
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
-	BUILD_P2P_MANIFEST: "build-p2p-manifest", // Chunk-hash a Work's assets for P2P delivery (45.04)
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -190,15 +189,6 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 120,
 		expireInMinutes: 5,
-	},
-	[QUEUES.BUILD_P2P_MANIFEST]: {
-		// Hashing is one pass over the asset, so the window is generous — a multi-gigabyte
-		// game build is the case this exists for. Safe to retry: the job is idempotent and
-		// a partial run leaves the column untouched, since the write is a single UPDATE
-		// after the hashing completes.
-		retryLimit: 2,
-		retryDelay: 120,
-		expireInMinutes: 60,
 	},
 	[QUEUES.DISTRIBUTE_POOL]: {
 		retryLimit: 1,

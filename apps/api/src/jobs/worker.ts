@@ -10,7 +10,6 @@ import { db } from "@anthers/db";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runDueDeletions } from "../services/account-deletion.js";
-import { type BuildP2pManifestData, buildP2pManifest } from "./build-p2p-manifest.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
@@ -96,20 +95,6 @@ async function start() {
 			for (const job of jobs) {
 				console.log(`[cross-publish] Processing job ${job.id}`);
 				await crossPublish(job.data);
-			}
-		},
-	);
-
-	// Chunk-hash a released Work's assets so the P2P manifest endpoint never hashes
-	// inside a request. Concurrency 1: this is IO-bound on storage and competes with the
-	// transcodes above for the same instance.
-	await queue.work<BuildP2pManifestData>(
-		QUEUES.BUILD_P2P_MANIFEST,
-		{ localConcurrency: 1 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[build-p2p-manifest] Processing job ${job.id}`);
-				await buildP2pManifest(job.data);
 			}
 		},
 	);
