@@ -274,8 +274,12 @@ export default function App() {
 					element={<CreatorMonetizationCalculatorPage />}
 				/>
 
-				{/* The Studio. MUST be registered before the /:username catch-alls below, or
-					`/studio` resolves to a creator profile for a user named "studio". */}
+				{/* The Studio. Placed before the /:username catch-alls for readability, NOT for
+					correctness — React Router v6 ranks matches by specificity rather than by
+					registration order, so a static `/studio` segment beats a dynamic `/:username`
+					wherever it sits. Verified by moving this block below the catch-all: every
+					route test still passed. The real hazard is a creator actually named
+					"studio", which route order cannot help with either. */}
 				<Route path="/studio" element={<StudioLayout />}>
 					<Route index element={<DashboardPage />} />
 					<Route path="catalog" element={<CatalogPage />} />

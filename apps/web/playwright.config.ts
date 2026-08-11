@@ -34,7 +34,23 @@ export default defineConfig({
 			name: "chromium",
 			use: { ...devices["Desktop Chrome"] },
 			testMatch: "**/*.e2e.ts",
-			testIgnore: "**/user-gauntlet.e2e.ts",
+			// Both authenticated suites are excluded: they need the session storageState
+			// that only `setup` produces, and signed out every route on this app renders the
+			// same marketing page — so they would pass here without asserting anything.
+			testIgnore: ["**/user-gauntlet.e2e.ts", "**/*.authed.e2e.ts"],
+		},
+		// Authenticated specs that are NOT the gauntlet: independent, parallel-safe, and
+		// signed in as the fixture viewer. Separate from `gauntlet` on purpose — that one is
+		// a single stateful staircase where order is the point, and dropping unrelated tests
+		// into it would make its ratchet assertions depend on what else ran.
+		{
+			name: "authed",
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: "tests/e2e/.auth/gauntlet-viewer.json",
+			},
+			testMatch: "**/*.authed.e2e.ts",
+			dependencies: ["setup"],
 		},
 		// The User Gauntlet walk: authenticated (storageState from setup), strictly serial —
 		// it is one stateful staircase, not a bag of independent tests.
