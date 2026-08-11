@@ -45,6 +45,7 @@ import { buildManifestForAsset } from "../jobs/build-p2p-manifest.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
+import { markPurchaseDownloaded } from "../services/refunds.js";
 import { storage } from "../services/storage/index.js";
 import { chunkRange, type Manifest } from "./manifest.js";
 import { getPublicKeyB64, mintP2pToken, verifyP2pToken } from "./token.js";
@@ -332,6 +333,33 @@ export const p2pRoutes = new Hono()
 		}
 
 		recordHubBytes(assetId, size);
+
+		/**
+		 * Stamp the purchase as delivered, on the first chunk only.
+		 *
+		 * 🚨 `markPurchaseDownloaded` existed with **zero callers** — no download path in the
+		 * app has ever set `purchases.downloaded_at`, including the signed-URL one. Two live
+		 * consequences: the refund cap counts only refunds `WHERE downloaded_at IS NOT NULL`,
+		 * so the three-per-year limit has been unreachable; and `refunds.ts` books the
+		 * delivery fee only when it is set, so Anthers has been writing off the bandwidth on
+		 * every refund. Wiring it here is what makes the P2P path the *whole* download path
+		 * rather than merely the one users see.
+		 *
+		 * On chunk 0 rather than on the manifest request, because a manifest fetch is not a
+		 * delivery — a viewer can mint a token and never pull a byte, and stamping then would
+		 * spend an allowance they should keep. Chunk 0 is always requested and is the first
+		 * moment real bytes leave. The update is idempotent (`downloaded_at IS NULL` in the
+		 * predicate), so a retry or a second download costs one no-op UPDATE.
+		 *
+		 * Best-effort and deliberately not awaited into the response: a bookkeeping failure
+		 * must not turn a working download into a 500. A missing stamp reads as pre-download,
+		 * which is the generous-to-the-buyer direction to fail in.
+		 */
+		if (chunkIndex === 0) {
+			markPurchaseDownloaded(payload.u, payload.w).catch((err) =>
+				console.error("Failed to stamp purchase as downloaded:", err),
+			);
+		}
 
 		return new Response(bytes as BodyInit, {
 			status: 200,

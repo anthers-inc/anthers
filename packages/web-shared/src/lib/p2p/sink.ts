@@ -43,8 +43,15 @@
 export interface DownloadSink {
 	/** Write `bytes` at `offset`. Chunks may arrive out of order. */
 	write(offset: number, bytes: Uint8Array): Promise<void>;
-	/** Flush and hand back the finished file. */
-	finish(): Promise<Blob>;
+	/**
+	 * Flush and hand back the finished file — or `null` when the sink has already put it
+	 * where the user wanted it and there is nothing left to hand over.
+	 *
+	 * That second case is `FileSystemSink`, which writes straight to a location the user
+	 * picked. Returning a Blob there would mean materialising a file that is already on
+	 * disk, purely to satisfy a return type.
+	 */
+	finish(): Promise<Blob | null>;
 	/** Release everything without producing a file — cancellation and failure both land here. */
 	abort(): Promise<void>;
 }
@@ -109,6 +116,72 @@ self.onmessage = async (event) => {
 	}
 };
 `;
+
+/**
+ * Stream straight to a file the user chose. Chromium only, and the best sink when it exists.
+ *
+ * This is what makes "one architecture, not two" cost nothing in user experience. The old
+ * signed-URL download streamed natively to disk; the P2P path assembles and then hands over
+ * a blob, which is a second copy. `showSaveFilePicker` removes that step entirely — the
+ * engine writes verified chunks directly into the user's file as they arrive, so the P2P
+ * protocol carries the download and the destination is the one they picked.
+ *
+ * ⚠️ **It requires transient user activation**, so `showSaveFilePicker()` must be called
+ * synchronously in the click handler, before any `await`. Awaiting the manifest first and
+ * then asking would throw `SecurityError` — see `useP2pDownload`, which picks first and
+ * fetches second for exactly this reason.
+ *
+ * Honest about the disk cost: Chrome implements a writable file stream with a swap file and
+ * commits on close, so this is not guaranteed to be strictly single-copy. What it does
+ * remove is the OPFS staging directory and the in-page blob hand-off, which were definitely
+ * a second full copy plus a quota negotiation.
+ */
+export class FileSystemSink implements DownloadSink {
+	private writable: FileSystemWritableFileStream | null = null;
+
+	private constructor(private readonly handle: FileSystemFileHandle) {}
+
+	/**
+	 * Ask the user where to put the file. Returns null when the browser cannot, and
+	 * rethrows an `AbortError` when the user cancels — those two must not be confused: one
+	 * means "try another sink", the other means "the user said no".
+	 */
+	static async pick(filename: string): Promise<FileSystemSink | null> {
+		const picker = (
+			globalThis as {
+				showSaveFilePicker?: (opts: { suggestedName?: string }) => Promise<FileSystemFileHandle>;
+			}
+		).showSaveFilePicker;
+		if (typeof picker !== "function") return null;
+		const handle = await picker({ suggestedName: filename });
+		return new FileSystemSink(handle);
+	}
+
+	async open(): Promise<void> {
+		this.writable = await this.handle.createWritable({ keepExistingData: false });
+	}
+
+	async write(offset: number, bytes: Uint8Array): Promise<void> {
+		// Positioned writes, because chunks arrive out of order.
+		await this.writable?.write({ type: "write", position: offset, data: bytes as BufferSource });
+	}
+
+	async finish(): Promise<null> {
+		await this.writable?.close();
+		this.writable = null;
+		// Already saved where the user asked. Nothing to hand back.
+		return null;
+	}
+
+	async abort(): Promise<void> {
+		try {
+			await this.writable?.abort();
+		} catch {
+			// Already closed.
+		}
+		this.writable = null;
+	}
+}
 
 /** True when this browser can stream a large download to origin-private storage. */
 export function opfsAvailable(): boolean {

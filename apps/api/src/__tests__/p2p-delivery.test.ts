@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, users, works } from "@anthers/db/schema";
+import { assets, purchases, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import {
@@ -89,6 +89,7 @@ describe("P2P delivery", () => {
 	let viewerCookie: string;
 	let deniedCookie: string;
 	let creatorId: number;
+	let viewerId: number;
 	let workId: number;
 	let assetId: number;
 	let testBytes: Uint8Array<ArrayBuffer>;
@@ -117,6 +118,13 @@ describe("P2P delivery", () => {
 			.where(eq(users.username, creatorName))
 			.limit(1);
 		creatorId = creator.id;
+
+		const [viewer] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, viewerName))
+			.limit(1);
+		viewerId = viewer.id;
 
 		// Create a free, downloadable Work (everyone allowed at threshold 0, price 0)
 		const work = await insertWork({
@@ -352,6 +360,80 @@ describe("P2P delivery", () => {
 		expect(await verifyFile(reassembled, manifestFromServer)).toBe(true);
 		// Byte-for-byte match with the original
 		expect(reassembled).toEqual(testBytes);
+	});
+
+	// ── Delivery bookkeeping ──────────────────────────────────────────────────────
+	//
+	// 🚨 `markPurchaseDownloaded` shipped with ZERO callers — no download path had ever
+	// stamped `purchases.downloaded_at`, the signed-URL one included. Two things read it and
+	// both were silently disabled: the refund cap counts only refunds `WHERE downloaded_at
+	// IS NOT NULL` (so the three-per-year limit was unreachable), and `refunds.ts` books the
+	// delivery fee only when it is set (so Anthers absorbed the bandwidth on every refund).
+	// Now that P2P is the whole download path, this is where the stamp belongs.
+
+	it("stamps a purchase as delivered when the first chunk is served", async () => {
+		const [purchase] = await db
+			.insert(purchases)
+			.values({
+				buyerId: viewerId,
+				creatorId,
+				workId,
+				type: "digital",
+				amount: "5.00",
+				processingFee: "0.45",
+				crfFee: "0.00",
+				creatorEarnings: "4.55",
+				stripePaymentIntentId: `pi_p2p_${crypto.randomUUID().slice(0, 12)}`,
+				status: "completed",
+			})
+			.returning();
+		expect(purchase.downloadedAt).toBeNull();
+
+		const res = await req(`/api/p2p/works/${workId}/assets/${assetId}/chunks/0`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		expect(res.status).toBe(200);
+
+		// The stamp is fire-and-forget so a bookkeeping failure cannot 500 a working
+		// download, so give it a moment to land rather than asserting into the race.
+		await Bun.sleep(150);
+		const [after] = await db.select().from(purchases).where(eq(purchases.id, purchase.id));
+		expect(after.downloadedAt).not.toBeNull();
+
+		await db.delete(purchases).where(eq(purchases.id, purchase.id));
+	});
+
+	it("does not re-stamp a purchase that was already delivered", async () => {
+		// The column answers "has this been delivered at all", not "how often" — so a second
+		// download must not move the date, or the refund window would slide with every pull.
+		const stamped = new Date("2026-01-01T00:00:00Z");
+		const [purchase] = await db
+			.insert(purchases)
+			.values({
+				buyerId: viewerId,
+				creatorId,
+				workId,
+				type: "digital",
+				amount: "5.00",
+				processingFee: "0.45",
+				crfFee: "0.00",
+				creatorEarnings: "4.55",
+				stripePaymentIntentId: `pi_p2p_${crypto.randomUUID().slice(0, 12)}`,
+				status: "completed",
+				downloadedAt: stamped,
+			})
+			.returning();
+
+		const res = await req(`/api/p2p/works/${workId}/assets/${assetId}/chunks/0`, {
+			headers: { Authorization: `Bearer ${token}` },
+		});
+		expect(res.status).toBe(200);
+
+		await Bun.sleep(150);
+		const [after] = await db.select().from(purchases).where(eq(purchases.id, purchase.id));
+		expect(after.downloadedAt?.toISOString()).toBe(stamped.toISOString());
+
+		await db.delete(purchases).where(eq(purchases.id, purchase.id));
 	});
 
 	// ── Bandwidth accounting ──────────────────────────────────────────────────────
