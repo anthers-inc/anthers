@@ -20,6 +20,7 @@ import {
 	getPendingDesktopAuth,
 	hashPassword,
 	listUserSessions,
+	pollDesktopAuth,
 	redeemDesktopAuth,
 	resetPassword,
 	revokeUserSession,
@@ -98,6 +99,10 @@ const desktopAuthorizeSchema = z.object({
 
 const desktopExchangeSchema = z.object({
 	code: hexToken,
+	verifier: hexToken,
+});
+
+const desktopPollSchema = z.object({
 	verifier: hexToken,
 });
 
@@ -427,6 +432,29 @@ const authRoutes = new Hono()
 		// The one place a session token is returned in a body rather than a Set-Cookie:
 		// the caller is not a browser and has no cookie jar to put it in.
 		return c.json({ token, user: serializeUser(result.user) });
+	})
+
+	// Step 4, alternate — for a client that cannot be called back.
+	//
+	// `anthersp2p` has no `anthers://` scheme to register and is routinely run over SSH on
+	// a headless box, where neither a deep link nor a loopback redirect can reach it. So it
+	// polls instead, and the one-time code — whose only job was to cross the browser→app
+	// hop — is not needed at all. Unauthenticated for the same reason `/exchange` is:
+	// possession of the verifier IS the proof, and here it is the *whole* proof, which is
+	// why this must be keyed on the verifier and never on the challenge. See
+	// `pollDesktopAuth`.
+	.post("/desktop/poll", zValidator("json", desktopPollSchema, invalidBody), async (c) => {
+		const { verifier } = c.req.valid("json");
+
+		const result = await pollDesktopAuth(verifier);
+		if (result === null) return c.json({ error: "This sign-in request has expired" }, 404);
+		// 202: the request is fine and the answer is "not yet". A 404 here would send a
+		// polling client away from a flow that is merely waiting on a human.
+		if (result === "pending") return c.json({ status: "pending" }, 202);
+
+		const session = await validateSession(result);
+		if (!session) return c.json({ error: "This sign-in request has expired" }, 404);
+		return c.json({ token: result, user: serializeUser(session.user) });
 	});
 
 export { authRoutes };

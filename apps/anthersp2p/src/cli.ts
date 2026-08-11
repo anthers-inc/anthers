@@ -6,14 +6,16 @@
  * is not `anthersdl`. Today only the download half exists; see § Seeding below.
  *
  * Usage:
+ *   anthersp2p login
  *   anthersp2p pull <workId> <assetId> [--out FILE] [--resume] [--concurrency N]
+ *   anthersp2p seed <workId> <assetId> --file F [--announce ORIGIN]
  *   anthersp2p manifest <workId> <assetId>
  *
- * Auth is a session token, passed as `--token` or `ANTHERS_TOKEN`. That is the same opaque
- * `sessions` row the desktop Studio carries as a bearer credential — no new auth primitive,
- * which is the same reasoning 42.06 used. A PKCE browser handoff like the desktop app's
- * would be friendlier and is the obvious follow-up; a token you can paste is what makes the
- * client usable today without one.
+ * Auth is an opaque `sessions` row carried as a bearer token — the same credential the
+ * desktop Studio uses, and no new auth primitive, which is the reasoning 42.06 used.
+ * `login` obtains one through the browser handoff (see `auth.ts`) and remembers it, so
+ * nothing has to paste a token; `--token` and `ANTHERS_TOKEN` still win where a script
+ * needs to name the account it means.
  *
  * ── Seeding is HTTP, not WebRTC, and that was the whole unlock ──────────────────────
  *
@@ -31,6 +33,7 @@
  */
 
 import { basename } from "node:path";
+import { clearStoredToken, LoginError, login, readStoredToken, storeToken } from "./auth.js";
 import { discoverPeers } from "./peers.js";
 import { AccessDeniedError, fetchManifest, pullAsset, VerificationError } from "./pull.js";
 import { SeedError, startSeeder } from "./seed.js";
@@ -40,6 +43,8 @@ const DEFAULT_BASE_URL = "https://anthers.org";
 function usage(): never {
 	console.error(`anthersp2p — the open client for Anthers P2P delivery
 
+  anthersp2p login                                 sign in through your browser
+  anthersp2p logout                                forget the stored session
   anthersp2p pull <workId> <assetId> [options]     download and verify an asset
   anthersp2p seed <workId> <assetId> --file F      serve chunks to entitled peers
   anthersp2p manifest <workId> <assetId>           print the manifest as JSON
@@ -55,10 +60,14 @@ Options:
   --no-discover       (pull) don't ask the hub which peers are serving; hub only
   --announce ORIGIN   (seed) the public origin to advertise, e.g. https://seed.example.org
   --url ORIGIN        hub origin (default ${DEFAULT_BASE_URL}, or ANTHERS_URL)
-  --token TOKEN       session token (or ANTHERS_TOKEN)
+  --web ORIGIN        where the site lives, if not the hub (or ANTHERS_WEB_URL)
+  --no-browser        (login) print the URL instead of trying to open it
+  --label TEXT        (login) how this device is named on the confirmation page
+  --token TOKEN       session token, overriding the stored one (or ANTHERS_TOKEN)
 
-Every chunk is verified against the manifest before it is written, and the finished
-file is checked end to end. Manifest format: 45.04.`);
+Run 'login' once and the session is remembered; --token and ANTHERS_TOKEN still
+win where you need them. Every chunk is verified against the manifest before it
+is written, and the finished file is checked end to end. Manifest format: 45.04.`);
 	process.exit(2);
 }
 
@@ -108,9 +117,52 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 		/\/$/,
 		"",
 	);
-	const token = String(flags.token ?? process.env.ANTHERS_TOKEN ?? "");
+	// The authorize page is served by the site, which is the same origin as the API in
+	// production and a different port in development. Defaulting it to `baseUrl` is right
+	// for everyone except a developer, who has `--web` and `ANTHERS_WEB_URL`.
+	const webUrl = String(flags.web ?? process.env.ANTHERS_WEB_URL ?? baseUrl).replace(/\/$/, "");
+
+	try {
+		if (command === "login") {
+			const result = await login({
+				baseUrl,
+				webUrl,
+				label: typeof flags.label === "string" ? flags.label : undefined,
+				noBrowser: flags["no-browser"] === true,
+				onLog: (line) => console.error(line),
+			});
+			const path = storeToken(result.token);
+			console.error(`\nSigned in as ${result.username}. Session stored in ${path}.`);
+			console.error("Revoke it any time from Settings → Devices, or run `anthersp2p logout`.");
+			return 0;
+		}
+
+		if (command === "logout") {
+			// Local only, and say so. Deleting the file stops THIS machine using the session;
+			// it does not tell the hub to end it, and implying otherwise would leave someone
+			// believing a stolen laptop had been dealt with.
+			const had = clearStoredToken();
+			console.error(
+				had
+					? "Forgot the stored session. It stays valid until you revoke it in Settings → Devices."
+					: "No stored session to forget.",
+			);
+			return 0;
+		}
+	} catch (err) {
+		if (err instanceof LoginError) {
+			console.error(`\n  ${err.message}`);
+			return 1;
+		}
+		throw err;
+	}
+
+	// Explicit credentials outrank the stored one: a script that passes --token is naming
+	// the account it means, and silently preferring whoever last ran `login` would make it
+	// act as somebody else.
+	const token = String(flags.token ?? process.env.ANTHERS_TOKEN ?? readStoredToken() ?? "");
 	if (!token) {
-		console.error("No session token. Pass --token or set ANTHERS_TOKEN.");
+		console.error("Not signed in. Run `anthersp2p login`, or pass --token / set ANTHERS_TOKEN.");
 		return 2;
 	}
 
