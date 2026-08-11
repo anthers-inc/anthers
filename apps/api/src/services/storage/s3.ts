@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * S3-compatible storage implementation for DigitalOcean Spaces (production).
+ * S3-compatible object storage (production).
  *
- * Uses @aws-sdk/client-s3 — the same SDK the DO reference project uses.
- * Spaces is S3-compatible, so this works with any S3-compatible provider.
+ * Uses @aws-sdk/client-s3. The provider is **configuration**, not a constant in this file:
+ * endpoint, bucket, credentials, addressing style and the public URL base all come from
+ * `resolveStorageConfig()`, whose defaults reproduce DigitalOcean Spaces exactly. An
+ * environment that sets nothing new behaves identically to before that split existed.
+ *
+ * See `config.ts` for why `publicBaseUrl` matters more than it looks — absolute URLs are
+ * persisted in the database and decoded back to keys by their pathname, so pointing it at a
+ * path-style endpoint silently corrupts every URL written afterwards.
  */
 
 import { randomUUID } from "node:crypto";
@@ -19,25 +25,30 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { publicUrlFor, resolveStorageConfig } from "./config.js";
 import type { StorageService } from "./types.js";
 
-const region = process.env.SPACES_REGION ?? "nyc3";
-const bucket = process.env.SPACES_BUCKET ?? "";
+const config = resolveStorageConfig();
+const bucket = config.bucket;
 
 const s3 = new S3Client({
-	region,
-	endpoint: `https://${region}.digitaloceanspaces.com`,
+	region: config.region,
+	endpoint: config.endpoint,
 	credentials: {
-		// Trim: a stray newline/space pasted into a dashboard secret silently
-		// corrupts the SigV4 HMAC and yields a baffling SignatureDoesNotMatch.
-		accessKeyId: (process.env.SPACES_KEY ?? "").trim(),
-		secretAccessKey: (process.env.SPACES_SECRET ?? "").trim(),
+		accessKeyId: config.accessKeyId,
+		secretAccessKey: config.secretAccessKey,
 	},
-	forcePathStyle: false, // DO Spaces requires virtual-hosted style
+	// False for Spaces, which requires virtual-hosted style; R2's S3 API wants true.
+	forcePathStyle: config.forcePathStyle,
 	// DO Spaces doesn't support the AWS SDK's default flexible-checksum trailers
 	// (they change x-amz-content-sha256 to a STREAMING-…-TRAILER value, which
 	// Spaces rejects with SignatureDoesNotMatch). Only checksum when an operation
 	// actually requires it — restores plain SigV4 that Spaces validates correctly.
+	//
+	// ⚠️ Kept unconditionally rather than made provider-specific. It is the conservative
+	// setting everywhere — it only ever *omits* optional checksums — so a provider that
+	// would accept the trailers loses nothing, while flipping it per-provider would be a
+	// behaviour change to Spaces made on the way past.
 	requestChecksumCalculation: "WHEN_REQUIRED",
 	responseChecksumValidation: "WHEN_REQUIRED",
 });
@@ -134,8 +145,9 @@ export class S3StorageService implements StorageService {
 				expiresIn: opts.expiresIn ?? 3600,
 			});
 		}
-		// Bare public URL
-		return `https://${bucket}.${region}.digitaloceanspaces.com/${key}`;
+		// Bare public URL. Byte-identical to the old hard-coded template when nothing
+		// overrides `publicBaseUrl` — see config.ts.
+		return publicUrlFor(config, key);
 	}
 
 	async getPresignedUploadUrl(

@@ -593,8 +593,17 @@ function serializeWork(
  * A storage URL or bare key → the storage key. Playlists/manifests, audio output, and
  * (sometimes) thumbnails are stored as URLs; source keys and asset files are bare keys.
  * Local-dev URLs carry a `/content/` path prefix that isn't part of the key.
+ *
+ * 🚨 **Exported only so the round-trip invariant can be tested.** `storage.getUrl(key)` and
+ * this function are inverses, and they live in different modules — a storage service and a
+ * route file — so nothing in either one fails when they stop agreeing. What they agree on
+ * is that the **pathname is the key**, which holds for virtual-hosted URLs and breaks for
+ * path-style ones, where the bucket name is prepended. That is not hypothetical: R2's S3
+ * API endpoint is path-style, and pointing `STORAGE_PUBLIC_BASE_URL` at it would corrupt
+ * every URL written afterwards while leaving older rows working.
+ * `__tests__/storage-url-roundtrip.test.ts` is the thing that notices.
  */
-function urlToKey(urlOrKey: string): string {
+export function urlToKey(urlOrKey: string): string {
 	let path = urlOrKey;
 	if (/^(https?:)?\/\//.test(urlOrKey)) {
 		try {
