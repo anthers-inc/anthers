@@ -42,6 +42,18 @@ import {
 export interface PullOptions {
 	/** Hub origin, e.g. "https://anthers.org". No trailing slash. */
 	baseUrl: string;
+	/**
+	 * Where to fetch CHUNKS from, when that is not the hub — a peer's origin.
+	 *
+	 * The manifest and the token always come from the hub, because only the hub can check
+	 * entitlement and only the hub can sign. Chunks can come from anywhere that verifies
+	 * the token, which is what makes this peer-assisted rather than merely proxied: the
+	 * peer never sees a credential the hub didn't mint, and the client verifies every
+	 * chunk against the hub's manifest regardless of who served it.
+	 *
+	 * A peer serves the hub's own URL shape, so this is a origin swap and nothing more.
+	 */
+	chunkBaseUrl?: string;
 	/** A session token — the same opaque `sessions` row the desktop app carries. */
 	token: string;
 	workId: string;
@@ -195,7 +207,8 @@ export async function pullAsset(opts: PullOptions): Promise<PullResult> {
 				const { offset, size } = chunkRange(index, chunkSize, manifest.assetSize);
 				await ensureToken();
 
-				const url = `${opts.baseUrl}/api/p2p/works/${opts.workId}/assets/${opts.assetId}/chunks/${index}`;
+				const chunkOrigin = opts.chunkBaseUrl ?? opts.baseUrl;
+				const url = `${chunkOrigin}/api/p2p/works/${opts.workId}/assets/${opts.assetId}/chunks/${index}`;
 				const res = await doFetch(url, { headers: { Authorization: `Bearer ${token}` } });
 				if (res.status === 401) {
 					// The clock-based renewal missed. Re-mint once and retry this chunk.
