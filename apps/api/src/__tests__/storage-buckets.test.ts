@@ -152,3 +152,62 @@ describe("the write-time and read-time halves agree", () => {
 		}
 	});
 });
+
+describe("the presigned-upload ACL header follows the bucket split", () => {
+	/**
+	 * 🚨 This suite pins a fact about R2, not a preference — measured against a live bucket
+	 * on 2026-08-11, not inferred from the S3 compatibility table.
+	 *
+	 * `getPresignedUploadUrl` returns headers for the client to echo verbatim. On Spaces that
+	 * is load-bearing: the presigner hoists `x-amz-acl` into the query string, Spaces ignores
+	 * it there, and an object whose header is dropped silently reverts to the bucket default.
+	 * On R2 echoing the same header returns **403 SignatureDoesNotMatch**, because the extra
+	 * header changes the canonical request the signature covers. With it, 403; without it,
+	 * 200.
+	 *
+	 * The asymmetry worth remembering, because it is what makes the compatibility table
+	 * misleading: a **direct** `PutObject` carrying `ACL` succeeds on R2 (the SDK signs what
+	 * it sends). Only the **presigned** path breaks — and every creator upload is presigned.
+	 * "R2 ignores x-amz-acl" is true of one path and fatally false of the other.
+	 */
+	it("echoes the ACL when one bucket holds both kinds — Spaces, where it carries access", () => {
+		const config = resolveStorageConfig({ SPACES_BUCKET: "anthers-media", SPACES_REGION: "nyc3" });
+		expect(config.sendObjectAcl).toBe(true);
+	});
+
+	it("stays silent once a second bucket carries the distinction — R2, where it is fatal", () => {
+		const config = resolveStorageConfig({
+			STORAGE_BUCKET: "anthers-media-private",
+			STORAGE_PUBLIC_BUCKET: "anthers-media-public",
+			STORAGE_REGION: "auto",
+			STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+		});
+		expect(config.sendObjectAcl).toBe(false);
+	});
+
+	it("is derived from the split alone, not from the vendor or the endpoint", () => {
+		// A two-bucket Spaces deployment must also stay silent, and a single-bucket R2 one
+		// must still echo. Tying this to a hostname would get both backwards, which is why
+		// the rule is about which layer carries access rather than about who the provider is.
+		const twoBucketSpaces = resolveStorageConfig({
+			STORAGE_BUCKET: "a-private",
+			STORAGE_PUBLIC_BUCKET: "a-public",
+			STORAGE_REGION: "nyc3",
+		});
+		const oneBucketR2 = resolveStorageConfig({
+			STORAGE_BUCKET: "solo",
+			STORAGE_REGION: "auto",
+			STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+		});
+		expect({
+			twoBucketSpaces: twoBucketSpaces.sendObjectAcl,
+			oneBucketR2: oneBucketR2.sendObjectAcl,
+		}).toEqual({ twoBucketSpaces: false, oneBucketR2: true });
+	});
+
+	it("keeps the pre-split default echoing, so introducing this changed nothing", () => {
+		// The no-op property PR #210 rests on: an environment that sets nothing new behaves
+		// exactly as it did before the split existed.
+		expect(resolveStorageConfig({ SPACES_BUCKET: "anthers-media" }).sendObjectAcl).toBe(true);
+	});
+});

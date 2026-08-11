@@ -70,6 +70,29 @@ export interface StorageConfig {
 	 * SDK builds, not `publicBaseUrl`, which is composed by hand.
 	 */
 	forcePathStyle: boolean;
+	/**
+	 * Whether a presigned upload should hand the client an `x-amz-acl` header to echo.
+	 *
+	 * 🚨 **On R2 echoing it is fatal, not merely useless — verified against a live bucket
+	 * on 2026-08-11.** A presigned PUT carrying the header returns `403
+	 * SignatureDoesNotMatch`; the identical PUT without it returns 200. The presigner
+	 * hoists `x-amz-acl` into the query string, so a client that also sends it as a header
+	 * changes the canonical request out from under the signature. Note the asymmetry that
+	 * makes this easy to mis-predict: a **direct** `PutObject` with `ACL` set succeeds on
+	 * R2, because there the SDK signs what it sends. Only the presigned path breaks, and
+	 * every creator upload takes the presigned path.
+	 *
+	 * So this is derived from the bucket split rather than the vendor, because that is the
+	 * rule it actually is: **one bucket means the per-object ACL is the only thing carrying
+	 * access, so it must be echoed; two buckets mean the bucket carries it and the header is
+	 * redundant.** Spaces is the one-bucket case and is unchanged; R2 is the two-bucket case
+	 * and must stay silent. Deriving it also means there is no third variable to set
+	 * correctly, and no vendor hostname to string-match.
+	 *
+	 * Do not "restore" the header for symmetry with `upload()`. It is load-bearing there and
+	 * fatal here, and the two are not the same operation.
+	 */
+	sendObjectAcl: boolean;
 }
 
 /** Read a variable under its current name, then its legacy one. */
@@ -87,6 +110,13 @@ function env(source: Record<string, string | undefined>, name: string, legacy: s
 export function resolveStorageConfig(
 	source: Record<string, string | undefined> = process.env,
 ): StorageConfig {
+	// ⚠️ `nyc3` is a DigitalOcean region and is the right default only for Spaces, where it
+	// also composes the endpoint and the public URL below. **R2 rejects it.** R2 ignores
+	// region for placement but still validates the name (`wnam|enam|weur|eeur|apac|oc|auto`),
+	// so an R2 deployment must set `STORAGE_REGION=auto` or every call fails — direct ones
+	// with `InvalidRegionName`, and presigned ones as `SignatureDoesNotMatch`, because SigV4
+	// folds the region into the credential scope and the mismatch surfaces as a bad signature
+	// rather than as a bad region. That second symptom is the one that wastes an afternoon.
 	const region = env(source, "REGION", "SPACES_REGION") || "nyc3";
 	const bucket = env(source, "BUCKET", "SPACES_BUCKET");
 	// Same bucket unless told otherwise — see the field docs for why that is the safe default.
@@ -114,6 +144,8 @@ export function resolveStorageConfig(
 		secretAccessKey: env(source, "SECRET", "SPACES_SECRET"),
 		publicBaseUrl: publicBaseUrl.replace(/\/+$/, ""),
 		forcePathStyle: (source.STORAGE_FORCE_PATH_STYLE ?? "").trim() === "true",
+		// One bucket → the ACL is the only thing carrying access. Two → the bucket is.
+		sendObjectAcl: publicBucket === bucket,
 	};
 }
 

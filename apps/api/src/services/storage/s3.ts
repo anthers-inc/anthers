@@ -26,54 +26,73 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { isPublicKey } from "./acl.js";
-import { publicUrlFor, resolveStorageConfig } from "./config.js";
+import { publicUrlFor, resolveStorageConfig, type StorageConfig } from "./config.js";
 import type { StorageService } from "./types.js";
 
-const config = resolveStorageConfig();
-
-/**
- * Which bucket an object belongs in.
- *
- * Two callers, and the difference matters. **Writes know the ACL** — every `upload` and
- * every presigned upload is handed `"public"` or `"private"` by `aclForMediaType`, so they
- * pass it here and the answer is exact. **Reads only have the key**, so they go through
- * `isPublicKey`, which reads the same policy from the other end.
- *
- * Both fail closed toward the private bucket, and while `STORAGE_PUBLIC_BUCKET` is unset the
- * two are the same bucket and this function cannot be wrong about anything.
- */
-function bucketFor(acl: "public" | "private"): string {
-	return acl === "public" ? config.publicBucket : config.bucket;
+function clientFor(config: StorageConfig): S3Client {
+	return new S3Client({
+		region: config.region,
+		endpoint: config.endpoint,
+		credentials: {
+			accessKeyId: config.accessKeyId,
+			secretAccessKey: config.secretAccessKey,
+		},
+		// False for Spaces, which requires virtual-hosted style; R2's S3 API wants true.
+		forcePathStyle: config.forcePathStyle,
+		// DO Spaces doesn't support the AWS SDK's default flexible-checksum trailers
+		// (they change x-amz-content-sha256 to a STREAMING-…-TRAILER value, which
+		// Spaces rejects with SignatureDoesNotMatch). Only checksum when an operation
+		// actually requires it — restores plain SigV4 that Spaces validates correctly.
+		//
+		// ⚠️ Kept unconditionally rather than made provider-specific. It is the conservative
+		// setting everywhere — it only ever *omits* optional checksums — so a provider that
+		// would accept the trailers loses nothing, while flipping it per-provider would be a
+		// behaviour change to Spaces made on the way past.
+		requestChecksumCalculation: "WHEN_REQUIRED",
+		responseChecksumValidation: "WHEN_REQUIRED",
+	});
 }
-
-/** The bucket a key lives in, for the operations that are given no ACL. */
-function bucketForKey(key: string): string {
-	return bucketFor(isPublicKey(key) ? "public" : "private");
-}
-
-const s3 = new S3Client({
-	region: config.region,
-	endpoint: config.endpoint,
-	credentials: {
-		accessKeyId: config.accessKeyId,
-		secretAccessKey: config.secretAccessKey,
-	},
-	// False for Spaces, which requires virtual-hosted style; R2's S3 API wants true.
-	forcePathStyle: config.forcePathStyle,
-	// DO Spaces doesn't support the AWS SDK's default flexible-checksum trailers
-	// (they change x-amz-content-sha256 to a STREAMING-…-TRAILER value, which
-	// Spaces rejects with SignatureDoesNotMatch). Only checksum when an operation
-	// actually requires it — restores plain SigV4 that Spaces validates correctly.
-	//
-	// ⚠️ Kept unconditionally rather than made provider-specific. It is the conservative
-	// setting everywhere — it only ever *omits* optional checksums — so a provider that
-	// would accept the trailers loses nothing, while flipping it per-provider would be a
-	// behaviour change to Spaces made on the way past.
-	requestChecksumCalculation: "WHEN_REQUIRED",
-	responseChecksumValidation: "WHEN_REQUIRED",
-});
 
 export class S3StorageService implements StorageService {
+	private readonly config: StorageConfig;
+	private readonly s3: S3Client;
+
+	/**
+	 * Configuration is INJECTABLE, and the default reads the environment exactly as before.
+	 *
+	 * It used to be resolved once at module scope, which made this class untestable in any
+	 * process where something else imported it first: `routes/content.ts` pulls storage in
+	 * transitively, so by the time a test set `process.env` the config was already frozen and
+	 * the test silently asserted against the ambient environment instead of its own. That is
+	 * how `storage-acl.test.ts` came to pass in CI (no `.env`) and fail locally (a real
+	 * `STORAGE_PUBLIC_BUCKET` set for the R2 migration) — the same shape as the `getStripe()`
+	 * problem, where "is it configured?" became a property of the machine rather than of the
+	 * test. Production still constructs exactly one instance, in the `index.ts` factory.
+	 */
+	constructor(config: StorageConfig = resolveStorageConfig()) {
+		this.config = config;
+		this.s3 = clientFor(config);
+	}
+
+	/**
+	 * Which bucket an object belongs in.
+	 *
+	 * Two callers, and the difference matters. **Writes know the ACL** — every `upload` and
+	 * every presigned upload is handed `"public"` or `"private"` by `aclForMediaType`, so they
+	 * pass it here and the answer is exact. **Reads only have the key**, so they go through
+	 * `isPublicKey`, which reads the same policy from the other end.
+	 *
+	 * Both fail closed toward the private bucket, and while `STORAGE_PUBLIC_BUCKET` is unset the
+	 * two are the same bucket and this function cannot be wrong about anything.
+	 */
+	private bucketFor(acl: "public" | "private"): string {
+		return acl === "public" ? this.config.publicBucket : this.config.bucket;
+	}
+
+	/** The bucket a key lives in, for the operations that are given no ACL. */
+	private bucketForKey(key: string): string {
+		return this.bucketFor(isPublicKey(key) ? "public" : "private");
+	}
 	async upload(
 		key: string,
 		body: Buffer | Uint8Array,
@@ -86,9 +105,9 @@ export class S3StorageService implements StorageService {
 		// and a bug report, not a silent leak.
 		acl: "public" | "private" = "private",
 	): Promise<string> {
-		await s3.send(
+		await this.s3.send(
 			new PutObjectCommand({
-				Bucket: bucketFor(acl),
+				Bucket: this.bucketFor(acl),
 				Key: key,
 				Body: body,
 				ContentType: contentType,
@@ -101,7 +120,9 @@ export class S3StorageService implements StorageService {
 	}
 
 	async downloadToTemp(key: string): Promise<string> {
-		const response = await s3.send(new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }));
+		const response = await this.s3.send(
+			new GetObjectCommand({ Bucket: this.bucketForKey(key), Key: key }),
+		);
 
 		if (!response.Body) {
 			throw new Error(`S3 object ${key} has no body`);
@@ -117,7 +138,9 @@ export class S3StorageService implements StorageService {
 
 	async read(key: string): Promise<Uint8Array | null> {
 		try {
-			const response = await s3.send(new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }));
+			const response = await this.s3.send(
+				new GetObjectCommand({ Bucket: this.bucketForKey(key), Key: key }),
+			);
 			if (!response.Body) return null;
 			return await response.Body.transformToByteArray();
 		} catch {
@@ -129,7 +152,9 @@ export class S3StorageService implements StorageService {
 
 	async size(key: string): Promise<number | null> {
 		try {
-			const head = await s3.send(new HeadObjectCommand({ Bucket: bucketForKey(key), Key: key }));
+			const head = await this.s3.send(
+				new HeadObjectCommand({ Bucket: this.bucketForKey(key), Key: key }),
+			);
 			return head.ContentLength ?? null;
 		} catch {
 			return null;
@@ -143,9 +168,9 @@ export class S3StorageService implements StorageService {
 			// offset + length - 1. Off-by-one here reads one byte too many into every
 			// chunk, which fails the manifest hash rather than corrupting silently —
 			// but only on the chunks that aren't last, so test the final chunk too.
-			const response = await s3.send(
+			const response = await this.s3.send(
 				new GetObjectCommand({
-					Bucket: bucketForKey(key),
+					Bucket: this.bucketForKey(key),
 					Key: key,
 					Range: `bytes=${offset}-${offset + length - 1}`,
 				}),
@@ -163,13 +188,17 @@ export class S3StorageService implements StorageService {
 
 	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		if (opts?.signed) {
-			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }), {
-				expiresIn: opts.expiresIn ?? 3600,
-			});
+			return getSignedUrl(
+				this.s3,
+				new GetObjectCommand({ Bucket: this.bucketForKey(key), Key: key }),
+				{
+					expiresIn: opts.expiresIn ?? 3600,
+				},
+			);
 		}
 		// Bare public URL. Byte-identical to the old hard-coded template when nothing
 		// overrides `publicBaseUrl` — see config.ts.
-		return publicUrlFor(config, key);
+		return publicUrlFor(this.config, key);
 	}
 
 	async getPresignedUploadUrl(
@@ -180,23 +209,30 @@ export class S3StorageService implements StorageService {
 	): Promise<{ url: string; headers: Record<string, string> }> {
 		const value = acl === "public" ? "public-read" : "private";
 		const url = await getSignedUrl(
-			s3,
+			this.s3,
 			new PutObjectCommand({
-				Bucket: bucketFor(acl),
+				Bucket: this.bucketFor(acl),
 				Key: key,
 				ContentType: contentType,
 				ACL: value,
 			}),
 			{ expiresIn },
 		);
-		// The ACL is returned as a header for the client to echo, not left to the URL.
+		// The ACL is returned as a header for the client to echo, not left to the URL:
 		// getSignedUrl hoists `x-amz-acl` into the query string, and Spaces ignores it
 		// there — signing alone is a no-op. See the note on the interface.
-		return { url, headers: { "x-amz-acl": value } };
+		//
+		// 🚨 But ONLY where the ACL is what carries access. On a two-bucket provider the
+		// bucket carries it, and echoing the header is fatal rather than redundant: R2
+		// returns `403 SignatureDoesNotMatch` for a presigned PUT that sends it, because the
+		// extra header changes the canonical request the signature was computed over.
+		// Verified against a live R2 bucket on 2026-08-11 — with the header 403, without it
+		// 200. `this.config.sendObjectAcl` is the derivation and carries the full reasoning.
+		return { url, headers: this.config.sendObjectAcl ? { "x-amz-acl": value } : {} };
 	}
 
 	async delete(key: string): Promise<void> {
-		await s3.send(new DeleteObjectCommand({ Bucket: bucketForKey(key), Key: key }));
+		await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucketForKey(key), Key: key }));
 	}
 
 	/**
@@ -211,14 +247,14 @@ export class S3StorageService implements StorageService {
 	 */
 	async deletePrefix(prefix: string): Promise<void> {
 		const buckets =
-			config.publicBucket === config.bucket
-				? [config.bucket]
-				: [config.bucket, config.publicBucket];
+			this.config.publicBucket === this.config.bucket
+				? [this.config.bucket]
+				: [this.config.bucket, this.config.publicBucket];
 		for (const target of buckets) {
 			// List (paginated) then batch-delete every object under the prefix.
 			let continuationToken: string | undefined;
 			do {
-				const listed = await s3.send(
+				const listed = await this.s3.send(
 					new ListObjectsV2Command({
 						Bucket: target,
 						Prefix: prefix,
@@ -230,7 +266,7 @@ export class S3StorageService implements StorageService {
 					.filter((k): k is string => !!k)
 					.map((Key) => ({ Key }));
 				if (objects.length > 0) {
-					await s3.send(
+					await this.s3.send(
 						new DeleteObjectsCommand({
 							Bucket: target,
 							Delete: { Objects: objects, Quiet: true },
@@ -244,7 +280,7 @@ export class S3StorageService implements StorageService {
 
 	async exists(key: string): Promise<boolean> {
 		try {
-			await s3.send(new HeadObjectCommand({ Bucket: bucketForKey(key), Key: key }));
+			await this.s3.send(new HeadObjectCommand({ Bucket: this.bucketForKey(key), Key: key }));
 			return true;
 		} catch {
 			return false;
