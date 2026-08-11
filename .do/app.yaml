@@ -21,8 +21,9 @@
 #     cluster admin (doadmin) so the migrate job can create schema/tables — a DO
 #     *dev* database's user lacks CREATE and blocks migrations. Tighten to a
 #     least-privilege app user before public launch.
-#   - STORAGE_BACKEND=s3 → DO Spaces (bucket `anthers-media`, nyc3). SPACES_KEY /
-#     SPACES_SECRET are dashboard-set secrets; bucket/region are non-secret here.
+#   - STORAGE_BACKEND=s3 → Cloudflare R2, TWO buckets (private/public — R2 has no
+#     per-object ACLs, so the bucket is the access boundary). STORAGE_KEY /
+#     STORAGE_SECRET are dashboard-set secrets; everything else is non-secret here.
 #     Objects use a creator-first key layout (creators/<creatorId>/…).
 #   - ATProto envs are omitted (read lazily; that feature is still stubbed) — add
 #     them when it comes online. STRIPE_* is NO LONGER omitted: prod runs Stripe
@@ -63,16 +64,45 @@ envs:
   - key: STORAGE_BACKEND
     scope: RUN_TIME
     value: s3
-  - key: SPACES_BUCKET
+  # Cloudflare R2, two buckets. The SPACES_* names are gone rather than kept as a
+  # fallback: this app was created fresh on the Anthers-owned account and has never
+  # run against DigitalOcean Spaces, so there is no live value for them to shadow and
+  # nothing to roll back to. (`config.ts` still honours them — that fallback exists for
+  # the app being decommissioned, not for this one.)
+  - key: STORAGE_ENDPOINT
     scope: RUN_TIME
-    value: anthers-media
-  - key: SPACES_REGION
+    value: https://42e9a13ee9f7af4092581dc675c9f4da.r2.cloudflarestorage.com
+  # 🚨 `auto`, not a region. R2 ignores region for placement but VALIDATES the name, and
+  # the code's default is `nyc3` (Spaces). Get this wrong and every call fails — direct
+  # ones with InvalidRegionName, presigned ones as SignatureDoesNotMatch, because SigV4
+  # folds region into the credential scope. The second symptom points nowhere near the
+  # cause, which is what makes it expensive.
+  - key: STORAGE_REGION
     scope: RUN_TIME
-    value: nyc3
-  - key: SPACES_KEY
+    value: auto
+  # Everything gated. NO custom domain, no r2.dev, ever — on R2 a public door is granted
+  # to the whole BUCKET, so one would publish every game asset, HLS segment and audio file.
+  - key: STORAGE_BUCKET
+    scope: RUN_TIME
+    value: anthers-media-private
+  # Display chrome only. This is the bucket cdn.anthers.org points at.
+  - key: STORAGE_PUBLIC_BUCKET
+    scope: RUN_TIME
+    value: anthers-media-public
+  # 🚨 The CUSTOM DOMAIN, never the S3 endpoint. Absolute URLs are persisted in the
+  # database and decoded back to keys by PATHNAME; the S3 endpoint is path-style, so it
+  # would glue the bucket name onto every key written afterwards — new uploads 404 while
+  # older rows keep resolving, which is the hardest shape of bug to spot.
+  - key: STORAGE_PUBLIC_BASE_URL
+    scope: RUN_TIME
+    value: https://cdn.anthers.org
+  - key: STORAGE_FORCE_PATH_STYLE
+    scope: RUN_TIME
+    value: "true"
+  - key: STORAGE_KEY
     scope: RUN_TIME
     type: SECRET
-  - key: SPACES_SECRET
+  - key: STORAGE_SECRET
     scope: RUN_TIME
     type: SECRET
   - key: SITE_PASSWORD
