@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { Navigate, Route, Routes } from "react-router-dom";
+import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { lazy, Suspense } from "react";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import LoggedInLayout from "./components/layout/LoggedInLayout";
 import MeadowDecorLayout from "./components/layout/MeadowDecorLayout";
 import PublicShell from "./components/layout/PublicShell";
@@ -10,6 +12,52 @@ import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
 import { SiteGatePanel } from "./components/ui/SiteGate";
 import StudioRedirect from "./components/ui/StudioRedirect";
+
+/**
+ * The Studio — the creator authoring surface, merged in from `apps/studio-web` on
+ * 2026-08-11 and now a SECTION of this app rather than a separate origin.
+ *
+ * LAZY, and that is the whole reason this is tolerable: these eight pages drag in the
+ * authoring stack (TipTap, ffmpeg.wasm, recharts) which a reader browsing the site must
+ * never download. `React.lazy` keeps them in their own chunks, fetched on first
+ * navigation into /studio.
+ *
+ * The origin split existed to give the Studio cross-origin isolation for multi-threaded
+ * ffmpeg.wasm. That is DORMANT (`@ffmpeg/core-mt` hangs at pthread spawn in-browser, so
+ * the Studio ran the same single-threaded path as the site), and isolation is per-DOCUMENT
+ * rather than per-origin anyway — so the split was buying nothing while costing a second
+ * app, a second origin, a CORS allowlist and a dot-prefixed cookie domain.
+ */
+const StudioShell = lazy(() => import("./studio/StudioShell"));
+const StudioAuthGate = lazy(() => import("./studio/StudioAuthGate"));
+const DashboardPage = lazy(() => import("@anthers/web-shared/DashboardPage"));
+const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
+const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
+const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
+const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
+const JamFormPage = lazy(() => import("@anthers/web-shared/JamFormPage"));
+const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
+const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
+
+/** Shell + creator gate + a suspense boundary, wrapped once for every /studio route. */
+function StudioLayout() {
+	return (
+		<Suspense
+			fallback={
+				<div className="flex justify-center items-center min-h-[60vh]">
+					<LoadingSpinner size="lg" />
+				</div>
+			}
+		>
+			<StudioAuthGate>
+				<StudioShell>
+					<Outlet />
+				</StudioShell>
+			</StudioAuthGate>
+		</Suspense>
+	);
+}
+
 import AboutPage from "./pages/AboutPage";
 import AdminPage from "./pages/AdminPage";
 import ATProtoCallbackPage from "./pages/ATProtoCallbackPage";
@@ -225,6 +273,24 @@ export default function App() {
 					path="/resources/creator-monetization"
 					element={<CreatorMonetizationCalculatorPage />}
 				/>
+
+				{/* The Studio. MUST be registered before the /:username catch-alls below, or
+					`/studio` resolves to a creator profile for a user named "studio". */}
+				<Route path="/studio" element={<StudioLayout />}>
+					<Route index element={<DashboardPage />} />
+					<Route path="catalog" element={<CatalogPage />} />
+					{/* kept so existing Studio links and bookmarks don't break */}
+					<Route path="library" element={<CatalogPage />} />
+					<Route path="analytics" element={<AnalyticsDashboardPage />} />
+					<Route path="posts/new" element={<PostFormPage />} />
+					<Route path="posts/:slug/edit" element={<PostFormPage />} />
+					<Route path="projects/new" element={<ProjectFormPage />} />
+					<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
+					<Route path="jams/new" element={<JamFormPage />} />
+					<Route path="jams/:slug/edit" element={<JamFormPage />} />
+					<Route path="import" element={<ImportPage />} />
+					<Route path="settings" element={<StudioSettingsPage />} />
+				</Route>
 
 				{/* Creator site routes */}
 				<Route path="/:username/:slug" element={<ProjectPage />} />
