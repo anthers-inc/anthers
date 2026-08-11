@@ -85,7 +85,16 @@ export interface SeedOptions {
 export interface Seeder {
 	port: number;
 	manifest: Manifest;
-	stop(): void;
+	/**
+	 * Stop serving. The socket and the file descriptor close **synchronously**; the returned
+	 * promise covers only the network round-trip that withdraws the hub listing.
+	 *
+	 * The split is deliberate. A caller that ignores the promise — a test teardown, a crash
+	 * path — still stops serving immediately, and the stale listing expires on its own within
+	 * the lease. A caller that awaits it, like the CLI's signal handler, closes the window
+	 * where the hub is still recommending a host that has already gone.
+	 */
+	stop(): Promise<void>;
 	/** Chunks served since boot — the peer-side half of 45.01 § 6's accounting. */
 	served(): { chunks: number; bytes: number };
 	/**
@@ -290,12 +299,12 @@ export async function startSeeder(opts: SeedOptions): Promise<Seeder> {
 		manifest,
 		listed: announcement?.listed ?? false,
 		stop() {
-			// Withdrawal is best-effort and not awaited: `stop` is called from a signal
-			// handler and from test teardown, and neither should hang on the network. The
-			// lease is short so an unwithdrawn peer expires on its own within minutes.
-			void announcement?.stop();
+			// Serving stops first and synchronously — nothing about withdrawing a listing
+			// should delay closing the socket, and a seeder that answered a request after
+			// announcing its departure would be the worst of both.
 			server.stop(true);
 			closeSync(fd);
+			return announcement?.stop() ?? Promise.resolve();
 		},
 		served: () => ({ chunks: servedChunks, bytes: servedBytes }),
 	};

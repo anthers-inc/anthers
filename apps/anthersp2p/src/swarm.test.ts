@@ -123,10 +123,13 @@ function hubStub(manifest: Manifest): typeof fetch {
 			return new Response(JSON.stringify({ peers: hubPeers, leaseSeconds: 600 }), { status: 200 });
 		}
 		if (url.includes("/announce")) {
-			hubPeers.push(JSON.parse(String(init?.body)).url);
-			return new Response(JSON.stringify({ origin: hubPeers.at(-1), leaseSeconds: 600 }), {
-				status: 200,
-			});
+			const origin = JSON.parse(String(init?.body)).url as string;
+			if (init?.method === "DELETE") {
+				hubPeers = hubPeers.filter((p) => p !== origin);
+				return new Response(JSON.stringify({ withdrawn: true }), { status: 200 });
+			}
+			hubPeers.push(origin);
+			return new Response(JSON.stringify({ origin, leaseSeconds: 600 }), { status: 200 });
 		}
 		if (url.includes("/chunks/")) {
 			throw new Error("the hub was asked for a chunk — the peer should have served it");
@@ -301,6 +304,31 @@ describe("finding a peer nobody told you about", () => {
 		expect(new Uint8Array(readFileSync(out))).toEqual(file);
 		// `hubStub` throws on any chunk request, so every one of these came off the peer.
 		expect(peer.served().chunks).toBe(totalChunks(file.length, CHUNK));
+	});
+
+	it("withdraws its listing when it stops, rather than leaving a lease pointing at nothing", async () => {
+		// The lease would expire on its own, so this is about the gap: minutes of the hub
+		// recommending a host that is already gone. `stop()` returns a promise for exactly
+		// this round-trip — a caller that ignores it still stops serving immediately.
+		const file = bytes(CHUNK * 2, 13);
+		const path = join(dir, "seeded.zip");
+		writeFileSync(path, file);
+		const port = 39_518;
+
+		const peer = await startSeeder({
+			baseUrl: HUB,
+			token: "creator-session",
+			workId: "5",
+			assetId: 12,
+			filePath: path,
+			port,
+			announceUrl: `http://localhost:${port}`,
+			fetchImpl: hubStub(await makeManifest(file)),
+		});
+		expect(hubPeers).toEqual([`http://localhost:${port}`]);
+
+		await peer.stop();
+		expect(hubPeers).toEqual([]);
 	});
 
 	it("downloads from the hub when discovery finds nobody", async () => {

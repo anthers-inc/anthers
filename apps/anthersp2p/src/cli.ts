@@ -160,8 +160,14 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 			// the gap seconds instead of minutes.
 			for (const signal of ["SIGINT", "SIGTERM"] as const) {
 				process.on(signal, () => {
-					seeder.stop();
-					process.exit(0);
+					// Await the withdrawal before exiting, or it never leaves the machine —
+					// `process.exit` is immediate and a fire-and-forget request dies with the
+					// process. Bounded, because a hub that is unreachable must not turn Ctrl-C
+					// into a hang; the lease expires by itself either way.
+					void Promise.race([
+						seeder.stop(),
+						new Promise((resolve) => setTimeout(resolve, 2000)),
+					]).then(() => process.exit(0));
 				});
 			}
 			// Resolve never: the process IS the service. Ctrl-C is the exit.
