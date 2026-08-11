@@ -1,0 +1,75 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# DigitalOcean App Platform spec for `anthers-studio` — the Creator Studio SPA
+# served at studio.anthers.org from apps/studio-web/Dockerfile.
+#
+# WHY THIS FILE EXISTS (captured 2026-08-11). Until now this app's spec lived
+# ONLY in App Platform and nowhere in this repository, which made it the one
+# piece of production that a lost or closed DigitalOcean account would take with
+# it. The Anthers-owned-account migration makes that a live risk rather than a
+# theoretical one: App Platform apps cannot be transferred between accounts, so
+# the app gets recreated from a spec — and there was no spec to recreate it from.
+#
+# 🚨 THIS IS A RECOVERY ARTIFACT, NOT A SOURCE OF TRUTH. Read the same warning
+# on .do/app.yaml and believe it here too: pushing to `release` never applies a
+# committed spec, so this file drifts by default and describes intent, not
+# reality. `doctl apps spec get 627305e3-ba1d-4991-8454-63fc140bbb07` is the only
+# authority. `make spec-diff` compares both apps and is what makes the drift loud.
+#
+# Apply with:
+#   doctl apps create --spec .do/studio.app.yaml           (recreating it)
+#   doctl apps update <app-id> --spec .do/studio.app.yaml  (thereafter)
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: anthers-studio
+region: nyc
+
+features:
+  - buildpack-stack=ubuntu-22
+
+domains:
+  - domain: studio.anthers.org
+    type: PRIMARY
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /
+      component:
+        name: studio
+
+services:
+  # A SERVICE, not a static site, and that is deliberate — see the header of
+  # apps/studio-web/serve.ts. The Studio is a cross-origin-isolated origin
+  # (COOP: same-origin + COEP: require-corp, which unlock SharedArrayBuffer and
+  # therefore multi-threaded ffmpeg.wasm), and DO App Platform static sites
+  # cannot set custom response headers. Serving the built SPA from Bun.serve is
+  # the only way to stamp them. A host that CAN set headers on static assets
+  # would make this component unnecessary.
+  - name: studio
+    dockerfile_path: apps/studio-web/Dockerfile
+    source_dir: /
+    github:
+      repo: anthers-inc/Anthers
+      branch: release
+      # `true` here, against `false` on every component of the `anthers` app, and
+      # it is LOAD-BEARING rather than drift. The CI `deploy` job in
+      # .github/workflows/ci.yml deploys one app id — the hub — and never this
+      # one, so push-on-release is the ONLY thing that ships the Studio. Setting
+      # this to `false` to match the hub's CI gate would not gate the Studio; it
+      # would strand it, permanently and silently.
+      #
+      # The consequence worth knowing: the Studio deploys with no CI gate at all,
+      # so a red suite still ships it. Closing that means adding a second
+      # create-deployment step to the deploy job FIRST, and flipping this after.
+      deploy_on_push: true
+    run_command: bun run apps/studio-web/serve.ts
+    http_port: 8080
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    health_check:
+      http_path: /
+    envs:
+      - key: PORT
+        scope: RUN_TIME
+        value: "8080"
