@@ -79,7 +79,7 @@ describe("pointing it somewhere else", () => {
 	it("takes an explicit endpoint and public base", () => {
 		const config = resolveStorageConfig({
 			STORAGE_REGION: "auto",
-			STORAGE_BUCKET: "anthers-media",
+			STORAGE_BUCKET: "anthers-media-private",
 			STORAGE_ENDPOINT: "https://abc123.r2.cloudflarestorage.com",
 			STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org",
 			STORAGE_FORCE_PATH_STYLE: "true",
@@ -125,10 +125,12 @@ describe("the URL↔key invariant", () => {
 		// longer the key. This is the one configuration that must never reach production,
 		// and the test exists to make the consequence concrete rather than cautionary.
 		const config = resolveStorageConfig({
-			STORAGE_PUBLIC_BASE_URL: "https://abc123.r2.cloudflarestorage.com/anthers-media",
+			STORAGE_PUBLIC_BASE_URL: "https://abc123.r2.cloudflarestorage.com/anthers-media-public",
 		});
 		const key = "creators/1/assets/game.zip";
-		expect(urlToKey(publicUrlFor(config, key))).toBe("anthers-media/creators/1/assets/game.zip");
+		expect(urlToKey(publicUrlFor(config, key))).toBe(
+			"anthers-media-public/creators/1/assets/game.zip",
+		);
 		expect(urlToKey(publicUrlFor(config, key))).not.toBe(key);
 	});
 

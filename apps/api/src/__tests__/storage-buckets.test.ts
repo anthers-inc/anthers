@@ -68,11 +68,11 @@ describe("the split is off until a second bucket is configured", () => {
 		// both wrong and, on a provider where the CDN domain is the grant, a way to ask for
 		// exactly the exposure this whole split exists to prevent.
 		const config = resolveStorageConfig({
-			STORAGE_BUCKET: "anthers-media",
+			STORAGE_BUCKET: "anthers-media-private",
 			STORAGE_PUBLIC_BUCKET: "anthers-media-public",
 			STORAGE_REGION: "nyc3",
 		});
-		expect(config.bucket).toBe("anthers-media");
+		expect(config.bucket).toBe("anthers-media-private");
 		expect(config.publicBucket).toBe("anthers-media-public");
 		expect(config.publicBaseUrl).toBe("https://anthers-media-public.nyc3.digitaloceanspaces.com");
 	});
