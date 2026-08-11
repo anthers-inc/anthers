@@ -271,12 +271,7 @@ describe("P2P delivery", () => {
 		expect(res.headers.get("X-Chunk-Sha256")).toBe(manifestFromServer.chunks[chunkIndex]);
 
 		const chunkBytes = new Uint8Array(await res.arrayBuffer());
-		const { offset, size } = chunkRange(
-			chunkIndex,
-			manifestFromServer.chunks.length,
-			CHUNK_SIZE,
-			FILE_SIZE,
-		);
+		const { offset, size } = chunkRange(chunkIndex, CHUNK_SIZE, FILE_SIZE);
 		expect(chunkBytes.length).toBe(size);
 
 		// Verify the chunk matches the original file bytes
@@ -349,7 +344,7 @@ describe("P2P delivery", () => {
 			});
 			expect(res.status).toBe(200);
 			const chunkBytes = new Uint8Array(await res.arrayBuffer());
-			const { offset } = chunkRange(i, numChunks, CHUNK_SIZE, FILE_SIZE);
+			const { offset } = chunkRange(i, CHUNK_SIZE, FILE_SIZE);
 			reassembled.set(chunkBytes, offset);
 		}
 
@@ -452,7 +447,7 @@ describe("P2P delivery", () => {
 		expect(manifest?.assetSize).toBe(oddSize);
 		expect(manifest?.chunks.length).toBe(3);
 
-		const { offset, size } = chunkRange(2, 3, CHUNK_SIZE, oddSize);
+		const { offset, size } = chunkRange(2, CHUNK_SIZE, oddSize);
 		expect(size).toBe(1000);
 		const last = await storage.readRange(oddKey, offset, size);
 		expect(last?.length).toBe(1000);
@@ -492,7 +487,7 @@ describe("P2P delivery", () => {
 		expect(res.status).toBe(200);
 
 		const chunkBytes = new Uint8Array(await res.arrayBuffer());
-		const { offset, size } = chunkRange(chunkIndex, 4, CHUNK_SIZE, FILE_SIZE);
+		const { offset, size } = chunkRange(chunkIndex, CHUNK_SIZE, FILE_SIZE);
 		expect(chunkBytes).toEqual(testBytes.subarray(offset, offset + size));
 		expect(await verifyChunk(chunkBytes, manifestFromServer, chunkIndex)).toBe(true);
 	});
