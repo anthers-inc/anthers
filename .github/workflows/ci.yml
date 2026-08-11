@@ -177,8 +177,6 @@ jobs:
           # The separate `anthers-studio` app. Its App Platform spec exists only in
           # App Platform, not in this repo, so this is the only place in version
           # control where that deployment gets checked at all.
-          - name: studio-web
-            dockerfile: apps/studio-web/Dockerfile
 
     steps:
       - uses: actions/checkout@v4

@@ -273,7 +273,7 @@ test-gauntlet: free-preview-port ## Run the User Gauntlet spec pass (fixture res
 
 
 # ─── Desktop Studio (Tauri) ───
-# The desktop shell wraps the SAME apps/studio-web build the browser Studio serves.
+# The desktop shell wraps the SAME apps/web build the site serves, opening it at /studio.
 # Its package scripts are deliberately not named dev/build, so the root's
 # `--filter '*'` globs can't launch a window during `make dev` or force a Rust
 # build on every web build — drive them from here instead.

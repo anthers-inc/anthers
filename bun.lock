@@ -44,32 +44,6 @@
       "name": "studio-desktop",
       "version": "0.1.0",
     },
-    "apps/studio-web": {
-      "name": "studio-web",
-      "version": "0.1.0",
-      "dependencies": {
-        "@anthers/web-shared": "workspace:*",
-        "@ffmpeg/core": "^0.12.6",
-        "@ffmpeg/core-mt": "^0.12.6",
-        "@ffmpeg/ffmpeg": "^0.12.10",
-        "@ffmpeg/util": "^0.12.1",
-        "@heroicons/react": "^2.2.0",
-        "@tauri-apps/api": "2.11.1",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
-        "react-router-dom": "^7.0.0",
-      },
-      "devDependencies": {
-        "@tailwindcss/typography": "^0.5.19",
-        "@types/bun": "latest",
-        "@types/react": "^19.0.0",
-        "@types/react-dom": "^19.0.0",
-        "bun-plugin-tailwind": "latest",
-        "daisyui": "^5.0.0",
-        "tailwindcss": "^4.0.0",
-        "typescript": "^5.8.0",
-      },
-    },
     "apps/web": {
       "name": "web",
       "version": "0.1.0",
@@ -357,8 +331,6 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
     "@ffmpeg/core": ["@ffmpeg/core@0.12.10", "", {}, "sha512-dzNplnn2Nxle2c2i2rrDhqcB19q9cglCkWnoMTDN9Q9l3PvdjZWd1HfSPjCNWc/p8Q3CT+Es9fWOR0UhAeYQZA=="],
-
-    "@ffmpeg/core-mt": ["@ffmpeg/core-mt@0.12.10", "", {}, "sha512-atyRTOpa58bLCIgd6GXBZAXWyWD3AUoQyzxqjvGhp9MuSzdILtOTI62ffLswBsCnLq15lQ8IETHUpm1oe4V9FQ=="],
 
     "@ffmpeg/ffmpeg": ["@ffmpeg/ffmpeg@0.12.15", "", { "dependencies": { "@ffmpeg/types": "^0.12.4" } }, "sha512-1C8Obr4GsN3xw+/1Ww6PFM84wSQAGsdoTuTWPOj2OizsRDLT4CXTaVjPhkw6ARyDus1B9X/L2LiXHqYYsGnRFw=="],
 
@@ -1287,8 +1259,6 @@
     "strnum": ["strnum@2.2.0", "", {}, "sha512-Y7Bj8XyJxnPAORMZj/xltsfo55uOiyHcU2tnAVzHUnSJR/KsEX+9RoDeXEnsXtl/CX4fAcrt64gZ13aGaWPeBg=="],
 
     "studio-desktop": ["studio-desktop@workspace:apps/studio-desktop"],
-
-    "studio-web": ["studio-web@workspace:apps/studio-web"],
 
     "style-to-js": ["style-to-js@1.1.21", "", { "dependencies": { "style-to-object": "1.0.14" } }, "sha512-RjQetxJrrUJLQPHbLku6U/ocGtzyjbJMP9lCNK7Ag0CNh690nSH8woqWH9u16nMjYBAok+i7JO1NP2pOy8IsPQ=="],
 

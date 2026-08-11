@@ -21,7 +21,6 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/web-shared/package.json packages/web-shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-COPY apps/studio-web/package.json apps/studio-web/
 # EVERY workspace listed in bun.lock must have its manifest here, even ones this image
 # never builds: `--frozen-lockfile` compares the lockfile against the workspaces it can
 # actually see, and a missing package.json reads as "the lockfile changed". The desktop
