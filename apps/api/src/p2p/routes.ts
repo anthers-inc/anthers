@@ -38,57 +38,115 @@
 
 import { db } from "@anthers/db/client";
 import { assets, works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
+import { buildManifestForAsset } from "../jobs/build-p2p-manifest.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { storage } from "../services/storage/index.js";
-import { buildManifestFromStorage, chunkRange, type Manifest } from "./manifest.js";
+import { chunkRange, type Manifest } from "./manifest.js";
 import { getPublicKeyB64, mintP2pToken, verifyP2pToken } from "./token.js";
 
 /**
- * How many assets' manifests to keep hashed. A manifest is one hex hash per 256 KiB, so
- * a 5 GiB asset costs roughly 1.3 MB here — small, but not free, and the map used to be
- * unbounded. The eviction cost is re-reading that asset from storage on its next request,
- * which is a latency cost rather than a correctness one.
- */
-const MANIFEST_CACHE_LIMIT = 64;
-
-/**
- * In-memory cache: assetId -> manifest + bytes-served counter.
+ * 🚨 **Nothing here caches a manifest, and that is deliberate — measured, not assumed.**
  *
- * 🚨 **It holds no file bytes, deliberately.** It used to cache the complete asset
- * alongside its manifest, which made the first request for any real Work a whole-file
- * read into a 512 MB instance that was then never released — an OOM of the entire hub,
- * reachable by one download. Chunks are read from storage per request instead
- * (`storage.readRange`), so the resident cost here is bounded by the manifests alone.
- * If you find yourself adding a `bytes` field back, that is the bug.
+ * An earlier version kept up to 64 whole manifests in a Map, on the reasoning that a
+ * manifest is "one hex hash per 256 KiB, so a 5 GiB asset costs roughly 1.3 MB". That
+ * arithmetic describes the JSON on the wire, not an array of 64-character strings in the
+ * JS heap. Measured on Bun (fresh process per sample, RSS after a forced GC):
+ *
+ *     1 GiB asset →   4,096 chunks →  16 MB
+ *     5 GiB asset →  20,480 chunks →  53 MB
+ *    20 GiB asset →  81,920 chunks → 177 MB
+ *
+ * — about **2.3 KB per chunk**, some 35× the estimate. Sixty-four of anything blows the
+ * 512 MB instance; a single 20 GiB manifest takes a third of it on its own. So there is
+ * no cache size that is both useful and safe, which is the tell that caching whole
+ * manifests was the wrong shape once they became persistent (migration 0026).
+ *
+ * What replaced it: the chunk endpoint asks Postgres for exactly the four small values it
+ * needs — storage key, asset size, chunk size, and the ONE chunk hash at the requested
+ * index, extracted inside the database with `p2p_manifest->'chunks'->>n`. The megabytes
+ * never enter the process at all. That is strictly better than caching them, because the
+ * old path also pulled the whole jsonb column out of Postgres on every cache miss.
+ *
+ * Only the manifest ENDPOINT materializes a full manifest, because returning it is its
+ * entire job, and it does not retain it afterwards.
  */
-interface SeederEntry {
-	manifest: Manifest;
-	/** The object key chunks are read from. Held so serving a chunk costs no database hit. */
-	storageKey: string;
-	hubBytesServed: number;
-}
-const seederStore = new Map<number, SeederEntry>();
 
 /**
- * Drop every cached manifest. Tests use this to reach the rebuild path that a restart,
- * a redeploy or an eviction would otherwise be needed to produce.
+ * Hub-served byte counters, for the bandwidth accounting in 45.01 § Milestone 6.
+ *
+ * Numbers keyed by asset id — the one thing here worth keeping in memory, at a few dozen
+ * bytes an entry rather than megabytes. Bounded anyway, because an unbounded map is what
+ * got us here. Losing a counter to eviction costs telemetry and nothing else.
  */
-export function _resetSeederCacheForTest(): void {
-	seederStore.clear();
+const HUB_BYTES_TRACKED_ASSETS = 1024;
+const hubBytesServed = new Map<number, number>();
+
+function recordHubBytes(assetId: number, bytes: number): void {
+	if (!hubBytesServed.has(assetId) && hubBytesServed.size >= HUB_BYTES_TRACKED_ASSETS) {
+		const oldest = hubBytesServed.keys().next();
+		if (!oldest.done) hubBytesServed.delete(oldest.value);
+	}
+	hubBytesServed.set(assetId, (hubBytesServed.get(assetId) ?? 0) + bytes);
 }
 
-/** Insertion-ordered eviction — Map preserves insertion order, so the first key is oldest. */
-function rememberManifest(assetId: number, entry: SeederEntry): void {
-	if (seederStore.size >= MANIFEST_CACHE_LIMIT) {
-		const oldest = seederStore.keys().next();
-		if (!oldest.done) seederStore.delete(oldest.value);
-	}
-	seederStore.set(assetId, entry);
+/** Reset the bandwidth counters. Tests use this to assert against a known baseline. */
+export function _resetSeederCacheForTest(): void {
+	hubBytesServed.clear();
+}
+
+/**
+ * Everything the chunk endpoint needs, and nothing else.
+ *
+ * The `->>` extraction is the point: it returns one 64-character hash out of an array
+ * that may hold eighty thousand of them, so the row this hands back is a few hundred
+ * bytes regardless of how large the asset is. Selecting the column and indexing in
+ * JavaScript would work and would drag the whole array across the wire every time.
+ *
+ * Returns null when the asset does not belong to that Work, has no stored manifest, or
+ * has no chunk at that index — three different reasons the caller answers identically,
+ * because distinguishing them for an unauthenticated-ish caller leaks the shape of the
+ * catalog for nothing.
+ *
+ * 🚨 **The `::int` cast on the index is load-bearing.** In Postgres, `jsonb ->> integer`
+ * takes an ARRAY ELEMENT while `jsonb ->> text` takes an OBJECT KEY — same spelling, two
+ * operators. Drizzle binds the parameter as text, so without the cast Postgres quietly
+ * resolves the object-key form, finds no key named "0", and returns null for every index
+ * ever requested. That surfaces as a 404 on every chunk of every download, with no error
+ * anywhere. The tests caught it; reading the query would not have.
+ */
+async function chunkLocator(
+	workId: number,
+	assetId: number,
+	index: number,
+): Promise<{ storageKey: string; assetSize: number; chunkSize: number; sha256: string } | null> {
+	const rows = await db.execute<{
+		file: string;
+		asset_size: string | null;
+		chunk_size: string | null;
+		sha256: string | null;
+	}>(sql`
+		SELECT
+			${assets.file}                                   AS file,
+			${assets.p2pManifest}->>'assetSize'              AS asset_size,
+			${assets.p2pManifest}->>'chunkSize'              AS chunk_size,
+			${assets.p2pManifest}->'chunks'->>(${index})::int AS sha256
+		FROM ${assets}
+		WHERE ${assets.id} = ${assetId} AND ${assets.workId} = ${workId}
+		LIMIT 1
+	`);
+	const row = rows[0];
+	if (!row?.sha256 || row.asset_size === null || row.chunk_size === null) return null;
+	return {
+		storageKey: row.file,
+		assetSize: Number(row.asset_size),
+		chunkSize: Number(row.chunk_size),
+		sha256: row.sha256,
+	};
 }
 
 /** Resolve a viewer from either a bearer token or the session cookie. */
@@ -135,67 +193,46 @@ async function findWork(workIdParam: string) {
  * result back — persisting is the job's responsibility, and a request handler that writes
  * would make a burst of first-requests race each other over the same row.
  */
-async function getOrCreateSeederEntry(
-	workId: number,
-	workPublicId: string,
-	asset: (typeof assets.$inferSelect)[],
-): Promise<SeederEntry> {
-	const assetRow = asset[0];
-	const cached = seederStore.get(assetRow.id);
-	if (cached) return cached;
-
+/**
+ * The full manifest for an asset — for the one endpoint whose job is to return it.
+ *
+ * The stored half is content-only (`assetSize`, `assetSha256`, `chunkSize`, `chunks`), so
+ * identity is composed here from the live Work and asset rows. That is what makes a rename
+ * show up immediately in the served manifest while the immutable half stays exactly as it
+ * was hashed — 45.04 requires both: manifests are immutable in their content, and the hub
+ * always serves the current one.
+ *
+ * When nothing is stored it builds AND PERSISTS, which reverses an earlier decision worth
+ * explaining. This used to build without writing, on the reasoning that persisting is the
+ * release job's business and a handler that wrote would let a burst of first-requests race
+ * over one row. The race is real and turns out to be benign — every racer hashes the same
+ * bytes and writes the same value, so the loser overwrites with an identical row. Not
+ * writing is the more expensive mistake: the chunk endpoint now reads its per-chunk hash
+ * straight out of this column, so an asset that is never persisted would re-hash on the
+ * manifest request and then be unable to serve a single chunk.
+ */
+async function manifestFor(
+	work: typeof works.$inferSelect,
+	assetRow: typeof assets.$inferSelect,
+): Promise<Manifest | null> {
 	const identity = {
-		workId,
-		workPublicId,
+		workId: work.id,
+		workPublicId: work.publicId.toString(),
 		assetId: assetRow.id,
 		assetFilename: assetRow.filename,
 		assetMimeType: assetRow.mimeType ?? "application/octet-stream",
 	};
 
-	const stored = assetRow.p2pManifest;
-	const manifest: Manifest | null = stored
-		? { specVersion: 1, ...identity, ...stored }
-		: await buildManifestFromStorage({ ...identity, storageKey: assetRow.file });
+	if (assetRow.p2pManifest) return { specVersion: 1, ...identity, ...assetRow.p2pManifest };
 
-	if (!manifest) throw new Error(`Asset file not found in storage: ${assetRow.file}`);
+	// No stored manifest — a Work released before the job existed, or a job that failed.
+	// Build it, persist it, and serve it.
+	const outcome = await buildManifestForAsset(assetRow.id, { force: true });
+	if (outcome !== "built") return null;
 
-	const entry: SeederEntry = { manifest, storageKey: assetRow.file, hubBytesServed: 0 };
-	rememberManifest(assetRow.id, entry);
-	return entry;
-}
-
-/**
- * The seeder entry for a token-bearing chunk request, rebuilding it if it isn't cached.
- *
- * A cache miss is normal rather than exceptional: the manifest cache is per-process and
- * bounded, so a restart, a redeploy, or simply the 65th asset all drop an entry while
- * perfectly valid 15-minute tokens are still in flight. Returning 404 there — which is
- * what this did — fails a download that the hub has already authorized, and it fails it
- * more often the busier the hub gets.
- *
- * Rebuilding needs no access re-check, and that is a property of the token rather than an
- * omission: it is Ed25519-signed by the hub, scoped to exactly this Work and asset, and
- * short-lived. `verifyP2pToken` has already established all of that. Re-resolving access
- * here would additionally be wrong for the case the swarm exists to serve — a peer
- * presenting a token it was legitimately given is not necessarily the user it was minted
- * for, which is precisely why the token is the credential at this endpoint and the
- * session is not.
- */
-async function seederEntryForToken(workId: number, assetId: number): Promise<SeederEntry | null> {
-	const cached = seederStore.get(assetId);
-	if (cached) return cached;
-
-	const [asset] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
-	if (!asset || asset.workId !== workId) return null;
-
-	const [work] = await db.select().from(works).where(eq(works.id, workId)).limit(1);
-	if (!work) return null;
-
-	try {
-		return await getOrCreateSeederEntry(work.id, work.publicId.toString(), [asset]);
-	} catch {
-		return null;
-	}
+	const [refreshed] = await db.select().from(assets).where(eq(assets.id, assetRow.id)).limit(1);
+	if (!refreshed?.p2pManifest) return null;
+	return { specVersion: 1, ...identity, ...refreshed.p2pManifest };
 }
 
 export const p2pRoutes = new Hono()
@@ -235,13 +272,13 @@ export const p2pRoutes = new Hono()
 			return c.json({ error: "Purchase or subscription required", access }, 403);
 		}
 
-		// Build (or fetch cached) manifest
-		let entry: SeederEntry;
+		let manifest: Manifest | null;
 		try {
-			entry = await getOrCreateSeederEntry(work.id, work.publicId.toString(), [asset]);
+			manifest = await manifestFor(work, asset);
 		} catch (err) {
 			return c.json({ error: "Failed to build manifest", detail: String(err) }, 500);
 		}
+		if (!manifest) return c.json({ error: "Asset file not available" }, 404);
 
 		// Mint the P2P delivery token
 		const token = await mintP2pToken({
@@ -250,7 +287,7 @@ export const p2pRoutes = new Hono()
 			userId: viewerId ?? 0,
 		});
 
-		return c.json({ manifest: entry.manifest, token });
+		return c.json({ manifest, token });
 	})
 	// ── Chunk endpoint (token-verified, serves bytes) ────────────────────────────
 	.get("/works/:id/assets/:assetId/chunks/:index", async (c) => {
@@ -273,31 +310,34 @@ export const p2pRoutes = new Hono()
 			return c.json({ error: "Token not valid for this asset" }, 403);
 		}
 
-		const entry = await seederEntryForToken(payload.w, assetId);
-		if (!entry) return c.json({ error: "Asset not available" }, 404);
-
-		if (chunkIndex < 0 || chunkIndex >= entry.manifest.chunks.length) {
+		if (chunkIndex < 0 || !Number.isInteger(chunkIndex)) {
 			return c.json({ error: "Chunk not found" }, 404);
 		}
 
+		// One small row: storage key, sizes, and just this chunk's hash. Never the array.
+		// A chunk index past the end comes back null here, so the bounds check is the
+		// query's rather than a separate length comparison.
+		const locator = await chunkLocator(payload.w, assetId, chunkIndex);
+		if (!locator) return c.json({ error: "Chunk not found" }, 404);
+
+		const totalChunks = Math.ceil(locator.assetSize / locator.chunkSize);
 		const { offset, size } = chunkRange(
 			chunkIndex,
-			entry.manifest.chunks.length,
-			entry.manifest.chunkSize,
-			entry.manifest.assetSize,
+			totalChunks,
+			locator.chunkSize,
+			locator.assetSize,
 		);
 
-		// Read just this chunk out of storage. The seeder holds no file bytes — see the
-		// note on SeederEntry for why that matters more than the extra read costs.
-		const bytes = await storage.readRange(entry.storageKey, offset, size);
+		// Read just this chunk out of storage. The seeder holds no file bytes and no
+		// manifests — see the note at the top of this file for why both matter.
+		const bytes = await storage.readRange(locator.storageKey, offset, size);
 		if (!bytes || bytes.length !== size) {
 			// The object changed or vanished under a manifest built from it. Serving a
 			// short chunk would fail the peer's hash check with no explanation, so say so.
 			return c.json({ error: "Chunk unavailable" }, 404);
 		}
 
-		// Bandwidth accounting: count hub-served bytes
-		entry.hubBytesServed += size;
+		recordHubBytes(assetId, size);
 
 		return new Response(bytes as BodyInit, {
 			status: 200,
@@ -305,20 +345,30 @@ export const p2pRoutes = new Hono()
 				"Content-Type": "application/octet-stream",
 				"Content-Length": String(size),
 				"X-Chunk-Index": String(chunkIndex),
-				"X-Chunk-Sha256": entry.manifest.chunks[chunkIndex],
+				"X-Chunk-Sha256": locator.sha256,
 				"Cache-Control": "no-store",
 			},
 		});
 	})
 	// ── Bandwidth accounting report ───────────────────────────────────────────────
-	.get("/bandwidth-report", (c) => {
+	.get("/bandwidth-report", async (c) => {
+		// The counters are the only thing held in memory, so the asset metadata that used
+		// to ride along in the cache is fetched here instead — for the handful of assets
+		// actually counted, not for everything.
+		const ids = [...hubBytesServed.keys()];
 		const report: Record<number, { filename: string; hubBytesServed: number; fileSize: number }> =
 			{};
-		for (const [assetId, entry] of seederStore) {
-			report[assetId] = {
-				filename: entry.manifest.assetFilename,
-				hubBytesServed: entry.hubBytesServed,
-				fileSize: entry.manifest.assetSize,
+		if (ids.length === 0) return c.json(report);
+
+		const rows = await db
+			.select({ id: assets.id, filename: assets.filename, fileSize: assets.fileSize })
+			.from(assets)
+			.where(inArray(assets.id, ids));
+		for (const row of rows) {
+			report[row.id] = {
+				filename: row.filename,
+				hubBytesServed: hubBytesServed.get(row.id) ?? 0,
+				fileSize: row.fileSize ?? 0,
 			};
 		}
 		return c.json(report);
