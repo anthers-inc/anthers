@@ -132,10 +132,34 @@ if (!(await run(["which", "doctl"])).ok) {
 	process.exit(0);
 }
 
+/**
+ * Which `doctl` account to compare against, via `DOCTL_CONTEXT`.
+ *
+ * Added 2026-08-11, when Anthers gained a SECOND DigitalOcean account: production is being
+ * rebuilt under an Anthers-owned account while the original still runs on a personal one,
+ * so "the live spec" stopped being a single thing. Without this the tool silently compares
+ * the committed spec against whichever account `doctl` happens to be pointed at — and since
+ * the committed spec now describes the R2-configured app, running it against the old
+ * account reports a wall of drift that is entirely expected and tells you nothing.
+ *
+ *     DOCTL_CONTEXT=anthers make spec-diff
+ */
+const CONTEXT = (process.env.DOCTL_CONTEXT ?? "").trim();
+const ctxArgs = CONTEXT ? ["--context", CONTEXT] : [];
+if (CONTEXT) console.log(`spec-diff: using doctl context "${CONTEXT}"`);
+
 // Fetched once and shared across specs. Asking DigitalOcean the same question once per
 // spec would only add a way for two comparisons in the same run to disagree about what
 // is live, and the answer is the same list either way.
-const appList = await run(["doctl", "apps", "list", "--format", "ID,Spec.Name", "--no-header"]);
+const appList = await run([
+	"doctl",
+	"apps",
+	"list",
+	"--format",
+	"ID,Spec.Name",
+	"--no-header",
+	...ctxArgs,
+]);
 if (!appList.ok) {
 	console.log(`spec-diff: doctl could not list apps — skipping.\n${appList.stderr.trim()}`);
 	process.exit(0);
@@ -164,7 +188,7 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		}
 	}
 
-	const live = await run(["doctl", "apps", "spec", "get", appId]);
+	const live = await run(["doctl", "apps", "spec", "get", appId, ...ctxArgs]);
 	if (!live.ok) {
 		console.log(
 			`spec-diff: could not fetch the live spec for ${appName} — skipping.\n${live.stderr.trim()}`,

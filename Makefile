@@ -253,7 +253,7 @@ storage-check: ## Inspect the live Spaces bucket's ACL/policy/CORS posture (WRIT
 # which CI has no token for and a fresh clone has no reason to. Run it when you touch
 # .do/app.yaml, and after any deploy that was supposed to change configuration — those
 # are the moments the two specs part company. See 42.05 Deployment Runbook.
-spec-diff: ## Compare .do/app.yaml against the LIVE App Platform spec (needs doctl; DO_APP_ID to override lookup)
+spec-diff: ## Compare .do/*.yaml against the LIVE App Platform specs (DOCTL_CONTEXT=anthers for the Anthers account)
 	bun run scripts/spec-diff.ts
 
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
