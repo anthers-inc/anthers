@@ -21,25 +21,17 @@
  */
 
 import { createPrivateKey, createPublicKey } from "node:crypto";
+import {
+	P2P_TOKEN_TTL_SECONDS,
+	type P2pTokenPayload,
+	verifyP2pToken as verifySharedToken,
+} from "@anthers/shared/p2p-token";
 
-/** Token TTL: 15 minutes (per 45.05 § Token lifetime). */
-export const P2P_TOKEN_TTL_SECONDS = 15 * 60;
+/** Re-exported so existing importers keep one import site. */
+export { P2P_TOKEN_TTL_SECONDS, type P2pTokenPayload };
 
 /** Key ID for the initial signing key. Increment on rotation. */
 const CURRENT_KEY_ID = 1;
-
-export interface P2pTokenPayload {
-	/** Work ID (short name to keep payload compact). */
-	w: number;
-	/** Asset ID. */
-	a: number;
-	/** User ID. */
-	u: number;
-	/** Expiry, unix seconds. */
-	e: number;
-	/** Key ID (optional, defaults to 1). */
-	k?: number;
-}
 
 // ── base64url helpers ────────────────────────────────────────────────────────
 
@@ -152,77 +144,23 @@ export async function mintP2pToken(params: {
 
 // ── Token verification ───────────────────────────────────────────────────────
 
-export interface VerifiedToken extends P2pTokenPayload {}
-
 /**
- * Verify a P2P delivery token. Returns the payload if valid and unexpired, null otherwise.
+ * Verification now lives in `@anthers/shared/p2p-token`, because the hub is not its only
+ * caller: 45.05's "both sides check" means a serving peer runs the same check, and a
+ * verifier that drifted a shade more permissive on the peer would be a hole exactly where
+ * nobody looks. One implementation, imported by both.
  *
- * This is called by the hub host and by any peer in the swarm. The verifier needs the
- * hub's public key (see getPublicKeyB64 / GET /api/p2p/pubkey), not the private key.
+ * This wrapper exists only to supply the hub's own public key, which the hub can derive
+ * from its private key and a peer must fetch over TLS.
  */
+export type VerifiedToken = P2pTokenPayload;
+
 export async function verifyP2pToken(
 	token: string,
 	publicKeyB64?: string,
 ): Promise<VerifiedToken | null> {
-	const [payloadB64, sigB64] = token.split(".");
-	if (!payloadB64 || !sigB64) return null;
-
-	let sig: Uint8Array;
-	let payloadBytes: Uint8Array;
-	try {
-		sig = b64urlDecode(sigB64);
-		payloadBytes = b64urlDecode(payloadB64);
-	} catch {
-		return null;
-	}
-
-	if (sig.length !== 64) return null;
-
-	// Import the public key
-	const pubB64 = publicKeyB64 ?? (await getPublicKeyB64());
-	const pubKeyBytes = b64urlDecode(pubB64);
-	if (pubKeyBytes.length !== 32) return null;
-
-	const pubKey = await crypto.subtle.importKey(
-		"raw",
-		pubKeyBytes as BufferSource,
-		{ name: "Ed25519" },
-		false,
-		["verify"],
-	);
-
-	// Verify the signature over the payload string (the bytes before the dot)
-	const message = new TextEncoder().encode(payloadB64);
-	const valid = await crypto.subtle.verify(
-		"Ed25519",
-		pubKey,
-		sig as BufferSource,
-		message as BufferSource,
-	);
-	if (!valid) return null;
-
-	let payload: P2pTokenPayload;
-	try {
-		payload = JSON.parse(new TextDecoder().decode(payloadBytes));
-	} catch {
-		return null;
-	}
-
-	// Expiry check
-	if (typeof payload.e !== "number" || payload.e < Math.floor(Date.now() / 1000)) {
-		return null;
-	}
-
-	// Required fields
-	if (
-		typeof payload.w !== "number" ||
-		typeof payload.a !== "number" ||
-		typeof payload.u !== "number"
-	) {
-		return null;
-	}
-
-	return payload;
+	const pub = publicKeyB64 ?? (await getPublicKeyB64());
+	return verifySharedToken(token, pub);
 }
 
 // ── Test helpers ─────────────────────────────────────────────────────────────

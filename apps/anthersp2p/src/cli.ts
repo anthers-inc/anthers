@@ -15,19 +15,24 @@
  * would be friendlier and is the obvious follow-up; a token you can paste is what makes the
  * client usable today without one.
  *
- * ── Seeding is NOT here, and the reason is a dependency decision ────────────────────
+ * ── Seeding is HTTP, not WebRTC, and that was the whole unlock ──────────────────────
  *
- * 🚨 Bun ships no `RTCPeerConnection`. Serving chunks to browser peers means a native
- * WebRTC implementation (`node-datachannel` or similar), which is a real dependency call —
- * a native module, in the one artifact whose whole value is that anyone can build and audit
- * it. Until that is decided, **no peer in the swarm can serve**: the browser client asks
- * `{t:"want"}` over its data channel and nothing anywhere answers, so the relay has never
- * introduced two peers that could trade bytes. The hub is the only host, and the P2P path
- * is currently a verified download protocol rather than a swarm.
+ * WebRTC exists to get through NAT. A host that can accept an inbound connection does not
+ * need it, and serving over HTTPS costs no new protocol, no native module (Bun ships no
+ * `RTCPeerConnection`), and no TURN relay — TURN being bytes *Anthers* would pay for, which
+ * would quietly falsify 45.01 § 6's "swarm-served bytes are free to both sides".
+ *
+ * `seed` answers exactly the hub's own URL shape, so a client pointed at a peer is the hub
+ * client with a different origin. One download architecture, not one plus a peer dialect.
+ *
+ * ⚠️ Still true: a peer that *cannot* accept inbound — an ordinary user behind NAT — needs
+ * WebRTC, and the browser client's `{t:"want"}` data-channel path still has nothing
+ * answering it. That population is 45.01's "as soon as viable", not a launch requirement.
  */
 
 import { basename } from "node:path";
 import { AccessDeniedError, fetchManifest, pullAsset, VerificationError } from "./pull.js";
+import { SeedError, startSeeder } from "./seed.js";
 
 const DEFAULT_BASE_URL = "https://anthers.org";
 
@@ -35,12 +40,17 @@ function usage(): never {
 	console.error(`anthersp2p — the open client for Anthers P2P delivery
 
   anthersp2p pull <workId> <assetId> [options]     download and verify an asset
+  anthersp2p seed <workId> <assetId> --file F      serve chunks to entitled peers
   anthersp2p manifest <workId> <assetId>           print the manifest as JSON
 
 Options:
   --out FILE          where to write (default: the asset's own filename)
+  --file FILE         (seed) the local copy to serve
+  --port N            (seed) listen port (default 8080)
+  --skip-verify       (seed) don't check the local file first — see the docs, it's a foot-gun
   --resume            re-verify what is on disk and fetch only what is missing
   --concurrency N     chunks in flight (default 4)
+  --peer ORIGIN       (pull) fetch chunks from this peer; manifest still comes from the hub
   --url ORIGIN        hub origin (default ${DEFAULT_BASE_URL}, or ANTHERS_URL)
   --token TOKEN       session token (or ANTHERS_TOKEN)
 
@@ -102,6 +112,34 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 			return 0;
 		}
 
+		if (command === "seed") {
+			const filePath = String(flags.file ?? "");
+			if (!filePath) {
+				console.error("seed needs --file pointing at your local copy of the asset.");
+				return 2;
+			}
+			const seeder = await startSeeder({
+				baseUrl,
+				token,
+				workId,
+				assetId,
+				filePath,
+				port: flags.port ? Number(flags.port) : undefined,
+				skipVerify: flags["skip-verify"] === true,
+				onLog: (line) => console.error(line),
+			});
+			console.error(
+				`seeding ${seeder.manifest.assetFilename} (${seeder.manifest.chunks.length} chunks) ` +
+					`on port ${seeder.port}`,
+			);
+			console.error(
+				"  peers present a hub-minted token; every request is verified. Ctrl-C to stop.",
+			);
+			// Resolve never: the process IS the service. Ctrl-C is the exit.
+			await new Promise<void>(() => {});
+			return 0;
+		}
+
 		if (command === "pull") {
 			const { manifest } = await fetchManifest({ baseUrl, token, workId, assetId });
 			const outputPath = String(
@@ -145,6 +183,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 	} catch (err) {
 		// Each of these means something different to whoever is reading, and an exit code
 		// that distinguishes them is what makes the CLI scriptable.
+		if (err instanceof SeedError) {
+			console.error(`\n  Cannot seed: ${err.message}`);
+			return 65; // EX_DATAERR — the file is wrong, not the request
+		}
 		if (err instanceof AccessDeniedError) {
 			console.error(`\n  ${err.message}`);
 			return 77; // EX_NOPERM
