@@ -39,3 +39,41 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
 export function aclForMediaType(mediaType: string | null | undefined): "public" | "private" {
 	return PUBLIC_MEDIA_TYPES.has(mediaType ?? "") ? "public" : "private";
 }
+
+/**
+ * The key prefixes that hold display chrome, under `creators/{id}/`.
+ *
+ * This is the same policy as `PUBLIC_MEDIA_TYPES` seen from the other end. The allowlist
+ * above answers *"may this upload be world-readable?"* at write time, when the media type
+ * is in hand; this answers *"is this object world-readable?"* at read time, when only the
+ * key is. Both must say the same thing about the same object, and `storage-buckets.test.ts`
+ * asserts they do against the key shapes the media-upload route actually mints.
+ *
+ * 🚨 **This became load-bearing when storage moved to a provider without per-object ACLs.**
+ * On S3 and Spaces, `public-read` versus `private` is carried by the object itself, so the
+ * two kinds can share a bucket and a mistake exposes exactly one file. Cloudflare R2 has no
+ * per-object ACL: access is granted by attaching a custom domain to a **bucket**, and
+ * everything inside it becomes readable by key. So the boundary has to be the bucket, and
+ * this function is what decides which one an object belongs to.
+ *
+ * Fails closed, like the allowlist above: a key that does not match the expected shape, or
+ * sits under a prefix nobody listed, is private.
+ */
+export const PUBLIC_KEY_PREFIXES: readonly string[] = [
+	"avatars/",
+	"headers/",
+	"covers/",
+	"thumbnails/",
+	"gallery/",
+	"inline-images/",
+	"jams/covers/",
+];
+
+/** Whether a storage key holds display chrome, and so belongs in the public bucket. */
+export function isPublicKey(key: string): boolean {
+	// Every key the application mints is `creators/{id}/…`; the media type is the segment
+	// (or two) that follows. Anything else is unrecognised and therefore private.
+	const match = /^creators\/\d+\/(.+)$/.exec(key);
+	if (!match) return false;
+	return PUBLIC_KEY_PREFIXES.some((prefix) => match[1].startsWith(prefix));
+}

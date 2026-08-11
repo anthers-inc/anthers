@@ -25,11 +25,31 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { isPublicKey } from "./acl.js";
 import { publicUrlFor, resolveStorageConfig } from "./config.js";
 import type { StorageService } from "./types.js";
 
 const config = resolveStorageConfig();
-const bucket = config.bucket;
+
+/**
+ * Which bucket an object belongs in.
+ *
+ * Two callers, and the difference matters. **Writes know the ACL** — every `upload` and
+ * every presigned upload is handed `"public"` or `"private"` by `aclForMediaType`, so they
+ * pass it here and the answer is exact. **Reads only have the key**, so they go through
+ * `isPublicKey`, which reads the same policy from the other end.
+ *
+ * Both fail closed toward the private bucket, and while `STORAGE_PUBLIC_BUCKET` is unset the
+ * two are the same bucket and this function cannot be wrong about anything.
+ */
+function bucketFor(acl: "public" | "private"): string {
+	return acl === "public" ? config.publicBucket : config.bucket;
+}
+
+/** The bucket a key lives in, for the operations that are given no ACL. */
+function bucketForKey(key: string): string {
+	return bucketFor(isPublicKey(key) ? "public" : "private");
+}
 
 const s3 = new S3Client({
 	region: config.region,
@@ -68,10 +88,12 @@ export class S3StorageService implements StorageService {
 	): Promise<string> {
 		await s3.send(
 			new PutObjectCommand({
-				Bucket: bucket,
+				Bucket: bucketFor(acl),
 				Key: key,
 				Body: body,
 				ContentType: contentType,
+				// Still sent, and still meaningful on S3/Spaces where one bucket holds both.
+				// R2 ignores it — there the bucket IS the ACL, which is what `bucketFor` is.
 				ACL: acl === "public" ? "public-read" : "private",
 			}),
 		);
@@ -79,7 +101,7 @@ export class S3StorageService implements StorageService {
 	}
 
 	async downloadToTemp(key: string): Promise<string> {
-		const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+		const response = await s3.send(new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }));
 
 		if (!response.Body) {
 			throw new Error(`S3 object ${key} has no body`);
@@ -95,7 +117,7 @@ export class S3StorageService implements StorageService {
 
 	async read(key: string): Promise<Uint8Array | null> {
 		try {
-			const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+			const response = await s3.send(new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }));
 			if (!response.Body) return null;
 			return await response.Body.transformToByteArray();
 		} catch {
@@ -107,7 +129,7 @@ export class S3StorageService implements StorageService {
 
 	async size(key: string): Promise<number | null> {
 		try {
-			const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+			const head = await s3.send(new HeadObjectCommand({ Bucket: bucketForKey(key), Key: key }));
 			return head.ContentLength ?? null;
 		} catch {
 			return null;
@@ -123,7 +145,7 @@ export class S3StorageService implements StorageService {
 			// but only on the chunks that aren't last, so test the final chunk too.
 			const response = await s3.send(
 				new GetObjectCommand({
-					Bucket: bucket,
+					Bucket: bucketForKey(key),
 					Key: key,
 					Range: `bytes=${offset}-${offset + length - 1}`,
 				}),
@@ -141,7 +163,7 @@ export class S3StorageService implements StorageService {
 
 	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
 		if (opts?.signed) {
-			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+			return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucketForKey(key), Key: key }), {
 				expiresIn: opts.expiresIn ?? 3600,
 			});
 		}
@@ -160,7 +182,7 @@ export class S3StorageService implements StorageService {
 		const url = await getSignedUrl(
 			s3,
 			new PutObjectCommand({
-				Bucket: bucket,
+				Bucket: bucketFor(acl),
 				Key: key,
 				ContentType: contentType,
 				ACL: value,
@@ -174,36 +196,55 @@ export class S3StorageService implements StorageService {
 	}
 
 	async delete(key: string): Promise<void> {
-		await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+		await s3.send(new DeleteObjectCommand({ Bucket: bucketForKey(key), Key: key }));
 	}
 
+	/**
+	 * Delete everything under a prefix, **from both buckets**.
+	 *
+	 * Today the only caller passes an HLS directory, which is unambiguously private, so
+	 * routing by prefix would work. Sweeping both anyway is the cheap side of the trade:
+	 * listing a prefix that isn't there costs one empty response, while getting it wrong
+	 * leaves orphaned objects that nothing will ever look for again. A prefix broad enough
+	 * to span both buckets — `creators/{id}/`, say — is exactly the call someone will add
+	 * later without reading this file.
+	 */
 	async deletePrefix(prefix: string): Promise<void> {
-		// List (paginated) then batch-delete every object under the prefix.
-		let continuationToken: string | undefined;
-		do {
-			const listed = await s3.send(
-				new ListObjectsV2Command({
-					Bucket: bucket,
-					Prefix: prefix,
-					ContinuationToken: continuationToken,
-				}),
-			);
-			const objects = (listed.Contents ?? [])
-				.map((o) => o.Key)
-				.filter((k): k is string => !!k)
-				.map((Key) => ({ Key }));
-			if (objects.length > 0) {
-				await s3.send(
-					new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }),
+		const buckets =
+			config.publicBucket === config.bucket
+				? [config.bucket]
+				: [config.bucket, config.publicBucket];
+		for (const target of buckets) {
+			// List (paginated) then batch-delete every object under the prefix.
+			let continuationToken: string | undefined;
+			do {
+				const listed = await s3.send(
+					new ListObjectsV2Command({
+						Bucket: target,
+						Prefix: prefix,
+						ContinuationToken: continuationToken,
+					}),
 				);
-			}
-			continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
-		} while (continuationToken);
+				const objects = (listed.Contents ?? [])
+					.map((o) => o.Key)
+					.filter((k): k is string => !!k)
+					.map((Key) => ({ Key }));
+				if (objects.length > 0) {
+					await s3.send(
+						new DeleteObjectsCommand({
+							Bucket: target,
+							Delete: { Objects: objects, Quiet: true },
+						}),
+					);
+				}
+				continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+			} while (continuationToken);
+		}
 	}
 
 	async exists(key: string): Promise<boolean> {
 		try {
-			await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+			await s3.send(new HeadObjectCommand({ Bucket: bucketForKey(key), Key: key }));
 			return true;
 		} catch {
 			return false;

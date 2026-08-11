@@ -38,7 +38,24 @@
 
 export interface StorageConfig {
 	region: string;
+	/**
+	 * The bucket holding everything gated — game assets, HLS, processed audio, originals.
+	 *
+	 * 🚨 **Nothing may attach a custom domain or public dev URL to this bucket.** On R2 that
+	 * is what grants access, and it is granted to the whole bucket at once: every private
+	 * object would become readable by anyone who knows its key. Reads happen through
+	 * presigned URLs against the S3 API and nothing else.
+	 */
 	bucket: string;
+	/**
+	 * The bucket holding display chrome — avatars, headers, covers, thumbnails, gallery and
+	 * inline images, jam art. This is the one the CDN custom domain points at.
+	 *
+	 * Defaults to `bucket`, which is what DigitalOcean Spaces has always done: one bucket,
+	 * with per-object ACLs carrying the distinction. That default is why introducing the
+	 * split changes nothing until a second bucket is configured.
+	 */
+	publicBucket: string;
 	endpoint: string;
 	accessKeyId: string;
 	secretAccessKey: string;
@@ -72,18 +89,24 @@ export function resolveStorageConfig(
 ): StorageConfig {
 	const region = env(source, "REGION", "SPACES_REGION") || "nyc3";
 	const bucket = env(source, "BUCKET", "SPACES_BUCKET");
+	// Same bucket unless told otherwise — see the field docs for why that is the safe default.
+	const publicBucket = env(source, "PUBLIC_BUCKET", "") || bucket;
 
 	// Defaults to the Spaces endpoint for the region, exactly as before.
 	const endpoint = env(source, "ENDPOINT", "") || `https://${region}.digitaloceanspaces.com`;
 
 	// Defaults to the Spaces virtual-hosted bucket URL, exactly as before. A deployment
 	// that fronts storage with a CDN sets this to that hostname and nothing else changes.
+	// Built from the PUBLIC bucket, since that is what it addresses. Identical to the old
+	// hard-coded string while the two buckets are the same.
 	const publicBaseUrl =
-		env(source, "PUBLIC_BASE_URL", "") || `https://${bucket}.${region}.digitaloceanspaces.com`;
+		env(source, "PUBLIC_BASE_URL", "") ||
+		`https://${publicBucket}.${region}.digitaloceanspaces.com`;
 
 	return {
 		region,
 		bucket,
+		publicBucket,
 		endpoint,
 		// Trim: a stray newline/space pasted into a dashboard secret silently corrupts the
 		// SigV4 HMAC and yields a baffling SignatureDoesNotMatch.
