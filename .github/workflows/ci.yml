@@ -308,11 +308,11 @@ jobs:
           # fails rather than green-on-submitted. App Platform keeps the previously-active
           # deployment serving throughout, so a failure here leaves prod on the last good
           # build rather than down.
-          doctl apps create-deployment ${{ vars.DO_APP_ID || 'e960deee-e9e3-450c-ac83-aa700fab1310' }} \
+          doctl apps create-deployment ${{ vars.DO_APP_ID || '5fa8af5d-e94f-400e-8dd6-e1377fb1a7ee' }} \
             --wait --format ID,Phase
 
       - name: Report what is now live
         if: ${{ !cancelled() }}
         run: |
-          doctl apps list-deployments ${{ vars.DO_APP_ID || 'e960deee-e9e3-450c-ac83-aa700fab1310' }} \
+          doctl apps list-deployments ${{ vars.DO_APP_ID || '5fa8af5d-e94f-400e-8dd6-e1377fb1a7ee' }} \
             --format ID,Cause,Phase | head -3
