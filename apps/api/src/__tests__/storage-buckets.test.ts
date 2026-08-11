@@ -53,28 +53,39 @@ const HLS_MASTER = "creators/7/videos/hls/deadbeef/master.m3u8";
 const JOB_THUMBNAIL = "creators/7/thumbnails/cafebabe.jpg";
 const PROCESSED_AUDIO = "creators/7/audio/processed/abc123.mp3";
 
+/**
+ * A complete, valid environment. Every storage variable is required now — the Spaces-shaped
+ * defaults were removed once that provider was retired — so spread this and override only
+ * what the test is about.
+ */
+const base = (over: Record<string, string> = {}) => ({
+	STORAGE_ENDPOINT: "https://abc123.r2.cloudflarestorage.com",
+	STORAGE_REGION: "auto",
+	STORAGE_BUCKET: "anthers-media-private",
+	STORAGE_PUBLIC_BASE_URL: "https://cdn.anthers.org",
+	STORAGE_KEY: "test-key",
+	STORAGE_SECRET: "test-secret",
+	...over,
+});
+
 describe("the split is off until a second bucket is configured", () => {
-	it("puts both kinds in one bucket by default, exactly as Spaces always has", () => {
-		// The property that makes introducing this a no-op: with no `STORAGE_PUBLIC_BUCKET`,
-		// every object resolves to the same bucket and the routing cannot be wrong.
-		const config = resolveStorageConfig({ SPACES_BUCKET: "anthers-media", SPACES_REGION: "nyc3" });
-		expect(config.bucket).toBe("anthers-media");
-		expect(config.publicBucket).toBe("anthers-media");
-		expect(config.publicBaseUrl).toBe("https://anthers-media.nyc3.digitaloceanspaces.com");
+	it("puts both kinds in one bucket when no public bucket is named", () => {
+		// `STORAGE_PUBLIC_BUCKET` is the one storage variable that still has a fallback, and
+		// it is a real posture rather than a vendor guess: one bucket with per-object ACLs
+		// carrying the distinction. With it unset the routing cannot be wrong, because both
+		// answers are the same bucket.
+		const config = resolveStorageConfig(base());
+		expect(config.bucket).toBe("anthers-media-private");
+		expect(config.publicBucket).toBe("anthers-media-private");
 	});
 
-	it("separates them, and points the public base at the PUBLIC bucket", () => {
-		// Getting this backwards would build CDN URLs naming the private bucket — which is
-		// both wrong and, on a provider where the CDN domain is the grant, a way to ask for
-		// exactly the exposure this whole split exists to prevent.
-		const config = resolveStorageConfig({
-			STORAGE_BUCKET: "anthers-media-private",
-			STORAGE_PUBLIC_BUCKET: "anthers-media-public",
-			STORAGE_REGION: "nyc3",
-		});
+	it("separates them once a public bucket is named", () => {
+		// Getting this backwards would route gated deliverables into the bucket the CDN
+		// domain points at — which on a provider where the domain IS the grant is a way to
+		// ask for exactly the exposure this whole split exists to prevent.
+		const config = resolveStorageConfig(base({ STORAGE_PUBLIC_BUCKET: "anthers-media-public" }));
 		expect(config.bucket).toBe("anthers-media-private");
 		expect(config.publicBucket).toBe("anthers-media-public");
-		expect(config.publicBaseUrl).toBe("https://anthers-media-public.nyc3.digitaloceanspaces.com");
 	});
 });
 
@@ -170,44 +181,34 @@ describe("the presigned-upload ACL header follows the bucket split", () => {
 	 * it sends). Only the **presigned** path breaks — and every creator upload is presigned.
 	 * "R2 ignores x-amz-acl" is true of one path and fatally false of the other.
 	 */
-	it("echoes the ACL when one bucket holds both kinds — Spaces, where it carries access", () => {
-		const config = resolveStorageConfig({ SPACES_BUCKET: "anthers-media", SPACES_REGION: "nyc3" });
-		expect(config.sendObjectAcl).toBe(true);
+	it("echoes the ACL when one bucket holds both kinds, where it carries access", () => {
+		expect(resolveStorageConfig(base()).sendObjectAcl).toBe(true);
 	});
 
-	it("stays silent once a second bucket carries the distinction — R2, where it is fatal", () => {
-		const config = resolveStorageConfig({
-			STORAGE_BUCKET: "anthers-media-private",
-			STORAGE_PUBLIC_BUCKET: "anthers-media-public",
-			STORAGE_REGION: "auto",
-			STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
-		});
+	it("stays silent once a second bucket carries the distinction — where it is fatal", () => {
+		const config = resolveStorageConfig(base({ STORAGE_PUBLIC_BUCKET: "anthers-media-public" }));
 		expect(config.sendObjectAcl).toBe(false);
 	});
 
 	it("is derived from the split alone, not from the vendor or the endpoint", () => {
-		// A two-bucket Spaces deployment must also stay silent, and a single-bucket R2 one
-		// must still echo. Tying this to a hostname would get both backwards, which is why
-		// the rule is about which layer carries access rather than about who the provider is.
-		const twoBucketSpaces = resolveStorageConfig({
-			STORAGE_BUCKET: "a-private",
-			STORAGE_PUBLIC_BUCKET: "a-public",
-			STORAGE_REGION: "nyc3",
-		});
-		const oneBucketR2 = resolveStorageConfig({
-			STORAGE_BUCKET: "solo",
-			STORAGE_REGION: "auto",
-			STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
-		});
+		// The rule is about which layer carries access, not about who the provider is. Tying
+		// it to a hostname would get both of these backwards: a two-bucket deployment on a
+		// provider WITH per-object ACLs must still stay silent (the bucket already decides),
+		// and a single-bucket one on a provider without them must still echo.
+		const twoBucketsOnSpacesShapedEndpoint = resolveStorageConfig(
+			base({
+				STORAGE_ENDPOINT: "https://nyc3.digitaloceanspaces.com",
+				STORAGE_REGION: "nyc3",
+				STORAGE_BUCKET: "a-private",
+				STORAGE_PUBLIC_BUCKET: "a-public",
+			}),
+		);
+		const oneBucketOnR2 = resolveStorageConfig(
+			base({ STORAGE_ENDPOINT: "https://acct.r2.cloudflarestorage.com", STORAGE_BUCKET: "solo" }),
+		);
 		expect({
-			twoBucketSpaces: twoBucketSpaces.sendObjectAcl,
-			oneBucketR2: oneBucketR2.sendObjectAcl,
-		}).toEqual({ twoBucketSpaces: false, oneBucketR2: true });
-	});
-
-	it("keeps the pre-split default echoing, so introducing this changed nothing", () => {
-		// The no-op property PR #210 rests on: an environment that sets nothing new behaves
-		// exactly as it did before the split existed.
-		expect(resolveStorageConfig({ SPACES_BUCKET: "anthers-media" }).sendObjectAcl).toBe(true);
+			twoBuckets: twoBucketsOnSpacesShapedEndpoint.sendObjectAcl,
+			oneBucket: oneBucketOnR2.sendObjectAcl,
+		}).toEqual({ twoBuckets: false, oneBucket: true });
 	});
 });
