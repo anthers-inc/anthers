@@ -7,7 +7,7 @@
 //
 // Loaded by `apps/web` only, from self-hosted files — see
 // apps/web/public/fonts/THIRD-PARTY.md for why they are not on a CDN. The Studio
-// (`apps/studio-web`) carries no font link and never has, so there these resolve
+// (formerly `apps/studio-web`) carried no font link, so it resolved
 // to their fallbacks (Georgia, system-ui). Every entry therefore needs a fallback
 // stack that stands on its own.
 

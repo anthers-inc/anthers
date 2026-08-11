@@ -48,10 +48,7 @@
  * from a spec. Committing it without checking it would only have added a second
  * document free to drift; this is the half that keeps it honest.
  */
-const SPECS: { path: string; idEnv: string }[] = [
-	{ path: ".do/app.yaml", idEnv: "DO_APP_ID" },
-	{ path: ".do/studio.app.yaml", idEnv: "DO_STUDIO_APP_ID" },
-];
+const SPECS: { path: string; idEnv: string }[] = [{ path: ".do/app.yaml", idEnv: "DO_APP_ID" }];
 
 type EnvEntry = { key?: string; value?: string; type?: string; scope?: string };
 type GitHubSource = { repo?: string; branch?: string; deploy_on_push?: boolean };
