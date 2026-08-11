@@ -35,7 +35,7 @@ COPY packages/ packages/
 COPY apps/api/ apps/api/
 
 # Default command — overridden per component in .do/app.yaml:
-#   api:     bun run apps/api/src/index.ts
+#   api:     bun run apps/api/src/server.ts
 #   worker:  bun run apps/api/src/jobs/worker.ts
 #   migrate: bun run packages/db/src/migrate.ts
-CMD ["bun", "run", "apps/api/src/index.ts"]
+CMD ["bun", "run", "apps/api/src/server.ts"]

@@ -4,7 +4,6 @@ import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
-import { ensureQueueReady } from "./jobs/queue.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { allowedOrigins } from "./origins.js";
 import { p2pRoutes } from "./p2p/routes.js";
@@ -66,36 +65,20 @@ const app = new Hono()
 	// Production P2P delivery routes — manifest, chunk, pubkey (per 45.04 + 45.05).
 	.route("/api/p2p", p2pRoutes);
 
-// Start the job queue when running as the server (not when imported by tests).
-// import.meta.main is true only when this file is the entry point.
-if (import.meta.main) {
-	ensureQueueReady().catch((err) => console.error("Job queue failed to start:", err));
-}
-
-// This default export is BOTH the Bun.serve config for production and the handle
-// every API test drives the app through (`import app from "../index"`, then
-// `app.fetch(new Request(...))`). Those two roles are only compatible while `fetch`
-// stays a one-argument function returning a Response.
+// This module is the Hono app and nothing else. It is never a process entry point —
+// `server.ts` is, and it owns the Bun.serve object (port, fetch, websocket).
 //
-// The P2P spike briefly broke that. It replaced `fetch: app.fetch` with a Bun.serve
-// handler — `fetch(req, server)`, returning `undefined` after a successful
-// `server.upgrade()` — to intercept a WebSocket signaling relay before Hono. Both
-// changes are correct for Bun and invisible at runtime (627 tests still passed), but
-// they moved the exported contract out from under all 28 test files at once: 680
-// typecheck errors, one `TS2554: Expected 2 arguments` per file plus ~650
-// `TS18048: 'res' is possibly 'undefined'`, which took `main` red on 2026-08-10.
+// Keep it that way. The two roles look like one thing: Bun reads the entry module's
+// default export as its server config, while all 28 API suites do
+// `import app from "../index"` and call `app.fetch(new Request(...))`. Those are only
+// compatible while `fetch` is a one-argument function returning a Response — and the
+// P2P work needed a WebSocket upgrade intercepted ahead of Hono, which makes it
+// `(req, server)` returning `undefined` after an upgrade. Merging the roles to get that
+// took `main` red with 680 typecheck errors across every suite, none of them test bugs.
 //
-// So when the real signaling relay lands with milestone 9 of the P2P lane, do NOT
-// widen this signature again — the type breakage lands on the tests, not here, which
-// is what made it look like a test problem when it never was. Split the entry point
-// instead: a `server.ts` that owns the Bun.serve object (fetch + websocket), leaving
-// this file exporting the Hono app. That is a deploy-config change — `.do/app.yaml`'s
-// api run_command, apps/api/Dockerfile, playwright.config.ts's webServer and the dev
-// scripts all name this file as the entry — so it wants to be deliberate rather than
-// a side effect of adding a route.
-export default {
-	port: Number(process.env.PORT ?? 8000),
-	fetch: app.fetch,
-};
+// So a WebSocket handler, an upgrade intercept, or anything else wanting the Bun server
+// object goes in `server.ts`. Adding it here breaks the tests, at a distance, in a way
+// that reads as their fault.
+export default app;
 
 export type AppType = typeof app;

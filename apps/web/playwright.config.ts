@@ -96,8 +96,8 @@ export default defineConfig({
 			// spinning, and each restart prints a line — if these appear, the crash is still
 			// happening and the Bun version is worth revisiting, so do not let it go quiet.
 			command: process.env.CI
-				? 'for i in 1 2 3 4 5; do bun src/index.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
-				: "make -C ../.. db-ready && bun --env-file=../../.env src/index.ts",
+				? 'for i in 1 2 3 4 5; do bun src/server.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
+				: "make -C ../.. db-ready && bun --env-file=../../.env src/server.ts",
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
 			reuseExistingServer: !process.env.CI,
