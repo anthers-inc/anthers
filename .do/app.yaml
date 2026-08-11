@@ -168,6 +168,23 @@ services:
     run_command: bun run apps/api/src/server.ts
     http_port: 8000
     instance_size_slug: basic-xxs
+    # 🚨 DO NOT RAISE THIS TO 2 WITHOUT REPLACING THE PEER REGISTRY FIRST.
+    #
+    # This component holds the P2P signaling relay, and peer presence lives in process
+    # memory — a WebSocket is an object owned by the process that accepted it, so a row
+    # saying "peer X is online" cannot hold the socket. With two instances the load
+    # balancer puts peer A on one and peer B on the other; B asks who has the asset, its
+    # instance consults its own Map, and answers "nobody". Both are online, both hold the
+    # bytes, and they never meet. The swarm fragments into one swarm per instance and every
+    # download falls back to hub-served chunks, which work perfectly — so there is no
+    # error, no log, and no symptom except the bandwidth bill.
+    #
+    # Replace `InMemoryPeerRegistry` (apps/api/src/p2p/registry.ts) with Postgres presence
+    # plus LISTEN/NOTIFY first. `make spec-diff` fails loudly if this goes above 1.
+    #
+    # Note the trap in the sequencing: signaling is ~100× cheaper than chunk serving, so
+    # whatever eventually forces a second instance will have nothing to do with P2P — and
+    # scaling for that unrelated reason is what breaks the swarm.
     instance_count: 1
     health_check:
       http_path: /health

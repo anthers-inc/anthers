@@ -34,7 +34,12 @@ const COMMITTED = ".do/app.yaml";
 
 type EnvEntry = { key?: string; value?: string; type?: string; scope?: string };
 type GitHubSource = { repo?: string; branch?: string; deploy_on_push?: boolean };
-type Component = { name?: string; envs?: EnvEntry[]; github?: GitHubSource };
+type Component = {
+	name?: string;
+	envs?: EnvEntry[];
+	github?: GitHubSource;
+	instance_count?: number;
+};
 type Spec = {
 	name?: string;
 	envs?: EnvEntry[];
@@ -76,14 +81,46 @@ function sourceMap(spec: Spec): Map<string, string> {
 	const out = new Map<string, string>();
 	for (const kind of COMPONENT_KINDS) {
 		for (const component of spec[kind] ?? []) {
+			const where = component.name ?? kind;
+			// Compared for every component, not only ones with a github source — see the
+			// swarm-fragmentation note below for why this one is here.
+			out.set(`${where}/instance_count`, String(component.instance_count ?? 1));
 			const g = component.github;
 			if (!g) continue;
-			const where = component.name ?? kind;
 			out.set(`${where}/deploy_on_push`, String(g.deploy_on_push ?? false));
 			out.set(`${where}/branch`, g.branch ?? "");
 		}
 	}
 	return out;
+}
+
+/**
+ * 🚨 The P2P swarm fragments silently at `instance_count: 2` on the api component.
+ *
+ * Peer presence for the signaling relay lives in process memory, because a WebSocket is an
+ * object owned by the process that accepted it. With two instances behind the load
+ * balancer, peer A lands on one and peer B on the other; B asks who has the asset, its
+ * instance checks its own Map, and answers "nobody". Both are online, both hold the bytes,
+ * and they never meet — every download falls back to hub-served chunks, which work
+ * perfectly. Nothing errors and nothing logs. The symptom is a bandwidth bill.
+ *
+ * That is why this check is here rather than only in a comment in `p2p/registry.ts`: the
+ * person scaling the API has no reason to be reading the P2P code, and `make spec-diff` is
+ * the standing pre-deploy check they WILL run. Replace the registry with Postgres presence
+ * plus LISTEN/NOTIFY first, then scale.
+ */
+function swarmGateWarning(spec: Spec): string | null {
+	const api = (spec.services ?? []).find((s) => s.name === "api");
+	const count = api?.instance_count ?? 1;
+	if (count <= 1) return null;
+	return (
+		`  🚨 api is running ${count} instances, and the P2P signaling relay holds peer\n` +
+		"     presence in process memory. Peers on different instances cannot find each\n" +
+		"     other: the swarm fragments into one swarm per instance, silently, and every\n" +
+		"     download quietly falls back to hub-served chunks.\n" +
+		"     → Replace InMemoryPeerRegistry (apps/api/src/p2p/registry.ts) with a\n" +
+		"       cross-instance implementation before running more than one api instance.\n"
+	);
 }
 
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
@@ -189,19 +226,28 @@ for (const [id, mineValue] of repoSource) {
 	if (theirs === undefined) {
 		sourceDiffs.push(`${id}\n      live: (component absent)\n      repo: ${mineValue}`);
 	} else if (theirs !== mineValue) {
-		const gate = id.endsWith("/deploy_on_push")
-			? "\n      ⚠ THIS IS THE DEPLOY GATE — `true` in production means pushes deploy without CI"
-			: "";
+		let gate = "";
+		if (id.endsWith("/deploy_on_push")) {
+			gate =
+				"\n      ⚠ THIS IS THE DEPLOY GATE — `true` in production means pushes deploy without CI";
+		} else if (id === "api/instance_count") {
+			gate = "\n      ⚠ THIS IS THE P2P SWARM GATE — see the warning below before changing it";
+		}
 		sourceDiffs.push(`${id}\n      live: ${theirs}\n      repo: ${mineValue}${gate}`);
 	}
 }
+
+// Fires on the LIVE spec as well as on a committed edit, because the state that matters is
+// what is actually running — two agreeing specs both saying `2` is not a clean report.
+const swarmGate = swarmGateWarning(liveSpec) ?? swarmGateWarning(committed);
 
 const clean =
 	!onlyLive.length &&
 	!onlyRepo.length &&
 	!differs.length &&
 	!relocated.length &&
-	!sourceDiffs.length;
+	!sourceDiffs.length &&
+	!swarmGate;
 console.log(`\n## Spec diff — ${appName} (${appId})\n`);
 
 if (onlyLive.length) {
@@ -228,6 +274,9 @@ if (differs.length) {
 	console.log("  Same key, different value (non-secret):");
 	for (const d of differs.sort()) console.log(`    ~ ${d}`);
 	console.log("");
+}
+if (swarmGate) {
+	console.log(swarmGate);
 }
 if (clean) console.log("  Committed and live specs agree ✓\n");
 
