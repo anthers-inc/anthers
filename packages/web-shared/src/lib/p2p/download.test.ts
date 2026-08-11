@@ -98,6 +98,18 @@ function fakePeer(
 	};
 }
 
+/**
+ * Read a finished download's bytes, asserting a blob came back.
+ *
+ * `blob` is nullable because `FileSystemSink` writes straight to the user's chosen file
+ * and has nothing to hand over. Every test here uses `MemorySink`, which always produces
+ * one — so a null is a real failure, not a case to tolerate.
+ */
+async function readResult(result: { blob: Blob | null }): Promise<Uint8Array<ArrayBuffer>> {
+	expect(result.blob).not.toBeNull();
+	return new Uint8Array(await (result.blob as Blob).arrayBuffer());
+}
+
 // ── Network stubbing ─────────────────────────────────────────────────────────────────
 
 const realFetch = globalThis.fetch;
@@ -180,7 +192,7 @@ describe("the hub-only floor", () => {
 		const sink = new MemorySink(file.length);
 		const result = await downloadAsset({ workId: 7, assetId: 9, sink });
 
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 		expect(result.hubBytes).toBe(file.length);
 		expect(result.peerBytes).toBe(0);
 		expect(hubChunkCalls.sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
@@ -195,7 +207,7 @@ describe("the hub-only floor", () => {
 			assetId: 9,
 			sink: new MemorySink(file.length),
 		});
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 	});
 
 	it("handles a file smaller than one chunk", async () => {
@@ -207,7 +219,7 @@ describe("the hub-only floor", () => {
 			assetId: 9,
 			sink: new MemorySink(file.length),
 		});
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 	});
 
 	it("reports progress that ends at the full size", async () => {
@@ -267,7 +279,7 @@ describe("verification", () => {
 		});
 
 		expect(liar.healthy).toBe(false);
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 		// Poisoned on its first bad chunk, so it is not consulted for the rest.
 		expect(liar.served).toEqual([0]);
 		expect(result.peerBytes).toBe(0);
@@ -313,7 +325,7 @@ describe("peers and failover", () => {
 		expect(result.peerBytes).toBe(file.length);
 		expect(result.hubBytes).toBe(0);
 		expect(hubChunkCalls).toEqual([]);
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 	});
 
 	it("falls back to the hub for chunks a peer does not have", async () => {
@@ -330,7 +342,7 @@ describe("peers and failover", () => {
 		});
 
 		expect(hubChunkCalls.sort((a, b) => a - b)).toEqual([1, 3]);
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 		expect(result.hubBytes).toBe(TEST_CHUNK * 2);
 		expect(result.peerBytes).toBe(TEST_CHUNK * 2);
 	});
@@ -346,7 +358,7 @@ describe("peers and failover", () => {
 			sink: new MemorySink(file.length),
 			peers: [dead],
 		});
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 		expect(result.hubBytes).toBe(file.length);
 	});
 
@@ -407,7 +419,7 @@ describe("memory bounds", () => {
 
 		releaseChunkZero();
 		const result = await run;
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 	});
 });
 
@@ -461,7 +473,7 @@ describe("the token", () => {
 			concurrency: 1,
 		});
 		expect(manifestCalls).toBe(2);
-		expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(file);
+		expect(await readResult(result)).toEqual(file);
 	});
 
 	it("stops when the asset changes underneath the download", async () => {

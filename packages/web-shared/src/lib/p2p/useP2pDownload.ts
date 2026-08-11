@@ -6,26 +6,33 @@
  * is only the part that turns its progress callbacks into state a component can render.
  * Keeping the split means the interesting logic never needs a component test to exercise.
  *
- * ── When this path is the right one, and when it is not ─────────────────────────────
+ * ── This is the ONLY download path, deliberately ───────────────────────────────────
  *
- * ⚠️ **This is not automatically better than the existing signed-URL download, and for
- * large files today it is worse.** A signed URL hands the browser a URL and the browser
- * streams it to disk natively: no OPFS, no second copy, no tab that has to stay open. The
- * P2P path assembles in origin-private storage and then hands the finished file over as a
- * blob, which costs 2× disk during the final copy — `showSaveFilePicker`, which would
- * write straight to a chosen location, is Chromium-only (verified against MDN's BCD on
- * 2026-08-10; Firefox and Safari have never shipped it).
+ * Parker, 2026-08-10: *"all downloads will use the P2P architecture, even if the Anthers
+ * hub host is the only host. That way, we don't have to maintain two separate download
+ * protocols."* That is 45.01 § 3's "one architecture, not two", and it is why there is no
+ * signed-URL button beside this one any more.
  *
- * What the P2P path buys is real but different: **bytes served by peers cost Anthers
- * nothing** (45.01 § 6), every chunk is **verified against the manifest** rather than
- * trusted because it came from our CDN, and the whole path is one a third party can
- * reimplement from 45.04 — the open-client guarantee. Those are the reasons to prefer it,
- * and none of them are "it is faster for the user".
+ * The concern that reading raised — that P2P assembles in origin-private storage and pays
+ * a second copy on the way out, where a signed URL streamed natively to disk — turns out
+ * to be about the **sink**, not the protocol. `showSaveFilePicker` writes verified chunks
+ * straight into a file the user chose, over the same P2P transport. So the choice is not
+ * "one protocol or good UX"; it is one protocol with the best available destination:
  *
- * So the honest shape while the swarm is empty is: offer it, do not force it. That changes
- * when peers exist, and it changes again for Anthers Desktop, which has a real filesystem
- * and none of these constraints — which is why Desktop is the right answer for large Works
- * rather than a fallback for one browser engine.
+ *   1. `FileSystemSink`  — Chromium. Straight to the user's chosen file, no staging copy.
+ *   2. `OpfsSink`        — everywhere else. Stages in origin-private storage, then hands
+ *                          over a blob. Costs 2x disk during that final copy, which is the
+ *                          price of `showSaveFilePicker` being Chromium-only.
+ *   3. `MemorySink`      — no OPFS at all, and only under a hard size ceiling.
+ *
+ * ⚠️ **The picker must be called before any `await`.** It needs transient user activation,
+ * so fetching the manifest first and then asking would throw `SecurityError`. `start()`
+ * therefore picks first and fetches second, which is why it cannot use the manifest's size
+ * to decide whether to bother asking.
+ *
+ * What P2P buys beyond not maintaining two protocols: every chunk is **verified against
+ * the manifest** rather than trusted for coming from our CDN, and once the swarm is warm,
+ * peer-served bytes **cost Anthers nothing** (45.01 § 6).
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -38,6 +45,7 @@ import {
 } from "./download.js";
 import {
 	type DownloadSink,
+	FileSystemSink,
 	MemorySink,
 	OpfsSink,
 	opfsAvailable,
@@ -85,14 +93,31 @@ export function useP2pDownload(params: {
 
 		let sink: DownloadSink | null = null;
 		try {
-			// The manifest is fetched twice on this path — once here to learn the size so the
-			// sink can be chosen, and once inside the engine. That is a small cost for not
-			// having to guess, and the endpoint is cheap now that manifests are precomputed.
+			// ⚠️ The picker FIRST, before any await — it needs transient user activation, and
+			// awaiting the manifest would spend it. That is why the sink is chosen without
+			// knowing the file's size: the cost of asking is a dialog, and the cost of not
+			// asking is a staging copy of a multi-gigabyte file.
+			let picked: FileSystemSink | null = null;
+			try {
+				picked = await FileSystemSink.pick(params.filename);
+			} catch (err) {
+				// A cancelled picker is the user declining the download, not a reason to fall
+				// through to a worse sink and download it anyway.
+				if (err instanceof DOMException && err.name === "AbortError") {
+					setState("idle");
+					return;
+				}
+				picked = null;
+			}
+
 			const { fetchManifest } = await import("./download.js");
 			const { manifest } = await fetchManifest(params.workId, params.assetId);
 			const mimeType = params.mimeType ?? manifest.assetMimeType;
 
-			if (opfsAvailable()) {
+			if (picked) {
+				await picked.open();
+				sink = picked;
+			} else if (opfsAvailable()) {
 				await requestPersistence();
 				const opfs = new OpfsSink(
 					"anthers-downloads",
@@ -108,7 +133,7 @@ export function useP2pDownload(params: {
 				// Refusing beats crashing the tab. "This browser can't do it" is a far better
 				// message than a page that dies four gigabytes in with no explanation.
 				throw new Error(
-					"This browser can't assemble a download this large. Use the standard download, or the desktop app.",
+					"This browser can't handle a download this large. Try Chrome or Edge, or the desktop app.",
 				);
 			}
 
@@ -121,7 +146,9 @@ export function useP2pDownload(params: {
 				signal: controller.signal,
 			});
 
-			saveBlob(result.blob, manifest.assetFilename || params.filename);
+			// Null means the sink already put the file where the user asked for it, so there is
+			// nothing to hand over — the whole point of the FileSystemSink path.
+			if (result.blob) saveBlob(result.blob, manifest.assetFilename || params.filename);
 			setState("done");
 		} catch (err) {
 			if (controller.signal.aborted) {

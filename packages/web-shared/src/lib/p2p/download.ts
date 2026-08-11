@@ -94,7 +94,8 @@ export interface DownloadOptions {
 
 export interface DownloadResult {
 	manifest: Manifest;
-	blob: Blob;
+	/** Null when the sink already delivered the file (the `showSaveFilePicker` path). */
+	blob: Blob | null;
 	hubBytes: number;
 	peerBytes: number;
 }
