@@ -1,0 +1,21 @@
+{
+	"name": "anthersp2p",
+	"private": true,
+	"version": "0.1.0",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"bin": {
+		"anthersp2p": "./src/cli.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@anthers/shared": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"typescript": "^5.8.0"
+	}
+}

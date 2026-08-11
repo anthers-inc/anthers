@@ -15,6 +15,20 @@
         "pg": "8.13.1",
       },
     },
+    "apps/anthersp2p": {
+      "name": "anthersp2p",
+      "version": "0.1.0",
+      "bin": {
+        "anthersp2p": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@anthers/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.8.0",
+      },
+    },
     "apps/api": {
       "name": "api",
       "version": "0.1.0",
@@ -749,6 +763,8 @@
     "acorn": ["acorn@8.16.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw=="],
 
     "acorn-jsx": ["acorn-jsx@5.3.2", "", { "peerDependencies": { "acorn": "^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ=="],
+
+    "anthersp2p": ["anthersp2p@workspace:apps/anthersp2p"],
 
     "api": ["api@workspace:apps/api"],
 

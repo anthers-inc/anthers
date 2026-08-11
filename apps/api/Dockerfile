@@ -28,6 +28,7 @@ COPY apps/studio-web/package.json apps/studio-web/
 # Studio is Rust + Tauri and ships nothing to the server, but omitting it fails the
 # install outright.
 COPY apps/studio-desktop/package.json apps/studio-desktop/
+COPY apps/anthersp2p/package.json apps/anthersp2p/
 RUN bun install --frozen-lockfile
 
 # Copy source (packages + API — no frontend needed here)
