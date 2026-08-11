@@ -17,9 +17,38 @@
  */
 
 import { createHash } from "node:crypto";
+import {
+	CHUNK_SIZE,
+	chunkRange,
+	type Manifest,
+	type ManifestSubject,
+	sha256hex,
+	totalChunks,
+	verifyChunk,
+	verifyFile,
+} from "@anthers/shared/p2p";
 import { storage } from "../services/storage/index.js";
 
-export const CHUNK_SIZE = 256 * 1024; // 256 KiB
+/**
+ * The format, the arithmetic and the hashing now live in `@anthers/shared/p2p`, because
+ * the hub is not the manifest's only reader — the browser client verifies against the same
+ * definitions, and two implementations of one format is how a format drifts. Re-exported
+ * here so the API's own callers (routes, jobs, tests) keep importing from one place.
+ *
+ * What stays behind is the half that genuinely cannot be shared: a *streaming* builder,
+ * which needs Node's incremental hasher because `crypto.subtle.digest` is one-shot, and a
+ * one-shot whole-file digest is exactly what this file exists to avoid.
+ */
+export {
+	CHUNK_SIZE,
+	chunkRange,
+	type Manifest,
+	type ManifestSubject,
+	sha256hex,
+	totalChunks,
+	verifyChunk,
+	verifyFile,
+};
 
 /**
  * How the walk below knows when to stop, and why it is a count rather than a sentinel.
@@ -41,46 +70,6 @@ export const CHUNK_SIZE = 256 * 1024; // 256 KiB
 const READ_MISMATCH = (assetId: number, index: number, want: number, got: number) =>
 	`Manifest read mismatch for asset ${assetId} chunk ${index}: expected ${want} bytes, got ${got}. ` +
 	"The object changed underneath the walk, or the range reader is not honouring its offset.";
-
-export interface Manifest {
-	/** The manifest format version (per 45.04). Currently 1. */
-	specVersion: 1;
-	/** The Work's numeric database ID (used by the hub for token verification). */
-	workId: number;
-	/** The Work's durable public identifier (used in URLs). */
-	workPublicId: string;
-	/** The asset's numeric database ID (used by the hub for token + chunk lookup). */
-	assetId: number;
-	/** The original filename of the asset. */
-	assetFilename: string;
-	/** Total file size in bytes. */
-	assetSize: number;
-	/** The asset's MIME type. */
-	assetMimeType: string;
-	/** SHA-256 hash of the complete file (end-to-end verification). */
-	assetSha256: string;
-	/** The logical chunk size in bytes. All chunks except the last are this size. */
-	chunkSize: number;
-	/** Ordered array of SHA-256 hashes, one per chunk. Index = position, value = hash. */
-	chunks: string[];
-}
-
-/** Compute SHA-256 of a byte array, return hex. */
-export async function sha256hex(data: Uint8Array): Promise<string> {
-	const hash = await crypto.subtle.digest("SHA-256", data as BufferSource);
-	return Array.from(new Uint8Array(hash))
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-}
-
-/** Identity fields a manifest carries about the thing it describes. */
-interface ManifestSubject {
-	workId: number;
-	workPublicId: string;
-	assetId: number;
-	assetFilename: string;
-	assetMimeType: string;
-}
 
 /**
  * Hands back up to `length` bytes starting at `offset`. Fewer bytes means end-of-file;
@@ -169,39 +158,4 @@ export async function buildManifestFromStorage(
 	return buildManifestFromReader(subject, assetSize, (offset, length) =>
 		storage.readRange(storageKey, offset, length),
 	);
-}
-
-/**
- * Compute the byte range for a chunk at a given index.
- * All chunks except the last are exactly `chunkSize` bytes; the last chunk may be smaller.
- */
-export function chunkRange(
-	index: number,
-	_totalChunks: number,
-	chunkSize: number,
-	assetSize: number,
-): {
-	offset: number;
-	size: number;
-} {
-	const offset = index * chunkSize;
-	const size = Math.min(chunkSize, assetSize - offset);
-	return { offset, size };
-}
-
-/** Verify a chunk's SHA-256 against a manifest. Returns true if the hash matches. */
-export async function verifyChunk(
-	chunkBytes: Uint8Array,
-	manifest: Manifest,
-	chunkIndex: number,
-): Promise<boolean> {
-	if (chunkIndex < 0 || chunkIndex >= manifest.chunks.length) return false;
-	const hash = await sha256hex(chunkBytes);
-	return hash === manifest.chunks[chunkIndex];
-}
-
-/** Verify a reassembled file's SHA-256 against a manifest. */
-export async function verifyFile(fileBytes: Uint8Array, manifest: Manifest): Promise<boolean> {
-	const hash = await sha256hex(fileBytes);
-	return hash === manifest.assetSha256;
 }

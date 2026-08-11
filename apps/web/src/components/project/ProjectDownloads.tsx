@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { P2pDownloadButton } from "@anthers/web-shared/content/P2pDownloadButton";
 import { client } from "@anthers/web-shared/rpc";
 import type { Asset } from "@anthers/web-shared/types";
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
@@ -71,6 +72,7 @@ export default function ProjectDownloads({
 							<th>Size</th>
 							{assets.some((a) => a.version) && <th>Version</th>}
 							<th></th>
+							<th></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -113,6 +115,22 @@ export default function ProjectDownloads({
 											<ArrowDownTrayIcon className="w-4 h-4" />
 											Download
 										</button>
+									</td>
+									<td>
+										{/*
+										 * The P2P path, offered rather than forced. It verifies every chunk
+										 * against the manifest and, once the swarm is warm, costs Anthers
+										 * nothing to serve — but it assembles in origin-private storage and
+										 * pays a second copy on the way out, where the signed URL above
+										 * streams straight to disk. Making it the default would be a UX
+										 * regression today; see `useP2pDownload` for the whole trade.
+										 */}
+										<P2pDownloadButton
+											workId={workId}
+											assetId={asset.id}
+											filename={asset.filename}
+											mimeType={asset.mimeType ?? undefined}
+										/>
 									</td>
 								</tr>
 							)),

@@ -41,7 +41,11 @@
 		"./JamFormPage": "./src/pages/JamFormPage.tsx",
 		"./ImportPage": "./src/pages/ImportPage.tsx",
 		"./AnalyticsDashboardPage": "./src/pages/AnalyticsDashboardPage.tsx",
-		"./StudioSettingsPage": "./src/pages/StudioSettingsPage.tsx"
+		"./StudioSettingsPage": "./src/pages/StudioSettingsPage.tsx",
+		"./p2p": "./src/lib/p2p/download.ts",
+		"./p2p/sink": "./src/lib/p2p/sink.ts",
+		"./p2p/swarm": "./src/lib/p2p/swarm.ts",
+		"./content/P2pDownloadButton": "./src/components/content/P2pDownloadButton.tsx"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit"

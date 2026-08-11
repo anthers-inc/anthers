@@ -12,7 +12,8 @@
 		"./moderation": "./src/moderation.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
-		"./figures": "./src/figures.generated.ts"
+		"./figures": "./src/figures.generated.ts",
+		"./p2p": "./src/p2p.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

@@ -320,13 +320,7 @@ export const p2pRoutes = new Hono()
 		const locator = await chunkLocator(payload.w, assetId, chunkIndex);
 		if (!locator) return c.json({ error: "Chunk not found" }, 404);
 
-		const totalChunks = Math.ceil(locator.assetSize / locator.chunkSize);
-		const { offset, size } = chunkRange(
-			chunkIndex,
-			totalChunks,
-			locator.chunkSize,
-			locator.assetSize,
-		);
+		const { offset, size } = chunkRange(chunkIndex, locator.chunkSize, locator.assetSize);
 
 		// Read just this chunk out of storage. The seeder holds no file bytes and no
 		// manifests — see the note at the top of this file for why both matter.
