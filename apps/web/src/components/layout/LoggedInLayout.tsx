@@ -132,15 +132,17 @@ function LoggedInLayoutInner() {
 								</NavLink>
 							))}
 
-							{/* Creator section — the Studio (studio.anthers.org) is the all-in-one
-								creator management surface, a separate origin, so this links out. */}
+							{/* Creator section — the Studio is the all-in-one creator management surface.
+								It lived on a separate origin until 2026-08-11 and this linked out with an
+								`<a>`; it is `/studio` on this origin now, so it is an ordinary NavLink and
+								no longer costs a full page load. */}
 							{user?.isCreator && (
 								<>
 									<div className="divider my-1 px-1 text-xs text-base-content/30">Creator</div>
-									<a href={studioUrl("/")} className={navLinkClass({ isActive: false })}>
+									<NavLink to={studioUrl("/")} className={navLinkClass}>
 										<Squares2X2Icon className="w-5 h-5 shrink-0" />
 										Studio
-									</a>
+									</NavLink>
 								</>
 							)}
 

@@ -209,21 +209,18 @@ services:
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: ${APP_URL}
-      # The Creator Studio's origin. `origins.ts` reads it into the CORS + CSRF
-      # allowlist, so without it every Studio mutation gets a 403 from middleware
-      # that never reaches a handler. Production has always set it; this file did
-      # not declare it, which is the same invisible-drift shape as the Stripe block
-      # above — and `make spec-diff` now catches that class outright.
-      - key: STUDIO_URL
-        scope: RUN_TIME
-        value: https://studio.anthers.org
       # Session-cookie domain, read by routes/auth.ts on set AND on delete.
-      # `.anthers.org` — a DOT-PREFIXED parent domain, so the session cookie is sent to
-      # both the apex and `studio.anthers.org`. That is load-bearing: the web Studio
-      # authenticates with this cookie, and a host-only cookie would simply not reach it.
-      # Do NOT "tidy" this to empty. A cookie set with a domain can only be cleared with
-      # the same domain, so changing it stands every live session up until it expires,
-      # and it signs the Studio out on the way past.
+      #
+      # `.anthers.org` — DOT-PREFIXED, so the cookie is sent to the apex and to every
+      # subdomain. ⚠️ The reason changed on 2026-08-11 and the value did not. It was here
+      # for `studio.anthers.org`, which no longer exists — the Studio is `/studio` on this
+      # origin now. What still requires it is **`www.anthers.org`**, an ALIAS domain on
+      # this same app: a host-only cookie set at the apex is not sent to `www`, so signing
+      # in on one and browsing the other would silently sign you out.
+      #
+      # Do NOT "tidy" this to empty on the strength of the Studio being gone — that is the
+      # exact reasoning that would break it. A cookie set with a domain can only be cleared
+      # with the same domain, so changing it strands every live session until it expires.
       - key: COOKIE_DOMAIN
         scope: RUN_TIME
         value: .anthers.org

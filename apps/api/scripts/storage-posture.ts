@@ -76,9 +76,8 @@ const host = config.publicBaseUrl;
  * playback broken, so both are probed.
  */
 const BROWSER_ORIGINS = [
-	["https://anthers.org", "consumer site"],
+	["https://anthers.org", "the site — including /studio, which performs media uploads"],
 	["https://www.anthers.org", "www variant"],
-	["https://studio.anthers.org", "Creator Studio — performs media uploads"],
 	["tauri://localhost", "packaged desktop Studio (raw XHR, so CORS applies)"],
 ] as const;
 

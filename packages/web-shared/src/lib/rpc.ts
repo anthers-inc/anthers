@@ -56,15 +56,16 @@ export function apiSendsCookies(): boolean {
 /**
  * Resolve the API origin for whichever app consumes this client.
  *
- * The API and the consumer SPA share the apex origin (anthers.org); the Studio is
- * a separate, cross-origin subdomain (studio.anthers.org). So:
+ * The API and the SPA share the apex origin (anthers.org), so in a browser this is
+ * almost always same-origin:
  *   - the desktop shell   → whatever origin it injected (host-sniffing can't work
  *     from `tauri://localhost`, which would otherwise resolve to the app itself)
  *   - localhost / 127.0.0.1 → the dev API on :8000
- *   - studio.<host>         → strip the `studio.` label to reach the apex API. This
- *     is a credentialed cross-origin call; CORS + the `.anthers.org`-scoped session
- *     cookie make the shared login work (see epic E50 — Creator Studio).
- *   - otherwise             → same-origin ("") — the consumer site on the apex.
+ *   - otherwise             → same-origin ("")
+ *
+ * There was a `studio.<host>` branch until 2026-08-11 that stripped the label to reach
+ * the apex API, because the Studio was a separate cross-origin subdomain. It merged into
+ * this app at `/studio`; the subdomain is gone and nothing serves it.
  */
 export function apiBaseUrl(): string {
 	const desktop = desktopRuntime();
@@ -72,7 +73,6 @@ export function apiBaseUrl(): string {
 	if (typeof location === "undefined") return "";
 	const h = location.hostname;
 	if (h === "localhost" || h === "127.0.0.1") return "http://localhost:8000";
-	if (h.startsWith("studio.")) return `${location.protocol}//${h.slice("studio.".length)}`;
 	return "";
 }
 

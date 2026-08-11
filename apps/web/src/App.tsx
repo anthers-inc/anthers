@@ -159,9 +159,9 @@ export default function App() {
 					}
 				/>
 				{/*
-					Creator tooling lives in the Studio (studio.anthers.org) now. Keep the whole
-					/dashboard/* tree as a redirect safety net for bookmarks/stale links — it
-					hard-redirects to the Studio equivalent (StudioRedirect strips /dashboard).
+					Creator tooling lives under /studio. Keep the whole /dashboard/* tree as a
+					redirect safety net for bookmarks and stale links — StudioRedirect strips
+					the /dashboard prefix and navigates, in-app, to the /studio equivalent.
 				*/}
 				<Route
 					path="/dashboard/*"
