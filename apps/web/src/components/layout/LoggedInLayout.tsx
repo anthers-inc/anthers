@@ -17,6 +17,7 @@ import {
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import MiniPlayer from "../media/MiniPlayer";
+import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
 import VerificationBanner from "./VerificationBanner";
@@ -176,7 +177,9 @@ function LoggedInLayoutInner() {
 				<main
 					className={`flex-1 min-w-0 overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
 				>
-					<Outlet />
+					<RouteSuspense>
+						<Outlet />
+					</RouteSuspense>
 
 					{/* Footer */}
 					<footer
