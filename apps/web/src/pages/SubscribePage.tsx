@@ -8,10 +8,10 @@
 //
 // The page is a guided sequence, and the order is the argument:
 //
-//   1. Anthers is free, stated on its own and shown with a reel of work anyone can open.
-//   2. A Seed is one thing — $3 — and the destination is the whole difference.
-//   3. What a Seed to Anthers does, with its breakdown, ending in a yes/no.
-//   4. What a Seed to a creator does, with the same breakdown, ending in a creator search.
+//   1. Anthers is free, stated on its own, shown with a reel of work anyone can open, and
+//      closing with what a Seed is — one thing, $3, and the destination is the difference.
+//   2. What a Seed to Anthers does, with its breakdown, ending in a yes/no.
+//   3. What a Seed to a creator does, with the same breakdown, ending in a creator search.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -1028,45 +1028,38 @@ export default function SubscribePage() {
 							</p>
 						</div>
 						<OpenWorksReel />
-					</Reveal>
 
-					{/* ── 2 · The Seed ───────────────────────────────────────── */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={2} title="Going further is one thing: a Seed.">
-							A Seed is <strong>{money(SEED_PRICE)} a month</strong> — the only unit of support on
-							Anthers. You hold as many as you like, and you choose where each one points.
-						</StepHeading>
-						<div className="mt-8 grid gap-4 sm:grid-cols-[auto_1fr_1fr] sm:items-stretch">
-							<div className="grid place-items-center rounded-xl border border-primary/30 bg-primary/10 px-6 py-4 text-center">
-								<span>
-									<span className="block text-2xl font-bold">{money(SEED_PRICE)}</span>
-									<span className="text-xs text-base-content/60">
-										one Seed
-										<br />
-										per month
-									</span>
-								</span>
-							</div>
-							<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
-								<h3 className="text-sm font-bold">Point it at Anthers</h3>
-								<p className="mt-1.5 text-sm leading-snug text-base-content/60">
-									It keeps Public Access open to everyone, and pays the creators whose work you
-									spend time with.
-								</p>
-							</div>
-							<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
-								<h3 className="text-sm font-bold">Point it at a creator</h3>
-								<p className="mt-1.5 text-sm leading-snug text-base-content/60">
-									It reaches them directly, as recurring support, and clears whichever of their own
-									levels it meets.
-								</p>
+						{/* What a Seed is, as the tail of "it's free" rather than as its own step: the
+						    primitive is one sentence, and giving it a numbered step of its own made the
+						    page look like it asked three things when it asks two. */}
+						<div className="mt-14">
+							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
+								Going further is one thing: a <strong>Seed</strong>, {money(SEED_PRICE)} a month. It
+								is the only unit of support on Anthers — you hold as many as you like, and you
+								choose where each one points.
+							</p>
+							<div className="mt-6 grid gap-4 sm:grid-cols-2">
+								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
+									<h3 className="text-sm font-bold">Point it at Anthers</h3>
+									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
+										It keeps Public Access open to everyone, and pays the creators whose work you
+										spend time with.
+									</p>
+								</div>
+								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
+									<h3 className="text-sm font-bold">Point it at a creator</h3>
+									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
+										It reaches them directly, as recurring support, and clears whichever of their
+										own levels it meets.
+									</p>
+								</div>
 							</div>
 						</div>
 					</Reveal>
 
-					{/* ── 3 · A Seed for Anthers ─────────────────────────────── */}
+					{/* ── 2 · A Seed for Anthers ─────────────────────────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={3} title="A Seed for Anthers">
+						<StepHeading n={2} title="A Seed for Anthers">
 							Watch as much Public Access as you like, for as long as you hold it — and{" "}
 							<strong>
 								{money(TIME_POOL_PER_SEED)} of every {money(SEED_PRICE)}
@@ -1116,9 +1109,9 @@ export default function SubscribePage() {
 						/>
 					</Reveal>
 
-					{/* ── 4 · A Seed for a creator ───────────────────────────── */}
+					{/* ── 3 · A Seed for a creator ───────────────────────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={4} title="A Seed for a creator">
+						<StepHeading n={3} title="A Seed for a creator">
 							It goes to them.{" "}
 							<strong>
 								{money(CREATOR_NET)} of every {money(SEED_PRICE)}
