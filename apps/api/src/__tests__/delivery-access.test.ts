@@ -22,7 +22,7 @@
  * Inserting the Work and its completed job is also the only way to test the delivered state
  * without actually running ffmpeg.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { assets, purchases, transcodingJobs, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -156,6 +156,18 @@ describe("Delivery-layer access", () => {
 			.returning();
 		freeAssetId = gameAsset.id;
 	}, DB_SETUP_TIMEOUT);
+
+	// The usernames carry a per-run suffix, so without this each run's rows stay in the
+	// shared dev database forever — including the simulated transcoding_jobs above, which
+	// the worker's boot-time resume sweep used to re-send as real jobs on every `make dev`.
+	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
+	// outlives its creator's account), so deleting the users alone orphans them instead.
+	afterAll(async () => {
+		const owners = sql`SELECT id FROM users WHERE username IN (${creatorName}, ${viewerName})`;
+		await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
+		await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
+		await db.execute(sql`DELETE FROM users WHERE username IN (${creatorName}, ${viewerName})`);
+	});
 
 	it("publishes a locked post and a free post over the same two items", async () => {});
 

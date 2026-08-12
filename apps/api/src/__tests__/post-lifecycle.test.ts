@@ -10,7 +10,7 @@
  * Transcode state is simulated by inserting transcoding_jobs rows directly, so nothing
  * touches real ffmpeg or pg-boss.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -78,6 +78,22 @@ beforeAll(async () => {
 	owner = await signUp(ownerName);
 	stranger = await signUp(strangerName);
 }, DB_SETUP_TIMEOUT);
+
+// These suites run against the shared dev database and the usernames carry a per-run
+// suffix, so without this every run's rows stay forever. It matters more here than the
+// count suggests: the transcoding_jobs rows below are inserted at `pending` to simulate an
+// encode in flight, and the worker's boot-time resume sweep re-sent every such row as a
+// real job on each `make dev`.
+//
+// Works and posts must go FIRST and by creator_id: both carry ON DELETE SET NULL (a Work
+// outlives its creator's account), so deleting the users alone orphans them rather than
+// removing them — and the transcoding_jobs that cascade off works would survive with them.
+afterAll(async () => {
+	const owners = sql`SELECT id FROM users WHERE username IN (${ownerName}, ${strangerName})`;
+	await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
+	await db.execute(sql`DELETE FROM posts WHERE creator_id IN (${owners})`);
+	await db.execute(sql`DELETE FROM users WHERE username IN (${ownerName}, ${strangerName})`);
+});
 
 describe("Release-readiness gate", () => {
 	// The gate MOVED rather than vanished. Readiness is a property of the media, the media
