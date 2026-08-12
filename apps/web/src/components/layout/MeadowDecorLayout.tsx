@@ -11,11 +11,14 @@
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Outlet } from "react-router-dom";
+import RouteSuspense from "./RouteSuspense";
 
 export default function MeadowDecorLayout() {
 	return (
 		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
-			<Outlet />
+			<RouteSuspense>
+				<Outlet />
+			</RouteSuspense>
 		</MeadowDecor>
 	);
 }

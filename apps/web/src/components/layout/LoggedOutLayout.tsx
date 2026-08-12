@@ -9,6 +9,7 @@ import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import MiniPlayer from "../media/MiniPlayer";
+import RouteSuspense from "./RouteSuspense";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -205,7 +206,9 @@ export default function LoggedOutLayout() {
 				viewport on mobile — without it, a flex item's default min-width:auto
 				keeps it at its content's min-content width. */}
 			<main className={`relative z-10 flex min-w-0 flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
-				<Outlet />
+				<RouteSuspense>
+					<Outlet />
+				</RouteSuspense>
 			</main>
 
 			<MiniPlayer />
