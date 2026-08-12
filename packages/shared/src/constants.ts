@@ -82,8 +82,31 @@ export type Badge = "root" | "sprout" | "petal" | "blossom";
 export const SEED_PRICE = 3;
 /** Time Pool funded per Anthers-Seed ($), distributed to creators by watch-time. */
 export const TIME_POOL_PER_SEED = 1.5;
-/** The Free rank's small subsidised Time Pool ($) — the user pays $0. */
-export const FREE_TIME_POOL = 0.05;
+/**
+ * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free
+ * viewer's watching still pays the creators they watch. The user pays $0.
+ *
+ * 🚨 **$0.25 is an explicitly PROVISIONAL number (Parker, 2026-08-12) and is expected to
+ * move.** It needs vetting against real modelling and real conversion data, not further
+ * argument on paper — so treat it as a starting position rather than a settled dial, and
+ * see [[11.03 Open Questions]] where it is flagged for review.
+ *
+ * **Why it is deliberately low rather than deliberately right.** The Public Access revamp
+ * proposed **$0.50**, and the docs were written against that figure before the code moved.
+ * Parker's call was to split the difference and start at $0.25, on an asymmetry rather than
+ * a forecast: **raising this later is easy and climbing down from it is not.** It is a
+ * standing obligation to every free account, so an over-generous opening number becomes a
+ * public commitment the charitable budget has to keep funding while the paying share
+ * catches up — and the growth ladder is violently non-linear near its floor. Under-shooting
+ * costs creators some free-viewer earnings and can be corrected upward at any time.
+ *
+ * It is also the single dial that sets **free-access cost per account**, since delivery
+ * became free: cost is now `free accounts × this number`, headcount times a policy figure,
+ * with no behavioural guess underneath it. That is what decoupled the free tier's
+ * *generosity* from the platform's *solvency* — the watch-hour limit can move without
+ * moving this, and vice versa.
+ */
+export const FREE_TIME_POOL = 0.25;
 
 /**
  * How long raw, per-person attention rows are kept before being rolled up into
