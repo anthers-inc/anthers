@@ -975,6 +975,21 @@ function serializeWorkForViewer(
 		assets: workAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
 		transcoding: viewerTranscoding(job, canAccess, delivery),
 		access,
+		/**
+		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
+		 *
+		 * 🚨 **Derived, never stored, and never a flag a creator sets.** Public Access is
+		 * what a Work *is* when there is nothing on it, not a category opted into: leave
+		 * the baseline row allowed at $0 on a streaming Work and it is the commons. A
+		 * boolean column here would be a second source of truth that could disagree with
+		 * the access table, and a creator-facing toggle would invite the question "what
+		 * happens if I turn it off but leave it ungated?" — which has no answer.
+		 *
+		 * Note this is a fact about the WORK and says nothing about whether a given viewer
+		 * may watch more of it this month. That is the account-level meter, which is
+		 * deliberately not expressed here — see `publicAccessGate`.
+		 */
+		publicAccess: access.isFree && work.streamEnabled && work.visibility === "released",
 	};
 }
 

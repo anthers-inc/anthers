@@ -204,6 +204,13 @@ export interface Work {
 	downloadEnabled?: boolean;
 	seedAccess?: SeedAccessRow[] | null;
 	access?: AccessResult;
+	/**
+	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
+	 * access table, never stored and never a creator-set flag: a Work with nothing on it
+	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * left, which is an account-level meter and a separate call.
+	 */
+	publicAccess?: boolean;
 
 	isPinned?: boolean;
 	tags?: string[] | null;
@@ -340,6 +347,13 @@ export interface CollectionPost {
 	sortOrder: number;
 	creator?: Creator;
 	access?: AccessResult;
+	/**
+	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
+	 * access table, never stored and never a creator-set flag: a Work with nothing on it
+	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * left, which is an account-level meter and a separate call.
+	 */
+	publicAccess?: boolean;
 }
 
 /** Project — a collection (playlist-like wrapper) that groups posts. */
