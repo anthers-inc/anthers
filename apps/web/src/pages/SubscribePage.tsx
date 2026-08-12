@@ -38,11 +38,14 @@
 //   • Seeds to ANTHERS commit for real, through the same preview + modal ceremony the
 //     inline post unlock uses.
 //   • Following commits for real.
-//   • Seeds to a CREATOR can be chosen, and are allocated where the user already holds a
-//     creator-Seed balance — but nothing in the API SELLS creator Seeds
-//     (`applyCreditForPurchase` credits a `type: "seeds"` purchase that no route creates),
-//     so a user without a balance cannot finish that half yet. The page says so plainly
-//     rather than failing at the last step.
+//   • Seeds to a CREATOR ride on the SAME subscription as the Anthers one — quantity is
+//     every Seed the user holds, so one Seed to Anthers and one each to two creators is
+//     quantity 3 at $9/month, one charge. The split rides in subscription metadata; see
+//     `anthersSeedsFromSub` in services/billing.ts, where reading quantity as the Anthers
+//     count would inflate the Badge and the Time Pool.
+//     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator-Seed
+//     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
+//     nothing in the UI calls it.)
 
 import { cardFeeDisplay, SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -778,6 +781,7 @@ export default function SubscribePage() {
 	const [success, setSuccess] = useState<string | null>(null);
 	const [pending, setPending] = useState<{
 		anthersSeeds: number;
+		directed: { creatorId: number; seeds: number }[];
 		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
@@ -921,45 +925,48 @@ export default function SubscribePage() {
 		setError(null);
 		setSuccess(null);
 		try {
+			// Following costs nothing, so it is applied straight away rather than waiting on
+			// a charge that may not even happen.
 			for (const username of picks.follow) {
 				const creator = byUsername.get(username);
 				if (!creator || creator.isFollowing) continue;
 				await client.api.accounts.users[":username"].follow.$post({ param: { username } });
 			}
 
-			// Creator Seeds are ALLOCATED from a balance the user already holds; nothing in
-			// the API sells them, so a user without one is told rather than failed at.
-			const unallocated: string[] = [];
-			for (const username of picks.seed) {
-				const creator = byUsername.get(username);
-				if (!creator) continue;
-				const res = await client.api.subscriptions.seeds.$post({
-					json: { creatorId: creator.id, amount: SEED_PRICE.toFixed(2) },
-				});
-				if (!res.ok) unallocated.push(nameOf(creator));
-			}
+			// One Seed each, to the creators picked — on the SAME charge as the Anthers one.
+			const directed = picks.seed
+				.map((username) => byUsername.get(username))
+				.filter((creator): creator is PublicUser => !!creator)
+				.map((creator) => ({ creatorId: creator.id, seeds: 1 }));
 
-			if (picks.anthers === true) {
-				const res = await client.api.subscriptions.preview[":seeds"].$get({
-					param: { seeds: "1" },
-				});
-				if (!res.ok) {
-					setError("Couldn't load the charge details. Please try again.");
-					return;
-				}
-				const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
-				setPending({ anthersSeeds: 1, badgeName: "1 Seed", preview });
-			}
+			const anthers = picks.anthers === true ? 1 : 0;
+			const totalSeeds = anthers + directed.length;
 
-			if (unallocated.length > 0) {
-				setError(
-					`Your follows are saved. Seeds for ${unallocated.join(", ")} need a creator-Seed balance, which can't be bought here yet — they're kept for when it can.`,
-				);
-			} else if (picks.anthers !== true) {
+			if (totalSeeds === 0) {
 				setSuccess(
 					picks.follow.length > 0 ? "Saved — you're following them now." : "Nothing to save yet.",
 				);
+				return;
 			}
+
+			// Preview prices the whole charge, so the modal quotes the total the user is
+			// actually agreeing to rather than the Anthers half of it.
+			const res = await client.api.subscriptions.preview[":seeds"].$get({
+				param: { seeds: String(totalSeeds) },
+			});
+			if (!res.ok) {
+				setError("Couldn't load the charge details. Please try again.");
+				return;
+			}
+			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
+			setPending({
+				anthersSeeds: anthers,
+				directed,
+				// The honest label is the count: a commit needn't land on a Badge, and
+				// naming one would describe only the Anthers half of this charge.
+				badgeName: `${totalSeeds} Seed${totalSeeds === 1 ? "" : "s"}`,
+				preview,
+			});
 		} catch {
 			setError("Something went wrong. Please try again.");
 		} finally {
@@ -1188,6 +1195,7 @@ export default function SubscribePage() {
 			{pending && (
 				<SubscriptionPaymentModal
 					anthersSeeds={pending.anthersSeeds}
+					directed={pending.directed}
 					badgeName={pending.badgeName}
 					preview={pending.preview}
 					onComplete={() => {

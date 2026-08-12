@@ -16,8 +16,17 @@ export interface SubscriptionPreview {
 }
 
 interface Props {
-	/** The target Anthers-Seed count to subscribe to (the subscription quantity). */
+	/** The target Anthers-Seed count — the Anthers half of the charge, not its quantity. */
 	anthersSeeds: number;
+	/**
+	 * Seeds pointed at creators, riding on the same charge.
+	 *
+	 * The subscription's quantity is `anthersSeeds` plus these, because every Seed a user
+	 * holds arrives on one monthly charge — which is also what amortises the fixed card
+	 * fee across the creators on it. Omitted everywhere the caller only changes the
+	 * Anthers count (the post unlock, /subscription).
+	 */
+	directed?: { creatorId: number; seeds: number }[];
 	badgeName: string;
 	preview: SubscriptionPreview;
 	/** Called after the change is confirmed — the webhook then applies the Seed count. */
@@ -34,7 +43,7 @@ function formatDate(unix: number | null): string | null {
 	});
 }
 
-function PaymentForm({ anthersSeeds, badgeName, preview, onComplete, onClose }: Props) {
+function PaymentForm({ anthersSeeds, directed, badgeName, preview, onComplete, onClose }: Props) {
 	const stripe = useStripe();
 	const elements = useElements();
 	const [processing, setProcessing] = useState(false);
@@ -52,7 +61,9 @@ function PaymentForm({ anthersSeeds, badgeName, preview, onComplete, onClose }: 
 		setProcessing(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.account.$post({ json: { anthersSeeds } });
+			const res = await client.api.subscriptions.account.$post({
+				json: { anthersSeeds, ...(directed?.length ? { directed } : {}) },
+			});
 			if (!res.ok) {
 				setError("Couldn't update your Seeds. Please try again.");
 				setProcessing(false);
