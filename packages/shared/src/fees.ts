@@ -198,15 +198,20 @@ export function badgeViews(): BadgeView[] {
 		const badge = id;
 		const n = seeds;
 		const price = seedCost(n);
-		const timePool = new Decimal(timePoolFor(n));
-		const supportsAnthers = n === 0 ? new Decimal(0) : new Decimal(price).minus(timePool);
+		// Delegated to `anthersSeedBreakdown` rather than re-derived. It used to compute
+		// `price - timePool` inline, which silently OMITTED the Payments term and so
+		// overstated the remainder by exactly the card fee — $1.50 at Root against a true
+		// $1.11. Same shape as the five hand-rolled card-fee copies and as `creatorReceipt`
+		// re-deriving the storage formula: a duplicated formula agrees with its original
+		// right up until a term moves, and here the term had already moved.
+		const bd = anthersSeedBreakdown(n, { payments: n === 0 ? 0 : cardFee(price) });
 		return {
 			id: badge,
 			name: badgeLabel(badge),
 			anthersSeeds: n,
 			price,
-			timePool: timePool.toFixed(2),
-			supportsAnthers: supportsAnthers.toFixed(2),
+			timePool: bd.timePool.toFixed(2),
+			supportsAnthers: bd.foundation.toFixed(2),
 			subsidised: n === 0,
 		};
 	});

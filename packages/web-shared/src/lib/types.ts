@@ -546,8 +546,10 @@ export interface AttentionSummary {
 
 export interface PoolDistribution {
 	id: number;
-	subscriberId: number;
-	creatorId: number;
+	/** Null once that account is deleted — the payment record outlives both parties. */
+	subscriberId: number | null;
+	/** Null once that account is deleted; the row survives, the identity link does not. */
+	creatorId: number | null;
 	billingCycle: string;
 	poolAmount: string;
 	seedAmount: string;

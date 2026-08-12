@@ -696,7 +696,13 @@ const subscriptionRoutes = new Hono()
 				creatorAvatar: users.avatar,
 			})
 			.from(poolDistributions)
-			.innerJoin(users, eq(poolDistributions.creatorId, users.id))
+			// LEFT, not inner: `creator_id` is nullable since migration `0031`, because this
+			// row is a payment record that outlives the accounts on either side of it. An
+			// inner join would silently drop a distribution whose creator has since deleted
+			// their account — making 51.05's "one record survives" true in the database and
+			// false on the page, which is the same failure shape as the feed dropping
+			// tombstoned posts.
+			.leftJoin(users, eq(poolDistributions.creatorId, users.id))
 			.where(
 				and(eq(poolDistributions.subscriberId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			)

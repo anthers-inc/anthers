@@ -358,10 +358,16 @@ export default function SubscriptionPage() {
 	const rows: CreatorRow[] = useMemo(() => {
 		const map = new Map<number, CreatorRow>();
 		for (const d of distributions) {
-			map.set(d.creatorId, {
-				creatorId: d.creatorId,
+			// `creatorId` is null once that creator deletes their account — the payment
+			// record survives them (51.05), so this list has to render the money without a
+			// creator to attach it to. Keyed on a negative synthetic id so several deleted
+			// creators stay separate rows rather than collapsing into one, and labelled
+			// rather than blanked: the person is gone, what you paid is not.
+			const key = d.creatorId ?? -d.id;
+			map.set(key, {
+				creatorId: d.creatorId ?? 0,
 				username: d.creator?.username ?? "",
-				displayName: d.creator?.displayName ?? null,
+				displayName: d.creator?.displayName ?? (d.creatorId === null ? "Deleted creator" : null),
 				avatar: d.creator?.avatar ?? null,
 				timeSeconds: d.attentionSeconds ?? 0,
 				poolAmount: Number(d.poolAmount),

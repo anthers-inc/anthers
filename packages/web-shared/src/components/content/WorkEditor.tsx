@@ -298,10 +298,10 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 				setError("Failed to create content.");
 				return;
 			}
-			const { work: created } = (await res.json()) as unknown as { work: Work };
-			setCurrent(created);
+			const { work: created } = await res.json();
+			setCurrent(created as Work);
 			// Games/software gain a builds section; everything else is done on create.
-			if (!isBuildType(type)) onSaved(created);
+			if (!isBuildType(type)) onSaved(created as Work);
 		} catch {
 			setError("Failed to create content.");
 		} finally {
@@ -337,8 +337,8 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 				setError("Failed to save content.");
 				return;
 			}
-			const { item: updated } = (await res.json()) as unknown as { item: Work };
-			onSaved(updated);
+			const { work: updated } = await res.json();
+			onSaved(updated as Work);
 		} catch {
 			setError("Failed to save content.");
 		} finally {
@@ -375,7 +375,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 				},
 			});
 			if (!res.ok) throw new Error("Create failed");
-			const { asset } = (await res.json()) as unknown as { asset: Asset };
+			const { asset } = await res.json();
 			setCurrent((prev) => (prev ? { ...prev, assets: [asset, ...prev.assets] } : prev));
 			setBuildFile(null);
 			setBuildVersion("");

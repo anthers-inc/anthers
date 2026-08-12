@@ -80,10 +80,17 @@ export default function ParentsPage() {
 					toward exactly that, and we think it's the wrong trade.
 				</p>
 				<p>
-					One age rule here is real, and it's enforced by something other than trust:{" "}
-					<strong>anyone who publishes work on Anthers is a verified adult</strong>, because
-					publishing requires completing payment verification with Stripe. Minors can't publish
-					here.
+					One age rule is enforced by something other than trust, and it covers selling rather than
+					publishing: <strong>anyone who sells work on Anthers is a verified adult</strong>, because
+					taking money requires completing identity verification with Stripe, and Stripe will not
+					verify a minor. We never see those documents — we read back a yes or no.
+				</p>
+				<p>
+					<strong>Publishing free work does not yet require that</strong>, so we are not going to
+					tell you minors can't publish here. We intend to close that gap, and the reason it is
+					still open is that the obvious fix would also bar creators in most of the world from
+					publishing at all — Stripe's identity checks reach about 34 countries. We would rather
+					take the time to find a check that doesn't do that than ship one that does.
 				</p>
 			</Section>
 
@@ -130,9 +137,10 @@ export default function ParentsPage() {
 					behind.
 				</p>
 				<p>
-					Any account can download everything we hold about it, or delete itself, from the settings
-					page. Deletion takes seven days, and signing back in during that week cancels it. Full
-					detail is in the{" "}
+					Any account can get everything we hold about it, or have the account deleted, by asking us
+					— the controls exist and we are still building the buttons, so for now it is an email
+					rather than a click. Deletion takes seven days, and signing back in during that week
+					cancels it. Full detail is in the{" "}
 					<Link to="/privacy" className="link link-primary">
 						Privacy Policy
 					</Link>

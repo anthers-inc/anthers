@@ -446,6 +446,22 @@ const addToCollectionSchema = z.object({
 
 // ─── Content library items ────────────────────────────────────────────────────
 
+/**
+ * `projects.id`, QUALIFIED, for the correlated subquery below.
+ *
+ * ⚠️ **This is hardening, not a bug fix — the query was never wrong.** Drizzle renders an
+ * interpolated `${table.id}` as bare `"id"` **only when the query has a single table in
+ * its FROM**; the moment a join is present it qualifies, and this query joins `users`.
+ * Verified with `toSQL()` in both shapes rather than assumed.
+ *
+ * It is written explicitly anyway because the correctness is currently a *side effect of
+ * the join*: remove or restructure that join — denormalize the creator name, say — and the
+ * identifier silently goes bare, binding project_posts.id, which exists. Postgres raises
+ * nothing and every count becomes a plausible constant. That is exactly what happened in
+ * `routes/accounts.ts`, whose listings had no join and read 0 for months (PR #223).
+ */
+const projectsId = sql`${sql.identifier("projects")}.${sql.identifier("id")}`;
+
 type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
@@ -2636,7 +2652,7 @@ const contentRoutes = new Hono()
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
-				postCount: sql<number>`(SELECT COUNT(*)::int FROM project_posts WHERE project_id = ${projects.id})`,
+				postCount: sql<number>`(SELECT COUNT(*)::int FROM project_posts WHERE project_id = ${projectsId})`,
 			})
 			.from(projects)
 			.innerJoin(users, eq(projects.creatorId, users.id))
