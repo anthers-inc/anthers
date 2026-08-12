@@ -13,6 +13,22 @@ import { requireAuth, requireCreator } from "../middleware/auth.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
+/**
+ * `game_jams.id`, QUALIFIED, for the correlated subquery below.
+ *
+ * ⚠️ **This is hardening, not a bug fix — the query was never wrong.** Drizzle renders an
+ * interpolated `${table.id}` as bare `"id"` **only when the query has a single table in
+ * its FROM**; the moment a join is present it qualifies, and this query joins `users`.
+ * Verified with `toSQL()` in both shapes rather than assumed.
+ *
+ * It is written explicitly anyway because the correctness is currently a *side effect of
+ * the join*: remove or restructure that join — denormalize the creator name, say — and the
+ * identifier silently goes bare, binding jam_entries.id, which exists. Postgres raises
+ * nothing and every count becomes a plausible constant. That is exactly what happened in
+ * `routes/accounts.ts`, whose listings had no join and read 0 for months (PR #223).
+ */
+const gameJamsId = sql`${sql.identifier("game_jams")}.${sql.identifier("id")}`;
+
 const createJamSchema = z.object({
 	title: z.string().min(1).max(255),
 	slug: z
@@ -59,7 +75,7 @@ const jamRoutes = new Hono()
 				jam: gameJams,
 				creatorUsername: users.username,
 				creatorDisplayName: users.displayName,
-				entryCount: sql<number>`(SELECT count(*)::int FROM jam_entries WHERE jam_id = ${gameJams.id})`,
+				entryCount: sql<number>`(SELECT count(*)::int FROM jam_entries WHERE jam_id = ${gameJamsId})`,
 			})
 			.from(gameJams)
 			.innerJoin(users, eq(gameJams.creatorId, users.id))

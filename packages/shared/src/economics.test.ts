@@ -24,6 +24,7 @@ import {
 	paymentsSplit,
 	supportBreakdown,
 } from "./fees.js";
+import { BADGE_TABLE } from "./figures.generated.js";
 
 const PAID_SEEDS = [1, 2, 3, 4];
 
@@ -205,6 +206,44 @@ describe("badgeViews", () => {
 			expect(v.supportsAnthers).toMatch(/^\d+\.\d{2}$/);
 			expect(Number(v.timePool)).toBe(timePoolFor(i));
 		});
+	});
+
+	// 🚨 The test above is the one that let a wrong number through for as long as it
+	// existed: `/^\d+\.\d{2}$/` passes against ANY value, so `supportsAnthers` was
+	// $1.50 at Root against a true $1.11 — overstated by exactly the card fee, because
+	// `badgeViews` computed `price - timePool` inline and omitted the Payments term.
+	// A shape assertion on a money field is not coverage. These two pin the value.
+	test("supportsAnthers is the remainder NET of the Payments line", () => {
+		const views = badgeViews();
+		for (const row of BADGE_TABLE) {
+			const v = views.find((x) => x.anthersSeeds === row.seeds);
+			expect(v, `no view for ${row.seeds} Seed(s)`).toBeDefined();
+			// Pinned against `figures.generated.ts`, which `econ:figures` derives
+			// independently — never against badgeViews' own arithmetic, which is what an
+			// assertion copied from the implementation would do.
+			expect({ badge: row.badge, remainder: v?.supportsAnthers }).toEqual({
+				badge: row.badge,
+				remainder: row.remainder,
+			});
+			expect({ badge: row.badge, timePool: v?.timePool }).toEqual({
+				badge: row.badge,
+				timePool: row.timePool,
+			});
+		}
+	});
+
+	test("the three terms conserve against the charge, at every rung", () => {
+		// The identity that makes the fix right rather than merely different:
+		// charge = Time Pool + Payments + remainder. Stated here so a future change that
+		// drops a term fails on the arithmetic and not only on a pinned constant.
+		for (const row of BADGE_TABLE) {
+			const v = badgeViews().find((x) => x.anthersSeeds === row.seeds);
+			const sum = new Decimal(v?.timePool ?? 0).plus(row.payments).plus(v?.supportsAnthers ?? 0);
+			expect({ badge: row.badge, sum: sum.toFixed(2) }).toEqual({
+				badge: row.badge,
+				sum: row.charge,
+			});
+		}
 	});
 });
 
