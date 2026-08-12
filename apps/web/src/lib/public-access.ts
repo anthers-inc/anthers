@@ -116,6 +116,14 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
  * Seed). Collapsing them is safe here because every caller does the same thing with all
  * three, and separating them would push a three-way branch into every consumer to no
  * end.
+ *
+ * ⚠️ **The `unlimited` clause here is redundant today, and that is recorded rather than
+ * hidden.** Sabotage-testing found that removing it changes nothing: a Seed-holder's
+ * budget carries `allowed: true` and a null remainder, so `shouldWarn` suppresses the
+ * countdown and the players never read `spent`. It is kept because it states the
+ * *semantic* boundary — an unlimited viewer is not a metered viewer — and because the
+ * players use the returned budget directly to render the wall. The property it stands
+ * for is enforced, and pinned, in `shouldWarn`; do not mistake this line for the guard.
  */
 export function useMeteredBudget(): PublicAccessBudget | null {
 	const { user } = useAuth();

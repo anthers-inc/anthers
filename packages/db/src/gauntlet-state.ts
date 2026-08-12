@@ -17,6 +17,7 @@
  *   bun run db:gauntlet:state --user gauntlet_viewer --seed-budget 6
  *   bun run db:gauntlet:state --user gauntlet_viewer --give 2   # 2 SEEDS (= $6)
  *   bun run db:gauntlet:state --user gauntlet_viewer --purchase gauntlet-paid-download
+ *   bun run db:gauntlet:state --user gauntlet_viewer --watched-minutes 570
  *
  * The viewer defaults to `DEV_ACCOUNT_USERNAME`, mirroring `seed-gauntlet.ts`; the harness
  * always passes `--user` explicitly. Everything here is scoped to the gauntlet fixture.
@@ -25,9 +26,18 @@
  */
 
 import { badgeLabel, heldBadgeName, SEED_PRICE, seedsFromDollars } from "@anthers/shared/constants";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
-import { accounts, db, posts, purchases, seedAllocations, users, works } from "./index.js";
+import {
+	accounts,
+	attentionEvents,
+	db,
+	posts,
+	purchases,
+	seedAllocations,
+	users,
+	works,
+} from "./index.js";
 
 const TAG = "[gauntlet-state]";
 
@@ -74,6 +84,20 @@ async function main(): Promise<void> {
 	const seedBudget = intFlag("--seed-budget", 0, 100);
 	const give = intFlag("--give", 0, 100);
 	const purchaseSlug = flagValue("--purchase");
+	/**
+	 * Public Access minutes already spent this month.
+	 *
+	 * The meter is the one staircase rung that cannot be UI-walked at all: reaching it
+	 * honestly means watching ten hours of video, which no test can do. So this writes
+	 * the same `attention_events` rows a real viewing would have left — stamped
+	 * `publicAccess: true`, which is what `publicAccessSecondsThisMonth` sums.
+	 *
+	 * 🚨 Writes rows rather than a total, because there is no total to write: the budget
+	 * is **derived** from the events every time it is read. A hop that set some cached
+	 * figure would place the viewer in a state the app cannot actually produce, and would
+	 * pass whether or not the derivation worked.
+	 */
+	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
 	// Account row: the two billing facts the subscription/seed-buy webhooks would write.
 	if (anthersSeeds !== undefined || seedBudget !== undefined) {
@@ -91,6 +115,37 @@ async function main(): Promise<void> {
 			await db.update(accounts).set(patch).where(eq(accounts.userId, viewerId));
 		} else {
 			await db.insert(accounts).values({ userId: viewerId, ...patch });
+		}
+	}
+
+	// Public Access consumption, as events rather than as a stored number.
+	if (watchedMinutes !== undefined) {
+		await db
+			.delete(attentionEvents)
+			.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
+
+		if (watchedMinutes > 0) {
+			// The endpoint caps one event at 300s, so a realistic month is many rows. Match
+			// that shape rather than writing one enormous row — the sum is the same, but a
+			// single 10-hour event is not a thing the app can produce, and a bug that only
+			// bites on row counts would slip past a fixture that never makes any.
+			const CHUNK = 300;
+			let left = watchedMinutes * 60;
+			const rows: (typeof attentionEvents.$inferInsert)[] = [];
+			while (left > 0) {
+				const durationSeconds = Math.min(CHUNK, left);
+				rows.push({
+					userId: viewerId,
+					creatorId,
+					eventType: "video_watch",
+					durationSeconds,
+					publicAccess: true,
+				});
+				left -= durationSeconds;
+			}
+			for (let i = 0; i < rows.length; i += 500) {
+				await db.insert(attentionEvents).values(rows.slice(i, i + 500));
+			}
 		}
 	}
 
@@ -182,12 +237,19 @@ async function main(): Promise<void> {
 		)
 		.limit(1);
 	const seeds = Number(acct?.anthersSeeds ?? 0);
+	// Report the meter from the same derivation the app uses, not from the flag we were
+	// handed — a hop that prints its own input tells you nothing about whether it landed.
+	const [watched] = await db
+		.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
+		.from(attentionEvents)
+		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
+	const watchedSeconds = Number(watched?.total ?? 0);
 	console.log(
 		`${TAG} ${viewerUsername}: ${seeds} Anthers-Seed${seeds === 1 ? "" : "s"} (${badgeLabel(
 			heldBadgeName(seeds),
 		)}) · budget $${Number(acct?.creatorSeedTotal ?? 0).toFixed(2)} · given ${seedsFromDollars(
 			alloc?.amount,
-		)} Seeds ($${Number(alloc?.amount ?? 0).toFixed(2)}) to ${GAUNTLET_CREATOR_USERNAME}`,
+		)} Seeds ($${Number(alloc?.amount ?? 0).toFixed(2)}) to ${GAUNTLET_CREATOR_USERNAME} · Public Access watched ${(watchedSeconds / 3600).toFixed(2)}h`,
 	);
 }
 
