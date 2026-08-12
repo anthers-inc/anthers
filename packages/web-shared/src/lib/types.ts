@@ -33,6 +33,12 @@ export interface PublicUser extends User {
 	/** Size of the creator's public catalog (published posts). */
 	projectCount: number;
 	isFollowing: boolean;
+	/**
+	 * Work types this creator has released (`video`, `audio`, `text`, `game`, …).
+	 * Derived from the Catalog, so it says what they make rather than what they claim.
+	 * Only the creator listing populates it.
+	 */
+	mediums?: string[];
 }
 
 export interface Creator {
