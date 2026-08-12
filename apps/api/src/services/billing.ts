@@ -1,18 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Stripe Billing helpers for the support model. A user's Anthers subscription is a
- * single **$3 Anthers-Seed** price with a **quantity** = how many Anthers-Seeds
- * they hold (their rank; unbounded, so Blossom+ works). The DB follows Stripe —
- * subscription webhooks are the source of truth for the held Seed count. Directed
- * creator-Seeds are a separate one-time "seeds" charge that tops up the user's
- * creator-Seed balance (which they then direct to creators).
+ * Stripe Billing helpers for the support model.
+ *
+ * ONE subscription carries every Seed a user holds, at the single **$3 Seed** price, with
+ * **quantity = the total** — Anthers' and the creators' together. Someone giving a Seed to
+ * Anthers and one to each of two creators is quantity 3, $9/month, one charge. That is
+ * 51.02's fully prepaid monthly charge, and it is also what amortises the fixed $0.30
+ * across every creator on it.
+ *
+ * 🚨 Quantity is therefore NOT the Anthers count. The split rides in subscription
+ * metadata (`anthersSeeds`, and `directed` for the per-creator picks) — see
+ * `anthersSeedsFromSub`, where getting this wrong inflates a Badge and the Time Pool.
+ *
+ * The DB follows Stripe: subscription webhooks are the source of truth for both halves,
+ * and the picks are applied on activation rather than at request time, so a declined card
+ * cannot leave Seeds directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
-import { accountCycles, accounts, purchases } from "@anthers/db/schema";
-import { seedCost } from "@anthers/shared/constants";
+import { accountCycles, accounts, purchases, seedAllocations } from "@anthers/db/schema";
+import { SEED_PRICE, seedCost } from "@anthers/shared/constants";
 import { anthersSeedBreakdown, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
 
@@ -49,9 +58,41 @@ export function seedPriceId(): string | null {
 	return process.env.STRIPE_PRICE_SEED?.trim() || null;
 }
 
-/** The Anthers-Seed count from a subscription's line item (its quantity). */
-export function anthersSeedsFromSub(sub: Stripe.Subscription): number {
+/** Every Seed on the subscription — Anthers' and the creators' together. */
+export function totalSeedsFromSub(sub: Stripe.Subscription): number {
 	return Math.max(0, sub.items.data[0]?.quantity ?? 0);
+}
+
+/**
+ * The **Anthers** Seed count — the subscription's quantity is the whole charge.
+ *
+ * 🚨 One subscription carries every Seed a user holds, because 51.02 is one fully
+ * prepaid monthly charge and batching is what amortises the fixed $0.30 across the
+ * creators on it. So quantity is 3 for someone giving one Seed to Anthers and one to
+ * each of two creators — and quantity is emphatically NOT the Anthers count.
+ *
+ * That distinction is load-bearing: `accounts.anthersSeeds` is the Badge and it sets the
+ * Time Pool, so reading quantity here would make that user a 3-Seed Petal funding $4.50
+ * of Time Pool off a $3 gift to Anthers. The split rides in subscription metadata, which
+ * the create call has always written.
+ *
+ * The fallback is the migration path rather than a guess: every subscription that
+ * predates directed Seeds is Anthers-only, so for those quantity *is* the Anthers count.
+ */
+export function anthersSeedsFromSub(sub: Stripe.Subscription): number {
+	const total = totalSeedsFromSub(sub);
+	const raw = sub.metadata?.anthersSeeds;
+	// A blank stamp is UNSTAMPED, not zero. `Number("")` is 0, which would hand every Seed
+	// on the charge to the creators' side and drop the user's Badge to Free.
+	if (typeof raw !== "string" || raw.trim() === "") return total;
+	const stamped = Number(raw);
+	if (!Number.isFinite(stamped) || stamped < 0) return total;
+	return Math.min(Math.floor(stamped), total);
+}
+
+/** The Seeds on the charge that are pointed at creators rather than at Anthers. */
+export function directedSeedsFromSub(sub: Stripe.Subscription): number {
+	return Math.max(0, totalSeedsFromSub(sub) - anthersSeedsFromSub(sub));
 }
 
 /** Create (once) and persist the user's Stripe customer id. */
@@ -201,12 +242,16 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 
 	const active = sub.status === "active" || sub.status === "trialing";
 	const anthersSeeds = anthersSeedsFromSub(sub);
+	// The paid-for creator-Seed balance is the rest of the same charge. It is set from the
+	// subscription rather than accumulated, so a user who lowers their count next month
+	// cannot keep directing Seeds they have stopped paying for.
+	const directedTotal = directedSeedsFromSub(sub) * SEED_PRICE;
 	const periodEndUnix = sub.items.data[0]?.current_period_end;
 
 	await db
 		.update(accounts)
 		.set({
-			...(active ? { anthersSeeds } : {}),
+			...(active ? { anthersSeeds, creatorSeedTotal: directedTotal.toFixed(2) } : {}),
 			stripeSubscriptionId: sub.id,
 			isActive: active,
 			...(periodEndUnix ? { currentPeriodEnd: new Date(periodEndUnix * 1000) } : {}),
@@ -216,6 +261,53 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		.where(eq(accounts.id, acct.id));
 
 	if (active) {
-		await snapshotCycle(acct.userId, anthersSeeds, Number(acct.creatorSeedTotal));
+		await applyDirectedSeedsFromSub(acct.userId, sub);
+		await snapshotCycle(acct.userId, anthersSeeds, directedTotal);
+	}
+}
+
+/**
+ * Write the per-creator allocations the user chose when they subscribed.
+ *
+ * The picks travel on the subscription's metadata because that is the record that
+ * survives the gap between "confirm this payment" and "the webhook says it succeeded" —
+ * writing allocations at request time would direct Seeds that were never paid for if the
+ * card then declined.
+ *
+ * Idempotent: the webhook can deliver the same event more than once, so each row is an
+ * upsert keyed on (user, creator, cycle) and the metadata is cleared once applied.
+ */
+async function applyDirectedSeedsFromSub(userId: number, sub: Stripe.Subscription): Promise<void> {
+	const raw = sub.metadata?.directed;
+	if (!raw) return;
+
+	let picks: { creatorId: number; seeds: number }[];
+	try {
+		picks = JSON.parse(raw) as { creatorId: number; seeds: number }[];
+	} catch {
+		return;
+	}
+	if (!Array.isArray(picks) || picks.length === 0) return;
+
+	const cycle = currentBillingCycle();
+	for (const pick of picks) {
+		if (!Number.isInteger(pick?.creatorId) || !Number.isInteger(pick?.seeds) || pick.seeds <= 0) {
+			continue;
+		}
+		const amount = (pick.seeds * SEED_PRICE).toFixed(2);
+		await db
+			.insert(seedAllocations)
+			.values({ userId, creatorId: pick.creatorId, amount, billingCycle: cycle })
+			.onConflictDoUpdate({
+				target: [seedAllocations.userId, seedAllocations.creatorId, seedAllocations.billingCycle],
+				// Allocation is add-only within a cycle (20.03), so an existing larger
+				// direction is never walked back by a replayed webhook.
+				set: { amount: sql`GREATEST(${seedAllocations.amount}, ${amount}::numeric)` },
+			});
+	}
+
+	const stripe = getStripe();
+	if (stripe) {
+		await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, directed: "" } });
 	}
 }

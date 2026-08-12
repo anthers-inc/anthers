@@ -2063,6 +2063,65 @@ const contentRoutes = new Hono()
 	})
 
 	/**
+	 * Works anyone can open — released, streamable, and free to everyone.
+	 *
+	 * The predicate is deliberately the **viewer-independent** one: a Work qualifies when
+	 * one of its access rows opens it at threshold 0 for no money, which is exactly what a
+	 * signed-out visitor holding no Seeds resolves `free` against in `resolveAccessSync`.
+	 * It asks only "is anything in the way", so it needs no opinion about *which* gate
+	 * kinds exist — which is why it stays correct across the Public Access revamp rather
+	 * than encoding a model that hasn't propagated yet.
+	 *
+	 * Streaming only, because the surface this feeds is a press-play strip and a
+	 * downloadable file is a promise about bytes rather than about access.
+	 *
+	 * Read the two access tables in SQL rather than resolving in JS: the alternative is
+	 * pulling every released Work into memory to filter a handful out of it.
+	 */
+	.get("/open-works", async (c) => {
+		const limit = Math.min(24, Math.max(1, Number(c.req.query("limit") ?? 12)));
+		const viewerId = await getOptionalUserId(c);
+
+		/** True when this access table has a row opening the Work to everyone, for free. */
+		const openToEveryone = (column: SQL | unknown) => sql`EXISTS (
+			SELECT 1 FROM jsonb_array_elements(COALESCE(${column}, '[]'::jsonb)) AS access_row
+			WHERE (access_row->>'threshold')::int = 0
+			  AND (access_row->>'allow')::boolean IS TRUE
+			  AND COALESCE((access_row->>'price')::numeric, 0) = 0
+		)`;
+
+		const rows = await db
+			.select({ work: works, username: users.username, displayName: users.displayName })
+			.from(works)
+			.innerJoin(users, eq(works.creatorId, users.id))
+			.where(
+				and(
+					eq(works.visibility, "released"),
+					eq(works.streamEnabled, true),
+					or(openToEveryone(works.anthersAccess), openToEveryone(works.seedAccess)),
+					notBlockedBy(viewerId, works.creatorId),
+				),
+			)
+			.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
+			.limit(limit);
+
+		await Promise.all(rows.map((r) => resolveWorkThumbnail(r.work)));
+
+		return c.json({
+			works: rows.map(({ work, username, displayName }) => ({
+				publicId: work.publicId,
+				slug: work.slug,
+				title: work.title,
+				type: work.type,
+				thumbnail: work.thumbnail,
+				durationSeconds: work.durationSeconds,
+				estimatedReadMinutes: work.estimatedReadMinutes,
+				creator: { username, displayName },
+			})),
+		});
+	})
+
+	/**
 	 * A creator's public Catalog — their released Works, newest-made first.
 	 *
 	 * Sorted by the creator-asserted **Created** date by default, so it reads as a body of

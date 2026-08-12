@@ -51,9 +51,16 @@ import { listNotifications, markRead, notify, unreadCount } from "../services/no
 /** Public user profile shape (for lists and public profiles) */
 function serializePublicUser(
 	user: typeof users.$inferSelect,
-	extra: { followerCount: number; projectCount: number; isFollowing: boolean },
+	extra: {
+		followerCount: number;
+		projectCount: number;
+		isFollowing: boolean;
+		/** Work types this creator has actually released — absent where not queried. */
+		mediums?: string[];
+	},
 ) {
 	return {
+		...(extra.mediums ? { mediums: extra.mediums } : {}),
 		id: user.id,
 		username: user.username,
 		displayName: user.displayName,
@@ -98,6 +105,26 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
 		notifyActivityEmail: user.notifyActivityEmail,
 	};
 }
+
+/**
+ * `users.id`, qualified — the outer column a correlated subquery has to name.
+ *
+ * 🚨 Interpolating `${users.id}` inside a `sql` template that sits in a SELECT list
+ * renders it **unqualified**, as bare `"id"`. Inside a subquery over another table that
+ * then binds to *that* table's `id` — `follows.id`, `posts.id` — so
+ * `WHERE creator_id = ${users.id}` silently becomes `WHERE creator_id = follows.id`.
+ * Postgres raises nothing, the shape of the result is right, and every count is wrong:
+ * follower counts, project counts and `isFollowing` all read 0 for accounts that had
+ * followers, posts and follows. Found 2026-08-11 while building /subscribe, which is the
+ * first surface to render these numbers where being wrong is obvious.
+ *
+ * The lesson generalises past this file: **a correlated subquery in a select list must
+ * qualify its outer reference**, and the failure mode is a plausible number rather than
+ * an error. `routes/jams.ts`'s `entryCount` has the identical shape against
+ * `jam_entries.id` and is left alone here only because it is nothing to do with this
+ * change.
+ */
+const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
 
 /** Get current user ID from cookie if authenticated, null otherwise */
 async function getOptionalUserId(c: any): Promise<number | null> {
@@ -185,11 +212,11 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
 						"project_count",
 					),
 			})
@@ -366,17 +393,25 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
 						"project_count",
 					),
+				// What a creator actually makes, taken from what they have released rather
+				// than from anything they declare — a self-described medium drifts the moment
+				// the catalog does. Feeds the medium chips on /subscribe.
+				mediums: sql<
+					string[]
+				>`COALESCE((SELECT array_agg(DISTINCT w.type) FROM works w WHERE w.creator_id = ${usersId} AND w.visibility = 'released'), ARRAY[]::text[])`.as(
+					"mediums",
+				),
 				...(currentUserId
 					? {
 							isFollowing:
-								sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${users.id})`.as(
+								sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${usersId})`.as(
 									"is_following",
 								),
 						}
@@ -394,6 +429,7 @@ const accountRoutes = new Hono()
 					followerCount: Number(row.followerCount),
 					projectCount: Number(row.projectCount),
 					isFollowing: currentUserId ? Boolean((row as any).isFollowing) : false,
+					mediums: row.mediums ?? [],
 				}),
 			),
 		});
@@ -408,17 +444,17 @@ const accountRoutes = new Hono()
 			.select({
 				user: users,
 				followerCount:
-					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+					sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 						"follower_count",
 					),
 				projectCount:
-					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${users.id} AND is_published = true)`.as(
+					sql<number>`(SELECT count(*)::int FROM posts WHERE creator_id = ${usersId} AND is_published = true)`.as(
 						"project_count",
 					),
 				...(currentUserId
 					? {
 							isFollowing:
-								sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${users.id})`.as(
+								sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${currentUserId} AND creator_id = ${usersId})`.as(
 									"is_following",
 								),
 						}

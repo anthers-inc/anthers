@@ -308,17 +308,37 @@ const subscriptionRoutes = new Hono()
 		"/account",
 		requireAuth,
 		requireVerified,
-		zValidator("json", z.object({ anthersSeeds: z.number().int().min(0).max(MAX_ANTHERS_SEEDS) })),
+		zValidator(
+			"json",
+			z.object({
+				anthersSeeds: z.number().int().min(0).max(MAX_ANTHERS_SEEDS),
+				/**
+				 * Seeds pointed at creators, on the SAME charge. One Seed to Anthers and one
+				 * each to two creators is quantity 3 — $9/month, one card fee. Optional so
+				 * every existing caller (the post unlock, /subscription) keeps working
+				 * untouched, where it simply means "no directed Seeds on this charge".
+				 */
+				directed: z
+					.array(z.object({ creatorId: z.number().int(), seeds: z.number().int().min(1).max(99) }))
+					.max(50)
+					.optional(),
+			}),
+		),
 		async (c) => {
 			const user = c.get("user");
-			const { anthersSeeds } = c.req.valid("json");
+			const { anthersSeeds, directed = [] } = c.req.valid("json");
 			const stripe = getStripe();
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
+			const directedSeeds = directed.reduce((sum, d) => sum + d.seeds, 0);
+			const totalSeeds = anthersSeeds + directedSeeds;
+			// The picks travel to the webhook on the subscription rather than being written
+			// now: a card that declines must not leave Seeds directed that nobody paid for.
+			const directedMeta = directed.length > 0 ? JSON.stringify(directed) : "";
 
-			// Drop to 0 (Free) → cancel the subscription at period end (webhook reverts).
-			if (anthersSeeds === 0) {
+			// Nothing at all → cancel the subscription at period end (webhook reverts).
+			if (totalSeeds === 0) {
 				if (acct.stripeSubscriptionId) {
 					await stripe.subscriptions.update(acct.stripeSubscriptionId, {
 						cancel_at_period_end: true,
@@ -340,9 +360,17 @@ const subscriptionRoutes = new Hono()
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
 				if (sub.status === "active" || sub.status === "trialing") {
 					await stripe.subscriptions.update(sub.id, {
-						items: [{ id: sub.items.data[0].id, price: priceId, quantity: anthersSeeds }],
+						items: [{ id: sub.items.data[0].id, price: priceId, quantity: totalSeeds }],
 						proration_behavior: "always_invoice",
 						cancel_at_period_end: false,
+						// Re-stamped on every change: the split is not derivable from the
+						// quantity, so a stale stamp would misreport the Badge from here on.
+						metadata: {
+							...sub.metadata,
+							userId: String(user.id),
+							anthersSeeds: String(anthersSeeds),
+							directed: directedMeta,
+						},
 					});
 					return c.json({ pending: false, account: await getAccount(user.id) });
 				}
@@ -352,11 +380,15 @@ const subscriptionRoutes = new Hono()
 			// the user confirms the first payment inline; the webhook applies the count on success.
 			const sub = await stripe.subscriptions.create({
 				customer: customerId,
-				items: [{ price: priceId, quantity: anthersSeeds }],
+				items: [{ price: priceId, quantity: totalSeeds }],
 				payment_behavior: "default_incomplete",
 				payment_settings: { save_default_payment_method: "on_subscription" },
 				expand: ["latest_invoice.confirmation_secret"],
-				metadata: { userId: String(user.id), anthersSeeds: String(anthersSeeds) },
+				metadata: {
+					userId: String(user.id),
+					anthersSeeds: String(anthersSeeds),
+					directed: directedMeta,
+				},
 			});
 			await db
 				.update(accounts)
