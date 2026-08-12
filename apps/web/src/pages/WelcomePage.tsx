@@ -24,7 +24,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { useNavigate } from "@anthers/web-shared/router";
+import { Link, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
 
@@ -40,6 +40,21 @@ export default function WelcomePage() {
 	const [username, setUsername] = useState("");
 	const [wantsPassword, setWantsPassword] = useState<boolean | null>(null);
 	const [password, setPassword] = useState("");
+	/**
+	 * 🚨 Real state, never a hardcoded `true`.
+	 *
+	 * The 13+ floor is the one thing Anthers asserts about age, and **an unaccepted
+	 * assertion is not one** — the phrase lived in a document no user had ever seen,
+	 * which made it closer to a wish than a term. The API requiring `acceptTerms` does
+	 * not fix that on its own: a page that satisfies the requirement on the user's behalf
+	 * reproduces exactly the problem the requirement exists to solve, while looking
+	 * compliant from the server's side.
+	 *
+	 * This is the *only* place the ceremony can ask. `/subscribe` collects an address and
+	 * nothing else, and the account is created the moment the code checks out — so
+	 * onboarding is where the terms are presented and agreed to.
+	 */
+	const [acceptTerms, setAcceptTerms] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +84,7 @@ export default function WelcomePage() {
 	const ready =
 		trimmed.length >= 3 &&
 		!handleProblem &&
+		acceptTerms &&
 		wantsPassword !== null &&
 		(wantsPassword === false || (password.length >= 8 && !passwordProblem));
 
@@ -82,7 +98,9 @@ export default function WelcomePage() {
 				json: {
 					username: trimmed,
 					...(wantsPassword && password ? { password } : {}),
-					acceptTerms: true as const,
+					// `acceptTerms as true` narrows the literal the schema demands; the value
+					// is the checkbox's, and `ready` already refuses to submit without it.
+					acceptTerms: acceptTerms as true,
 				},
 			});
 			if (!res.ok) {
@@ -191,11 +209,34 @@ export default function WelcomePage() {
 					)}
 				</fieldset>
 
+				{/* The honest surface, not the enforcement — the API requires this too. It sits
+				    here rather than on /subscribe because that page collects an address and
+				    nothing else, and this is the first moment the ceremony can ask. */}
+				<label className="mt-8 flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3">
+					<input
+						type="checkbox"
+						className="checkbox checkbox-sm mt-0.5"
+						checked={acceptTerms}
+						onChange={(e) => setAcceptTerms(e.target.checked)}
+					/>
+					<span className="text-sm">
+						I'm 13 or older, and I agree to the{" "}
+						<Link to="/terms" className="link link-primary" target="_blank">
+							Terms of Service
+						</Link>{" "}
+						and{" "}
+						<Link to="/privacy" className="link link-primary" target="_blank">
+							Privacy Policy
+						</Link>
+						.
+					</span>
+				</label>
+
 				{error && <p className="mt-4 text-sm text-error">{error}</p>}
 
 				<button
 					type="submit"
-					className={`btn btn-primary btn-lg mt-8 w-full ${busy ? "btn-disabled" : ""}`}
+					className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
 					disabled={!ready || busy}
 				>
 					{busy ? "Saving…" : "Finish setting up"}

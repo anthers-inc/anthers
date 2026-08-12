@@ -81,11 +81,21 @@ test.describe("the code field", () => {
 		await page.locator("#subscribe-email").fill(addr());
 		await page.getByRole("button", { name: /create my free account/i }).click();
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
+
+		// 🚨 Wait for the autofocus, not just for the modal. Every test below drives the
+		// field with bare `keyboard.type`, which goes wherever focus currently is — and
+		// the modal becoming *visible* is a different moment from its focus effect having
+		// run. Asserting only visibility passed in isolation and failed under the full
+		// suite's parallel load, which is the classic shape of an e2e flake: the race is
+		// real, the test just usually wins it.
+		await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
 	});
 
 	test("is six boxes, focused, and types forward", async ({ page }) => {
 		const boxes = page.locator('input[aria-label^="Code character"]');
 		await expect(boxes).toHaveCount(6);
+		// Focus is already asserted in beforeEach; restated here because it is this
+		// test's own subject rather than a precondition.
 		await expect(boxes.first()).toBeFocused();
 
 		await page.keyboard.type("AB");
