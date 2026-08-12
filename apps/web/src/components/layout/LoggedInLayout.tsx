@@ -77,7 +77,7 @@ function LoggedInLayoutInner() {
 							{user?.avatar ? (
 								<img
 									src={user.avatar}
-									alt={user?.displayName || user?.username}
+									alt={user?.displayName || user?.username || "Your account"}
 									className="w-8 h-8 rounded-full object-cover"
 								/>
 							) : (
@@ -89,7 +89,14 @@ function LoggedInLayoutInner() {
 							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
 						>
 							<li className="menu-title px-4 py-1">
-								<span className="text-xs text-base-content/50">@{user?.username}</span>
+								{/* An account that hasn't finished onboarding has no handle to print and
+								    no profile to link to, so the menu offers the way to get one instead
+								    of a dead `@` and a link to `/null`. In practice `RequireOnboarding`
+								    redirects before this renders — this is what it degrades to if that
+								    guard is ever removed. */}
+								<span className="text-xs text-base-content/50">
+									{user?.username ? `@${user.username}` : "Finish setting up"}
+								</span>
 							</li>
 							<div className="divider my-0 px-2" />
 							<li>
@@ -99,7 +106,11 @@ function LoggedInLayoutInner() {
 								<Link to="/purchases">Purchases</Link>
 							</li>
 							<li>
-								<Link to={`/${user?.username}`}>Profile</Link>
+								{user?.username ? (
+									<Link to={`/${user.username}`}>Profile</Link>
+								) : (
+									<Link to="/welcome">Pick your username</Link>
+								)}
 							</li>
 							<li>
 								<Link to="/settings">Settings</Link>

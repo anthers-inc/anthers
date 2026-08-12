@@ -13,9 +13,36 @@ import {
 
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
-	username: text("username").notNull().unique(),
+	/**
+	 * The handle, and the `/:username` profile URL. **Null until onboarding claims one.**
+	 *
+	 * The signup ceremony creates the account the moment an emailed code is verified —
+	 * before a username has been chosen — so that payment is an ordinary authenticated
+	 * call rather than a second half-built identity. That leaves a real window where an
+	 * account exists with no handle, and the column has to be able to say so.
+	 *
+	 * A shared `PENDING` literal was considered and does not work: this column is unique,
+	 * so every pending account would collide on the index, while Postgres allows many
+	 * nulls under one. An email-as-placeholder was rejected for a worse reason — this
+	 * value is the public profile URL and a field in `serializePublicUser`, so it would
+	 * publish the address.
+	 *
+	 * Nothing strands: sign-in already accepts an email *or* a username, so someone who
+	 * abandons onboarding can come back and finish. What null costs is that every public
+	 * surface has to refuse an account that has not claimed one — see `publicHandle()` in
+	 * `routes/accounts.ts` and the `/:username` route's own guard.
+	 */
+	username: text("username").unique(),
 	email: text("email").notNull().unique(),
-	passwordHash: text("password_hash"), // nullable for ATProto-only users
+	/**
+	 * Argon2id hash, or null.
+	 *
+	 * Null has meant "ATProto-only" for a long time; since the signup ceremony it also
+	 * means **"chose not to set one"**, which is a supported end state rather than a
+	 * half-finished account. Those users sign in with an emailed code (`/auth/signup/*`),
+	 * which is why that pair signs in an existing account as well as creating a new one.
+	 */
+	passwordHash: text("password_hash"),
 	displayName: text("display_name").default(""),
 	bio: text("bio").default(""),
 	isCreator: boolean("is_creator").default(false),
@@ -234,6 +261,65 @@ export const verificationTokens = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [index("idx_verification_tokens_user").on(table.userId)],
+);
+
+/**
+ * One live email-verification code, keyed by the address rather than by a user.
+ *
+ * 🚨 **This table exists because the code has to come BEFORE the account.** Every other
+ * credential in this file hangs off a `user_id`; the signup ceremony asks for an address
+ * and proves control of it before any row in `users` exists, so there is nothing to hang
+ * it off. That inversion is the whole reason `verification_tokens` could not be reused.
+ *
+ * The address is the key — **one live code per address, ever**, replaced on re-request
+ * rather than appended. That is what makes "Send it again" safe: a second code silently
+ * retires the first, so a mailbox holding three codes has exactly one that works (the
+ * newest), which is the behaviour a reader already expects from every other site.
+ *
+ * What proving the address buys depends on whether it is already an account:
+ * a new address is **created** and signed in; an existing one is **signed in**. Both
+ * live here because the caller cannot be told which case it is without leaking whether
+ * the address is registered — see `POST /auth/signup/start`.
+ */
+export const signupCodes = pgTable(
+	"signup_codes",
+	{
+		id: serial("id").primaryKey(),
+		/** Lowercased at the boundary, so `A@b.com` and `a@b.com` are one row. */
+		email: text("email").notNull().unique(),
+		/**
+		 * Argon2id over the code, never the code itself.
+		 *
+		 * Deliberately the same hash as a password, and the reason is the code's length:
+		 * six characters from a 31-symbol alphabet is ~887 million possibilities, which a
+		 * fast digest turns back into the plaintext in milliseconds. A cheap hash here
+		 * would be decoration. This one means a leaked backup does not hand out live
+		 * accounts, and the cost is bounded by `attempts` — at most a handful of
+		 * verifications per code, never a hot path.
+		 */
+		codeHash: text("code_hash").notNull(),
+		/**
+		 * Wrong guesses so far. At `SIGNUP_CODE_MAX_ATTEMPTS` the row is spent.
+		 *
+		 * Counted per code rather than per address on purpose: the cap has to survive the
+		 * attacker choosing to re-request, and it does, because a re-request replaces the
+		 * row and issues a code they still have to receive.
+		 */
+		attempts: integer("attempts").notNull().default(0),
+		/**
+		 * When the last code went out — the rate limit's whole state.
+		 *
+		 * Separate from `createdAt` because a re-request updates this row in place, so
+		 * `createdAt` is when the address first asked and this is when it last got mail.
+		 * Without it, "always return 200" degrades into a free mail-bomb aimed at anyone
+		 * whose address you know.
+		 */
+		lastSentAt: timestamp("last_sent_at", { withTimezone: true }).notNull().defaultNow(),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// Swept by PRUNE_CREDENTIALS alongside the other two expiring credential tables.
+	(table) => [index("idx_signup_codes_expires").on(table.expiresAt)],
 );
 
 export const atprotoSessions = pgTable("atproto_sessions", {

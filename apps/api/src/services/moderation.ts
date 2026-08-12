@@ -568,7 +568,14 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			.from(users)
 			.where(inArray(users.id, userIds));
 		for (const r of rows) {
-			const label = r.displayName ? `${r.displayName} (@${r.username})` : `@${r.username}`;
+			// An account that has not finished onboarding has no handle and no profile to
+			// link to. It should not be reportable in the first place — there is nothing of
+			// theirs to see — but the queue is built from reports, and a report names an id
+			// rather than a handle, so this has to render rather than crash. The id is the
+			// only thing an operator can act on, so the id is what it says; the empty slug
+			// is how the console is told there is nowhere to go.
+			const handle = r.username ? `@${r.username}` : `account #${r.id}`;
+			const label = r.displayName ? `${r.displayName} (${handle})` : handle;
 			items.set(key("user", r.id), {
 				...base(
 					"user",
@@ -579,7 +586,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 						moderationStatus: "visible",
 						createdAt: r.createdAt,
 					},
-					{ kind: "profile", slug: r.username, title: label },
+					{ kind: "profile", slug: r.username ?? "", title: label },
 				),
 				excerpt: r.bio ? `${label} — ${r.bio}` : label,
 				score: null,

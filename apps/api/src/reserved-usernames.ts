@@ -57,6 +57,11 @@ const ROUTE_NAMES = [
 	"subscription",
 	"terms",
 	"verify-email",
+	// Onboarding. Reserved with a sharper edge than the rest of this list: it is the
+	// route a handle-less account is sent to, so claiming it would let someone strand
+	// every *future* pending account — and their own profile — behind a name the router
+	// answers first.
+	"welcome",
 	"wiki",
 	"works",
 ];

@@ -9,7 +9,19 @@ import { applyTheme, storeTheme, type Theme } from "./theme";
  */
 export interface User {
 	id: number;
-	username: string;
+	/**
+	 * Null until onboarding claims one — see `hasOnboarded` below.
+	 *
+	 * 🚨 This is the **signed-in** user, which is the one shape where a null handle is a
+	 * live state rather than an impossibility: the signup ceremony creates and signs in
+	 * the account the moment its emailed code is verified, and asks for a name after. The
+	 * public shapes (`PublicUser`, `Creator` in `lib/types.ts`) stay `string`, because the
+	 * API refuses to serialize an unclaimed account into either — so a null reaches the
+	 * browser for *yourself* and never for anybody else.
+	 *
+	 * Anything building a profile link out of this has to route to onboarding instead.
+	 */
+	username: string | null;
 	email: string;
 	displayName: string | null;
 	bio: string | null;

@@ -160,7 +160,7 @@ export async function unblockUser(
  */
 export async function listBlocks(
 	blockerId: number,
-): Promise<{ id: number; username: string; displayName: string | null; createdAt: Date }[]> {
+): Promise<{ id: number; username: string | null; displayName: string | null; createdAt: Date }[]> {
 	return db
 		.select({
 			id: users.id,
