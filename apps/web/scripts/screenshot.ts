@@ -95,9 +95,17 @@ try {
 		await page.screenshot({ path: out, fullPage: true });
 		// Ignore the expected no-backend failures (there's no API in the preview).
 		const real = consoleErrors.filter((e) => !/\/api\/|auth\/me|Failed to load resource/i.test(e));
-		const ok = pageErrors.length === 0 && real.length === 0;
+		// An empty #root is a real failure that emits NO error, so error-watching alone
+		// gives false confidence — the same trap as an HTTP-200 check. It is how a build
+		// whose HTML pointed at the wrong chunk served a blank page with a clean console
+		// and HTTP 200 throughout (2026-08-11). Every route mounts something.
+		const mounted = await page.evaluate(
+			() => (document.getElementById("root")?.innerHTML.length ?? 0) > 0,
+		);
+		const ok = pageErrors.length === 0 && real.length === 0 && mounted;
 		if (!ok) failures++;
 		console.log(`[${ok ? "ok" : "FAIL"}] ${route} -> ${out}`);
+		if (!mounted) console.log("    blank: #root is empty — the app did not mount");
 		for (const e of pageErrors) console.log(`    pageerror: ${e}`);
 		for (const e of real) console.log(`    console: ${e}`);
 		await page.close();
