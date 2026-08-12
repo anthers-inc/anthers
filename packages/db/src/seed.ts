@@ -74,36 +74,16 @@ function daysAgo(n: number): Date {
 }
 
 /** The levels an Anthers table covers: everyone (0) plus each Anthers Badge's threshold. */
-const ACCESS_LEVELS = [0, ...ANTHERS_BADGES.map((b) => b.threshold)];
 
 /** The neutral Anthers table — every badge rung locked. */
-function lockedAnthers() {
-	return ACCESS_LEVELS.map((threshold) => ({ threshold, allow: false, price: "0" }));
-}
-
-/** Free to everyone: the $0 Seed baseline row is allowed at price 0. */
+/** Public Access: ungated and streaming, so the baseline row is allowed at price 0. */
 function freeAccess() {
-	return {
-		anthersAccess: lockedAnthers(),
-		seedAccess: [{ threshold: 0, allow: true, price: "0" }],
-	};
+	return { seedAccess: [{ threshold: 0, allow: true, price: "0" }] };
 }
 
-/** Purchasable by anyone at `price` (the $0 Seed baseline row, priced). */
+/** Purchasable by anyone at `price` (the baseline row, priced). */
 function paidAccess(price: string) {
-	return { anthersAccess: lockedAnthers(), seedAccess: [{ threshold: 0, allow: true, price }] };
-}
-
-/** Anthers-gated: any paid Anthers badge streams it free; everyone else is locked out. */
-function anthersGatedAccess() {
-	return {
-		anthersAccess: ACCESS_LEVELS.map((threshold) => ({
-			threshold,
-			allow: threshold > 0,
-			price: "0",
-		})),
-		seedAccess: [{ threshold: 0, allow: false, price: "0" }],
-	};
+	return { seedAccess: [{ threshold: 0, allow: true, price }] };
 }
 
 /**
@@ -112,7 +92,6 @@ function anthersGatedAccess() {
  */
 function seedGatedAccess(threshold: number) {
 	return {
-		anthersAccess: lockedAnthers(),
 		seedAccess: [
 			{ threshold: 0, allow: false, price: "0" },
 			{ threshold, allow: true, price: "0" },
@@ -137,6 +116,8 @@ const SEED_GATED_POSTS = new Set<string>([
 ]);
 /** Whole Seeds a viewer must give a creator to clear a Seed-gated post. */
 const SEED_GATE_THRESHOLD = 1;
+/** The second rung, for posts that were Anthers-gated before 2026-08-12. */
+const SEED_GATE_THRESHOLD_HIGH = 2;
 
 // ---------------------------------------------------------------------------
 // Seed data definitions
@@ -896,8 +877,12 @@ async function seed() {
 				continue;
 			}
 
+			// Two Seed-Gate levels plus Public Access. The first set was Anthers-gated until
+			// 2026-08-12 — "any paid Badge streams it free" — and Anthers Gates are retired,
+			// so it became the creator's higher rung rather than disappearing: the demo still
+			// wants a ladder with more than one step on it.
 			const access = ANTHERS_GATED_POSTS.has(post.title)
-				? anthersGatedAccess()
+				? seedGatedAccess(SEED_GATE_THRESHOLD_HIGH)
 				: SEED_GATED_POSTS.has(post.title)
 					? seedGatedAccess(SEED_GATE_THRESHOLD)
 					: freeAccess();
@@ -1068,136 +1053,95 @@ async function seed() {
 	// ---- 6. Create creator gates ----
 	console.log("Creating creator gates...");
 
-	// Gate definitions per creator: a mix of Anthers Gates (unlocked by holding a badge)
-	// and Seed Gates (unlocked by giving Seeds to the creator this cycle).
-	//   - anthers_badge → threshold is a badge RANK: root=1, sprout=2, petal=3, blossom=4.
-	//   - seed         → threshold is dollars of Seeds given to the creator this cycle. A Seed
-	//                    is an indivisible $3 unit, so every threshold here is a multiple of 3;
-	//                    the stepper steps whole Seeds and POST /seeds rejects anything else.
+	// Gate definitions per creator — the creator's advertised ladder. `threshold` is
+	// **whole Seeds given to this creator this cycle**, per migration 0007.
+	//
+	// Two things changed here on 2026-08-12. The `anthers_badge` rungs are gone with
+	// Anthers Gates, and the surviving thresholds were written in DOLLARS ("3.00", "6.00")
+	// against a column that has counted Seeds since 0007 — so every rung advertised three
+	// times the support it meant. Divided by SEED_PRICE and stated in Seeds.
 	const GATES_BY_CREATOR: Record<
 		string,
-		{ gateType: "anthers_badge" | "seed"; threshold: string; label: string; description: string }[]
+		{ gateType: "seed"; threshold: string; label: string; description: string }[]
 	> = {
 		[`${SEED_PREFIX}novapixel`]: [
 			{
-				gateType: "anthers_badge",
-				threshold: "1",
-				label: "Root",
-				description: "Early devlogs and behind-the-scenes screenshots",
-			},
-			{
-				gateType: "anthers_badge",
-				threshold: "2",
-				label: "Sprout",
-				description: "Beta access to in-progress builds",
-			},
-			{
 				gateType: "seed",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Pixel Pal",
 				description: "Weekly pixel art WIP threads",
 			},
 			{
 				gateType: "seed",
-				threshold: "6.00",
+				threshold: "2",
 				label: "Playtester",
 				description: "Access to private playtesting branches and feedback channels",
 			},
 		],
 		[`${SEED_PREFIX}sagemoreno`]: [
 			{
-				gateType: "anthers_badge",
-				threshold: "1",
-				label: "Root",
-				description: "Early access to essays (one week before public)",
-			},
-			{
 				gateType: "seed",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Reader",
 				description: "Extended footnotes and research notes",
 			},
 			{
 				gateType: "seed",
-				threshold: "6.00",
+				threshold: "2",
 				label: "Inner Circle",
 				description: "Monthly AMA threads and draft previews",
 			},
 			{
 				gateType: "seed",
-				threshold: "12.00",
+				threshold: "4",
 				label: "Patron",
 				description: "Annual long-form piece dedicated to patron questions",
 			},
 		],
 		[`${SEED_PREFIX}fluxbeats`]: [
 			{
-				gateType: "anthers_badge",
-				threshold: "1",
-				label: "Root",
-				description: "Stems and project files for released tracks",
-			},
-			{
 				gateType: "seed",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Listener",
 				description: "Early access to new releases (48-hour window)",
 			},
 			{
 				gateType: "seed",
-				threshold: "9.00",
+				threshold: "3",
 				label: "Collaborator",
 				description: "Unreleased demos, remix packs, and sample libraries",
 			},
 		],
 		[`${SEED_PREFIX}marisol`]: [
 			{
-				gateType: "anthers_badge",
-				threshold: "1",
-				label: "Root",
-				description: "High-resolution art downloads",
-			},
-			{
-				gateType: "anthers_badge",
-				threshold: "3",
-				label: "Petal",
-				description: "Exclusive print-ready illustrations",
-			},
-			{
 				gateType: "seed",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Sketch Club",
 				description: "Weekly process videos and timelapse recordings",
 			},
 			{
 				gateType: "seed",
-				threshold: "6.00",
+				threshold: "2",
 				label: "Studio Access",
 				description: "Full PSD/Procreate files and custom brush packs",
 			},
 		],
 		[`${SEED_PREFIX}hexbound`]: [
 			{
-				gateType: "anthers_badge",
-				threshold: "2",
-				label: "Sprout",
-				description: "Director's commentary audio tracks for all games",
-			},
-			{
 				gateType: "seed",
-				threshold: "3.00",
+				threshold: "1",
 				label: "Insider",
 				description: "Monthly design documents and narrative outlines",
 			},
 			{
 				gateType: "seed",
-				threshold: "9.00",
+				threshold: "3",
 				label: "Patron",
 				description: "Playable prototypes and experimental builds",
 			},
 			{
 				gateType: "seed",
-				threshold: "15.00",
+				threshold: "5",
 				label: "Producer",
 				description: "Vote on next game concept, name in credits",
 			},

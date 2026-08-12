@@ -47,6 +47,7 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 } from "@anthers/shared/content";
+import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import {
 	and,
@@ -71,12 +72,12 @@ import { requireAuth } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
 	buildAccessContext,
-	defaultAnthersAccess,
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import { loadPublicAccessBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { aclForMediaType } from "../services/storage/acl.js";
@@ -291,7 +292,6 @@ const accessRowSchema = z.object({
 	price: z.string().regex(MONEY),
 });
 
-const anthersAccessRowSchema = accessRowSchema;
 const seedAccessRowSchema = accessRowSchema;
 
 /**
@@ -335,8 +335,7 @@ const workBaseSchema = z
 		streamEnabled: z.boolean().optional(),
 		downloadEnabled: z.boolean().optional(),
 
-		// Access tables (default "free but fully locked" applied server-side when omitted)
-		anthersAccess: z.array(anthersAccessRowSchema).optional(),
+		// Access table (default "free but fully locked" applied server-side when omitted)
 		seedAccess: z.array(seedAccessRowSchema).optional(),
 
 		// Presentation & metadata
@@ -573,7 +572,6 @@ function serializeWork(
 		authoredPrecision: item.authoredPrecision,
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
-		anthersAccess: item.anthersAccess,
 		seedAccess: item.seedAccess,
 		isPinned: item.isPinned,
 		tags: item.tags,
@@ -885,6 +883,43 @@ async function workAccessFor(
 }
 
 /**
+ * Whether this request may be served *bytes*, once access says yes.
+ *
+ * 🚨 **A second, account-level check that deliberately does NOT live in `resolveAccess`.**
+ * A free account watches 10 hours of Public Access a month; the first Seed given to
+ * Anthers removes the limit. That is a property of the **account**, not of the Work — the
+ * Work stays free to everyone either way — so encoding it as a Work-level denial is how
+ * the commons quietly re-stratifies, which is exactly what retiring Anthers Gates was
+ * for. `resolveAccessSync` also has to stay pure and synchronous so a Catalog page
+ * resolves a batch without an N+1, and this needs a query.
+ *
+ * So it sits here, at the two endpoints that actually hand over media, and only for
+ * Public Access work: a gated Work the viewer cleared, one they bought, and their own
+ * catalogue are all `isFree: false` and never reach the meter.
+ *
+ * Returns null when delivery may proceed, or the 402 body when the allowance is spent.
+ */
+async function publicAccessGate(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: WorkRow,
+	access: AccessResultLike,
+): Promise<{ error: string; reason: string; budget: PublicAccessBudget } | null> {
+	// Only the commons is metered. Anything reached by paying — a gate cleared, a
+	// purchase — or a creator's own work is not Public Access and draws nothing.
+	if (!(access.isFree && work.streamEnabled)) return null;
+
+	const viewerId = await getOptionalUserId(c);
+	const budget = await loadPublicAccessBudget(viewerId);
+	if (budget.allowed) return null;
+
+	return {
+		error: "You have used this month's free Public Access hours",
+		reason: "public_access_limit",
+		budget,
+	};
+}
+
+/**
  * Serialize a Work for a viewer, withholding the deliverable when they lack access.
  *
  * The split is the load-bearing part. Everything a *listing* needs — title, type,
@@ -940,6 +975,21 @@ function serializeWorkForViewer(
 		assets: workAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
 		transcoding: viewerTranscoding(job, canAccess, delivery),
 		access,
+		/**
+		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
+		 *
+		 * 🚨 **Derived, never stored, and never a flag a creator sets.** Public Access is
+		 * what a Work *is* when there is nothing on it, not a category opted into: leave
+		 * the baseline row allowed at $0 on a streaming Work and it is the commons. A
+		 * boolean column here would be a second source of truth that could disagree with
+		 * the access table, and a creator-facing toggle would invite the question "what
+		 * happens if I turn it off but leave it ungated?" — which has no answer.
+		 *
+		 * Note this is a fact about the WORK and says nothing about whether a given viewer
+		 * may watch more of it this month. That is the account-level meter, which is
+		 * deliberately not expressed here — see `publicAccessGate`.
+		 */
+		publicAccess: access.isFree && work.streamEnabled && work.visibility === "released",
 	};
 }
 
@@ -1761,6 +1811,11 @@ const contentRoutes = new Hono()
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403: the viewer is not forbidden, they have spent a monthly allowance
+		// that a $3 Seed removes. The status code is the difference between "you may not"
+		// and "you may, and here is how".
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
 
 		const [job] = await db
 			.select()
@@ -1795,6 +1850,12 @@ const contentRoutes = new Hono()
 		// Enforce access server-side — this is the gate for private segments.
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// And the account-level Public Access meter. Checked on the PLAYLIST rather than
+		// per segment: segments are fetched straight from the CDN with signed URLs and
+		// never touch the API, so the playlist is the last point at which we can decline —
+		// and refusing it is what stops playback continuing.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
 
 		const workId = work.id;
 		const [job] = await db
@@ -1901,7 +1962,6 @@ const contentRoutes = new Hono()
 				authoredPrecision: data.authoredPrecision ?? null,
 				streamEnabled: data.streamEnabled ?? true,
 				downloadEnabled: data.downloadEnabled ?? false,
-				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
 				seedAccess: data.seedAccess ?? defaultSeedAccess(),
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
@@ -2098,7 +2158,7 @@ const contentRoutes = new Hono()
 				and(
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
-					or(openToEveryone(works.anthersAccess), openToEveryone(works.seedAccess)),
+					openToEveryone(works.seedAccess),
 					notBlockedBy(viewerId, works.creatorId),
 				),
 			)
@@ -2237,7 +2297,6 @@ const contentRoutes = new Hono()
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
-		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
 		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -2475,18 +2534,18 @@ const contentRoutes = new Hono()
 			WHERE pi.project_id = ${projects.id} AND w.visibility = 'released' AND (${predicate})
 		)`;
 
-		/** Both access tables share one row shape, so one scan over their concatenation. */
+		/** Any allowed row on the Work's access table. (There were two tables to concatenate
+		 * here until Anthers Gates were retired on 2026-08-12.) */
 		const anyAccessRow = (predicate: SQL) => sql`EXISTS (
-			SELECT 1 FROM jsonb_array_elements(
-				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
-			) r WHERE (r->>'allow')::boolean AND (${predicate})
+			SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			WHERE (r->>'allow')::boolean AND (${predicate})
 		)`;
 
 		/** The cheapest allowed offer on a Work, for the price-range filter. */
 		const cheapestPrice = sql`(
-			SELECT MIN((r->>'price')::numeric) FROM jsonb_array_elements(
-				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
-			) r WHERE (r->>'allow')::boolean
+			SELECT MIN((r->>'price')::numeric)
+			FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			WHERE (r->>'allow')::boolean
 		)`;
 
 		const conditions: SQL[] = [];
@@ -2556,11 +2615,6 @@ const contentRoutes = new Hono()
 					containsWork(sql`(
 						${viewerId} = w.creator_id
 						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
-						OR EXISTS (
-							SELECT 1 FROM jsonb_array_elements(COALESCE(w.anthers_access, '[]'::jsonb)) r
-							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
-								AND (r->>'threshold')::int <= ${ctx.anthersSeeds}
-						)
 						OR EXISTS (
 							SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
 							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0

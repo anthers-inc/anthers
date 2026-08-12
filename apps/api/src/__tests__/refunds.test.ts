@@ -182,8 +182,7 @@ async function makeWork(title: string): Promise<number> {
 		title,
 		streamEnabled: false,
 		downloadEnabled: true,
-		anthersAccess: FOR_SALE,
-		seedAccess: LOCKED,
+		seedAccess: FOR_SALE,
 	});
 	await db.insert(assets).values({
 		workId: work.id,

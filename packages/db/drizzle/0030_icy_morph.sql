@@ -1,0 +1,25 @@
+-- The Public Access meter needs to know which watched seconds were Public Access —
+-- ungated, streaming, free to everyone — because those are the only ones that draw a
+-- free account's 10-hour monthly allowance. Seconds spent on gated work the viewer
+-- cleared, on work they bought, or on their own catalogue are not the commons and must
+-- not be metered.
+--
+-- Stamped at the WRITE boundary (`POST /api/subscriptions/attention`), never re-derived
+-- on read. A Work's access can change after the fact — a creator may gate something they
+-- had left open, or open something they had gated — so reading today's access to decide
+-- what a viewer consumed last week is wrong in both directions, and one of them is
+-- harmful: it would charge a supporter's free allowance for gated work they had paid a
+-- creator to reach.
+
+--> statement-breakpoint
+ALTER TABLE "attention_events" ADD COLUMN "public_access" boolean DEFAULT false NOT NULL;
+--> statement-breakpoint
+-- Existing rows keep the DEFAULT FALSE and are deliberately NOT backfilled from current
+-- access. Two reasons, and the second is the one that matters:
+--
+--   1. It would be a guess. These events predate the column, so their Public Access
+--      status at the time is genuinely unknown; today's gates are evidence of today.
+--   2. **You cannot retroactively spend an allowance nobody was told about.** Backfilling
+--      TRUE would silently consume real viewers' first month against a limit that did not
+--      exist when they watched. Starting everyone at zero is the only honest opening
+--      position, and it errs toward the viewer.

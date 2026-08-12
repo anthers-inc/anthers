@@ -31,9 +31,15 @@ import {
 	GAUNTLET_POSTS,
 	GAUNTLET_VIEWER_USERNAME,
 	gauntletPost,
+	SEED_RUNGS,
+	SEED_WALK,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
 import { SEED_PRICE } from "@anthers/shared/constants";
+
+/** The purchase rung's key — derived, so extending SEED_RUNGS doesn't strand it. */
+const BUY = `G${2 + SEED_RUNGS.length}`;
+
 import { expect, type Page, test } from "@playwright/test";
 import { API_URL, trackErrorsStrict } from "./fixtures";
 
@@ -369,19 +375,12 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 
 	await expectPostUnlocked(page, "G1");
 	await expectPostLocked(page, "G2");
-	await expectPostLocked(page, "G6");
+	await expectPostLocked(page, "G3");
 
-	// The exact numbers, at the one state where they're unambiguous: holding nothing, G2's
-	// Root gate (1 Seed to Anthers) and G6's first Seed rung (1 Seed to the creator) each
-	// ask for exactly one more. Pinning the arithmetic here is what stops the panel drifting
-	// back to quoting the THRESHOLD instead of the gap.
+	// The exact number, at the one state where it's unambiguous: holding nothing, G2's
+	// first Seed rung asks for exactly one more. Pinning the arithmetic here is what stops
+	// the panel drifting back to quoting the THRESHOLD instead of the gap.
 	await page.goto(`/works/${gauntletPost("G2").slug}`);
-	await expect(page.getByRole("heading", { name: "Locked · Root" })).toBeVisible();
-	await expect(
-		page.getByRole("button", { name: "Unlock with 1 more Seed to Anthers" }),
-	).toBeVisible();
-
-	await page.goto(`/works/${gauntletPost("G6").slug}`);
 	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
 
 	await expectStaircase(page, "Free, unfollowed");
@@ -445,62 +444,80 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	expect(errors).toEqual([]);
 });
 
-// ── The Anthers-Seed ladder, one rung at a time ──────────────────────────────
-// Each hop sets the count the subscription webhook would have written; the staircase
-// must gain EXACTLY one post per rung, and the rung above must stay shut.
-for (const [seeds, state, unlocked, stillLocked] of [
-	[1, "Root", "G2", "G3"],
-	[2, "Sprout", "G3", "G4"],
-	[3, "Petal", "G4", "G5"],
-	[4, "Blossom", "G5", "G6"],
-] as const) {
-	test(`rung 4 — ${state}: exactly one more post unlocks`, async ({ page }) => {
-		const errors = trackErrorsStrict(page, ALLOWED);
-		hop("--anthers-seeds", String(seeds));
+// ── A Badge opens nothing ───────────────────────────────────────────────────
+/**
+ * 🚨 Four tests climbed Root → Blossom here until 2026-08-12, each asserting that exactly
+ * one more post unlocked. **Anthers Gates are retired**, so the replacement asserts the
+ * opposite and is the more important of the two: the top Badge, held for real, changes
+ * nothing about any Work.
+ *
+ * Worth walking in the browser rather than trusting the resolver test, because the
+ * resolver can no longer even see the count — the risk that remains is a *surface* that
+ * still offers a Badge as a way in.
+ */
+test("rung 4 — Blossom unlocks nothing; a Badge is standing, not access", async ({ page }) => {
+	const errors = trackErrorsStrict(page, ALLOWED);
+	hop("--anthers-seeds", "4");
 
-		await expectPostUnlocked(page, unlocked);
-		await expectPostLocked(page, stillLocked);
-		await expectStaircase(page, state);
+	await expectPostUnlocked(page, "G1");
+	await expectPostLocked(page, "G2");
+	await expectStaircase(page, "Blossom, no Seeds given");
 
-		// G3 carries the gated audio. Sprout is the rung that opens it, so this is the
-		// state where "the bytes arrive" flips from false to true — the same transition
-		// the floor asserted the other side of.
-		if (mediaSeeded && unlocked === "G3") await expectAudioBytes(page, "G3");
-		expect(errors).toEqual([]);
-	});
-}
+	// And no surface offers the Badge as a route in. The unlock control on a gated Work
+	// must name the creator, never Anthers.
+	await page.goto(`/works/${gauntletPost("G2").slug}`);
+	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
+	await expect(page.getByRole("button", { name: /Seed to Anthers/ })).toBeHidden();
+
+	if (mediaSeeded) await expectMediaWithheld(page, "G3");
+	expect(errors).toEqual([]);
+});
 
 // ── The Seed ladder, through the real Give-Seeds control ─────────────────────
 test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	// Enough budget for the whole three-Seed ladder. Holding budget is not giving it —
-	// the staircase must still read exactly as Blossom.
-	hop("--seed-budget", String(SEED_PRICE * 3));
-	await expectStaircase(page, "Blossom");
+	// Enough budget for the whole ladder. Holding budget is not giving it — the staircase
+	// must still read exactly as it did before.
+	hop("--seed-budget", String(SEED_PRICE * SEED_RUNGS[SEED_RUNGS.length - 1]));
+	await expectStaircase(page, "Blossom, no Seeds given");
 	expect(errors).toEqual([]);
 });
 
-// One click per Seed: the stepper steps whole Seeds ($3), so reaching rung N from rung
-// N-1 is exactly one click, and the give button quotes the delta in dollars.
-for (const [seeds, state, unlocked, stillLocked] of [
-	[1, EXPECTED_STAIRCASE[6].state, "G6", "G7"],
-	[2, EXPECTED_STAIRCASE[7].state, "G7", "G8"],
-	[3, EXPECTED_STAIRCASE[8].state, "G8", null],
-] as const) {
-	test(`rung 5 — give a ${seeds}${seeds === 1 ? "st" : seeds === 2 ? "nd" : "rd"} Seed: exactly one more post unlocks`, async ({
+/**
+ * One click per Seed: the stepper steps whole Seeds ($3), so every state on the walk is
+ * reached by exactly one more click than the one before it.
+ *
+ * ⭐ **The ladder is sparse (`SEED_RUNGS` = 1, 2, 3, 5, 7), so some clicks land BETWEEN
+ * rungs and must unlock nothing.** That is the point of walking every count rather than
+ * only the rungs: a surface that compared a viewer's position in the ladder to the rung's
+ * position would open a post at 4 Seeds, and only a between-state can catch it.
+ */
+for (const [i, seeds] of SEED_WALK.entries()) {
+	const rungIndex = SEED_RUNGS.indexOf(seeds as (typeof SEED_RUNGS)[number]);
+	const unlocked = rungIndex >= 0 ? `G${2 + rungIndex}` : null;
+	// The next rung ABOVE this Seed count, whether or not the count is itself a rung —
+	// one expression covering both the on-rung and between-rung states. Null at the top
+	// of the ladder, where there is nothing left to stay locked.
+	const nextIndex = SEED_RUNGS.findIndex((t) => t > seeds);
+	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
+	const clicks = seeds - (SEED_WALK[i - 1] ?? 0);
+
+	test(`rung 5 — at ${seeds} Seed${seeds === 1 ? "" : "s"} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
 		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
-		await page.getByRole("button", { name: "More seeds" }).click();
-		await page.getByRole("button", { name: `Give $${SEED_PRICE.toFixed(2)}` }).click();
+		for (let n = 0; n < clicks; n++) {
+			await page.getByRole("button", { name: "More seeds" }).click();
+		}
+		await page.getByRole("button", { name: `Give $${(SEED_PRICE * clicks).toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
 		await expect(page.getByRole("button", { name: "Give Seeds" })).toBeVisible();
 
-		await expectPostUnlocked(page, unlocked);
+		if (unlocked) await expectPostUnlocked(page, unlocked);
 		if (stillLocked) await expectPostLocked(page, stillLocked);
-		await expectStaircase(page, state);
+		await expectStaircase(page, EXPECTED_STAIRCASE[3 + i].state);
 		expect(errors).toEqual([]);
 	});
 }
@@ -517,15 +534,15 @@ test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page 
 test("rung 6 — purchase unlocks the download, and only the purchase does", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
-	// Even from the very top of both ladders, G9 still quotes its price — asserted by
+	// Even from the very top of the ladder, the purchase rung still quotes its price — asserted by
 	// every row so far. Now the hop writes the completed purchase the payment webhook
 	// would have written (the real charge belongs to the Stripe walk).
-	hop("--purchase", gauntletPost("G9").slug);
+	hop("--purchase", gauntletPost(BUY).slug);
 
 	await expectStaircase(page, "+ purchased");
 
 	// The post page must now offer the download instead of a checkout.
-	await page.goto(`/works/${gauntletPost("G9").slug}`);
+	await page.goto(`/works/${gauntletPost(BUY).slug}`);
 	await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
 	await expect(page.getByText("Purchase this post to access downloads.")).toBeHidden();
 

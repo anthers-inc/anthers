@@ -305,8 +305,7 @@ async function makePaidPost(title: string): Promise<{ slug: string; id: number }
 		title,
 		streamEnabled: false,
 		downloadEnabled: true,
-		anthersAccess: FOR_SALE,
-		seedAccess: LOCKED,
+		seedAccess: FOR_SALE,
 	});
 	await db.insert(assets).values({
 		workId: work.id,
@@ -1130,7 +1129,6 @@ describe("Checkout — what isn't for sale", () => {
 			title: `Locked ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
-			anthersAccess: LOCKED,
 			seedAccess: LOCKED,
 		});
 

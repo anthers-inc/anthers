@@ -94,7 +94,7 @@ beforeAll(async () => {
 			creatorId: creator.id,
 			type: "video",
 			title: "Clamp Fixture",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		})
 	).id;
 }, DB_SETUP_TIMEOUT);

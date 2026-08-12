@@ -62,7 +62,6 @@ export interface AccessRow {
 	price: string; // money string; "0" = free when allowed
 }
 
-export type AnthersAccessRow = AccessRow;
 export type SeedAccessRow = AccessRow;
 
 /**
@@ -203,9 +202,15 @@ export interface Work {
 	// Delivery & access (creator-facing tables; viewers get the resolved `access`).
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	anthersAccess?: AnthersAccessRow[] | null;
 	seedAccess?: SeedAccessRow[] | null;
 	access?: AccessResult;
+	/**
+	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
+	 * access table, never stored and never a creator-set flag: a Work with nothing on it
+	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * left, which is an account-level meter and a separate call.
+	 */
+	publicAccess?: boolean;
 
 	isPinned?: boolean;
 	tags?: string[] | null;
@@ -250,7 +255,6 @@ export interface WorkInput {
 	authoredPrecision?: AuthoredPrecision | null;
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	anthersAccess?: AnthersAccessRow[];
 	seedAccess?: SeedAccessRow[];
 	isPinned?: boolean;
 	tags?: string[];
@@ -343,6 +347,13 @@ export interface CollectionPost {
 	sortOrder: number;
 	creator?: Creator;
 	access?: AccessResult;
+	/**
+	 * Ungated, streaming, free to everyone — the commons. Derived server-side from the
+	 * access table, never stored and never a creator-set flag: a Work with nothing on it
+	 * IS Public Access. Says nothing about whether *this viewer* has monthly allowance
+	 * left, which is an account-level meter and a separate call.
+	 */
+	publicAccess?: boolean;
 }
 
 /** Project — a collection (playlist-like wrapper) that groups posts. */
@@ -592,7 +603,7 @@ export interface ContentAccessResponse {
 export interface CreatorGate {
 	id: number;
 	creatorId: number;
-	gateType: "seed" | "anthers_badge";
+	gateType: "seed";
 	threshold: string;
 	label: string;
 	description: string | null;

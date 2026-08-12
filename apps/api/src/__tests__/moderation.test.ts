@@ -126,7 +126,7 @@ beforeAll(async () => {
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
 		body: JSON.stringify({
 			visibility: "released",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		}),
 	});
 	expect(release.status).toBe(200);
@@ -299,7 +299,16 @@ describe("The operator queue", () => {
 			const entry = items.find((i) => i.subjectType === "comment" && i.subjectId === commentId);
 			expect(entry).toBeDefined();
 			// And none of the orphans are served as queue entries either.
-			expect(items.some((i) => orphanIds.includes(i.subjectId))).toBe(false);
+			//
+			// 🚨 Match on the PAIR, never the bare id. Reports are polymorphic over
+			// `(subject_type, subject_id)`, so a `user` report and a `comment` report can
+			// legitimately share a subject_id — and on a dev database that has accumulated
+			// enough rows they do. This assertion read `orphanIds.includes(i.subjectId)`
+			// until 2026-08-12 and began failing the moment `users.id` grew past the
+			// synthetic comment range, reporting a queue bug that did not exist.
+			expect(
+				items.some((i) => i.subjectType === "comment" && orphanIds.includes(i.subjectId)),
+			).toBe(false);
 		} finally {
 			await db
 				.delete(moderationReports)

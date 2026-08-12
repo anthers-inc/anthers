@@ -254,7 +254,6 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			bodyHtml: `<p>${spec.body}</p>`,
 			streamEnabled: spec.streamEnabled,
 			downloadEnabled: spec.downloadEnabled,
-			anthersAccess: spec.anthersAccess,
 			seedAccess: spec.seedAccess,
 			visibility: "released",
 			releasedAt: new Date(),

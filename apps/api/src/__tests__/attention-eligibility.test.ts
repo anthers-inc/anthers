@@ -108,7 +108,7 @@ beforeAll(async () => {
 			creatorId: creator.id,
 			type: "video",
 			title: "A Film",
-			anthersAccess: FREE,
+			seedAccess: FREE,
 		})
 	).id;
 	textWorkId = (
@@ -117,7 +117,7 @@ beforeAll(async () => {
 			type: "text",
 			title: "An Essay",
 			bodyHtml: "<p>prose that earns, because it is a Work</p>",
-			anthersAccess: FREE,
+			seedAccess: FREE,
 		})
 	).id;
 	lockedWorkId = (
@@ -125,7 +125,7 @@ beforeAll(async () => {
 			creatorId: creator.id,
 			type: "video",
 			title: "A Locked Film",
-			anthersAccess: LOCKED,
+			seedAccess: LOCKED,
 		})
 	).id;
 	privateWorkId = (
@@ -134,7 +134,7 @@ beforeAll(async () => {
 			type: "video",
 			title: "Still Editing",
 			visibility: "private",
-			anthersAccess: FREE,
+			seedAccess: FREE,
 		})
 	).id;
 }, DB_SETUP_TIMEOUT);

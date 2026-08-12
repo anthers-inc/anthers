@@ -59,7 +59,7 @@ async function makeReleasedWork(cookie: string, title: string, type = "game"): P
 	const res = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ visibility: "released", anthersAccess: FREE }),
+		body: JSON.stringify({ visibility: "released", seedAccess: FREE }),
 	});
 	expect(res.status).toBe(200);
 	return workId;

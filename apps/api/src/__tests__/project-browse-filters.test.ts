@@ -86,7 +86,7 @@ describe("project browse filters", () => {
 			const workId = (await created.json()).work.id as number;
 
 			const patch: Record<string, unknown> = {
-				anthersAccess: c.access,
+				seedAccess: c.access,
 				streamEnabled: c.type !== "text",
 				downloadEnabled: true,
 			};

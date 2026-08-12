@@ -61,7 +61,7 @@ const creatorName = `deliv_${id}`;
 const viewerName = `deliv_viewer_${id}`;
 
 /** Locked to everyone but the owner: present rows, none allowed. */
-const LOCKED = { anthersAccess: [{ threshold: 0, allow: false, price: "0" }] };
+const LOCKED = { seedAccess: [{ threshold: 0, allow: false, price: "0" }] };
 
 describe("Delivery-layer access", () => {
 	let creatorCookie: string;
@@ -124,7 +124,7 @@ describe("Delivery-layer access", () => {
 			creatorId,
 			type: "audio",
 			title: "Open Track",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		freeAudioId = freeAudio.id;
 		await db.insert(transcodingJobs).values({
@@ -139,7 +139,7 @@ describe("Delivery-layer access", () => {
 			type: "game",
 			title: "Open Game",
 			downloadEnabled: true,
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		freeWorkId = game.id;
 		const [gameAsset] = await db
@@ -217,7 +217,7 @@ describe("Delivery-layer access", () => {
 			type: "video",
 			title: "Still Editing",
 			visibility: "private",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		const denied = await req(`/api/content/works/${staging.id}`, {
 			headers: { Cookie: viewerCookie },

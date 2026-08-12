@@ -124,7 +124,7 @@ beforeAll(async () => {
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: host },
 		body: JSON.stringify({
 			visibility: "released",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		}),
 	});
 	expect(release.status).toBe(200);
@@ -351,7 +351,7 @@ describe("a block is a boundary, not a moderation action", () => {
 					headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: bee },
 					body: JSON.stringify({
 						visibility: "released",
-						anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+						seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 					}),
 				})
 			).status,

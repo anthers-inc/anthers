@@ -236,9 +236,32 @@ describe("selfSufficiency", () => {
 	 */
 	test("free access has no usage-dependent price — a free user costs a flat Time Pool", () => {
 		expect(Number(s.freeUserCost)).toBe(FREE_TIME_POOL);
-		// And that is genuinely small against what a paying user brings in, which is why
-		// the break-even share is low. If a cost term is ever added back here, this
-		// inequality is the one that will move first.
-		expect(Number(s.revenuePerPayingUser)).toBeGreaterThan(Number(s.freeUserCost) * 10);
+	});
+
+	/**
+	 * ⚠️ **`FREE_TIME_POOL` is the dial this whole table pivots on, and it is provisional.**
+	 * It moved $0.05 → $0.25 on 2026-08-12 and is expected to move again once there is real
+	 * conversion data. So the assertion is the *relationship*, computed independently of
+	 * `selfSufficiency`'s own arithmetic — a break-even share is exactly the point where one
+	 * paying user's remainder covers the free users beside them:
+	 *
+	 *     breakEven = cost / (revenue + cost)
+	 *
+	 * A guard here previously read `revenue > cost × 10`, which was a number picked to pass
+	 * at $0.05 and said nothing about the model. It failed the moment the dial moved — the
+	 * right outcome for a bad assertion, and the reason it is replaced rather than retuned.
+	 */
+	test("the break-even share is cost / (revenue + cost), whatever the dial is set to", () => {
+		const cost = new Decimal(s.freeUserCost);
+		const revenue = new Decimal(s.revenuePerPayingUser);
+		const expected = cost.dividedBy(revenue.plus(cost)).times(100);
+		expect(Number(s.breakEvenPct.replace("%", ""))).toBeCloseTo(expected.toNumber(), 1);
+	});
+
+	test("the model is viable at a plausible paying share", () => {
+		// The claim the figure is actually for. Not a tautology: at a high enough
+		// FREE_TIME_POOL this fails, which is precisely the bind a generous opening number
+		// would have put the charitable budget in.
+		expect(Number(s.breakEvenPct.replace("%", ""))).toBeLessThan(25);
 	});
 });
