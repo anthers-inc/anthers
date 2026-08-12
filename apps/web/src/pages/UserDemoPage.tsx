@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { FREE_FLOOR_GIB, GIB_PER_SEED, SEED_PRICE } from "@anthers/shared/constants";
+import { SEED_PRICE } from "@anthers/shared/constants";
 import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -41,9 +41,9 @@ interface DemoPurchase {
 	item: string;
 	type: "download" | "content" | "experience" | "physical";
 	price: number;
-	/** At-cost costs taken OUT of the listed price — card processing plus, on a digital
-	 * purchase, the first download's bandwidth. Anthers keeps none of it; the purchase
-	 * purchase fee was removed 2026-08-03. */
+	/** The at-cost card processing taken OUT of the listed price — the only deduction
+	 * there is. Anthers keeps none of it; the purchase fee was removed 2026-08-03 and
+	 * the first download's delivery charge 2026-08-12. */
 	fee: number;
 	date: string;
 }
@@ -63,10 +63,9 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 
 // A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
 // Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
-// creators, by watch-time) and $1.50 "Supports Anthers" (their bandwidth at cost +
-// the remainder funding free access and programs). Directed Seeds ($3 each, no
-// platform cut) sit alongside.
-// Bandwidth is folded in — a free floor plus a per-Seed allowance, no wallet.
+// creators, by watch-time) and "Supports Anthers" (the remainder, funding free access
+// and programs). Directed Seeds ($3 each, no platform cut) sit alongside. There is no
+// bandwidth line — streaming and downloads are unlimited and free.
 // Derived from the generated figures, never hand-computed. This block used to be
 // typed by hand and silently kept the pre-2026-08-03 arithmetic — `supportsAnthers`
 // was price − Time Pool, which omits the Payments line entirely.
@@ -78,9 +77,8 @@ const DEMO_PLAN = {
 	timePool: Number(PETAL.timePool), // to creators, distributed by watch-time
 	seeds: 3, // directed creator-Seeds (count, $3 each)
 	seedPool: 9.0, // $ value of the directed Seeds
-	// bandwidth (at cost) + the remainder — i.e. the charge less Time Pool and Payments.
-	supportsAnthers: Number(PETAL.bandwidth) + Number(PETAL.remainder),
-	allowanceGiB: FREE_FLOOR_GIB + GIB_PER_SEED * PETAL.seeds,
+	// The remainder — i.e. the charge less the Time Pool and the Payments line.
+	supportsAnthers: Number(PETAL.remainder),
 	month: "February 2026",
 };
 
@@ -444,8 +442,8 @@ function SubscriptionDashboardDemo() {
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
 	// Monthly total (pre tax): the Time Pool + directed Seeds + "Supports Anthers" —
-	// i.e. the Anthers-Seeds plus the directed Seeds. Bandwidth and the at-cost Payments
-	// line are both folded INSIDE the Seeds; sales tax is the only thing added on top.
+	// i.e. the Anthers-Seeds plus the directed Seeds. The at-cost Payments line is folded
+	// INSIDE the Seeds; sales tax is the only thing added on top.
 	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.supportsAnthers;
 
 	// Seeds are indivisible $3 units, so directing them is a whole-Seed move: give one
@@ -505,9 +503,7 @@ function SubscriptionDashboardDemo() {
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Supports Anthers</p>
 						<p className="text-xl font-bold">${DEMO_PLAN.supportsAnthers.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">
-							Your bandwidth (at cost) + free access &amp; programs
-						</p>
+						<p className="text-xs text-base-content/40">Free access &amp; charitable programs</p>
 					</div>
 				</div>
 			</div>
@@ -609,8 +605,8 @@ function SubscriptionDashboardDemo() {
 						<span className="text-success">${totalPool.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Streaming (at cost, folded in)</span>
-						<span className="text-base-content/50">{DEMO_PLAN.allowanceGiB} GiB / mo</span>
+						<span className="text-base-content/70">Streaming &amp; downloads</span>
+						<span className="text-base-content/50">Unlimited</span>
 					</div>
 					<div className="divider my-1" />
 					<div className="flex justify-between text-sm font-bold">

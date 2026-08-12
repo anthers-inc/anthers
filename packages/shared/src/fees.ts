@@ -3,8 +3,6 @@ import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
 	ANTHERS_BADGES,
-	allowanceGiB,
-	BANDWIDTH_PER_GIB,
 	type Badge,
 	type BadgeKey,
 	badgeLabel,
@@ -71,27 +69,31 @@ export function paymentsSplit(
 /**
  * Decompose a user's Anthers-Seeds into where each $3 goes:
  *
- *   Anthers-Seed value ($3 × n) = bandwidth + Time Pool + Payments + remainder
+ *   Anthers-Seed value ($3 × n) = Time Pool + Payments + remainder
  *
- * Time Pool ($1.50/Seed) is a fixed target to creators and never moves; bandwidth
- * is the user's own at-cost usage; `payments` is this side's share of the at-cost
- * card fee (see `paymentsSplit`); the **the remainder is what's left** — the shock
- * absorber, so a heavy streamer or an expensive charge shrinks the mission share
- * while creator pay stays exactly the same. Free (n = 0) pays $0: its small Time
- * Pool and in-floor bandwidth are subsidised, and it funds no charitable remainder.
+ * Time Pool ($1.50/Seed) is a fixed target to creators and never moves; `payments`
+ * is this side's share of the at-cost card fee (see `paymentsSplit`); the
+ * **remainder is what's left** — the shock absorber, so an expensive charge shrinks
+ * the mission share while creator pay stays exactly the same. Free (n = 0) pays $0:
+ * its small Time Pool is subsidised, and it funds no charitable remainder.
  *
- * `payments` defaults to 0 so a caller that only wants the Time-Pool/bandwidth
- * view is unaffected — but anything crediting the **charitable ledger** must pass
- * it, or the charitable ledger is over-credited by the card fee.
+ * A fourth term, the user's own at-cost bandwidth, sat first in this identity until
+ * 2026-08-12. It is gone with the allowance: R2 charges $0 egress, so there was no
+ * cost to pass through. Note the freed value went to the **remainder** rather than
+ * anywhere else, because the remainder is the residual by construction — which made
+ * that retirement an increase in charitable funding, not a deleted fee.
+ *
+ * `payments` defaults to 0 so a caller that only wants the Time-Pool view is
+ * unaffected — but anything crediting the **charitable ledger** must pass it, or
+ * the charitable ledger is over-credited by the card fee.
  */
 export function anthersSeedBreakdown(
 	anthersSeeds: number,
-	opts: { bandwidthGiB?: Decimal | number; payments?: Decimal | number } = {},
+	opts: { payments?: Decimal | number } = {},
 ): {
 	anthersSeeds: number;
 	seedValue: Decimal;
 	timePool: Decimal;
-	bandwidth: Decimal;
 	payments: Decimal;
 	foundation: Decimal;
 	subsidised: boolean;
@@ -99,25 +101,22 @@ export function anthersSeedBreakdown(
 	const n = Math.max(0, Math.floor(anthersSeeds));
 	const seedValue = new Decimal(seedCost(n));
 	const timePool = new Decimal(timePoolFor(n));
-	const bandwidth = bandwidthCost(opts.bandwidthGiB ?? 0);
 	const payments = new Decimal(opts.payments ?? 0);
 	if (n === 0) {
 		return {
 			anthersSeeds: 0,
 			seedValue: new Decimal(0),
 			timePool,
-			bandwidth,
 			payments: new Decimal(0),
 			foundation: new Decimal(0),
 			subsidised: true,
 		};
 	}
-	const foundation = seedValue.minus(timePool).minus(bandwidth).minus(payments);
+	const foundation = seedValue.minus(timePool).minus(payments);
 	return {
 		anthersSeeds: n,
 		seedValue,
 		timePool,
-		bandwidth,
 		payments,
 		foundation,
 		subsidised: false,
@@ -126,7 +125,7 @@ export function anthersSeedBreakdown(
 
 /**
  * The full monthly support breakdown for a user holding `anthersSeeds` Anthers-
- * Seeds and `creatorSeeds` directed Seeds, given their actual `bandwidthGiB`.
+ * Seeds and `creatorSeeds` directed Seeds.
  *
  * Anthers takes **no cut** — but the at-cost card fee comes out of the charge
  * rather than riding on top of it, so a directed Seed reaches its creator less
@@ -136,15 +135,10 @@ export function anthersSeedBreakdown(
  * `creatorDirect` is the **gross** directed-Seed value; `creatorNet` is what
  * actually reaches creators. Use `creatorNet` for anything describing payout.
  */
-export function supportBreakdown(params: {
-	anthersSeeds: number;
-	creatorSeeds: number;
-	bandwidthGiB?: Decimal | number;
-}): {
+export function supportBreakdown(params: { anthersSeeds: number; creatorSeeds: number }): {
 	creatorDirect: Decimal;
 	creatorNet: Decimal;
 	timePool: Decimal;
-	bandwidth: Decimal;
 	foundation: Decimal;
 	toCreators: Decimal;
 	seedsSubtotal: Decimal;
@@ -152,10 +146,7 @@ export function supportBreakdown(params: {
 	total: Decimal;
 } {
 	const split = paymentsSplit(params.anthersSeeds, params.creatorSeeds);
-	const anthers = anthersSeedBreakdown(params.anthersSeeds, {
-		bandwidthGiB: params.bandwidthGiB,
-		payments: split.anthers,
-	});
+	const anthers = anthersSeedBreakdown(params.anthersSeeds, { payments: split.anthers });
 	const creatorDirect = new Decimal(seedCost(Math.max(0, Math.floor(params.creatorSeeds))));
 	const creatorNet = creatorDirect.minus(split.creator);
 	const seedsSubtotal = creatorDirect.plus(anthers.seedValue);
@@ -163,7 +154,6 @@ export function supportBreakdown(params: {
 		creatorDirect,
 		creatorNet,
 		timePool: anthers.timePool,
-		bandwidth: anthers.bandwidth,
 		foundation: anthers.foundation,
 		toCreators: creatorNet.plus(anthers.timePool),
 		seedsSubtotal,
@@ -183,10 +173,8 @@ export interface BadgeView {
 	price: number;
 	/** Time Pool $ at this rank (to creators, by watch-time). */
 	timePool: string;
-	/** "Supports Anthers" — your bandwidth (at cost) + the remainder. */
+	/** "Supports Anthers" — the remainder, funding free access and the programs. */
 	supportsAnthers: string;
-	/** Streaming allowance (GiB) at this rank. */
-	allowanceGiB: number;
 	subsidised: boolean;
 }
 
@@ -194,8 +182,8 @@ export interface BadgeView {
  * The rank ladder as view models, low → high (free … blossom). Pure and static —
  * derived from the Seed dials, no per-user data — so the Subscribe page, the
  * `/subscriptions/ranks` route, and inline-unlock all render the same numbers and
- * can't drift. "Supports Anthers" bundles bandwidth (at cost) + the
- * remainder into one line (as the Subscribe page shows it).
+ * can't drift. "Supports Anthers" is the remainder — what is left of the charge
+ * after the Time Pool, funding free access and the charitable programs.
  */
 export function badgeViews(): BadgeView[] {
 	// The 0-Seed rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's
@@ -219,52 +207,9 @@ export function badgeViews(): BadgeView[] {
 			price,
 			timePool: timePool.toFixed(2),
 			supportsAnthers: supportsAnthers.toFixed(2),
-			allowanceGiB: allowanceGiB(n),
 			subsidised: n === 0,
 		};
 	});
-}
-
-// ── Bandwidth: at-cost, folded into Anthers-Seeds (free floor + per-Seed allowance)
-/** At-cost bandwidth cost for a number of GiB (a pass-through, no fee). */
-export function bandwidthCost(gib: Decimal | number): Decimal {
-	return CENTS(new Decimal(gib).mul(BANDWIDTH_PER_GIB));
-}
-
-/**
- * Apply a month's stream bandwidth against the free floor + per-Seed allowance.
- * The allowance is drawn down first and does not roll over; whatever is unused
- * returns to the subsidy pool at month-end. A positive `overage` is bandwidth
- * beyond the allowance (which, in the support model, is a nudge to hold another
- * Anthers-Seed — there is no wallet).
- */
-export function drawBandwidth(params: {
-	consumedGiB: Decimal | number;
-	allowanceGiB: Decimal | number;
-}): {
-	fromAllowanceGiB: Decimal;
-	overageGiB: Decimal;
-	overageCost: Decimal;
-	remainingAllowanceGiB: Decimal;
-} {
-	const consumed = new Decimal(params.consumedGiB);
-	const allowance = new Decimal(params.allowanceGiB);
-	const fromAllowanceGiB = Decimal.min(consumed, allowance);
-	const overageGiB = Decimal.max(0, consumed.minus(allowance));
-	return {
-		fromAllowanceGiB,
-		overageGiB,
-		overageCost: bandwidthCost(overageGiB),
-		remainingAllowanceGiB: allowance.minus(fromAllowanceGiB),
-	};
-}
-
-/**
- * The at-cost value of allowance left unused at month-end, which returns to the
- * subsidy pool (it was budgeted as a potential cost the pool didn't incur).
- */
-export function unusedAllowanceValue(remainingAllowanceGiB: Decimal | number): Decimal {
-	return bandwidthCost(remainingAllowanceGiB);
 }
 
 // ── Charitable split (coarse accounting view; see FOUNDATION_SPLIT) ────────
@@ -290,51 +235,32 @@ export type PurchaseType = "digital" | "physical" | "service";
  * Fee breakdown for a direct purchase (zero-cut, all-in price).
  *
  * The listed price IS what the buyer pays, plus sales tax and nothing else. Card
- * processing and — on a digital sale — the buyer's first download come **out of**
- * that price, both paid to third parties. Anthers keeps $0.
+ * processing comes **out of** that price and is paid to Stripe. Anthers keeps $0,
+ * and now so does delivery: **every download is included, forever, on every
+ * device.** There is no first-download-versus-redownload distinction any more.
  *
- * - `digital`: the first download is delivered at cost and deducted from the
- *   creator's earnings, so nobody buys something they cannot download. Redownloads
- *   draw the buyer's own streaming allowance instead.
- * - `physical` / `service`: no bytes are delivered, so there is no delivery cost.
- *
- * `crfFee` keeps its legacy key name and is **always zero** — the purchase fee it
- * used to carry was removed 2026-08-03. See the note at the return statement.
+ * `deliveryFee` and `crfFee` keep their legacy key names and are **always zero** —
+ * the purchase fee went 2026-08-03, the delivery charge 2026-08-12. Both columns
+ * are `NOT NULL`, so they stay; dropping them is a separate migration.
  */
-export function calculateFees(
-	amount: Decimal,
-	opts: { deliveryBytes?: Decimal | number; type?: PurchaseType } = {},
-) {
-	const type = opts.type ?? "digital";
-	const deliveryGiB = new Decimal(opts.deliveryBytes ?? 0).div(GIB);
-
-	// Delivery = the FIRST download, included in the sale and paid out of the
-	// creator's deduction — so nobody ever buys something they cannot download,
-	// whatever their Badge. Redownloads draw the buyer's streaming allowance.
-	// Physical goods and services deliver no bytes, so they carry none of this.
-	let deliveryFee = new Decimal(0);
-	if (type === "digital") {
-		deliveryFee = CENTS(deliveryGiB.mul(BANDWIDTH_PER_GIB));
-		// Any real download costs at least a cent to deliver — we can't bill sub-cent.
-		if (deliveryGiB.gt(0) && deliveryFee.lte(0)) deliveryFee = new Decimal("0.01");
-	}
+export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {}) {
+	// `type` no longer changes the arithmetic — it did while digital sales carried
+	// the first download's bandwidth. Kept because callers pass it and `purchases.type`
+	// is a real discriminator elsewhere (a Seed buy is not owned content).
+	void opts.type;
 
 	// The list price IS the advertised price: card processing comes out of it, not
 	// on top of it. Sales tax is the only thing added, because a government-imposed
 	// tax is the sole carve-out mandatory-fee disclosure law allows.
 	const processingFee = CENTS(amount.mul(CARD_RATE).plus(CARD_FLAT));
 	const salesTax = CENTS(amount.mul(SALES_TAX_RATE));
-	const creatorEarnings = amount.minus(processingFee).minus(deliveryFee);
+	const creatorEarnings = amount.minus(processingFee);
 	const buyerTotal = amount.plus(salesTax);
 
 	return {
 		processingFee,
-		deliveryFee,
+		deliveryFee: new Decimal(0),
 		salesTax,
-		// Anthers takes $0 from a creator transaction. The purchase fee
-		// was removed 2026-08-03 — a commission on a creator's sale is the exact
-		// feature Rev. Rul. 76-152 keyed on. The `crf_fee` column is NOT NULL, so it
-		// stays and is always zero; dropping it is a separate migration.
 		crfFee: new Decimal(0),
 		creatorEarnings,
 		buyerTotal,
@@ -344,9 +270,10 @@ export function calculateFees(
 /**
  * A creator's monthly storage cost and the half-again on top of it.
  *
- * Storage beyond the free allowance is billed at DigitalOcean rates, plus half
- * again — the half is what funds free access and the charitable programs. Delivery is viewer-funded, so it is not billed here.
- * A self-hosting creator (Anthers stores/serves nothing) pays a flat fee instead.
+ * Storage beyond the free allowance is billed at the object-store rate, plus half
+ * again — the half is what funds free access and the charitable programs. Storage
+ * is the **only** creator-side infrastructure charge: delivery costs nothing to
+ * anyone. A self-hosting creator stores nothing here and so pays nothing.
  */
 export function estimateStorageCost(params: { storageBytes: number; isSelfHosting?: boolean }): {
 	storageGiB: Decimal;

@@ -133,12 +133,15 @@ const buyerName = `ref_buyer_${run}`;
 const otherName = `ref_other_${run}`;
 
 const PRICE = "5.00";
-/** 2 GiB of downloadable asset, so the delivery deduction is non-zero. */
+/**
+ * 2 GiB of downloadable asset. It made the delivery deduction non-zero until that
+ * deduction was retired 2026-08-12; kept so the fixture is a realistic Work.
+ */
 const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
 const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
 
-const fees = calculateFees(new Decimal(PRICE), { deliveryBytes: ASSET_BYTES, type: "digital" });
+const fees = calculateFees(new Decimal(PRICE), { type: "digital" });
 
 let fake: Fake;
 let realClient: Stripe | null;
@@ -199,7 +202,19 @@ async function makeWork(title: string): Promise<number> {
  * through `resolveAccess` in ways that read as findings and aren't.
  */
 async function completedPurchase(
-	opts: { buyer?: number; downloadedAt?: Date | null; type?: string; workId?: number | null } = {},
+	opts: {
+		buyer?: number;
+		downloadedAt?: Date | null;
+		type?: string;
+		workId?: number | null;
+		/**
+		 * A pre-2026-08-12 purchase, which really did carry the first download's
+		 * delivery at $0.01/GiB. New sales record "0.00" — delivery is free — but the
+		 * refund path still reads this column off the ROW, because those rows exist and
+		 * their books have to close the same way they were opened.
+		 */
+		deliveryFee?: string;
+	} = {},
 ) {
 	const workId = opts.workId === undefined ? await makeWork(`Refund work ${uid()}`) : opts.workId;
 	const [row] = await db
@@ -214,7 +229,7 @@ async function completedPurchase(
 			type: opts.type ?? "digital",
 			amount: PRICE,
 			processingFee: fees.processingFee.toFixed(2),
-			deliveryFee: fees.deliveryFee.toFixed(2),
+			deliveryFee: opts.deliveryFee ?? fees.deliveryFee.toFixed(2),
 			crfFee: "0.00",
 			salesTax: fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
@@ -339,18 +354,41 @@ describe("What the remainder absorbs", () => {
 		expect(new Decimal(rows[0].amount).isNegative()).toBe(true);
 	});
 
-	it("adds the delivered bytes to the shortfall once the buyer has downloaded", async () => {
+	it("absorbs only the card fee on a current sale — delivery costs nothing to absorb", async () => {
 		const purchase = await completedPurchase({ downloadedAt: new Date() });
 		await refundAs(buyerCookie, purchase.id);
 
 		const rows = await ledgerFor(purchase.id);
 		expect(rows).toHaveLength(1);
+		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(fees.processingFee.negated().toFixed(2));
+		// Downloading used to make the loss bigger; since 2026-08-12 it cannot, so the
+		// downloaded and never-downloaded cases now book the same amount on a new sale.
+		expect(fees.deliveryFee.toNumber()).toBe(0);
+	});
+
+	/**
+	 * ⚠️ **A pre-2026-08-12 purchase still has to settle its own way.** Those rows
+	 * carry a real `delivery_fee`, and `refunds.ts` reads the column off the row
+	 * rather than recomputing it — which is the only reason their books still close.
+	 * Recomputing from today's model would silently under-book every legacy refund by
+	 * the delivery it actually paid for.
+	 */
+	it("still books a LEGACY delivery fee, when the row carries one and the bytes went out", async () => {
+		const legacy = await completedPurchase({ downloadedAt: new Date(), deliveryFee: "0.02" });
+		await refundAs(buyerCookie, legacy.id);
+
+		const rows = await ledgerFor(legacy.id);
 		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(
-			fees.processingFee.plus(fees.deliveryFee).negated().toFixed(2),
+			fees.processingFee.plus("0.02").negated().toFixed(2),
 		);
-		// Guard against the fixture going all-zero and the assertion above passing
-		// vacuously.
-		expect(fees.deliveryFee.greaterThan(0)).toBe(true);
+	});
+
+	it("returns a LEGACY delivery fee untouched when nothing was ever downloaded", async () => {
+		const legacy = await completedPurchase({ downloadedAt: null, deliveryFee: "0.02" });
+		await refundAs(buyerCookie, legacy.id);
+
+		const rows = await ledgerFor(legacy.id);
+		expect(new Decimal(rows[0].amount).toFixed(2)).toBe(fees.processingFee.negated().toFixed(2));
 	});
 
 	/**
@@ -359,10 +397,12 @@ describe("What the remainder absorbs", () => {
 	 * more; the sales tax was only ever held for the state and is returned intact;
 	 * whatever is left over is what Anthers absorbs out of the remainder.
 	 *
-	 * The delivery fee is the interesting term, and it moves between the two cases:
-	 * collected to pay for a download, it is returned untouched if none happened and
-	 * absorbed as a real loss if one did. A single formula covering both would hide
-	 * exactly the distinction the cap is built on.
+	 * The delivery fee used to be the interesting term, moving between the two cases:
+	 * collected to pay for a download, returned untouched if none happened and absorbed
+	 * as a real loss if one did. It is $0.00 on every new sale since 2026-08-12, so the
+	 * two cases now balance identically — but the term stays in the arithmetic because
+	 * legacy rows carry one, and the distinction it encodes is what the refund cap is
+	 * built on.
 	 */
 	it.each([
 		["never downloaded", null as Date | null],

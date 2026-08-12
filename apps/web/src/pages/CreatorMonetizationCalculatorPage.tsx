@@ -15,13 +15,12 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // ---------------------------------------------------------------------------
 // Support-model economics. A viewer holds Anthers-Seeds — $3 each; the count is
 // their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
-// ($1.50, to creators by watch-time) and "Supports Anthers" (their bandwidth at
-// cost + the remainder funding free access and programs). Money to creators = the Time Pool + Seeds a
-// viewer gives directly to a creator ($3 each, no platform cut). The Time Pool is
-// distributed across the creators a viewer watches, in proportion to watch-time
-// (equal-time principle — a minute is a minute across every medium). Bandwidth is
-// folded into the Anthers-Seeds, at cost — never the creator-funding lever, so it
-// never appears in these earnings figures.
+// ($1.50, to creators by watch-time) and "Supports Anthers" (the remainder funding
+// free access and programs). Money to creators = the Time Pool + Seeds a viewer gives
+// directly to a creator ($3 each, no platform cut). The Time Pool is distributed
+// across the creators a viewer watches, in proportion to watch-time (equal-time
+// principle — a minute is a minute across every medium). There is no bandwidth term:
+// delivery costs $0 at any volume, so it appears on nobody's bill.
 //
 // Rates/dials come from @anthers/shared/constants (SEED_PRICE, timePoolFor, …) —
 // the same source of truth the API charges against.
@@ -34,8 +33,8 @@ const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
 /** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
 const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
-/** "Supports Anthers" — the non-Time-Pool half of each Seed given to Anthers
- * (bandwidth at cost + the remainder funding free access and programs). */
+/** "Supports Anthers" — the non-Time-Pool half of each Seed given to Anthers: the
+ * remainder that funds free access and the charitable programs. */
 const supportsAnthersOf = (badge: BadgeKey) =>
 	Math.max(0, seedCost(thresholdForBadge(badge)) - timePoolFor(thresholdForBadge(badge)));
 
@@ -102,8 +101,7 @@ function ConversionEngine() {
 		};
 	}, [badge, total, you, seedsToYou]);
 
-	// Split bar over what the viewer's Anthers-Seeds cost them (their own at-cost
-	// bandwidth is folded into the "Supports Anthers" slice, not broken out here).
+	// Split bar over what the viewer's Anthers-Seeds cost them.
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
 		{
@@ -293,8 +291,8 @@ function ConversionEngine() {
 								))}
 							</div>
 							<p className="mt-2 text-[11px] text-base-content/40">
-								Bandwidth is folded into each Seed given to Anthers at cost (a free floor + per-Seed
-								allowance, $0.01/GiB) — no wallet, and never a creator-funding lever.
+								Delivery costs nothing and appears in neither slice — no allowance, no wallet, no
+								per-GiB charge, and never a creator-funding lever.
 							</p>
 						</div>
 
@@ -765,9 +763,9 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
 									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($1.50, to creators by
-									watch-time) and <b>Supports Anthers</b> (their bandwidth at cost + the remainder
-									that funds free access and the charitable programs). Directed <b>Seeds</b> ($3
-									each, no platform cut) are given alongside.
+									watch-time) and <b>Supports Anthers</b> (the remainder, which funds free access
+									and the charitable programs). Directed <b>Seeds</b> ($3 each, no platform cut) are
+									given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
@@ -777,8 +775,8 @@ export default function CreatorMonetizationCalculatorPage() {
 								</li>
 								<li>
 									<b>Equal-time principle:</b> a minute counts the same across all media types.
-									Delivery cost differs by medium, but that's billed on the viewer's side (a folded
-									into their Seeds to Anthers, at cost) and never touches the creator share.
+									Delivery cost differs by medium and is billed to nobody, so it cannot touch the
+									creator share.
 								</li>
 								<li>
 									The <b>Badge</b> is what you hold right now, not a rolling spend total.
@@ -791,7 +789,7 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									The audience builder counts just the Seeds each segment directs to you. One-time /
 									direct purchases and creator <b>storage</b> costs are out of scope — see the
-									companion storage &amp; bandwidth calculators.
+									companion storage calculator.
 								</li>
 								<li>
 									Rates from the support model (<code>@anthers/shared</code>). Planning model —

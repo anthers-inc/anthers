@@ -18,10 +18,10 @@
  *     safe way to make Anthers eat more of it. Full refunds only, for now.
  *
  *   • **Anthers absorbs the shortfall, and it is booked.** Stripe does not return
- *     its processing fee on a refund, and bytes already served cannot be un-sent.
- *     That unrecoverable amount comes out of the remainder — the same shock
- *     absorber carrying the free bandwidth floor — and it is written to the
- *     charitable ledger as a negative entry so the pool's balance tells the truth.
+ *     its processing fee on a refund. That unrecoverable amount comes out of the
+ *     remainder — the same shock absorber that funds free access — and it is written
+ *     to the charitable ledger as a negative entry so the pool's balance tells the
+ *     truth.
  *     A refund that moves money without a ledger row is the silent version of the
  *     gross-vs-net bug that cost ~$0.39 a Seed until 2026-08-08.
  *
@@ -95,9 +95,15 @@ export async function refundsAfterDownloadInWindow(
  * What Anthers cannot recover on this refund: Stripe's sunk processing fee, plus
  * the delivery it already paid for if the buyer actually took the bytes.
  *
- * Delivery is conditional on `downloaded_at` on purpose — the fee was collected
- * to cover a download, and if none happened the bandwidth was never spent, so
- * booking it as a loss would overstate what the remainder absorbed.
+ * ⚠️ **`delivery_fee` is "0.00" on every sale since 2026-08-12**, so on a current
+ * purchase this is the processing fee alone. The term stays because it is read off
+ * the ROW rather than recomputed, and **pre-2026-08-12 purchases carry a real one** —
+ * recomputing from today's model would under-book every legacy refund by exactly the
+ * delivery it actually paid for.
+ *
+ * Delivery is conditional on `downloaded_at` on purpose — the fee was collected to
+ * cover a download, and if none happened the bytes were never sent, so booking it as
+ * a loss would overstate what the remainder absorbed.
  */
 export function refundShortfall(purchase: Purchase): Decimal {
 	const processing = new Decimal(purchase.processingFee);

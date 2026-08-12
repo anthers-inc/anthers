@@ -425,7 +425,7 @@ export interface StripeAccountStatus {
 export interface CheckoutResponse {
 	amount: string; // listed price — what the creator receives (pass-through)
 	processingFee: string;
-	deliveryFee: string; // download bandwidth
+	deliveryFee: string; // always "0.00" since 2026-08-12 — delivery is free
 	crfFee: string; // Legacy field name; the retired purchase fee — always "0" since 2026-08-03
 	creatorEarnings: string;
 	buyerTotal: string; // price + fees — what the buyer is charged
@@ -491,12 +491,17 @@ export interface BadgeView {
 	price: number;
 	timePool: string;
 	supportsAnthers: string;
-	allowanceGiB: number;
 	subsidised: boolean;
 }
 
-/** A user's account: the Seeds they've given Anthers (which are their Badge) + the Seeds they've
- *  directed to creators. Bandwidth is folded into the Anthers-Seeds — there is no wallet. */
+/**
+ * A user's account: the Seeds they've given Anthers (which are their Badge) + the Seeds
+ * they've directed to creators.
+ *
+ * `bandwidthUsedGiB` is a **dead column**. It metered stream consumption against a
+ * per-Seed allowance until 2026-08-12; delivery is free, nothing writes it, and it
+ * stays only because dropping it is a migration of its own.
+ */
 export interface Account {
 	id?: number;
 	userId?: number;

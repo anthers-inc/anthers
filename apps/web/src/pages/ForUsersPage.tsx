@@ -81,8 +81,8 @@ export default function ForUsersPage() {
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							No payment required to use Anthers, ever. All accounts have an allowance of free
-							access every month, forever, no strings attached.
+							No payment required to use Anthers, ever. Every account streams and downloads freely,
+							forever, no strings attached.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
@@ -113,7 +113,6 @@ export default function ForUsersPage() {
 							<SignpostCard step="1" title="Support Anthers" tone="anthers">
 								Each $3/month Seed you direct to Anthers does the following:
 								<ul>
-									<li>Raise your included streaming bandwidth allowance</li>
 									<li>Increase the pool of money distributed to creators you stream</li>
 									<li>Fund Anthers' free public access and charitable programs for all</li>
 								</ul>
@@ -159,15 +158,15 @@ export default function ForUsersPage() {
 					<Eyebrow>① The Anthers commons</Eyebrow>
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
-						Every account receives a bandwidth allowance of free access every month—enough for a few
-						hours of 1080p video, far more of music, or thousands of articles. This isn't a trial or
-						a trick (we're a non-profit; there's little incentive for either), it's an attempt to
+						Every account streams and downloads without a meter—no allowance to run out of, no data
+						cap, no per-gigabyte charge, on as many devices as you like. This isn't a trial or a
+						trick (we're a non-profit; there's little incentive for either), it's an attempt to
 						fulfill what we believe is a common right: for everyone to share and experience
 						creativity and community with their neighbors around the world.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Seeds given to Anthers are how you help keep it that way. Each one covers your own
-						streaming at cost, funds the free public content everyone enjoys—creators earn from the{" "}
+						Seeds given to Anthers are how you help keep it that way. Each one funds the free public
+						content everyone enjoys—creators earn from the{" "}
 						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
 						people spend with their public work—and raises your Badge, unlocking a growing library
 						of Anthers-gated content across every creator. The more the garden fills in, the more
@@ -182,9 +181,10 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
-								free viewer's small bandwidth cost is covered as free access, from a pool that every
-								Seed given to Anthers supports. By sharing the load together, mountains diffuse into
-								pebbles—and we all get a healthier internet for it.
+								free viewer still pays the creators they watch—their small Time Pool is covered as
+								free access, from a pool that every Seed given to Anthers supports. By sharing the
+								load together, mountains diffuse into pebbles—and we all get a healthier internet
+								for it.
 							</p>
 						</Card>
 					</Reveal>
@@ -194,9 +194,6 @@ export default function ForUsersPage() {
 								🎋&nbsp; What Seeds to Anthers add
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
-								<FreeItem yes>
-									A larger monthly streaming allowance, growing with every Seed.
-								</FreeItem>
 								<FreeItem yes>
 									A Time Pool that pays creators for the time you spend with their public work.
 								</FreeItem>
@@ -284,8 +281,8 @@ export default function ForUsersPage() {
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
 								keep. You pay the listed price plus your state's sales tax, and nothing else.
-								Anthers keeps none of it: what comes out of that price is card processing and your
-								first download, both at cost.
+								Anthers keeps none of it: the one thing that comes out of that price is card
+								processing, at cost. Downloading it again, on any device, costs nothing.
 							</p>
 						</Card>
 					</Reveal>

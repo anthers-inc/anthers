@@ -21,9 +21,6 @@ import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
 	BADGE_ORDER,
-	BANDWIDTH_PER_GIB,
-	DELIVERY_GIB_PER_HOUR,
-	FREE_FLOOR_GIB,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	SALES_TAX_RATE,
@@ -31,54 +28,49 @@ import {
 	STORAGE_PER_GIB_MONTH,
 	thresholdForBadge,
 } from "./constants.js";
-import { anthersSeedBreakdown, calculateFees, paymentsSplit, supportBreakdown } from "./fees.js";
+import {
+	anthersSeedBreakdown,
+	calculateFees,
+	estimateStorageCost,
+	paymentsSplit,
+	supportBreakdown,
+} from "./fees.js";
 
-const GIB = 1024 ** 3;
 const money = (d: Decimal) => d.toFixed(2);
-
-/**
- * The illustrative streamer behind the per-Badge table: 18 / 28 / 38 / 48 watch-
- * hours a month. This is an ASSUMPTION, not a dial — it is the single reason the
- * bandwidth column moves, and quoting the table without it is what makes the
- * numbers look arbitrary. Keep it here so every rendering states the same one.
- */
-export const REFERENCE_WATCH_HOURS: Record<number, number> = { 1: 18, 2: 28, 3: 38, 4: 48 };
 
 export interface BadgeRow {
 	badge: string;
 	seeds: number;
 	/** The all-in monthly charge for those Seeds. */
 	charge: string;
-	/** At-cost actual usage for the reference streamer. */
-	bandwidth: string;
 	timePool: string;
 	/** This side's share of the at-cost card fee — INSIDE the charge since 2026-08-03. */
 	payments: string;
 	/** The residual, which is what funds free access and the charitable programs. */
 	remainder: string;
-	watchHours: number;
-	allowanceGiB: number;
 }
 
-/** The per-Badge decomposition. Each row conserves: bw + pool + payments + rem = charge. */
+/**
+ * The per-Badge decomposition. Each row conserves: pool + payments + rem = charge.
+ *
+ * A `bandwidth` column sat between the charge and the Time Pool until 2026-08-12,
+ * driven by a reference streamer's watch-hours. Both are gone: delivery costs $0,
+ * so there is nothing for watch-time to price, and the table no longer rests on a
+ * behavioural assumption at all. **Every row is now exact rather than illustrative.**
+ */
 export function badgeTable(): BadgeRow[] {
 	return BADGE_ORDER.filter((b) => thresholdForBadge(b) > 0).map((badge) => {
 		const n = thresholdForBadge(badge);
-		const hours = REFERENCE_WATCH_HOURS[n] ?? 0;
-		const gib = new Decimal(hours).mul(DELIVERY_GIB_PER_HOUR);
 		// No directed Seeds in this scenario, so the whole card fee sits on this side.
 		const payments = paymentsSplit(n, 0).anthers;
-		const b = anthersSeedBreakdown(n, { bandwidthGiB: gib, payments });
+		const b = anthersSeedBreakdown(n, { payments });
 		return {
 			badge: badge.charAt(0).toUpperCase() + badge.slice(1),
 			seeds: n,
 			charge: money(b.seedValue),
-			bandwidth: money(b.bandwidth),
 			timePool: money(b.timePool),
 			payments: money(b.payments),
 			remainder: money(b.foundation),
-			watchHours: hours,
-			allowanceGiB: gib.toNumber(),
 		};
 	});
 }
@@ -86,13 +78,11 @@ export function badgeTable(): BadgeRow[] {
 export interface ReceiptScenario {
 	anthersSeeds: number;
 	creatorSeeds: number;
-	watchHours: number;
 	/** Gross directed-Seed value — what the user chose to give. */
 	directedGross: string;
 	/** What actually reaches those creators, net of their share of the card fee. */
 	directedNet: string;
 	timePool: string;
-	bandwidth: string;
 	/** The WHOLE card fee on the batched charge. */
 	payments: string;
 	/** This side's share of it — what the Anthers block must show, or it double-counts. */
@@ -115,23 +105,16 @@ export interface ReceiptScenario {
  * as a line inside the Seeds, never beneath the subtotal.
  */
 export function sampleReceipt(anthersSeeds = 2, creatorSeeds = 2): ReceiptScenario {
-	const hours = REFERENCE_WATCH_HOURS[anthersSeeds] ?? 0;
-	const gib = new Decimal(hours).mul(DELIVERY_GIB_PER_HOUR);
-	const s = supportBreakdown({ anthersSeeds, creatorSeeds, bandwidthGiB: gib });
+	const s = supportBreakdown({ anthersSeeds, creatorSeeds });
 	const split = paymentsSplit(anthersSeeds, creatorSeeds);
-	const anthers = anthersSeedBreakdown(anthersSeeds, {
-		bandwidthGiB: gib,
-		payments: split.anthers,
-	});
+	const anthers = anthersSeedBreakdown(anthersSeeds, { payments: split.anthers });
 	const salesTax = new Decimal(s.seedsSubtotal).mul(SALES_TAX_RATE).toDecimalPlaces(2);
 	return {
 		anthersSeeds,
 		creatorSeeds,
-		watchHours: hours,
 		directedGross: money(s.creatorDirect),
 		directedNet: money(s.creatorNet),
 		timePool: money(s.timePool),
-		bandwidth: money(anthers.bandwidth),
 		payments: money(split.total),
 		paymentsAnthers: money(split.anthers),
 		paymentsCreator: money(split.creator),
@@ -149,15 +132,18 @@ export interface SaleScenario {
 	sizeGiB: number;
 	creatorReceives: string;
 	cardFee: string;
-	delivery: string;
 }
 
 /**
  * The sale take-homes quoted across the comparison pages.
  *
- * The download size is load-bearing and was the source of a live inconsistency —
- * two pages quoted $9.39 and $9.40 for "a $10 game" because each had assumed a
- * different size without saying so. Every scenario names its size here.
+ * ⚠️ **Size stopped affecting take-home on 2026-08-12** and the identical rows here
+ * are deliberate: `game-10-1gib` and `game-10-2gib` now differ only in their label.
+ * Download size *was* load-bearing — it caused a live inconsistency where two pages
+ * quoted $9.39 and $9.40 for "a $10 game" because each assumed a different size —
+ * and the fix at the time was to name the size in every scenario. Delivery is free
+ * now, so the two agree by construction. The sizes stay because a row still reads
+ * as a concrete thing, not because they price anything.
  */
 export const SALE_SCENARIOS: { label: string; price: number; sizeGiB: number }[] = [
 	{ label: "game-10-1gib", price: 10, sizeGiB: 1 },
@@ -169,17 +155,13 @@ export const SALE_SCENARIOS: { label: string; price: number; sizeGiB: number }[]
 
 export function saleTable(): SaleScenario[] {
 	return SALE_SCENARIOS.map(({ label, price, sizeGiB }) => {
-		const r = calculateFees(new Decimal(price), {
-			deliveryBytes: sizeGiB * GIB,
-			type: sizeGiB > 0 ? "digital" : "physical",
-		});
+		const r = calculateFees(new Decimal(price), { type: sizeGiB > 0 ? "digital" : "physical" });
 		return {
 			label,
 			price: money(new Decimal(price)),
 			sizeGiB,
 			creatorReceives: money(r.creatorEarnings),
 			cardFee: money(r.processingFee),
-			delivery: money(r.deliveryFee),
 		};
 	});
 }
@@ -217,7 +199,7 @@ export const PURCHASE_EXAMPLES: {
 export function purchaseExamples(): PurchaseExample[] {
 	return PURCHASE_EXAMPLES.map(({ item, price, sizeGiB, sizeLabel }) => {
 		const list = new Decimal(price);
-		const r = calculateFees(list, { deliveryBytes: sizeGiB * GIB, type: "digital" });
+		const r = calculateFees(list, { type: "digital" });
 		const deduction = list.minus(r.creatorEarnings).dividedBy(list).times(100);
 		return {
 			label: item,
@@ -227,7 +209,6 @@ export function purchaseExamples(): PurchaseExample[] {
 			sizeGiB,
 			creatorReceives: money(r.creatorEarnings),
 			cardFee: money(r.processingFee),
-			delivery: money(r.deliveryFee),
 			// One decimal reads right for most rows; the sub-5% rows need two, or the
 			// large-game case rounds to a suspiciously round 4.7%.
 			deductionPct: `${deduction.toFixed(deduction.lessThan(5) ? 2 : 1)}%`,
@@ -243,11 +224,8 @@ export function purchaseExamples(): PurchaseExample[] {
  * bundles are an economic instrument here rather than a convenience.
  */
 export function cartSaving(unitPrice = 1, count = 5) {
-	const one = calculateFees(new Decimal(unitPrice), { deliveryBytes: 0, type: "digital" });
-	const together = calculateFees(new Decimal(unitPrice * count), {
-		deliveryBytes: 0,
-		type: "digital",
-	});
+	const one = calculateFees(new Decimal(unitPrice), { type: "digital" });
+	const together = calculateFees(new Decimal(unitPrice * count), { type: "digital" });
 	return {
 		count,
 		unitPrice: money(new Decimal(unitPrice)),
@@ -260,32 +238,34 @@ export function cartSaving(unitPrice = 1, count = 5) {
  * A mid-size creator's monthly earnings receipt.
  *
  * Gross earnings and library size are the two ASSUMPTIONS; everything below them is
- * derived. A creator's only platform-side cost is their own storage above the free
- * allowance, plus the storage charge on it — payouts carry no processing, because
- * Connect standard transfers are free.
+ * derived. Storage above the free allowance, plus the charge on it, is a creator's
+ * **only** platform-side cost — payouts carry no processing (Connect standard
+ * transfers are free) and delivery costs nothing at any volume.
+ *
+ * ⚠️ **The numbers come from `estimateStorageCost`, not from a second copy of its
+ * formula.** They used to be re-derived here, which was invisible while the rate was
+ * $0.02/GiB: 19 billable GiB landed on exact cents at every step, so rounding once or
+ * twice gave the same answer. R2's $0.0161 does not, and the receipt promptly stopped
+ * reconciling — the charge is half of the *rounded* storage cost, not the rounded half
+ * of the raw one. Same family as the five hand-rolled card-fee copies: a duplicated
+ * formula agrees with its original right up until a dial moves.
  */
 export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
 	const gross = new Decimal(grossEarnings);
 	const billableGiB = Math.max(0, libraryGiB - FREE_STORAGE_GIB);
-	const storage = new Decimal(billableGiB).times(STORAGE_PER_GIB_MONTH);
-	const storageCharge = storage.times(AFF_INFRA_RATE);
+	const { storageCost, storageAff } = estimateStorageCost({
+		storageBytes: libraryGiB * 1024 ** 3,
+	});
 	return {
 		libraryGiB,
 		freeGiB: FREE_STORAGE_GIB,
 		billableGiB,
 		gross: money(gross),
-		storage: money(storage),
-		storageCharge: money(storageCharge),
-		net: money(gross.minus(storage).minus(storageCharge)),
+		storage: money(storageCost),
+		storageCharge: money(storageAff),
+		net: money(gross.minus(storageCost).minus(storageAff)),
 	};
 }
-
-/**
- * What a free user costs the subsidy each month: their bandwidth at cost, plus the
- * Time Pool Anthers funds on their behalf so a free viewer still pays the creators
- * they watch. Streaming hours are the assumption.
- */
-export const FREE_USER_STREAM_HOURS = 8;
 
 /**
  * The paying-user mix behind the self-sufficiency table — what share of paying users
@@ -301,20 +281,32 @@ export const FIXED_MONTHLY_OVERHEAD = 12_600;
 /** The paying shares the table reports. */
 export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
 
-export function selfSufficiency() {
-	const freeUserCost = new Decimal(FREE_USER_STREAM_HOURS)
-		.times(DELIVERY_GIB_PER_HOUR)
-		.times(BANDWIDTH_PER_GIB)
-		.plus(FREE_TIME_POOL);
+/**
+ * What a free user costs each month.
+ *
+ * It used to be their streaming bandwidth at cost plus the subsidised Time Pool.
+ * With delivery free the bandwidth half is gone, so **a free account's whole cost to
+ * Anthers is the Time Pool it funds on their behalf** — the money that reaches the
+ * creators they watched. Watching more costs Anthers nothing extra, which is exactly
+ * what makes Public Access describable as free without qualification.
+ *
+ * Not literally zero beyond that: presigned HLS segments can't be edge-cached, so
+ * streaming carries ~600 Class B reads per watch-hour — about $0.0002/hr, against
+ * 10 million free reads a month. It rounds to nothing at any scale this model
+ * describes, and it is a platform line rather than a per-account one, so it is
+ * deliberately not charged to a user here. 42.02 carries the figures.
+ */
+export const freeUserCost = () => new Decimal(FREE_TIME_POOL);
 
-	// The remainder one paying user generates, weighted across the Badge mix. Each rung
-	// carries its own reference watch-hours, because bandwidth is what the remainder
-	// absorbs — a heavier streamer shrinks it while their creators are paid the same.
+export function selfSufficiency() {
+	const cost = freeUserCost();
+
+	// The remainder one paying user generates, weighted across the Badge mix. This no
+	// longer depends on how much anyone watches: bandwidth was the term the remainder
+	// absorbed, and it is gone, so each rung's remainder is now exact.
 	const revenuePerPayingUser = Object.entries(PAYING_BADGE_MIX).reduce((acc, [seeds, share]) => {
 		const n = Number(seeds);
-		const hours = REFERENCE_WATCH_HOURS[n] ?? 0;
 		const bd = anthersSeedBreakdown(n, {
-			bandwidthGiB: hours * DELIVERY_GIB_PER_HOUR,
 			// Seed COUNTS, not dollars — and the `anthers` side, because this user holds
 			// no directed Seeds and the remainder is what the Anthers side has left after
 			// its own share of the card fee. Taking `.creator` here reads as zero and
@@ -326,7 +318,7 @@ export function selfSufficiency() {
 
 	const rows = PAYING_SHARES.map((share) => {
 		const freePerPaying = new Decimal(1 - share).dividedBy(share);
-		const net = revenuePerPayingUser.minus(freePerPaying.times(freeUserCost));
+		const net = revenuePerPayingUser.minus(freePerPaying.times(cost));
 		return {
 			share,
 			sharePct: `${(share * 100).toFixed(0)}%`,
@@ -342,21 +334,16 @@ export function selfSufficiency() {
 	});
 
 	// Below this share each new cohort costs more in free access than it brings in, so
-	// growth makes the gap worse rather than better.
-	const breakEven = (cost: Decimal) => cost.dividedBy(revenuePerPayingUser.plus(cost));
-
-	// The same floor, if every free user drew their whole 15 GiB rather than the 8 hours
-	// above. This is the sensitivity that matters politically: the generosity of the free
-	// floor and the platform's self-sufficiency are the same dial, so the cost of raising
-	// it should be a derived number rather than a remembered one.
-	const fullFloorCost = new Decimal(FREE_FLOOR_GIB).times(BANDWIDTH_PER_GIB).plus(FREE_TIME_POOL);
+	// growth makes the gap worse rather than better. The sensitivity that used to sit
+	// beside it — the same floor if every free user drew their whole 15 GiB — is gone
+	// with the floor: free access no longer has a usage-dependent price, so there is
+	// no longer a version of this number that depends on how much free users watch.
+	const breakEven = cost.dividedBy(revenuePerPayingUser.plus(cost));
 
 	return {
-		freeUserCost: money(freeUserCost),
-		fullFloorCost: money(fullFloorCost),
+		freeUserCost: money(cost),
 		revenuePerPayingUser: money(revenuePerPayingUser),
-		breakEvenPct: `${breakEven(freeUserCost).times(100).toFixed(1)}%`,
-		breakEvenFullFloorPct: `${breakEven(fullFloorCost).times(100).toFixed(1)}%`,
+		breakEvenPct: `${breakEven.times(100).toFixed(1)}%`,
 		rows,
 	};
 }

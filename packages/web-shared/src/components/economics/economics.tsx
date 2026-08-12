@@ -5,16 +5,15 @@
 // hover-tooltip (i). All numbers derive from the support model (see
 // @anthers/shared/constants + fees): a Seed is a flat $3 ALL IN, pointed at a
 // creator (no platform cut) or at Anthers (an Anthers-Seed). Each Anthers-Seed
-// splits into your bandwidth (at cost, folded in) + Time Pool ($1.50) + the
-// at-cost Payments line (card 2.9%+$0.30) + the remainder funding free access and
-// the charitable programs. Sales tax
+// splits into Time Pool ($1.50) + the at-cost Payments line (card 2.9%+$0.30) +
+// the remainder funding free access and the charitable programs. There is no
+// bandwidth term — delivery costs $0 at any volume (retired 2026-08-12). Sales tax
 // (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
 // sole carve-out mandatory-fee disclosure law allows. Anthers keeps $0.
 
 import type { BrandIconName } from "@anthers/brand";
 import {
 	BADGE_ORDER,
-	BANDWIDTH_PER_GIB,
 	type BadgeKey,
 	badgeLabel,
 	cardFeeDisplay,
@@ -196,8 +195,9 @@ export function SubscriptionCalculator() {
 	const n = thresholdForBadge(badge);
 	const price = seedCost(n);
 	const timePool = timePoolFor(n);
-	// "Supports Anthers" bundles your bandwidth (at cost) + the remainder that funds
-	// free access and the charitable programs.
+	// "Supports Anthers" is the remainder — what funds free access and the charitable
+	// programs.
+
 	const supportsAnthers = n === 0 ? 0 : price - timePool - cardFeeDisplay(price);
 	const toCreators = n === 0 ? 0 : timePool;
 
@@ -257,7 +257,7 @@ export function SubscriptionCalculator() {
 							desc={
 								n === 0
 									? "free access for all is supported by paying users"
-									: "your bandwidth (at cost) + free access & charitable programs"
+									: "free access & charitable programs"
 							}
 							amount={supportsAnthers}
 						/>
@@ -305,8 +305,8 @@ export function SubscriptionCalculator() {
 				</p>
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
-				Bandwidth is folded in: every account streams a free floor each month, and each Seed adds
-				more — all at cost ({money(BANDWIDTH_PER_GIB)}/GiB), no wallet, no hidden fees.
+				Streaming and downloads cost nothing on top of this — no allowance, no wallet, no per-GiB
+				charge, and no limit on how many devices you use.
 			</p>
 		</div>
 	);
@@ -321,12 +321,11 @@ export function PurchaseExample({
 	price?: number;
 	sizeGiB?: number;
 }) {
-	// The list price IS the advertised price: card processing and the first download
-	// come out of it, and sales tax is the only thing added. Anthers keeps $0 — there
-	// is no platform fee on a purchase (removed 2026-08-03).
+	// The list price IS the advertised price: card processing comes out of it, and sales
+	// tax is the only thing added. Anthers keeps $0 — there is no platform fee on a
+	// purchase (removed 2026-08-03) and no delivery charge (removed 2026-08-12).
 	const card = cardFeeDisplay(price);
-	const delivery = sizeGiB * BANDWIDTH_PER_GIB; // $0.01/GiB, at cost
-	const creator = price - card - delivery;
+	const creator = price - card;
 	const tax = price * TAX_PCT;
 	const total = price + tax;
 
@@ -344,13 +343,6 @@ export function PurchaseExample({
 			amount: card,
 			bar: "bg-base-content/15",
 			dot: "bg-base-content/20",
-		},
-		{
-			label: "Delivery",
-			desc: "your first download, provided at cost",
-			amount: delivery,
-			bar: "bg-secondary",
-			dot: "bg-secondary",
 		},
 		{
 			label: "Sales tax",
@@ -395,7 +387,8 @@ export function PurchaseExample({
 			</div>
 			<p className="mt-4 text-xs text-base-content/45">
 				That's it — the price you see is the price you pay, and Anthers keeps none of it. Card
-				processing goes to the payment processor; delivery covers the bytes, at cost.
+				processing goes to the payment processor. Downloading it costs nothing, now or ever, on as
+				many devices as you like.
 			</p>
 		</div>
 	);

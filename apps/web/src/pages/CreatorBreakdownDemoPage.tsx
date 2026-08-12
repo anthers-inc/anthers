@@ -84,10 +84,15 @@ interface DemoCreatorBreakdown {
 const INFRA = {
 	/** Source bitrate assumption for all video content (Mbps). */
 	videoBitrateMbps: 30,
-	/** Object storage: $/GB/month */
-	storageCostPerGb: 0.02,
-	/** CDN delivery: $/GB */
-	deliveryCostPerGb: 0.01,
+	/** Object storage: $/GB/month (Cloudflare R2) */
+	storageCostPerGb: 0.015,
+	/**
+	 * CDN delivery: $/GB. **Zero, and not a placeholder** — R2 charges nothing for
+	 * egress at any volume. The residual delivery cost is per-request operations,
+	 * which is a platform line rather than a per-creator one and is far below the
+	 * resolution of this model. It was $0.01 (DigitalOcean Spaces) until 2026-08-12.
+	 */
+	deliveryCostPerGb: 0,
 	/** Multi-quality ladder storage multiplier (360p through source) */
 	qualityLadderMultiplier: 1.8,
 	/** Blended average viewer delivery rate (MB/min) across quality tiers */
@@ -145,7 +150,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		avatar: "DC",
 		contentType: "Long-form video essays",
 		description:
-			"High-bandwidth video essayist with a back-catalog of long-form content. This is the hardest case in our model — heavy streaming, large file sizes, high concurrent viewership. If the economics work here, they work everywhere.",
+			"High-bandwidth video essayist with a back-catalog of long-form content. This was the hardest case in our model — heavy streaming, large file sizes, high concurrent viewership. If the economics work here, they work everywhere.",
 		currentPlatform: "YouTube",
 		audienceStats: [
 			{ label: "Subscribers", value: "147,000" },
@@ -208,10 +213,10 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Seed income is load-bearing — directed Seeds account for over half of revenue at Sprout and above. With WebRTC peer-assisted delivery (30-60% bandwidth savings), infrastructure drops to ~$575/mo, widening the margin significantly.",
+			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Seed income is load-bearing — directed Seeds account for over half of revenue at Sprout and above. Serving ~106 TB a month used to cost ~$1,060 and now costs nothing at all, which is why the hardest case in the model is no longer a hard case.",
 		infraBreakdown: [
-			{ label: "CDN delivery (~106 TB)", cost: 1060 },
-			{ label: "Object storage (~133 GB)", cost: 2.66 },
+			{ label: "CDN delivery (~106 TB)", cost: 0 },
+			{ label: "Object storage (~133 GB)", cost: 2 },
 			{ label: "Compute (transcoding)", cost: 42 },
 		],
 		contentStats: [
@@ -290,10 +295,10 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Audio and text are incredibly cheap to serve. Sage's entire monthly infrastructure cost is under $50 — less than 0.5% of revenue. This means nearly every dollar from subscribers flows directly to income. Compared to Patreon's 8-12% fee + payment processing, Anthers saves over $1,200/mo at the same subscriber count.",
+			"Audio and text are almost free to serve, and delivery is now free outright. Sage's entire monthly infrastructure cost is under $25, all of it processing and storage — well under 0.5% of revenue, so nearly every dollar from subscribers flows directly to income. Compared to Patreon's 8-12% fee + payment processing, Anthers saves over $1,200/mo at the same subscriber count.",
 		infraBreakdown: [
-			{ label: "CDN delivery (~2.4 TB audio)", cost: 24 },
-			{ label: "Object storage (~18 GB)", cost: 0.36 },
+			{ label: "CDN delivery (~2.4 TB audio)", cost: 0 },
+			{ label: "Object storage (~18 GB)", cost: 0.27 },
 			{ label: "Compute (audio processing)", cost: 8 },
 			{ label: "Text/image hosting", cost: 15.64 },
 		],
@@ -373,10 +378,10 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Game developers benefit from both subscription income (devlog followers, OST listeners) and direct sales on the marketplace. Nova's infrastructure costs are minimal — downloads are one-time transfers, not continuous streaming. Combined with direct game sales, even a small subscriber base creates a sustainable income floor that smooths out the feast-or-famine cycle of launch-driven sales.",
+			"Game developers benefit from both subscription income (devlog followers, OST listeners) and direct sales on the marketplace. Nova's infrastructure costs are minimal — delivery is free, so what remains is storage and transcoding. Combined with direct game sales, even a small subscriber base creates a sustainable income floor that smooths out the feast-or-famine cycle of launch-driven sales.",
 		infraBreakdown: [
-			{ label: "CDN delivery (~120 GB)", cost: 1.2 },
-			{ label: "Object storage (~8 GB)", cost: 0.16 },
+			{ label: "CDN delivery (~120 GB)", cost: 0 },
+			{ label: "Object storage (~8 GB)", cost: 0.12 },
 			{ label: "Compute (video transcoding)", cost: 6 },
 			{ label: "Game file hosting", cost: 4.64 },
 		],
@@ -766,10 +771,9 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
 				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($1.50, distributed to
-				creators by watch-time), the user's own bandwidth (at cost, folded in), and a remainder that
-				funds free access and the charitable programs. Seeds given straight to a creator carry no
-				platform cut. "To creators" here is the Time Pool. {creator.displayName} earns their
-				watch-time share —{" "}
+				creators by watch-time) and a remainder that funds free access and the charitable programs.
+				Seeds given straight to a creator carry no platform cut. "To creators" here is the Time
+				Pool. {creator.displayName} earns their watch-time share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
 				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>
