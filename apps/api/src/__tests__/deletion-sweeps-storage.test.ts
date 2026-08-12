@@ -29,7 +29,14 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { purchases, sessions, users, verificationTokens, works } from "@anthers/db/schema";
+import {
+	poolDistributions,
+	purchases,
+	sessions,
+	users,
+	verificationTokens,
+	works,
+} from "@anthers/db/schema";
 import { eq, inArray, lt } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
@@ -39,13 +46,17 @@ import { insertWork } from "./work-fixtures.js";
 
 const SUFFIX = `del${Date.now().toString(36)}`;
 const created: number[] = [];
+// Per-call, because two fixtures in one suite otherwise collide on users_username_unique.
+let userSeq = 0;
 
 async function makeUser(name: string, extra: Record<string, unknown> = {}): Promise<number> {
+	userSeq += 1;
+	const tag = `${name}${userSeq}_${SUFFIX}`;
 	const [row] = await db
 		.insert(users)
 		.values({
-			username: `${name}_${SUFFIX}`,
-			email: `${name}_${SUFFIX}@example.test`,
+			username: tag,
+			email: `${tag}@example.test`,
 			passwordHash: "x",
 			emailVerified: true,
 			isCreator: true,
@@ -235,6 +246,75 @@ describe("expired credentials are actually deleted", () => {
 				.from(verificationTokens)
 				.where(lt(verificationTokens.expiresAt, new Date()));
 			expect(stragglers).toHaveLength(0);
+		},
+		DB_SETUP_TIMEOUT,
+	);
+});
+
+describe("the one record 51.05 says survives deletion, survives it", () => {
+	// 51.05: "One record survives that, and it is a payment record rather than a viewing
+	// one … a per-month total of how much time you spent with each creator you supported."
+	// Both FKs cascaded until 2026-08-12, so it did not survive either deletion — and the
+	// creator side was worse, because a creator leaving destroyed the records of everyone
+	// who had funded THEM. Nothing failed; the rows were simply gone.
+	async function seedDistribution(): Promise<{
+		subscriberId: number;
+		creatorId: number;
+		rowId: number;
+	}> {
+		const subscriberId = await makeUser("pdsub");
+		const creatorId = await makeUser("pdcre");
+		const [row] = await db
+			.insert(poolDistributions)
+			.values({
+				subscriberId,
+				creatorId,
+				billingCycle: "2026-08",
+				poolAmount: "1.50",
+				seedAmount: "0.00",
+				attentionSeconds: 3600,
+			})
+			.returning({ id: poolDistributions.id });
+		return { subscriberId, creatorId, rowId: row.id };
+	}
+
+	it(
+		"survives the SUBSCRIBER deleting, with the identity link severed",
+		async () => {
+			const { subscriberId, rowId } = await seedDistribution();
+			await eraseAccount(subscriberId);
+
+			const [row] = await db
+				.select()
+				.from(poolDistributions)
+				.where(eq(poolDistributions.id, rowId));
+			// The row, and the money on it, are still there.
+			expect(row, "the payment record was destroyed").toBeDefined();
+			expect({ pool: row?.poolAmount, seconds: row?.attentionSeconds }).toEqual({
+				pool: "1.50",
+				seconds: 3600,
+			});
+			// And the person is off it.
+			expect(row?.subscriberId).toBeNull();
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"survives the CREATOR deleting — a third party's record is not theirs to destroy",
+		async () => {
+			const { subscriberId, creatorId, rowId } = await seedDistribution();
+			await eraseAccount(creatorId);
+
+			const [row] = await db
+				.select()
+				.from(poolDistributions)
+				.where(eq(poolDistributions.id, rowId));
+			expect(row, "the funder's payment record was destroyed by someone else").toBeDefined();
+			expect(row?.creatorId).toBeNull();
+			// The funder is untouched — it is still THEIR record of what they paid.
+			expect(row?.subscriberId).toBe(subscriberId);
+			expect(row?.poolAmount).toBe("1.50");
 		},
 		DB_SETUP_TIMEOUT,
 	);

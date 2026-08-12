@@ -8,6 +8,18 @@
  * *doesn't* do.
  *
  * Works are game/text so nothing hits real media processing (no pg-boss).
+ *
+ * ⚠️ **This suite creates and releases Works from accounts that have never touched Stripe,
+ * and that is currently correct** — publishing is gated on a verified email and media
+ * readiness, never on payment verification. Say so here because it is load-bearing
+ * elsewhere: `/parents` describes what is and isn't enforced about who may publish, and
+ * until 2026-08-12 it claimed a payment-verification gate that has never existed.
+ *
+ * So if you build that gate, these tests will fail — and the fix is not to hand the
+ * fixtures a Connect account and move on. Update `apps/web/src/pages/ParentsPage.tsx` in
+ * the same change, along with 62.03, 40.09 and 51.07, which all rest on the same premise.
+ * A safety claim to parents and the code that does or doesn't back it have to move
+ * together, in both directions.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";

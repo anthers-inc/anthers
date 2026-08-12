@@ -222,12 +222,21 @@ export const poolDistributions = pgTable(
 	"pool_distributions",
 	{
 		id: serial("id").primaryKey(),
-		subscriberId: integer("subscriber_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+		// 🚨 BOTH are ON DELETE SET NULL, not cascade, and both are nullable — because this
+		// row is a **payment record**, not a viewing one. 51.05 names it as the one thing
+		// that survives account deletion ("a per-month total of how much time you spent
+		// with each creator you supported"), and until 2026-08-12 a cascade on both sides
+		// destroyed it. The creator side was the worse half: a creator closing their
+		// account erased the payout records of everyone who had funded them — third
+		// parties' financial records, deleted by someone else's action.
+		//
+		// Same shape as `purchases.buyer_id`: the person comes off the record, the record
+		// stays. Erasure runs to personal data, and is satisfied by severing the identity
+		// link rather than destroying the artifact.
+		subscriberId: integer("subscriber_id").references(() => users.id, {
+			onDelete: "set null",
+		}),
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
 		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-Seed share
