@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * The Access section's two OR-gated tables. A viewer gets access if EITHER table
- * allows them. Both default to "free but fully locked" (every row allow=false,
- * price "0"). A price of $0 with Allow checked = free at that level; a positive
- * price is a minimum (itch.io style — buyers may pay more).
+ * The Access section's table — the creator's own Seed ladder. It defaults to "free but
+ * fully locked" (every row allow=false, price "0"). A price of $0 with Allow checked =
+ * free at that level; a positive price is a minimum (itch.io style — buyers may pay more).
+ * The baseline row allowed at $0 is what makes a Work **Public Access**.
+ *
+ * A second table sat beside this until 2026-08-12, gating on the viewer's Anthers Badge,
+ * with access the OR across both. Anthers Gates are retired — they stratified the commons
+ * — so a Work is gated by its creator or it is Public Access, and there is one table.
  */
-import { ANTHERS_BADGES, badgeLabel } from "@anthers/shared/constants";
-import type { AnthersAccessRow, CreatorGate, SeedAccessRow } from "../../lib/types";
+import type { CreatorGate, SeedAccessRow } from "../../lib/types";
 
 // ─── Row drafts ───
 
 /**
- * One draft shape for both tables, because both stored rows are one shape: a whole-Seed
- * threshold, an allow flag, a price. `label` is display only — the threshold is what is
- * saved and what decides access, so renaming a Badge never moves a gate.
+ * A draft row: a whole-Seed threshold, an allow flag, a price. `label` is display only —
+ * the threshold is what is saved and what decides access, so renaming a rung never moves
+ * a gate.
  */
 export interface AccessRowDraft {
-	/** Whole Seeds required — Anthers-Seeds held, or Seeds given to this creator. */
+	/** Whole Seeds required — given to this Work's creator this cycle. 0 = everyone. */
 	threshold: number;
 	label: string;
 	allow: boolean;
@@ -24,13 +27,6 @@ export interface AccessRowDraft {
 }
 
 export type SeedRowDraft = AccessRowDraft;
-export type AnthersRowDraft = AccessRowDraft;
-
-/** The Anthers ladder as editable rows: everyone, then each Anthers Badge at its level. */
-const ANTHERS_LEVELS: { threshold: number; label: string }[] = [
-	{ threshold: 0, label: "Everyone" },
-	...ANTHERS_BADGES.map((b) => ({ threshold: b.threshold, label: badgeLabel(b.name) })),
-];
 
 /** Coerce a user-entered price to a valid money string ("0" when blank/invalid). */
 export function normalizeMoney(v: string): string {
@@ -71,17 +67,7 @@ export function buildSeedRows(
 	return rows;
 }
 
-/** Anthers rows = everyone plus each Badge level, hydrated from an existing table if present. */
-export function buildAnthersRows(existing?: AnthersAccessRow[] | null): AnthersRowDraft[] {
-	const byThreshold = new Map<number, AnthersAccessRow>();
-	for (const r of existing ?? []) byThreshold.set(r.threshold, r);
-	return ANTHERS_LEVELS.map(({ threshold, label }) => {
-		const ex = byThreshold.get(threshold);
-		return { threshold, label, allow: ex?.allow ?? false, price: ex?.price ?? "0" };
-	});
-}
-
-/** Both tables serialize identically — the label is editor-only and never stored. */
+/** The label is editor-only and never stored. */
 function serializeRows(rows: AccessRowDraft[]): AccessRowDraft[] {
 	return rows.map((r) => ({
 		threshold: r.threshold,
@@ -94,35 +80,23 @@ export function serializeSeedRows(rows: SeedRowDraft[]): SeedAccessRow[] {
 	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
 }
 
-export function serializeAnthersRows(rows: AnthersRowDraft[]): AnthersAccessRow[] {
-	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
-}
-
 // ─── Component ───
 
 interface AccessTablesProps {
 	seedRows: SeedRowDraft[];
-	anthersRows: AnthersRowDraft[];
 	onSeedChange: (rows: SeedRowDraft[]) => void;
-	onAnthersChange: (rows: AnthersRowDraft[]) => void;
 }
 
-export default function AccessTables({
-	seedRows,
-	anthersRows,
-	onSeedChange,
-	onAnthersChange,
-}: AccessTablesProps) {
+export default function AccessTables({ seedRows, onSeedChange }: AccessTablesProps) {
 	const patchSeed = (index: number, changes: Partial<SeedRowDraft>) =>
 		onSeedChange(seedRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
-	const patchAnthers = (index: number, changes: Partial<AnthersRowDraft>) =>
-		onAnthersChange(anthersRows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 
 	return (
 		<div className="flex flex-col gap-6">
 			<p className="text-xs text-base-content/60">
-				Access is granted if <strong>either</strong> table allows the viewer. A price of $0 with
-				Allow checked is free at that level; a positive price is a minimum — buyers may pay more.
+				A price of $0 with Allow checked is free at that level; a positive price is a minimum —
+				buyers may pay more. Leaving <strong>Everyone</strong> allowed at $0 on a streaming Work is
+				what makes it <strong>Public Access</strong>: free to all, with nothing to clear.
 			</p>
 
 			{/* Seed Access */}
@@ -176,47 +150,6 @@ export default function AccessTables({
 						Add Seed rungs in Settings → Seed Ladder to gate by Seeds given.
 					</p>
 				)}
-			</div>
-
-			{/* Anthers Access */}
-			<div>
-				<h3 className="font-semibold text-sm mb-2">Anthers Access</h3>
-				<div className="overflow-x-auto">
-					<table className="table table-sm">
-						<thead>
-							<tr>
-								<th>Badge</th>
-								<th className="w-20 text-center">Allow</th>
-								<th className="w-32">Price ($)</th>
-							</tr>
-						</thead>
-						<tbody>
-							{anthersRows.map((row, i) => (
-								<tr key={row.threshold}>
-									<td className="font-medium">{row.label}</td>
-									<td className="text-center">
-										<input
-											type="checkbox"
-											className="checkbox checkbox-sm checkbox-primary"
-											checked={row.allow}
-											onChange={(e) => patchAnthers(i, { allow: e.target.checked })}
-										/>
-									</td>
-									<td>
-										<input
-											type="number"
-											className="input input-bordered input-sm w-full"
-											value={row.price}
-											min="0"
-											step="0.01"
-											onChange={(e) => patchAnthers(i, { price: e.target.value })}
-										/>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
 			</div>
 		</div>
 	);

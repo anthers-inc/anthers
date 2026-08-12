@@ -62,7 +62,6 @@ export interface AccessRow {
 	price: string; // money string; "0" = free when allowed
 }
 
-export type AnthersAccessRow = AccessRow;
 export type SeedAccessRow = AccessRow;
 
 /**
@@ -203,7 +202,6 @@ export interface Work {
 	// Delivery & access (creator-facing tables; viewers get the resolved `access`).
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	anthersAccess?: AnthersAccessRow[] | null;
 	seedAccess?: SeedAccessRow[] | null;
 	access?: AccessResult;
 
@@ -250,7 +248,6 @@ export interface WorkInput {
 	authoredPrecision?: AuthoredPrecision | null;
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	anthersAccess?: AnthersAccessRow[];
 	seedAccess?: SeedAccessRow[];
 	isPinned?: boolean;
 	tags?: string[];
@@ -592,7 +589,7 @@ export interface ContentAccessResponse {
 export interface CreatorGate {
 	id: number;
 	creatorId: number;
-	gateType: "seed" | "anthers_badge";
+	gateType: "seed";
 	threshold: string;
 	label: string;
 	description: string | null;

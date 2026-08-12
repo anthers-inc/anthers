@@ -212,7 +212,6 @@ function BadgesTab({
 	canGiveSeeds: boolean;
 	onGiven: () => void | Promise<void>;
 }) {
-	const anthersBadgeGates = gates.filter((g) => g.gateType === "anthers_badge");
 	const seedGates = gates.filter((g) => g.gateType === "seed");
 	const unlockedSet = new Set(unlockedGates);
 
@@ -242,57 +241,6 @@ function BadgesTab({
 								)}
 							</div>
 						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Anthers Badges */}
-			{anthersBadgeGates.length > 0 && (
-				<div>
-					<h3 className="text-lg font-bold mb-1">Anthers Badges</h3>
-					<p className="text-sm text-base-content/50 mb-3">
-						Platform-wide access, unlocked by the Anthers Badge you hold.
-					</p>
-					<div className="space-y-2">
-						{anthersBadgeGates.map((gate) => {
-							const unlocked = unlockedSet.has(gate.id);
-							const gateBadge = anthersBadgeForRank(Number(gate.threshold));
-							const gateBadgeView = gateBadge
-								? { price: seedCost(thresholdForBadge(gateBadge)) }
-								: null;
-							return (
-								<div
-									key={gate.id}
-									className={`card border ${unlocked ? "border-success/40 bg-success/5" : "border-base-content/10 bg-base-200"}`}
-								>
-									<div className="card-body p-4">
-										<div className="flex items-center justify-between">
-											<div className="flex items-center gap-2">
-												{unlocked ? (
-													<CheckCircleIcon className="w-5 h-5 text-success flex-shrink-0" />
-												) : (
-													<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
-												)}
-												<div>
-													<span className="font-medium">
-														{gateBadge ? badgeLabel(gateBadge) : gate.label}
-													</span>
-													{gateBadgeView && (
-														<span className="text-base-content/40 ml-2 text-sm">
-															${gateBadgeView.price}/mo
-														</span>
-													)}
-												</div>
-											</div>
-											{unlocked && <span className="badge badge-sm badge-success">Unlocked</span>}
-										</div>
-										{gate.description && (
-											<p className="text-sm text-base-content/60 mt-1 ml-7">{gate.description}</p>
-										)}
-									</div>
-								</div>
-							);
-						})}
 					</div>
 				</div>
 			)}

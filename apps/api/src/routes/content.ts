@@ -71,7 +71,6 @@ import { requireAuth } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
 	buildAccessContext,
-	defaultAnthersAccess,
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
@@ -291,7 +290,6 @@ const accessRowSchema = z.object({
 	price: z.string().regex(MONEY),
 });
 
-const anthersAccessRowSchema = accessRowSchema;
 const seedAccessRowSchema = accessRowSchema;
 
 /**
@@ -335,8 +333,7 @@ const workBaseSchema = z
 		streamEnabled: z.boolean().optional(),
 		downloadEnabled: z.boolean().optional(),
 
-		// Access tables (default "free but fully locked" applied server-side when omitted)
-		anthersAccess: z.array(anthersAccessRowSchema).optional(),
+		// Access table (default "free but fully locked" applied server-side when omitted)
 		seedAccess: z.array(seedAccessRowSchema).optional(),
 
 		// Presentation & metadata
@@ -573,7 +570,6 @@ function serializeWork(
 		authoredPrecision: item.authoredPrecision,
 		streamEnabled: item.streamEnabled,
 		downloadEnabled: item.downloadEnabled,
-		anthersAccess: item.anthersAccess,
 		seedAccess: item.seedAccess,
 		isPinned: item.isPinned,
 		tags: item.tags,
@@ -1901,7 +1897,6 @@ const contentRoutes = new Hono()
 				authoredPrecision: data.authoredPrecision ?? null,
 				streamEnabled: data.streamEnabled ?? true,
 				downloadEnabled: data.downloadEnabled ?? false,
-				anthersAccess: data.anthersAccess ?? defaultAnthersAccess(),
 				seedAccess: data.seedAccess ?? defaultSeedAccess(),
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
@@ -2098,7 +2093,7 @@ const contentRoutes = new Hono()
 				and(
 					eq(works.visibility, "released"),
 					eq(works.streamEnabled, true),
-					or(openToEveryone(works.anthersAccess), openToEveryone(works.seedAccess)),
+					openToEveryone(works.seedAccess),
 					notBlockedBy(viewerId, works.creatorId),
 				),
 			)
@@ -2237,7 +2232,6 @@ const contentRoutes = new Hono()
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
 		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
-		if (data.anthersAccess !== undefined) updates.anthersAccess = data.anthersAccess;
 		if (data.seedAccess !== undefined) updates.seedAccess = data.seedAccess;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -2475,18 +2469,18 @@ const contentRoutes = new Hono()
 			WHERE pi.project_id = ${projects.id} AND w.visibility = 'released' AND (${predicate})
 		)`;
 
-		/** Both access tables share one row shape, so one scan over their concatenation. */
+		/** Any allowed row on the Work's access table. (There were two tables to concatenate
+		 * here until Anthers Gates were retired on 2026-08-12.) */
 		const anyAccessRow = (predicate: SQL) => sql`EXISTS (
-			SELECT 1 FROM jsonb_array_elements(
-				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
-			) r WHERE (r->>'allow')::boolean AND (${predicate})
+			SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			WHERE (r->>'allow')::boolean AND (${predicate})
 		)`;
 
 		/** The cheapest allowed offer on a Work, for the price-range filter. */
 		const cheapestPrice = sql`(
-			SELECT MIN((r->>'price')::numeric) FROM jsonb_array_elements(
-				COALESCE(w.anthers_access, '[]'::jsonb) || COALESCE(w.seed_access, '[]'::jsonb)
-			) r WHERE (r->>'allow')::boolean
+			SELECT MIN((r->>'price')::numeric)
+			FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
+			WHERE (r->>'allow')::boolean
 		)`;
 
 		const conditions: SQL[] = [];
@@ -2556,11 +2550,6 @@ const contentRoutes = new Hono()
 					containsWork(sql`(
 						${viewerId} = w.creator_id
 						OR w.id = ANY(${sql.raw(`ARRAY[${purchased.length ? purchased.join(",") : ""}]::int[]`)})
-						OR EXISTS (
-							SELECT 1 FROM jsonb_array_elements(COALESCE(w.anthers_access, '[]'::jsonb)) r
-							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
-								AND (r->>'threshold')::int <= ${ctx.anthersSeeds}
-						)
 						OR EXISTS (
 							SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
 							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0

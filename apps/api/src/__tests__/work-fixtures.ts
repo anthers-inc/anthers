@@ -14,7 +14,7 @@
  * staging is the thing being tested.
  */
 import { db } from "@anthers/db/client";
-import type { AnthersAccessRow, SeedAccessRow } from "@anthers/db/schema";
+import type { SeedAccessRow } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
 
 let seq = 0;
@@ -39,7 +39,6 @@ export interface WorkFixture {
 	visibility?: "private" | "released";
 	streamEnabled?: boolean;
 	downloadEnabled?: boolean;
-	anthersAccess?: AnthersAccessRow[];
 	seedAccess?: SeedAccessRow[];
 	authoredAt?: Date | null;
 	authoredPrecision?: "year" | "month" | "day" | null;
@@ -69,7 +68,6 @@ export async function insertWork(fixture: WorkFixture) {
 			releasedAt: visibility === "released" ? new Date() : null,
 			streamEnabled: fixture.streamEnabled ?? true,
 			downloadEnabled: fixture.downloadEnabled ?? false,
-			anthersAccess: fixture.anthersAccess ?? [],
 			seedAccess: fixture.seedAccess ?? [],
 			authoredAt: fixture.authoredAt ?? null,
 			authoredPrecision: fixture.authoredPrecision ?? null,

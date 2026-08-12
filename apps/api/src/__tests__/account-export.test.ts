@@ -101,7 +101,7 @@ beforeAll(async () => {
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: subject },
 		body: JSON.stringify({
 			visibility: "released",
-			anthersAccess: [{ threshold: 0, allow: true, price: "0" }],
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 		}),
 	});
 	expect(release.status).toBe(200);
