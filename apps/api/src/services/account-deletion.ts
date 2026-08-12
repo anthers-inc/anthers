@@ -53,6 +53,7 @@
 import { db } from "@anthers/db/client";
 import { comments, posts, purchases, ratings, sessions, users, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
 
 /**
@@ -201,7 +202,11 @@ export async function cancelDeletion(userId: number): Promise<{ cancelled: boole
  * ask which of this creator's Works somebody bought.
  */
 export async function eraseAccount(userId: number): Promise<{ erased: boolean }> {
-	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+	const [user] = await db
+		.select({ id: users.id, avatar: users.avatar, headerImage: users.headerImage })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
 	if (!user) return { erased: false };
 
 	const workIds = (
@@ -210,6 +215,19 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 
 	const purchasedWorkIds = await purchasedAmong(workIds);
 	const unpurchased = workIds.filter((id) => !purchasedWorkIds.includes(id));
+
+	// Enumerated BEFORE the wipe, for the same reason the buyer list is: this reads
+	// `works`, `assets` and `transcoding_jobs`, and the transaction is about to delete
+	// them — run it after and it finds nothing and silently sweeps nothing, which is
+	// exactly the failure this closes (until 2026-08-12 account deletion made no
+	// object-storage calls at all, so a deleted profile's avatar stayed publicly
+	// downloadable forever).
+	//
+	// 🚨 ONLY the unpurchased Works. A purchased one is *withdrawn*, not destroyed —
+	// the buyer still downloads it, and `resolveAccess` reads purchases rather than
+	// visibility, so sweeping its media would break an entitlement we promise survives
+	// the creator leaving.
+	const mediaToSweep = addUserImages(await collectWorkMedia(unpurchased), user);
 
 	// Collected BEFORE the wipe: `purchases.buyer_id` survives, but the Work rows and
 	// the join back to them are about to change under us, and a buyer we failed to
@@ -292,6 +310,13 @@ export async function eraseAccount(userId: number): Promise<{ erased: boolean }>
 			})),
 		);
 	}
+
+	// Swept AFTER the transaction commits, and deliberately not inside it: destroying a
+	// creator's media for a deletion that then rolled back is unrecoverable, while a crash
+	// between commit and sweep merely strands objects a later pass can find. Same trade the
+	// notification above makes, for the same reason — prefer losing the side effect to
+	// performing one the database never agreed to.
+	await sweepCollected(mediaToSweep);
 
 	return { erased: true };
 }

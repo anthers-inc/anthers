@@ -7,9 +7,13 @@
  * to a Work are kept only until their billing cycle has settled and the card-dispute
  * window has closed, after which they are *"aggregated into per-Work and per-creator
  * totals and the per-person records are deleted"* — so that a complete history of
- * what someone personally watched **stops existing**. Cleanup paths already existed
- * for sessions, verification tokens and desktop auth requests; the behavioural log,
- * which is by far the most sensitive of the four, had none and accumulated forever.
+ * what someone personally watched **stops existing**. 🚨 **This docstring used to say
+ * cleanup paths already existed for sessions, verification tokens and desktop auth
+ * requests. Two of those three were false** — `deleteExpiredSessions()` and
+ * `deleteExpiredTokens()` were exported and called from nowhere until 2026-08-12, when
+ * they were scheduled as `QUEUES.PRUNE_CREDENTIALS`. Only `cleanupDesktopAuthRequests()`
+ * ever actually ran. The behavioural log, which is by far the most sensitive of the four,
+ * had none either and accumulated forever.
  *
  * Three properties this has to hold, in order of how badly they break:
  *

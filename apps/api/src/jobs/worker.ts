@@ -10,6 +10,7 @@ import { db } from "@anthers/db";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runDueDeletions } from "../services/account-deletion.js";
+import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
@@ -134,6 +135,20 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[run-deletions] Processing job ${job.id}`);
 			await runDueDeletions();
+		}
+	});
+
+	await queue.work(QUEUES.PRUNE_CREDENTIALS, async (jobs) => {
+		for (const job of jobs) {
+			const [sessionsGone, tokensGone] = await Promise.all([
+				deleteExpiredSessions(),
+				deleteExpiredTokens(),
+			]);
+			if (sessionsGone > 0 || tokensGone > 0) {
+				console.log(
+					`[prune-credentials] job ${job.id}: removed ${sessionsGone} expired session(s), ${tokensGone} expired token(s)`,
+				);
+			}
 		}
 	});
 

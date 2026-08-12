@@ -77,6 +77,7 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
 import { loadPublicAccessBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
@@ -601,62 +602,7 @@ function serializeWork(
  * every URL written afterwards while leaving older rows working.
  * `__tests__/storage-url-roundtrip.test.ts` is the thing that notices.
  */
-export function urlToKey(urlOrKey: string): string {
-	let path = urlOrKey;
-	if (/^(https?:)?\/\//.test(urlOrKey)) {
-		try {
-			path = decodeURIComponent(new URL(urlOrKey).pathname);
-		} catch {
-			path = urlOrKey;
-		}
-	}
-	path = path.replace(/^\/+/, "");
-	if (path.startsWith("content/")) path = path.slice("content/".length);
-	return path;
-}
-
-/**
- * Best-effort purge of a content item's stored media before the row (and its cascaded
- * assets/transcodes/post-refs) are deleted: the source, thumbnail, every asset file, each
- * completed video transcode's HLS output prefix, and any processed-audio output. Failures
- * are logged and swallowed so a storage hiccup never blocks the DB delete.
- */
-async function purgeWorkMedia(
-	item: WorkRow,
-	workAssets: AssetRow[],
-	jobRows: TranscodingJobRow[],
-): Promise<void> {
-	const keys = new Set<string>();
-	const prefixes = new Set<string>();
-
-	if (item.sourceKey) keys.add(urlToKey(item.sourceKey));
-	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
-	for (const a of workAssets) if (a.file) keys.add(urlToKey(a.file));
-	for (const job of jobRows) {
-		if (job.hlsManifestUrl) {
-			const masterKey = urlToKey(job.hlsManifestUrl);
-			const prefix = masterKey.replace(/\/[^/]+$/, "");
-			if (prefix && prefix !== masterKey) prefixes.add(prefix);
-		}
-		if (job.outputFileUrl) keys.add(urlToKey(job.outputFileUrl));
-	}
-
-	for (const prefix of prefixes) {
-		try {
-			await storage.deletePrefix(prefix);
-		} catch (err) {
-			console.error(`[work delete] deletePrefix failed for ${prefix}:`, err);
-		}
-	}
-	for (const key of keys) {
-		if (!key) continue;
-		try {
-			await storage.delete(key);
-		} catch (err) {
-			console.error(`[work delete] delete failed for ${key}:`, err);
-		}
-	}
-}
+export { urlToKey };
 
 // ─── Publish / edit / delete helpers ────────────────────────────────────────────
 

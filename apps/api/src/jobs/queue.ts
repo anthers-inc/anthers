@@ -167,6 +167,12 @@ export const QUEUES = {
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
+	// Delete expired sessions and verification tokens. 51.05 promises "Sessions: deleted
+	// when they expire"; until 2026-08-12 `deleteExpiredSessions()` and
+	// `deleteExpiredTokens()` were exported and called from NOWHERE, so every session row
+	// ever written — with its `ip_address` and `user_agent` — was filtered out of reads
+	// and kept forever. A retention promise with no mechanism behind it.
+	PRUNE_CREDENTIALS: "prune-credentials",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -244,6 +250,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// than privacy. The retention window is months wide, so the ordering has enormous
 	// slack — it is stated here so a future reschedule has to notice the dependency.
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
+	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
+	// reader the moment it expires, so this only reclaims the row and the IP on it.
+	[QUEUES.PRUNE_CREDENTIALS, "30 3 * * *"],
 	// 4 AM daily. Hourly would honour the grace period more precisely, but the window
 	// is a week — a few hours' latency on the far end of it is not something a user can
 	// perceive, and a wipe that runs once a day is a wipe you can reason about.
