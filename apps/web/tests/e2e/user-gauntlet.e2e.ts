@@ -565,3 +565,83 @@ test("the ladders only ever climbed — no state unlocked less than the one befo
 		previous = unlocked;
 	}
 });
+
+// ── The meter rung: the free-limit moment ────────────────────────────────────
+//
+// 🚨 This lives inside the gauntlet walk rather than in an `.authed` spec of its own,
+// and the reason is `fullyParallel: true`. These assertions have to move the viewer's
+// Anthers-Seed count and rewrite their attention events — shared fixture state the
+// staircase above depends on — so a parallel file would race the walk and fail somewhere
+// unrelated. The serial walk already owns this viewer, so it owns this too, and it runs
+// last where disturbing the ladder costs nothing.
+//
+// What is being guarded is specific: **the meter regressing to silence.** Every part of
+// it can break without erroring — a countdown that never renders, a wall that never
+// replaces the player, a limit that stops applying — and none of that fails a test that
+// only checks the page loads. The failure mode is a working feature that says nothing,
+// which is exactly the state this whole surface was built to end.
+test("the meter — a free viewer is warned before the limit, not after", async ({ page }) => {
+	const errors = trackErrorsStrict(page, ALLOWED);
+
+	// Down to Free, and 9½ hours spent. `--watched-minutes` writes real `attention_events`
+	// rows stamped as Public Access, which is what the budget is derived from — there is
+	// no stored total to fake.
+	hop("--anthers-seeds", "0", "--watched-minutes", "570");
+
+	await page.goto(`/works/${gauntletPost("G1").slug}`);
+
+	// Half an hour left, so the countdown speaks — and says the remainder, because "you
+	// are near the end" without a number is not information.
+	await expect(page.getByText(/30 minutes.*Public Access left this month/i)).toBeVisible();
+	// The pitch, with the multiplier that must never be typed into copy.
+	await expect(page.getByText(/6× more/)).toBeVisible();
+
+	// And the player is still there — a warning is not a wall.
+	await expect(page.locator("video")).toBeVisible();
+
+	expect(errors).toEqual([]);
+});
+
+test("the meter — spent, the player gives way to an explanation", async ({ page }) => {
+	const errors = trackErrorsStrict(page, ALLOWED);
+
+	hop("--watched-minutes", "600");
+	await page.goto(`/works/${gauntletPost("G1").slug}`);
+
+	await expect(
+		page.getByRole("heading", { name: /that's your 10 hours for this month/i }),
+	).toBeVisible();
+	// 🚨 The wall replaces the player. If the video element survives, the limit is
+	// decorative — the bytes are still being served and the message is a sticker.
+	await expect(page.locator("video")).toHaveCount(0);
+
+	// It must not read as locked content. The Work is free to everyone and stays free to
+	// everyone; what ran out belongs to the viewer, and saying it the other way round is
+	// how the commons quietly reads as stratified again.
+	await expect(page.getByText(/this work stays free to everyone/i)).toBeVisible();
+	await expect(page.getByText(/\block(ed)?\b/i)).toHaveCount(0);
+
+	expect(errors).toEqual([]);
+});
+
+test("the meter — one Seed removes it, and nothing above the first buys more", async ({ page }) => {
+	const errors = trackErrorsStrict(page, ALLOWED);
+
+	// Same 10 hours spent; the only change is holding a Seed.
+	hop("--anthers-seeds", "1");
+	await page.goto(`/works/${gauntletPost("G1").slug}`);
+
+	await expect(page.locator("video")).toBeVisible();
+	await expect(page.getByRole("heading", { name: /that's your 10 hours/i })).toHaveCount(0);
+	// Nothing counts down for a Seed-holder either: there is no limit to count toward,
+	// and showing one would state a restriction that does not exist.
+	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
+
+	// The model's central claim about access — binary, and whole at the first Seed.
+	hop("--anthers-seeds", "4");
+	await page.goto(`/works/${gauntletPost("G1").slug}`);
+	await expect(page.locator("video")).toBeVisible();
+	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
+
+	expect(errors).toEqual([]);
+});

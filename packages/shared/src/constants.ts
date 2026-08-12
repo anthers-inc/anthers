@@ -262,6 +262,35 @@ export function timePoolFor(anthersSeeds: number): number {
 	return anthersSeeds <= 0 ? FREE_TIME_POOL : TIME_POOL_PER_SEED * anthersSeeds;
 }
 
+/**
+ * How much more a creator earns from an hour of your attention once you hold a Seed.
+ *
+ * 🚨 **This is the free-limit prompt's headline number and it must never be typed into
+ * copy.** 21.01 §9.4 reads *"every creator you spend time with is also paid six times
+ * more for your attention"* — and that six is not a fact about the world, it is
+ * `1.50 / 0.25`, a ratio between two dials. **`FREE_TIME_POOL` is explicitly provisional
+ * and expected to move** (see its own note), so a typed "six" becomes a lie on the day
+ * someone tunes it, silently, in the one piece of copy the platform's entire conversion
+ * argument rests on. Same reasoning as the generated econ figures: a published number
+ * with a formula behind it is generated, never transcribed.
+ *
+ * Not in `figures.generated.ts` because that file is money *tables* built by a script;
+ * this is a one-line derivation and belongs beside the dials it divides.
+ */
+export const FREE_TIME_POOL_MULTIPLE = TIME_POOL_PER_SEED / FREE_TIME_POOL;
+
+/**
+ * Render a multiple for copy — `6×`, or `3.8×` when the dials stop dividing evenly.
+ *
+ * The current dials give a whole 6, which makes it tempting to assume one. They are not
+ * required to: moving `FREE_TIME_POOL` to $0.40 gives 3.75. Rounding that to "4×" would
+ * overstate what a Seed buys, and printing `3.75×` reads like a spreadsheet, so it goes
+ * to one decimal and keeps the trailing digit only when there is one.
+ */
+export function formatMultiple(n: number): string {
+	return `${Number.isInteger(n) ? n : n.toFixed(1)}×`;
+}
+
 // ── Storage charge rate (creator storage only) ───────────────────────────────
 /**
  * Half again on a creator's storage cost above the free allowance. This is a

@@ -26,8 +26,9 @@
 // ⚠️ PROPOSAL vs. SHIPPED. Public Access is a proposal — the working plan is the vault's
 // `90-99 Agents/Transient/Public Access Model Revamp 20260811`, and where this disagrees
 // with the wiki the wiki is still right. Everything drawn from `@anthers/shared/constants`
-// is real and charged against; the two proposed figures are quarantined in the named SPIKE
-// block below so nothing invented can hide inside the copy.
+// is real and charged against. The two figures that used to be quarantined here as a
+// SPIKE — the free watch-hours and the free-account Time Pool — are both real constants
+// as of 2026-08-12 and are now read rather than typed.
 //
 // What is wired to real data, and what is not:
 //   • The reel is REAL — `GET /api/content/open-works` returns released, streamable Works
@@ -47,7 +48,13 @@
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
 
-import { cardFeeDisplay, SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
+import {
+	cardFeeDisplay,
+	FREE_TIME_POOL,
+	SEED_PRICE,
+	TIME_POOL_PER_SEED,
+} from "@anthers/shared/constants";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
@@ -60,20 +67,15 @@ import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
 
-/* ── SPIKE dials — PROPOSED, not in @anthers/shared/constants yet ─────────────
- * Kept in one named block so a reader can see at a glance which figures on this page have
- * no code behind them. Both are settled in the working plan and neither has propagated:
- * moving them here is a copy change, moving them into `constants.ts` is a model change
- * that has to travel with `econ:figures`.
+/* ── Free-tier figures ────────────────────────────────────────────────────────
+ * Both of these were quarantined in a named `SPIKE` block until 2026-08-12, because
+ * Public Access was a proposal and neither number had code behind it. Both are real
+ * now and are read from the modules that own them, so this page cannot drift from the
+ * meter that enforces the hours or the ledger that funds the pool.
  *
- * FREE_PA_HOURS — how much Public Access a free account reaches each month.
- * FREE_TP_PER_ACCOUNT — what Anthers puts into the Time Pool for a free account, split
- *   among creators by attention-proportion exactly as a paying account's is.
+ * 🚨 `FREE_TIME_POOL` in particular is **explicitly provisional** and expected to move —
+ * which is exactly why it must not be transcribed here. See its note in `constants.ts`.
  */
-const SPIKE = {
-	FREE_PA_HOURS: 10,
-	FREE_TP_PER_ACCOUNT: 0.5,
-} as const;
 
 /** Where a Seed given to Anthers goes, at the single-Seed worst case. */
 const ANTHERS_PAYMENTS = cardFeeDisplay(SEED_PRICE);
@@ -955,7 +957,7 @@ export default function SubscribePage() {
 			{
 				key: null,
 				label: "Free account",
-				sub: `${SPIKE.FREE_PA_HOURS} hours of Public Access a month`,
+				sub: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
 				amount: 0,
 			},
 			...anthersLines,
@@ -1165,9 +1167,10 @@ export default function SubscribePage() {
 								Anthers is free. Forever.
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-								Every month you get <strong>{SPIKE.FREE_PA_HOURS} hours of Public Access</strong> —
-								the streaming work creators leave open to everyone. Follow whoever you like, keep a
-								library, and buy anything a creator sells.
+								Every month you get{" "}
+								<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access</strong> — the streaming
+								work creators leave open to everyone. Follow whoever you like, keep a library, and
+								buy anything a creator sells.
 							</p>
 						</div>
 						<OpenWorksReel />
@@ -1236,7 +1239,7 @@ export default function SubscribePage() {
 							title="Add a Seed for Anthers?"
 							value={picks.anthers}
 							yesLabel={`Yes — ${money(SEED_PRICE)} a month`}
-							noLabel={`The free ${SPIKE.FREE_PA_HOURS} hours suit me`}
+							noLabel={`The free ${FREE_PUBLIC_ACCESS_HOURS} hours suit me`}
 							onChange={(v) => setPicks((prev) => ({ ...prev, anthers: v }))}
 						>
 							You can change it any month, and your free account stays yours either way.
@@ -1246,7 +1249,7 @@ export default function SubscribePage() {
 							onDrop={dropPick}
 							empty={
 								picks.anthers === false
-									? `Staying free — ${SPIKE.FREE_PA_HOURS} hours of Public Access a month.`
+									? `Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`
 									: "Nothing added here yet."
 							}
 						/>
@@ -1307,8 +1310,8 @@ export default function SubscribePage() {
 						</p>
 						<Summary {...summaryProps} />
 						<p className="mx-auto mt-5 max-w-xl text-center text-xs leading-relaxed text-base-content/45">
-							Anthers puts {money(SPIKE.FREE_TP_PER_ACCOUNT)} a month into the Time Pool for every
-							free account, so your watching pays creators even at $0.
+							Anthers puts {money(FREE_TIME_POOL)} a month into the Time Pool for every free
+							account, so your watching pays creators even at $0.
 						</p>
 					</Reveal>
 
