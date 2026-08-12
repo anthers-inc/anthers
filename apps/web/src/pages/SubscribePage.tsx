@@ -51,10 +51,11 @@ import { cardFeeDisplay, SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { Link } from "@anthers/web-shared/router";
+import { Link, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
@@ -705,6 +706,8 @@ function Summary({
 	note,
 	error,
 	success,
+	email,
+	onEmailChange,
 	onSubmit,
 	onDrop,
 }: {
@@ -715,6 +718,9 @@ function Summary({
 	note: string;
 	error: string | null;
 	success: string | null;
+	/** Null when signed in — there is no address to ask a returning user for. */
+	email: string | null;
+	onEmailChange: (value: string) => void;
 	onSubmit: () => void;
 	onDrop: (key: string) => void;
 }) {
@@ -752,14 +758,52 @@ function Summary({
 			{total > 0 && (
 				<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
 			)}
-			<button
-				type="button"
-				className={`btn btn-primary btn-lg mt-5 w-full ${busy ? "btn-disabled" : ""}`}
-				onClick={onSubmit}
-				disabled={busy}
-			>
-				{busy ? "Working…" : cta}
-			</button>
+
+			{/* The ONE field this page collects. Username and password are deliberately not
+			    asked for here — they cost nothing at the moment of decision and everything
+			    at the moment of doubt, so they move to onboarding, after the address is
+			    confirmed and after any charge. */}
+			{email !== null && (
+				<form
+					className="mt-5"
+					onSubmit={(e) => {
+						e.preventDefault();
+						onSubmit();
+					}}
+				>
+					<label className="label px-0 pb-1" htmlFor="subscribe-email">
+						<span className="text-sm font-semibold">Where should we reach you?</span>
+					</label>
+					<input
+						id="subscribe-email"
+						type="email"
+						required
+						autoComplete="email"
+						placeholder="you@example.com"
+						className="input input-bordered w-full"
+						value={email}
+						onChange={(e) => onEmailChange(e.target.value)}
+					/>
+					<button
+						type="submit"
+						className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+						disabled={busy}
+					>
+						{busy ? "Working…" : cta}
+					</button>
+				</form>
+			)}
+
+			{email === null && (
+				<button
+					type="button"
+					className={`btn btn-primary btn-lg mt-5 w-full ${busy ? "btn-disabled" : ""}`}
+					onClick={onSubmit}
+					disabled={busy}
+				>
+					{busy ? "Working…" : cta}
+				</button>
+			)}
 			{error && <p className="mt-3 text-sm text-error">{error}</p>}
 			{success && <p className="mt-3 text-sm text-success">{success}</p>}
 			<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
@@ -770,8 +814,21 @@ function Summary({
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function SubscribePage() {
-	const { user } = useAuth();
+	const { user, refreshUser } = useAuth();
+	const navigate = useNavigate();
 	const signedIn = !!user;
+
+	const [email, setEmail] = useState("");
+	/** The address a ceremony is open for, or null when it isn't. */
+	const [ceremony, setCeremony] = useState<string | null>(null);
+	/**
+	 * Whether this session was minted by the ceremony just now, and still owes a handle.
+	 *
+	 * A ref rather than state because it is read inside `commit` immediately after being
+	 * set, in the same turn — a state update would not have landed yet, and the account
+	 * would be left on the marketing page instead of being sent to onboarding.
+	 */
+	const justSignedUp = useRef(false);
 
 	const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
@@ -916,11 +973,34 @@ export default function SubscribePage() {
 	 * inline post unlock uses — one ceremony, so the charge is described identically
 	 * wherever a user commits.
 	 */
-	const submit = async () => {
-		if (!signedIn) {
-			window.location.href = "/signup";
-			return;
-		}
+	/**
+	 * Tell the auth context about the new session, then go.
+	 *
+	 * 🚨 **Refreshing the context is what unmounts this page, so it must be the LAST
+	 * thing the ceremony does.** `/subscribe` renders inside `PublicShell`, which returns
+	 * `LoggedOutLayout` or `LoggedInLayout` depending on `isAuthenticated`. Those are
+	 * different component types, so the moment `refreshUser()` resolves React tears the
+	 * subtree down and rebuilds it — and this page goes with it.
+	 *
+	 * That cost a real bug: verifying used to refresh immediately, so by the time the
+	 * preview came back `setPending` was landing on an unmounted component and the
+	 * payment modal never opened. Nothing errored. The free path appeared to work only
+	 * because `navigate` still fires from a dead closure, which is exactly the kind of
+	 * partial success that hides the problem.
+	 *
+	 * The session cookie is set at verification, so every call in between is already
+	 * authenticated — the context is the only thing that doesn't know yet, and it does
+	 * not need to until we are leaving.
+	 */
+	const leave = useCallback(
+		async (path: string) => {
+			await refreshUser();
+			navigate(path);
+		},
+		[navigate, refreshUser],
+	);
+
+	const commit = useCallback(async () => {
 		setBusy(true);
 		setError(null);
 		setSuccess(null);
@@ -943,6 +1023,13 @@ export default function SubscribePage() {
 			const totalSeeds = anthers + directed.length;
 
 			if (totalSeeds === 0) {
+				// Nothing to charge. A brand-new account still has somewhere to be — the
+				// handle it hasn't claimed — and sending it there is the difference between
+				// finishing the ceremony and abandoning someone on a marketing page.
+				if (justSignedUp.current) {
+					await leave("/welcome");
+					return;
+				}
 				setSuccess(
 					picks.follow.length > 0 ? "Saved — you're following them now." : "Nothing to save yet.",
 				);
@@ -972,6 +1059,56 @@ export default function SubscribePage() {
 		} finally {
 			setBusy(false);
 		}
+	}, [byUsername, leave, picks]);
+
+	/**
+	 * Commit what can be committed.
+	 *
+	 * Signed in, this goes straight to `commit`. Signed out, it opens the ceremony —
+	 * which is a code box rather than a payment box, and which stays on this page. The
+	 * old flow redirected to `/signup`, and the picks only survived because they were
+	 * being written to session storage on every change; keeping the user here means the
+	 * choices they just made are simply still in front of them.
+	 */
+	const submit = async () => {
+		if (!signedIn) {
+			const address = email.trim();
+			if (!address) {
+				setError("Add an email address so we can confirm it's you.");
+				return;
+			}
+			setBusy(true);
+			setError(null);
+			try {
+				// Answers 200 whatever happened, deliberately — see the route. So there is
+				// nothing to branch on here, and the modal opens either way.
+				await client.api.auth.signup.start.$post({ json: { email: address } });
+				setCeremony(address);
+			} catch {
+				setError("Couldn't send the code. Please try again.");
+			} finally {
+				setBusy(false);
+			}
+			return;
+		}
+		await commit();
+	};
+
+	/**
+	 * The address is confirmed and the browser now holds a session.
+	 *
+	 * Everything from here is an ordinary authenticated call, which is the entire reason
+	 * the session is issued at verification rather than after payment — and note there is
+	 * deliberately no `refreshUser()` here. See `leave`: telling the auth context is what
+	 * unmounts this page, so it waits until the page is finished with.
+	 */
+	const onVerified = async (result: { created: boolean; needsOnboarding: boolean }) => {
+		setCeremony(null);
+		justSignedUp.current = result.needsOnboarding;
+
+		// A returning user who already has a handle just gets signed in, and their picks
+		// commit exactly as if they had been signed in all along.
+		await commit();
 	};
 
 	const summaryProps = {
@@ -981,13 +1118,19 @@ export default function SubscribePage() {
 			? total > 0
 				? "Confirm and continue"
 				: "Save my picks"
-			: "Create your free account",
+			: total > 0
+				? "Create my account & continue"
+				: "Create my free account",
 		busy,
 		error,
 		success,
+		email: signedIn ? null : email,
+		onEmailChange: setEmail,
 		note: signedIn
 			? "You'll see the exact charge before anything is confirmed. Change or stop any month."
-			: "Free to make, and your picks are kept here while you sign up.",
+			: total > 0
+				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
+				: "We'll email you a code to confirm the address. A card is only needed if you choose a Seed.",
 		onSubmit: submit,
 		onDrop: dropPick,
 	};
@@ -1185,6 +1328,15 @@ export default function SubscribePage() {
 				</div>
 			</div>
 
+			{ceremony && (
+				<SignupCeremonyModal
+					email={ceremony}
+					paying={total > 0}
+					onVerified={onVerified}
+					onClose={() => setCeremony(null)}
+				/>
+			)}
+
 			{pending && (
 				<SubscriptionPaymentModal
 					anthersSeeds={pending.anthersSeeds}
@@ -1193,10 +1345,20 @@ export default function SubscribePage() {
 					preview={pending.preview}
 					onComplete={() => {
 						setPending(null);
-						// The webhook applies the Seed count, so send the user where it shows.
-						window.location.href = "/subscription";
+						// A brand-new account owes a handle before anything else — including
+						// before the page that would show off the Seeds it just bought, which
+						// is a poor place to discover you have no profile. An existing user
+						// goes where the webhook's work becomes visible.
+						void leave(justSignedUp.current ? "/welcome" : "/subscription");
 					}}
-					onClose={() => setPending(null)}
+					onClose={() => {
+						setPending(null);
+						// The card was declined or dismissed — but the account exists and is
+						// signed in, because verification made it. That is the correct
+						// outcome and takes no unwinding: they have a free account, and the
+						// only thing still owed is the handle.
+						if (justSignedUp.current) void leave("/welcome");
+					}}
 				/>
 			)}
 		</div>

@@ -101,6 +101,7 @@ const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const UserDemoPage = lazy(() => import("./pages/UserDemoPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
+const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoBandwidthCalculatorPage = lazy(() => import("./pages/VideoBandwidthCalculatorPage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WikiPage = lazy(() => import("./pages/WikiPage"));
@@ -167,6 +168,14 @@ export default function App() {
 				(discover, library, dashboard, avatar dropdown).
 			*/}
 				<Route element={<LoggedInLayout />}>
+					{/*
+					Onboarding. Signed in but nameless — so it sits inside the logged-in
+					layout yet deliberately OUTSIDE ProtectedRoute, whose own guard sends a
+					handle-less account here. Wrapping it would redirect it to itself. The
+					page does the equivalent check itself, and bounces anyone who has no
+					business here (signed out, or already named).
+				*/}
+					<Route path="/welcome" element={<WelcomePage />} />
 					<Route
 						path="/feed"
 						element={
