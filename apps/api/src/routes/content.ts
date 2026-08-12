@@ -47,6 +47,7 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 } from "@anthers/shared/content";
+import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import {
 	and,
@@ -76,6 +77,7 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import { loadPublicAccessBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { aclForMediaType } from "../services/storage/acl.js";
@@ -878,6 +880,43 @@ async function workAccessFor(
 	const viewerId = await getOptionalUserId(c);
 	const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
 	return resolveAccessSync(work as AccessibleWork, ctx);
+}
+
+/**
+ * Whether this request may be served *bytes*, once access says yes.
+ *
+ * 🚨 **A second, account-level check that deliberately does NOT live in `resolveAccess`.**
+ * A free account watches 10 hours of Public Access a month; the first Seed given to
+ * Anthers removes the limit. That is a property of the **account**, not of the Work — the
+ * Work stays free to everyone either way — so encoding it as a Work-level denial is how
+ * the commons quietly re-stratifies, which is exactly what retiring Anthers Gates was
+ * for. `resolveAccessSync` also has to stay pure and synchronous so a Catalog page
+ * resolves a batch without an N+1, and this needs a query.
+ *
+ * So it sits here, at the two endpoints that actually hand over media, and only for
+ * Public Access work: a gated Work the viewer cleared, one they bought, and their own
+ * catalogue are all `isFree: false` and never reach the meter.
+ *
+ * Returns null when delivery may proceed, or the 402 body when the allowance is spent.
+ */
+async function publicAccessGate(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: WorkRow,
+	access: AccessResultLike,
+): Promise<{ error: string; reason: string; budget: PublicAccessBudget } | null> {
+	// Only the commons is metered. Anything reached by paying — a gate cleared, a
+	// purchase — or a creator's own work is not Public Access and draws nothing.
+	if (!(access.isFree && work.streamEnabled)) return null;
+
+	const viewerId = await getOptionalUserId(c);
+	const budget = await loadPublicAccessBudget(viewerId);
+	if (budget.allowed) return null;
+
+	return {
+		error: "You have used this month's free Public Access hours",
+		reason: "public_access_limit",
+		budget,
+	};
 }
 
 /**
@@ -1757,6 +1796,11 @@ const contentRoutes = new Hono()
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403: the viewer is not forbidden, they have spent a monthly allowance
+		// that a $3 Seed removes. The status code is the difference between "you may not"
+		// and "you may, and here is how".
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
 
 		const [job] = await db
 			.select()
@@ -1791,6 +1835,12 @@ const contentRoutes = new Hono()
 		// Enforce access server-side — this is the gate for private segments.
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// And the account-level Public Access meter. Checked on the PLAYLIST rather than
+		// per segment: segments are fetched straight from the CDN with signed URLs and
+		// never touch the API, so the playlist is the last point at which we can decline —
+		// and refusing it is what stops playback continuing.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
 
 		const workId = work.id;
 		const [job] = await db

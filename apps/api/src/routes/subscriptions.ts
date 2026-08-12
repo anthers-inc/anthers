@@ -53,6 +53,7 @@ import {
 	savedCardFor,
 	seedPriceId,
 } from "../services/billing.js";
+import { loadPublicAccessBudget } from "../services/public-access.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -148,6 +149,12 @@ interface WorkEligibility {
 	earns: Set<AttentionEventType>;
 	/** Whether the claiming viewer may actually consume it. */
 	accessible: boolean;
+	/**
+	 * Whether this Work is **Public Access** — ungated, streaming, free to everyone — so
+	 * its seconds draw a free account's monthly allowance. Gated work the viewer cleared,
+	 * work they bought, and their own catalogue are all excluded by this being false.
+	 */
+	publicAccess: boolean;
 	/** Private Works aren't public consumption, so they can't earn from the public. */
 	released: boolean;
 }
@@ -176,11 +183,22 @@ async function loadWorkEligibility(
 	for (const work of workRows) {
 		const earns = new Set<AttentionEventType>();
 		if (isTimePoolEligible(work.type)) earns.add(eventTypeFor(work.type));
+		const access = resolveAccessSync(work as AccessibleWork, ctx);
 		byId.set(work.id, {
 			creatorId: work.creatorId,
 			earns,
-			accessible: resolveAccessSync(work as AccessibleWork, ctx).canAccess,
+			accessible: access.canAccess,
 			released: work.visibility === "released",
+			// Public Access = ungated, streaming, free to everyone. `isFree` is exactly
+			// "an allowed baseline row at price 0", so the definition is the resolver's
+			// rather than a second copy of it. Stamped per event because a Work's access
+			// can change later and today's answer must not be applied to last week's
+			// seconds — see the column note on `attention_events.public_access`.
+			//
+			// A creator's own watching is excluded here rather than by the meter: `owner`
+			// reports `isFree: false`, so their seconds never carry the flag and never
+			// draw an allowance for consuming their own catalogue.
+			publicAccess: access.isFree && work.streamEnabled && work.visibility === "released",
 		});
 	}
 	return byId;
@@ -193,6 +211,16 @@ const subscriptionRoutes = new Hono()
 	.get("/badges", (c) => c.json({ badges: BADGE_VIEWS }))
 
 	// ── Current Account ──────────────────────────────────────────────────────
+	// ── Public Access meter ──────────────────────────────────────────────────
+	// A free account watches 10 hours of the commons a month; the first Seed given to
+	// Anthers removes the limit and nothing above it buys more. Its own endpoint because
+	// it is a property of the ACCOUNT, not of any Work — a Work never reports itself
+	// gated by the meter, or the commons would be stratified again.
+	.get("/public-access", async (c) => {
+		const userId = await getOptionalUserId(c);
+		return c.json(await loadPublicAccessBudget(userId));
+	})
+
 	.get("/me", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
@@ -609,11 +637,19 @@ const subscriptionRoutes = new Hono()
 				eventType: e.eventType,
 				durationSeconds: e.durationSeconds,
 				workId: e.workId ?? null,
+				// Zero-duration visit pings carry no Work and draw nothing, so they are
+				// never Public Access consumption whatever they point at.
+				publicAccess: e.workId != null && (eligibility.get(e.workId)?.publicAccess ?? false),
 			}));
 
 			await db.insert(attentionEvents).values(rows);
 
-			return c.json({ recorded: rows.length, granted, refused, ineligible });
+			// The budget AFTER this batch, so a player can stop at the limit rather than
+			// discovering it on the next playlist request. Returned on every write because
+			// the client has no other cheap way to know it is close.
+			const budget = await loadPublicAccessBudget(user.id);
+
+			return c.json({ recorded: rows.length, granted, refused, ineligible, publicAccess: budget });
 		},
 	)
 

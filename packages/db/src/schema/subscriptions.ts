@@ -95,6 +95,23 @@ export const attentionEvents = pgTable(
 		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
 		eventType: text("event_type").notNull(), // page_view | play | watch | read | listen
 		durationSeconds: integer("duration_seconds").default(0),
+		/**
+		 * Was this Work **Public Access** — ungated and streaming, free to everyone — at
+		 * the moment the seconds were watched?
+		 *
+		 * 🚨 **Stamped at the write boundary, never re-derived on read**, and that is the
+		 * whole point of the column. A Work's access can change after the fact: a creator
+		 * may gate something they had left open, or open something they had gated. Reading
+		 * today's access to decide what a viewer consumed last week gets it wrong in both
+		 * directions — and one of those directions is harmful, because it would charge a
+		 * supporter's free allowance for gated work they had actually paid a creator to
+		 * reach.
+		 *
+		 * Same discipline as attention eligibility itself: decided once, where the fact is
+		 * known, so no later reader can apply a different rule. `distribute-pool`
+		 * deliberately applies no filter of its own for the same reason.
+		 */
+		publicAccess: boolean("public_access").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
