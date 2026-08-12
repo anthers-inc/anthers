@@ -417,6 +417,37 @@ describe("POST /auth/onboarding/claim", () => {
 		});
 		expect(res.status).toBe(401);
 	});
+
+	/**
+	 * 🚨 The 13+ floor is the one thing Anthers asserts about age, and **an unaccepted
+	 * assertion is not one** — the phrase lived in a document no user had ever seen,
+	 * which made it closer to a wish than a term.
+	 *
+	 * The ceremony moves where this has to be asked. `/subscribe` collects an address and
+	 * nothing else, and `/signup/verify` creates the account the moment the code checks
+	 * out — so **onboarding is the only place left**, and if it does not ask, nobody ever
+	 * agreed to anything.
+	 */
+	test("refuses to claim a handle without the terms actually being accepted", async () => {
+		const { cookie, email } = await pendingAccount("terms");
+		const username = `${RUN}terms`.slice(0, 30);
+
+		const missing = await post("/api/auth/onboarding/claim", { username }, { Cookie: cookie });
+		expect(missing.status).toBe(400);
+
+		// `false` is not a value to accept and quietly record — it is a request that
+		// cannot be granted, which is why the schema is a literal rather than a boolean.
+		const refused = await post(
+			"/api/auth/onboarding/claim",
+			{ username, acceptTerms: false },
+			{ Cookie: cookie },
+		);
+		expect(refused.status).toBe(400);
+
+		// And neither attempt wrote anything.
+		const [row] = await db.select().from(users).where(eq(users.email, email));
+		expect(row.username).toBeNull();
+	});
 });
 
 describe("a pending account has no public existence", () => {

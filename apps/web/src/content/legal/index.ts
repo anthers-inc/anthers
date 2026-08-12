@@ -42,7 +42,8 @@ const PRIVACY: LegalDocument = {
 		"Anthers is operated by **Anthers, Inc.**, a Colorado nonprofit corporation. You can reach us at privacy@anthers.org, or at PO Box 21233, Denver, CO 80221.",
 
 		"## What we collect",
-		"**Information you give us.** Your username, email address, and password (stored only as a cryptographic hash — we never hold your actual password). Optionally: a display name, bio, avatar, header image, website, and location. All optional fields are free text you choose, and anything you put in them is public.",
+		"**Information you give us.** Your email address and username, and a password if you set one — passwords are optional here, and are stored only as a cryptographic hash, so we never hold your actual password. Optionally: a display name, bio, avatar, header image, website, and location. All optional fields are free text you choose, and anything you put in them is public.",
+		"**A sign-in code, briefly, before there is an account.** When you start an account or sign in by email, we email you a six-character code and hold it — hashed, never in readable form — against that address for **ten minutes**, with a count of how many times it has been tried. Nothing else: no IP address, no name, and if you never finish, no account is created. See *How long we keep it*.",
 		"**Information created by using Anthers.** Your posts, Works, comments, reviews, follows, bookmarks, and projects.",
 		"**What you view, and for how long.** When you play, watch, read, or listen to a Work, we record that it happened, which Work it was, and for how long. **We have to**: this is how creators get paid by watch-time, and there is no way to pay someone for the time you spend with their work without recording the time you spend with their work. See *How long we keep it* below.",
 		"**Technical information.** Your IP address and browser user-agent, recorded with each sign-in session so you can review and revoke your own sessions and so we can investigate abuse.",
@@ -76,6 +77,7 @@ const PRIVACY: LegalDocument = {
 		"**Viewing history:** raw records connecting *you* to a specific Work are kept for **180 days**, which covers the billing cycle they belong to and the card-dispute window that follows it. After that they are aggregated into per-Work and per-creator totals and **the per-person records are deleted.** Creators keep their earnings history; a complete history of what you personally watched stops existing.",
 		"One record survives that, and it is a payment record rather than a viewing one. So that creators can be paid, we keep — for as long as financial records must be kept — a per-month total of how much time you spent with *each creator* you supported. It never says which of their works you spent it on.",
 		"**Sessions:** deleted when they expire.",
+		"**Sign-in codes:** a code stops working after ten minutes. The record is deleted the moment it is used, and otherwise by a daily sweep — so an unused one is dead long before it is gone. Nothing else is kept: if you never finish, no account is created.",
 		"**Payment records:** kept as long as tax, accounting, and nonprofit reporting law requires, which is longer than your account may exist and is not a period we can choose.",
 		"**Safety records:** reports and moderation decisions are kept after the account they concern is gone — deliberately. If a decision could simply be erased, *“why was my comment removed?”* would have no honest answer, and appeals would be impossible. These records are minimal and are not used for anything else.",
 
