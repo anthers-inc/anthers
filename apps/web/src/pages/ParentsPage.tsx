@@ -137,10 +137,11 @@ export default function ParentsPage() {
 					behind.
 				</p>
 				<p>
-					Any account can get everything we hold about it, or have the account deleted, by asking us
-					— the controls exist and we are still building the buttons, so for now it is an email
-					rather than a click. Deletion takes seven days, and signing back in during that week
-					cancels it. Full detail is in the{" "}
+					Any account can download everything we hold about it, or delete itself, from the settings
+					page. Before it deletes, it shows you exactly what happens to each thing — how many Works
+					go, how many stay because someone bought them, what gets kept with the name removed.
+					Deletion takes seven days, and signing back in during that week cancels it. Full detail is
+					in the{" "}
 					<Link to="/privacy" className="link link-primary">
 						Privacy Policy
 					</Link>

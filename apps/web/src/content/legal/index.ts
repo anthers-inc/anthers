@@ -81,9 +81,9 @@ const PRIVACY: LegalDocument = {
 
 		"## Your rights",
 		"These rights are extended to everyone who uses Anthers, wherever you live.",
-		"- **Know** what we hold about you and why — this document, and on request the specifics.\n- **Get a copy** of your information and your content, in an openly readable format. Ask us and we will send it.\n- **Correct** anything inaccurate — most of it directly in your settings.\n- **Delete** your account and content — see below.\n- **Object** to a particular use, and ask us to stop.\n- **Complain** to your data protection authority, if you are somewhere that has one.",
+		"- **Know** what we hold about you and why — this document, and on request the specifics.\n- **Get a copy** of your information and your content, in an openly readable format. It's in your settings, and it's immediate.\n- **Correct** anything inaccurate — most of it directly in your settings.\n- **Delete** your account and content — see below.\n- **Object** to a particular use, and ask us to stop.\n- **Complain** to your data protection authority, if you are somewhere that has one.",
 		"We will not charge you for exercising these, and we will not treat you differently for it.",
-		"**Downloading your data** and **deleting your account** are built and work on request — we are still building the buttons for them, so for now both are an email to us rather than a click. Ask for anything on this list and we will respond **within 30 days**.",
+		"Two of them are buttons rather than requests: **downloading your data** and **deleting your account** both happen in [your settings](/settings), without asking us. For anything else, ask us and we will respond **within 30 days**.",
 
 		"## What happens when you delete your account",
 		"Deleting is **scheduled, not instant**: you have **seven days** to change your mind, and signing back in is all it takes to cancel. Confirming signs you out of every device straight away. We show you exactly what will happen to your things — with the actual counts from your account — before you confirm, because a warning you can't check isn't consent.",
@@ -154,7 +154,7 @@ const TERMS: LegalDocument = {
 		"There are narrow cases where a creator can have work taken down immediately — a lost licence, a legal order, a safety reason — and in those cases you're refunded.",
 
 		"## Ending things",
-		"You can delete your account at any time by asking us. It takes effect after seven days, and signing back in during that week cancels it.",
+		"You can delete your account at any time, from your settings. It takes effect after seven days, and signing back in during that week cancels it.",
 		"We can end your account if you seriously or repeatedly break these terms. We'll tell you why.",
 
 		"## Disputes",
