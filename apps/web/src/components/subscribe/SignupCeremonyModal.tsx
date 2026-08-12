@@ -54,6 +54,20 @@ export default function SignupCeremonyModal({ email, paying, onVerified, onClose
 		inputs.current[0]?.focus();
 	}, []);
 
+	/*
+	 * Put the cursor back after a refusal.
+	 *
+	 * 🚨 This has to run in an effect rather than inline where the error is set, because
+	 * the boxes carry `disabled={busy}` and **focusing a disabled input does nothing.**
+	 * Calling `focus()` beside `setBusy(false)` looks right and silently fails: React has
+	 * not re-rendered yet, so the element is still disabled at that instant. The symptom
+	 * is quiet — a cleared field that ignores typing until you click it — which is exactly
+	 * the sort of thing that ships. Caught by the e2e spec, not by reading it.
+	 */
+	useEffect(() => {
+		if (error && !busy) inputs.current[0]?.focus();
+	}, [error, busy]);
+
 	const code = digits.join("");
 
 	const submit = useCallback(
@@ -66,11 +80,10 @@ export default function SignupCeremonyModal({ email, paying, onVerified, onClose
 				if (!res.ok) {
 					const body = (await res.json().catch(() => ({}))) as { error?: string };
 					setError(body.error ?? "That code didn't work. Check it, or ask for a new one.");
-					// Clear and refocus rather than leaving a wrong code sitting in the boxes:
-					// the next thing they do is retype it, and six half-corrected characters
-					// is how the second attempt goes wrong too.
+					// Clear rather than leaving a wrong code sitting in the boxes: the next
+					// thing they do is retype it, and six half-corrected characters is how the
+					// second attempt goes wrong too. Refocusing is the effect above's job.
 					setDigits(Array(CODE_LENGTH).fill(""));
-					inputs.current[0]?.focus();
 					setBusy(false);
 					return;
 				}
@@ -125,10 +138,33 @@ export default function SignupCeremonyModal({ email, paying, onVerified, onClose
 	};
 
 	const onKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-		// Delete backward — the behaviour a code field is expected to have, and the
-		// reason it can be six boxes rather than one.
-		if (e.key === "Backspace" && !digits[index] && index > 0) {
-			inputs.current[index - 1]?.focus();
+		/*
+		 * Backspace is handled entirely here, and it has to be.
+		 *
+		 * 🚨 These are **controlled** inputs, and `putChar` returns early when the incoming
+		 * value is empty — so a native backspace on a filled box fires `onChange` with `""`,
+		 * gets ignored, and React immediately re-renders the old character straight back in.
+		 * The box simply could not be cleared: you could type a wrong code and then be
+		 * unable to correct it without reloading. Nothing errors, and it looks like a stuck
+		 * field. Found by the e2e spec.
+		 *
+		 * The behaviour it implements is the one people expect from a code field: clear this
+		 * box if it holds anything, otherwise clear the one before and go there. Stepping
+		 * back *without* clearing would leave a character behind that the cursor has already
+		 * passed, which is how these fields end up eating a correction.
+		 */
+		if (e.key === "Backspace") {
+			e.preventDefault();
+			const next = [...digits];
+			if (next[index]) {
+				next[index] = "";
+				setDigits(next);
+			} else if (index > 0) {
+				next[index - 1] = "";
+				setDigits(next);
+				inputs.current[index - 1]?.focus();
+			}
+			return;
 		}
 		if (e.key === "ArrowLeft" && index > 0) inputs.current[index - 1]?.focus();
 		if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) inputs.current[index + 1]?.focus();
