@@ -68,6 +68,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { embedCreator } from "../lib/handles.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
@@ -1235,11 +1236,11 @@ const contentRoutes = new Hono()
 					viewCount: p.viewCount,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
-					creator: {
+					creator: embedCreator({
 						username: r.creatorUsername,
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
-					},
+					}),
 					// A card image, if the post links anything. Thumbnails are public — they are
 					// the preview a locked Work is *supposed* to show.
 					thumbnail: linked[0]?.thumbnail ?? "",
@@ -2664,11 +2665,11 @@ const contentRoutes = new Hono()
 			projects: result.map((r) => ({
 				...r.project,
 				postCount: Number(r.postCount),
-				creator: {
+				creator: embedCreator({
 					username: r.creatorUsername,
 					displayName: r.creatorDisplayName,
 					avatar: r.creatorAvatar,
-				},
+				}),
 			})),
 		});
 	})
@@ -2767,11 +2768,11 @@ const contentRoutes = new Hono()
 		return c.json({
 			project: {
 				...row.project,
-				creator: {
+				creator: embedCreator({
 					username: row.creatorUsername,
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
-				},
+				}),
 				works: itemRows.map((m) => ({
 					sortOrder: m.sortOrder,
 					...serializeWorkForViewer(
@@ -2792,11 +2793,11 @@ const contentRoutes = new Hono()
 					isPublished: m.post.isPublished,
 					publishedAt: m.post.publishedAt,
 					sortOrder: m.sortOrder,
-					creator: {
+					creator: embedCreator({
 						username: m.creatorUsername,
 						displayName: m.creatorDisplayName,
 						avatar: m.creatorAvatar,
-					},
+					}),
 				})),
 			},
 		});

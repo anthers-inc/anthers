@@ -34,6 +34,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
+import { type ClaimedUser, embedCreator, hasHandle } from "../lib/handles.js";
 import { requireAuth } from "../middleware/auth.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
@@ -50,7 +51,7 @@ import { listNotifications, markRead, notify, unreadCount } from "../services/no
 
 /** Public user profile shape (for lists and public profiles) */
 function serializePublicUser(
-	user: typeof users.$inferSelect,
+	user: ClaimedUser,
 	extra: {
 		followerCount: number;
 		projectCount: number;
@@ -232,12 +233,21 @@ const accountRoutes = new Hono()
 			.where(notBlockedBy(sessionUser.id, users.id));
 
 		return c.json({
-			users: followedUsers.map((row) =>
-				serializePublicUser(row.user, {
-					followerCount: Number(row.followerCount),
-					projectCount: Number(row.projectCount),
-					isFollowing: true, // by definition, you follow everyone in this list
-				}),
+			// `flatMap` rather than `map`, so an account that has not claimed a handle is
+			// dropped instead of rendered. It should not be reachable — you cannot follow
+			// someone with no profile — but this list is built from a join, and "it can't
+			// happen because of what another function does" is the reasoning the block
+			// filter above already refuses to rely on.
+			users: followedUsers.flatMap((row) =>
+				hasHandle(row.user)
+					? [
+							serializePublicUser(row.user, {
+								followerCount: Number(row.followerCount),
+								projectCount: Number(row.projectCount),
+								isFollowing: true, // by definition, you follow everyone in this list
+							}),
+						]
+					: [],
 			),
 		});
 	})
@@ -337,11 +347,11 @@ const accountRoutes = new Hono()
 					viewCount: p.viewCount,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
-					creator: {
+					creator: embedCreator({
 						username: row.creatorUsername,
 						displayName: row.creatorDisplayName,
 						avatar: row.creatorAvatar,
-					},
+					}),
 				};
 			}),
 			...feedWorks.map((row) => {
@@ -366,11 +376,11 @@ const accountRoutes = new Hono()
 					authoredPrecision: w.authoredPrecision,
 					releasedAt: w.releasedAt,
 					createdAt: w.createdAt,
-					creator: {
+					creator: embedCreator({
 						username: row.creatorUsername,
 						displayName: row.creatorDisplayName,
 						avatar: row.creatorAvatar,
-					},
+					}),
 				};
 			}),
 		]
@@ -424,13 +434,17 @@ const accountRoutes = new Hono()
 			.where(and(eq(users.isCreator, true), notBlockedBy(currentUserId, users.id)));
 
 		return c.json({
-			creators: creatorList.map((row) =>
-				serializePublicUser(row.user, {
-					followerCount: Number(row.followerCount),
-					projectCount: Number(row.projectCount),
-					isFollowing: currentUserId ? Boolean((row as any).isFollowing) : false,
-					mediums: row.mediums ?? [],
-				}),
+			creators: creatorList.flatMap((row) =>
+				hasHandle(row.user)
+					? [
+							serializePublicUser(row.user, {
+								followerCount: Number(row.followerCount),
+								projectCount: Number(row.projectCount),
+								isFollowing: currentUserId ? Boolean((row as any).isFollowing) : false,
+								mediums: row.mediums ?? [],
+							}),
+						]
+					: [],
 			),
 		});
 	})
@@ -475,6 +489,13 @@ const accountRoutes = new Hono()
 		}
 
 		const row = result[0];
+		// Unreachable through this route — the lookup matched on the handle, so a row with
+		// none cannot come back — but the 404 is the correct answer to "show me the profile
+		// of an account that has not claimed a name", and stating it is cheaper than
+		// asserting the row's shape and being wrong later.
+		if (!hasHandle(row.user)) {
+			return c.json({ error: "User not found" }, 404);
+		}
 		return c.json({
 			user: serializePublicUser(row.user, {
 				followerCount: Number(row.followerCount),

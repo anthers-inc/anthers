@@ -6,7 +6,16 @@ import { bearerToken, resolveBearerSession } from "./bearer.js";
 
 type SessionUser = {
 	id: number;
-	username: string;
+	/**
+	 * Null between verifying the signup code and finishing onboarding.
+	 *
+	 * A real state rather than a defensive `| null`: the ceremony signs the account in
+	 * the moment the emailed code checks out, precisely so that paying is an ordinary
+	 * authenticated call — which means there is a genuine window where a fully
+	 * authenticated request carries no handle. Anything that builds a profile URL or
+	 * renders `@name` from this has to say what it does in that window.
+	 */
+	username: string | null;
 	email: string;
 	displayName: string | null;
 	isCreator: boolean | null;

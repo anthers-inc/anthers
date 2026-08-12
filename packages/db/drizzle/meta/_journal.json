@@ -225,6 +225,13 @@
       "when": 1786557400926,
       "tag": "0031_open_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786563424994,
+      "tag": "0032_rich_blockbuster",
+      "breakpoints": true
     }
   ]
 }

@@ -131,11 +131,26 @@ function escapeHtml(s: string): string {
 
 // ─── Senders ─────────────────────────────────────────────────────────────────
 
+/**
+ * How to address someone who may not have claimed a handle yet.
+ *
+ * Since the signup ceremony an account can exist before onboarding names it, and mail
+ * still has to reach it. Interpolating the null would greet a reader as "Hi null", so
+ * the fallback is to greet nobody in particular and let the sentence carry itself.
+ */
+function greet(username: string | null): string {
+	return username ? `, ${escapeHtml(username)}` : "";
+}
+
 /** Welcome + email verification, sent on sign-up. Logs the link when send is skipped (dev). */
-export async function sendWelcomeEmail(to: string, username: string, token: string): Promise<void> {
+export async function sendWelcomeEmail(
+	to: string,
+	username: string | null,
+	token: string,
+): Promise<void> {
 	const url = verifyEmailUrl(token);
 	const html = shell(
-		`Welcome to Anthers, ${escapeHtml(username)} 🌱`,
+		`Welcome to Anthers${greet(username)} 🌱`,
 		verifyBody(
 			"We're glad you're here. Confirm your email address to unlock purchases, funding, and creator mode.",
 			url,
@@ -148,14 +163,14 @@ export async function sendWelcomeEmail(to: string, username: string, token: stri
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,
-	username: string,
+	username: string | null,
 	token: string,
 ): Promise<void> {
 	const url = verifyEmailUrl(token);
 	const html = shell(
 		"Verify your email",
 		verifyBody(
-			`Hi ${escapeHtml(username)}, confirm your email address to finish setting up your Anthers account.`,
+			`Hi${greet(username)}, confirm your email address to finish setting up your Anthers account.`,
 			url,
 		),
 	);
