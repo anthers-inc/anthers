@@ -283,6 +283,7 @@ export default function WorkPage() {
 								src={work.transcoding.hlsManifestUrl}
 								poster={work.thumbnail ?? undefined}
 								attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+								publicAccess={work.publicAccess ?? false}
 							/>
 						)}
 						{work.type === "audio" && work.transcoding?.outputFileUrl && (
@@ -290,6 +291,7 @@ export default function WorkPage() {
 								src={work.transcoding.outputFileUrl}
 								waveform={work.transcoding.waveformData ?? undefined}
 								attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+								publicAccess={work.publicAccess ?? false}
 							/>
 						)}
 						{work.type === "image" && work.sourceKey && (

@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
 import { type RefObject, useEffect, useRef } from "react";
+import { publishBudget } from "./public-access";
 
 const TICK_MS = 1_000;
 const FLUSH_INTERVAL_MS = 30_000;
@@ -215,7 +216,22 @@ async function flushEvents() {
 				})),
 			},
 		});
-		if (!res.ok) pendingEvents.unshift(...batch);
+		if (!res.ok) {
+			pendingEvents.unshift(...batch);
+			return;
+		}
+
+		/*
+		 * The write answers with the Public Access budget **after** this batch, and this
+		 * is the only place in the app that learns it in the ordinary course of watching.
+		 *
+		 * 🚨 That makes this line the meter's live signal, not a nicety: the flush that
+		 * spends a viewer's last minute is the same flush that reports zero remaining, so
+		 * publishing it here is what lets a player stop at the limit and *say so* rather
+		 * than discovering it by having a segment request refused. Without it the first
+		 * sign of the limit is a dead player.
+		 */
+		publishBudget(((await res.json()) as { publicAccess?: unknown }).publicAccess);
 	} catch {
 		pendingEvents.unshift(...batch);
 	}
