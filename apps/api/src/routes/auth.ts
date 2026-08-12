@@ -28,7 +28,13 @@ import {
 	verifyEmailToken,
 	verifyPassword,
 } from "../services/auth.js";
-import { sendVerificationEmail, sendWelcomeEmail } from "../services/email.js";
+import {
+	sendSignInCodeEmail,
+	sendSignupCodeEmail,
+	sendVerificationEmail,
+	sendWelcomeEmail,
+} from "../services/email.js";
+import { checkSignupCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +66,43 @@ const signUpSchema = z.object({
 const signInSchema = z.object({
 	login: z.string(), // accepts username or email
 	password: z.string(),
+});
+
+const signupStartSchema = z.object({
+	email: z.string().email().max(254),
+});
+
+const signupVerifySchema = z.object({
+	email: z.string().email().max(254),
+	/**
+	 * Six characters from the code alphabet, case-insensitively.
+	 *
+	 * Loose on purpose — the exact alphabet is `services/signup-codes.ts`'s business and
+	 * a stricter regex here would leak it into the 400s, telling an attacker which
+	 * symbols are worth trying. This only rejects a shape that cannot be a code at all.
+	 */
+	code: z.string().trim().length(6),
+});
+
+const claimUsernameSchema = z.object({
+	username: z
+		.string()
+		.min(3)
+		.max(150)
+		.regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, hyphens, underscores")
+		.refine((name) => !isReservedUsername(name), "That username is reserved"),
+	/**
+	 * Optional, and that is the point rather than an omission.
+	 *
+	 * Someone who would rather sign in with an emailed code should not be made to invent
+	 * a password to get through onboarding — an unwanted password is one that gets reused
+	 * or written down. Leaving it unset is a supported end state; `POST /auth/signup/*`
+	 * is how those accounts come back.
+	 */
+	password: z.string().min(8).max(128).optional(),
+	acceptTerms: z.literal(true, {
+		errorMap: () => ({ message: "You need to accept the terms to create an account." }),
+	}),
 });
 
 const verifyEmailSchema = z.object({
@@ -183,6 +226,143 @@ const authRoutes = new Hono()
 
 		return c.json({ user: serializeUser(user) }, 201);
 	})
+
+	// ── Signup ceremony: prove the address, then build the account ───────────
+	//
+	// The order is the feature. `/subscribe` asks for an email and nothing else, this
+	// pair confirms the address, and only then does anything ask for money or a name.
+	// Parker's reasoning: every account should arrive with a confirmed address, and the
+	// public page should ask for as little as it possibly can.
+	//
+	// Step 1 — issue a code. ALWAYS 200, whatever happened.
+	.post("/signup/start", zValidator("json", signupStartSchema, invalidBody), async (c) => {
+		const { email } = c.req.valid("json");
+
+		// Failures are swallowed on purpose. A mail outage, a throttled repeat and an
+		// address that already has an account must all look identical from out here —
+		// the moment one of them answers differently, this endpoint becomes a way to
+		// ask "is this person on Anthers?" and get a reliable answer.
+		try {
+			const issued = await issueSignupCode(email);
+			if (issued.code) {
+				await (issued.existingAccount
+					? sendSignInCodeEmail(email, issued.code)
+					: sendSignupCodeEmail(email, issued.code));
+			}
+		} catch (err) {
+			console.error("[signup/start] failed to issue a code:", err);
+		}
+
+		// Deliberately says nothing about what was sent, or whether anything was.
+		return c.json({ success: true });
+	})
+
+	// Step 2 — spend the code. Creates the account, or signs the existing one in, and
+	// issues the session cookie either way.
+	//
+	// 🚨 **Issuing the session here is the shortcut the whole ceremony rests on.** Once
+	// the browser holds a session, the payment step is an ordinary authenticated call
+	// and reuses the existing preview + modal machinery unchanged — no second identity,
+	// no half-built account waiting on a charge to become real, and nothing to reconcile
+	// if the card is declined. A declined card leaves a perfectly good free account,
+	// which is the correct outcome and takes no code to arrange.
+	.post("/signup/verify", zValidator("json", signupVerifySchema, invalidBody), async (c) => {
+		const { email, code } = c.req.valid("json");
+
+		const result = await checkSignupCode(email, code);
+		if (!result.ok) {
+			// One message for every failure. Distinguishing "no code for this address"
+			// from "wrong code" would confirm registration to anyone who asked, which is
+			// the leak `/signup/start` is careful to avoid — closing it there and
+			// reopening it here would be worse than never closing it.
+			const status = result.reason === "too_many_attempts" ? 429 : 400;
+			return c.json(
+				{
+					error:
+						result.reason === "too_many_attempts"
+							? "Too many attempts. Ask for a new code."
+							: "That code didn't work. Check it, or ask for a new one.",
+					reason: result.reason,
+				},
+				status,
+			);
+		}
+
+		const [existing] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
+
+		// Created accounts are `emailVerified: true` from the first instant, and get no
+		// verification mail: the code they just typed IS the verification, and asking a
+		// second time for the same fact is how a flow teaches people to ignore it.
+		//
+		// The username stays null until onboarding claims one — see the column's note
+		// for why a placeholder was rejected rather than merely unnecessary.
+		const user =
+			existing ??
+			(await db.insert(users).values({ email: result.email, emailVerified: true }).returning())[0];
+
+		const token = await createSession(
+			user.id,
+			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
+			c.req.header("User-Agent"),
+		);
+		setSessionCookie(c, token);
+
+		return c.json(
+			{
+				user: serializeUser(user),
+				// What the client does next. `created` opens onboarding; a returning user
+				// is simply signed in and keeps whatever they already had.
+				created: !existing,
+				// Onboarding is unfinished business for anyone without a handle, which
+				// includes a returning user who abandoned it last time.
+				needsOnboarding: user.username === null,
+			},
+			existing ? 200 : 201,
+		);
+	})
+
+	// ── Onboarding: claim the handle, and optionally set a password ──────────
+	//
+	// The other half of the ceremony. The account already exists and is signed in, so
+	// this is an ordinary authenticated call — it just happens to be the one that makes
+	// the account visible to anybody else.
+	.post(
+		"/onboarding/claim",
+		requireAuth,
+		zValidator("json", claimUsernameSchema, invalidBody),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const { username, password } = c.req.valid("json");
+
+			// Idempotent only in the trivial sense: claiming again is refused rather than
+			// silently renaming. A handle is a URL other people hold, and changing one is
+			// a different feature with different consequences (redirects, impersonation
+			// of the vacated name) that this endpoint should not quietly become.
+			if (sessionUser.username !== null) {
+				return c.json({ error: "You've already chosen a username." }, 409);
+			}
+
+			const [taken] = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.username, username))
+				.limit(1);
+			if (taken) {
+				return c.json({ error: "Username already taken" }, 409);
+			}
+
+			const [user] = await db
+				.update(users)
+				.set({
+					username,
+					...(password ? { passwordHash: await hashPassword(password) } : {}),
+				})
+				.where(eq(users.id, sessionUser.id))
+				.returning();
+
+			return c.json({ user: serializeUser(user) });
+		},
+	)
 
 	// ── Sign In (accepts username or email) ──────────────────────────────────
 	.post("/sign-in", zValidator("json", signInSchema, invalidBody), async (c) => {

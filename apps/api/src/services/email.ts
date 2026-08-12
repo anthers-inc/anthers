@@ -160,6 +160,47 @@ export async function sendWelcomeEmail(
 	if (!sent) console.info(`[email] verify link for ${to}: ${url}`);
 }
 
+/**
+ * The signup ceremony's code, to an address with no account yet.
+ *
+ * The code is spelled out in a monospace block rather than wrapped in a button, because
+ * the reader's next move is to *type it into six boxes on the page they came from* — a
+ * link would take them somewhere else and lose the picks they had already made. That is
+ * the whole reason this flow uses a code instead of the verification link above.
+ */
+export async function sendSignupCodeEmail(to: string, code: string): Promise<void> {
+	const html = shell(
+		"Your Anthers code",
+		`<p style="margin:0 0 18px;">Enter this code on the page you left open to confirm your address:</p>
+		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't ask to join Anthers, you can ignore this email — no account has been created.</p>`,
+	);
+	const sent = await sendEmail({ to, subject: `${code} is your Anthers code`, html });
+	if (!sent) console.info(`[email] signup code for ${to}: ${code}`);
+}
+
+/**
+ * The same ceremony, to an address that **already has an account** — so it signs in.
+ *
+ * A separate template rather than a flag on the one above, because the sentence a
+ * returning user needs is different: they did not ask to create anything, and telling
+ * them "welcome, confirm your address" would be both wrong and alarming.
+ *
+ * 🚨 What is *not* different is the API's response, which is identical in both cases.
+ * The two templates exist so the mail is honest to the one person who can read it; the
+ * caller learns nothing, or the "always 200" rule would be decorative.
+ */
+export async function sendSignInCodeEmail(to: string, code: string): Promise<void> {
+	const html = shell(
+		"Your Anthers sign-in code",
+		`<p style="margin:0 0 18px;">You already have an Anthers account with this address. Enter this code to sign in:</p>
+		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:#ffffff;">${escapeHtml(code)}</p>
+		<p style="margin:22px 0 0;color:#6b6878;font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, you can ignore this email — and your account is unchanged.</p>`,
+	);
+	const sent = await sendEmail({ to, subject: `${code} is your Anthers sign-in code`, html });
+	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);
+}
+
 /** Standalone re-send of the verification email. */
 export async function sendVerificationEmail(
 	to: string,
