@@ -326,6 +326,248 @@ function BlueskySection() {
 	);
 }
 
+interface DeletionPreview {
+	follows: number;
+	bookmarks: number;
+	blocks: number;
+	viewingEvents: number;
+	sessions: number;
+	comments: number;
+	reviews: number;
+	posts: number;
+	worksDeleted: number;
+	worksWithdrawn: number;
+	purchases: number;
+}
+
+interface DeletionState {
+	scheduledFor: string | null;
+	graceDays: number;
+	preview: DeletionPreview;
+}
+
+/**
+ * Your data — the export button and the deletion flow.
+ *
+ * 🚨 **This section is what makes two published sentences true.** 51.05 has said since it
+ * was written that getting a copy of your data and deleting your account are things you
+ * do yourself, and `/parents` said the same to parents. The API routes shipped in PR #193
+ * and **nothing ever called them**, so both documents described a self-service control
+ * that did not exist — a promise with no mechanism, which is the failure this codebase
+ * keeps finding. The copy was corrected to "ask us" in PR #227; this restores the claim.
+ *
+ * Two things here are deliberate rather than incidental:
+ *
+ * **The counts are real, and they are the whole point of the confirmation.** Parker's
+ * ruling on deletion (2026-08-07) was that the safety lives in *informed consent plus an
+ * oops window*, not in the foreign keys — so "your content will be deleted" is a sentence
+ * people click past, and "3 Works deleted, 1 withdrawn because someone bought it, 14
+ * comments tombstoned" is a decision. They come from `deletionPreview()` on the server,
+ * per account, never from anything computed here.
+ *
+ * **The outcomes are not uniform and the UI must not flatten them.** Some things are
+ * destroyed, some tombstoned, some anonymised, and some kept with the person detached for
+ * tax records. Showing one number would misrepresent all four.
+ */
+function DataSection() {
+	const [state, setState] = useState<DeletionState | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [exporting, setExporting] = useState(false);
+	const [confirming, setConfirming] = useState(false);
+	const [busy, setBusy] = useState(false);
+
+	const load = () => {
+		apiFetch("/api/accounts/me/deletion")
+			.then((r) => (r.ok ? r.json() : Promise.reject(new Error("Could not load your data."))))
+			.then((d) => setState(d as DeletionState))
+			.catch((e) => setError(e instanceof Error ? e.message : "Could not load your data."));
+	};
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: load on mount only
+	useEffect(load, []);
+
+	const handleExport = async () => {
+		setExporting(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/export");
+			if (!res.ok) throw new Error("Export failed.");
+			// The server sends it as an attachment deliberately — this is the one document
+			// containing everything about a person, and a browser rendering it in a tab is a
+			// thing that ends up in shared screenshots and back-button history. Honour that
+			// by saving it rather than navigating to it.
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `anthers-export-${new Date().toISOString().slice(0, 10)}.json`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Export failed.");
+		} finally {
+			setExporting(false);
+		}
+	};
+
+	const handleDelete = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me", { method: "DELETE" });
+			if (!res.ok) throw new Error("Could not schedule deletion.");
+			// Every session went with the request, including this one. A full reload is the
+			// honest response: staying on a logged-in-looking page would be a lie the client
+			// is telling about a server that has already forgotten us.
+			window.location.href = "/";
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Could not schedule deletion.");
+			setBusy(false);
+		}
+	};
+
+	const handleCancel = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/deletion/cancel", { method: "POST" });
+			if (!res.ok) throw new Error("Could not cancel.");
+			load();
+			setConfirming(false);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Could not cancel.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const p = state?.preview;
+	const scheduled = state?.scheduledFor;
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your data</h3>
+
+				{error && (
+					<div className="alert alert-error alert-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				<div className="flex flex-wrap items-center gap-3">
+					<button type="button" className="btn btn-sm" onClick={handleExport} disabled={exporting}>
+						{exporting ? "Preparing…" : "Download my data"}
+					</button>
+					<p className="text-xs text-base-content/60">
+						Everything we hold about you, as a JSON file. It does not include your password, or
+						anything that is someone else's.
+					</p>
+				</div>
+
+				<div className="divider my-2" />
+
+				{scheduled ? (
+					<div className="alert alert-warning flex-col items-start gap-2">
+						<span className="font-medium">
+							Your account is scheduled for deletion on {new Date(scheduled).toLocaleDateString()}.
+						</span>
+						<span className="text-sm">
+							Nothing has been deleted yet. Cancelling puts everything back exactly as it was —
+							there is no separate restore.
+						</span>
+						<button type="button" className="btn btn-sm" onClick={handleCancel} disabled={busy}>
+							Cancel deletion
+						</button>
+					</div>
+				) : (
+					<>
+						<h4 className="font-medium text-error">Delete my account</h4>
+						{!confirming ? (
+							<div className="flex flex-wrap items-center gap-3">
+								<button
+									type="button"
+									className="btn btn-sm btn-error btn-outline"
+									onClick={() => setConfirming(true)}
+								>
+									Delete my account
+								</button>
+								<p className="text-xs text-base-content/60">
+									You get {state?.graceDays ?? 7} days to change your mind.
+								</p>
+							</div>
+						) : (
+							<div className="rounded-lg border border-error/40 p-4">
+								<p className="text-sm font-medium">Here is exactly what happens to this account:</p>
+								{p ? (
+									<ul className="mt-2 space-y-1 text-sm text-base-content/80">
+										<li>
+											<strong>Deleted:</strong> your profile, {p.follows} follow
+											{p.follows === 1 ? "" : "s"}, {p.bookmarks} bookmark
+											{p.bookmarks === 1 ? "" : "s"}, {p.sessions} session
+											{p.sessions === 1 ? "" : "s"}, and {p.viewingEvents} viewing record
+											{p.viewingEvents === 1 ? "" : "s"}.
+										</li>
+										<li>
+											<strong>Kept, with your name removed:</strong> {p.posts} post
+											{p.posts === 1 ? "" : "s"} and {p.comments} comment
+											{p.comments === 1 ? "" : "s"} — so conversations other people took part in
+											stay readable — and {p.reviews} review
+											{p.reviews === 1 ? "" : "s"}, whose scores stay in creators' averages.
+										</li>
+										<li>
+											<strong>Your Works:</strong> {p.worksDeleted} deleted
+											{p.worksWithdrawn > 0 ? (
+												<>
+													, and {p.worksWithdrawn} withdrawn rather than destroyed because someone
+													bought {p.worksWithdrawn === 1 ? "it" : "them"} — a purchase outlives the
+													account that sold it
+												</>
+											) : null}
+											.
+										</li>
+										<li>
+											<strong>Kept without you attached:</strong> {p.purchases} purchase
+											{p.purchases === 1 ? "" : "s"}, because we have to be able to evidence sales
+											tax.
+										</li>
+									</ul>
+								) : (
+									<p className="mt-2 text-sm text-base-content/60">Loading your counts…</p>
+								)}
+								<p className="mt-3 text-sm">
+									It takes effect in {state?.graceDays ?? 7} days. Signing back in during that week
+									cancels it. You will be signed out everywhere now.
+								</p>
+								<div className="mt-3 flex gap-2">
+									<button
+										type="button"
+										className="btn btn-sm btn-error"
+										onClick={handleDelete}
+										disabled={busy || !p}
+									>
+										{busy ? "Scheduling…" : "Yes, delete my account"}
+									</button>
+									<button
+										type="button"
+										className="btn btn-sm btn-ghost"
+										onClick={() => setConfirming(false)}
+										disabled={busy}
+									>
+										Keep my account
+									</button>
+								</div>
+							</div>
+						)}
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export default function SettingsPage() {
 	const { user, refreshUser } = useAuth();
 
@@ -417,6 +659,9 @@ export default function SettingsPage() {
 			{/* Blocked accounts — the only place a block can be lifted, since a blocked
 			    profile no longer resolves. */}
 			<BlockedSection />
+
+			{/* Export and deletion — the controls 51.05 and /parents describe. */}
+			<DataSection />
 
 			{/* Creator tools live in the Studio (payouts, connections, Badges). */}
 			{isCreator && (
