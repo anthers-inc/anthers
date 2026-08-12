@@ -13,8 +13,13 @@
 //   3. What a Seed to Anthers does, with its breakdown, ending in a yes/no.
 //   4. What a Seed to a creator does, with the same breakdown, ending in a creator search.
 //
-// A tray alongside collects the answers, and the panel at the foot of the page is its
-// twin. The question the page asks is *whether*, never *how much*: a creator pick is
+// Each step that asks something answers it in place — a `SectionEcho` under the controls,
+// defaulting to *nothing chosen* — and the closing section adds the page up once. That
+// replaced a sticky tray in a right-hand rail: the rail fought the one thing every other
+// marketing page does, which is centre a single column, and it put a choice and its
+// consequence in different eyelines.
+//
+// The question the page asks is *whether*, never *how much*: a creator pick is
 // follow-or-Seed rather than a stepper, because the amount is a conversation for after
 // the account exists and asking it here costs conversion for no information.
 //
@@ -42,6 +47,7 @@
 import { cardFeeDisplay, SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
@@ -84,6 +90,9 @@ const MEDIUMS = [
 
 /** Picks survive a trip through signup, so nobody loses their choices to a redirect. */
 const PICKS_KEY = "anthers_subscribe_picks";
+
+/** The marketing display face, as the other marketing pages set it. */
+const serif = { fontFamily: FONTS.fraunces };
 
 interface OpenWork {
 	publicId: number;
@@ -182,9 +191,43 @@ function MediumGlyph({ type, className }: { type: string; className?: string }) 
 /** The step marker — numbered because the page really is a sequence. */
 function StepNumber({ n }: { n: number }) {
 	return (
-		<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-content">
+		<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-content">
 			{n}
 		</span>
+	);
+}
+
+/**
+ * A step's heading block.
+ *
+ * Centred, and in the Fraunces display face at the marketing scale, because this page
+ * sits in the same lineup as /for-users and /about and was reading as a different site:
+ * bold sans headings hard against the left edge, while every neighbouring page centres a
+ * light serif inside a capped column.
+ */
+function StepHeading({
+	n,
+	title,
+	children,
+}: {
+	n: number;
+	title: React.ReactNode;
+	children?: React.ReactNode;
+}) {
+	return (
+		<div className="text-center">
+			<div className="mb-4 flex justify-center">
+				<StepNumber n={n} />
+			</div>
+			<h2 style={serif} className="text-balance text-3xl font-light leading-tight sm:text-4xl">
+				{title}
+			</h2>
+			{children && (
+				<p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-base-content/65">
+					{children}
+				</p>
+			)}
+		</div>
 	);
 }
 
@@ -210,7 +253,7 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
  */
 function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }) {
 	return (
-		<div className="max-w-xl">
+		<div className="mx-auto max-w-xl">
 			<div className="flex h-11 overflow-hidden rounded-xl border border-base-content/10">
 				{segments.map((s) => (
 					<div
@@ -265,7 +308,7 @@ function Ask({
 }) {
 	return (
 		<div
-			className={`mt-7 rounded-2xl border p-5 transition-colors ${
+			className={`mx-auto mt-8 max-w-xl rounded-2xl border p-5 transition-colors ${
 				value === true ? "border-primary/45 bg-primary/5" : "border-base-content/10 bg-base-200/60"
 			}`}
 		>
@@ -449,7 +492,7 @@ function CreatorFinder({
 
 	return (
 		<div className="mt-6">
-			<label className="input input-bordered flex max-w-md items-center gap-2 rounded-full">
+			<label className="input input-bordered mx-auto flex max-w-md items-center gap-2 rounded-full">
 				<svg
 					viewBox="0 0 24 24"
 					fill="none"
@@ -472,7 +515,7 @@ function CreatorFinder({
 				/>
 			</label>
 
-			<div className="mt-3 flex flex-wrap items-center gap-2">
+			<div className="mt-3 flex flex-wrap items-center justify-center gap-2">
 				{MEDIUMS.map((m) => (
 					<button
 						key={m.key}
@@ -567,7 +610,7 @@ function CreatorFinder({
 					})
 				)}
 			</div>
-			<p className="mt-3 text-xs text-base-content/45">
+			<p className="mt-4 text-center text-xs text-base-content/45">
 				How much each creator gets is a question for once your account exists — right now it&rsquo;s
 				just who.
 			</p>
@@ -575,17 +618,83 @@ function CreatorFinder({
 	);
 }
 
-/* ── The tray, and the twin at the foot of the page ─────────────────────────── */
+/* ── Per-section feedback, and the summary that adds it up ──────────────────── */
 
-interface TrayLine {
+interface PickLine {
 	key: string | null;
 	label: string;
 	sub: string;
 	amount: number;
 }
 
-function Tray({
-	title,
+/**
+ * What this section currently amounts to, stated under the section itself.
+ *
+ * Every step that asks something answers it in place rather than reporting into a rail
+ * off to one side: a choice and its consequence belong in the same eyeline, and the page
+ * can then be a single centred column like the rest of the marketing lineup. The default
+ * is always *nothing chosen*, said plainly — an unanswered step reads as unanswered
+ * rather than as a quiet no.
+ */
+function SectionEcho({
+	empty,
+	lines,
+	onDrop,
+}: {
+	empty: string;
+	lines: PickLine[];
+	onDrop: (key: string) => void;
+}) {
+	const total = lines.reduce((sum, l) => sum + l.amount, 0);
+	return (
+		<div
+			className={`mx-auto mt-8 max-w-xl rounded-2xl border px-5 py-4 transition-colors ${
+				lines.length > 0
+					? "border-primary/35 bg-primary/5"
+					: "border-dashed border-base-content/15 bg-base-200/40"
+			}`}
+		>
+			{lines.length === 0 ? (
+				<p className="text-center text-sm text-base-content/50">{empty}</p>
+			) : (
+				<>
+					<ul className="space-y-2">
+						{lines.map((line) => (
+							<li key={line.key ?? line.label} className="flex items-baseline gap-3 text-sm">
+								<span className="min-w-0">
+									<span className="font-semibold">{line.label}</span>
+									<span className="block text-xs text-base-content/50">{line.sub}</span>
+								</span>
+								<span className="ml-auto flex shrink-0 items-baseline gap-3">
+									<strong className="tabular-nums">
+										{line.amount ? `${money(line.amount)}/mo` : "Free"}
+									</strong>
+									{line.key && (
+										<button
+											type="button"
+											className="text-xs text-base-content/45 underline"
+											onClick={() => onDrop(line.key as string)}
+										>
+											Remove
+										</button>
+									)}
+								</span>
+							</li>
+						))}
+					</ul>
+					{lines.length > 1 && (
+						<p className="mt-3 border-t border-base-content/10 pt-2 text-right text-sm font-semibold tabular-nums">
+							{money(total)}/mo from this step
+						</p>
+					)}
+				</>
+			)}
+		</div>
+	);
+}
+
+/** The closing panel — the only place the whole page is added up, and the only CTA. */
+function Summary({
 	lines,
 	total,
 	cta,
@@ -596,8 +705,7 @@ function Tray({
 	onSubmit,
 	onDrop,
 }: {
-	title: string;
-	lines: TrayLine[];
+	lines: PickLine[];
 	total: number;
 	cta: string;
 	busy: boolean;
@@ -608,51 +716,50 @@ function Tray({
 	onDrop: (key: string) => void;
 }) {
 	return (
-		<div className="rounded-2xl border border-base-300 bg-base-200/60 p-5">
-			<h3 className="mb-3 text-lg font-bold">{title}</h3>
-			<ul className="space-y-2">
+		<div className="mx-auto mt-8 max-w-lg rounded-2xl border border-base-300 bg-base-200/60 p-6">
+			<ul className="space-y-2.5">
 				{lines.map((line) => (
 					<li
 						key={line.key ?? "free"}
-						className="flex items-baseline justify-between gap-3 border-b border-base-content/5 pb-2 text-sm"
+						className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
 					>
 						<span className="min-w-0">
 							<span className="font-semibold">{line.label}</span>
 							<span className="block text-xs text-base-content/45">{line.sub}</span>
+						</span>
+						<span className="ml-auto flex shrink-0 items-baseline gap-3">
+							<strong className="tabular-nums">{line.amount ? money(line.amount) : "Free"}</strong>
 							{line.key && (
 								<button
 									type="button"
-									className="text-[11px] text-base-content/40 underline"
+									className="text-xs text-base-content/40 underline"
 									onClick={() => onDrop(line.key as string)}
 								>
 									Remove
 								</button>
 							)}
 						</span>
-						<strong className="shrink-0 tabular-nums">
-							{line.amount ? money(line.amount) : "Free"}
-						</strong>
 					</li>
 				))}
 			</ul>
-			<div className="mt-3 flex items-baseline justify-between">
+			<div className="mt-4 flex items-baseline justify-between">
 				<span className="font-bold">Monthly</span>
-				<span className="text-2xl font-bold tabular-nums">{money(total)}</span>
+				<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
 			</div>
 			{total > 0 && (
 				<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
 			)}
 			<button
 				type="button"
-				className={`btn btn-primary mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+				className={`btn btn-primary btn-lg mt-5 w-full ${busy ? "btn-disabled" : ""}`}
 				onClick={onSubmit}
 				disabled={busy}
 			>
 				{busy ? "Working…" : cta}
 			</button>
-			{error && <p className="mt-2 text-sm text-error">{error}</p>}
-			{success && <p className="mt-2 text-sm text-success">{success}</p>}
-			<p className="mt-2 text-xs leading-relaxed text-base-content/45">{note}</p>
+			{error && <p className="mt-3 text-sm text-error">{error}</p>}
+			{success && <p className="mt-3 text-sm text-success">{success}</p>}
+			<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
 		</div>
 	);
 }
@@ -750,33 +857,51 @@ export default function SubscribePage() {
 	const anthersSeeds = picks.anthers === true ? 1 : 0;
 	const total = (anthersSeeds + picks.seed.length) * SEED_PRICE;
 
-	const lines: TrayLine[] = useMemo(() => {
-		const out: TrayLine[] = [
+	/** Step 3's answer, in the shape the echo and the summary both render. */
+	const anthersLines: PickLine[] = useMemo(
+		() =>
+			picks.anthers === true
+				? [
+						{
+							key: "anthers",
+							label: "A Seed for Anthers",
+							sub: "watch as much Public Access as you like",
+							amount: SEED_PRICE,
+						},
+					]
+				: [],
+		[picks.anthers],
+	);
+
+	/** Step 4's answers — one line per creator, whether followed or backed. */
+	const creatorLines: PickLine[] = useMemo(
+		() =>
+			picks.follow.map((username) => {
+				const creator = byUsername.get(username);
+				return {
+					key: username,
+					label: creator ? nameOf(creator) : username,
+					sub: picks.seed.includes(username) ? "following · one Seed" : "following",
+					amount: picks.seed.includes(username) ? SEED_PRICE : 0,
+				};
+			}),
+		[picks.follow, picks.seed, byUsername],
+	);
+
+	/** The whole page, added up once — the only place a total appears. */
+	const summaryLines: PickLine[] = useMemo(
+		() => [
 			{
 				key: null,
 				label: "Free account",
 				sub: `${SPIKE.FREE_PA_HOURS} hours of Public Access a month`,
 				amount: 0,
 			},
-		];
-		if (picks.anthers === true)
-			out.push({
-				key: "anthers",
-				label: "A Seed for Anthers",
-				sub: "watch as much as you like",
-				amount: SEED_PRICE,
-			});
-		for (const username of picks.follow) {
-			const creator = byUsername.get(username);
-			out.push({
-				key: username,
-				label: creator ? nameOf(creator) : username,
-				sub: picks.seed.includes(username) ? "following · one Seed" : "following",
-				amount: picks.seed.includes(username) ? SEED_PRICE : 0,
-			});
-		}
-		return out;
-	}, [picks, byUsername]);
+			...anthersLines,
+			...creatorLines,
+		],
+		[anthersLines, creatorLines],
+	);
 
 	/**
 	 * Commit what can be committed.
@@ -842,8 +967,8 @@ export default function SubscribePage() {
 		}
 	};
 
-	const trayProps = {
-		lines,
+	const summaryProps = {
+		lines: summaryLines,
 		total,
 		cta: signedIn
 			? total > 0
@@ -863,42 +988,48 @@ export default function SubscribePage() {
 	return (
 		// `min-w-0 w-full` breaks the flex-column min-content cascade so this wrapper can
 		// shrink below its content's min-content width on mobile; without `w-full`,
-		// `mx-auto` on a flex item disables the default `align-self: stretch`. The
-		// wide-screen cap is a utility class, never an inline style — an inline width wins
-		// over `max-w-full` and defeats the cap below the cap.
-		<div className="mx-auto min-w-0 w-full max-w-full max-w-[80rem] px-4 py-8">
-			<div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-				<div className="min-w-0">
+		// `mx-auto` on a flex item disables the default `align-self: stretch`.
+		//
+		// 🚨 ONE max-width, never two. This carried `max-w-full max-w-[80rem]` (inherited
+		// from the page it replaced), and Tailwind resolves that pair by source order in
+		// the generated stylesheet, not by order in the attribute — `.max-w-full` is
+		// emitted last, so it won and the page ran the full width of the viewport at every
+		// size. Nothing errors; the cap is simply never applied, which reads as a scattered
+		// layout rather than as a bug. `max-w-6xl` matches the shared marketing `Section`.
+		<div className="mx-auto min-w-0 w-full max-w-5xl px-6 py-12 sm:py-16">
+			<div className="min-w-0">
+				<div>
 					{/* ── 1 · Free ───────────────────────────────────────────── */}
 					<Reveal>
-						<div className="mb-3 flex items-center gap-3">
-							<StepNumber n={1} />
-							<p className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
-								A non-profit · no ads, no shareholders, no strings
+						<div className="text-center">
+							<div className="mb-4 flex items-center justify-center gap-3">
+								<StepNumber n={1} />
+								<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
+									A non-profit · no ads, no shareholders, no strings
+								</p>
+							</div>
+							<h1
+								style={serif}
+								className="text-balance text-4xl font-light leading-tight sm:text-5xl"
+							>
+								Anthers is free. Forever.
+							</h1>
+							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
+								Every month you get <strong>{SPIKE.FREE_PA_HOURS} hours of Public Access</strong> —
+								the streaming work creators leave open to everyone. Follow whoever you like, keep a
+								library, and buy anything a creator sells.
 							</p>
 						</div>
-						<h1 className="text-4xl font-bold sm:text-5xl">Anthers is free. Forever.</h1>
-						<p className="mt-4 max-w-2xl leading-relaxed text-base-content/70">
-							Every month you get <strong>{SPIKE.FREE_PA_HOURS} hours of Public Access</strong> —
-							the streaming work creators leave open to everyone. Follow whoever you like, keep a
-							library, and buy anything a creator sells.
-						</p>
 						<OpenWorksReel />
 					</Reveal>
 
 					{/* ── 2 · The Seed ───────────────────────────────────────── */}
-					<Reveal delay={80} className="mt-12 border-t border-base-content/10 pt-8">
-						<div className="mb-3 flex items-center gap-3">
-							<StepNumber n={2} />
-							<h2 className="text-2xl font-bold sm:text-3xl">
-								Going further is one thing: a Seed.
-							</h2>
-						</div>
-						<p className="max-w-2xl leading-relaxed text-base-content/70">
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<StepHeading n={2} title="Going further is one thing: a Seed.">
 							A Seed is <strong>{money(SEED_PRICE)} a month</strong> — the only unit of support on
 							Anthers. You hold as many as you like, and you choose where each one points.
-						</p>
-						<div className="mt-6 grid gap-4 sm:grid-cols-[auto_1fr_1fr] sm:items-stretch">
+						</StepHeading>
+						<div className="mt-8 grid gap-4 sm:grid-cols-[auto_1fr_1fr] sm:items-stretch">
 							<div className="grid place-items-center rounded-xl border border-primary/30 bg-primary/10 px-6 py-4 text-center">
 								<span>
 									<span className="block text-2xl font-bold">{money(SEED_PRICE)}</span>
@@ -927,18 +1058,14 @@ export default function SubscribePage() {
 					</Reveal>
 
 					{/* ── 3 · A Seed for Anthers ─────────────────────────────── */}
-					<Reveal delay={80} className="mt-12 border-t border-base-content/10 pt-8">
-						<div className="mb-3 flex items-center gap-3">
-							<StepNumber n={3} />
-							<h2 className="text-2xl font-bold sm:text-3xl">A Seed for Anthers</h2>
-						</div>
-						<p className="mb-6 max-w-2xl leading-relaxed text-base-content/70">
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<StepHeading n={3} title="A Seed for Anthers">
 							Watch as much Public Access as you like, for as long as you hold it — and{" "}
 							<strong>
 								{money(TIME_POOL_PER_SEED)} of every {money(SEED_PRICE)}
 							</strong>{" "}
 							goes into the Time Pool, split among the creators whose work you spent time with.
-						</p>
+						</StepHeading>
 						<SeedBreakdown
 							segments={[
 								{
@@ -971,22 +1098,27 @@ export default function SubscribePage() {
 						>
 							You can change it any month, and your free account stays yours either way.
 						</Ask>
+						<SectionEcho
+							lines={anthersLines}
+							onDrop={dropPick}
+							empty={
+								picks.anthers === false
+									? `Staying free — ${SPIKE.FREE_PA_HOURS} hours of Public Access a month.`
+									: "Nothing added here yet."
+							}
+						/>
 					</Reveal>
 
 					{/* ── 4 · A Seed for a creator ───────────────────────────── */}
-					<Reveal delay={80} className="mt-12 border-t border-base-content/10 pt-8">
-						<div className="mb-3 flex items-center gap-3">
-							<StepNumber n={4} />
-							<h2 className="text-2xl font-bold sm:text-3xl">A Seed for a creator</h2>
-						</div>
-						<p className="mb-6 max-w-2xl leading-relaxed text-base-content/70">
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<StepHeading n={4} title="A Seed for a creator">
 							It goes to them.{" "}
 							<strong>
 								{money(CREATOR_NET)} of every {money(SEED_PRICE)}
 							</strong>{" "}
 							reaches the creator, with card processing the only deduction — Anthers takes no cut of
 							a single cent of it.
-						</p>
+						</StepHeading>
 						<SeedBreakdown
 							segments={[
 								{
@@ -1004,7 +1136,7 @@ export default function SubscribePage() {
 							]}
 							note="Shown at the worst case — a single Seed on the charge. Hold more and the fixed card fee spreads across them, so every creator on it receives a little more."
 						/>
-						<p className="mt-8 max-w-2xl leading-relaxed text-base-content/70">
+						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
 							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
 							tap a medium to meet a few. Following is free — add a Seed when you&rsquo;d like to
 							back them.
@@ -1015,41 +1147,39 @@ export default function SubscribePage() {
 							picks={picks}
 							onToggle={toggleCreator}
 						/>
+						<SectionEcho
+							lines={creatorLines}
+							onDrop={dropPick}
+							empty="No creators picked yet — following is free whenever you're ready."
+						/>
 					</Reveal>
 
-					{/* ── The tray's twin, for anyone who scrolled past it ───── */}
-					<Reveal delay={80} className="mt-12 border-t border-base-content/10 pt-8">
-						<h2 className="text-2xl font-bold">Ready when you are</h2>
-						<p className="mt-2 max-w-prose text-base-content/60">
-							The same panel as the one beside you — whatever you&rsquo;ve picked comes with it.
+					{/* ── The one place it all adds up ───────────────────────── */}
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<h2 style={serif} className="text-center text-3xl font-light leading-tight sm:text-4xl">
+							Ready when you are
+						</h2>
+						<p className="mx-auto mt-4 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
+							Everything you chose along the way, in one place.
 						</p>
-						<div className="mt-5 max-w-md">
-							<Tray {...trayProps} title="Create your account" />
-						</div>
+						<Summary {...summaryProps} />
+						<p className="mx-auto mt-5 max-w-xl text-center text-xs leading-relaxed text-base-content/45">
+							Anthers puts {money(SPIKE.FREE_TP_PER_ACCOUNT)} a month into the Time Pool for every
+							free account, so your watching pays creators even at $0.
+						</p>
 					</Reveal>
 
 					{/* Why non-profit */}
 					<div className="mx-auto mt-16 max-w-3xl pb-4 text-center">
-						<h2 className="mb-3 text-xl font-bold">Why non-profit</h2>
+						<h2 style={serif} className="mb-4 text-2xl font-light sm:text-3xl">
+							Why non-profit
+						</h2>
 						<p className="mx-auto max-w-2xl text-sm leading-relaxed text-base-content/60">
 							Anthers is a non-profit because the only way to guarantee that our platform always
 							serves creators is to make it legally impossible for it to act otherwise. Anthers
 							cannot distribute profits to insiders, cannot be acquired, and cannot have its mission
 							diluted by investors. If it ever ceases to operate, its assets go to another exempt
 							organization, not to founders or shareholders.
-						</p>
-					</div>
-				</div>
-
-				{/* ── The tray ───────────────────────────────────────────────── */}
-				<div className="hidden lg:block">
-					{/* Clears the sticky marketing navbar, which is ~4.5rem and sits at top-0 —
-					    a smaller offset parks the tray's first row underneath it. */}
-					<div className="sticky top-24">
-						<Tray {...trayProps} title="Your start" />
-						<p className="mt-3 text-xs leading-relaxed text-base-content/40">
-							Anthers puts {money(SPIKE.FREE_TP_PER_ACCOUNT)} a month into the Time Pool for every
-							free account, so your watching pays creators even at $0.
 						</p>
 					</div>
 				</div>
