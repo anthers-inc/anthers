@@ -61,7 +61,7 @@ const PRIVACY: LegalDocument = {
 
 		"## Who we share it with",
 		"We share personal information only with service providers who process it **on our instructions**, only for the purposes below, and never for their own:",
-		"- **Cloudflare** — your IP address, browser user-agent and request headers, for every request. DNS, DDoS protection, and filtering automated traffic. Every request to Anthers passes through Cloudflare before it reaches us.\n- **DigitalOcean** — application hosting, the database, and uploaded files.\n- **Stripe** — card details, payment and payout records, and (on our payment pages only) device and browser information for fraud prevention.\n- **Resend** — your email address and the contents of the email we send you.",
+		"- **Cloudflare** — your IP address, browser user-agent and request headers, for every request, plus **everything you upload**: your files, images, video and audio are stored on Cloudflare R2. DNS, DDoS protection, and filtering automated traffic. Every request to Anthers passes through Cloudflare before it reaches us.\n- **DigitalOcean** — application hosting and the database.\n- **Stripe** — card details, payment and payout records, and (on our payment pages only) device and browser information for fraud prevention.\n- **Resend** — your email address and the contents of the email we send you.",
 		"We may also disclose information **where we are legally compelled to** — a valid court order, subpoena, or equivalent legal process. Where we are permitted to tell you, we will.",
 		"We publish **aggregate, anonymised** figures — totals, trends, charitable transparency reporting — which cannot be traced to any individual.",
 		"**We have never sold personal information and will not.** Under California law, we do not “sell” or “share” personal information as those terms are defined.",
@@ -136,7 +136,7 @@ const TERMS: LegalDocument = {
 		"You can also report content or a person, which is different: that asks a human to look. We don't tell you what happened to an individual report.",
 
 		"## Money",
-		"**Seeds** are $3 each, monthly, and you choose who they go to. Seeds you give a creator go to that creator; Seeds you give Anthers cover your own streaming at cost, fund the pool that pays creators by watch-time, and what's left funds free access and our charitable programs.",
+		"**Seeds** are $3 each, monthly, and you choose who they go to. Seeds you give a creator go to that creator; Seeds you give Anthers fund the pool that pays creators by watch-time, pay their share of card processing at cost, and what's left funds free access and our charitable programs.",
 		"**Direct purchases** are one-off. You pay the price the creator set, plus sales tax where it applies, and nothing else.",
 		"Prices shown include every mandatory fee. Sales tax is the only thing added at checkout.",
 

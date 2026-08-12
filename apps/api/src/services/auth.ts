@@ -247,9 +247,26 @@ export async function cleanupDesktopAuthRequests(): Promise<void> {
 	await db.delete(desktopAuthRequests).where(lt(desktopAuthRequests.expiresAt, new Date()));
 }
 
-/** Delete all expired sessions (cleanup) */
-export async function deleteExpiredSessions(): Promise<void> {
-	await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
+/**
+ * Delete all expired sessions. Returns how many rows went.
+ *
+ * 🚨 **Run it, don't just export it.** This was exported and called from nowhere until
+ * 2026-08-12, while 51.05 promised "Sessions: deleted when they expire" — and because
+ * `validateSession` and `listUserSessions` both filter on `expiresAt > now()`, nothing
+ * anywhere behaved differently for the rows that should have been gone. The `ip_address`
+ * and `user_agent` on every session ever created were simply kept. It is scheduled as
+ * `QUEUES.PRUNE_CREDENTIALS` now.
+ *
+ * The count is returned rather than logged here so a test can assert on **rows removed**.
+ * Asserting through a read would prove nothing: every reader already excludes what this
+ * is supposed to delete, so the test would pass identically against a no-op.
+ */
+export async function deleteExpiredSessions(): Promise<number> {
+	const gone = await db
+		.delete(sessions)
+		.where(lt(sessions.expiresAt, new Date()))
+		.returning({ id: sessions.id });
+	return gone.length;
 }
 
 // ─── Email Verification ──────────────────────────────────────────────────────
@@ -353,7 +370,16 @@ export async function resetPassword(token: string, newPassword: string): Promise
 	return true;
 }
 
-/** Delete all expired verification tokens (cleanup) */
-export async function deleteExpiredTokens(): Promise<void> {
-	await db.delete(verificationTokens).where(lt(verificationTokens.expiresAt, new Date()));
+/**
+ * Delete all expired verification tokens. Returns how many rows went.
+ *
+ * Same history as {@link deleteExpiredSessions} — exported, never called, and invisible
+ * because every consumer already filters on expiry. Scheduled as `QUEUES.PRUNE_CREDENTIALS`.
+ */
+export async function deleteExpiredTokens(): Promise<number> {
+	const gone = await db
+		.delete(verificationTokens)
+		.where(lt(verificationTokens.expiresAt, new Date()))
+		.returning({ id: verificationTokens.id });
+	return gone.length;
 }
