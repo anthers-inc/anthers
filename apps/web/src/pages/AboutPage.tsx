@@ -309,9 +309,9 @@ export default function AboutPage() {
 							<p className="leading-relaxed text-base-content/65">
 								Anthers takes no cut of any Seed or any direct purchase, and the shared Time Pool
 								pays out to creators by watch-time in full. Every dollar a user spends is money to
-								creators, bandwidth at cost, or the remainder of each Seed given to Anthers that
-								funds free access and the charitable programs. Anthers, Inc. is a Colorado nonprofit
-								corporation—no investors, no profit-taking.
+								creators, the at-cost card processing, or the remainder of each Seed given to
+								Anthers that funds free access and the charitable programs. Anthers, Inc. is a
+								Colorado nonprofit corporation—no investors, no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -402,7 +402,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, bandwidth at cost, or the remainder of each Seed given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
+								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, the at-cost card processing, or the remainder of each Seed given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
 							},
 							{
 								num: "04",

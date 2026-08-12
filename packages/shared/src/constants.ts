@@ -10,14 +10,23 @@ export const APP_NAME = "Anthers";
  *     card fee, paid to Stripe (see `paymentsSplit`), so a lone $3 Seed reaches its
  *     creator as $2.61 and batching pays them more; clears that creator's Seed
  *     Gates in $3 increments; or
- *   - at **Anthers** (an *Anthers-Seed*): covers the user's streaming (at cost),
- *     funds the **Time Pool** ($1.50/Seed, to creators by watch-time), earns
- *     **Anthers' Badges**, and leaves a **remainder** for Anthers.
+ *   - at **Anthers** (an *Anthers-Seed*): funds the **Time Pool** ($1.50/Seed, to
+ *     creators by watch-time), earns **Anthers' Badges**, and leaves a
+ *     **remainder** for Anthers.
  *
  * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
  * Anthers is a recipient like any creator — it simply defines its own Badge set
- * (root/sprout/petal/blossom at 1/2/3/4 Anthers-Seeds). Bandwidth is folded into
- * Anthers-Seeds — no wallet — as a 15 GiB free floor plus 60 GiB per Seed.
+ * (root/sprout/petal/blossom at 1/2/3/4 Anthers-Seeds).
+ *
+ * **There is no bandwidth term.** Delivery was metered at cost ($0.01/GiB) against
+ * a 15 GiB free floor plus 60 GiB per Seed until 2026-08-12. That whole apparatus
+ * was cost-recovery for one vendor's price list — `BANDWIDTH_PER_GIB` was *exactly*
+ * DigitalOcean Spaces' egress rate — and Cloudflare R2 charges $0 egress at any
+ * volume, so it metered a cost nobody pays. Downloads are unlimited and free,
+ * permanently, across unlimited devices. The freed term fell to the **remainder**,
+ * which is the residual, so removing it *raised* charitable funding rather than
+ * deleting a fee. Don't reintroduce a per-byte charge without a vendor change
+ * behind it.
  *
  * The at-cost **Payments** line (card + processing) sits INSIDE the price — it is
  * charged on the whole batched monthly charge and split pro-rata, then paid to the
@@ -33,9 +42,8 @@ export const APP_NAME = "Anthers";
  * no remainder to absorb anything. (This comment used to claim creator pay was never
  * touched; that contradicted `paymentsSplit` and `economics.test.ts`.)
  *
- * Seed price is locked at $3; the allocation dials (Time-Pool-per-Seed, free
- * floor, GiB-per-Seed) are the current tuned values — see the Support Model
- * Playground (50.04) and Subscription Economics (50.01).
+ * Seed price is locked at $3; Time-Pool-per-Seed is the current tuned value — see
+ * Subscription Economics (50.01).
  */
 
 // ── Badges (what a recipient returns for Seeds) ───────────────────────────────
@@ -76,10 +84,6 @@ export const SEED_PRICE = 3;
 export const TIME_POOL_PER_SEED = 1.5;
 /** The Free rank's small subsidised Time Pool ($) — the user pays $0. */
 export const FREE_TIME_POOL = 0.05;
-/** Free streaming floor (GiB/mo) on every account, funded as free access. */
-export const FREE_FLOOR_GIB = 15;
-/** Streaming allowance (GiB/mo) added per Anthers-Seed, on top of the free floor. */
-export const GIB_PER_SEED = 60;
 
 /**
  * How long raw, per-person attention rows are kept before being rolled up into
@@ -235,15 +239,6 @@ export function timePoolFor(anthersSeeds: number): number {
 	return anthersSeeds <= 0 ? FREE_TIME_POOL : TIME_POOL_PER_SEED * anthersSeeds;
 }
 
-/** Streaming allowance (GiB) for `n` Anthers-Seeds: the free floor + 60/Seed. */
-export function allowanceGiB(anthersSeeds: number): number {
-	return FREE_FLOOR_GIB + GIB_PER_SEED * Math.max(0, anthersSeeds);
-}
-
-// ── Bandwidth (at cost, pass-through — folded into Anthers-Seeds) ─────────────
-/** Delivery/egress bandwidth, at DigitalOcean cost. Neutral to creators. */
-export const BANDWIDTH_PER_GIB = 0.01;
-
 // ── Storage charge rate (creator storage only) ───────────────────────────────
 /**
  * Half again on a creator's storage cost above the free allowance. This is a
@@ -252,7 +247,7 @@ export const BANDWIDTH_PER_GIB = 0.01;
  * 2026-08-08 — copy names who pays for what, not a fee. The identifier stays.
  *
  * The purchase fees this constant also used to drive — 50% of a download's
- * bandwidth on a digital sale, and 1% of price on a physical one — were
+ * delivery on a digital sale, and 1% of price on a physical one — were
  * **removed 2026-08-03**. They raised a fraction of a cent per sale, and a
  * commission on a creator's sale is the exact feature the IRS keyed on in Rev.
  * Rul. 76-152 and Final Adverse Determination 202521022. Anthers now takes $0
@@ -270,12 +265,42 @@ export const AFF_INFRA_RATE = 0.5;
 export const FOUNDATION_SPLIT = { admin: 0.1, programs: 0.4, subsidy: 0.5 } as const;
 
 // ── Storage & self-hosting (creator side) ────────────────────────────────────
-/** DigitalOcean Spaces storage, $/GiB/month. */
-export const STORAGE_PER_GIB_MONTH = 0.02;
+/**
+ * Object storage, $/GiB/month — a pass-through of the vendor's rate, so it moves
+ * when the vendor does. **Cloudflare R2 since 2026-08-12**: $0.015/GB-month, which
+ * is $0.0161/GiB-month. It was $0.02, DigitalOcean Spaces' rate.
+ *
+ * This is the second dial R2 moved, and the one nothing else was watching. It cuts
+ * the creator-facing storage charge by ~20% — and that charge is one of the two
+ * charitable revenue streams, so it reduces the mission's income at the same moment
+ * retiring the bandwidth term raises it. The two must be modelled together or the
+ * net effect reads wrong in both directions.
+ *
+ * Note R2's Infrequent Access tier charges $0.01/GB to retrieve, so a cold-storage
+ * class is not a free saving and shouldn't be assumed into this number.
+ */
+export const STORAGE_PER_GIB_MONTH = 0.0161;
 /** Free creator storage allowance (GiB), subsidised. */
 export const FREE_STORAGE_GIB = 50;
-/** Flat monthly fee for a self-hosting creator (Anthers stores/serves nothing). */
-export const SELF_HOST_FEE = 1;
+/**
+ * What a self-hosting creator pays Anthers for infrastructure: **nothing**.
+ *
+ * It was a flat $1/month standing in for the storage charge, and it was upside-down
+ * — a hosted creator's first 50 GiB is free, so break-even sat at a catalogue of
+ * ~91 GiB at R2 rates and every creator below that line paid *more* for storing
+ * their own files than for Anthers storing them. The discount was a penalty for
+ * exactly the hobbyist most likely to try self-hosting, and R2 widened the gap.
+ *
+ * $0 is the only value consistent with the standing principle that **Anthers
+ * charging less because it provides less is the model working**: a self-hosting
+ * creator stores and serves nothing here, so there is nothing to pass through.
+ *
+ * ⚠️ `POST /api/subscriptions/self-hosting` still sets the flag on the creator's
+ * own assertion and verifies no origin, so this is now a bigger unearned discount
+ * than it was. The fix is origin registration, not a price — see 42.07 § *The one
+ * thing that is currently untrue*.
+ */
+export const SELF_HOST_FEE = 0;
 
 // ── Payments (INSIDE the charge since 2026-08-03; it leaves the system) ───────
 /** Card processing: 2.9% + $0.30, charged once on the whole batched charge. */
@@ -351,5 +376,10 @@ export const WITHDRAWN_RESCUE_DAYS = 90;
 export const PAYOUT_THRESHOLD = 20;
 
 // ── Delivery assumption (AV1 1080p60) ────────────────────────────────────────
-/** Delivered GiB per stream-hour — converts watch-hours to allowance draw. */
+/**
+ * Delivered GiB per stream-hour — a *size* assumption, used to describe how much
+ * data a watch-hour moves. It stopped converting to money on 2026-08-12 when the
+ * per-GiB charge was retired; egress is $0 at any volume on R2. Keep it for
+ * capacity talk, never for billing.
+ */
 export const DELIVERY_GIB_PER_HOUR = 1.7;

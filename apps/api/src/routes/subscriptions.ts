@@ -6,7 +6,7 @@
  * count is their rank and, at $3 each, their Anthers subscription (a single $3
  * Seed price × quantity in Stripe). Directed creator-Seeds are tracked in
  * `seed_allocations`; `creatorSeedTotal` is the balance the user directs.
- * Bandwidth is folded into the Anthers-Seeds — there is no wallet. This file also
+ * There is no bandwidth line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator gates, and access.
  */
 

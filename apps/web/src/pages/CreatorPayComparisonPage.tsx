@@ -14,7 +14,8 @@
 //     price to contain every mandatory fee. So the honest claim is "Anthers takes
 //     no cut" — unconditionally true — NOT "100% to the creator", which is retired.
 //   • On a direct sale the creator receives the listed price less at-cost card
-//     processing and the buyer's first download. Both go to third parties.
+//     processing, which goes to Stripe. That is the only deduction — the buyer's
+//     first download was charged at cost until 2026-08-12 and is now free.
 //   • On a Seed there is no platform fee at all; only the pro-rata share of the
 //     at-cost card fee on the fan's whole monthly charge comes out.
 //
@@ -37,8 +38,9 @@
 // Seeds and direct sales, and Anthers takes no cut of either.
 //
 // Anthers figures derive from packages/shared/src/constants.ts (SEED_PRICE $3,
-// TIME_POOL_PER_SEED $1.50, BANDWIDTH_PER_GIB $0.01 at cost). There is no platform
-// fee on a purchase — it was removed 2026-08-03. Competitor figures are their public
+// TIME_POOL_PER_SEED $1.50). There is no delivery charge anywhere — it was retired
+// 2026-08-12 — and no platform
+// fee on a purchase — that went 2026-08-03. Competitor figures are their public
 // rates, checked 2026-08-03 and perishable; re-check before publishing.
 //
 // Styled like the calculators (dense, DaisyUI-native, plain — no Meadow decor), so
@@ -122,21 +124,21 @@ const SEED_NET = money(SEED_SPEND - cardFeeDisplay(SEED_SPEND));
 /** What Patreon delivers on the same $6: 10% platform fee, then the same card cost. */
 const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND));
 
-// Anthers' per-transaction facts, reused across tabs. Anthers' cut is a literal
-// $0 everywhere; what comes out of a price is at-cost card processing (to the
-// processor) and, on a digital sale, the buyer's first download (to the CDN).
+// Anthers' per-transaction facts, reused across tabs. Anthers' cut is a literal $0
+// everywhere; the one thing that comes out of a price is at-cost card processing, paid
+// to the processor.
 const A_STREAM: Side = {
 	keep: "~$0.03–0.60 / hr",
 	keepSub: `your watch-time share of the fan's monthly Time Pool — the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
 	cut: "$0",
 	cutKind: "none",
 };
-/** A direct sale. Anthers' cut is a literal $0 — what comes out of the listed
- * price is at-cost card processing and the buyer's first download, both paid to
- * third parties. `net` is what actually reaches the creator. */
+/** A direct sale. Anthers' cut is a literal $0 — the one thing that comes out of the
+ * listed price is at-cost card processing, paid to Stripe. `net` is what actually
+ * reaches the creator. */
 const aPrice = (list: string, net: string): Side => ({
 	keep: net,
-	keepSub: `your ${list} list, less at-cost card processing and the first download — Anthers takes none of it`,
+	keepSub: `your ${list} list, less at-cost card processing — Anthers takes none of it`,
 	cut: "$0",
 	cutKind: "none",
 });
@@ -199,7 +201,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "70% — Valve absorbs card processing inside its 30%",
 					cut: "30% (≈ $3.00)",
 				},
-				note: "Both figures are all-in take-home. Anthers takes $0; the $0.60 that leaves your $10 is card processing and the buyer's first download, paid to third parties. Steam's $3.00 is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.",
+				note: `Both figures are all-in take-home. Anthers takes $0; the $${SALE_10_1GIB.cardFee} that leaves your $${SALE_10_1GIB.price} is card processing, paid to Stripe. Steam's $3.00 is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.`,
 			},
 		],
 	},
@@ -307,12 +309,12 @@ export default function CreatorPayComparisonPage() {
 						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
 						<b className="text-base-content">Seed</b> given to you and every direct sale carries no
 						platform fee at all, and the Time Pool is distributed to creators by watch-time. What
-						does come out of a price is the at-cost card processing, paid to the processor, and on a
-						digital sale the buyer's first download — never a cent to us. The one thing that funds
-						the platform is <b className="text-base-content">the remainder</b> — what's left of each
-						Seed to Anthers after the fan's own bandwidth and the Time Pool, funding free access and
-						the creator programs, never subtracted from your earnings. Here's what actually reaches
-						you, platform by platform.
+						does come out of a price is the at-cost card processing, paid to the processor — never a
+						cent to us, and nothing at all for delivery however large the work. The one thing that
+						funds the platform is <b className="text-base-content">the remainder</b> — what's left
+						of each Seed to Anthers after the Time Pool, funding free access and the creator
+						programs, never subtracted from your earnings. Here's what actually reaches you,
+						platform by platform.
 					</>
 				}
 			/>
@@ -356,12 +358,10 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Seeds</b> — a flat $3/month each. A fan gives Seeds
 					straight to creators ($3, no platform cut) and holds{" "}
 					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
-					Time Pool ($1.50, distributed to the creators they watch by watch-time), the fan's own
-					bandwidth (at cost, folded in — no wallet), and{" "}
+					Time Pool ($1.50, distributed to the creators they watch by watch-time) and{" "}
 					<b className="text-base-content/70">the remainder</b> that funds free access and the
-					creator programs. On a direct sale Anthers takes nothing at all; the only deductions from
-					the listed price are the at-cost card processing and, on a digital sale, the buyer's first
-					download — both paid to third parties.
+					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
+					the listed price is the at-cost card processing, paid to the processor.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷

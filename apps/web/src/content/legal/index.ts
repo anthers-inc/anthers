@@ -182,7 +182,7 @@ const CREATOR_TERMS: LegalDocument = {
 		"You're responsible for having the rights to everything you publish, including music, art, and code you didn't make yourself.",
 
 		"## Getting paid",
-		"**Anthers takes no cut.** On a direct purchase you receive the price you set, less the card processing the payment network charges and the bandwidth of the buyer's first download. On Seeds given to you directly, you receive the full $3 less its share of card processing.",
+		"**Anthers takes no cut.** On a direct purchase you receive the price you set, less the card processing the payment network charges — the only deduction there is. Delivery costs nothing, however large the work or however many times the buyer downloads it. On Seeds given to you directly, you receive the full $3 less its share of card processing.",
 		"You are also paid from the pool funded by Seeds given to Anthers, in proportion to time people spend with your work. A minute is a minute regardless of whether it's a game, a video, audio, or writing.",
 		"Payouts run through Stripe on their schedule. Tax is yours to handle; we report what we're required to report.",
 

@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { DIRECTED_SEED_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Link } from "@anthers/web-shared/router";
 import { type ReactNode, useState } from "react";
+
+/**
+ * Money figures come from the generated table, never typed here — see
+ * `scripts/econ-figures.ts`. A hand-typed $9.40 sat in this file for months against a
+ * model that said something else.
+ */
+const SEED = DIRECTED_SEED_WORST_CASE;
+const GAME_10 = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
 
 interface FAQItem {
 	question: string;
@@ -59,51 +68,51 @@ const FAQ_ITEMS: FAQItem[] = [
 			<div className="space-y-2">
 				<p>
 					Support on Anthers is all in the form of <strong>Seeds</strong> — a flat{" "}
-					<strong>$3/month</strong> each — and every dollar goes to creators, to your bandwidth at
-					cost, or to free access and Anthers' charitable programs. A Seed goes one of two ways:
+					<strong>$3/month</strong> each — and every dollar goes to creators, to the at-cost card
+					processing, or to free access and Anthers' charitable programs. A Seed goes one of two
+					ways:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
 						<strong>Give Seeds to a creator</strong> — $3/month each, sent straight to creators you
 						pick, Patreon-style. <strong>Anthers takes no cut at all.</strong> The only deduction is
-						the at-cost card processing, paid to the processor — on a single $3 Seed that is $0.39,
-						so the creator receives $2.61. It is one fee on your whole monthly charge, so the more
-						Seeds you hold, the more of each one reaches its creator.
+						the at-cost card processing, paid to the processor — on a single $3 Seed that is $
+						{SEED.cardFee}, so the creator receives ${SEED.net}. It is one fee on your whole monthly
+						charge, so the more Seeds you hold, the more of each one reaches its creator.
 					</li>
 					<li>
-						<strong>Give Seeds to Anthers</strong> — $3/month each. Each one covers your streaming
-						(at cost), funds the Time Pool (shared out by the time you spend with each creator's
-						work), and leaves a remainder that funds free access and the charitable programs. Your
-						count is your Badge (Root → Blossom, and a "+" beyond) — a point-in-time choice, not a
-						rolling total of past spend.
+						<strong>Give Seeds to Anthers</strong> — $3/month each. Each one funds the Time Pool
+						(shared out by the time you spend with each creator's work) and leaves a remainder that
+						funds free access and the charitable programs. Your count is your Badge (Root → Blossom,
+						and a "+" beyond) — a point-in-time choice, not a rolling total of past spend.
 					</li>
 				</ul>
 				<p>
-					Bandwidth is folded into the Seeds you give Anthers and billed at cost ($0.01/GiB)—there's
-					no separate wallet. Every account gets a free monthly streaming floor (15 GiB), and each
-					Seed adds a generous allowance. Card processing comes out of your Seeds at cost and leaves
-					the system entirely; sales tax is the only thing added on top of the price.
+					Streaming and downloading are unlimited and cost you nothing on top — no allowance, no
+					wallet, no per-GiB charge, however many devices you use. Card processing comes out of your
+					Seeds at cost and leaves the system entirely; sales tax is the only thing added on top of
+					the price.
 				</p>
 			</div>
 		),
 	},
 	{
 		category: "Subscriptions & Payments",
-		question: "How does bandwidth work?",
+		question: "Is there a data cap? What does streaming cost me?",
 		answer:
-			"Streaming and downloading content moves real data, which costs real money to deliver. On Anthers that cost is folded into the Seeds you give Anthers and billed at cost ($0.01/GiB, DigitalOcean's rate) — there's no separate wallet. Every account gets a free monthly streaming floor (15 GiB), and each Seed you give Anthers adds a generous allowance on top, so for all but the heaviest streamer a single Seed covers a month's viewing. Bandwidth is neutral—none of it is a platform cut, and it never changes what a creator earns.",
+			"Nothing, and there is no cap. Streaming and downloading are unlimited on every account, free and paying alike, across as many devices as you like — and a game you bought can be re-downloaded forever at no cost. There is no allowance to run out of, no wallet to top up, and no per-GiB line on your bill. Anthers used to meter this, because delivery genuinely was expensive; our object storage now charges nothing for it at any volume, so we charge nothing for it either. Anthers charging less because it costs less is the model working as intended.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "What pays for free access and Anthers' charitable programs?",
 		answer:
-			"The remainder of each Seed given to Anthers — what's left after your bandwidth at cost, the Time Pool, and the at-cost card processing — plus the half-again on creator storage above the free allowance. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
+			"The remainder of each Seed given to Anthers — what's left after the Time Pool and the at-cost card processing — plus the half-again on creator storage above the free allowance. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
 	},
 	{
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut — we keep nothing at all. The creator sets the listed price, and that price plus your state's sales tax is exactly what you pay; there are no other additions. Out of that price come two real costs: card processing, paid to the payment processor, and your first download, at cost. Your first download is always included, so you can get what you bought whatever your Badge; re-downloads later draw your ordinary streaming allowance. The receipt shows every cent, and none of it is ours.",
+			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut — we keep nothing at all. The creator sets the listed price, and that price plus your state's sales tax is exactly what you pay; there are no other additions. One real cost comes out of that price: card processing, paid to the payment processor. Downloading what you bought is free, every time, on every device, for as long as you have the account — there is no first-download allowance and nothing to run out of. The receipt shows every cent, and none of it is ours.",
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -136,8 +145,7 @@ const FAQ_ITEMS: FAQItem[] = [
 	{
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer:
-			"Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus the Seeds directed to them. The only deductions anywhere are costs paid to third parties: card processing, and on a digital sale the buyer's first download. A $3 directed Seed reaches its creator as $2.61 at worst, and a $10 game sale with a 1 GiB download returns $9.40. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — DigitalOcean's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.",
+		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus the Seeds directed to them. The only deduction anywhere is a cost paid to a third party: card processing. A $3 directed Seed reaches its creator as $${SEED.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
 	},
 	{
 		category: "Creators",

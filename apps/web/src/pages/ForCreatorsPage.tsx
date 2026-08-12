@@ -8,10 +8,10 @@
 // Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one
 // primitive, a Seed at $3/month, pointed either at a creator (a directed Seed —
 // no platform cut, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
-// (a Seed given to Anthers — the fan's streaming at cost, $1.50 into the Time Pool, and
-// a remainder funding free access and the charitable programs). A fan's Badge IS their
-// count of Seeds given to Anthers (Root → Blossom = 1 → 4, "+" beyond). Bandwidth is
-// folded in — no wallet.
+// (a Seed given to Anthers — $1.50 into the Time Pool and a remainder funding free
+// access and the charitable programs). A fan's Badge IS their count of Seeds given to
+// Anthers (Root → Blossom = 1 → 4, "+" beyond). There is no bandwidth line: delivery
+// costs $0 at any volume, so streaming and downloads are unlimited and free.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (Seeds given to you + direct sales) carries no platform cut — the
@@ -36,12 +36,10 @@
 
 import {
 	BADGE_ORDER,
-	BANDWIDTH_PER_GIB,
 	badgeLabel,
 	CARD_FLAT,
 	CARD_RATE,
 	cardFeeDisplay,
-	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
 	SEED_PRICE,
 	seedCost,
@@ -224,16 +222,16 @@ export default function ForCreatorsPage() {
 									amount={`−$${SALE_10_2GIB.cardFee}`}
 								/>
 								<ReceiptLine
-									label={`First download (${SALE_10_2GIB.sizeGiB} GiB @ $${BANDWIDTH_PER_GIB.toFixed(2)}/GiB, at cost)`}
-									amount={`−$${SALE_10_2GIB.delivery}`}
+									label={`Delivery (unlimited downloads, ${SALE_10_2GIB.sizeGiB} GiB or 200)`}
+									amount="−$0.00"
 								/>
 								<ReceiptLine label="Anthers" amount="−$0.00" />
 								<div className="my-1 border-t border-base-content/10" />
 								<ReceiptLine label="You receive" amount={`$${SALE_10_2GIB.creatorReceives}`} bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								The buyer pays your listed price plus sales tax and nothing else. What comes out of
-								it goes to the payment processor and the CDN — never to us.
+								The buyer pays your listed price plus sales tax and nothing else. The one thing that
+								comes out of it goes to the payment processor — never a cent to us.
 							</p>
 						</Card>
 					</Reveal>
@@ -254,8 +252,8 @@ export default function ForCreatorsPage() {
 								touches a creator is half again on your storage past the free {FREE_STORAGE_GIB} GiB
 								— your own infrastructure, opt-in, and nothing to do with what you sell. Free access
 								and the charitable programs are funded by what's left of a fan's Seeds to Anthers
-								after their bandwidth, the Time Pool, and the card cost, and by lean
-								operations—Anthers itself never profits.
+								after the Time Pool and the card cost, and by lean operations—Anthers itself never
+								profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -263,8 +261,8 @@ export default function ForCreatorsPage() {
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-3">
 					<Reveal delay={0} className="h-full">
 						<PricingOption title="Free">
-							No charge—anyone can download or play in the browser within their free allowance.
-							Great for jam entries, demos, and open-source projects.
+							No charge—anyone can download it or play it in the browser, as many times as they
+							like. Great for jam entries, demos, and open-source projects.
 						</PricingOption>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
@@ -562,10 +560,10 @@ export default function ForCreatorsPage() {
 						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
 						split across every creator they spend time with, so what reaches you is your share of
 						their month, not the whole figure. Seeds they give you directly are separate, and carry
-						no platform cut. *A free account pays nothing; free access covers its small Time Pool
-						and its streaming floor, so even a free viewer pays the creators they watch. Bandwidth
-						is folded into each Seed at cost (${BANDWIDTH_PER_GIB.toFixed(2)}/GiB)—no wallet—and you
-						get {FREE_STORAGE_GIB} GiB of free storage.
+						no platform cut. *A free account pays nothing; free access covers its small Time Pool,
+						so even a free viewer pays the creators they watch. Streaming and downloads cost nothing
+						on either side—no allowance, no per-GiB charge—and you get {FREE_STORAGE_GIB} GiB of
+						free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -830,22 +828,19 @@ const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 // reference streamer the economics doc uses. Everything below is derived, never
 // typed: the creator earns the fan's Time Pool ÷ their watch-hours per watch-hour —
 // the SAME for every medium (equal-time), and independent of resolution (pay is by
-// time, not bytes). The rest of that $6 is the fan's own bandwidth at cost, the
-// at-cost card fee (inside the Seed since 2026-08-03), and the remainder that funds
-// free access and the charitable programs, which shrinks per hour the more they watch.
+// time, not bytes). The rest of that $6 is the at-cost card fee (inside the Seed
+// since 2026-08-03) and the remainder that funds free access and the charitable
+// programs. Note the per-hour figures fall as they watch more only because the same
+// fixed monthly money is spread over more hours — nothing costs more per hour.
 const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
 const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
-const STREAM_FAN_BANDWIDTH = STREAM_FAN_HOURS * DELIVERY_GIB_PER_HOUR * BANDWIDTH_PER_GIB;
 const STREAM_FAN_CARD = cardFeeDisplay(STREAM_FAN_SPEND);
 const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
 const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
-const STREAM_HR_BANDWIDTH = perHour(STREAM_FAN_BANDWIDTH);
 const STREAM_HR_CARD = perHour(STREAM_FAN_CARD);
-const STREAM_HR_FOUNDATION = perHour(
-	STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_BANDWIDTH - STREAM_FAN_CARD,
-);
+const STREAM_HR_FOUNDATION = perHour(STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_CARD);
 /** "a Sprout fan ($6/mo, ~28 hrs/month)" — the shared preamble for the stream notes. */
 const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Seeds to Anthers, ~${STREAM_FAN_HOURS} hrs/month)`;
 
@@ -894,16 +889,12 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit is
-// always $0 — the remainder funds free access and the charitable programs, bandwidth is
-// an at-cost passthrough, and the card fee goes to the processor. Streaming isn't
+// always $0 — the remainder funds free access and the charitable programs, and the
+// card fee goes to the processor. Streaming isn't
 // where Anthers competes on pay; the Time Pool share is small and variable, and the
 // real support comes from Seeds and sales.
 const streamReceipt: Line[] = [
 	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
-	{
-		label: "Their bandwidth — folded into their Seeds to Anthers, at cost",
-		amount: STREAM_HR_BANDWIDTH,
-	},
 	{
 		label: "Card processing — their share of the at-cost card fee, to the processor",
 		amount: STREAM_HR_CARD,
@@ -914,13 +905,13 @@ const streamReceipt: Line[] = [
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
 ];
-/** A sale. `net` is your take-home; `card` and `bw` are the at-cost deductions, both
- * paid to third parties. Anthers charges nothing on a purchase (the fee that used to
- * sit here was removed 2026-08-03). */
-const purchaseReceipt = (net: string, card: string, bw: string): Line[] => [
-	{ label: "To you — the listed price, less the at-cost costs below", amount: net },
+/** A sale. `net` is your take-home; `card` is the only deduction, and it is paid to
+ * Stripe. Anthers charges nothing on a purchase (the fee that used to sit here was
+ * removed 2026-08-03) and delivery costs nothing (removed 2026-08-12). */
+const purchaseReceipt = (net: string, card: string): Line[] => [
+	{ label: "To you — the listed price, less the card cost below", amount: net },
 	{ label: "Card processing — to the payment processor", amount: card },
-	{ label: "First download — delivery, at cost", amount: bw },
+	{ label: "Delivery — every download, on every device, forever", amount: "$0.00" },
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
@@ -934,29 +925,23 @@ const seedReceipt: Line[] = [
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 
-/** The Anthers take-home + receipt for a sale, derived from constants: the list
- * price less at-cost card processing and the first download's bandwidth (both
- * rounded to cents before subtracting, matching fees.ts calculateFees). A digital
- * download costs at least $0.01 to deliver. Anthers keeps $0 — the purchase fee was
- * removed 2026-08-03. */
-const anthersPurchase = (price: number, sizeGiB: number): { netStr: string; receipt: Line[] } => {
+/** The Anthers take-home + receipt for a sale, derived from constants: the list price
+ * less at-cost card processing, which since 2026-08-12 is the only deduction — the
+ * first download's delivery went with the per-GiB charge, so the work's size no longer
+ * enters this at all. Anthers keeps $0 (the purchase fee was removed 2026-08-03). */
+const anthersPurchase = (price: number): { netStr: string; receipt: Line[] } => {
 	const card = cardFeeDisplay(price);
-	let delivery = Math.round(sizeGiB * BANDWIDTH_PER_GIB * 100) / 100;
-	if (sizeGiB > 0 && delivery <= 0) delivery = 0.01;
-	const net = Math.round((price - card - delivery) * 100) / 100;
+	const net = Math.round((price - card) * 100) / 100;
 	const fmt = (n: number) => `$${n.toFixed(2)}`;
-	return {
-		netStr: fmt(net),
-		receipt: purchaseReceipt(fmt(net), fmt(card), fmt(delivery)),
-	};
+	return { netStr: fmt(net), receipt: purchaseReceipt(fmt(net), fmt(card)) };
 };
 
 // Pre-compute the Anthers take-home + receipt for each purchase scenario (the
 // MATRIX rows + breakdowns reference these — derived from constants, never typed).
-const PURCHASE_VIDEO = anthersPurchase(12, 1);
-const PURCHASE_GAMES = anthersPurchase(15, 2);
-const PURCHASE_MUSIC = anthersPurchase(10, 0.5);
-const PURCHASE_WRITING = anthersPurchase(8, 0.1);
+const PURCHASE_VIDEO = anthersPurchase(12);
+const PURCHASE_GAMES = anthersPurchase(15);
+const PURCHASE_MUSIC = anthersPurchase(10);
+const PURCHASE_WRITING = anthersPurchase(8);
 
 // [action][media] → the scenario + who-gets-what + the Anthers breakdown. Anthers
 // first. Competitor figures are rough public estimates. `stream` has no `merch`
@@ -1274,13 +1259,13 @@ function SolutionExplorer() {
 			</div>
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
-				Anthers never profits. On a sale, the only deductions from your listed price are the at-cost
-				card processing and the buyer's first download — both paid to third parties, never a cent to
-				Anthers (the purchase fee was removed 2026-08-03). On a stream, what's left of the fan's
-				Seeds to Anthers after their bandwidth, the Time Pool, and the at-cost card fee funds free
-				access and the charitable programs. A Seed given to you is a pure passthrough. Scenario
-				figures are illustrative; competitor rates are rough public estimates, all-in take-home at
-				the same list price.
+				Anthers never profits. On a sale, the only deduction from your listed price is the at-cost
+				card processing, paid to Stripe — never a cent to Anthers (the purchase fee was removed
+				2026-08-03), and delivery costs nothing however large the work or however often it is
+				downloaded. On a stream, what's left of the fan's Seeds to Anthers after the Time Pool and
+				the at-cost card fee funds free access and the charitable programs. A Seed given to you is a
+				pure passthrough. Scenario figures are illustrative; competitor rates are rough public
+				estimates, all-in take-home at the same list price.
 			</p>
 		</Card>
 	);

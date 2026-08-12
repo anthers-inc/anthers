@@ -29,11 +29,8 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-	BANDWIDTH_PER_GIB,
 	CARD_FLAT,
 	CARD_RATE,
-	DELIVERY_GIB_PER_HOUR,
-	FREE_FLOOR_GIB,
 	FREE_STORAGE_GIB,
 	SALES_TAX_RATE,
 	SEED_PRICE,
@@ -45,7 +42,6 @@ import {
 	creatorReceipt,
 	directedSeedWorstCase,
 	FIXED_MONTHLY_OVERHEAD,
-	FREE_USER_STREAM_HOURS,
 	PAYING_BADGE_MIX,
 	purchaseExamples,
 	saleTable,
@@ -97,10 +93,16 @@ function renderModule(): string {
 // These are plain numbers on purpose: the app must not import fees.ts, which would
 // pull decimal.js into the SPA bundle. Derivation happens at build time instead.
 
-/** Per-Badge decomposition of the monthly charge, for the reference streamer. */
+/**
+ * Per-Badge decomposition of the monthly charge. Exact, not illustrative — it stopped
+ * depending on a reference streamer's watch-hours when the bandwidth term went.
+ */
 export const BADGE_TABLE = ${j(badges)} as const;
 
-/** Direct-sale take-homes. \`sizeGiB\` is load-bearing — quote it alongside. */
+/**
+ * Direct-sale take-homes. \`sizeGiB\` is context for the row, NOT an input to the money:
+ * delivery is free, so two rows at the same price agree whatever their size.
+ */
 export const SALE_TABLE = ${j(sales)} as const;
 
 /** The sample monthly receipt: a Sprout who also directs two Seeds. */
@@ -115,23 +117,22 @@ export const DIRECTED_SEED_WORST_CASE = ${j(seed)} as const;
 function renderBadgeMarkdown(): string {
 	const rows = badgeTable();
 	const head =
-		"| Badge | Seeds given to Anthers | Charge | Bandwidth\\* | Time Pool | Payments\\*\\* | → Remainder |";
-	const sep = "|:--|--:|--:|--:|--:|--:|--:|";
+		"| Badge | Seeds given to Anthers | Charge | Time Pool | Payments\\* | → Remainder |";
+	const sep = "|:--|--:|--:|--:|--:|--:|";
 	const body = rows.map(
 		(r) =>
-			`| **${r.badge}** | ${r.seeds} | $${r.charge} | $${r.bandwidth} | $${r.timePool} | $${r.payments} | **$${r.remainder}** |`,
+			`| **${r.badge}** | ${r.seeds} | $${r.charge} | $${r.timePool} | $${r.payments} | **$${r.remainder}** |`,
 	);
-	const hours = rows.map((r) => r.watchHours).join(" / ");
 	return [
 		head,
 		sep,
 		...body,
 		"",
-		`\\* **Bandwidth is at-cost *actual usage*** — shown for a representative streamer at ${hours} watch-hours of 1080p AV1 a month (${DELIVERY_GIB_PER_HOUR} GiB/hr at $${BANDWIDTH_PER_GIB.toFixed(2)}/GiB). It is a scenario, not a dial: change the hours and every remainder changes.`,
+		`\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per Seed, it does not scale with the Seed count — which is why the remainder grows faster than linearly.`,
 		"",
-		`\\*\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per Seed, it does not scale with the Seed count — which is why the remainder grows faster than linearly.`,
+		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
-		`Every row conserves exactly: bandwidth + Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other three — a heavier streamer shrinks it while the creators they watch are paid exactly the same.`,
+		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's watch-hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
 	].join("\n");
 }
 
@@ -158,7 +159,6 @@ function renderReceiptMarkdown(): string {
 			`$${(r.anthersSeeds * SEED_PRICE).toFixed(2)}`,
 		),
 		pad("  Time Pool → creators you watched (by watch-time)", `$${r.timePool}`),
-		pad("  Your bandwidth (at cost, inside allowance)", `$${r.bandwidth}`),
 		pad("  Payments → this side's share of the card fee (at cost)", `$${r.paymentsAnthers}`),
 		pad("  Free access & programs (the remainder)", `$${r.remainder}`),
 		"─".repeat(66),
@@ -176,19 +176,24 @@ function renderReceiptMarkdown(): string {
 }
 
 function renderSaleMarkdown(): string {
-	const rows = saleTable().filter((r) => !r.label.startsWith("album"));
+	// One row per list price. Size used to split them — a $10 1 GiB game and a $10
+	// 2 GiB game took home different amounts — and since 2026-08-12 it doesn't, so
+	// keeping both would print the same row twice.
+	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
 	const seed = directedSeedWorstCase();
 	return [
-		"| Sale | Download | Creator receives | Card | Delivery |",
-		"|:--|--:|--:|--:|--:|",
+		"| Sale | Creator receives | Card |",
+		"|:--|--:|--:|",
 		...rows.map(
 			(r) =>
-				`| $${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"} | ${r.sizeGiB > 0 ? `${r.sizeGiB} GiB` : "—"} | **$${r.creatorReceives}** | $${r.cardFee} | $${r.delivery} |`,
+				`| $${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"} | **$${r.creatorReceives}** | $${r.cardFee} |`,
 		),
+		"",
+		`**Download size does not appear, because it no longer changes anything.** A digital sale used to carry the first download's bandwidth at cost, and redownloads drew the buyer's own allowance; delivery is free on R2, so every download of a purchased work is included, forever, on any number of devices.`,
 		"",
 		`A lone directed Seed is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator. Batching Seeds onto one monthly charge pays every creator on it more, because the $${CARD_FLAT.toFixed(2)} is fixed per charge.`,
 		"",
-		`Anthers keeps **$0.00** from every row. Creator storage is the only creator-side charge: the first ${FREE_STORAGE_GIB} GiB free, then DigitalOcean's rate plus half again.`,
+		`Anthers keeps **$0.00** from every row. Creator storage is the only creator-side charge: the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again.`,
 	].join("\n");
 }
 
@@ -203,14 +208,16 @@ function renderPurchaseExamplesMarkdown(): string {
 	const rows = purchaseExamples();
 	const cart = cartSaving();
 	return [
-		"| Item | List | Size | Card | Delivery | **Creator receives** | Deduction |",
-		"|:--|--:|--:|--:|--:|--:|--:|",
+		"| Item | List | Size | Card | **Creator receives** | Deduction |",
+		"|:--|--:|--:|--:|--:|--:|",
 		...rows.map(
 			(r) =>
-				`| ${r.item} | $${r.price} | ${r.sizeLabel} | $${r.cardFee} | $${r.delivery} | **$${r.creatorReceives}** | ${r.deductionPct} |`,
+				`| ${r.item} | $${r.price} | ${r.sizeLabel} | $${r.cardFee} | **$${r.creatorReceives}** | ${r.deductionPct} |`,
 		),
 		"",
-		`**The percentage is Stripe's flat $${CARD_FLAT.toFixed(2)}, not our design.** At $${rows[0].price} that single fee is **${((CARD_FLAT / (Number(rows[0].price) - Number(rows[0].creatorReceives))) * 100).toFixed(0)}%** of the whole deduction. Delivery is negligible at both ends — a flat penny below ~1 GiB, and about 1% of price even at ${rows[rows.length - 1].sizeLabel} — so the size of a work barely matters and "the creator pays for the first download" costs them almost nothing.`,
+		`**The deduction is Stripe's card fee and nothing else** — ${(CARD_RATE * 100).toFixed(1)}% + a flat $${CARD_FLAT.toFixed(2)}, paid to Stripe, with Anthers keeping $0.00 from every row. The flat part is what the percentages track: it is the whole reason a $${rows[0].price} track loses ${rows[0].deductionPct} while a $${rows[rows.length - 1].price} game loses ${rows[rows.length - 1].deductionPct}.`,
+		"",
+		`**Size is in the table for scale, not for money.** A digital sale used to deduct the first download's delivery at cost as well; delivery is free since 2026-08-12, so a ${rows[rows.length - 1].sizeLabel} work and a ${rows[0].sizeLabel} one at the same price pay their creator exactly the same, and every later download costs nobody anything.`,
 		"",
 		`**The cart is the mechanism that fixes the small end.** ${cart.count} $${cart.unitPrice} tracks bought separately lose **$${cart.separately}** to card fees; bought in one cart they lose **$${cart.inOneCart}**, and every cent of that difference goes to the creators.`,
 	].join("\n");
@@ -231,6 +238,7 @@ function renderCreatorReceiptMarkdown(): string {
 			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB free = ${r.billableGiB} GiB, at cost)`,
 			`−$${r.storage}`,
 		),
+		pad("Delivery (unlimited, at any volume)", "$0.00"),
 		pad("Storage charge (half again)", `−$${r.storageCharge}`),
 		`${" ".repeat(54)}──────────`,
 		pad("Net earnings", `$${r.net}`),
@@ -248,7 +256,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		.map(([seeds, share]) => `${(Number(share) * 100).toFixed(0)}% at ${seeds}`)
 		.join(", ");
 	return [
-		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each** at ${FREE_USER_STREAM_HOURS} hrs of streaming. So everything turns on the **paying share**:`,
+		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidised Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
 		"",
 		"| Paying share | Net per paying user | Users to solvency |",
 		"|--:|--:|--:|",
@@ -261,7 +269,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		"",
 		`**Below roughly ${s.breakEvenPct} paying, growth never closes the gap** — each new cohort costs more in free access than it brings in, so scale makes the problem worse rather than better. Above it the model self-funds, and the scale required falls away quickly.`,
 		"",
-		`**That floor moves with how much free users stream.** At ${FREE_USER_STREAM_HOURS} hrs/month it is ${s.breakEvenPct}; if every free user drew their whole ${FREE_FLOOR_GIB} GiB floor ($${s.fullFloorCost} each) it rises to ${s.breakEvenFullFloorPct}. **The generosity of the free floor and the platform's self-sufficiency are the same dial** — raising it is a real charitable act with a real price, and the price is paid in the paying share we need. Manage it deliberately; don't drift it.`,
+		`**That floor no longer moves with how much free users watch**, and until 2026-08-12 it did. A free account's cost was its streaming bandwidth plus its Time Pool, so the generosity of the free floor and the platform's self-sufficiency were the same dial and raising one priced the other. Delivery is free on R2, the floor is gone, and what remains — the $${s.freeUserCost} Time Pool — is a flat cost per free account however much it watches. **Free access stopped having a usage-dependent price.**`,
 		"",
 		`Two ASSUMPTIONS drive every number here and neither is a dial: the paying-user Badge mix (${mix} Seeds) and $${FIXED_MONTHLY_OVERHEAD.toLocaleString("en-US")}/month of fixed overhead. The mix matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it.`,
 	].join("\n");

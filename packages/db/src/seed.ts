@@ -12,7 +12,6 @@
 
 import {
 	ANTHERS_BADGES,
-	DELIVERY_GIB_PER_HOUR,
 	heldBadgeLabel,
 	SEED_PRICE,
 	seedCost,
@@ -634,27 +633,28 @@ function buildAttentionEvents(
 
 /**
  * Insert a user's `account` (their Anthers-Seed count, held point-in-time) and its
- * current-cycle `account_cycle` snapshot. The cycle's Time Pool and remainder
- * remainder are derived from the Anthers-Seed count and stream usage via
- * `anthersSeedBreakdown`. Bandwidth is folded into the Anthers-Seeds — no wallet.
+ * current-cycle `account_cycle` snapshot. The cycle's Time Pool and remainder are
+ * derived from the Anthers-Seed count via `anthersSeedBreakdown`.
+ *
+ * Stream usage was a third input until 2026-08-12 — it priced the account's
+ * bandwidth against its allowance — and is gone with the per-GiB charge. The
+ * `bandwidth_used_gib` columns still exist and default to 0; nothing writes them.
  */
 async function seedAccountAndCycle(params: {
 	userId: number;
 	anthersSeeds: number;
 	creatorSeedTotal: number;
-	bandwidthUsedGiB: number;
 	cycleStart: Date;
 	cycleEnd: Date;
 	billingCycle: string;
 }) {
-	const bd = anthersSeedBreakdown(params.anthersSeeds, { bandwidthGiB: params.bandwidthUsedGiB });
+	const bd = anthersSeedBreakdown(params.anthersSeeds);
 
 	try {
 		await db.insert(accounts).values({
 			userId: params.userId,
 			anthersSeeds: params.anthersSeeds,
 			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
-			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
 			isActive: true,
 			currentPeriodStart: params.cycleStart,
 			currentPeriodEnd: params.cycleEnd,
@@ -671,7 +671,6 @@ async function seedAccountAndCycle(params: {
 			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
 			timePool: bd.timePool.toFixed(2),
 			foundation: Math.max(0, bd.foundation.toNumber()).toFixed(2),
-			bandwidthUsedGiB: params.bandwidthUsedGiB.toFixed(2),
 		});
 	} catch {
 		// unique constraint on (userId, billingCycle)
@@ -781,7 +780,6 @@ async function seed() {
 			userId,
 			anthersSeeds: cfg.anthersSeeds,
 			creatorSeedTotal: (cfg.creatorSeeds ?? 0) * SEED_PRICE,
-			bandwidthUsedGiB: 0, // creators' own consumption isn't modelled in the seed
 			cycleStart,
 			cycleEnd,
 			billingCycle,
@@ -1292,21 +1290,13 @@ async function seed() {
 			const amount = parseFloat(priceByTitle[title] ?? "0");
 			if (amount <= 0) continue;
 
-			// Delivery bandwidth of the Work's downloadable assets → digital-purchase fees.
-			const [sz] = await db
-				.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
-				.from(assets)
-				.where(eq(assets.workId, p.id));
-			const deliveryGiB = Number(sz?.bytes ?? 0) / 1073741824;
-
 			// Digital purchase (zero-cut): the listed price IS the advertised price. Card
-			// processing and the first download come OUT of it, Anthers keeps $0, and sales
-			// tax is the only thing added. Mirrors `calculateFees` in @anthers/shared/fees.
-			let deliveryFee = Math.round(deliveryGiB * 0.01 * 100) / 100;
-			if (deliveryGiB > 0 && deliveryFee <= 0) deliveryFee = 0.01;
+			// processing comes OUT of it, Anthers keeps $0, and sales tax is the only thing
+			// added. Mirrors `calculateFees` in @anthers/shared/fees.
+			const deliveryFee = 0; // delivery charge removed 2026-08-12 — egress is free
 			const crfFee = 0; // purchase fee removed 2026-08-03
 			const processingFee = Math.round((amount * 0.029 + 0.3) * 100) / 100;
-			const creatorEarnings = Math.round((amount - processingFee - deliveryFee) * 100) / 100;
+			const creatorEarnings = Math.round((amount - processingFee) * 100) / 100;
 			const fakePaymentId = `pi_seed_${tu.username}_${slug}`;
 
 			try {
@@ -1328,27 +1318,19 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Account (Anthers-Seeds; bandwidth folded in, no wallet) --
+		// -- Account (Anthers-Seeds) --
 		const cfg = accountConfig(tu.username);
 		const creatorSeedTotal = (cfg.creatorSeeds ?? 0) * SEED_PRICE;
-		// Stream bandwidth consumed this cycle ≈ total watch-hours × delivery rate.
-		const totalWatchSeconds = Object.values(tu.attentionTargets).reduce(
-			(sum, t) => sum + t.seconds,
-			0,
-		);
-		const bandwidthUsedGiB =
-			Math.round((totalWatchSeconds / 3600) * DELIVERY_GIB_PER_HOUR * 100) / 100;
 		await seedAccountAndCycle({
 			userId,
 			anthersSeeds: cfg.anthersSeeds,
 			creatorSeedTotal,
-			bandwidthUsedGiB,
 			cycleStart,
 			cycleEnd,
 			billingCycle,
 		});
 		console.log(
-			`    account: ${heldBadgeLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)}, ${bandwidthUsedGiB} GiB streamed)`,
+			`    account: ${heldBadgeLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)})`,
 		);
 
 		// -- Attention events --

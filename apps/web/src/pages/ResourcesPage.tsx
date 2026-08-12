@@ -83,7 +83,7 @@ const CALCULATORS: ResourceCard[] = [
 		to: "/resources/video-bandwidth",
 		title: "Video Bandwidth Calculator",
 		blurb:
-			"How much watch time a bandwidth allowance buys at each delivery tier and codec — the egress side of hosting video.",
+			"How much data a watch-hour actually moves at each delivery tier and codec — the egress side of hosting video, for capacity planning rather than billing.",
 		tag: "Infrastructure",
 		icon: SignalIcon,
 	},

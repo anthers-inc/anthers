@@ -10,8 +10,6 @@ import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
-	BANDWIDTH_PER_GIB,
-	DELIVERY_GIB_PER_HOUR,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	SALES_TAX_RATE,
@@ -22,7 +20,6 @@ import {
 	badgeTable,
 	creatorReceipt,
 	directedSeedWorstCase,
-	FREE_USER_STREAM_HOURS,
 	saleTable,
 	sampleReceipt,
 	selfSufficiency,
@@ -31,9 +28,9 @@ import {
 const D = (s: string) => new Decimal(s);
 
 describe("badgeTable", () => {
-	test("every row conserves: bandwidth + Time Pool + Payments + remainder = the charge", () => {
+	test("every row conserves: Time Pool + Payments + remainder = the charge", () => {
 		for (const r of badgeTable()) {
-			const sum = D(r.bandwidth).plus(r.timePool).plus(r.payments).plus(r.remainder);
+			const sum = D(r.timePool).plus(r.payments).plus(r.remainder);
 			expect(sum.toFixed(2)).toBe(r.charge);
 		}
 	});
@@ -69,7 +66,7 @@ describe("sampleReceipt", () => {
 		// of `paymentsAnthers` double-counts the creator side's share and the block
 		// overshoots the charge.
 		const anthersCharge = D((r.anthersSeeds * SEED_PRICE).toFixed(2));
-		const sum = D(r.timePool).plus(r.bandwidth).plus(r.paymentsAnthers).plus(r.remainder);
+		const sum = D(r.timePool).plus(r.paymentsAnthers).plus(r.remainder);
 		expect(sum.toFixed(2)).toBe(anthersCharge.toFixed(2));
 	});
 
@@ -93,36 +90,43 @@ describe("sampleReceipt", () => {
 	});
 
 	test("nothing is unaccounted for — the whole subtotal lands somewhere", () => {
-		const accounted = D(r.toCreators).plus(r.bandwidth).plus(r.payments).plus(r.remainder);
+		const accounted = D(r.toCreators).plus(r.payments).plus(r.remainder);
 		expect(accounted.toFixed(2)).toBe(r.seedsSubtotal);
 	});
 });
 
 describe("saleTable", () => {
-	test("every row is price − card − delivery, straight from calculateFees", () => {
+	test("every row is price − card, straight from calculateFees", () => {
 		for (const r of saleTable()) {
-			const expected = calculateFees(D(r.price), {
-				deliveryBytes: r.sizeGiB * 1024 ** 3,
-				type: r.sizeGiB > 0 ? "digital" : "physical",
-			});
+			const expected = calculateFees(D(r.price), { type: r.sizeGiB > 0 ? "digital" : "physical" });
 			expect(r.creatorReceives).toBe(expected.creatorEarnings.toFixed(2));
-			expect(D(r.price).minus(r.cardFee).minus(r.delivery).toFixed(2)).toBe(r.creatorReceives);
+			expect(D(r.price).minus(r.cardFee).toFixed(2)).toBe(r.creatorReceives);
 		}
 	});
 
-	test("a bigger download returns the creator less — which is why size must be quoted", () => {
+	/**
+	 * This assertion is **inverted from what it said until 2026-08-12**, and the
+	 * inversion is the whole change. It used to read *"a bigger download returns the
+	 * creator less — which is why size must be quoted"*: the two $10 rows differ only
+	 * in declared size, and a 2 GiB game returned a cent less than a 1 GiB one because
+	 * the first download was deducted at $0.01/GiB.
+	 *
+	 * Delivery is free at any volume on R2, so they must now agree exactly — and these
+	 * two scenarios are the only place left in the model where the same price is
+	 * declared at two different sizes, which is what makes them worth keeping.
+	 */
+	test("size no longer changes take-home — the two $10 rows agree exactly", () => {
 		const rows = saleTable();
 		const oneGiB = rows.find((r) => r.label === "game-10-1gib")!;
 		const twoGiB = rows.find((r) => r.label === "game-10-2gib")!;
 		expect(oneGiB.price).toBe(twoGiB.price);
-		expect(D(twoGiB.creatorReceives).lessThan(oneGiB.creatorReceives)).toBe(true);
+		expect(twoGiB.sizeGiB).toBeGreaterThan(oneGiB.sizeGiB);
+		expect(twoGiB.creatorReceives).toBe(oneGiB.creatorReceives);
 	});
 
 	test("Anthers keeps nothing on any of them", () => {
 		for (const r of saleTable()) {
-			expect(
-				calculateFees(D(r.price), { deliveryBytes: r.sizeGiB * 1024 ** 3 }).crfFee.toNumber(),
-			).toBe(0);
+			expect(calculateFees(D(r.price), { type: "digital" }).crfFee.toNumber()).toBe(0);
 		}
 	});
 });
@@ -145,15 +149,32 @@ describe("directedSeedWorstCase", () => {
 });
 
 describe("creatorReceipt", () => {
+	/**
+	 * ⚠️ The charge assertion here **used to restate the code** — `storageCharge ===
+	 * storage × AFF_INFRA_RATE` — and passed for as long as it did only because $0.02
+	 * a GiB put every step on an exact cent. Moving to R2's $0.0161 broke it
+	 * immediately: the charge is half of the *rounded* storage cost ($0.31 → $0.16),
+	 * not the rounded half of the raw one ($0.155). The formula was right about the
+	 * model and wrong about the money, and nothing would have said so.
+	 *
+	 * So the figures below are computed by hand: 19 billable GiB × $0.0161 = $0.3059,
+	 * which is $0.31 to the cent, and half again on that is $0.155 → $0.16.
+	 */
 	test("charges storage only above the free allowance, and nothing else", () => {
 		const r = creatorReceipt(1575, 69);
 		expect(r.billableGiB).toBe(69 - FREE_STORAGE_GIB);
-		// Net is gross less storage and its charge — payouts carry no processing, because
-		// Connect standard transfers are free. Anything else appearing here is a bug.
+		expect(r.storage).toBe("0.31");
+		expect(r.storageCharge).toBe("0.16");
+		// Net is gross less storage and its charge — payouts carry no processing (Connect
+		// standard transfers are free) and delivery costs nothing. Anything else appearing
+		// here is a bug.
+		expect(r.net).toBe("1574.53");
 		expect(new Decimal(r.net)).toEqual(
 			new Decimal(r.gross).minus(r.storage).minus(r.storageCharge),
 		);
-		expect(new Decimal(r.storageCharge)).toEqual(new Decimal(r.storage).times(AFF_INFRA_RATE));
+		// Half again, to the cent — the rate itself is a vendor pass-through and may move,
+		// but the multiplier is the dial that funds the mission.
+		expect(AFF_INFRA_RATE).toBe(0.5);
 	});
 
 	test("a library inside the free allowance costs its creator nothing", () => {
@@ -166,12 +187,8 @@ describe("creatorReceipt", () => {
 describe("selfSufficiency", () => {
 	const s = selfSufficiency();
 
-	test("a free user costs their bandwidth plus the Time Pool funded for them", () => {
-		const expected = new Decimal(FREE_USER_STREAM_HOURS)
-			.times(DELIVERY_GIB_PER_HOUR)
-			.times(BANDWIDTH_PER_GIB)
-			.plus(FREE_TIME_POOL);
-		expect(s.freeUserCost).toBe(expected.toFixed(2));
+	test("a free user costs the Time Pool funded for them, and nothing else", () => {
+		expect(s.freeUserCost).toBe(new Decimal(FREE_TIME_POOL).toFixed(2));
 	});
 
 	test("net per paying user is revenue less the free users they carry", () => {
@@ -206,12 +223,22 @@ describe("selfSufficiency", () => {
 		expect(Math.abs(net.toNumber())).toBeLessThan(0.06);
 	});
 
-	test("a more generous free floor raises the share needed to sustain it", () => {
-		// The whole political point of the figure: the floor's generosity and the
-		// platform's self-sufficiency are one dial, so this inequality must hold.
-		expect(Number(s.fullFloorCost)).toBeGreaterThan(Number(s.freeUserCost));
-		expect(Number(s.breakEvenFullFloorPct.replace("%", ""))).toBeGreaterThan(
-			Number(s.breakEvenPct.replace("%", "")),
-		);
+	/**
+	 * The sensitivity that used to sit here — *"a more generous free floor raises the
+	 * share needed to sustain it"* — was retired with the floor on 2026-08-12. It
+	 * compared the free-user cost at 8 streaming hours against the same user drawing
+	 * their whole 15 GiB, and there is no longer a version of a free account that
+	 * costs more by watching more.
+	 *
+	 * What replaces it is the stronger claim: **free access has no usage-dependent
+	 * price at all.** Asserted here as a property of the published figure, because it
+	 * is the sentence the wiki now leads with.
+	 */
+	test("free access has no usage-dependent price — a free user costs a flat Time Pool", () => {
+		expect(Number(s.freeUserCost)).toBe(FREE_TIME_POOL);
+		// And that is genuinely small against what a paying user brings in, which is why
+		// the break-even share is low. If a cost term is ever added back here, this
+		// inequality is the one that will move first.
+		expect(Number(s.revenuePerPayingUser)).toBeGreaterThan(Number(s.freeUserCost) * 10);
 	});
 });

@@ -71,7 +71,10 @@ export const purchases = pgTable(
 		type: text("type").notNull().default("digital"), // digital | physical | service | seeds
 		amount: numeric("amount").notNull(),
 		processingFee: numeric("processing_fee").notNull(),
-		deliveryFee: numeric("delivery_fee").notNull().default("0.00"), // download bandwidth (digital only)
+		// The first download's delivery, at cost, on a digital sale. Always "0.00" since
+		// 2026-08-12 — egress is free — but historical rows carry real values and the
+		// refund path reads them, so the column stays. Dropping it is its own migration.
+		deliveryFee: numeric("delivery_fee").notNull().default("0.00"),
 		crfFee: numeric("crf_fee").notNull(), // Legacy column name; stores the retired purchase fee; always 0 since 2026-08-03
 		// Sales tax is the ONE thing added on top of the list price, so it is money we
 		// collect and owe onward rather than money anyone here keeps. Recording it

@@ -7,87 +7,77 @@
 // These are plain numbers on purpose: the app must not import fees.ts, which would
 // pull decimal.js into the SPA bundle. Derivation happens at build time instead.
 
-/** Per-Badge decomposition of the monthly charge, for the reference streamer. */
+/**
+ * Per-Badge decomposition of the monthly charge. Exact, not illustrative — it stopped
+ * depending on a reference streamer's watch-hours when the bandwidth term went.
+ */
 export const BADGE_TABLE = [
 	{
 		badge: "Root",
 		seeds: 1,
 		charge: "3.00",
-		bandwidth: "0.31",
 		timePool: "1.50",
 		payments: "0.39",
-		remainder: "0.80",
-		watchHours: 18,
-		allowanceGiB: 30.6,
+		remainder: "1.11",
 	},
 	{
 		badge: "Sprout",
 		seeds: 2,
 		charge: "6.00",
-		bandwidth: "0.48",
 		timePool: "3.00",
 		payments: "0.47",
-		remainder: "2.05",
-		watchHours: 28,
-		allowanceGiB: 47.6,
+		remainder: "2.53",
 	},
 	{
 		badge: "Petal",
 		seeds: 3,
 		charge: "9.00",
-		bandwidth: "0.65",
 		timePool: "4.50",
 		payments: "0.56",
-		remainder: "3.29",
-		watchHours: 38,
-		allowanceGiB: 64.6,
+		remainder: "3.94",
 	},
 	{
 		badge: "Blossom",
 		seeds: 4,
 		charge: "12.00",
-		bandwidth: "0.82",
 		timePool: "6.00",
 		payments: "0.65",
-		remainder: "4.53",
-		watchHours: 48,
-		allowanceGiB: 81.6,
+		remainder: "5.35",
 	},
 ] as const;
 
-/** Direct-sale take-homes. `sizeGiB` is load-bearing — quote it alongside. */
+/**
+ * Direct-sale take-homes. `sizeGiB` is context for the row, NOT an input to the money:
+ * delivery is free, so two rows at the same price agree whatever their size.
+ */
 export const SALE_TABLE = [
 	{
 		label: "game-10-1gib",
 		price: "10.00",
 		sizeGiB: 1,
-		creatorReceives: "9.40",
+		creatorReceives: "9.41",
 		cardFee: "0.59",
-		delivery: "0.01",
 	},
 	{
 		label: "game-10-2gib",
 		price: "10.00",
 		sizeGiB: 2,
-		creatorReceives: "9.39",
+		creatorReceives: "9.41",
 		cardFee: "0.59",
-		delivery: "0.02",
 	},
 	{
 		label: "game-20-10gib",
 		price: "20.00",
 		sizeGiB: 10,
-		creatorReceives: "19.02",
+		creatorReceives: "19.12",
 		cardFee: "0.88",
-		delivery: "0.10",
 	},
 	{
 		label: "album-10-1gib",
 		price: "10.00",
 		sizeGiB: 1,
-		creatorReceives: "9.40",
+		creatorReceives: "9.41",
 		cardFee: "0.59",
-		delivery: "0.01",
 	},
 	{
 		label: "merch-25-physical",
@@ -95,7 +85,6 @@ export const SALE_TABLE = [
 		sizeGiB: 0,
 		creatorReceives: "23.97",
 		cardFee: "1.03",
-		delivery: "0.00",
 	},
 ] as const;
 
@@ -103,15 +92,13 @@ export const SALE_TABLE = [
 export const SAMPLE_RECEIPT = {
 	anthersSeeds: 2,
 	creatorSeeds: 2,
-	watchHours: 28,
 	directedGross: "6.00",
 	directedNet: "5.67",
 	timePool: "3.00",
-	bandwidth: "0.48",
 	payments: "0.65",
 	paymentsAnthers: "0.32",
 	paymentsCreator: "0.33",
-	remainder: "2.20",
+	remainder: "2.68",
 	seedsSubtotal: "12.00",
 	salesTax: "0.78",
 	totalBilled: "12.78",

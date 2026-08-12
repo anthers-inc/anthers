@@ -496,12 +496,13 @@ function UnitCostCalculator() {
 							<span className="font-semibold text-base-content">
 								{fmtCost(VIDEO_QUALITIES[videoQualityIdx].deliveryCostPerMin)}/min
 							</span>{" "}
-							— a bandwidth pass-through folded into the viewer's Seeds to Anthers, at cost
-							($0.01/GiB, after a free monthly allowance). Creator earnings are{" "}
-							<span className="font-semibold text-success">decoupled</span> from this: they come
+							— and{" "}
+							<span className="font-semibold text-base-content">nobody is charged for it</span>.
+							Egress is $0 at any volume on Cloudflare R2, so there is no allowance, no wallet and
+							no per-GiB line on anyone's bill. Creator earnings were always{" "}
+							<span className="font-semibold text-success">decoupled</span> from delivery: they come
 							from the Time Pool their Seeds to Anthers fund ($1.50 each), distributed by watch-time
-							(equal-time), plus directed Seeds. The Time Pool and Seeds reach creators in full; the
-							folded-in bandwidth is billed at cost.
+							(equal-time), plus directed Seeds — both of which reach creators in full.
 						</p>
 					</div>
 				</div>
@@ -827,18 +828,21 @@ function ReferenceCreatorProfiles() {
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
 						Anthers Sprout Badge: {SPROUT.seeds} Seeds to Anthers (${SPROUT.charge}) → $
-						{SPROUT.timePool} Time Pool to creators, ${SPROUT.bandwidth} of their own bandwidth at
-						cost and ${SPROUT.payments} of at-cost card processing, leaving ${SPROUT.remainder} to
-						fund free access and the charitable programs. Seeds given straight to a creator carry no
-						platform cut. Time Pool is distributed by watch-time. Bandwidth is folded into each
-						Seed, at cost.
+						{SPROUT.timePool} Time Pool to creators and ${SPROUT.payments} of at-cost card
+						processing, leaving ${SPROUT.remainder} to fund free access and the charitable programs.
+						Seeds given straight to a creator carry no platform cut. Time Pool is distributed by
+						watch-time. Delivery is free and appears nowhere in the split.
 					</p>
-					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Bandwidth: ~4 MB/min blended.</p>
-					<p>Infrastructure at DigitalOcean retail rates. Volume pricing would reduce further.</p>
+					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Delivery: ~4 MB/min blended.</p>
 					<p>
-						Free access — a free monthly streaming floor per viewer (15 GiB) plus a per-Seed
-						allowance, and 50 GiB free storage per creator — is funded by the remainder of Seeds
-						given to Anthers, from a shared subsidy pool.
+						Infrastructure at Cloudflare R2 retail rates. Egress is $0 at any volume; the residual
+						delivery cost is per-request operations, which HLS incurs and whole-file downloads
+						barely do.
+					</p>
+					<p>
+						Free access — unlimited streaming and downloads for every account, and 50 GiB free
+						storage per creator — is funded by the remainder of Seeds given to Anthers, from a
+						shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>
 				</div>

@@ -3,12 +3,15 @@
  * Payment routes — Stripe Connect onboarding, checkout, purchases, charitable ledger.
  *
  * Direct purchases run as Stripe destination charges. Since 2026-08-03 the listed
- * price IS the advertised price: card processing and the first download's bandwidth
- * come **out of** it and sales tax is the only thing added on top, so the buyer is
- * charged price + tax, the creator's connected account receives the price less those
- * at-cost deductions, and the application fee is the remainder — which is tax and
- * delivery, never a cut. Anthers keeps $0. A creator with no connected account is a
- * hard 409, not a platform-held fallback.
+ * price IS the advertised price: card processing comes **out of** it and sales tax
+ * is the only thing added on top, so the buyer is charged price + tax, the creator's
+ * connected account receives the price less that at-cost deduction, and the
+ * application fee is the remainder — which is tax, never a cut. Anthers keeps $0. A
+ * creator with no connected account is a hard 409, not a platform-held fallback.
+ *
+ * A digital sale also carried the first download's bandwidth at cost until
+ * 2026-08-12. Delivery is free on R2, so `deliveryFee` is now always $0.00 and every
+ * download of a purchased Work is included forever, on any number of devices.
  */
 
 import { db } from "@anthers/db/client";
@@ -75,16 +78,11 @@ async function resolvePurchase(slug: string, userId: number) {
 	if (amount.lte(0))
 		return { ok: false as const, status: 400 as const, error: "This work is free" };
 
-	// Delivery (bandwidth) scales with the total size of this Work's downloadable assets.
-	const [assetSize] = await db
-		.select({ bytes: sql<number>`COALESCE(SUM(${assets.fileSize}), 0)` })
-		.from(assets)
-		.where(eq(assets.workId, work.id));
-
-	// All-in list price: card processing and this delivery come OUT of the price, sales
-	// tax is added on top, and Anthers keeps $0 (the purchase fee was removed
-	// 2026-08-03). `calculateFees` owns that arithmetic — never restate it at a call site.
-	const fees = calculateFees(amount, { deliveryBytes: assetSize?.bytes ?? 0, type: "digital" });
+	// All-in list price: card processing comes OUT of the price, sales tax is added on
+	// top, and Anthers keeps $0 (the purchase fee was removed 2026-08-03, the delivery
+	// charge 2026-08-12 — so the Work's asset size no longer enters the arithmetic at
+	// all). `calculateFees` owns it — never restate it at a call site.
+	const fees = calculateFees(amount, { type: "digital" });
 	return { ok: true as const, work, amount, fees };
 }
 
@@ -247,11 +245,10 @@ const paymentRoutes = new Hono()
 			metadata: { kind: "direct_purchase", workId: String(work.id), buyerId: String(user.id) },
 		};
 		// The buyer pays the all-in list price plus sales tax; the creator's transfer is
-		// that price less the at-cost card processing and the first download's
-		// bandwidth. Of what the platform is left holding, Stripe takes its processing
-		// fee and the rest is sales tax owed to the state plus the delivery it pays for
-		// — Anthers retains $0. Guarded because a fee at or above the total would be
-		// rejected by Stripe anyway.
+		// that price less the at-cost card processing. Of what the platform is left
+		// holding, Stripe takes its processing fee and the rest is sales tax owed to the
+		// state — Anthers retains $0. Guarded because a fee at or above the total would
+		// be rejected by Stripe anyway.
 		if (applicationFeeCents < totalCents) {
 			params.application_fee_amount = applicationFeeCents;
 			params.transfer_data = { destination: creatorAccount.stripeAccountId };
@@ -287,10 +284,10 @@ const paymentRoutes = new Hono()
 		return c.json({
 			amount: amount.toFixed(2), // the all-in list price the buyer was shown
 			processingFee: fees.processingFee.toFixed(2), // out of the price, to Stripe
-			deliveryFee: fees.deliveryFee.toFixed(2), // first download, at cost
+			deliveryFee: fees.deliveryFee.toFixed(2), // always "0.00" — delivery is free
 			crfFee: fees.crfFee.toFixed(2), // always "0.00" — Anthers takes no cut
 			salesTax: fees.salesTax.toFixed(2),
-			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing − delivery
+			creatorEarnings: fees.creatorEarnings.toFixed(2), // price − processing
 			buyerTotal: fees.buyerTotal.toFixed(2), // price + tax — what the buyer is charged
 			clientSecret: paymentIntent.client_secret,
 		});

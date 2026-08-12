@@ -5,12 +5,12 @@
  *
  * The user holds a count of Anthers-Seeds (their rank, free/root/sprout/petal/
  * blossom = 0…4+). This page surfaces:
- *   1. The rank (each Anthers-Seed: Time Pool + Supports Anthers; streaming allowance).
+ *   1. The rank (each Anthers-Seed: Time Pool + Supports Anthers).
  *   2. The creator-Seed budget + per-creator Seed allocations (directed, $3 units).
  *   3. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
  *
- * Rank changes happen on /subscribe; here we direct Seeds. Bandwidth is folded into
- * the Anthers-Seeds (no wallet).
+ * Rank changes happen on /subscribe; here we direct Seeds. There is no bandwidth
+ * line — streaming and downloads are unlimited and free.
  */
 
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
@@ -623,7 +623,7 @@ export default function SubscriptionPage() {
 				{/* Where the month's Seeds go */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
-					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (your bandwidth at cost + the remainder that funds free access and the charitable programs). The card fee is inside the price; there's no wallet." />
+					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing." />
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
@@ -634,14 +634,12 @@ export default function SubscriptionPage() {
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Supports Anthers</div>
 						<div className="text-lg font-bold">{fmt(badgeView.supportsAnthers)}</div>
-						<div className="text-[11px] text-base-content/40">
-							your bandwidth (at cost) + free access &amp; programs
-						</div>
+						<div className="text-[11px] text-base-content/40">free access &amp; programs</div>
 					</div>
 					<div>
-						<div className="text-xs text-base-content/50 uppercase">Streaming allowance</div>
-						<div className="text-lg font-bold">{badgeView.allowanceGiB} GiB</div>
-						<div className="text-[11px] text-base-content/40">per month, folded in</div>
+						<div className="text-xs text-base-content/50 uppercase">Streaming</div>
+						<div className="text-lg font-bold">Unlimited</div>
+						<div className="text-[11px] text-base-content/40">no allowance, no per-GiB charge</div>
 					</div>
 				</div>
 			</div>

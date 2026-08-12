@@ -31,8 +31,8 @@ import {
 	stripeAccounts,
 	users,
 } from "@anthers/db/schema";
-import { DELIVERY_GIB_PER_HOUR, seedCost } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, calculateFees, cardFee } from "@anthers/shared/fees";
+import { seedCost } from "@anthers/shared/constants";
+import { calculateFees, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 import Stripe from "stripe";
@@ -266,7 +266,11 @@ const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
 /** $5.00 to anyone, at any Anthers-Seed count — a purchasable post with no ladder route in. */
 const PRICE = "5.00";
 const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
-/** 2 GiB of downloadable asset, so the delivery deduction is non-zero. */
+/**
+ * 2 GiB of downloadable asset. It used to make the delivery deduction non-zero; that
+ * deduction was retired 2026-08-12, and the size is kept so the fixture is still a
+ * realistic Work rather than an empty one.
+ */
 const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 
 beforeAll(async () => {
@@ -290,10 +294,6 @@ beforeAll(async () => {
 	webhookWorkId = (await makePaidPost(`Webhook work ${run}`)).id;
 }, DB_SETUP_TIMEOUT);
 
-/**
- * A $5 post backed by a real-sized downloadable asset, so delivery bandwidth and the
- * delivery deduction is non-zero and the fee math under test isn't all zeroes.
- */
 /**
  * A released, download-only Work that is for sale. Checkout names a WORK now — that is
  * where the gate lives, and what a permanent unlock has to be permanent about.
@@ -795,10 +795,7 @@ describe("Webhook: customer.subscription.*", () => {
 
 describe("Checkout — destination charge construction", () => {
 	/** The fee breakdown the route should be quoting, computed independently here. */
-	const expected = calculateFees(new Decimal(PRICE), {
-		deliveryBytes: ASSET_BYTES,
-		type: "digital",
-	});
+	const expected = calculateFees(new Decimal(PRICE), { type: "digital" });
 
 	async function checkout() {
 		fake.reset();
@@ -914,11 +911,10 @@ describe("Checkout — destination charge construction", () => {
 		expect(totalCents - feeCents).toBe(Math.round(expected.creatorEarnings.toNumber() * 100));
 
 		// And what the platform is left holding, once Stripe has taken its cut, is sales
-		// tax owed to the state plus the at-cost delivery — no platform cut anywhere.
+		// tax owed to the state and NOTHING else — no platform cut, and since 2026-08-12
+		// no delivery either, so this is now an exact equality with the tax.
 		const processingCents = Math.round(expected.processingFee.toNumber() * 100);
-		expect(feeCents - processingCents).toBe(
-			Math.round(expected.salesTax.plus(expected.deliveryFee).toNumber() * 100),
-		);
+		expect(feeCents - processingCents).toBe(Math.round(expected.salesTax.toNumber() * 100));
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 	});
 
@@ -1028,17 +1024,24 @@ describe("Seed buy — the price is all-in", () => {
 	});
 });
 
-describe("remainder — the clamp that persists it", () => {
+describe("remainder — a heavy streamer costs the mission nothing", () => {
 	/**
-	 * `anthersSeedBreakdown` deliberately has no floor (pinned in `economics.test.ts`), so a
-	 * heavy enough streamer produces a negative remainder — a true statement about that
-	 * account, and one that must never reach the ledger, where the amount means "what the
-	 * remainder received". The clamp doing that work is `settle-cycle.ts` (`Decimal.max(0, …)`
-	 * on the inflow); the identical-looking clamp in `billing.ts`'s `snapshotCycle` is
-	 * defensive only and cannot currently fire, because that path passes no bandwidth.
+	 * This block used to pin the *clamp*: bandwidth was a term in the Seed
+	 * decomposition, so ~120 hours of watch-time drove the remainder to −$0.54 and
+	 * `settle-cycle.ts`'s `Decimal.max(0, …)` was what kept a negative amount out of a
+	 * ledger whose amounts mean "what the remainder received".
 	 *
-	 * Consumption here is realistic rather than contrived: ~120 hours of watch-time in a
-	 * month, which at 1.7 GiB/hour is 204 GiB against a 1-Seed allowance of 75 GiB.
+	 * **Retiring the per-GiB charge on 2026-08-12 made that unreachable**, and the
+	 * honest replacement is the inverse claim rather than a contrived input: the same
+	 * heavy account now books its *full* remainder, because nothing a user watches
+	 * enters settlement any more. The clamp stays as documented-defensive code (its
+	 * no-floor contract is still pinned in `economics.test.ts`), but this is the
+	 * behaviour worth guarding — a future cost term added back here would fail it
+	 * first, which is exactly when someone should be made to think about it.
+	 *
+	 * The 120 hours of attention are deliberately kept in the fixture. They are what
+	 * makes the assertion mean "watch-time does not move this" rather than
+	 * "watch-time was absent".
 	 */
 	const heavyName = `pay_heavy_${run}`;
 	let heavyId: number;
@@ -1071,12 +1074,9 @@ describe("remainder — the clamp that persists it", () => {
 		await db.execute(sql`DELETE FROM users WHERE username = ${heavyName}`);
 	});
 
-	it("books $0.00, never a negative amount, when bandwidth outruns the Seeds", async () => {
-		// The unclamped remainder: $3.00 − $1.50 Time Pool − $2.04 bandwidth = −$0.54.
-		const consumedGiB = new Decimal(120).mul(DELIVERY_GIB_PER_HOUR);
-		const unclamped = anthersSeedBreakdown(1, { bandwidthGiB: consumedGiB });
-		expect(unclamped.foundation.isNegative()).toBe(true);
-
+	it("books the FULL remainder for a 120-hour month — watch-time does not enter settlement", async () => {
+		// Hand-computed: $3.00 charge − $1.50 Time Pool − $0.39 card fee = $1.11, and the
+		// 204 GiB this account streamed changes none of the three.
 		expect(await settleCycle({ accountId: heavyAccountId, cycle })).toBe(1);
 
 		const [ledger] = await db
@@ -1085,16 +1085,17 @@ describe("remainder — the clamp that persists it", () => {
 			.where(sql`${crfLedger.description} LIKE ${`[settle u${heavyId} ${cycle}]%`}`)
 			.limit(1);
 		expect(ledger).toBeDefined();
-		expect(new Decimal(ledger.amount).toFixed(2)).toBe("0.00");
-		expect(new Decimal(ledger.amount).isNegative()).toBe(false);
+		expect(new Decimal(ledger.amount).toFixed(2)).toBe("1.11");
+		// And the description says nothing about an allowance or an overage any more.
+		expect(ledger.description).not.toMatch(/bandwidth|allowance/i);
 
 		const [snapshot] = await db
 			.select()
 			.from(accountCycles)
 			.where(and(eq(accountCycles.userId, heavyId), eq(accountCycles.billingCycle, cycle)));
-		expect(new Decimal(snapshot.foundation).toFixed(2)).toBe("0.00");
-		// The creators this user watched are paid the same regardless: the Time Pool is a
-		// fixed target per Seed, and the remainder absorbed the shortfall.
+		expect(new Decimal(snapshot.foundation).toFixed(2)).toBe("1.11");
+		// The creators this user watched are paid the same as anyone's: the Time Pool is a
+		// fixed target per Seed.
 		expect(new Decimal(snapshot.timePool).toFixed(2)).toBe("1.50");
 	});
 

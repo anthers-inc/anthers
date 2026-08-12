@@ -28,9 +28,10 @@ import { works } from "./content.js";
  * A user's standing account (one per user). `anthersSeeds` is the count of
  * Anthers-Seeds held (rank = min(anthersSeeds, 4); count also drives billing at
  * $3/Seed). `creatorSeedTotal` is the $ of directed creator-Seeds this cycle
- * (denormalised sum of `seed_allocations`). `bandwidthUsedGiB` is the running
- * stream consumption this cycle, drawn at cost against the Seed allowance
- * (15 GiB floor + 60 GiB per Anthers-Seed). There is no bandwidth wallet.
+ * (denormalised sum of `seed_allocations`). `bandwidthUsedGiB` is a **dead column**:
+ * it held the running stream consumption drawn against a per-Seed allowance until
+ * 2026-08-12. Delivery is free at any volume, nothing writes it, and it stays only
+ * because dropping it is a migration of its own.
  */
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
@@ -40,7 +41,7 @@ export const accounts = pgTable("accounts", {
 		.references(() => users.id, { onDelete: "cascade" }),
 	anthersSeeds: integer("anthers_seeds").notNull().default(0), // count → rank + $3/Seed billing
 	creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators this cycle
-	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed this cycle
+	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage charge
 	stripeCustomerId: text("stripe_customer_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Anthers-Seed subscription
@@ -70,7 +71,7 @@ export const accountCycles = pgTable(
 		creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
 		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle
-		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // stream GiB consumed
+		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
