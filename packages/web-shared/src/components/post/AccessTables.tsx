@@ -115,12 +115,16 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 							{seedRows.map((row, i) => (
 								<tr key={row.threshold}>
 									<td>
-										<span className="font-medium">{row.label}</span>{" "}
-										<span className="text-base-content/50">
-											{row.threshold === 0
-												? "Everyone"
-												: `${row.threshold} Seed${row.threshold === 1 ? "" : "s"}+`}
-										</span>
+										<span className="font-medium">{row.label}</span>
+										{/* The threshold hint only earns its place on a rung. The baseline row's
+										label is already "Everyone", and printing both rendered "Everyone
+										Everyone" — invisible until this table got its first consumer. */}
+										{row.threshold > 0 && (
+											<span className="text-base-content/50">
+												{" "}
+												{row.threshold} Seed{row.threshold === 1 ? "" : "s"}+
+											</span>
+										)}
 									</td>
 									<td className="text-center">
 										<input

@@ -22,7 +22,11 @@ import { Link, useLocation } from "react-router-dom";
 const STUDIO = "/studio";
 const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
 	{ to: STUDIO, label: "Dashboard", icon: Squares2X2Icon },
-	{ to: `${STUDIO}/library`, label: "Library", icon: RectangleStackIcon },
+	// Catalog, NOT "Library". A creator keeps a Catalog of Works; **Library is the bound
+	// term for the USER's own owned content** and is the sidebar item directly above this
+	// one in `LoggedInLayout`, so the two were the same word for opposite things.
+	// `/studio/library` still resolves — it is kept as an alias for old bookmarks.
+	{ to: `${STUDIO}/catalog`, label: "Catalog", icon: RectangleStackIcon },
 	{ to: `${STUDIO}/posts/new`, label: "New Post", icon: PencilSquareIcon },
 	{ to: `${STUDIO}/analytics`, label: "Analytics", icon: ChartBarIcon },
 	{ to: `${STUDIO}/import`, label: "Import", icon: ArrowUpTrayIcon },

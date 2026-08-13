@@ -1,17 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Create / edit a creator-owned library content item. This is the single authoring
- * surface for the content library (used by the Library page and the post content
- * picker's "Upload new"): a modal that picks a `UploadableWorkType`, runs the type's
- * upload flow (client-transcode for video, raw upload for audio, image upload, embed
- * URL for game/software, details for physical/service), then POSTs the item. Media
- * items with a source are processed once, server-side, on create. Game/software items
- * can then manage downloadable builds (assets), which persist immediately.
+ * Create / edit a **Work** in the creator's Catalog. The single authoring surface for it
+ * (used by the Catalog page and the post content picker's "Upload new"): a modal that
+ * picks a `UploadableWorkType`, runs the type's upload flow (client-transcode for video,
+ * raw upload for audio, image upload, embed URL for game/software, details for
+ * physical/service), then POSTs the Work. Media with a source is processed once,
+ * server-side, on create. Games/software can then manage downloadable builds (assets),
+ * which persist immediately.
+ *
+ * Beyond the media it also carries everything that decides what a Work *is* to a reader —
+ * its Created date, its delivery switches, its access table and its release. Those had no
+ * surface at all until 2026-08-13: a Work is born `private` with an access table that
+ * admits nobody, so a Catalog built through this editor used to be invisible by
+ * construction and there was no control anywhere to change that.
+ *
+ * 🚨 **Release is edit-only.** `POST /works` refuses `visibility: "released"` outright
+ * (`code: "release_on_create"`) — release is a separate deliberate act, which is the whole
+ * point of separating the Catalog from posting.
  */
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { client, isDesktop } from "../../lib/rpc";
-import type { Asset, UploadableWorkType, Work, WorkInput } from "../../lib/types";
+import type {
+	Asset,
+	AuthoredPrecision,
+	CreatorGate,
+	UploadableWorkType,
+	Work,
+	WorkInput,
+} from "../../lib/types";
 import {
 	canTranscodeInBrowser,
 	type UploadedVariant,
@@ -19,10 +36,16 @@ import {
 	uploadMediaFile,
 	uploadNativeTranscodedVideo,
 } from "../../lib/upload";
+import AccessTables, {
+	buildSeedRows,
+	type SeedRowDraft,
+	serializeSeedRows,
+} from "../post/AccessTables";
 import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import LoadingSpinner from "../ui/LoadingSpinner";
+import { authoredToIso, isoToAuthoredValue } from "./work-state";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
 
 type EncodeMode = "device" | "server";
@@ -104,6 +127,37 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	const [embedUrl, setEmbedUrl] = useState(editing?.embedUrl ?? "");
 	const [detailsNote, setDetailsNote] = useState(metaNote(editing));
 
+	// Created date — the creator's claim about when the work was MADE, distinct from the
+	// upload date (`createdAt`, creator-facing only) and the release date (ours).
+	const [authoredPrecision, setAuthoredPrecision] = useState<AuthoredPrecision | null>(
+		editing?.authoredAt ? (editing.authoredPrecision ?? "day") : null,
+	);
+	const [authoredValue, setAuthoredValue] = useState(() =>
+		editing?.authoredAt
+			? isoToAuthoredValue(editing.authoredAt, editing.authoredPrecision ?? "day")
+			: "",
+	);
+
+	// Delivery. The server's create defaults, mirrored — and a Work must keep at least one
+	// of them on, which the server enforces against the state the edit RESULTS IN.
+	const [streamEnabled, setStreamEnabled] = useState(editing?.streamEnabled ?? true);
+	const [downloadEnabled, setDownloadEnabled] = useState(editing?.downloadEnabled ?? false);
+
+	// Access. The creator's Seed ladder is fetched below because rungs live on the creator,
+	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
+	// exist, so the rows are the only state worth holding.
+	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>(() =>
+		// A NEW Work is proposed as Public Access — baseline allowed at $0 — rather than
+		// inheriting the server's "free but fully locked" default. That default is right for
+		// the API (a Work created by any client should reveal nothing until asked) and wrong
+		// for a person: it publishes something nobody can open, silently. Here the choice is
+		// on screen and can be unchecked, so the locked state stays reachable but never
+		// accidental.
+		editing
+			? buildSeedRows([], editing.seedAccess)
+			: [{ threshold: 0, label: "Everyone", allow: true, price: "0" }],
+	);
+
 	// Upload progress
 	const [uploading, setUploading] = useState(false);
 	const [progress, setProgress] = useState(0);
@@ -112,6 +166,35 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+
+	// Release is only reachable once the Work exists: `POST /works` refuses
+	// `visibility: "released"` outright with `code: "release_on_create"`, because release is
+	// a separate deliberate act and that is the whole point of separating Catalog from post.
+	const [visibility, setVisibility] = useState<"private" | "released">(
+		editing?.visibility === "released" ? "released" : "private",
+	);
+
+	// The creator's own Seed rungs. Best-effort: without them the table still renders its
+	// baseline row, which is the row that decides Public Access and the only one most
+	// creators will ever touch.
+	useEffect(() => {
+		let live = true;
+		client.api.subscriptions.gates
+			.$get()
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as { gates: CreatorGate[] };
+				if (!live) return;
+				const seedGates = (data.gates ?? []).filter((g) => g.gateType === "seed");
+				// Rebuild THROUGH the current rows so a rung arriving after the creator has
+				// already ticked something doesn't discard the tick.
+				setSeedRows((prev) => buildSeedRows(seedGates, serializeSeedRows(prev)));
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	// ── Uploads ──
 
@@ -256,6 +339,23 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		type === "physical" ||
 		type === "service";
 
+	/**
+	 * The server's own words, when it has any.
+	 *
+	 * Every failure here is a decision the creator can act on — media still encoding, no
+	 * delivery switch on, a date without its precision — and the generic string this used to
+	 * show turned all of them into "something went wrong", which is the one thing none of
+	 * them are.
+	 */
+	const failed = async (res: Response, fallback: string) => {
+		try {
+			const body = (await res.json()) as { error?: string };
+			setError(body?.error || fallback);
+		} catch {
+			setError(fallback);
+		}
+	};
+
 	const handleCreate = async () => {
 		setSaving(true);
 		setError(null);
@@ -265,6 +365,14 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		if (title.trim()) input.title = title.trim();
 		if (description.trim()) input.description = description.trim();
 		if (thumbnailUrl) input.thumbnail = thumbnailUrl;
+		input.streamEnabled = streamEnabled;
+		input.downloadEnabled = downloadEnabled;
+		input.seedAccess = serializeSeedRows(seedRows);
+		const authoredAt = authoredToIso(authoredPrecision, authoredValue);
+		if (authoredAt && authoredPrecision) {
+			input.authoredAt = authoredAt;
+			input.authoredPrecision = authoredPrecision;
+		}
 		switch (type) {
 			case "video":
 				input.sourceKey = videoKey;
@@ -295,7 +403,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		try {
 			const res = await client.api.content.works.$post({ json: input });
 			if (!res.ok) {
-				setError("Failed to create content.");
+				await failed(res, "Failed to create content.");
 				return;
 			}
 			const { work: created } = await res.json();
@@ -313,18 +421,20 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		if (!current) return;
 		setSaving(true);
 		setError(null);
-		const json: {
-			title?: string;
-			description?: string;
-			thumbnail?: string;
-			embedUrl?: string;
-			sourceKey?: string;
-			metadata?: Record<string, unknown>;
-		} = {
+		const json: WorkInput = {
 			title: title.trim(),
 			description: description.trim(),
 			thumbnail: thumbnailUrl,
+			visibility,
+			streamEnabled,
+			downloadEnabled,
+			seedAccess: serializeSeedRows(seedRows),
+			// Sent unconditionally, including as `null` — clearing a Created date is a real
+			// edit, and an omitted field cannot express it. The server clears the precision
+			// alongside it, since a precision without a date claims accuracy about nothing.
+			authoredAt: authoredToIso(authoredPrecision, authoredValue),
 		};
+		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
 		if (type === "game" || type === "software") json.embedUrl = embedUrl.trim();
 		if (type === "physical" || type === "service") json.metadata = { note: detailsNote.trim() };
 		if (type === "image" && imageUrl) json.sourceKey = imageUrl;
@@ -334,7 +444,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 				json,
 			});
 			if (!res.ok) {
-				setError("Failed to save content.");
+				await failed(res, "Failed to save content.");
 				return;
 			}
 			const { work: updated } = await res.json();
@@ -403,6 +513,13 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	};
 
 	const showBuilds = hasId && isBuildType(type);
+
+	// Mirrors the server's own definition of the commons (`isFree && streamEnabled &&
+	// released`) against the rows as they stand in the form, so the preview answers for what
+	// is about to be saved rather than for what was loaded.
+	const anyoneAllowed = seedRows.some((r) => r.allow);
+	const baselineRow = seedRows.find((r) => r.threshold === 0);
+	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
 
 	return (
 		<div className="modal modal-open" role="dialog">
@@ -557,6 +674,132 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 							/>
 						</div>
 					</FormField>
+
+					{/* Created date — the creator's claim about when the work was MADE. */}
+					<FormField label="Created (optional)">
+						<div className="flex flex-wrap gap-2 items-center">
+							<select
+								className="select select-bordered select-sm"
+								value={authoredPrecision ?? ""}
+								onChange={(e) => {
+									const next = (e.target.value || null) as AuthoredPrecision | null;
+									// Re-cut the value to the new precision rather than dropping it, so
+									// narrowing "2015-06" to a year keeps 2015 instead of blanking.
+									const iso = authoredToIso(authoredPrecision, authoredValue);
+									setAuthoredPrecision(next);
+									setAuthoredValue(next ? isoToAuthoredValue(iso, next) : "");
+								}}
+							>
+								<option value="">Not stated</option>
+								<option value="year">Year</option>
+								<option value="month">Month</option>
+								<option value="day">Exact date</option>
+							</select>
+							{authoredPrecision === "year" && (
+								<input
+									type="number"
+									className="input input-bordered input-sm w-28"
+									value={authoredValue}
+									min="1900"
+									max="2200"
+									placeholder="2015"
+									onChange={(e) => setAuthoredValue(e.target.value)}
+								/>
+							)}
+							{authoredPrecision === "month" && (
+								<input
+									type="month"
+									className="input input-bordered input-sm"
+									value={authoredValue}
+									onChange={(e) => setAuthoredValue(e.target.value)}
+								/>
+							)}
+							{authoredPrecision === "day" && (
+								<input
+									type="date"
+									className="input input-bordered input-sm"
+									value={authoredValue}
+									onChange={(e) => setAuthoredValue(e.target.value)}
+								/>
+							)}
+						</div>
+						<p className="text-xs text-base-content/50 mt-1">
+							When this was made — not when you uploaded it. Stated at the precision you pick, so a
+							work you only date to a year shows the year and nothing finer.
+						</p>
+					</FormField>
+
+					{/* Delivery + access. */}
+					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+						<h3 className="font-semibold text-sm">Delivery</h3>
+						<div className="flex flex-wrap gap-4">
+							<label className="label cursor-pointer justify-start gap-2">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm"
+									checked={streamEnabled}
+									// A Work must keep at least one way to be consumed; the server enforces
+									// it against the resulting state, so don't offer the click that fails.
+									disabled={streamEnabled && !downloadEnabled}
+									onChange={(e) => setStreamEnabled(e.target.checked)}
+								/>
+								<span className="label-text text-sm">Stream</span>
+							</label>
+							<label className="label cursor-pointer justify-start gap-2">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm"
+									checked={downloadEnabled}
+									disabled={downloadEnabled && !streamEnabled}
+									onChange={(e) => setDownloadEnabled(e.target.checked)}
+								/>
+								<span className="label-text text-sm">Download</span>
+							</label>
+						</div>
+						<p className="text-xs text-base-content/50">
+							At least one is required. Only streaming work can be Public Access — downloads are
+							paid for by whoever bought or unlocked them.
+						</p>
+					</div>
+
+					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+						<h3 className="font-semibold text-sm">Access</h3>
+						<AccessTables seedRows={seedRows} onSeedChange={setSeedRows} />
+					</div>
+
+					{/* Release. Only once the Work exists — create refuses it by design. */}
+					{hasId && (
+						<div className="border-t border-base-300 pt-4 flex flex-col gap-2">
+							<h3 className="font-semibold text-sm">Release</h3>
+							<label className="label cursor-pointer justify-start gap-2">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm checkbox-primary"
+									checked={visibility === "released"}
+									onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
+								/>
+								<span className="label-text text-sm">Released to my public Catalog</span>
+							</label>
+							{visibility === "released" && !anyoneAllowed && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										Nobody can open this. Released puts it in your Catalog; the Access table above
+										is what lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public
+										Access.
+									</span>
+								</div>
+							)}
+							{visibility === "released" && publicAccessNow && (
+								<p className="text-xs text-success">
+									Public Access — free to everyone, and earning from the Time Pool.
+								</p>
+							)}
+							<p className="text-xs text-base-content/50">
+								Released means listed publicly. It does not mean free — the Access table decides
+								that.
+							</p>
+						</div>
+					)}
 
 					{/* Downloadable builds (games/software) */}
 					{(type === "game" || type === "software") && !hasId && (
