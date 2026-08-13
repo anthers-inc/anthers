@@ -45,6 +45,28 @@ describe("published legal documents", () => {
 		}
 	});
 
+	it('never says "watch-time" — a minute is a minute across four media', () => {
+		/*
+		 * 🚨 The equal-time principle, enforced where it is most likely to be broken.
+		 *
+		 * The privacy policy's own sentence enumerates *"play, watch, read, or listen"*
+		 * and then, until 2026-08-12, called the result **watch-time** — naming one medium
+		 * as the unit for a platform that hosts four, in the same breath as listing them.
+		 * 63.01 made the same mistake and worse: it blessed the term while citing this
+		 * principle as its authority.
+		 *
+		 * Nothing errors when copy drifts back, which is why this is a test rather than a
+		 * style note. "watch-hour" is caught too — the free allowance is hours of Public
+		 * Access, drawn down by reading and playing exactly as by watching.
+		 */
+		for (const doc of Object.values(LEGAL_DOCUMENTS)) {
+			const text = doc.blocks.join("\n").toLowerCase();
+			expect(text).not.toContain("watch-time");
+			expect(text).not.toContain("watch time");
+			expect(text).not.toContain("watch-hour");
+		}
+	});
+
 	it("makes no claim Anthers is a 501(c)(3)", () => {
 		// Copy rule, and a live one until the determination letter arrives: the honest
 		// word is "nonprofit". Asserted here because a legal page is the most plausible

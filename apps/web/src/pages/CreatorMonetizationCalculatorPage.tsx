@@ -15,10 +15,10 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // ---------------------------------------------------------------------------
 // Support-model economics. A viewer holds Anthers-Seeds — $3 each; the count is
 // their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
-// ($1.50, to creators by watch-time) and "Supports Anthers" (the remainder funding
+// ($1.50, to creators by time) and "Supports Anthers" (the remainder funding
 // free access and programs). Money to creators = the Time Pool + Seeds a viewer gives
 // directly to a creator ($3 each, no platform cut). The Time Pool is distributed
-// across the creators a viewer watches, in proportion to watch-time (equal-time
+// across the creators a viewer watches, in proportion to time (equal-time
 // principle — a minute is a minute across every medium). There is no bandwidth term:
 // delivery costs $0 at any volume, so it appears on nobody's bill.
 //
@@ -120,8 +120,8 @@ function ConversionEngine() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the Badge a viewer chose, then how they spend their month. Their Time Pool is split
-					across everyone they watch, by time; your slice of their watch-time — plus any Seeds they
-					direct to you — is what you take home from them. Anthers is a non-profit—no profit-taking.
+					across everyone they watch, by time; your slice of their time — plus any Seeds they direct
+					to you — is what you take home from them. Anthers is a non-profit—no profit-taking.
 				</p>
 
 				<div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-6">
@@ -148,7 +148,7 @@ function ConversionEngine() {
 						</div>
 						<label className="block">
 							<span className="block text-sm text-base-content/70 mb-2">
-								Their total watch-time / month
+								Their total time / month
 							</span>
 							<div className="flex items-center gap-2">
 								<input
@@ -365,7 +365,7 @@ function ValueMatrix() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					The same hour of content pays wildly different amounts depending on who's watching. Each
 					cell is <b className="text-base-content">$ per view-hour</b> = that viewer's Time Pool ÷
-					their total monthly watch-time. Rows are the paid Badges; edit the consumption columns to
+					their total monthly time. Rows are the paid Badges; edit the consumption columns to
 					explore.
 				</p>
 				<div className="overflow-x-auto">
@@ -521,8 +521,8 @@ function AudienceBuilder() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					Build an audience from segments. For each, set the subscriber count, the Badge they chose,
-					total monthly watch-time, hours spent with you, and any Seeds they direct to you. Revenue
-					per subscriber = (your share of their time × their Time Pool) + directed Seeds.
+					total monthly time, hours spent with you, and any Seeds they direct to you. Revenue per
+					subscriber = (your share of their time × their Time Pool) + directed Seeds.
 				</p>
 
 				<div className="overflow-x-auto">
@@ -683,9 +683,7 @@ function AudienceBuilder() {
 						<p className="mt-1 text-xs text-base-content/50">per view-hour, blended</p>
 					</div>
 					<div className="flex-1 min-w-[180px] rounded-xl bg-base-200 p-4">
-						<p className="text-xs uppercase tracking-wide text-base-content/50">
-							Captured watch-time
-						</p>
+						<p className="text-xs uppercase tracking-wide text-base-content/50">Captured time</p>
 						<p className="mt-1 font-mono text-2xl font-bold tabular-nums">
 							{cnt(totals.capHrs)} hrs
 						</p>
@@ -731,8 +729,8 @@ export default function CreatorMonetizationCalculatorPage() {
 		<div className="max-w-5xl min-w-0 w-full mx-auto px-4 pb-16">
 			<Reveal>
 				<CalcPageHeader
-					eyebrow="Time Pool · watch-time → revenue"
-					title="How watch-time becomes creator revenue"
+					eyebrow="Time Pool · time → revenue"
+					title="How time with a creator becomes revenue"
 					lede={
 						<>
 							On Anthers, a viewer's <b className="text-base-content">Time Pool</b> — set by the
@@ -763,9 +761,9 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
 									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($1.50, to creators by
-									watch-time) and <b>Supports Anthers</b> (the remainder, which funds free access
-									and the charitable programs). Directed <b>Seeds</b> ($3 each, no platform cut) are
-									given alongside.
+									time) and <b>Supports Anthers</b> (the remainder, which funds free access and the
+									charitable programs). Directed <b>Seeds</b> ($3 each, no platform cut) are given
+									alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

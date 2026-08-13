@@ -63,7 +63,7 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 
 // A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
 // Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
-// creators, by watch-time) and "Supports Anthers" (the remainder, funding free access
+// creators, by time) and "Supports Anthers" (the remainder, funding free access
 // and programs). Directed Seeds ($3 each, no platform cut) sit alongside. There is no
 // bandwidth line — streaming and downloads are unlimited and free.
 // Derived from the generated figures, never hand-computed. This block used to be
@@ -74,7 +74,7 @@ const DEMO_PLAN = {
 	badge: PETAL.badge,
 	anthersSeeds: PETAL.seeds,
 	price: Number(PETAL.charge),
-	timePool: Number(PETAL.timePool), // to creators, distributed by watch-time
+	timePool: Number(PETAL.timePool), // to creators, distributed by time
 	seeds: 3, // directed creator-Seeds (count, $3 each)
 	seedPool: 9.0, // $ value of the directed Seeds
 	// The remainder — i.e. the charge less the Time Pool and the Payments line.
@@ -487,7 +487,7 @@ function SubscriptionDashboardDemo() {
 					<div className="card-body p-4">
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Time Pool</p>
 						<p className="text-xl font-bold text-success">${totalPool.toFixed(2)}</p>
-						<p className="text-xs text-base-content/40">Auto &middot; watch-time proportional</p>
+						<p className="text-xs text-base-content/40">Auto &middot; time-proportional</p>
 					</div>
 				</div>
 				<div className="card bg-base-200">

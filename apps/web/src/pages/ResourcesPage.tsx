@@ -91,7 +91,7 @@ const CALCULATORS: ResourceCard[] = [
 		to: "/resources/creator-monetization",
 		title: "Creator Monetization Calculator",
 		blurb:
-			"How watch-time becomes revenue under the Time Pool + Seed model — from one viewer up to a creator's monthly earnings.",
+			"How time with a creator becomes revenue under the Time Pool + Seed model — from one viewer up to a creator's monthly earnings.",
 		tag: "Economics",
 		icon: BanknotesIcon,
 	},
@@ -149,8 +149,8 @@ export default function ResourcesPage() {
 					<Reveal delay={150}>
 						<Lede>
 							Everything behind Anthers, in the open — how the model works, what the infrastructure
-							really costs, and how watch-time turns into creator revenue. No login, no sign-up: run
-							the numbers yourself, and hold us to them.
+							really costs, and how time with a creator turns into revenue. No login, no sign-up:
+							run the numbers yourself, and hold us to them.
 						</Lede>
 					</Reveal>
 				</div>

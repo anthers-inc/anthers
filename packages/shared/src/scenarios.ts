@@ -55,7 +55,7 @@ export interface BadgeRow {
  *
  * A `bandwidth` column sat between the charge and the Time Pool until 2026-08-12,
  * driven by a reference streamer's watch-hours. Both are gone: delivery costs $0,
- * so there is nothing for watch-time to price, and the table no longer rests on a
+ * so there is nothing for time to price, and the table no longer rests on a
  * behavioural assumption at all. **Every row is now exact rather than illustrative.**
  */
 export function badgeTable(): BadgeRow[] {
