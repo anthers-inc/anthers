@@ -293,6 +293,113 @@ afterAll(async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Refunding one item out of a basket.
+ *
+ * 🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge** (Parker,
+ * 2026-08-13). A basket puts several independent purchases on one PaymentIntent; the
+ * buyer chose each of them separately and refunding one must not return the others.
+ *
+ * The reversal lands exactly right by arithmetic rather than luck: `reverse_transfer` on
+ * a partial refund reverses *proportionally*, and because the card fee and the tax are
+ * both apportioned pro-rata by item value, that proportion resolves to precisely the
+ * row's own recorded earnings.
+ *
+ * Verified by sabotage, with measured counts: re-adding the sibling settling loop fails
+ * **2**, and dropping the explicit `amount` fails **1**.
+ *
+ * ⚠️ That second number is worth understanding rather than raising. Dropping the `amount`
+ * asks Stripe for the whole charge, and only the parameter assertion notices — the fake
+ * does not simulate Stripe's side effects, so the sibling ROWS stay `completed` either
+ * way. What we control and can assert is the request; what the money then does is
+ * Stripe's, and no fake can prove it. Same limit the file header states for the
+ * destination charge.
+ */
+describe("A basket refunds one item at a time", () => {
+	/** Three purchases on ONE PaymentIntent, apportioned the way checkout writes them. */
+	async function basketOfThree() {
+		const intent = `pi_basket_${uid()}`;
+		const unit = new Decimal("1.00");
+		const subtotal = unit.times(3);
+		const whole = calculateFees(subtotal, { type: "digital" });
+		const rows = [];
+		for (let i = 0; i < 3; i++) {
+			const share = (t: Decimal) => t.dividedBy(3).toDecimalPlaces(2);
+			const [row] = await db
+				.insert(purchases)
+				.values({
+					buyerId,
+					workId: await makeWork(`Basket work ${uid()}`),
+					creatorId,
+					workTitle: `Basket item ${i}`,
+					workType: "audio",
+					workPublicId: null,
+					type: "digital",
+					amount: unit.toFixed(2),
+					processingFee: share(whole.processingFee).toFixed(2),
+					deliveryFee: "0.00",
+					crfFee: "0.00",
+					salesTax: share(whole.salesTax).toFixed(2),
+					creatorEarnings: unit.minus(share(whole.processingFee)).toFixed(2),
+					stripePaymentIntentId: intent,
+					status: "completed",
+				})
+				.returning();
+			rows.push(row);
+		}
+		return rows;
+	}
+
+	it("refunds only that item's share of the charge", async () => {
+		const rows = await basketOfThree();
+		const res = await refundAs(buyerCookie, rows[0].id);
+		expect(res.status).toBe(200);
+
+		const params = fake.lastCall("refunds.create")?.args[0] as Stripe.RefundCreateParams;
+		// The item's price plus its apportioned tax — what the buyer paid for THIS thing,
+		// not what they paid for the basket.
+		const expected = Math.round(
+			new Decimal(rows[0].amount).plus(rows[0].salesTax).toNumber() * 100,
+		);
+		expect(params.amount).toBe(expected);
+		expect(params.reverse_transfer).toBe(true);
+		// A whole-charge refund would be three times this. Stated as an inequality so it
+		// keeps meaning if the fixture's prices change.
+		expect(params.amount).toBeLessThan(expected * 3);
+	});
+
+	it("leaves the other two purchases untouched, and still owned", async () => {
+		const rows = await basketOfThree();
+		await refundAs(buyerCookie, rows[0].id);
+
+		expect((await reload(rows[0].id)).status).toBe("refunded");
+		// The assertion this whole change exists for: the buyer keeps what they kept.
+		expect((await reload(rows[1].id)).status).toBe("completed");
+		expect((await reload(rows[2].id)).status).toBe("completed");
+	});
+
+	it("books only that item's share of the sunk card fee", async () => {
+		const rows = await basketOfThree();
+		await refundAs(buyerCookie, rows[0].id);
+
+		const ledger = await ledgerFor(rows[0].id);
+		expect(ledger).toHaveLength(1);
+		// The shortfall is the row's apportioned processing, so refunding all three
+		// would book the whole fee once — never three times over.
+		expect(new Decimal(ledger[0].amount).negated().toFixed(2)).toBe(rows[0].processingFee);
+		expect(await ledgerFor(rows[1].id)).toHaveLength(0);
+	});
+
+	it("still refunds a lone purchase in full, with no amount at all", async () => {
+		const purchase = await completedPurchase();
+		await refundAs(buyerCookie, purchase.id);
+		const params = fake.lastCall("refunds.create")?.args[0] as Stripe.RefundCreateParams;
+		// The long-tested path for the common case: no `amount` means the whole charge,
+		// and there is no reason to move it onto the basket's arithmetic for symmetry.
+		expect(params.amount).toBeUndefined();
+	});
+});
+
 describe("The reversal we ask Stripe for", () => {
 	it("reverses the creator's transfer and does NOT refund the application fee", async () => {
 		const purchase = await completedPurchase();

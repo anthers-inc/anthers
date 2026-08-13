@@ -726,11 +726,20 @@ const paymentRoutes = new Hono()
 					typeof charge.payment_intent === "string"
 						? charge.payment_intent
 						: charge.payment_intent.id;
-				// 🚨 Every purchase on the charge, not the first. `refunds.ts` issues a
-				// FULL refund of the PaymentIntent (no `amount`), so on a basket the whole
-				// charge comes back — and settling one row would leave the buyer holding
-				// permanent access to the other items with the money returned. The
-				// `.limit(1)` here was correct only while a charge could carry one purchase.
+				// 🚨 Every purchase on the charge, not the first — the `.limit(1)` here was
+				// correct only while a charge could carry one purchase.
+				//
+				// This branch runs only when the charge is **wholly** refunded, so on a
+				// basket it means every item is gone and every row must be settled. Our own
+				// per-item refunds arrive here as *partial* refunds (`refunded: false`) and
+				// are skipped by the guard above, having already settled their own row.
+				//
+				// ⚠️ **A partial refund issued from the Stripe DASHBOARD is still not
+				// handled**, and baskets make that reachable where it wasn't before: the
+				// money goes back and the row stays `completed`, so the buyer keeps access.
+				// Nothing in a charge says *which* item an operator meant, so this cannot be
+				// inferred — operator refunds have to go through the app. Worth a real fix
+				// once there is a takedown path that issues them.
 				const refundedRows = await db
 					.select()
 					.from(purchases)
