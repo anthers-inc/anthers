@@ -13,6 +13,7 @@
  * line — streaming and downloads are unlimited and free.
  */
 
+import { SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -629,7 +630,9 @@ export default function SubscriptionPage() {
 				{/* Where the month's Seeds go */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
-					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing." />
+					<InfoTip
+						text={`Each Seed given to Anthers ($${SEED_PRICE}) funds the Time Pool ($${TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing.`}
+					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
@@ -645,6 +648,8 @@ export default function SubscriptionPage() {
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Streaming</div>
 						<div className="text-lg font-bold">Unlimited</div>
+						{/* econ:allow — this states the ABSENCE of the retired mechanism, which is the
+						    one place naming it is correct. */}
 						<div className="text-[11px] text-base-content/40">no allowance, no per-GiB charge</div>
 					</div>
 				</div>

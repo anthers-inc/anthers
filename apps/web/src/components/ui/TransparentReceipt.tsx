@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // The buyer-facing receipt. Since 2026-08-03 the listed price IS the advertised
-// price: card processing and the first download come OUT of it, Anthers keeps $0,
-// and sales tax is the only thing added — the sole carve-out mandatory-fee
-// disclosure law allows. So this renders a disclosure of where the price went,
-// never a stack of extras being piled on.
+// price: card processing comes OUT of it, Anthers keeps $0, and sales tax is the
+// only thing added — the sole carve-out mandatory-fee disclosure law allows. So this
+// renders a disclosure of where the price went, never a stack of extras being piled
+// on. (The buyer's first download was a second deduction until 2026-08-12. Delivery
+// is free at any volume now, so no caller renders a line for it.)
 interface ReceiptLine {
 	label: string;
 	amount: number;

@@ -348,6 +348,72 @@ export function selfSufficiency() {
 	};
 }
 
+/**
+ * The storefronts 62.04's headline table compares us against, and their revenue share.
+ *
+ * ⚠️ **These rates are PERISHABLE** — checked 2026-08-03, and a competitor can change
+ * one without telling us. Re-check before anything ships. They live here rather than
+ * in the document because they are arithmetic, not copy: 63.01 § Comparisons binds
+ * every row to be **all-in against all-in**, which means a rival's column must be
+ * computed from the same card fee ours is and must move when that fee moves. Typed by
+ * hand, they don't — the $5 row disagreed with itself by a cent for exactly that
+ * reason, because the rival columns rounded the fee at the end while ours rounded it
+ * first.
+ *
+ * `absorbsProcessing` is Valve's model: their 30% covers the card cost, so nothing
+ * further comes off. `maxPrice` bounds a row we would not honestly claim — Bandcamp
+ * sells music, and a $40 album is not a transaction anyone recognises.
+ */
+export const RIVAL_STOREFRONTS: {
+	name: string;
+	share: number;
+	absorbsProcessing?: boolean;
+	maxPrice?: number;
+}[] = [
+	{ name: "Steam", share: 0.3, absorbsProcessing: true },
+	{ name: "itch.io", share: 0.1 },
+	{ name: "Bandcamp", share: 0.15, maxPrice: 20 },
+];
+
+export interface TakeHomeRow {
+	price: string;
+	/** What reaches the creator here — the list price less at-cost card processing. */
+	anthers: string;
+	/** Per storefront, all-in at the same list price. `null` where we make no claim. */
+	rivals: { name: string; net: string | null }[];
+	/** The best take-home in the row. Steam wins below ~$1.15 and the table must say so. */
+	best: string;
+}
+
+/**
+ * Creator take-home at the same list price, us against each storefront.
+ *
+ * The winner is computed rather than marked by hand, because *"concede where we lose"*
+ * is a rule we would otherwise have to remember on every dial change: Steam beats us
+ * below about $1.15, where their 30% of a small sale is less than the flat card fee
+ * they absorb. A generated table concedes it by construction.
+ */
+export function takeHomeComparison(): TakeHomeRow[] {
+	return PURCHASE_EXAMPLES.map(({ price }) => {
+		const list = new Decimal(price);
+		const card = calculateFees(list, { type: "digital" }).processingFee;
+		const anthers = list.minus(card);
+		const rivals = RIVAL_STOREFRONTS.map((r) => {
+			if (r.maxPrice !== undefined && price > r.maxPrice) return { name: r.name, net: null };
+			const afterShare = list.times(1 - r.share);
+			return {
+				name: r.name,
+				net: money(r.absorbsProcessing ? afterShare : afterShare.minus(card)),
+			};
+		});
+		const best = rivals.reduce(
+			(top, r) => (r.net && new Decimal(r.net).greaterThan(top) ? new Decimal(r.net) : top),
+			anthers,
+		);
+		return { price: money(list), anthers: money(anthers), rivals, best: money(best) };
+	});
+}
+
 /** A lone directed Seed — the worst case, and the figure creator-facing copy quotes. */
 export function directedSeedWorstCase() {
 	const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });

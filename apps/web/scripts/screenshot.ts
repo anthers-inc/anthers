@@ -25,7 +25,6 @@ const BASE = `http://localhost:${PORT}`;
 const DEFAULT_ROUTES = [
 	"/resources",
 	"/resources/video-storage",
-	"/resources/video-bandwidth",
 	"/resources/creator-monetization",
 ];
 

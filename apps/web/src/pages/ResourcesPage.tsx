@@ -25,7 +25,6 @@ import {
 	NewspaperIcon,
 	PuzzlePieceIcon,
 	ScaleIcon,
-	SignalIcon,
 	UserGroupIcon,
 	WalletIcon,
 } from "@heroicons/react/24/outline";
@@ -78,14 +77,6 @@ const CALCULATORS: ResourceCard[] = [
 			"What it costs to store a source video plus its full AV1 transcode ladder, per source-hour and across a whole library.",
 		tag: "Infrastructure",
 		icon: CircleStackIcon,
-	},
-	{
-		to: "/resources/video-bandwidth",
-		title: "Video Bandwidth Calculator",
-		blurb:
-			"How much data a watch-hour actually moves at each delivery tier and codec — the egress side of hosting video, for capacity planning rather than billing.",
-		tag: "Infrastructure",
-		icon: SignalIcon,
 	},
 	{
 		to: "/resources/creator-monetization",

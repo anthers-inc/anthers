@@ -297,8 +297,9 @@ export default function PurchasesPage() {
 									<span>{fmt(totalCreator)}</span>
 								</div>
 								<p className="text-[11px] text-base-content/30 mt-1">
-									You pay the listed price plus sales tax, and nothing else. Card processing and the
-									first download come out of that price at cost — Anthers takes no cut.
+									You pay the listed price plus sales tax, and nothing else. Card processing comes
+									out of that price at cost — Anthers takes no cut. Downloads are free, forever, on
+									any number of devices.
 								</p>
 							</div>
 						)}
