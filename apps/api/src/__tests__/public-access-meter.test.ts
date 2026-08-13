@@ -23,9 +23,16 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, attentionEvents, purchases, transcodingJobs, users } from "@anthers/db/schema";
+import {
+	accounts,
+	assets,
+	attentionEvents,
+	purchases,
+	transcodingJobs,
+	users,
+} from "@anthers/db/schema";
 import { FREE_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -33,6 +40,10 @@ import { insertWork } from "./work-fixtures.js";
 const testFetch = app.fetch;
 const ORIGIN = "http://localhost:3000";
 const HLS_URL = "https://cdn.example.com/creators/x/videos/hls/pa/master.m3u8";
+/** Distinctive enough that finding it in a payload is unambiguous. */
+const TEXT_BODY = "<p>the-essay-body-that-must-not-leak</p>";
+const GAME_EMBED = "https://games.example.com/embed/pa-game";
+const ASSET_KEY = "creators/x/builds/pa-download.zip";
 
 function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
@@ -62,6 +73,10 @@ let seededCookie: string;
 let paWorkId: number;
 let gatedWorkId: number;
 let boughtWorkId: number;
+let textWorkId: number;
+let gameWorkId: number;
+let gatedTextWorkId: number;
+let downloadableWorkId: number;
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const res = await req("/api/auth/sign-up", {
@@ -92,6 +107,21 @@ async function spend(userId: number, seconds: number, publicAccess = true) {
 		durationSeconds: seconds,
 		publicAccess,
 	});
+}
+
+/**
+ * Put a viewer at exactly `seconds` spent, clearing whatever came before.
+ *
+ * ⚠️ `spend` above **accumulates** — it inserts an event — so tests that need a viewer
+ * *inside* their allowance cannot use it once an earlier test has spent one. That
+ * ordering coupling is fine for a suite that only ever climbs; it is a trap for one that
+ * moves in both directions, which is why this exists.
+ */
+async function setSpent(userId: number, seconds: number) {
+	await db
+		.delete(attentionEvents)
+		.where(and(eq(attentionEvents.userId, userId), eq(attentionEvents.publicAccess, true)));
+	if (seconds > 0) await spend(userId, seconds);
 }
 
 /** Ask for the playlist — the last point at which delivery can be declined. */
@@ -142,6 +172,56 @@ beforeAll(async () => {
 		seedAccess: FOR_SALE,
 	});
 	boughtWorkId = bought.id;
+
+	// Text and a browser game. Neither has a delivery endpoint of its own — the
+	// deliverable rides inside `GET /works/:id`, which is exactly why the meter missed
+	// them for two PRs while their attention was being counted the whole time.
+	const text = await insertWork({
+		creatorId,
+		type: "text",
+		title: "Public Access essay",
+		streamEnabled: true,
+		bodyHtml: TEXT_BODY,
+		seedAccess: PUBLIC_ACCESS,
+	});
+	textWorkId = text.id;
+
+	const game = await insertWork({
+		creatorId,
+		type: "game",
+		title: "Public Access game",
+		streamEnabled: true,
+		embedUrl: GAME_EMBED,
+		seedAccess: PUBLIC_ACCESS,
+	});
+	gameWorkId = game.id;
+
+	const gatedText = await insertWork({
+		creatorId,
+		type: "text",
+		title: "Seed-gated essay",
+		streamEnabled: true,
+		bodyHtml: TEXT_BODY,
+		seedAccess: SEED_GATED,
+	});
+	gatedTextWorkId = gatedText.id;
+
+	// Public Access *and* downloadable — the pair that proves the meter stops at bytes.
+	const withFile = await insertWork({
+		creatorId,
+		type: "video",
+		title: "Public Access with a download",
+		streamEnabled: true,
+		downloadEnabled: true,
+		seedAccess: PUBLIC_ACCESS,
+	});
+	downloadableWorkId = withFile.id;
+	await db.insert(assets).values({
+		workId: withFile.id,
+		file: ASSET_KEY,
+		filename: "build.zip",
+		fileSize: 1024,
+	});
 
 	// A completed job on each, so delivery has something to reach for and a 402 can be
 	// distinguished from a 404.
@@ -327,5 +407,163 @@ describe("an anonymous viewer", () => {
 		expect(budget.usedSeconds).toBe(0);
 		expect(budget.allowed).toBe(true);
 		expect((await playlist(paWorkId)).status).not.toBe(402);
+	});
+});
+
+describe("media with no player of their own", () => {
+	/*
+	 * 🚨 The bug this block exists for, and it shipped twice.
+	 *
+	 * `attention_events.public_access` is stamped for **any** Work that is ungated +
+	 * streaming + released, and `stream_enabled` is genuinely true for text and games —
+	 * so reading and playing have always **spent** the ten hours. But `publicAccessGate`
+	 * was applied at exactly two call sites, `/works/:id/audio` and `/works/:id/hls/:file`,
+	 * because those are the only media with a delivery endpoint to gate.
+	 *
+	 * The result was that reading silently burned the video allowance and then stopped a
+	 * video, with no warning anywhere near the reading. Nothing errored; the meter simply
+	 * counted a thing it never enforced.
+	 *
+	 * Text, games and images deliver **inside `GET /works/:id`**, so the choke point is
+	 * serialization rather than a route, and these assertions are about the payload.
+	 */
+	async function fetchWork(id: number, cookie: string) {
+		const res = await req(`/api/content/works/${id}`, { headers: { Cookie: cookie } });
+		return (await res.json()) as {
+			work: {
+				bodyHtml: string;
+				embedUrl: string;
+				access: { canAccess: boolean; isFree: boolean };
+				publicAccess: boolean;
+			};
+		};
+	}
+
+	it("serves a Public Access essay inside the allowance", async () => {
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, 60);
+
+		const { work } = await fetchWork(textWorkId, viewerCookie);
+		expect(work.bodyHtml).toBe(TEXT_BODY);
+	});
+
+	it("withholds the essay once the allowance is spent", async () => {
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+
+		const { work } = await fetchWork(textWorkId, viewerCookie);
+		// The body is the deliverable for a text Work. Hiding it in the client would be
+		// decoration; the bytes must not arrive.
+		expect(work.bodyHtml).toBe("");
+	});
+
+	it("withholds a game's embed once the allowance is spent", async () => {
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+
+		const { work } = await fetchWork(gameWorkId, viewerCookie);
+		expect(work.embedUrl).toBe("");
+	});
+
+	it("🚨 still reports the Work as FREE — the meter is not a gate on the Work", async () => {
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+
+		const { work } = await fetchWork(textWorkId, viewerCookie);
+		/*
+		 * The whole distinction the model rests on. The Work is free to everyone and stays
+		 * free to everyone; what ran out belongs to the *account*. If `access` ever starts
+		 * reporting denied here, the commons has quietly re-stratified — which is the exact
+		 * thing retiring Anthers Gates was for — and the UI would show a lock ("you may
+		 * not") where the truth is a spent allowance ("you may, and here is how").
+		 */
+		expect(work.access.isFree).toBe(true);
+		expect(work.access.canAccess).toBe(true);
+		expect(work.publicAccess).toBe(true);
+	});
+
+	it("one Seed restores it, and nothing above the first buys more", async () => {
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+		await setSeeds(viewerId, 1);
+		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
+
+		await setSeeds(viewerId, 4);
+		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
+	});
+
+	it("🚨 gated text the viewer CLEARED survives a spent allowance", async () => {
+		/*
+		 * The don't-bill-them-twice property, for the media that have no delivery endpoint.
+		 *
+		 * By this point the viewer holds a Seed given to this creator (an earlier test in
+		 * this file gave them one), so the gate is open to them. Their allowance is also
+		 * gone. Those two facts must not interact: they paid a creator to reach this, it
+		 * was never part of the commons, and it never drew an allowance — so an empty
+		 * allowance has no claim on it.
+		 *
+		 * The mechanism that makes this true is worth naming, because it is easy to break:
+		 * `deliverable` withholds only when `publicAccess` is true, and `publicAccess`
+		 * requires `access.isFree`. Gated work the viewer cleared is accessible but NOT
+		 * free, so it is untouched. Widen that condition to "canAccess" and this fails.
+		 */
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+
+		const { work } = await fetchWork(gatedTextWorkId, viewerCookie);
+		expect(work.access.canAccess).toBe(true);
+		expect(work.publicAccess).toBe(false);
+		expect(work.bodyHtml).toBe(TEXT_BODY);
+	});
+
+	it("gated text the viewer has NOT cleared is withheld for access, not for the meter", async () => {
+		// A viewer with no Seed to this creator, and a full allowance. Empty for the
+		// access reason alone — asserted so a refactor cannot collapse the two reasons
+		// into one flag: they mean different things and produce different UI.
+		const { cookie, id } = await signUp(`pam_nogate_${run}`);
+		await setSeeds(id, 0);
+		await setSpent(id, 0);
+
+		const { work } = await fetchWork(gatedTextWorkId, cookie);
+		expect(work.bodyHtml).toBe("");
+		expect(work.access.canAccess).toBe(false);
+		expect(work.publicAccess).toBe(false);
+	});
+
+	it("an anonymous reader is never withheld from", async () => {
+		// The server hands logged-out callers the full allowance on purpose — anonymous
+		// reading of the commons is the shop window, and there is no account to meter.
+		const res = await req(`/api/content/works/${textWorkId}`);
+		const { work } = (await res.json()) as { work: { bodyHtml: string } };
+		expect(work.bodyHtml).toBe(TEXT_BODY);
+	});
+
+	it("⚠️ a spent allowance never withholds a DOWNLOAD", async () => {
+		/*
+		 * The meter measures **attention to the commons, not bytes**, and this is the only
+		 * assertion holding that line.
+		 *
+		 * Delivery has cost $0 at any volume since R2, so there is no per-byte reason to
+		 * ration a file, and the allowance was never spent on one — downloads draw nothing,
+		 * which is why they are excluded from `public_access` stamping in the first place.
+		 * Metering them here would invent a limit the model does not have, and it would do
+		 * it invisibly: the key would simply be missing and the download button would do
+		 * nothing.
+		 *
+		 * Found by sabotage — switching `assets` from `canAccess` to `deliverable` broke
+		 * no test in the entire suite before this one existed.
+		 */
+		await setSeeds(viewerId, 0);
+		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
+
+		const res = await req(`/api/content/works/${downloadableWorkId}`, {
+			headers: { Cookie: viewerCookie },
+		});
+		const { work } = (await res.json()) as {
+			work: { assets: { file: string }[]; publicAccess: boolean };
+		};
+
+		// Public Access, allowance gone — and the file key still arrives.
+		expect(work.publicAccess).toBe(true);
+		expect(work.assets[0]?.file).toBe(ASSET_KEY);
 	});
 });
