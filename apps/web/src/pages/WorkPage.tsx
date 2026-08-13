@@ -24,6 +24,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AudioPlayer from "../components/media/AudioPlayer";
+import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
 import CommentThread from "../components/post/CommentThread";
@@ -35,6 +36,7 @@ import ProjectRating from "../components/project/ProjectRating";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionClaim } from "../lib/attention";
+import { useMeteredBudget } from "../lib/public-access";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 type WorkDetail = Work & {
@@ -133,6 +135,24 @@ export default function WorkPage() {
 	// Poll while the media is still encoding, so the player swaps in without a refresh.
 	const jobStatus = work?.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
+
+	/*
+	 * The Public Access meter, for the media that have no player of their own.
+	 *
+	 * Video and audio carry their own countdown and wall inside `VideoPlayer` and
+	 * `AudioPlayer`, because those components own the playback state the footer needs.
+	 * Text, games, software and images have no such component — so the page holds it.
+	 */
+	const meterBudget = useMeteredBudget();
+	/** Media whose deliverable arrives in the payload rather than through a player. */
+	const playerless = work != null && work.type !== "video" && work.type !== "audio";
+	/**
+	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
+	 * says nothing about gated work the viewer cleared, work they bought, or their own
+	 * catalogue — none of which is Public Access, and none of which the meter touches.
+	 */
+	const spentOnThis =
+		playerless && (work?.publicAccess ?? false) && meterBudget != null && !meterBudget.allowed;
 	useEffect(() => {
 		if (!work || !encoding) return;
 		const tick = async () => {
@@ -269,6 +289,10 @@ export default function WorkPage() {
 								<InlineUnlock post={work} access={access} onUnlocked={refetch} />
 							))}
 					</div>
+				) : spentOnThis ? (
+					// The server withheld the deliverable because the allowance is gone, so
+					// there is nothing to render in its place but the reason.
+					<PublicAccessWall budget={meterBudget} />
 				) : encoding ? (
 					<TranscodingStatus
 						status={work.transcoding?.status ?? "pending"}
@@ -305,6 +329,18 @@ export default function WorkPage() {
 								<SanitizedHtml html={work.bodyHtml} />
 							</article>
 						)}
+						{/*
+						 * Reading, playing and looking draw the allowance exactly as watching does,
+						 * and until now said nothing about it — the countdown and the wall were
+						 * wired into the two players and nowhere else, so a reader nine hours in
+						 * got no signal at all and then met a wall at a video.
+						 *
+						 * 🚨 Rendered here rather than inside each medium's block because there is
+						 * no component to hang it on: text is an <article>, a game is an <iframe>,
+						 * an image is an <img>. The players own their own footer; everything else
+						 * has this one.
+						 */}
+						{playerless && <PublicAccessFooter playing={false} />}
 					</>
 				)}
 			</section>

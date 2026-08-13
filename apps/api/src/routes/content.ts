@@ -898,8 +898,40 @@ function serializeWorkForViewer(
 	job: TranscodingJobRow | null,
 	access: AccessResultLike,
 	delivery: DeliveryCtx | null,
+	/**
+	 * Whether this viewer has spent their monthly Public Access allowance.
+	 *
+	 * 🚨 **Required, not optional, and that is the point.** Video and audio are metered at
+	 * their own delivery endpoints, which a text Work and a browser game do not have —
+	 * their deliverable rides inside this payload, so this function is the only choke
+	 * point they pass through. An optional parameter would default to "not spent" and the
+	 * fifth call site anyone adds would silently serve the commons for free forever, which
+	 * is exactly the bug this exists to close.
+	 */
+	allowanceSpent: boolean,
 ) {
 	const canAccess = access.canAccess;
+
+	/**
+	 * Whether this Work is the commons — see the `publicAccess` field below for why this
+	 * is derived rather than stored. Computed up here because the deliverable depends on
+	 * it: only Public Access work draws an allowance, so only Public Access work can be
+	 * withheld by one running out.
+	 */
+	const publicAccess = access.isFree && work.streamEnabled && work.visibility === "released";
+
+	/**
+	 * Whether to hand over the thing itself.
+	 *
+	 * Two independent reasons to withhold, and they must not be conflated: **access**
+	 * (this is gated and you have not cleared it) and **allowance** (it is free to you and
+	 * always will be, but you have used your hours this month). The second never touches
+	 * `access` below — the Work still reports itself free, because it *is* free. What ran
+	 * out belongs to the account, and a Work that described itself as gated by someone
+	 * else's meter would re-stratify the commons the retirement of Anthers Gates removed.
+	 */
+	const deliverable = canAccess && !(publicAccess && allowanceSpent);
+
 	return {
 		id: work.id,
 		publicId: work.publicId,
@@ -930,12 +962,23 @@ function serializeWorkForViewer(
 		// The creator's prose. For a text Work this IS the deliverable; for any other type
 		// it is the notes that come with it. Either way it rides with the payload and is
 		// gated — `description` is the public blurb that stays visible when locked.
-		bodyHtml: canAccess ? work.bodyHtml : "",
-		body: canAccess ? work.body : "",
-		sourceKey: canAccess ? work.sourceKey : "",
-		embedUrl: canAccess ? work.embedUrl : "",
-		// Download keys are only handed out through the access-checked download route.
+		//
+		// These four are the ones with no delivery endpoint of their own, so `deliverable`
+		// is where the meter actually bites for reading, playing and looking.
+		bodyHtml: deliverable ? work.bodyHtml : "",
+		body: deliverable ? work.body : "",
+		sourceKey: deliverable ? work.sourceKey : "",
+		embedUrl: deliverable ? work.embedUrl : "",
+		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
+		// attention to the commons, not bytes** — delivery is free at any volume since R2,
+		// and a spent allowance has never had anything to do with a file you are entitled
+		// to. Metering these would invent a limit the model does not have.
 		assets: workAssets.map((a) => ({ ...a, file: canAccess ? a.file : "" })),
+		// Video and audio keep `canAccess` too: their bytes are refused at
+		// `/works/:id/audio` and `/works/:id/hls/:file`, which return a real 402 with the
+		// budget attached. Withholding the URL here as well would be a second, weaker
+		// mechanism for something already enforced — and the player decides what to render
+		// from the budget it holds, not from a missing URL.
 		transcoding: viewerTranscoding(job, canAccess, delivery),
 		access,
 		/**
@@ -952,8 +995,24 @@ function serializeWorkForViewer(
 		 * may watch more of it this month. That is the account-level meter, which is
 		 * deliberately not expressed here — see `publicAccessGate`.
 		 */
-		publicAccess: access.isFree && work.streamEnabled && work.visibility === "released",
+		publicAccess,
 	};
+}
+
+/**
+ * Whether this viewer has spent their monthly Public Access allowance.
+ *
+ * One read per request, not per Work: the allowance belongs to the **account**, so a
+ * page listing forty Works asks once. That is the same reason the meter could never live
+ * inside `resolveAccessSync` — which is pure and synchronous precisely so a batch
+ * resolves without an N+1.
+ *
+ * A logged-out viewer is never spent: the server hands anonymous callers the full
+ * allowance on purpose, because anonymous streaming of the commons is the shop window.
+ */
+async function allowanceSpent(viewerId: number | null): Promise<boolean> {
+	const budget = await loadPublicAccessBudget(viewerId);
+	return !budget.allowed;
 }
 
 /** The shape `resolveAccessSync` returns; declared structurally so serialization stays pure. */
@@ -1014,7 +1073,10 @@ async function loadPostWorks(
 
 	const workIds = refs.map((r) => r.workId);
 	const { worksById, assetsByWork, jobByWork } = await loadWorkBundles(workIds);
-	const ctx = await buildAccessContext(viewerId, { workIds });
+	const [ctx, spent] = await Promise.all([
+		buildAccessContext(viewerId, { workIds }),
+		allowanceSpent(viewerId),
+	]);
 
 	return refs
 		.map((ref) => {
@@ -1028,6 +1090,7 @@ async function loadPostWorks(
 					jobByWork.get(work.id) ?? null,
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
+					spent,
 				),
 			};
 		})
@@ -2076,6 +2139,7 @@ const contentRoutes = new Hono()
 					jobRows[0] ?? null,
 					resolveAccessSync(work as AccessibleWork, ctx),
 					deliveryCtx(),
+					await allowanceSpent(viewerId),
 				),
 				creator,
 				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
@@ -2185,7 +2249,10 @@ const contentRoutes = new Hono()
 
 		const ids = rows.map((r) => r.id);
 		const { assetsByWork, jobByWork } = await loadWorkBundles(ids);
-		const ctx = await buildAccessContext(viewerId, { workIds: ids });
+		const [ctx, catalogSpent] = await Promise.all([
+			buildAccessContext(viewerId, { workIds: ids }),
+			allowanceSpent(viewerId),
+		]);
 		await Promise.all(rows.map(resolveWorkThumbnail));
 
 		return c.json({
@@ -2197,6 +2264,7 @@ const contentRoutes = new Hono()
 					jobByWork.get(w.id) ?? null,
 					resolveAccessSync(w as AccessibleWork, ctx),
 					deliveryCtx(),
+					catalogSpent,
 				),
 			),
 		});
@@ -2762,7 +2830,10 @@ const contentRoutes = new Hono()
 
 		const memberWorkIds = itemRows.map((r) => r.work.id);
 		const { assetsByWork, jobByWork } = await loadWorkBundles(memberWorkIds);
-		const workCtx = await buildAccessContext(viewerId, { workIds: memberWorkIds });
+		const [workCtx, projectSpent] = await Promise.all([
+			buildAccessContext(viewerId, { workIds: memberWorkIds }),
+			allowanceSpent(viewerId),
+		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
 		return c.json({
@@ -2781,6 +2852,7 @@ const contentRoutes = new Hono()
 						jobByWork.get(m.work.id) ?? null,
 						resolveAccessSync(m.work as AccessibleWork, workCtx),
 						deliveryCtx(),
+						projectSpent,
 					),
 				})),
 				// No per-post access verdict: a post has no gates. The Works a member post
