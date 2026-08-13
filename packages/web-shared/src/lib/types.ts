@@ -6,7 +6,7 @@
  * responses. This models the unified Post: everything a creator publishes is a
  * Post whose deliverable is an ordered array of typed content elements; access
  * type (stream/download) and the two access tables are orthogonal switches.
- * Projects are collections that group posts.
+ * Projects group a creator's Works and Posts.
  */
 
 // ─── User Types ───
@@ -336,8 +336,8 @@ export interface PostListItem {
 	linkedWorkCount: number;
 }
 
-/** A post as it appears inside a collection (GET /projects/:slug). */
-export interface CollectionPost {
+/** A post as it appears inside a Project (GET /projects/:slug). */
+export interface ProjectPost {
 	id: number;
 	publicId: number;
 	slug: string;
@@ -356,7 +356,7 @@ export interface CollectionPost {
 	publicAccess?: boolean;
 }
 
-/** Project — a collection (playlist-like wrapper) that groups posts. */
+/** Project — a creator's named grouping of Works and Posts, with its own page. */
 export interface Project {
 	id: number;
 	creatorId: number;
@@ -374,7 +374,7 @@ export interface Project {
 	/** Member count (list endpoint). */
 	postCount?: number;
 	/** Ordered members (detail endpoint). */
-	posts?: CollectionPost[];
+	posts?: ProjectPost[];
 }
 
 export interface Comment {

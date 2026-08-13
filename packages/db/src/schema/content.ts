@@ -309,8 +309,8 @@ export const postEdits = pgTable(
 );
 
 /**
- * Projects — collections (playlist-like wrappers) that group a creator's things and give
- * them a rich custom showcase page. Not a content type; hold no content or pricing.
+ * Projects — a creator's named groupings of Works and Posts around one subject, each with
+ * its own page. Not a content type; hold no media and no pricing of their own.
  * A project collects **both** Works and Posts, in separate ordered lists — a game project
  * holds its builds and soundtrack alongside its devlogs and patch notes.
  */
@@ -364,7 +364,7 @@ export const projectItems = pgTable(
 	],
 );
 
-/** Many-to-many: which posts belong to which project (collection), with ordering. */
+/** Many-to-many: which posts belong to which Project, with ordering. */
 export const projectPosts = pgTable(
 	"project_posts",
 	{

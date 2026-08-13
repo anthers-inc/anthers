@@ -38,7 +38,7 @@ export default function ProjectPage() {
 			.finally(() => setLoading(false));
 	}, [slug]);
 
-	// Attention tracking—a collection view is a page_view for the creator.
+	// Attention tracking — a Project view is a page_view for the creator.
 	// A project is a collection — a shelf holding no work of its own — so browsing
 	// one records the visit and earns no Time Pool minutes. The time is earned on
 	// the posts, where the content entities actually live.

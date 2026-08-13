@@ -691,7 +691,7 @@ async function seed() {
 
 	const createdUserIds: Record<string, number> = {};
 	// Posts (announcements) and Works (the Catalog) are tracked separately now — ratings,
-	// comments and collections hang off posts; purchases and gates off Works.
+	// comments and Project membership hang off posts; purchases and gates off Works.
 	const createdPosts: { postId: number; creatorUsername: string }[] = [];
 	const postIdBySlug: Record<string, number> = {};
 	const postIdByTitle: Record<string, number> = {};
@@ -940,8 +940,8 @@ async function seed() {
 		}
 	}
 
-	// ---- 3b. Create collections (projects) grouping each creator's works ----
-	console.log("Creating seed collections...");
+	// ---- 3b. Create Projects grouping each creator's works ----
+	console.log("Creating seed Projects...");
 	for (const [username, creatorWorks] of Object.entries(PROJECTS_BY_CREATOR)) {
 		const creatorId = createdUserIds[username];
 		if (!creatorId || creatorWorks.length < 2) continue;
@@ -984,7 +984,7 @@ async function seed() {
 			}
 		}
 	}
-	console.log("  Collections created.");
+	console.log("  Projects created.");
 
 	// ---- 4. Create some reviews ----
 	// A review is a score plus text — seeding score-only rows would produce the
@@ -1424,7 +1424,7 @@ async function seed() {
 		`  ${CREATORS.length} creators, ${
 			Object.values(PROJECTS_BY_CREATOR).flat().length +
 			Object.values(POSTS_BY_CREATOR).flat().length
-		} posts (works + stream), grouped into collections`,
+		} posts (works + stream), grouped into Projects`,
 	);
 	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).anthersSeeds > 0);
 	console.log(

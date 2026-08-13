@@ -92,11 +92,11 @@ export default function DashboardPage() {
 	};
 
 	/**
-	 * Delete a project (collection).
+	 * Delete a Project.
 	 *
 	 * Deliberately NOT modelled on the post-delete flow above, because the stakes are
 	 * different: `project_posts.projectId` cascades, so only the MEMBERSHIP rows go — every
-	 * post in the collection survives on the creator's profile. There is no orphaned-media
+	 * post in the Project survives on the creator's profile. There is no orphaned-media
 	 * question here and nothing to purge, so offering a media checkbox would imply a
 	 * destructiveness this action doesn't have.
 	 */
@@ -454,7 +454,7 @@ export default function DashboardPage() {
 							Delete "{projectDeleteTarget.title || "Untitled"}"?
 						</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							This removes the collection and its ordering. <strong>Posts are not deleted</strong> —
+							This removes the Project and its ordering. <strong>Posts are not deleted</strong> —
 							they stay on your profile and in your library, they just stop being grouped here. It
 							can't be undone.
 						</p>
