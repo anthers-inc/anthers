@@ -2,7 +2,7 @@
 /**
  * Shared presentation helpers for creator-owned library content items: the type
  * catalog, per-type icons/labels, the derived processing-state badge, and the card
- * preview URL. Used by the Content Library page, the content-item editor, and the
+ * preview URL. Used by the Catalog page, the Work editor, and the
  * post authoring content picker.
  */
 import {
@@ -16,6 +16,9 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
 import type { UploadableWorkType, Work } from "../../lib/types";
+import { type AccessState, accessState } from "./work-state";
+
+export { type AccessState, accessState } from "./work-state";
 
 /** The uploadable/processable library content types (text stays post-native). */
 export const LIBRARY_TYPE_OPTIONS: { value: UploadableWorkType; label: string }[] = [
@@ -81,6 +84,45 @@ export function ProcessingBadge({ item }: { item: Work }) {
 		default:
 			return null;
 	}
+}
+
+const ACCESS_BADGES: Record<AccessState, { label: string; className: string; title: string }> = {
+	private: {
+		label: "Private",
+		className: "badge-neutral",
+		title: "Only you can see this. Release it to put it in your public Catalog.",
+	},
+	locked: {
+		label: "Nobody can open",
+		className: "badge-error",
+		title: "Released, but no access row allows anyone in. Set access on this Work.",
+	},
+	"public-access": {
+		label: "Public Access",
+		className: "badge-success",
+		title: "Free to everyone, nothing to clear. Earns from the Time Pool.",
+	},
+	free: {
+		label: "Free download",
+		className: "badge-success badge-outline",
+		title: "Free to everyone, but it doesn't stream — so it isn't Public Access.",
+	},
+	sale: { label: "For sale", className: "badge-info", title: "Anyone can buy this." },
+	gated: {
+		label: "Seed gated",
+		className: "badge-info badge-outline",
+		title: "Reachable by people who give you enough Seeds.",
+	},
+};
+
+/** The Work's release + access state, as one badge. */
+export function AccessBadge({ item }: { item: Work }) {
+	const badge = ACCESS_BADGES[accessState(item)];
+	return (
+		<span className={`badge badge-sm ${badge.className}`} title={badge.title}>
+			{badge.label}
+		</span>
+	);
 }
 
 /** A small type badge. */

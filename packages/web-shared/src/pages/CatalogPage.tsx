@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * The creator's content library: a grid of their reusable content items (video, audio,
- * image, game, software, physical, service). Each item OWNS its media, downloadable
- * builds, and transcodes; posts reference items rather than owning media. From here a
- * creator uploads new content, edits an item (title/description/thumbnail + builds), and
- * deletes items. Processing state is derived from each item's latest transcode and polled
- * while anything is still encoding.
+ * The creator's **Catalog**: a grid of their Works (video, audio, image, game, software,
+ * physical, service). Each Work OWNS its media, downloadable builds, and transcodes, plus
+ * its own visibility, dates, delivery switches and access gates; posts merely reference
+ * Works. From here a creator uploads, edits, releases and deletes. Processing state is
+ * derived from each Work's latest transcode and polled while anything is still encoding.
+ *
+ * 🚨 **Catalog, not "Library".** Library is a bound term meaning the *user's* own owned
+ * content — see the Copy Style Guide. This page said "Content Library" until 2026-08-13.
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
@@ -36,6 +38,10 @@ export default function CatalogPage() {
 	const [inUse, setInUse] = useState<UsingPost[] | null>(null);
 	/** Completed purchases of this Work; null until the preflight answers. */
 	const [sold, setSold] = useState<number | null>(null);
+	/** Work id whose visibility flip is in flight, so only its own button disables. */
+	const [releasing, setReleasing] = useState<number | null>(null);
+	/** A refused release, kept beside the grid — the server's reason, not a generic one. */
+	const [releaseError, setReleaseError] = useState<string | null>(null);
 
 	const fetchItems = () =>
 		client.api.content.works
@@ -81,6 +87,36 @@ export default function CatalogPage() {
 				? prev.map((i) => (i.id === item.id ? item : i))
 				: [item, ...prev],
 		);
+
+	/**
+	 * Flip a Work between private and released, from the card.
+	 *
+	 * The server owns the preconditions — media finished encoding, at least one delivery
+	 * switch on — and refuses with a specific message when they aren't met. Show that
+	 * message: "can't release yet, the media is still processing" is something the creator
+	 * can wait out, and a generic failure is not.
+	 */
+	const setVisibility = async (work: Work, visibility: "private" | "released") => {
+		setReleasing(work.id);
+		setReleaseError(null);
+		try {
+			const res = await client.api.content.works[":id"].$patch({
+				param: { id: String(work.id) },
+				json: { visibility },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setReleaseError(body?.error || "Couldn't change this Work's visibility.");
+				return;
+			}
+			const { work: updated } = (await res.json()) as unknown as { work: Work };
+			upsert(updated);
+		} catch {
+			setReleaseError("Couldn't change this Work's visibility.");
+		} finally {
+			setReleasing(null);
+		}
+	};
 
 	/**
 	 * Open the delete dialog, asking the server which posts use this item FIRST so the
@@ -175,7 +211,7 @@ export default function CatalogPage() {
 	return (
 		<div className="max-w-7xl mx-auto px-4 py-8">
 			<div className="flex items-center justify-between mb-8">
-				<h1 className="text-2xl font-bold">Content Library</h1>
+				<h1 className="text-2xl font-bold">Catalog</h1>
 				<button
 					type="button"
 					className="btn btn-primary btn-sm"
@@ -185,11 +221,17 @@ export default function CatalogPage() {
 				</button>
 			</div>
 
+			{releaseError && (
+				<div className="alert alert-error text-sm mb-4">
+					<span>{releaseError}</span>
+				</div>
+			)}
+
 			{items.length === 0 ? (
 				<EmptyState
 					icon={<RectangleStackIcon className="w-12 h-12" />}
-					title="Your library is empty"
-					description="Upload video, audio, images, games, software, or list physical goods and services. Then reference them from your posts."
+					title="Your Catalog is empty"
+					description="Upload video, audio, images, games, software, or list physical goods and services. Each one is a Work you can release, gate or sell on its own — with or without ever writing a post about it."
 					action={
 						<button
 							type="button"
@@ -208,6 +250,8 @@ export default function CatalogPage() {
 							item={item}
 							onEdit={(it) => setEditor({ item: it })}
 							onDelete={(it) => openDelete(it)}
+							onSetVisibility={setVisibility}
+							busy={releasing === item.id}
 						/>
 					))}
 				</div>
