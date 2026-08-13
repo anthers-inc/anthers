@@ -4,9 +4,14 @@
 // Airy editorial forest-green, Fraunces display serif over Nunito Sans. The route
 // wraps this page in <MeadowDecor> (pollen + woven side vines), so this file only
 // styles the content: a tinted hero header, alternating Section bands, rounded
-// cards, and the feature-comparison table. All copy and data are preserved
-// verbatim from the original.
+// cards, and the feature-comparison table.
+//
+// Every money figure here derives from SALE_TABLE. The restyle preserved the copy
+// verbatim, which is how three hand-typed $9.40s rode through it; the sale figures
+// are read from the model now, and the buyer's first download is no longer a
+// deduction anywhere (retired 2026-08-12 with the per-GiB charge).
 
+import { SALE_TABLE } from "@anthers/shared/figures";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -29,6 +34,23 @@ import {
 } from "@heroicons/react/24/outline";
 
 const serif = { fontFamily: FONTS.fraunces };
+
+/**
+ * The $10 sale both receipts are built from — derived, never typed. See
+ * `scripts/econ-figures.ts`; a hand-typed $9.40 sat on this page in three places for
+ * months, and survived the sweep that retired the charge it was built from.
+ *
+ * itch.io's column quotes the same `cardFee` on purpose: every platform pays the same
+ * card cost, and 63.01 § Comparisons requires all-in against all-in. Only their
+ * revenue share is theirs.
+ */
+const GAME_10 = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
+const ITCH_SHARE = (Number(GAME_10.price) * 0.1).toFixed(2);
+const ITCH_RECEIVES = (
+	Number(GAME_10.price) -
+	Number(ITCH_SHARE) -
+	Number(GAME_10.cardFee)
+).toFixed(2);
 
 export default function CompareItchPage() {
 	const { isAuthenticated } = useAuth();
@@ -110,7 +132,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<CurrencyDollarIcon className="h-6 w-6" />}
 							title="0% platform fee—no revenue share"
-							description="itch.io defaults to a 10% revenue share (which creators set themselves, anywhere from 0% to 100%). Anthers never takes a percentage at all. The only deductions from your price are costs paid to third parties—card processing, and the buyer's first download—itemized in full. On a $10 game with a 1 GiB download that is $9.40 to you."
+							description={`itch.io defaults to a 10% revenue share (which creators set themselves, anywhere from 0% to 100%). Anthers never takes a percentage at all. The only deduction from your price is a cost paid to a third party—card processing—itemized in full. On a $${GAME_10.price} game that is $${GAME_10.creatorReceives} to you, whatever the download size.`}
 						/>
 					</Reveal>
 					<Reveal delay={100}>
@@ -124,7 +146,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<EyeIcon className="h-6 w-6" />}
 							title="Transparent, itemized pricing"
-							description="On itch.io, the platform's share is deducted from your sale. On Anthers there is no platform share at all — the only deductions are card processing and the buyer's first download, both at cost and both itemized. Buyers see exactly where their money goes."
+							description="On itch.io, the platform's share is deducted from your sale. On Anthers there is no platform share at all — the only deduction is card processing, at cost and itemized. Buyers see exactly where their money goes."
 						/>
 					</Reveal>
 					<Reveal delay={300}>
@@ -171,11 +193,12 @@ export default function CompareItchPage() {
 							</h3>
 							<p className="mb-4 text-xs text-base-content/45">$10 game sale (default 10% share)</p>
 							<div className="flex flex-col gap-2 text-sm">
-								<ReceiptLine label="Sale price" amount="$10.00" />
-								<ReceiptLine label="itch.io share (10%)" amount="-$1.00" negative />
-								<ReceiptLine label="Payment processing" amount="-$0.59" negative />
+								<ReceiptLine label="Sale price" amount={`$${GAME_10.price}`} />
+								{/* econ:allow — itch.io's own revenue share, not one of our figures */}
+								<ReceiptLine label="itch.io share (10%)" amount={`-$${ITCH_SHARE}`} negative />
+								<ReceiptLine label="Payment processing" amount={`-$${GAME_10.cardFee}`} negative />
 								<div className="my-1 border-t border-base-content/10" />
-								<ReceiptLine label="Creator receives" amount="$8.41" bold />
+								<ReceiptLine label="Creator receives" amount={`$${ITCH_RECEIVES}`} bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
 								Creators can set their share to 0%, but the default is 10%.
@@ -191,17 +214,21 @@ export default function CompareItchPage() {
 							</h3>
 							<p className="mb-4 text-xs text-base-content/45">$10 game sale (0% platform fee)</p>
 							<div className="flex flex-col gap-2 text-sm">
-								<ReceiptLine label="Sale price" amount="$10.00" />
+								<ReceiptLine label="Sale price" amount={`$${GAME_10.price}`} />
 								<ReceiptLine label="Anthers share" amount="-$0.00" />
-								<ReceiptLine label="Payment processing (2.9% + $0.30)" amount="-$0.59" negative />
-								<ReceiptLine label="First download (~1 GiB, at cost)" amount="-$0.01" negative />
+								<ReceiptLine
+									label="Payment processing (2.9% + $0.30)"
+									amount={`-$${GAME_10.cardFee}`}
+									negative
+								/>
+								<ReceiptLine label="Delivery (unlimited, any size)" amount="$0.00" />
 								<div className="my-1 border-t border-base-content/10" />
-								<ReceiptLine label="Creator receives" amount="$9.40" bold />
+								<ReceiptLine label="Creator receives" amount={`$${GAME_10.creatorReceives}`} bold />
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
-								Anthers keeps nothing. The two deductions are the card processing every platform
-								pays, and the buyer's first download at cost — both to third parties. The buyer pays
-								$10.00, plus any applicable tax.
+								Anthers keeps nothing. The one deduction is the card processing every platform pays,
+								to a third party. Downloads are free at any size, on any number of devices, forever.
+								The buyer pays ${GAME_10.price}, plus any applicable tax.
 							</p>
 						</Card>
 					</Reveal>
@@ -380,9 +407,9 @@ export default function CompareItchPage() {
 							Ready to try something new?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use, and takes a 0% cut of your sales—a $10 game with a 1 GiB
-							download returns $9.40 to you, the rest being card processing and delivery, at cost.
-							If you love itch.io, you'll love what comes next.
+							Anthers is free to use, and takes a 0% cut of your sales—a ${GAME_10.price} game
+							returns ${GAME_10.creatorReceives} to you whatever its size, the rest being card
+							processing, at cost. If you love itch.io, you'll love what comes next.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link

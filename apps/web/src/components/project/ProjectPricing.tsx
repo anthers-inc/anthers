@@ -26,11 +26,13 @@ interface Quote {
 function receiptFromQuote(q: Quote) {
 	const n = (s: string) => Number(s);
 	const lines: { label: string; amount: number; note?: string; added?: boolean }[] = [];
-	// Everything except tax comes OUT of the listed price; `crfFee` is always zero now
-	// (Anthers takes no cut of a purchase) and is deliberately not rendered.
+	// Everything except tax comes OUT of the listed price. Two of the quote's fields are
+	// structurally zero on any new purchase and neither is rendered: `crfFee` (Anthers
+	// takes no cut of a purchase, 2026-08-03) and `deliveryFee` (delivery is free at any
+	// volume, 2026-08-12 — `calculateFees` no longer even takes a size). Both stay in the
+	// arithmetic below, because a receipt that ignores a field the server sent would stop
+	// reconciling the moment one came back non-zero.
 	lines.push({ label: "Card processing", amount: n(q.processingFee), note: "at cost" });
-	if (n(q.deliveryFee) > 0)
-		lines.push({ label: "First download", amount: n(q.deliveryFee), note: "at cost" });
 	lines.push({ label: "Sales tax", amount: n(q.salesTax), note: "est.", added: true });
 	return {
 		price: n(q.amount),

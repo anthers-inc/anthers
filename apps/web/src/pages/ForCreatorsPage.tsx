@@ -216,7 +216,11 @@ export default function ForCreatorsPage() {
 								Example: $10 game, 2 GiB download (card payment)
 							</h3>
 							<div className="flex flex-col gap-2 text-sm">
-								<ReceiptLine label="Listed price — what the buyer pays" amount="$10.00" bold />
+								<ReceiptLine
+									label="Listed price — what the buyer pays"
+									amount={`$${SALE_10_2GIB.price}`}
+									bold
+								/>
 								<ReceiptLine
 									label={`Payment processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)})`}
 									amount={`−$${SALE_10_2GIB.cardFee}`}
@@ -274,8 +278,8 @@ export default function ForCreatorsPage() {
 					<Reveal delay={220} className="h-full">
 						<PricingOption title="Fixed Price">
 							Set the price a buyer sees, and we show you exactly what you'll receive. The only
-							deductions are the at-cost card processing and the first download—both paid to third
-							parties, neither to us.
+							deduction is the at-cost card processing—paid to a third party, not to us. Downloads
+							are free, at any size.
 						</PricingOption>
 					</Reveal>
 				</div>
@@ -461,8 +465,8 @@ export default function ForCreatorsPage() {
 									and we show you exactly what you'll receive before you publish
 								</li>
 								<li>
-									The only deductions are the at-cost card processing and your buyer's first
-									download—both paid to third parties, never a cent to Anthers
+									The only deduction is the at-cost card processing—paid to a third party, never a
+									cent to Anthers. Delivery is free, at any size and any number of downloads
 								</li>
 							</ul>
 							This is where "0% cut" is simply true, with nothing to qualify.
@@ -822,6 +826,7 @@ const NO_CUT = "no cut";
 
 /** Derived, never typed — see scripts/econ-figures.ts. */
 const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
+const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 
 // A representative engaged fan for the streaming comparison: Sprout rank — 2
 // Anthers-Seeds ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
@@ -875,6 +880,11 @@ const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = 
 	const card = cardFeeDisplay(price);
 	return `$${(afterCut - card).toFixed(2)}`;
 };
+/** What the rival keeps on that sale — their revenue share, derived from the same two
+ * numbers as their take-home above, so the two halves of a row can never disagree.
+ * Not one of our figures; several of these land on the same amount as a Time Pool
+ * rung by coincidence, which is exactly why it is computed rather than typed. */
+const rivalPurchaseCut = (price: number, cutRate: number) => `$${(price * cutRate).toFixed(2)}`;
 
 /** The Anthers row for a combo. `platform` is what Anthers itself receives — the
  * remainder of a fan's Seeds to Anthers on a stream (funds free access + the
@@ -915,8 +925,14 @@ const purchaseReceipt = (net: string, card: string): Line[] => [
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
-	{ label: "To you — your $25.00 listed, less the card cost", amount: "$23.97" },
-	{ label: "Card processing — to the payment processor", amount: "$1.03" },
+	{
+		label: `To you — your $${SALE_25_PHYSICAL.price} listed, less the card cost`,
+		amount: `$${SALE_25_PHYSICAL.creatorReceives}`,
+	},
+	{
+		label: "Card processing — to the payment processor",
+		amount: `$${SALE_25_PHYSICAL.cardFee}`,
+	},
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const seedReceipt: Line[] = [
@@ -994,8 +1010,16 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			scenario: "A fan buys your $12 video",
 			rows: [
 				anthers(PURCHASE_VIDEO.netStr, "$0.00", NO_CUT),
-				{ name: "Gumroad", creator: rivalPurchaseAllIn(12, 0.1), platform: "$1.20" },
-				{ name: "Apple / iTunes", creator: rivalPurchaseAllIn(12, 0.3, true), platform: "$3.60" },
+				{
+					name: "Gumroad",
+					creator: rivalPurchaseAllIn(12, 0.1),
+					platform: rivalPurchaseCut(12, 0.1),
+				},
+				{
+					name: "Apple / iTunes",
+					creator: rivalPurchaseAllIn(12, 0.3, true),
+					platform: rivalPurchaseCut(12, 0.3),
+				},
 			],
 			breakdown: PURCHASE_VIDEO.receipt,
 		},
@@ -1003,8 +1027,16 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			scenario: "A fan buys your $15 game",
 			rows: [
 				anthers(PURCHASE_GAMES.netStr, "$0.00", NO_CUT),
-				{ name: "itch.io", creator: rivalPurchaseAllIn(15, 0.1), platform: "$1.50" },
-				{ name: "Steam", creator: rivalPurchaseAllIn(15, 0.3, true), platform: "$4.50" },
+				{
+					name: "itch.io",
+					creator: rivalPurchaseAllIn(15, 0.1),
+					platform: rivalPurchaseCut(15, 0.1),
+				},
+				{
+					name: "Steam",
+					creator: rivalPurchaseAllIn(15, 0.3, true),
+					platform: rivalPurchaseCut(15, 0.3),
+				},
 			],
 			breakdown: PURCHASE_GAMES.receipt,
 		},
@@ -1012,8 +1044,16 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			scenario: "A fan buys your $10 album",
 			rows: [
 				anthers(PURCHASE_MUSIC.netStr, "$0.00", NO_CUT),
-				{ name: "Bandcamp", creator: rivalPurchaseAllIn(10, 0.15), platform: "$1.50" },
-				{ name: "iTunes Store", creator: rivalPurchaseAllIn(10, 0.3, true), platform: "$3.00" },
+				{
+					name: "Bandcamp",
+					creator: rivalPurchaseAllIn(10, 0.15),
+					platform: rivalPurchaseCut(10, 0.15),
+				},
+				{
+					name: "iTunes Store",
+					creator: rivalPurchaseAllIn(10, 0.3, true),
+					platform: rivalPurchaseCut(10, 0.3),
+				},
 			],
 			breakdown: PURCHASE_MUSIC.receipt,
 		},
@@ -1021,17 +1061,33 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			scenario: "A fan buys your $8 ebook",
 			rows: [
 				anthers(PURCHASE_WRITING.netStr, "$0.00", NO_CUT),
-				{ name: "Gumroad", creator: rivalPurchaseAllIn(8, 0.1), platform: "$0.80" },
-				{ name: "Amazon KDP", creator: rivalPurchaseAllIn(8, 0.3, true), platform: "$2.40" },
+				{
+					name: "Gumroad",
+					creator: rivalPurchaseAllIn(8, 0.1),
+					platform: rivalPurchaseCut(8, 0.1),
+				},
+				{
+					name: "Amazon KDP",
+					creator: rivalPurchaseAllIn(8, 0.3, true),
+					platform: rivalPurchaseCut(8, 0.3),
+				},
 			],
 			breakdown: PURCHASE_WRITING.receipt,
 		},
 		merch: {
 			scenario: "A fan buys your $25 shirt",
 			rows: [
-				anthers("$23.97", "$0.00", NO_CUT),
-				{ name: "Etsy", creator: rivalPurchaseAllIn(25, 0.11), platform: "$2.75" },
-				{ name: "Gumroad", creator: rivalPurchaseAllIn(25, 0.1), platform: "$2.50" },
+				anthers(`$${SALE_25_PHYSICAL.creatorReceives}`, "$0.00", NO_CUT),
+				{
+					name: "Etsy",
+					creator: rivalPurchaseAllIn(25, 0.11),
+					platform: rivalPurchaseCut(25, 0.11),
+				},
+				{
+					name: "Gumroad",
+					creator: rivalPurchaseAllIn(25, 0.1),
+					platform: rivalPurchaseCut(25, 0.1),
+				},
 			],
 			note: "Excludes production & shipping—a real cost on any platform, including Anthers.",
 			breakdown: merchReceipt,

@@ -5,6 +5,7 @@ import {
 	badgeLabel,
 	SEED_PRICE,
 	seedCost,
+	TIME_POOL_PER_SEED,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -760,10 +761,10 @@ export default function CreatorMonetizationCalculatorPage() {
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
 									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
-									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($1.50, to creators by
-									time) and <b>Supports Anthers</b> (the remainder, which funds free access and the
-									charitable programs). Directed <b>Seeds</b> ($3 each, no platform cut) are given
-									alongside.
+									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($
+									{TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and <b>Supports Anthers</b>{" "}
+									(the remainder, which funds free access and the charitable programs). Directed{" "}
+									<b>Seeds</b> ($3 each, no platform cut) are given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

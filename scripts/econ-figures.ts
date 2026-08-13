@@ -21,13 +21,26 @@
  *     in the docs that publish them. Same pattern the vault already uses for roadmap
  *     bars: generated regions are never hand-edited.
  *
+ * And one guard, which is neither:
+ *
+ *  3. A scan of the app source for published figures that were TYPED rather than
+ *     read from (1). Markers are how markdown gets covered, because markdown cannot
+ *     import; the app can, so its coverage is the opposite shape — not "regenerate
+ *     this region" but "no region may hold a typed figure at all". See `scanApp`.
+ *
  * Why it exists: the 2026-08-03 pricing revamp swept these by hand and missed three
  * of them, which then sat in the "source of truth" doc overstating the remainder by
  * exactly the card fee for five days. A sweep cannot be trusted to be complete.
+ *
+ * Why (3) exists: because (1) and (2) were both green on 2026-08-12 while five
+ * marketing pages published $9.40 against a model that said $9.41, and still called
+ * the buyer's first download a deduction four months after it stopped being one.
+ * A generated-figures guard only covers what it is pointed at, and nothing said the
+ * app was outside it.
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import {
 	CARD_FLAT,
 	CARD_RATE,
@@ -44,16 +57,25 @@ import {
 	FIXED_MONTHLY_OVERHEAD,
 	PAYING_BADGE_MIX,
 	purchaseExamples,
+	RIVAL_STOREFRONTS,
 	saleTable,
 	sampleReceipt,
 	selfSufficiency,
+	takeHomeComparison,
 } from "../packages/shared/src/scenarios.js";
 
 const REPO = join(import.meta.dir, "..");
 const VAULT = join(process.env.HOME ?? "", "Obsidian/40-59 PhD Projects/43 Platforms/Anthers");
 
 const check = process.argv.includes("--check");
+/** Generated regions that no longer match what the model says. */
 const failures: string[] = [];
+/** Published figures found typed into the app by hand. */
+const typed: string[] = [];
+/** App copy describing a charge the model no longer has. */
+const retired: string[] = [];
+/** Files carrying `econ:allow-file`, reported every run so an exemption stays visible. */
+const exempt: string[] = [];
 
 /**
  * Run the rendered module through Biome before writing it.
@@ -114,19 +136,42 @@ export const DIRECTED_SEED_WORST_CASE = ${j(seed)} as const;
 }
 
 // ── 2. The wiki blocks ───────────────────────────────────────────────────────
+
+/**
+ * Emit a table in the vault's house style: an empty trailing column and an empty
+ * trailing row.
+ *
+ * Not decoration — it is a legibility rule for **edit mode**, which is where this
+ * vault is actually read and written. Without them the rightmost column runs to the
+ * edge of the pane and the last row abuts whatever follows. The vault's CLAUDE.md
+ * requires generators to emit them precisely so a generated table doesn't fight the
+ * convention on every run and produce a diff the moment a human touches the file.
+ */
+function table(head: string[], align: string[], rows: string[][]): string {
+	const line = (cells: string[]) => `| ${cells.join(" | ")} |     |`;
+	return [
+		line(head),
+		`|${align.map((a) => `${a}|`).join("")}---|`,
+		...rows.map(line),
+		`|${head.map(() => "  |").join("")}     |`,
+	].join("\n");
+}
+
 function renderBadgeMarkdown(): string {
 	const rows = badgeTable();
-	const head =
-		"| Badge | Seeds given to Anthers | Charge | Time Pool | Payments\\* | → Remainder |";
-	const sep = "|:--|--:|--:|--:|--:|--:|";
-	const body = rows.map(
-		(r) =>
-			`| **${r.badge}** | ${r.seeds} | $${r.charge} | $${r.timePool} | $${r.payments} | **$${r.remainder}** |`,
-	);
 	return [
-		head,
-		sep,
-		...body,
+		table(
+			["Badge", "Seeds given to Anthers", "Charge", "Time Pool", "Payments\\*", "→ Remainder"],
+			[":--", "--:", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				`**${r.badge}**`,
+				String(r.seeds),
+				`$${r.charge}`,
+				`$${r.timePool}`,
+				`$${r.payments}`,
+				`**$${r.remainder}**`,
+			]),
+		),
 		"",
 		`\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per Seed, it does not scale with the Seed count — which is why the remainder grows faster than linearly.`,
 		"",
@@ -182,11 +227,14 @@ function renderSaleMarkdown(): string {
 	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
 	const seed = directedSeedWorstCase();
 	return [
-		"| Sale | Creator receives | Card |",
-		"|:--|--:|--:|",
-		...rows.map(
-			(r) =>
-				`| $${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"} | **$${r.creatorReceives}** | $${r.cardFee} |`,
+		table(
+			["Sale", "Creator receives", "Card"],
+			[":--", "--:", "--:"],
+			rows.map((r) => [
+				`$${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"}`,
+				`**$${r.creatorReceives}**`,
+				`$${r.cardFee}`,
+			]),
 		),
 		"",
 		`**Download size does not appear, because it no longer changes anything.** A digital sale used to carry the first download's bandwidth at cost, and redownloads drew the buyer's own allowance; delivery is free on R2, so every download of a purchased work is included, forever, on any number of devices.`,
@@ -208,11 +256,17 @@ function renderPurchaseExamplesMarkdown(): string {
 	const rows = purchaseExamples();
 	const cart = cartSaving();
 	return [
-		"| Item | List | Size | Card | **Creator receives** | Deduction |",
-		"|:--|--:|--:|--:|--:|--:|",
-		...rows.map(
-			(r) =>
-				`| ${r.item} | $${r.price} | ${r.sizeLabel} | $${r.cardFee} | **$${r.creatorReceives}** | ${r.deductionPct} |`,
+		table(
+			["Item", "List", "Size", "Card", "**Creator receives**", "Deduction"],
+			[":--", "--:", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				r.item,
+				`$${r.price}`,
+				r.sizeLabel,
+				`$${r.cardFee}`,
+				`**$${r.creatorReceives}**`,
+				r.deductionPct,
+			]),
 		),
 		"",
 		`**The deduction is Stripe's card fee and nothing else** — ${(CARD_RATE * 100).toFixed(1)}% + a flat $${CARD_FLAT.toFixed(2)}, paid to Stripe, with Anthers keeping $0.00 from every row. The flat part is what the percentages track: it is the whole reason a $${rows[0].price} track loses ${rows[0].deductionPct} while a $${rows[rows.length - 1].price} game loses ${rows[rows.length - 1].deductionPct}.`,
@@ -258,13 +312,14 @@ function renderSelfSufficiencyMarkdown(): string {
 	return [
 		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidised Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
 		"",
-		"| Paying share | Net per paying user | Users to solvency |",
-		"|--:|--:|--:|",
-		...s.rows.map(
-			(r) =>
-				`| ${r.sharePct} | ${r.net.startsWith("-") ? `−$${r.net.slice(1)}` : `$${r.net}`} | ${
-					r.usersToSolvency === null ? "**never**" : `~${r.usersToSolvency.toLocaleString("en-US")}`
-				} |`,
+		table(
+			["Paying share", "Net per paying user", "Users to solvency"],
+			["--:", "--:", "--:"],
+			s.rows.map((r) => [
+				r.sharePct,
+				r.net.startsWith("-") ? `−$${r.net.slice(1)}` : `$${r.net}`,
+				r.usersToSolvency === null ? "**never**" : `~${r.usersToSolvency.toLocaleString("en-US")}`,
+			]),
 		),
 		"",
 		`**Below roughly ${s.breakEvenPct} paying, growth never closes the gap** — each new cohort costs more in free access than it brings in, so scale makes the problem worse rather than better. Above it the model self-funds, and the scale required falls away quickly.`,
@@ -272,6 +327,39 @@ function renderSelfSufficiencyMarkdown(): string {
 		`**That floor no longer moves with how much free users watch**, and until 2026-08-12 it did. A free account's cost was its streaming bandwidth plus its Time Pool, so the generosity of the free floor and the platform's self-sufficiency were the same dial and raising one priced the other. Delivery is free on R2, the floor is gone, and what remains — the $${s.freeUserCost} Time Pool — is a flat cost per free account however much it watches. **Free access stopped having a usage-dependent price.**`,
 		"",
 		`Two ASSUMPTIONS drive every number here and neither is a dial: the paying-user Badge mix (${mix} Seeds) and $${FIXED_MONTHLY_OVERHEAD.toLocaleString("en-US")}/month of fixed overhead. The mix matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it.`,
+	].join("\n");
+}
+
+/**
+ * 62.04's headline table: what reaches a creator here versus on each storefront.
+ *
+ * This block is why the task existed. The Anthers column was a **hand-mirror** of the
+ * generated figures — the doc said so in its own warning — and it went a cent low
+ * everywhere the day the delivery charge was retired, because a mirror only reflects
+ * when someone remembers to polish it. Two competitor cells were a cent out too, in
+ * the other direction: they rounded the card fee at the end of the row while ours
+ * rounded it first, so a single table disagreed with itself about one number.
+ */
+function renderTakeHomeMarkdown(): string {
+	const rows = takeHomeComparison();
+	const bold = (v: string | null, best: string) =>
+		v === null ? "—" : v === best ? `**$${v}**` : `$${v}`;
+	return [
+		table(
+			["List price", "**Anthers**", ...RIVAL_STOREFRONTS.map((r) => r.name)],
+			["--:", ...RIVAL_STOREFRONTS.map(() => "--:"), "--:"],
+			rows.map((r) => [
+				`$${r.price}`,
+				bold(r.anthers, r.best),
+				...r.rivals.map((v) => bold(v.net, r.best)),
+			]),
+		),
+		"",
+		`Every column is **all-in take-home at the same list price** — each rival's figure includes the same ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} card cost we itemise, because every platform pays it. Comparing our all-in against a competitor's headline cut would flatter us exactly where a creator would check.`,
+		"",
+		`**The bold cell is the best row, and it is computed rather than chosen.** Steam returns more than us at $${rows[0].price}: their ${(RIVAL_STOREFRONTS[0].share * 100).toFixed(0)}% of a small sale is less than the flat card fee they absorb, so a percentage model beats a flat-fee model at the very bottom. Conceding that is what makes the rest of the table believable, and generating it means we cannot quietly stop conceding it when a dial moves.`,
+		"",
+		`⚠️ **Competitor rates are perishable** — they live in \`RIVAL_STOREFRONTS\` in \`packages/shared/src/scenarios.ts\`, were last checked 2026-08-03, and a storefront can change one without telling us. Re-check before anything ships. Only the arithmetic is guaranteed here; the rates are an input.`,
 	].join("\n");
 }
 
@@ -316,7 +404,254 @@ const BLOCKS: { file: string; key: string; render: () => string }[] = [
 		key: "self-sufficiency",
 		render: renderSelfSufficiencyMarkdown,
 	},
+	{
+		file: "60-69 Strategy/62 Positioning & Audience/62.04 Creator Take-Home Comparisons.md",
+		key: "take-home",
+		render: renderTakeHomeMarkdown,
+	},
 ];
+
+// ── 3. The app: a published figure may be DERIVED, never TYPED ───────────────
+//
+// The app reads its figures from `figures.generated.ts`, and an import cannot
+// drift — so the residual risk is not a stale region, it is someone typing a
+// number that is right today. This scan is what closes that, and it is worth being
+// exact about the guarantee, because a guard whose reach is misread is how we got
+// here in the first place:
+//
+//   It catches a published figure at the moment it is TYPED, while it still matches
+//   the model. It does NOT recognise one that has already gone stale — $9.40 matches
+//   nothing we publish now, so nothing here would have flagged it today. It would
+//   have flagged it on the day it was written, when it was still correct.
+//
+// That is the right place to catch it. Typing is the defect; drifting is only what
+// the defect eventually does.
+
+const APP_ROOTS = ["apps/web/src", "packages/web-shared/src"];
+
+/**
+ * Copy for a charge that no longer exists.
+ *
+ * This is NOT a copy linter — 63.01 is the guide, and adding every rule there to a
+ * build script would rot. It is the second half of one specific defect, and it earns
+ * its place because the figure scan above could not have found it: *"the only
+ * deductions are card processing and your buyer's first download"* carries no number,
+ * so a page can quote a perfectly current $9.41 while still describing a fee retired
+ * four months earlier. That exact sentence survived this task's own sweep and turned
+ * up in a bundle grep afterwards.
+ *
+ * The rule for adding one: a phrase belongs here when it describes a **mechanism the
+ * code no longer has**, so that the only correct number of occurrences is zero.
+ *
+ * 🚨 **Every pattern must exclude the negation**, or the guard fires on the one use
+ * that is always correct. *"No wallet, no per-GiB charge, however many devices you
+ * use"* is exactly the sentence a retired charge should leave behind, and four pages
+ * say some version of it. A first cut without the lookbehind flagged all four — which
+ * would have taught us to annotate good copy rather than fix bad copy, and that is how
+ * a guard becomes noise people route around.
+ */
+const NOT_NEGATED = /(?<!\b(?:no|never|not|without|nor|zero) )/.source;
+const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
+	{
+		pattern: new RegExp(`${NOT_NEGATED}(?:buyer'?s? )?first download`, "gi"),
+		why: "delivery has been free at any volume since 2026-08-12 — there is no first-download charge to deduct",
+	},
+	{
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:bandwidth (?:allowance|wallet)|per-GiB (?:charge|rate))`,
+			"gi",
+		),
+		why: "the allowance, the wallet and the per-GiB rate were all deleted 2026-08-12",
+	},
+];
+
+/** `// econ:allow — <why>`: this number is not one of ours. The reason is required. */
+const ALLOW = /econ:allow(?!-file)\b[\s:—-]*(.*)$/;
+
+/**
+ * `// econ:allow-file — <why>`: this whole file is a known exception.
+ *
+ * A file-level escape hatch is how guards go quiet, so it pays for itself two ways:
+ * the reason is required, and **every exempt file is printed on every run**, in both
+ * write and check mode. An exception you have to read out loud each time is one
+ * somebody eventually fixes; a silenced line is one nobody sees again.
+ */
+// The `m` flag matters: without it `$` only anchors at end-of-STRING, so a marker
+// in a file header would never match the file it heads.
+const ALLOW_FILE = /econ:allow-file\b[\s:—-]*(.*)$/m;
+
+/**
+ * Find the annotation covering line `i`: on the line itself, or anywhere in the
+ * comment block immediately above it — the reason for a coincidence is often two
+ * lines, and a guard that silently ignores the second one teaches people to write
+ * shorter reasons rather than better ones.
+ *
+ * `code` is the comment-blanked source, so "this line is nothing but a comment" is
+ * exactly "blank once the comments are gone, but not blank before".
+ */
+function allowance(lines: string[], code: string[], i: number): RegExpExecArray | null {
+	let found = ALLOW.exec(lines[i]);
+	for (let k = i - 1; !found && k >= 0 && code[k].trim() === "" && lines[k].trim() !== ""; k--) {
+		found = ALLOW.exec(lines[k]);
+	}
+	return found;
+}
+
+/**
+ * Every money figure `scenarios.ts` publishes, indexed by its rendered value and
+ * mapped to the name a page should read it by.
+ *
+ * Built from the scenarios rather than from `figures.generated.ts`, so a stale
+ * generated file can never satisfy the guard that guards it.
+ */
+function publishedFigures(): Map<string, string[]> {
+	const index = new Map<string, string[]>();
+	const add = (value: unknown, name: string) => {
+		if (typeof value !== "string" || !/^\d+\.\d{2}$/.test(value)) return;
+		const at = index.get(value) ?? [];
+		if (!at.includes(name)) at.push(name);
+		index.set(value, at);
+	};
+	const record = (owner: string, row: Record<string, unknown>, keyField?: string) => {
+		const at = keyField ? `${owner}[${row[keyField]}]` : owner;
+		for (const [k, v] of Object.entries(row)) add(v, `${at}.${k}`);
+	};
+	// The two dials prose quotes directly, named first so the message points at the
+	// import a page actually wants rather than at the table row that happens to equal it.
+	add(SEED_PRICE.toFixed(2), "SEED_PRICE (@anthers/shared/constants)");
+	add(TIME_POOL_PER_SEED.toFixed(2), "TIME_POOL_PER_SEED (@anthers/shared/constants)");
+	for (const r of badgeTable()) record("BADGE_TABLE", r, "badge");
+	for (const r of saleTable()) record("SALE_TABLE", r, "label");
+	for (const r of purchaseExamples()) record("purchaseExamples()", r, "label");
+	record("SAMPLE_RECEIPT", sampleReceipt());
+	record("DIRECTED_SEED_WORST_CASE", directedSeedWorstCase());
+	record("cartSaving()", cartSaving());
+	record("creatorReceipt()", creatorReceipt());
+	const s = selfSufficiency();
+	add(s.freeUserCost, "selfSufficiency().freeUserCost");
+	add(s.revenuePerPayingUser, "selfSufficiency().revenuePerPayingUser");
+	for (const r of s.rows) add(r.net, `selfSufficiency().rows[${r.sharePct}].net`);
+	return index;
+}
+
+/**
+ * Blank every comment, preserving newlines so line numbers stay true.
+ *
+ * These pages carry long doc comments that explain the model in figures — developer
+ * prose no reader ever sees, and flagging it would only push us toward worse
+ * comments. There is deliberately no TypeScript parse here: a real lexer would have
+ * to know that the apostrophe in JSX text like `Anthers' cut` is not a string
+ * delimiter, and mis-reading that fails in the wrong direction. Blanking only ever
+ * REMOVES text, so the worst a mis-read can cost is a missed hit — never a false
+ * accusation against a line that is fine.
+ */
+function withoutComments(src: string): string {
+	let out = "";
+	for (let i = 0; i < src.length; ) {
+		if (src.startsWith("/*", i)) {
+			const end = src.indexOf("*/", i + 2);
+			const stop = end === -1 ? src.length : end + 2;
+			for (let k = i; k < stop; k++) out += src[k] === "\n" ? "\n" : " ";
+			i = stop;
+		} else if (src.startsWith("//", i) && src[i - 1] !== ":") {
+			// The `:` guard keeps `https://…` inside a string from reading as a comment.
+			const end = src.indexOf("\n", i);
+			const stop = end === -1 ? src.length : end;
+			out += " ".repeat(stop - i);
+			i = stop;
+		} else {
+			out += src[i++];
+		}
+	}
+	return out;
+}
+
+/**
+ * Collapse the source to one line, keeping a char→line map.
+ *
+ * JSX text wraps wherever the formatter decides, so a phrase and the word that negates
+ * it routinely end up on different lines: `no allowance, no wallet, no per-GiB\ncharge`
+ * splits "per-GiB charge" itself in half AND strands its "no" two lines up. Matching
+ * line-by-line therefore reports a sentence that says the exact opposite of what it was
+ * accused of — which is worse than missing it, because the fix looks like deleting
+ * correct copy. Phrase rules run against the unwrapped text; only the report needs
+ * lines, and `lineOf` carries them.
+ */
+function flatten(code: string): { text: string; lineOf: number[] } {
+	let text = "";
+	const lineOf: number[] = [];
+	let line = 1;
+	let gap = false;
+	for (const ch of code) {
+		if (ch === "\n") {
+			line++;
+			gap = true;
+			continue;
+		}
+		if (/\s/.test(ch)) {
+			gap = true;
+			continue;
+		}
+		if (gap && text) {
+			text += " ";
+			lineOf.push(line);
+		}
+		gap = false;
+		text += ch;
+		lineOf.push(line);
+	}
+	return { text, lineOf };
+}
+
+async function* sourceFiles(dir: string): AsyncGenerator<string> {
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) yield* sourceFiles(path);
+		else if (/\.tsx?$/.test(entry.name) && !/\.(test|spec|e2e)\.tsx?$/.test(entry.name)) yield path;
+	}
+}
+
+async function scanApp() {
+	const index = publishedFigures();
+	for (const root of APP_ROOTS) {
+		const dir = join(REPO, root);
+		if (!existsSync(dir)) continue;
+		for await (const path of sourceFiles(dir)) {
+			const source = await readFile(path, "utf8");
+			const fileWide = ALLOW_FILE.exec(source);
+			if (fileWide?.[1].trim()) {
+				exempt.push(`${relative(REPO, path)} — ${fileWide[1].trim()}`);
+				continue;
+			}
+			const lines = source.split("\n");
+			const code = withoutComments(source).split("\n");
+			code.forEach((line, i) => {
+				for (const m of line.matchAll(/\$(\d+\.\d{2})/g)) {
+					const owners = index.get(m[1]);
+					if (!owners) continue;
+					// The annotation lives in a comment, so it is looked for in the ORIGINAL.
+					const allow = allowance(lines, code, i);
+					if (allow?.[1].trim()) continue;
+					typed.push(
+						`${relative(REPO, path)}:${i + 1}\n      typed $${m[1]} — that is ${owners
+							.slice(0, 3)
+							.join(" / ")}${allow ? "\n      (econ:allow needs a reason after it)" : ""}`,
+					);
+				}
+			});
+
+			const { text, lineOf } = flatten(withoutComments(source));
+			for (const { pattern, why } of RETIRED_COPY) {
+				for (const hit of text.matchAll(pattern)) {
+					const at = lineOf[hit.index] ?? 1;
+					const allow = allowance(lines, code, at - 1);
+					if (allow?.[1].trim()) continue;
+					retired.push(`${relative(REPO, path)}:${at}\n      "${hit[0]}" — ${why}`);
+				}
+			}
+		}
+	}
+}
 
 function splice(source: string, key: string, body: string): string | null {
 	const begin = `<!-- econ:begin ${key} -->`;
@@ -373,10 +708,44 @@ if (!existsSync(VAULT)) {
 	}
 }
 
-if (check && failures.length > 0) {
-	console.error("\necon-figures --check FAILED. These are stale:\n");
+await scanApp();
+
+if (failures.length > 0) {
+	console.error("\nThese generated regions are stale:\n");
 	for (const f of failures) console.error(`  ${f}`);
 	console.error("\nRun `bun run econ:figures` and commit the result.");
+}
+
+if (typed.length > 0) {
+	console.error("\nThe app may DERIVE a published figure, never type one:\n");
+	for (const t of typed) console.error(`  ${t}`);
+	console.error(
+		"\nRead it from `@anthers/shared/figures` instead — the way FAQPage does.\n" +
+			"If the number is not one of ours (a rival platform's cut, an illustrative\n" +
+			"infrastructure cost), say so on the line:\n" +
+			"    // econ:allow — Steam's 30% cut, not one of our figures\n",
+	);
+}
+
+if (retired.length > 0) {
+	console.error("\nThis copy describes a charge that no longer exists:\n");
+	for (const r of retired) console.error(`  ${r}`);
+	console.error(
+		"\nStrike the retired term rather than updating a number beside it — the\n" +
+			"sentence changes shape, it does not change value. If the phrase is genuinely\n" +
+			"historical in rendered copy, annotate it:\n" +
+			"    // econ:allow — describing what the model USED to charge, in past tense\n",
+	);
+}
+
+if (exempt.length > 0) {
+	console.log(`\necon-figures: ${exempt.length} file(s) exempt from the app scan:`);
+	for (const e of exempt) console.log(`  ${e}`);
+	console.log("");
+}
+
+if (check && failures.length + typed.length + retired.length > 0) {
+	console.error("econ-figures --check FAILED.");
 	process.exit(1);
 }
 console.log(check ? "econ-figures: up to date" : "econ-figures: done");

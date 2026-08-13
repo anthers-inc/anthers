@@ -1,4 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// econ:allow-file — KNOWN DEFECT, allowed only so the guard that FOUND it can ship.
+//
+// This whole calculator is built on a user-facing bandwidth allowance priced in
+// dollars, and both were deleted 2026-08-12. Its notes still say the Seeds a viewer
+// gives Anthers "cover this egress at cost ($0.01/GiB)" — that rate was DigitalOcean
+// Spaces' egress price, and we moved to Cloudflare R2 ($0 egress) on 2026-08-11 — and
+// the page's premise is how much watch time an allowance buys "before it runs out".
+// 63.01 § Storage forbids describing a user-side bandwidth line at all: delivery is
+// free to everyone, at any volume.
+//
+// The SIZING is still sound and still useful (a Mbps-hour really is 0.419 GiB, and
+// DELIVERY_GIB_PER_HOUR deliberately survived the retirement as a capacity figure).
+// What has no owner any more is the allowance the sizing is spent against. Whether
+// this becomes a viewer's own mobile-data budget, a creator self-hosting estimate, or
+// nothing at all is a product call, not a copy fix — which is why it is exempted here
+// rather than quietly reworded.
 
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";

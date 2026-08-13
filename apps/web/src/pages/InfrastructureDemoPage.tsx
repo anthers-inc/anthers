@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { TIME_POOL_PER_SEED } from "@anthers/shared/constants";
 import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -501,8 +502,9 @@ function UnitCostCalculator() {
 							Egress is $0 at any volume on Cloudflare R2, so there is no allowance, no wallet and
 							no per-GiB line on anyone's bill. Creator earnings were always{" "}
 							<span className="font-semibold text-success">decoupled</span> from delivery: they come
-							from the Time Pool their Seeds to Anthers fund ($1.50 each), distributed by time
-							(equal-time), plus directed Seeds — both of which reach creators in full.
+							from the Time Pool their Seeds to Anthers fund (${TIME_POOL_PER_SEED.toFixed(2)}{" "}
+							each), distributed by time (equal-time), plus directed Seeds — both of which reach
+							creators in full.
 						</p>
 					</div>
 				</div>
@@ -566,6 +568,8 @@ function CrossMediaComparison() {
 		{
 			type: "Musician (10 albums, 10K streams)",
 			volume: "7 GB stored, 18 GB delivered",
+			// econ:allow — an illustrative infrastructure cost, not a published figure.
+			// It equals SAMPLE_RECEIPT.paymentsAnthers by coincidence.
 			cost: "$0.32",
 		},
 		{

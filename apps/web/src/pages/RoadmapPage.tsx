@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { DIRECTED_SEED_WORST_CASE } from "@anthers/shared/figures";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -342,8 +343,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						{
 							id: "u-sub-tiers",
 							title: "Seeds — to Anthers, and to creators",
-							description:
-								"Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (Anthers takes no cut; a $3 Seed reaches its creator as $2.61 at worst, the difference being card processing paid to the processor). Each Seed to Anthers funds the Time Pool (shared by time) and a remainder that funds free access and the charitable programs. Streaming and downloads are unlimited and cost nothing. Every dollar is money to creators, the at-cost card processing, or that remainder.",
+							description: `Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (Anthers takes no cut; a $${DIRECTED_SEED_WORST_CASE.gross} Seed reaches its creator as $${DIRECTED_SEED_WORST_CASE.net} at worst, the difference being card processing paid to the processor). Each Seed to Anthers funds the Time Pool (shared by time) and a remainder that funds free access and the charitable programs. Streaming and downloads are unlimited and cost nothing. Every dollar is money to creators, the at-cost card processing, or that remainder.`,
 							status: "active",
 							startQ: 0,
 							endQ: 1,

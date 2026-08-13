@@ -104,6 +104,21 @@ const RANKS = ["root", "sprout", "petal", "blossom"] as const;
 const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
 /** Derived, never typed — see scripts/econ-figures.ts. */
 const SALE_10_1GIB = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
+const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
+/**
+ * A rival's all-in take-home at the SAME list price: their revenue share off, then the
+ * same at-cost card processing every platform pays.
+ *
+ * Derived rather than typed because 63.01 § Comparisons binds us to all-in against
+ * all-in — so a rival's row has to move when the card cost moves, exactly as ours
+ * does. Quoting their headline cut against our all-in would flatter us, and a creator
+ * would catch it.
+ */
+const rivalSaleNet = (sale: { price: string; cardFee: string }, share: number) =>
+	(Number(sale.price) * (1 - share) - Number(sale.cardFee)).toFixed(2);
+const BANDCAMP_DIGITAL = rivalSaleNet(SALE_10_1GIB, 0.15);
+/** econ:allow — Valve's own 30% of a $10 sale. Held once so the two places that name it agree. */
+const STEAM_CUT = "$3.00";
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
@@ -164,7 +179,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: "The Seeds a fan gives Anthers set a monthly Time Pool ($1.50 each) that's split across everyone they watch, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
+				note: `The Seeds a fan gives Anthers set a monthly Time Pool (${money(TIME_POOL_PER_SEED)} each) that's split across everyone they watch, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
 			},
 		],
 	},
@@ -199,9 +214,9 @@ const PLATFORMS: Platform[] = [
 				rival: {
 					keep: "$7.00",
 					keepSub: "70% — Valve absorbs card processing inside its 30%",
-					cut: "30% (≈ $3.00)",
+					cut: `30% (≈ ${STEAM_CUT})`,
 				},
-				note: `Both figures are all-in take-home. Anthers takes $0; the $${SALE_10_1GIB.cardFee} that leaves your $${SALE_10_1GIB.price} is card processing, paid to Stripe. Steam's $3.00 is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.`,
+				note: `Both figures are all-in take-home. Anthers takes $0; the $${SALE_10_1GIB.cardFee} that leaves your $${SALE_10_1GIB.price} is card processing, paid to Stripe. Steam's ${STEAM_CUT} is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.`,
 			},
 		],
 	},
@@ -216,22 +231,26 @@ const PLATFORMS: Platform[] = [
 				kind: "Digital purchase",
 				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
-					keep: "$7.91",
+					keep: `$${BANDCAMP_DIGITAL}`,
 					keepSub: "85% less the same card processing everyone pays (→ 90% after $5k in sales)",
 					cut: "15% (→ 10% after $5k)",
 				},
-				note: "Both figures are all-in. Bandcamp's headline is 15%, but processing comes out of the remainder too, so the honest comparison is $9.40 against $7.91 — not $9.40 against $8.50. Worth conceding: on Bandcamp Friday they waive the revenue share entirely, which puts an artist at about $9.41 — their best day is our every day.",
+				// Bandcamp Friday is a TIE, and saying so is the point. They waive the
+				// revenue share entirely that day, which lands an artist on the same
+				// figure we pay every day — conceding it costs nothing and is what makes
+				// the rest of these rows believable.
+				note: `Both figures are all-in. Bandcamp's headline is 15%, but processing comes out of the remainder too, so the honest comparison is $${SALE_10_1GIB.creatorReceives} against $${BANDCAMP_DIGITAL} — not against 85% of the list price. Worth conceding: on Bandcamp Friday they waive the revenue share entirely, which puts an artist at $${SALE_10_1GIB.creatorReceives} too — an exact tie. Their best day is our every day.`,
 			},
 			{
 				scenario: "A fan buys your $25 vinyl",
 				kind: "Physical purchase",
-				anthers: aPrice("$25.00", "$23.97"),
+				anthers: aPrice(`$${SALE_25_PHYSICAL.price}`, `$${SALE_25_PHYSICAL.creatorReceives}`),
 				rival: {
-					keep: "$21.47",
+					keep: `$${rivalSaleNet(SALE_25_PHYSICAL, 0.1)}`,
 					keepSub: "90% less the same card processing",
 					cut: "10% (≈ $2.50)",
 				},
-				note: "Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $25 is card processing. Excludes production & shipping, a real cost on any platform.",
+				note: `Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $${SALE_25_PHYSICAL.price} is card processing. Excludes production & shipping, a real cost on any platform.`,
 			},
 		],
 	},
@@ -357,8 +376,8 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Seeds</b> — a flat $3/month each. A fan gives Seeds
 					straight to creators ($3, no platform cut) and holds{" "}
 					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
-					Time Pool ($1.50, distributed to the creators they watch by time) and{" "}
-					<b className="text-base-content/70">the remainder</b> that funds free access and the
+					Time Pool ({money(TIME_POOL_PER_SEED)}, distributed to the creators they watch by time)
+					and <b className="text-base-content/70">the remainder</b> that funds free access and the
 					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
 					the listed price is the at-cost card processing, paid to the processor.
 				</p>
