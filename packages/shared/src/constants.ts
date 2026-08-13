@@ -11,7 +11,7 @@ export const APP_NAME = "Anthers";
  *     creator as $2.61 and batching pays them more; clears that creator's Seed
  *     Gates in $3 increments; or
  *   - at **Anthers** (an *Anthers-Seed*): funds the **Time Pool** ($1.50/Seed, to
- *     creators by watch-time), earns **Anthers' Badges**, and leaves a
+ *     creators by time), earns **Anthers' Badges**, and leaves a
  *     **remainder** for Anthers.
  *
  * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
@@ -80,7 +80,7 @@ export type Badge = "root" | "sprout" | "petal" | "blossom";
 // ── Seed dials (Seed price locked; allocation dials tuned-but-tunable) ────────
 /** A Seed — a flat $3/month unit of support (creator-directed or an Anthers-Seed). */
 export const SEED_PRICE = 3;
-/** Time Pool funded per Anthers-Seed ($), distributed to creators by watch-time. */
+/** Time Pool funded per Anthers-Seed ($), distributed to creators by time. */
 export const TIME_POOL_PER_SEED = 1.5;
 /**
  * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free

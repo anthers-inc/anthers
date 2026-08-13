@@ -501,7 +501,7 @@ function UnitCostCalculator() {
 							Egress is $0 at any volume on Cloudflare R2, so there is no allowance, no wallet and
 							no per-GiB line on anyone's bill. Creator earnings were always{" "}
 							<span className="font-semibold text-success">decoupled</span> from delivery: they come
-							from the Time Pool their Seeds to Anthers fund ($1.50 each), distributed by watch-time
+							from the Time Pool their Seeds to Anthers fund ($1.50 each), distributed by time
 							(equal-time), plus directed Seeds — both of which reach creators in full.
 						</p>
 					</div>
@@ -582,9 +582,9 @@ function CrossMediaComparison() {
 			<p className="text-sm text-base-content/60 leading-relaxed">
 				The metric that matters most for the Time Pool model is{" "}
 				<span className="font-semibold text-base-content">cost per minute of audience time</span>,
-				since Time Pool revenue is distributed proportionally to watch-time (the equal-time
-				principle). Video is by far the most expensive medium to deliver — audio, text, and games
-				are 30-500x cheaper per time-minute.
+				since Time Pool revenue is distributed proportionally to time (the equal-time principle).
+				Video is by far the most expensive medium to deliver — audio, text, and games are 30-500x
+				cheaper per time-minute.
 			</p>
 
 			{/* Chart */}
@@ -831,7 +831,7 @@ function ReferenceCreatorProfiles() {
 						{SPROUT.timePool} Time Pool to creators and ${SPROUT.payments} of at-cost card
 						processing, leaving ${SPROUT.remainder} to fund free access and the charitable programs.
 						Seeds given straight to a creator carry no platform cut. Time Pool is distributed by
-						watch-time. Delivery is free and appears nowhere in the split.
+						time. Delivery is free and appears nowhere in the split.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Delivery: ~4 MB/min blended.</p>
 					<p>

@@ -16,7 +16,7 @@
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (Seeds given to you + direct sales) carries no platform cut — the
 // wedge, and where the 0%-cut claim is unconditionally true; ② the commons (the
-// Time Pool, by watch-time) pays for the work Anthers distributes for you. The
+// Time Pool, by time) pays for the work Anthers distributes for you. The
 // distributor-pays rule ties them together: whoever distributes a piece of work is
 // who pays for it. Streaming is deliberately NOT pitched as out-earning YouTube or
 // Spotify per hour — its value is at-cost reach.
@@ -955,7 +955,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
 				{ name: "YouTube (Premium)", creator: "~$0.05–0.20", platform: "~55%" },
 			],
-			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of watch-time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Seed they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
+			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of their time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Seed they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
 			breakdown: streamReceipt,
 		},
 		games: {

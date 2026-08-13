@@ -138,7 +138,7 @@ export default function CompareItchPage() {
 						<DiffCard
 							icon={<UserGroupIcon className="h-6 w-6" />}
 							title="Subscription model that funds creators"
-							description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual watch-time—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
+							description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual time spent—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
 						/>
 					</Reveal>
 					<Reveal delay={500}>

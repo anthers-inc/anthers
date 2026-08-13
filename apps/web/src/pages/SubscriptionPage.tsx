@@ -629,13 +629,13 @@ export default function SubscriptionPage() {
 				{/* Where the month's Seeds go */}
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
-					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by watch-time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing." />
+					<InfoTip text="Each Seed given to Anthers ($3) funds the Time Pool ($1.50, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing." />
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Time Pool</div>
 						<div className="text-lg font-bold text-success">{fmt(badgeView.timePool)}</div>
-						<div className="text-[11px] text-base-content/40">to creators, by watch-time</div>
+						<div className="text-[11px] text-base-content/40">to creators, by time</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Supports Anthers</div>
@@ -654,7 +654,7 @@ export default function SubscriptionPage() {
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
 					Creators You Support
-					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your watch-time — video, audio, reading, and gameplay all count equally) and Seeds (whole $3 units you direct to specific creators, with no platform cut — only the at-cost card processing comes out)." />
+					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and Seeds (whole $3 units you direct to specific creators, with no platform cut — only the at-cost card processing comes out)." />
 				</div>
 				{attention && (
 					<p className="text-xs text-base-content/40 text-center mb-3">
@@ -826,8 +826,8 @@ export default function SubscriptionPage() {
 					<div className="py-6 text-center text-sm text-base-content/40">
 						<p>No time with creators yet this cycle.</p>
 						<p className="mt-1">
-							Your Time Pool is distributed by watch-time — video, audio, text, and gameplay all
-							count equally.
+							Your Time Pool is distributed by time — video, audio, text, and gameplay all count
+							equally.
 						</p>
 					</div>
 				)}

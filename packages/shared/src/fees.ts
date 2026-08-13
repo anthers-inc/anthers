@@ -171,7 +171,7 @@ export interface BadgeView {
 	anthersSeeds: number;
 	/** Monthly $ to hold this rank ($3 × anthersSeeds). */
 	price: number;
-	/** Time Pool $ at this rank (to creators, by watch-time). */
+	/** Time Pool $ at this rank (to creators, by time). */
 	timePool: string;
 	/** "Supports Anthers" — the remainder, funding free access and the programs. */
 	supportsAnthers: string;

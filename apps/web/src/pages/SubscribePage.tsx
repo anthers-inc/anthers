@@ -27,7 +27,7 @@
 // `90-99 Agents/Transient/Public Access Model Revamp 20260811`, and where this disagrees
 // with the wiki the wiki is still right. Everything drawn from `@anthers/shared/constants`
 // is real and charged against. The two figures that used to be quarantined here as a
-// SPIKE — the free watch-hours and the free-account Time Pool — are both real constants
+// SPIKE — the free hours and the free-account Time Pool — are both real constants
 // as of 2026-08-12 and are now read rather than typed.
 //
 // What is wired to real data, and what is not:

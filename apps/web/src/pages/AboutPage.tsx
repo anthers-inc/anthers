@@ -308,7 +308,7 @@ export default function AboutPage() {
 							<h3 className="mb-3 text-sm uppercase tracking-wider text-primary">For Creators</h3>
 							<p className="leading-relaxed text-base-content/65">
 								Anthers takes no cut of any Seed or any direct purchase, and the shared Time Pool
-								pays out to creators by watch-time in full. Every dollar a user spends is money to
+								pays out to creators by time in full. Every dollar a user spends is money to
 								creators, the at-cost card processing, or the remainder of each Seed given to
 								Anthers that funds free access and the charitable programs. Anthers, Inc. is a
 								Colorado nonprofit corporation—no investors, no profit-taking.

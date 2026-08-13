@@ -45,7 +45,7 @@ const PRIVACY: LegalDocument = {
 		"**Information you give us.** Your email address and username, and a password if you set one — passwords are optional here, and are stored only as a cryptographic hash, so we never hold your actual password. Optionally: a display name, bio, avatar, header image, website, and location. All optional fields are free text you choose, and anything you put in them is public.",
 		"**A sign-in code, briefly, before there is an account.** When you start an account or sign in by email, we email you a six-character code and hold it — hashed, never in readable form — against that address for **ten minutes**, with a count of how many times it has been tried. Nothing else: no IP address, no name, and if you never finish, no account is created. See *How long we keep it*.",
 		"**Information created by using Anthers.** Your posts, Works, comments, reviews, follows, bookmarks, and projects.",
-		"**What you view, and for how long.** When you play, watch, read, or listen to a Work, we record that it happened, which Work it was, and for how long. **We have to**: this is how creators get paid by watch-time, and there is no way to pay someone for the time you spend with their work without recording the time you spend with their work. See *How long we keep it* below.",
+		"**What you view, and for how long.** When you play, watch, read, or listen to a Work, we record that it happened, which Work it was, and for how long. **We have to**: this is how creators get paid by time, and there is no way to pay someone for the time you spend with their work without recording the time you spend with their work. See *How long we keep it* below.",
 		"**Technical information.** Your IP address and browser user-agent, recorded with each sign-in session so you can review and revoke your own sessions and so we can investigate abuse.",
 		"**Payment information.** If you give Seeds or buy something, **your card details go directly to Stripe and never touch our servers.** We keep a record of the transaction: what was bought, the amounts, the fees, sales tax, and Stripe's identifier for the payment.",
 		"**Safety information.** If you report content or someone, or if something of yours is reported, we keep a record of the report, the decision, and who made it.",
@@ -138,7 +138,7 @@ const TERMS: LegalDocument = {
 		"You can also report content or a person, which is different: that asks a human to look. We don't tell you what happened to an individual report.",
 
 		"## Money",
-		"**Seeds** are $3 each, monthly, and you choose who they go to. Seeds you give a creator go to that creator; Seeds you give Anthers fund the pool that pays creators by watch-time, pay their share of card processing at cost, and what's left funds free access and our charitable programs.",
+		"**Seeds** are $3 each, monthly, and you choose who they go to. Seeds you give a creator go to that creator; Seeds you give Anthers fund the pool that pays creators by the time you spend, pay their share of card processing at cost, and what's left funds free access and our charitable programs.",
 		"**Direct purchases** are one-off. You pay the price the creator set, plus sales tax where it applies, and nothing else.",
 		"Prices shown include every mandatory fee. Sales tax is the only thing added at checkout.",
 

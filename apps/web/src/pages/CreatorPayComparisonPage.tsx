@@ -8,7 +8,7 @@
 // Framing (the support model): lead with the 0% cut. Anthers takes NOTHING from any
 // creator transaction — no fee on a Seed, no fee on a sale — and the Time Pool
 // (funded by the Anthers-Seeds fans point at the platform) is distributed to
-// creators by watch-time.
+// creators by time.
 //   • Since 2026-08-03 the at-cost card fee comes OUT of the price rather than
 //     riding on top, because mandatory-fee disclosure law requires an advertised
 //     price to contain every mandatory fee. So the honest claim is "Anthers takes
@@ -25,7 +25,7 @@
 // and a creator would catch it. Where a rival wins (Steam below ~$1.15) or ties
 // (Bandcamp Friday), the row says so. Competitor rates checked 2026-08-03 and
 // perishable — re-check before publishing.
-//   • On streaming the creator earns their watch-time share of every viewer's Time
+//   • On streaming the creator earns their share of every viewer's Time
 //     Pool ($1.50 per Anthers-Seed), the same rate for every medium (equal-time).
 //     Anthers profits $0.
 //
@@ -97,7 +97,7 @@ interface Platform {
 
 // A fan's Anthers-Seed count sets the Time Pool they bring each month ($1.50 per
 // Seed: Root $1.50 · Sprout $3 · Petal $4.50 · Blossom $6, and it keeps climbing past
-// Blossom). Split across everyone they watch by watch-time, that lands roughly
+// Blossom). Split across everyone they watch by time, that lands roughly
 // $0.03–0.60 per view-hour depending on how many Seeds they hold and how much they
 // watch — the same rate for every medium (equal-time). Anthers takes none of it.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
@@ -129,7 +129,7 @@ const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND));
 // to the processor.
 const A_STREAM: Side = {
 	keep: "~$0.03–0.60 / hr",
-	keepSub: `your watch-time share of the fan's monthly Time Pool — the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
+	keepSub: `your share of the fan's monthly Time Pool — the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -164,7 +164,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: "The Seeds a fan gives Anthers set a monthly Time Pool ($1.50 each) that's split across everyone they watch, by watch-time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
+				note: "The Seeds a fan gives Anthers set a monthly Time Pool ($1.50 each) that's split across everyone they watch, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.",
 			},
 		],
 	},
@@ -308,13 +308,12 @@ export default function CreatorPayComparisonPage() {
 					<>
 						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
 						<b className="text-base-content">Seed</b> given to you and every direct sale carries no
-						platform fee at all, and the Time Pool is distributed to creators by watch-time. What
-						does come out of a price is the at-cost card processing, paid to the processor — never a
-						cent to us, and nothing at all for delivery however large the work. The one thing that
-						funds the platform is <b className="text-base-content">the remainder</b> — what's left
-						of each Seed to Anthers after the Time Pool, funding free access and the creator
-						programs, never subtracted from your earnings. Here's what actually reaches you,
-						platform by platform.
+						platform fee at all, and the Time Pool is distributed to creators by time. What does
+						come out of a price is the at-cost card processing, paid to the processor — never a cent
+						to us, and nothing at all for delivery however large the work. The one thing that funds
+						the platform is <b className="text-base-content">the remainder</b> — what's left of each
+						Seed to Anthers after the Time Pool, funding free access and the creator programs, never
+						subtracted from your earnings. Here's what actually reaches you, platform by platform.
 					</>
 				}
 			/>
@@ -358,15 +357,15 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Seeds</b> — a flat $3/month each. A fan gives Seeds
 					straight to creators ($3, no platform cut) and holds{" "}
 					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
-					Time Pool ($1.50, distributed to the creators they watch by watch-time) and{" "}
+					Time Pool ($1.50, distributed to the creators they watch by time) and{" "}
 					<b className="text-base-content/70">the remainder</b> that funds free access and the
 					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
 					the listed price is the at-cost card processing, paid to the processor.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
-					their monthly watch-time, the same rate for every medium (equal-time). Each Seed to
-					Anthers adds ${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
+					their monthly time, the same rate for every medium (equal-time). Each Seed to Anthers adds
+					${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
 					{PAID_POOLS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}
