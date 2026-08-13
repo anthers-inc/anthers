@@ -24,10 +24,10 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
-import { REFUND_AUTO_CAP } from "@anthers/shared/constants";
+import { MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
 import { getStripe } from "../lib/stripe.js";
@@ -84,6 +84,64 @@ async function resolvePurchase(slug: string, userId: number) {
 	// all). `calculateFees` owns it — never restate it at a call site.
 	const fees = calculateFees(amount, { type: "digital" });
 	return { ok: true as const, work, amount, fees };
+}
+
+/**
+ * The same resolution for a **basket** of Works bought on one charge.
+ *
+ * 🚨 **One creator per basket, and that is forced rather than chosen.** Stripe's
+ * `transfer_data.destination` names exactly one connected account, so a basket spanning
+ * two creators cannot be a single destination charge. The alternative — separate charges
+ * and transfers — parks the buyers' money in a **platform balance** before paying it out,
+ * which is precisely what `/checkout/:slug` refuses to do, and it is the *conduit* framing
+ * the counsel brief (51.04) says makes both the money-transmission answer and the 501(c)(3) story harder.
+ * That is a question for counsel, not a thing to decide in a route handler. Until it is
+ * answered, a multi-creator basket is refused with `mixed_creators` and the client checks
+ * out one creator at a time.
+ *
+ * What the basket buys is the **fixed $0.30**, which is per *charge* and not per item:
+ * five $1 tracks pay $1.65 in card fees separately and $0.45 together, and the whole
+ * $1.20 goes to the creator because Anthers keeps nothing either way. Same mechanism as
+ * batching a month's Seeds onto one transaction (51.02).
+ */
+async function resolveBasket(workIds: number[], userId: number) {
+	const unique = [...new Set(workIds)];
+	if (unique.length === 0)
+		return { ok: false as const, status: 400 as const, error: "Your basket is empty" };
+	if (unique.length > MAX_BASKET_ITEMS)
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: `A basket holds at most ${MAX_BASKET_ITEMS} items`,
+		};
+
+	const rows = await db.select().from(works).where(inArray(works.id, unique));
+	if (rows.length !== unique.length)
+		return { ok: false as const, status: 404 as const, error: "Work not found" };
+
+	// Resolved per Work, through the same path a single purchase takes — the basket
+	// changes who pays the flat fee, never who may buy what.
+	const items: { work: (typeof rows)[number]; amount: Decimal }[] = [];
+	for (const work of rows) {
+		const one = await resolvePurchase(work.slug, userId);
+		if (!one.ok) return { ...one, workId: work.id };
+		items.push({ work: one.work, amount: one.amount });
+	}
+
+	const creatorIds = new Set(items.map((i) => i.work.creatorId));
+	if (creatorIds.size > 1)
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "A basket can only hold work from one creator at a time",
+			code: "mixed_creators" as const,
+		};
+
+	// 🚨 Fees on the SUM, once — computing per item and adding would charge the flat
+	// $0.30 per Work and defeat the entire point of the basket.
+	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), new Decimal(0));
+	const fees = calculateFees(subtotal, { type: "digital" });
+	return { ok: true as const, items, subtotal, fees, creatorId: items[0].work.creatorId };
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -293,6 +351,157 @@ const paymentRoutes = new Hono()
 		});
 	})
 
+	/**
+	 * What a basket would cost, without creating anything. The buy UI quotes from here so
+	 * the saving is visible *before* the decision, which is the whole reason a basket is
+	 * worth building rather than a convenience.
+	 */
+	.post("/basket/quote", requireAuth, async (c) => {
+		const user = c.get("user");
+		const body = await c.req.json().catch(() => null);
+		const workIds = Array.isArray(body?.workIds) ? (body.workIds as number[]) : [];
+		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
+		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
+
+		// What the same items would have cost bought one at a time. Not decoration: it is
+		// the number that makes the basket legible, and it is derived rather than typed —
+		// `cardFee` per item, summed, against one `cardFee` on the subtotal.
+		const separately = q.items.reduce(
+			(acc, i) => acc.plus(calculateFees(i.amount, { type: "digital" }).processingFee),
+			new Decimal(0),
+		);
+
+		return c.json({
+			items: q.items.map((i) => ({
+				workId: i.work.id,
+				slug: i.work.slug,
+				title: i.work.title,
+				type: i.work.type,
+				thumbnail: i.work.thumbnail,
+				price: i.amount.toFixed(2),
+			})),
+			subtotal: q.subtotal.toFixed(2),
+			processingFee: q.fees.processingFee.toFixed(2),
+			salesTax: q.fees.salesTax.toFixed(2),
+			creatorEarnings: q.fees.creatorEarnings.toFixed(2),
+			buyerTotal: q.fees.buyerTotal.toFixed(2),
+			/** Card fees if these were bought separately, and what the basket saves. */
+			feeSeparately: separately.toFixed(2),
+			creatorGains: separately.minus(q.fees.processingFee).toFixed(2),
+		});
+	})
+
+	/**
+	 * Buy a basket on one charge — one PaymentIntent, one card fee, one row per Work.
+	 *
+	 * Deliberately a sibling of `/checkout/:slug` rather than a replacement: a single
+	 * purchase is the overwhelming case and there is no reason to make it travel through
+	 * a list. What the two must share is the *money*, and they do — both quote
+	 * `calculateFees`, both use a destination charge, and both subtract exactly
+	 * `buyerTotal − creatorEarnings` as the application fee.
+	 */
+	.post("/basket/checkout", requireAuth, requireVerified, async (c) => {
+		const user = c.get("user");
+		const body = await c.req.json().catch(() => null);
+		const workIds = Array.isArray(body?.workIds) ? (body.workIds as number[]) : [];
+		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
+		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
+
+		const stripe = getStripe();
+		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
+
+		// Same hard precondition as a single purchase: Anthers does not sell a creator's
+		// work when the money cannot reach them.
+		if (q.creatorId == null) return c.json({ error: "This work is no longer for sale." }, 409);
+		const [creatorAccount] = await db
+			.select()
+			.from(stripeAccounts)
+			.where(eq(stripeAccounts.userId, q.creatorId))
+			.limit(1);
+		if (!creatorAccount?.onboardingComplete || !creatorAccount.payoutsEnabled) {
+			return c.json({ error: "This creator can't accept payments yet." }, 409);
+		}
+
+		const totalCents = Math.round(q.fees.buyerTotal.toNumber() * 100);
+		const applicationFeeCents = Math.round(
+			q.fees.buyerTotal.minus(q.fees.creatorEarnings).toNumber() * 100,
+		);
+
+		const params: Stripe.PaymentIntentCreateParams = {
+			amount: totalCents,
+			currency: "usd",
+			payment_method_types: ["card"],
+			metadata: {
+				kind: "direct_purchase_basket",
+				workIds: q.items.map((i) => i.work.id).join(","),
+				buyerId: String(user.id),
+			},
+		};
+		if (applicationFeeCents < totalCents) {
+			params.application_fee_amount = applicationFeeCents;
+			params.transfer_data = { destination: creatorAccount.stripeAccountId };
+		}
+
+		const paymentIntent = await stripe.paymentIntents.create(params);
+
+		/**
+		 * One row per Work, all sharing the PaymentIntent — because access, refunds and
+		 * the buyer's Library are all **per Work** and must stay that way. The basket is a
+		 * property of the *charge*, not of the entitlement.
+		 *
+		 * 🚨 The per-item money is apportioned, not recomputed. `calculateFees` on a $1
+		 * item would attach a fresh $0.30 to it, so the rows would sum to far more than
+		 * was charged and every downstream reader — earnings, the tax remittance record,
+		 * refunds — would be wrong. The fee is split **pro-rata by item value**, with the
+		 * last row absorbing the rounding remainder so the parts sum to the whole exactly.
+		 */
+		const rows = q.items.map(({ work, amount }, idx) => {
+			const isLast = idx === q.items.length - 1;
+			const share = (total: Decimal) =>
+				isLast
+					? total.minus(
+							q.items
+								.slice(0, -1)
+								.reduce(
+									(acc, it) =>
+										acc.plus(total.times(it.amount).dividedBy(q.subtotal).toDecimalPlaces(2)),
+									new Decimal(0),
+								),
+						)
+					: total.times(amount).dividedBy(q.subtotal).toDecimalPlaces(2);
+			const processing = share(q.fees.processingFee);
+			const tax = share(q.fees.salesTax);
+			return {
+				buyerId: user.id,
+				workId: work.id,
+				creatorId: work.creatorId,
+				workTitle: work.title,
+				workType: work.type,
+				workPublicId: work.publicId,
+				type: "digital" as const,
+				amount: amount.toFixed(2),
+				processingFee: processing.toFixed(2),
+				deliveryFee: "0.00",
+				crfFee: "0.00",
+				salesTax: tax.toFixed(2),
+				creatorEarnings: amount.minus(processing).toFixed(2),
+				stripePaymentIntentId: paymentIntent.id,
+				status: "pending" as const,
+			};
+		});
+		await db.insert(purchases).values(rows);
+
+		return c.json({
+			subtotal: q.subtotal.toFixed(2),
+			processingFee: q.fees.processingFee.toFixed(2),
+			salesTax: q.fees.salesTax.toFixed(2),
+			creatorEarnings: q.fees.creatorEarnings.toFixed(2),
+			buyerTotal: q.fees.buyerTotal.toFixed(2),
+			itemCount: q.items.length,
+			clientSecret: paymentIntent.client_secret,
+		});
+	})
+
 	// ── Ownership Check ──────────────────────────────────────────────────────
 	.get("/owns/:slug", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -474,12 +683,19 @@ const paymentRoutes = new Hono()
 		if (event.type === "payment_intent.succeeded") {
 			const pi = event.data.object as Stripe.PaymentIntent;
 			// Idempotent: only a still-pending row flips, so redelivered events are no-ops.
-			const [completed] = await db
+			//
+			// 🚨 **Every** row, not the first. This destructured a single `[completed]`
+			// until baskets existed, which was correct while one charge meant one purchase
+			// and silently wrong the moment it didn't: the update flips all the rows (the
+			// predicate matches them all) but only the first got its ledger entry or its
+			// Seed credit. The buyer would have been charged for five Works, unlocked all
+			// five, and had one booked.
+			const completedRows = await db
 				.update(purchases)
 				.set({ status: "completed", updatedAt: new Date() })
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
 				.returning();
-			if (completed) {
+			for (const completed of completedRows) {
 				if (completed.type === "seeds") {
 					// A Seed buy → credit the account (not a post purchase).
 					await applyCreditForPurchase(completed);
@@ -510,18 +726,31 @@ const paymentRoutes = new Hono()
 					typeof charge.payment_intent === "string"
 						? charge.payment_intent
 						: charge.payment_intent.id;
-				const [purchase] = await db
+				// 🚨 Every purchase on the charge, not the first — the `.limit(1)` here was
+				// correct only while a charge could carry one purchase.
+				//
+				// This branch runs only when the charge is **wholly** refunded, so on a
+				// basket it means every item is gone and every row must be settled. Our own
+				// per-item refunds arrive here as *partial* refunds (`refunded: false`) and
+				// are skipped by the guard above, having already settled their own row.
+				//
+				// ⚠️ **A partial refund issued from the Stripe DASHBOARD is still not
+				// handled**, and baskets make that reachable where it wasn't before: the
+				// money goes back and the row stays `completed`, so the buyer keeps access.
+				// Nothing in a charge says *which* item an operator meant, so this cannot be
+				// inferred — operator refunds have to go through the app. Worth a real fix
+				// once there is a takedown path that issues them.
+				const refundedRows = await db
 					.select()
 					.from(purchases)
-					.where(eq(purchases.stripePaymentIntentId, intentId))
-					.limit(1);
+					.where(eq(purchases.stripePaymentIntentId, intentId));
 				// The refund our own route just made arrives back here as an event; the
 				// row is already `refunded` by then and `settleRefundedPurchase` no-ops on
 				// it. What this branch really exists for is the refund issued from the
 				// Stripe dashboard, which reaches us no other way — and that is an
 				// operator action, so it books as platform-initiated and does not spend
 				// the buyer's automatic allowance.
-				if (purchase)
+				for (const purchase of refundedRows)
 					await settleRefundedPurchase(purchase, {
 						initiator: "platform",
 						reason: "Refunded at Stripe",

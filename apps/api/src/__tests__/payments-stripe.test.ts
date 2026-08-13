@@ -792,6 +792,159 @@ describe("Webhook: customer.subscription.*", () => {
 	});
 });
 
+/**
+ * The basket — several Works, one charge, one card fee.
+ *
+ * The whole reason a basket exists is the **fixed $0.30**, which is per charge rather
+ * than per item: five $1 tracks pay $1.65 in card fees separately and $0.45 together,
+ * and every cent of that goes to the creator because Anthers keeps nothing either way.
+ * So the assertions that matter are (a) the fee is charged ONCE, and (b) the per-row
+ * money still sums to exactly what Stripe was asked for — the place a basket goes
+ * quietly wrong is rows that each carry their own $0.30 and no longer reconcile.
+ *
+ * Verified by sabotage before being committed: computing fees per item rather than on
+ * the subtotal fails 3; dropping the mixed-creator guard fails 1; apportioning without
+ * the last-row remainder fails 1 (a 3-way split of an odd cent is what exposes it).
+ */
+describe("Basket checkout — one charge, one card fee", () => {
+	let items: { id: number; slug: string }[] = [];
+	let otherCreatorWorkId = 0;
+
+	async function connect(userId: number) {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, userId));
+		await db.insert(stripeAccounts).values({
+			userId,
+			stripeAccountId: `acct_${uid()}`,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+	}
+
+	/** Three items at an odd price, so the pro-rata split cannot divide evenly. */
+	const UNIT = "3.33";
+	const ODD = [{ threshold: 0, allow: true, price: UNIT }];
+
+	async function basket(workIds: number[], path = "checkout") {
+		fake.reset();
+		const res = await req(`/api/payments/basket/${path}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
+			body: JSON.stringify({ workIds }),
+		});
+		return { res, body: await res.json() };
+	}
+
+	beforeAll(async () => {
+		await connect(creatorId);
+		items = [];
+		for (let i = 0; i < 3; i++) {
+			const w = await insertWork({
+				creatorId,
+				type: "game",
+				title: `Basket item ${i} ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				seedAccess: ODD,
+			});
+			items.push({ id: w.id, slug: w.slug });
+		}
+		// A fourth Work belonging to somebody else entirely.
+		const { id: otherCreator } = await signUp(`bskt_other_${run}`);
+		await connect(otherCreator);
+		otherCreatorWorkId = (
+			await insertWork({
+				creatorId: otherCreator,
+				type: "game",
+				title: `Other creator ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				seedAccess: ODD,
+			})
+		).id;
+	}, DB_SETUP_TIMEOUT);
+
+	it("charges the flat fee ONCE, not once per item", async () => {
+		const { res, body } = await basket(items.map((i) => i.id));
+		expect(res.status).toBe(200);
+
+		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
+		expect(body.subtotal).toBe(expected.creatorEarnings.plus(expected.processingFee).toFixed(2));
+		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
+
+		// The point of the whole feature, stated as an inequality rather than a figure:
+		// one basket fee must be strictly less than three separate ones.
+		const separately = cardFee(new Decimal(UNIT)).times(3);
+		expect(new Decimal(body.processingFee).lessThan(separately)).toBe(true);
+	});
+
+	it("asks Stripe for exactly the buyer total, at the right destination", async () => {
+		const { body } = await basket(items.map((i) => i.id));
+		const params = fake.lastCall("paymentIntents.create")
+			?.args[0] as Stripe.PaymentIntentCreateParams;
+
+		expect(params.amount).toBe(Math.round(Number(body.buyerTotal) * 100));
+		expect(params.transfer_data?.destination).toBeTruthy();
+		// On a destination charge the creator receives `amount − application_fee_amount`,
+		// so that difference has to BE their earnings on the whole basket.
+		const transferred = new Decimal(params.amount as number)
+			.minus(params.application_fee_amount as number)
+			.dividedBy(100);
+		expect(transferred.toFixed(2)).toBe(body.creatorEarnings);
+	});
+
+	it("writes one purchase row per Work, and they reconcile to the charge", async () => {
+		const { body } = await basket(items.map((i) => i.id));
+		// The fake records call ARGS, not return values, so the intent id comes back off
+		// the response's own client secret — `pi_xxx_secret_test`.
+		const intentId = String(body.clientSecret).split("_secret")[0];
+		const rows = await db
+			.select()
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, intentId));
+
+		expect(rows).toHaveLength(3);
+		const sum = (f: (r: (typeof rows)[number]) => string) =>
+			rows.reduce((acc, r) => acc.plus(new Decimal(f(r))), new Decimal(0));
+
+		// Each part sums to the whole. The last row absorbs the rounding remainder, which
+		// is why an odd unit price is used: $3.33 x 3 cannot split a fee evenly.
+		expect(sum((r) => r.amount).toFixed(2)).toBe(body.subtotal);
+		expect(sum((r) => r.processingFee).toFixed(2)).toBe(body.processingFee);
+		expect(sum((r) => r.salesTax).toFixed(2)).toBe(body.salesTax);
+		expect(sum((r) => r.creatorEarnings).toFixed(2)).toBe(body.creatorEarnings);
+
+		// And no row invented its own flat fee — the giveaway that fees were computed
+		// per item. Three separate $0.30s would put every row's fee above $0.30.
+		for (const r of rows) expect(new Decimal(r.processingFee).lessThan("0.30")).toBe(true);
+	});
+
+	it("refuses a basket spanning two creators, and creates no charge", async () => {
+		const { res, body } = await basket([items[0].id, otherCreatorWorkId]);
+		expect(res.status).toBe(400);
+		expect(body.code).toBe("mixed_creators");
+		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
+	});
+
+	it("quotes the saving without creating anything", async () => {
+		const { res, body } = await basket(
+			items.map((i) => i.id),
+			"quote",
+		);
+		expect(res.status).toBe(200);
+		expect(body.items).toHaveLength(3);
+		// The saving is what makes the basket legible, so it has to be real and positive.
+		expect(new Decimal(body.creatorGains).greaterThan(0)).toBe(true);
+		expect(new Decimal(body.feeSeparately).greaterThan(new Decimal(body.processingFee))).toBe(true);
+		expect(fake.callsTo("paymentIntents.create")).toHaveLength(0);
+	});
+
+	it("refuses an empty basket", async () => {
+		const { res } = await basket([]);
+		expect(res.status).toBe(400);
+	});
+});
+
 describe("Checkout — destination charge construction", () => {
 	/** The fee breakdown the route should be quoting, computed independently here. */
 	const expected = calculateFees(new Decimal(PRICE), { type: "digital" });

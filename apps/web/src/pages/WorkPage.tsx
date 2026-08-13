@@ -23,6 +23,7 @@ import type { TranscodingJob, Work } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
+import AddToBasket from "../components/basket/AddToBasket";
 import AudioPlayer from "../components/media/AudioPlayer";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
@@ -279,12 +280,25 @@ export default function WorkPage() {
 						/>
 						{access &&
 							(access.requiresPurchase ? (
-								<ProjectPricing
-									slug={work.slug ?? ""}
-									access={access}
-									creatorHasStripe={work.creatorHasStripe ?? false}
-									onPurchaseComplete={refetch}
-								/>
+								<>
+									<ProjectPricing
+										slug={work.slug ?? ""}
+										access={access}
+										creatorHasStripe={work.creatorHasStripe ?? false}
+										onPurchaseComplete={refetch}
+									/>
+									{/* Only where there is actually a charge to share. */}
+									{work.creatorHasStripe && access.price && work.creator?.username && (
+										<AddToBasket
+											workId={work.id}
+											slug={work.slug ?? ""}
+											title={work.title ?? "Untitled"}
+											price={access.price}
+											creatorUsername={work.creator.username}
+											thumbnail={work.thumbnail}
+										/>
+									)}
+								</>
 							) : (
 								<InlineUnlock post={work} access={access} onUnlocked={refetch} />
 							))}

@@ -10,12 +10,24 @@
  * Three invariants, and each of them is a way to get money wrong:
  *
  *   • **The creator is reversed to exactly their earnings and never below zero.**
- *     `reverse_transfer` on a full refund claws back the whole transfer and no
- *     more, so a creator is never billed for someone else's refund — that would be
- *     a cut, just a negative one they cannot predict or price around, and it would
- *     contradict "Anthers takes no cut". Note the corollary for partial refunds:
- *     Stripe reverses the transfer *proportionally*, so a partial refund is not a
- *     safe way to make Anthers eat more of it. Full refunds only, for now.
+ *     `reverse_transfer` claws back the transfer and no more, so a creator is never
+ *     billed for someone else's refund — that would be a cut, just a negative one
+ *     they cannot predict or price around, and it would contradict "Anthers takes
+ *     no cut".
+ *
+ *     🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge**
+ *     (clarified 2026-08-13, Parker; this used to read "full refunds only, for
+ *     now" and was applied to the charge). A basket puts several independent
+ *     purchases on one PaymentIntent, and refunding one of five must not return
+ *     the other four — the buyer chose each of them and keeps what they keep.
+ *     What remains prohibited is refunding *part of one item*, which is what the
+ *     old warning was really about: there, a proportional reversal genuinely is
+ *     not a safe way to make Anthers absorb more.
+ *
+ *     Per-item refunds are safe because the proportion resolves exactly. Both the
+ *     card fee and the tax are apportioned pro-rata by item value, so reversing
+ *     `itemShare ÷ charge` of the transfer lands on `aᵢ(S − p)/S` — precisely that
+ *     row's recorded earnings. See `refundPurchase` for the derivation.
  *
  *   • **Anthers absorbs the shortfall, and it is booked.** Stripe does not return
  *     its processing fee on a refund. That unrecoverable amount comes out of the
@@ -165,11 +177,49 @@ export async function refundPurchase(
 	if (!stripe)
 		return { ok: false, code: "not_configured", message: "Payments are not configured." };
 
+	/**
+	 * How much of the charge this purchase is.
+	 *
+	 * 🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge** (settled
+	 * 2026-08-13, Parker). A basket puts several independent purchases on one
+	 * PaymentIntent, and refunding one of five must not return the other four — they are
+	 * separate things the buyer chose to keep. So where the charge carries siblings, the
+	 * refund names an explicit `amount`: this row's price plus its apportioned share of
+	 * the sales tax, which is exactly what the buyer paid for it.
+	 *
+	 * **The transfer reversal then lands exactly right, and that is arithmetic rather than
+	 * luck.** `reverse_transfer` on a partial refund reverses *proportionally*, and
+	 * because both the card fee and the tax are apportioned pro-rata by item value, the
+	 * proportion resolves to the item's own earnings:
+	 *
+	 *     reversal = (S − p) × [aᵢ(1 + t/S)] ÷ (S + t) = aᵢ(S − p)/S = the row's earnings
+	 *
+	 * (S = subtotal, p = card fee, t = tax, aᵢ = this item's price.) Rounding can leave a
+	 * cent between Stripe's proportion and the row's stored figure; that lands in the
+	 * shortfall the ledger already books, which is what the remainder is for.
+	 *
+	 * **A lone purchase still sends no `amount` at all.** Its share *is* the whole charge,
+	 * so the two are equivalent — but the no-amount call is the long-tested path for the
+	 * overwhelmingly common case, and there is no reason to move it onto a new one for
+	 * symmetry's sake.
+	 */
+	const siblingCount = (
+		await db
+			.select({ id: purchases.id })
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, purchase.stripePaymentIntentId))
+	).length;
+	const itemCents =
+		siblingCount > 1
+			? Math.round(new Decimal(purchase.amount).plus(purchase.salesTax).toNumber() * 100)
+			: undefined;
+
 	let refundId: string;
 	try {
 		const refund = await stripe.refunds.create(
 			{
 				payment_intent: purchase.stripePaymentIntentId,
+				...(itemCents !== undefined ? { amount: itemCents } : {}),
 				// Claw the creator's transfer back. Without this the refund comes
 				// entirely out of the platform balance and the creator keeps money for a
 				// sale that no longer exists.
@@ -201,6 +251,22 @@ export async function refundPurchase(
 		};
 	}
 
+	/**
+	 * 🚨 Settle **every** purchase on this charge, not just the one asked for.
+	 *
+	 * `refunds.create` above passes no `amount`, so it refunds the whole PaymentIntent.
+	 * That was the same thing as "this purchase" until baskets existed. On a basket it is
+	 * not: refunding one of five items returns all five items' money and reverses the
+	 * whole transfer, so settling one row would leave the buyer holding permanent access
+	 * to four Works nobody was paid for. `resolveAccess` reads completed purchases, so an
+	 * unsettled sibling is a live entitlement, not a stale record.
+	 *
+	 * A basket therefore refunds **as a basket** — which is also why the buyer-facing copy
+	 * has to say so before they click. Refunding a single item would mean a *partial*
+	 * refund, and 51.02's rule is full refunds only for now; it is genuinely available
+	 * later (a same-creator basket reverses the transfer proportionally, which is exactly
+	 * that item's earnings) but it is a decision, not a detail.
+	 */
 	return await settleRefundedPurchase(purchase, {
 		initiator: opts.initiator,
 		reason: opts.reason,

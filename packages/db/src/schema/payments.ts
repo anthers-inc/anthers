@@ -83,7 +83,22 @@ export const purchases = pgTable(
 		// to 0.00 for the charges that carry none (a Seed buy).
 		salesTax: numeric("sales_tax").notNull().default("0.00"),
 		creatorEarnings: numeric("creator_earnings").notNull(),
-		stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
+		/**
+		 * 🚨 **Indexed, not UNIQUE** (changed 2026-08-13, migration `0033`).
+		 *
+		 * It was unique while one charge could only ever mean one purchase, and that
+		 * assumption is exactly what a basket breaks: buying five Works on one card charge
+		 * writes five rows sharing this id — which is the entire point, since the fixed
+		 * $0.30 is per charge. The constraint didn't guard idempotency (the `pending` →
+		 * `completed` status predicate does that, and still does); it encoded a
+		 * one-purchase-per-charge model that no longer holds.
+		 *
+		 * Every reader of this column was already written to expect several rows, or was
+		 * corrected in the same change: the webhook completes **all** pending rows, and
+		 * `refunds.ts` settles **all** siblings because a refund with no `amount` returns
+		 * the whole charge.
+		 */
+		stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
 		status: text("status").notNull().default("pending"), // pending | completed | failed | refunded
 		// ── Delivery & refunds (`0018`) ──────────────────────────────────────────
 		// When this buyer first pulled the actual payload down. Null = never
@@ -114,6 +129,9 @@ export const purchases = pgTable(
 		// creator_id arrives already indexed: it is what calculate-crf now sums by, and
 		// an unindexed FK is the exact debt `0015` was written to clear.
 		index("idx_purchases_creator").on(table.creatorId),
+		// Replaces the UNIQUE constraint the column carried until `0033`. The lookup is
+		// hot on both webhook branches and on every refund, and it now returns a SET.
+		index("idx_purchases_payment_intent").on(table.stripePaymentIntentId),
 	],
 );
 

@@ -1,0 +1,2 @@
+ALTER TABLE "purchases" DROP CONSTRAINT "purchases_stripe_payment_intent_id_unique";--> statement-breakpoint
+CREATE INDEX "idx_purchases_payment_intent" ON "purchases" USING btree ("stripe_payment_intent_id");

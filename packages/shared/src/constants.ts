@@ -405,6 +405,20 @@ export function cardFeeDisplay(amount: number): number {
  * built yet (51.06 notes).
  */
 export const REFUND_AUTO_CAP = 3;
+
+/**
+ * How many Works one basket may hold.
+ *
+ * A bound rather than a product limit: a basket is resolved item-by-item through the
+ * same access path a single purchase takes, so an unbounded list is an unbounded number
+ * of queries on an unauthenticated-cost path. Twenty is far above any real basket — an
+ * album's worth of tracks is a dozen — and far below anything that hurts.
+ *
+ * 🚨 **One creator per basket**, which is not a number and so is not here: Stripe's
+ * `transfer_data.destination` names a single connected account, so a basket spanning two
+ * creators cannot be one destination charge. See `resolveBasket` in `routes/payments.ts`.
+ */
+export const MAX_BASKET_ITEMS = 20;
 /** The rolling window the cap is counted over, in months. */
 export const REFUND_CAP_WINDOW_MONTHS = 12;
 /**
