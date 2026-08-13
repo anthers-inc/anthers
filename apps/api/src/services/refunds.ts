@@ -201,12 +201,41 @@ export async function refundPurchase(
 		};
 	}
 
-	return await settleRefundedPurchase(purchase, {
+	/**
+	 * 🚨 Settle **every** purchase on this charge, not just the one asked for.
+	 *
+	 * `refunds.create` above passes no `amount`, so it refunds the whole PaymentIntent.
+	 * That was the same thing as "this purchase" until baskets existed. On a basket it is
+	 * not: refunding one of five items returns all five items' money and reverses the
+	 * whole transfer, so settling one row would leave the buyer holding permanent access
+	 * to four Works nobody was paid for. `resolveAccess` reads completed purchases, so an
+	 * unsettled sibling is a live entitlement, not a stale record.
+	 *
+	 * A basket therefore refunds **as a basket** — which is also why the buyer-facing copy
+	 * has to say so before they click. Refunding a single item would mean a *partial*
+	 * refund, and 51.02's rule is full refunds only for now; it is genuinely available
+	 * later (a same-creator basket reverses the transfer proportionally, which is exactly
+	 * that item's earnings) but it is a decision, not a detail.
+	 */
+	const settleOpts = {
 		initiator: opts.initiator,
 		reason: opts.reason,
 		stripeRefundId: refundId,
 		now,
-	});
+	};
+
+	// The named row first, so its result is the one reported without needing a
+	// placeholder to stand in for it; the rest are bookkeeping on the same charge.
+	const result = await settleRefundedPurchase(purchase, settleOpts);
+
+	const siblings = await db
+		.select()
+		.from(purchases)
+		.where(eq(purchases.stripePaymentIntentId, purchase.stripePaymentIntentId));
+	for (const row of siblings) {
+		if (row.id !== purchase.id) await settleRefundedPurchase(row, settleOpts);
+	}
+	return result;
 }
 
 /**

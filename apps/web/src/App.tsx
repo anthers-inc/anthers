@@ -90,6 +90,7 @@ const JamPage = lazy(() => import("./pages/JamPage"));
 const JamsPage = lazy(() => import("./pages/JamsPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const BasketPage = lazy(() => import("./pages/BasketPage"));
 const ParentsPage = lazy(() => import("./pages/ParentsPage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
 const ProjectPage = lazy(() => import("./pages/ProjectPage"));
@@ -216,6 +217,13 @@ export default function App() {
 							</ProtectedRoute>
 						}
 					/>
+					{/*
+					 * Deliberately NOT a ProtectedRoute. A basket is a scratchpad in
+					 * localStorage, so a logged-out reader can fill one and is asked to log
+					 * in at the point of payment — where the ask is motivated — rather than
+					 * at the point of browsing, where it is a wall.
+					 */}
+					<Route path="/basket" element={<BasketPage />} />
 					<Route
 						path="/subscription"
 						element={
