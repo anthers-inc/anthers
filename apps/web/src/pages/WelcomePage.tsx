@@ -26,7 +26,8 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import FirstRun, { type Arrival, readArrival } from "../components/onboarding/FirstRun";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -58,13 +59,30 @@ export default function WelcomePage() {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Nobody else has business here. An account that already has a handle has finished
-	// onboarding, and a signed-out visitor has nothing to onboard.
+	/*
+	 * A signed-out visitor has nothing to onboard.
+	 *
+	 * ⚠️ Note what is NOT here any more: this used to bounce an account that already had
+	 * a handle to its own profile. It no longer does, because claiming a handle is only
+	 * the first half of this route — the second is the first-run state below, which an
+	 * onboarded account is exactly the audience for. Every signup door now ends here.
+	 */
 	useEffect(() => {
 		if (isLoading) return;
 		if (!user) navigate("/login");
-		else if (user.username) navigate(`/${user.username}`);
 	}, [isLoading, user, navigate]);
+
+	/**
+	 * What this account chose on the way in, captured **once, on mount**.
+	 *
+	 * A ref rather than state read at render time: claiming a handle re-renders this
+	 * component, and re-reading then would be reading the same storage twice for no
+	 * reason. Capturing on mount also means the answer is stable across the claim step,
+	 * which is the whole point — the person who arrives having paid is still the person
+	 * who paid after they pick a name.
+	 */
+	const arrival = useRef<Arrival | null>(null);
+	arrival.current ??= readArrival();
 
 	const trimmed = username.trim();
 	const handleProblem =
@@ -109,15 +127,25 @@ export default function WelcomePage() {
 				setBusy(false);
 				return;
 			}
+			// Deliberately no navigation: refreshing the user makes `user.username` non-null,
+			// and this component then renders the first-run state in place. Sending them to
+			// their own brand-new, empty profile is the thing this task exists to stop.
 			await refreshUser();
-			navigate(`/${trimmed}`);
 		} catch {
 			setError("Something went wrong. Please try again.");
 			setBusy(false);
 		}
 	};
 
-	if (isLoading || !user || user.username) return null;
+	if (isLoading || !user) return null;
+
+	if (user.username) {
+		return (
+			<div className="mx-auto min-w-0 w-full max-w-lg px-6 py-12 sm:py-20">
+				<FirstRun arrival={arrival.current ?? { kind: "cold" }} username={user.username} />
+			</div>
+		);
+	}
 
 	return (
 		<div className="mx-auto min-w-0 w-full max-w-lg px-6 py-12 sm:py-20">

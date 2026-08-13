@@ -71,7 +71,16 @@ export default function AuthPage({ initialMode = "login" }: { initialMode?: Mode
 		setLoading(true);
 		try {
 			await signUp(username, email, password, acceptTerms);
-			navigate(redirectTo, { replace: true });
+			/*
+			 * A brand-new account goes to the first-run state, not to the feed.
+			 *
+			 * ⚠️ Unless something specific sent them here. An explicit `?next=` or a route
+			 * that bounced them to sign in is a person trying to *do* something — a gated
+			 * post, a checkout — and interrupting that with a welcome screen loses the
+			 * thing they actually wanted. Only the undirected case gets the welcome, which
+			 * is exactly the case that has nowhere better to be.
+			 */
+			navigate(nextParam || from ? redirectTo : "/welcome", { replace: true });
 		} catch (err) {
 			setErrors({
 				general: err instanceof Error ? err.message : "Something went wrong. Please try again.",
