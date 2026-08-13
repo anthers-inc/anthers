@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Shared video-bitrate model for the Video Storage and Video Bandwidth
-// calculators. Both tools size content from the same AV1 delivery ladder and the
-// same bytes-per-bitrate constant, so the reference numbers live here once. Ported
-// from the standalone planning tools in the Anthers business-and-finance wiki.
+// Shared video-bitrate model for the Video Storage calculator. It sizes content
+// from the AV1 delivery ladder and a bytes-per-bitrate constant, and the reference
+// numbers live here rather than in the page. Ported from the standalone planning
+// tools in the Anthers business-and-finance wiki.
+//
+// It was shared with a Video Bandwidth calculator until 2026-08-12, when that page
+// was retired: it priced a user-facing bandwidth allowance that no longer exists,
+// and quoted $0.01/GiB — DigitalOcean Spaces' egress rate — a day after we moved to
+// R2, where egress is $0 at any volume. The SIZING half of it was never wrong, and
+// is what survives here.
 
 export type Resolution = "240p" | "480p" | "720p" | "1080p" | "1440p" | "2160p";
 
@@ -50,20 +56,11 @@ export const RES_LADDER_HIGH_TO_LOW: Resolution[] = [
 	"240p",
 ];
 
-/** Low → high, the order the bandwidth tier menu is listed. */
-export const RES_TIERS_LOW_TO_HIGH: Resolution[] = [
-	"240p",
-	"480p",
-	"720p",
-	"1080p",
-	"1440p",
-	"2160p",
-];
-
 /**
  * AV1 delivery-ladder video bitrate reference at 30fps (Mbps), good-quality VBR.
- * The storage calculator builds its whole ladder from these; the bandwidth
- * calculator uses them as its AV1 codec row.
+ * The storage calculator builds its whole ladder from these. (A bandwidth
+ * calculator used them as its AV1 codec row until 2026-08-12, when it was retired
+ * along with the user-facing bandwidth allowance it existed to spend.)
  */
 export const AV1_REF30: Record<Resolution, number> = {
 	"240p": 0.15,
@@ -104,24 +101,4 @@ export function moneyBig(v: number): string {
 /** Fixed-decimal helper for bitrates / sizes. */
 export function fixed(v: number, d: number): string {
 	return v.toFixed(d);
-}
-
-/** Trim a number to at most two decimals without trailing zeros. */
-export function trimNum(v: number): string {
-	return (Math.round(v * 100) / 100).toString();
-}
-
-/** Render a duration in hours as a compact "1h 26m" / "45 min" / "30 sec". */
-export function fmtTime(hours: number): string {
-	if (!Number.isFinite(hours) || hours <= 0) return "—";
-	const totalMin = hours * 60;
-	if (totalMin < 1) return `${Math.round(hours * 3600)} sec`;
-	let h = Math.floor(totalMin / 60);
-	let m = Math.round(totalMin - h * 60);
-	if (m === 60) {
-		h += 1;
-		m = 0;
-	}
-	if (h === 0) return `${m} min`;
-	return `${h}h ${m}m`;
 }

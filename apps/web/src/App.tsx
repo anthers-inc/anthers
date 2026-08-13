@@ -102,7 +102,6 @@ const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const UserDemoPage = lazy(() => import("./pages/UserDemoPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
-const VideoBandwidthCalculatorPage = lazy(() => import("./pages/VideoBandwidthCalculatorPage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WikiPage = lazy(() => import("./pages/WikiPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
@@ -294,7 +293,6 @@ export default function App() {
 					</Route>
 					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
 					<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
-					<Route path="/resources/video-bandwidth" element={<VideoBandwidthCalculatorPage />} />
 					<Route
 						path="/resources/creator-monetization"
 						element={<CreatorMonetizationCalculatorPage />}

@@ -31,7 +31,6 @@ test.describe("Resources calculators", () => {
 		await expect(page.getByRole("heading", { name: "How we stack up" })).toBeVisible();
 
 		await expect(page.getByRole("heading", { name: "Video Storage Calculator" })).toBeVisible();
-		await expect(page.getByRole("heading", { name: "Video Bandwidth Calculator" })).toBeVisible();
 		await expect(
 			page.getByRole("heading", { name: "Creator Monetization Calculator" }),
 		).toBeVisible();
@@ -49,16 +48,6 @@ test.describe("Resources calculators", () => {
 		await expect(page.getByText("10.62 GiB", { exact: false }).first()).toBeVisible();
 		// 100-hour library scale-out.
 		await expect(page.getByText("$21.25", { exact: false }).first()).toBeVisible();
-		expect(errors).toEqual([]);
-	});
-
-	test("video bandwidth: stream time responds to the delivered tier", async ({ page }) => {
-		const errors = trackErrors(page);
-		await page.goto("/resources/video-bandwidth");
-		const readout = page.locator("p.text-5xl");
-		await expect(readout).toHaveText("2h 21m"); // AV1 1080p60 on a 4 GiB allowance
-		await page.getByRole("button", { name: "2160p" }).click();
-		await expect(readout).toHaveText("45 min"); // same allowance, 4K burns it far faster
 		expect(errors).toEqual([]);
 	});
 

@@ -36,7 +36,6 @@ const DEFAULT_ROUTES = [
 	"/resources",
 	"/resources/pay-comparison",
 	"/resources/video-storage",
-	"/resources/video-bandwidth",
 	"/resources/creator-monetization",
 	"/subscribe",
 	"/faq",
