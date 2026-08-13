@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useReportVisit } from "@/lib/attention";
+import WorkCard from "../components/cards/WorkCard";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import { studioUrl } from "../lib/studio";
 
@@ -39,9 +40,10 @@ export default function ProjectPage() {
 	}, [slug]);
 
 	// Attention tracking — a Project view is a page_view for the creator.
-	// A project is a collection — a shelf holding no work of its own — so browsing
-	// one records the visit and earns no Time Pool minutes. The time is earned on
-	// the posts, where the content entities actually live.
+	// A Project is a shelf holding no work of its own, so browsing one records the visit
+	// and earns no Time Pool minutes. The time is earned on the **Works**, which is where
+	// consumption actually happens. (This said "on the posts" until Works could appear
+	// here at all; only a Work has ever been able to earn — see 40.05.)
 	useReportVisit({ creatorId: project?.creatorId ?? null });
 
 	if (loading) {
@@ -62,6 +64,7 @@ export default function ProjectPage() {
 	}
 
 	const posts = project.posts ?? [];
+	const works = project.works ?? [];
 	const isOwner = !!user && user.id === project.creatorId;
 
 	return (
@@ -106,39 +109,67 @@ export default function ProjectPage() {
 				)}
 			</div>
 
-			{/* Member posts */}
-			<h2 className="text-xl font-bold mb-4">
-				{posts.length} {posts.length === 1 ? "post" : "posts"}
-			</h2>
-			{posts.length === 0 ? (
-				<p className="text-base-content/50 text-sm">This project has no posts yet.</p>
-			) : (
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-					{posts.map((member) => {
-						// A member post carries no gate and no cover — it is an announcement.
-						// The Works it links resolve on their own, at the post itself.
-						return (
-							<Link
-								key={member.id}
-								to={postUrl(member)}
-								className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
-							>
-								<div className="card-body p-4 gap-2">
-									{member.title && <h3 className="font-semibold line-clamp-2">{member.title}</h3>}
-									{member.publishedAt && (
-										<span className="text-xs text-base-content/40">
-											{new Date(member.publishedAt).toLocaleDateString("en-US", {
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									)}
-								</div>
-							</Link>
-						);
-					})}
+			{/*
+			 * Member Works, first — they are the substance of the Project, and posts are
+			 * announcements about them. Each renders through the same `WorkCard` the public
+			 * Catalog uses, so a gated member shows its blurred cover and unlock route here
+			 * exactly as it does on the creator's profile. `access` is already resolved
+			 * per-Work by the API; the shelf adds nothing to it.
+			 */}
+			{works.length > 0 && (
+				<div className="mb-10">
+					<h2 className="text-xl font-bold mb-4">
+						{works.length} {works.length === 1 ? "work" : "works"}
+					</h2>
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						{works.map((work) => (
+							<WorkCard key={work.id} work={{ ...work, creator: project.creator }} />
+						))}
+					</div>
 				</div>
+			)}
+
+			{/* Member posts */}
+			{(posts.length > 0 || works.length === 0) && (
+				<>
+					<h2 className="text-xl font-bold mb-4">
+						{posts.length} {posts.length === 1 ? "post" : "posts"}
+					</h2>
+					{posts.length === 0 ? (
+						<p className="text-base-content/50 text-sm">
+							{works.length === 0 ? "This Project is empty." : "No posts about this Project yet."}
+						</p>
+					) : (
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							{posts.map((member) => {
+								// A member post carries no gate and no cover — it is an announcement.
+								// The Works it links resolve on their own, at the post itself.
+								return (
+									<Link
+										key={member.id}
+										to={postUrl(member)}
+										className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+									>
+										<div className="card-body p-4 gap-2">
+											{member.title && (
+												<h3 className="font-semibold line-clamp-2">{member.title}</h3>
+											)}
+											{member.publishedAt && (
+												<span className="text-xs text-base-content/40">
+													{new Date(member.publishedAt).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</span>
+											)}
+										</div>
+									</Link>
+								);
+							})}
+						</div>
+					)}
+				</>
 			)}
 		</div>
 	);

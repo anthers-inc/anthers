@@ -373,8 +373,30 @@ export interface Project {
 	creator?: Creator;
 	/** Member count (list endpoint). */
 	postCount?: number;
-	/** Ordered members (detail endpoint). */
+	/** Ordered member posts (detail endpoint). */
 	posts?: ProjectPost[];
+	/**
+	 * Ordered member Works (detail endpoint) — a full `Work` each, with `access` resolved
+	 * for this viewer, plus the membership's own `sortOrder`.
+	 *
+	 * 🚨 **The API has always sent these and nothing could read them**, because this field
+	 * did not exist: `GET /projects/:slug` serializes `project.works[]` in full, and
+	 * `ProjectPage` rendered posts alone. The array was undeclared rather than discarded,
+	 * which is why nothing ever failed and no error pointed at it — the JSON simply
+	 * arrived and TypeScript had no name for it.
+	 */
+	works?: ProjectWork[];
+}
+
+/**
+ * A Work as it appears inside a Project. The Work entire, plus its position on the shelf.
+ *
+ * Membership carries nothing else, and that is the model rather than an omission: a
+ * Project is a shelf, so a reference that carried gates or a price would be the Project
+ * owning the Work. Access here is the Work's own, resolved for this viewer.
+ */
+export interface ProjectWork extends Work {
+	sortOrder: number;
 }
 
 export interface Comment {
