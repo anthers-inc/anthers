@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import ProjectWorks from "../components/content/ProjectWorks";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -159,8 +160,8 @@ export default function ProjectFormPage() {
 		<div className="max-w-3xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">{isEdit ? "Edit Project" : "New Project"}</h1>
 			<p className="text-sm text-base-content/60 mb-6">
-				A project groups related posts — an album, a season, a devlog, a store. Add and reorder
-				posts after creating it.
+				A Project groups related Works and Posts — an album and its tracks, a game and its devlogs,
+				a book and its chapters. Add and reorder them after creating it.
 			</p>
 
 			{error && (
@@ -248,6 +249,25 @@ export default function ProjectFormPage() {
 						</div>
 					</label>
 				</div>
+
+				{/*
+				 * The shelf itself. Edit-only: every membership endpoint is keyed on the
+				 * Project's slug, so there is nothing to attach a Work to until the Project
+				 * exists — the same shape as "create the Work first, then add builds".
+				 *
+				 * Outside the form's save cycle by design; `ProjectWorks` persists each change
+				 * on its own endpoint the moment it is made.
+				 */}
+				{isEdit && projectSlug && (
+					<div className="border-t border-base-300 pt-4">
+						<h2 className="font-semibold text-sm mb-1">Works</h2>
+						<p className="text-xs text-base-content/50 mb-3">
+							The Works on this Project's shelf, in order. Putting one here changes nothing about
+							who can open it.
+						</p>
+						<ProjectWorks projectSlug={projectSlug} />
+					</div>
+				)}
 
 				<div className="flex gap-2 mt-2">
 					<button

@@ -2987,6 +2987,64 @@ const contentRoutes = new Hono()
 		return c.body(null, 204);
 	})
 
+	/**
+	 * Reorder the Works in a Project.
+	 *
+	 * The counterpart to `/posts/reorder`, and it had no equivalent until 2026-08-13 —
+	 * `POST /works` assigns `max(sortOrder) + 1` and nothing could change it afterwards, so
+	 * order was fixed at the moment of adding. For an album that is not a missing
+	 * convenience: **track order is the artifact**, and "add them in the right sequence or
+	 * start over" is not an authoring model.
+	 *
+	 * 🚨 **Wrapped in a transaction, unlike the posts version it mirrors.** That one issues N
+	 * sequential un-transacted UPDATEs, so a failure partway leaves the list *scrambled* —
+	 * some members renumbered, some not — which is worse than the reorder simply failing,
+	 * and worse in a way the creator has to repair by hand. Ordering is exactly the state
+	 * where a partial write is indefensible. Worth fixing on the posts side too.
+	 *
+	 * `workIds` is the **complete** desired order. Members omitted from it keep their
+	 * existing `sortOrder`, which may then collide with an assigned one — send the whole
+	 * list. Ids that aren't members are ignored rather than rejected: the `projectId`
+	 * predicate simply matches nothing, so a stale client can't renumber another Project.
+	 */
+	.post(
+		"/projects/:slug/works/reorder",
+		requireAuth,
+		zValidator("json", z.object({ workIds: z.array(z.number().int()) })),
+		async (c) => {
+			const user = c.get("user");
+			const { slug } = c.req.param();
+			const { workIds } = c.req.valid("json");
+
+			const [project] = await db
+				.select({ id: projects.id })
+				.from(projects)
+				.where(and(eq(projects.slug, slug), eq(projects.creatorId, user.id)))
+				.limit(1);
+			if (!project) return c.json({ error: "Project not found" }, 404);
+
+			// A duplicate id would silently give two members the same position, so the order
+			// the creator sees would depend on the tiebreak rather than on what they asked
+			// for. Cheaper to refuse than to explain.
+			if (new Set(workIds).size !== workIds.length) {
+				return c.json({ error: "Duplicate Work in the requested order" }, 400);
+			}
+
+			await db.transaction(async (tx) => {
+				for (let i = 0; i < workIds.length; i++) {
+					await tx
+						.update(projectItems)
+						.set({ sortOrder: i })
+						.where(
+							and(eq(projectItems.projectId, project.id), eq(projectItems.workId, workIds[i])),
+						);
+				}
+			});
+
+			return c.json({ success: true });
+		},
+	)
+
 	// ── Project membership (project_posts) ────────────────────────────────────
 	.post(
 		"/projects/:slug/posts",
