@@ -4,7 +4,7 @@ import { Link } from "@anthers/web-shared/router";
 import type { Project } from "@anthers/web-shared/types";
 import { RectangleStackIcon } from "@heroicons/react/24/outline";
 
-/** A collection (project) card — a playlist-like wrapper that groups posts. */
+/** A Project card — the named grouping of a creator's Works and Posts. */
 export default function ProjectCard({ project }: { project: Project }) {
 	return (
 		<Link

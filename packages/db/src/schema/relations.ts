@@ -58,7 +58,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Content
 	works: many(works), // the creator's Catalog
 	posts: many(posts),
-	projects: many(projects), // collections the creator owns
+	projects: many(projects), // Projects the creator owns
 	inlineImages: many(inlineImages),
 	comments: many(comments),
 	ratings: many(ratings),
@@ -134,14 +134,14 @@ export const userBlocksRelations = relations(userBlocks, ({ one }) => ({
 // Posts — announcements. They reference Works; they never contain them.
 export const postsRelations = relations(posts, ({ one, many }) => ({
 	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
-	projectPosts: many(projectPosts), // collections this post belongs to
+	projectPosts: many(projectPosts), // Projects this post belongs to
 	workRefs: many(postWorkRefs),
 	attentionEvents: many(attentionEvents),
 	crossPublishResults: many(crossPublishResults),
 	jamEntries: many(jamEntries),
 }));
 
-// Projects — collections that group posts.
+// Projects — they group Works and Posts.
 // A project collects BOTH kinds, in separate ordered lists — a game project holds its
 // builds and soundtrack (Works) alongside its devlogs and patch notes (Posts).
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -167,7 +167,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	assets: many(assets),
 	transcodingJobs: many(transcodingJobs),
 	postRefs: many(postWorkRefs), // where this Work has been posted
-	projectItems: many(projectItems), // collections this Work belongs to
+	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
 	ratings: many(ratings),

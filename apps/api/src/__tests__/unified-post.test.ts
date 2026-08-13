@@ -255,8 +255,8 @@ describe("Catalog vertical slice", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
-				title: `Collection ${id}`,
-				slug: `collection-${id}`,
+				title: `Project ${id}`,
+				slug: `project-${id}`,
 				isPublished: true,
 			}),
 		});

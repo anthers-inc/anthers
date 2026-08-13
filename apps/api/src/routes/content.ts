@@ -13,7 +13,7 @@
  * else. It may *reference* Works (`post_work_refs`), which renders as a card and gives the
  * Work its posting history in return, but **that reference is inert: it confers no access
  * whatsoever.** A Post may freely link a Work its reader cannot open. Projects are
- * collections that group posts (and, from stage 4, Works) via many-to-many joins.
+ * Projects that group Works and Posts via many-to-many joins.
  *
  * Both are addressed by a durable numeric `publicId`; the canonical URLs are
  * `/posts/{slug}-{publicId}` and `/works/{slug}-{publicId}`, and a route param of either
@@ -382,7 +382,7 @@ const postBaseSchema = z.object({
 	// schedule. Publishing now (isPublished=true) supersedes and clears any schedule.
 	scheduledFor: z.string().datetime().nullable().optional(),
 
-	// Optionally attach to a project (collection) on create.
+	// Optionally attach to a Project on create.
 	projectId: z.number().int().optional(),
 });
 
@@ -435,12 +435,12 @@ const createAssetSchema = z.object({
 	isPrimary: z.boolean().optional().default(false),
 });
 
-const addWorkToCollectionSchema = z.object({
+const addWorkToProjectSchema = z.object({
 	workId: z.number().int(),
 	sortOrder: z.number().int().optional(),
 });
 
-const addToCollectionSchema = z.object({
+const addPostToProjectSchema = z.object({
 	postId: z.number().int(),
 	sortOrder: z.number().int().optional(),
 });
@@ -1170,7 +1170,7 @@ const contentRoutes = new Hono()
 	.get("/posts", async (c) => {
 		const mine = c.req.query("mine");
 		const creator = c.req.query("creator");
-		const collection = c.req.query("collection"); // project (collection) slug
+		const projectSlug = c.req.query("project"); // Project slug
 		const contentType = c.req.query("content_type");
 		const delivery = c.req.query("delivery"); // stream | download
 		const tag = c.req.query("tag");
@@ -1197,15 +1197,15 @@ const contentRoutes = new Hono()
 			conditions.push(eq(posts.creatorId, user.id));
 		}
 
-		if (collection) {
-			const [project] = await db
+		if (projectSlug) {
+			const [row] = await db
 				.select({ id: projects.id })
 				.from(projects)
-				.where(eq(projects.slug, collection))
+				.where(eq(projects.slug, projectSlug))
 				.limit(1);
-			if (!project) return c.json({ posts: [] });
+			if (!row) return c.json({ posts: [] });
 			conditions.push(
-				sql`${posts.id} IN (SELECT post_id FROM project_posts WHERE project_id = ${project.id})`,
+				sql`${posts.id} IN (SELECT post_id FROM project_posts WHERE project_id = ${row.id})`,
 			);
 		}
 
@@ -1218,8 +1218,8 @@ const contentRoutes = new Hono()
 		void delivery;
 
 		// The public feed shows timeline posts only; a creator's own view or a
-		// collection view shows everything (including off-timeline posts).
-		if (mine !== "true" && !collection) {
+		// Project view shows everything (including off-timeline posts).
+		if (mine !== "true" && !projectSlug) {
 			conditions.push(eq(posts.showOnTimeline, true));
 		}
 
@@ -1369,7 +1369,7 @@ const contentRoutes = new Hono()
 
 		await setPostWorkRefs(post.id, data.workIds);
 
-		// Optionally attach to a project (collection) the creator owns.
+		// Optionally attach to a Project the creator owns.
 		if (data.projectId != null) {
 			const [project] = await db
 				.select({ id: projects.id })
@@ -2527,7 +2527,7 @@ const contentRoutes = new Hono()
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
-	// PROJECTS — collections that group posts
+	// PROJECTS — they group Works and Posts
 	// ══════════════════════════════════════════════════════════════════════════
 
 	.get("/projects", async (c) => {
@@ -2554,7 +2554,7 @@ const contentRoutes = new Hono()
 		void c.req.query("on_sale");
 
 		/**
-		 * A project matches when ANY released Work in it matches: a collection is
+		 * A project matches when ANY released Work in it matches: a Project is
 		 * described by what it contains, so "games" means "contains a game" rather than
 		 * "contains only games". Private and withdrawn Works never qualify a project for
 		 * a public listing.
@@ -2610,7 +2610,7 @@ const contentRoutes = new Hono()
 		// `free` is the baseline row the resolver calls universally free; `paid` is any
 		// priced offer; `gated` is a threshold you must hold rather than buy. They overlap
 		// on purpose — a project can hold a free Work and a priced one, and answering
-		// "show me free things" with "only wholly-free collections" would hide it.
+		// "show me free things" with "only wholly-free Projects" would hide it.
 		if (pricing === "free") {
 			conditions.push(
 				containsWork(anyAccessRow(sql`(r->>'threshold')::int = 0 AND (r->>'price')::numeric <= 0`)),
@@ -2813,7 +2813,7 @@ const contentRoutes = new Hono()
 			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
 
-		// The Works in this collection, each resolved on its own gates. A project is a
+		// The Works in this Project, each resolved on its own gates. A Project is a
 		// shelf: putting a Work on it changes nothing about who can open it.
 		const itemRows = await db
 			.select({ work: works, sortOrder: projectItems.sortOrder })
@@ -2919,7 +2919,7 @@ const contentRoutes = new Hono()
 		return c.body(null, 204);
 	})
 
-	// ── Collection membership (Works) ────────────────────────────────────────────
+	// ── Project membership (Works) ────────────────────────────────────────────
 	//
 	// The half that was always missing. A project could only hold announcements, which
 	// meant an album could not hold its tracks — 40.02's own worked example ("a track in
@@ -2927,7 +2927,7 @@ const contentRoutes = new Hono()
 	.post(
 		"/projects/:slug/works",
 		requireAuth,
-		zValidator("json", addWorkToCollectionSchema),
+		zValidator("json", addWorkToProjectSchema),
 		async (c) => {
 			const user = c.get("user");
 			const { slug } = c.req.param();
@@ -2962,7 +2962,7 @@ const contentRoutes = new Hono()
 				.onConflictDoNothing({ target: [projectItems.projectId, projectItems.workId] })
 				.returning();
 
-			if (!link) return c.json({ error: "Work is already in this collection" }, 409);
+			if (!link) return c.json({ error: "Work is already in this Project" }, 409);
 			return c.json({ projectItem: link }, 201);
 		},
 	)
@@ -2981,17 +2981,17 @@ const contentRoutes = new Hono()
 			)
 			.returning({ id: projectItems.id });
 
-		// Removing a Work from a collection never touches the Work. It stays in the
-		// Catalog, released, with its gates — a collection is a shelf, not an owner.
+		// Removing a Work from a Project never touches the Work. It stays in the
+		// Catalog, released, with its gates — a Project is a shelf, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
 	})
 
-	// ── Collection membership (project_posts) ────────────────────────────────────
+	// ── Project membership (project_posts) ────────────────────────────────────
 	.post(
 		"/projects/:slug/posts",
 		requireAuth,
-		zValidator("json", addToCollectionSchema),
+		zValidator("json", addPostToProjectSchema),
 		async (c) => {
 			const user = c.get("user");
 			const { slug } = c.req.param();
@@ -3026,7 +3026,7 @@ const contentRoutes = new Hono()
 				.onConflictDoNothing({ target: [projectPosts.projectId, projectPosts.postId] })
 				.returning();
 
-			if (!link) return c.json({ error: "Post is already in this collection" }, 409);
+			if (!link) return c.json({ error: "Post is already in this Project" }, 409);
 			return c.json({ projectPost: link }, 201);
 		},
 	)
@@ -3222,7 +3222,7 @@ const contentRoutes = new Hono()
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
-	// BOOKMARKS — a user-ordered list of posts, collections, and creators
+	// BOOKMARKS — a user-ordered list of posts, Projects, and creators
 	// ══════════════════════════════════════════════════════════════════════════
 
 	.get("/bookmarks", requireAuth, async (c) => {
