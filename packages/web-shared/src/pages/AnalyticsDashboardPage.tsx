@@ -104,7 +104,9 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
 				<div className="stat-figure text-secondary">
 					<ClockIcon className="w-6 h-6" />
 				</div>
-				<div className="stat-title text-xs">Watch Time</div>
+				{/* Not "Watch Time": this totals attention across a creator's whole Catalog,
+				    which may be audio, text or games. A minute is a minute. */}
+				<div className="stat-title text-xs">Time Spent</div>
 				<div className="stat-value text-lg">{overview.totalDurationHours.toFixed(1)}h</div>
 			</div>
 			<div className="stat bg-base-200 rounded-lg p-4">

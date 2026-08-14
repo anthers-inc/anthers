@@ -176,10 +176,14 @@ const PLATFORMS: Platform[] = [
 				anthers: A_STREAM,
 				rival: {
 					keep: "45% of the revenue",
+					// econ:allow — YouTube Premium really is pooled by watch-time; that is THEIR
+					// mechanism and their word for it. 63.01 bans it for OURS, and § Comparisons
+					// binds us to describing a rival accurately — renaming their metric to suit our
+					// vocabulary would misdescribe them, which is the worse failure.
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: `The Seeds a fan gives Anthers set a monthly Time Pool (${money(TIME_POOL_PER_SEED)} each) that's split across everyone they watch, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
+				note: `The Seeds a fan gives Anthers set a monthly Time Pool (${money(TIME_POOL_PER_SEED)} each) that's split across everyone they spend time with, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
 			},
 		],
 	},

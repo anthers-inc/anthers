@@ -392,7 +392,7 @@ export default function AboutPage() {
 							{
 								num: "01",
 								title: "Creators Own Everything",
-								text: "Identity, content, and audience relationships are portable and sovereign. Built on federation and open protocols, a creator's presence on the network cannot be revoked by any single entity. If they disagree with how any node operates, they can move—and their audience comes with them.",
+								text: "The platform is open source under the AGPL, and everything a creator makes is one click from a file on their own machine. The rest of the promise—federation, creators running their own nodes, a presence no single entity can revoke—is a direction we are committed to and have not built yet. It is the point of the whole track, and we would rather signpost it than imply it already works.",
 							},
 							{
 								num: "02",
@@ -412,7 +412,7 @@ export default function AboutPage() {
 							{
 								num: "05",
 								title: "No Single Entity Can Rug-Pull the Network",
-								text: "Federation makes the network resilient to external pressure. Non-profit incorporation makes the organization resilient to internal corruption. Both are necessary. Neither is sufficient alone.",
+								text: "Federation is meant to make the network resilient to external pressure; non-profit incorporation already makes the organization resilient to internal corruption. Both are necessary and neither is sufficient alone — which is why the second is done and the first is a commitment rather than a claim.",
 							},
 						].map((item, i) => (
 							<Reveal key={item.num} delay={i * 100}>

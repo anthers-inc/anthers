@@ -160,6 +160,8 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		audienceStats: [
 			{ label: "Subscribers", value: "147,000" },
 			{ label: "Monthly views", value: "953,000" },
+			// econ:allow — this persona's stats are their YOUTUBE numbers (see currentPlatform
+			// above), and "watch time" is YouTube's own metric name. Ours is "time".
 			{ label: "Watch time/mo", value: "26.5M min" },
 			{ label: "Avg. video length", value: "~50 min" },
 		],

@@ -203,7 +203,12 @@ function renderReceiptMarkdown(): string {
 			`Seeds given to Anthers (${r.anthersSeeds} · Sprout)`,
 			`$${(r.anthersSeeds * SEED_PRICE).toFixed(2)}`,
 		),
-		pad("  Time Pool → creators you watched (by watch-time)", `$${r.timePool}`),
+		// "creators you spent time with", not "creators you watched", and "by time" rather
+		// than "by watch-time": the platform hosts four media and measures them on one
+		// clock. Naming the video one makes it the default unit of a thing it is a quarter
+		// of. This is a GENERATED block, so editing the wiki by hand is worse than useless —
+		// the next `econ:figures` run puts the old wording straight back.
+		pad("  Time Pool → creators you spent time with (by time)", `$${r.timePool}`),
 		pad("  Payments → this side's share of the card fee (at cost)", `$${r.paymentsAnthers}`),
 		pad("  Free access & programs (the remainder)", `$${r.remainder}`),
 		"─".repeat(66),
@@ -287,7 +292,7 @@ function renderCreatorReceiptMarkdown(): string {
 		"Your Earnings — February 2026                                  @LifeOfRiza",
 		"",
 		"━".repeat(66),
-		pad("Time Pool (by watch-time) + directed Seeds (net of card)", `$${r.gross}`),
+		pad("Time Pool (by time spent) + directed Seeds (net of card)", `$${r.gross}`),
 		pad(
 			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB free = ${r.billableGiB} GiB, at cost)`,
 			`−$${r.storage}`,
@@ -462,6 +467,39 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			"gi",
 		),
 		why: "the allowance, the wallet and the per-GiB rate were all deleted 2026-08-12",
+	},
+	{
+		// A mechanism the code never had, rather than one it lost — but the test the list
+		// applies is the same ("the only correct number of occurrences is zero"), and so is
+		// the fix. ATProto adoption is deferred (41.01): what ships is Bluesky identity
+		// LINKING, and the `atproto_uri` columns sit unpopulated as future-proofing. This
+		// framing has drifted back onto marketing pages twice — PR #166 removed it from
+		// /for-creators, #183 from the Ghost comparison — which is what earns it a guard
+		// rather than another sweep.
+		//
+		// ⚠️ Deliberately narrow: it matches the CLAIM, not the subject. A page may say
+		// federation is coming, may name Bluesky, may explain what ATProto is. What it may
+		// not say is that Anthers is built on it today.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:built on the AT ?Protocol|portable DID|stored as ATProto records)`,
+			"gi",
+		),
+		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
+	},
+	{
+		// Not a retired *mechanism* like the two above — a retired *word* for a live one,
+		// which is the other way this list earns its keep. The Time Pool is real; calling
+		// what it measures "watch-time" makes video the default unit of a platform that
+		// hosts four media and measures them on one clock. 63.01 blessed the word until
+		// 2026-08-12 **while citing the equal-time principle as its authority**, which
+		// refutes itself in a line.
+		//
+		// ⚠️ Scoped to user-facing copy, exactly as 63.01 is. This scanner only walks
+		// `APP_ROOTS` and blanks comments first, so the engineering uses it deliberately
+		// keeps — `distribute-pool.ts`'s job comments, the ~600 Class B reads per
+		// watch-hour figure — are out of reach by construction rather than by exception.
+		pattern: new RegExp(`${NOT_NEGATED}watch[- ](?:time|hours?)`, "gi"),
+		why: 'a minute is a minute across four media — say "time" (63.01 § Vocabulary)',
 	},
 ];
 
@@ -728,13 +766,17 @@ if (typed.length > 0) {
 }
 
 if (retired.length > 0) {
-	console.error("\nThis copy describes a charge that no longer exists:\n");
+	// The list holds two kinds now — a mechanism the code no longer has, and a word we
+	// no longer use for one it does — so the header names neither and the per-hit `why`
+	// carries the difference. Saying "a charge that no longer exists" over a vocabulary
+	// hit sends the reader looking for a number to update, which is the wrong move.
+	console.error("\nThis copy uses something we have retired:\n");
 	for (const r of retired) console.error(`  ${r}`);
 	console.error(
-		"\nStrike the retired term rather than updating a number beside it — the\n" +
+		"\nStrike the retired phrasing rather than updating a number beside it — the\n" +
 			"sentence changes shape, it does not change value. If the phrase is genuinely\n" +
-			"historical in rendered copy, annotate it:\n" +
-			"    // econ:allow — describing what the model USED to charge, in past tense\n",
+			"someone else's (a rival's mechanism, their metric) or historical, annotate it:\n" +
+			"    // econ:allow — YouTube's own metric for YouTube's own mechanism\n",
 	);
 }
 
