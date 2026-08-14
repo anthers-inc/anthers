@@ -10,7 +10,7 @@ Email **[contact@anthers.org](mailto:contact@anthers.org)** with `SECURITY` in t
 - How to reproduce it, in enough detail that we can see it happen.
 - What you think an attacker could do with it.
 
-If you would rather report privately through GitHub, [open a draft security advisory](https://github.com/anthers-inc/Anthers/security/advisories/new) instead — it stays private between you and us until we publish it.
+If you would rather report privately through GitHub, [open a draft security advisory](https://github.com/anthers-inc/anthers/security/advisories/new) instead — it stays private between you and us until we publish it.
 
 **Please do not open a public issue for a vulnerability.** That is the one report we would rather receive slowly than publicly.
 

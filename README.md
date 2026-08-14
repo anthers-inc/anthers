@@ -79,7 +79,7 @@ A Bun workspace monorepo. Four packages, three apps, one deployment.
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
-| `packages/brand` | The brand assets that ship — first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in [Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand). |
+| `packages/brand` | The brand assets that ship — first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in [anthers-brand](https://github.com/anthers-inc/anthers-brand). |
 
 Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 

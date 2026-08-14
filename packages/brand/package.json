@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.1.0",
 	"license": "AGPL-3.0-or-later",
-	"description": "Anthers brand assets that ship — the first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in anthers-inc/Anthers-Brand.",
+	"description": "Anthers brand assets that ship — the first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in anthers-inc/anthers-brand.",
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",

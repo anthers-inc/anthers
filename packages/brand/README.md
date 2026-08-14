@@ -14,14 +14,14 @@ scripts/      The codegen
 
 The botanical icon set behind `iconSvg`/`iconGroup`/`iconDataUri` is ~650 Noun Project SVGs. It lived in this package until 2026-08-14, when it was **14 MiB of a 15.6 MiB repository — 91% of everything tracked**, to promote 18 icons into code. A platform's repository should not be, by weight, an icon mirror.
 
-It now lives in **[anthers-inc/Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand)** alongside the layered design working files: the studio, as against this package, which is the product.
+It now lives in **[anthers-inc/anthers-brand](https://github.com/anthers-inc/anthers-brand)** alongside the layered design working files: the studio, as against this package, which is the product.
 
 **The split costs the app nothing**, which is what made it cheap. `src/generated/icons.ts` inlines each curated icon's `viewBox` and path markup, `src/` never reads the source tree, and nothing imports a raw SVG. **The app builds identically with the library absent** — verified by regenerating with it present and diffing: byte-identical. What you lose without a checkout is only the ability to re-run the codegen, so `bun run build` prints a pointer and exits 0 rather than failing.
 
 
 # Adding an icon
 
-1. Clone [Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand) beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`.
+1. Clone [anthers-brand](https://github.com/anthers-inc/anthers-brand) beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`.
 2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
 3. Add `{ id, path }` to `CURATED` in `scripts/build-icons.ts`, with the path relative to the library's `svg/`.
 4. `cd packages/brand && bun run build`, and commit the regenerated `src/generated/icons.ts`.

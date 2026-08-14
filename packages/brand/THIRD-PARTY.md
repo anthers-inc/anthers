@@ -6,7 +6,7 @@ Provenance and licensing for artwork this package carries. Third-party files are
 
 The botanical icons behind `iconSvg`/`iconGroup`/`iconDataUri` are from [The Noun Project](https://thenounproject.com/), obtained under a paid NounPro subscription and **used and redistributed under the Creative Commons Attribution 3.0 license (CC BY 3.0)**.
 
-**The full attribution — every collection, its creator, and links to both — lives with the art, in [anthers-inc/Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand).** What this repository carries is the *derived* form: 18 icons normalized into path markup in `src/generated/icons.ts`. That file is a derivative of CC BY 3.0 art and so travels under the same condition, which is why the credit is restated here rather than only in the other repo:
+**The full attribution — every collection, its creator, and links to both — lives with the art, in [anthers-inc/anthers-brand](https://github.com/anthers-inc/anthers-brand).** What this repository carries is the *derived* form: 18 icons normalized into path markup in `src/generated/icons.ts`. That file is a derivative of CC BY 3.0 art and so travels under the same condition, which is why the credit is restated here rather than only in the other repo:
 
 > Botanical and bee icons by **Monika**, **Rachel Fredericks**, **Natcha Rochana**, **Pong Pong** and **Fauzi Arts**, via The Noun Project, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
 
@@ -30,7 +30,7 @@ Two scoping notes, because both are easy to get backwards:
 
 ## Anthers marks (`marks/`)
 
-First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources are in [Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand) rather than here.
+First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources are in [anthers-brand](https://github.com/anthers-inc/anthers-brand) rather than here.
 
 ## Desktop packaging (`app-icons/`)
 

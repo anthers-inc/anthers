@@ -29,7 +29,7 @@ const ROOT = join(import.meta.dir, "..");
 const REPO = join(ROOT, "..", "..");
 const OUT_DIR = join(ROOT, "src", "generated");
 
-const SOURCE_HINT = "https://github.com/anthers-inc/Anthers-Brand";
+const SOURCE_HINT = "https://github.com/anthers-inc/anthers-brand";
 /** Where the icon library lives. A sibling checkout by default, per the repo naming convention. */
 const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 
