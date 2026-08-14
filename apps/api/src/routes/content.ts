@@ -73,8 +73,10 @@ import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
+	type AccessContext,
 	type AccessibleWork,
 	buildAccessContext,
+	buildPreviewContext,
 	defaultSeedAccess,
 	resolveAccessSync,
 } from "../services/access.js";
@@ -858,6 +860,75 @@ function viewerTranscoding(
 function parseNumericId(raw: string): number | null {
 	const n = Number(raw);
 	return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * A creator's **preview** request, if they made one.
+ *
+ * `?previewAs=out` for signed-out, `?previewAs=<n>` for a viewer holding n Seeds, plus
+ * `?previewOwned=1` for one who bought it outright. Absent or malformed → null, and the
+ * viewer sees the truth, which is the only safe way for this to fail.
+ */
+/**
+ * The preview parameters, declared for the RPC client.
+ *
+ * ⚠️ This exists to publish the *types*, not to parse: `previewRequest` below still reads
+ * the raw query, because three routes accept a preview and only one of them can carry this
+ * validator without changing its own signature. Everything is optional and unconstrained
+ * here, so it can never reject a request — the real validation is `previewRequest`, which
+ * fails back to "no preview" on anything it doesn't recognise.
+ */
+const previewQuerySchema = z.object({
+	previewAs: z.string().optional(),
+	previewOwned: z.string().optional(),
+});
+
+/** The Catalog's own filters, plus a preview. Same "publish the types" purpose. */
+const catalogQuerySchema = previewQuerySchema.extend({
+	sort: z.string().optional(),
+	type: z.string().optional(),
+});
+
+function previewRequest(c: {
+	req: { query: (k: string) => string | undefined };
+}): { seeds: number | null; owned: boolean } | null {
+	// 🚨 `?previewAs=` gives an EMPTY STRING, not undefined — and `Number("")` is **0**,
+	// which passes every range check below. So the obvious `raw == null` guard alone reads
+	// a blank parameter as "preview as a viewer with zero Seeds" and quietly locks a
+	// creator out of their own page. Second time this exact trap has bitten today; the
+	// first was `Number(localStorage.getItem(...))` defaulting the remembered volume to
+	// silence. Treat empty as absent, always.
+	const raw = c.req.query("previewAs")?.trim();
+	if (!raw) return null;
+	if (raw === "out") return { seeds: null, owned: false };
+	const seeds = Number(raw);
+	if (!Number.isInteger(seeds) || seeds < 0 || seeds > 999) return null;
+	return { seeds, owned: c.req.query("previewOwned") === "1" };
+}
+
+/**
+ * The context to resolve one Work with — the real one, or the creator's preview.
+ *
+ * 🚨 **The ownership guard is here, per Work, and is the whole safety argument.** A
+ * preview only ever subtracts access *because* it is only ever applied to a Work the
+ * requester created, and a creator already sees everything of theirs. Guarding per Work
+ * rather than per request means a Work that somehow isn't theirs — on a shared shelf, in
+ * a future collab — silently resolves normally instead of resolving as somebody with a
+ * different amount of access.
+ */
+function contextFor(
+	work: { id: number; creatorId: number | null },
+	viewerId: number | null,
+	real: AccessContext,
+	preview: { seeds: number | null; owned: boolean } | null,
+): AccessContext {
+	if (!preview || viewerId == null || work.creatorId !== viewerId) return real;
+	return buildPreviewContext({
+		creatorId: viewerId,
+		seeds: preview.seeds,
+		owned: preview.owned,
+		workIds: [work.id],
+	});
 }
 
 /**
@@ -2155,7 +2226,7 @@ const contentRoutes = new Hono()
 	 * A `private` Work 404s for everyone but its creator — not 403, because the existence
 	 * of unreleased work is itself not public information.
 	 */
-	.get("/works/:id", async (c) => {
+	.get("/works/:id", zValidator("query", previewQuerySchema), async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2196,7 +2267,21 @@ const contentRoutes = new Hono()
 
 		await resolveWorkThumbnail(work);
 
-		if (isOwner) {
+		/*
+		 * The owner short-circuit — and the one place creator preview has to interrupt it.
+		 *
+		 * A creator's own Work comes back through `serializeWork`, the owner-facing shape:
+		 * full media keys, the editable access table, and **no `access` verdict at all**,
+		 * because an owner has never needed one. That is exactly what a preview is asking
+		 * for, so a preview request falls through to the viewer path below rather than
+		 * being applied here — which is why `contextFor` can substitute a context and get
+		 * a real answer out of the real resolver.
+		 *
+		 * ⚠️ Missing this branch is why the first cut of the preview did nothing at all for
+		 * the person it exists for: the parameter was parsed, the context was built, and
+		 * the request never reached the code that used it.
+		 */
+		if (isOwner && previewRequest(c) === null) {
 			return c.json({ work: serializeWork(work, workAssets, jobRows[0] ?? null) });
 		}
 
@@ -2248,7 +2333,10 @@ const contentRoutes = new Hono()
 					work,
 					workAssets,
 					jobRows[0] ?? null,
-					resolveAccessSync(work as AccessibleWork, ctx),
+					resolveAccessSync(
+						work as AccessibleWork,
+						contextFor(work, viewerId, ctx, previewRequest(c)),
+					),
 					deliveryCtx(),
 					await allowanceSpent(viewerId),
 					pageRow?.count ?? 0,
@@ -2328,7 +2416,7 @@ const contentRoutes = new Hono()
 	 * `sort=released` gives "what's new here" instead. Works with no Created date fall back
 	 * to their release date so they can't vanish to the bottom.
 	 */
-	.get("/catalog/:username", async (c) => {
+	.get("/catalog/:username", zValidator("query", catalogQuerySchema), async (c) => {
 		const username = c.req.param("username");
 		const sort = c.req.query("sort") ?? "authored";
 		const type = c.req.query("type");
@@ -2346,6 +2434,7 @@ const contentRoutes = new Hono()
 		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
 		if (type) conditions.push(eq(works.type, type));
 
+		const preview = previewRequest(c);
 		const order =
 			sort === "released"
 				? sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`
@@ -2374,7 +2463,7 @@ const contentRoutes = new Hono()
 					w,
 					assetsByWork.get(w.id) ?? [],
 					jobByWork.get(w.id) ?? null,
-					resolveAccessSync(w as AccessibleWork, ctx),
+					resolveAccessSync(w as AccessibleWork, contextFor(w, viewerId, ctx, preview)),
 					deliveryCtx(),
 					catalogSpent,
 					pagesByWork.get(w.id) ?? 0,
@@ -2968,7 +3057,10 @@ const contentRoutes = new Hono()
 						m.work,
 						assetsByWork.get(m.work.id) ?? [],
 						jobByWork.get(m.work.id) ?? null,
-						resolveAccessSync(m.work as AccessibleWork, workCtx),
+						resolveAccessSync(
+							m.work as AccessibleWork,
+							contextFor(m.work, viewerId, workCtx, previewRequest(c)),
+						),
 						deliveryCtx(),
 						projectSpent,
 						pagesByWork.get(m.work.id) ?? 0,
@@ -3365,9 +3457,6 @@ const contentRoutes = new Hono()
 				break;
 			case "inline-image":
 				key = `${prefix}/inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "jam-cover":
-				key = `${prefix}/jams/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			default:
 				key = `${prefix}/uploads/${uuid}.${ext}`;

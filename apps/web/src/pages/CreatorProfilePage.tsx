@@ -32,6 +32,7 @@ import { useCallback, useEffect, useState } from "react";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
+import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
 import ReportDialog from "../components/ui/ReportDialog";
 import { useReportVisit } from "../lib/attention";
 
@@ -363,6 +364,9 @@ export default function CreatorProfilePage() {
 	const [blocked, setBlocked] = useState(false);
 
 	const isOwnProfile = currentUser?.username === username;
+	const preview = usePreviewQuery();
+	/** Stable string for the preview, so the load effect re-runs on value not identity. */
+	const previewKey = JSON.stringify(preview);
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -380,7 +384,7 @@ export default function CreatorProfilePage() {
 		const res = await apiFetch(`/api/subscriptions/creator-status/${username}`, {});
 		if (!res.ok) return;
 		setCreatorStatus((await res.json()) as CreatorStatus);
-	}, [username]);
+	}, [username, previewKey]);
 
 	// Edit mode state
 	const [editing, setEditing] = useState(false);
@@ -514,7 +518,9 @@ export default function CreatorProfilePage() {
 			client.api.content.projects.$get({ query: { creator: username } }).then((res) => res.json()),
 			client.api.content.posts.$get({ query: { creator: username } }).then((res) => res.json()),
 			client.api.content.catalog[":username"]
-				.$get({ param: { username } })
+				// The preview reaches the server, which re-resolves each Work with a
+				// substituted context — the frontend never decides a gate itself.
+				.$get({ param: { username }, query: preview })
 				.then(async (res) => (res.ok ? await res.json() : { works: [] })),
 			apiFetch(`/api/subscriptions/creator-status/${username}`, {})
 				.then((res) => (res.ok ? res.json() : null))
@@ -616,6 +622,14 @@ export default function CreatorProfilePage() {
 
 	return (
 		<div>
+			{/* Creator preview — above everything, because it changes what everything below
+			    says. Only ever offered to the person whose profile it is; the server guards
+			    it per Work regardless. */}
+			{isAuthenticated && isOwnProfile && (
+				<div className="container mx-auto px-4 pt-4">
+					<PreviewBar />
+				</div>
+			)}
 			{/* Header banner */}
 			{editing ? (
 				<div className="relative w-full h-48 md:h-64 bg-base-300 group">

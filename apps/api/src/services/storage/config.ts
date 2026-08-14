@@ -59,7 +59,7 @@ export interface StorageConfig {
 	bucket: string;
 	/**
 	 * The bucket holding display chrome — avatars, headers, covers, thumbnails, gallery and
-	 * inline images, jam art. This is the one the CDN custom domain points at.
+	 * inline images. This is the one the CDN custom domain points at.
 	 *
 	 * Defaults to `bucket`, which is what DigitalOcean Spaces has always done: one bucket,
 	 * with per-object ACLs carrying the distinction. That default is why introducing the

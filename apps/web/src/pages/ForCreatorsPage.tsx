@@ -75,7 +75,6 @@ import {
 	ShoppingBagIcon,
 	Squares2X2Icon,
 	StarIcon,
-	TrophyIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
@@ -301,7 +300,7 @@ export default function ForCreatorsPage() {
 							icon={<PuzzlePieceIcon className="h-8 w-8" />}
 							title="Games"
 							description="Upload builds for Windows, Mac, Linux. Host HTML5 games playable in the browser. Manage versions, platforms, and pricing."
-							features={["Multi-platform downloads", "Web game embedding", "Game jam support"]}
+							features={["Multi-platform downloads", "Web game embedding", "Build variants"]}
 						/>
 					</Reveal>
 					<Reveal delay={100} className="h-full">
@@ -364,13 +363,6 @@ export default function ForCreatorsPage() {
 							icon={<StarIcon className="h-6 w-6" />}
 							title="Ratings and comments"
 							description="Community feedback built into every project page. Ratings help the best work surface. Comments create conversation around your creations."
-						/>
-					</Reveal>
-					<Reveal delay={320}>
-						<Feature
-							icon={<TrophyIcon className="h-6 w-6" />}
-							title="Game jams"
-							description="Host and participate in game jams with timed submission periods, theme reveals, community voting, and ranked results. Jams are how communities form and creators get discovered."
 						/>
 					</Reveal>
 					<Reveal delay={400}>

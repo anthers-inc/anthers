@@ -15,7 +15,7 @@
 
 /**
  * Display chrome — the imagery a viewer is meant to see *before* they have access:
- * avatars, headers, covers, thumbnails, gallery shots, inline post images, jam art.
+ * avatars, headers, covers, thumbnails, gallery shots, inline post images.
  * Nothing here is ever a gated deliverable, which is the entire test for membership.
  */
 export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
@@ -27,7 +27,6 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
 	"image",
 	"screenshot",
 	"inline-image",
-	"jam-cover",
 ]);
 
 /**
@@ -66,7 +65,6 @@ export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 	"thumbnails/",
 	"gallery/",
 	"inline-images/",
-	"jams/covers/",
 ];
 
 /** Whether a storage key holds display chrome, and so belongs in the public bucket. */

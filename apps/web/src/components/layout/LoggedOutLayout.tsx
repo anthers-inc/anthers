@@ -20,10 +20,6 @@ const LOCALIZATION_ENABLED = false;
 // The Meadow footer nav — mirrors the header, plus a Support column. label → href.
 const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	{
-		title: "Explore",
-		links: [["Jams", "/jams"]],
-	},
-	{
 		title: "Creators",
 		links: [
 			["For Creators", "/for-creators"],

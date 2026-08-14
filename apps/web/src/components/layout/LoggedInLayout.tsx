@@ -11,7 +11,6 @@ import {
 	RectangleStackIcon,
 	RssIcon,
 	Squares2X2Icon,
-	TrophyIcon,
 	UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useMediaPlayer } from "../../lib/media-player";
@@ -27,7 +26,6 @@ const NAV_LINKS = [
 	{ to: "/feed", label: "Feed", icon: RssIcon },
 	{ to: "/library", label: "Library", icon: RectangleStackIcon },
 	{ to: "/discover", label: "Discover", icon: MagnifyingGlassIcon },
-	{ to: "/jams", label: "Jams", icon: TrophyIcon },
 ] as const;
 
 function LoggedInLayoutInner() {
@@ -202,9 +200,6 @@ function LoggedInLayoutInner() {
 									<h6 className="footer-title text-xs">Discover</h6>
 									<Link to="/discover" className="link link-hover">
 										Browse Projects
-									</Link>
-									<Link to="/jams" className="link link-hover">
-										Jams
 									</Link>
 								</nav>
 								<nav className="join-item flex-1 flex flex-col items-center gap-1.5">

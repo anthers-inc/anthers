@@ -41,7 +41,6 @@ const KEY_FOR: Record<string, string> = {
 	image: "creators/7/gallery/42/abc123.png",
 	screenshot: "creators/7/gallery/42/abc123.png",
 	"inline-image": "creators/7/inline-images/42/abc123.png",
-	"jam-cover": "creators/7/jams/covers/42/abc123.png",
 	video: "creators/7/videos/originals/abc123.mp4",
 	audio: "creators/7/audio/originals/abc123.flac",
 	asset: "creators/7/assets/42/abc123.zip",
@@ -98,7 +97,6 @@ describe("what counts as public, by key", () => {
 			KEY_FOR.thumbnail,
 			KEY_FOR.gallery,
 			KEY_FOR["inline-image"],
-			KEY_FOR["jam-cover"],
 			JOB_THUMBNAIL,
 		]) {
 			expect({ key, public: isPublicKey(key) }).toEqual({ key, public: true });

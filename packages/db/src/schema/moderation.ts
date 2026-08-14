@@ -14,7 +14,7 @@
  * Both tables are polymorphic over `(subject_type, subject_id)` rather than
  * carrying a `comment_id` and a `rating_id`. That's deliberate: the operator
  * queue is one list over both kinds, and a third moderatable kind (a post, a
- * profile, a jam entry) should be a new value, not a new column and a new
+ * profile, a review) should be a new value, not a new column and a new
  * branch in every query. The cost is no foreign key on the subject, which is
  * why `hideSubject`/`restoreSubject` in `services/moderation.ts` are the only
  * writers — they resolve the subject row first, so a log entry can't name a

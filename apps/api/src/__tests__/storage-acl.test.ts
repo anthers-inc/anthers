@@ -33,7 +33,6 @@ describe("upload ACL allowlist", () => {
 			"image",
 			"screenshot",
 			"inline-image",
-			"jam-cover",
 		]) {
 			expect(aclForMediaType(type), type).toBe("public");
 		}

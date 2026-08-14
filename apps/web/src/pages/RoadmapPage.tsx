@@ -391,15 +391,6 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							endQ: 1,
 						},
 						{
-							id: "u-jams",
-							title: "Game Jams",
-							description:
-								"Participate in game jams: browse entries, vote, and discover new creators.",
-							status: "active",
-							startQ: 0,
-							endQ: 1,
-						},
-						{
 							id: "u-contests",
 							title: "Contests & Calls for Content",
 							description:
