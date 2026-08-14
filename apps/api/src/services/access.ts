@@ -69,6 +69,54 @@ export interface AccessContext {
 	purchasedWorkIds: Set<number>;
 }
 
+/**
+ * The stand-in identity a **creator preview** resolves as.
+ *
+ * 🚨 Negative on purpose, and named rather than inlined. `resolveAccessSync` branches on
+ * two properties of `ctx.userId` and nothing else: `null` means logged out (→
+ * `login_required`), and `=== work.creatorId` means owner (→ full access). A preview needs
+ * *neither* — it is asking "what would a signed-in stranger see?" — so it needs a value
+ * that is non-null and can never equal a real `users.id`. Serial ids are positive, so a
+ * negative one is exactly that, and it never reaches a query: a preview context is built
+ * in memory and read only by the pure resolver.
+ */
+export const PREVIEW_VIEWER_ID = -1;
+
+/**
+ * An access context that answers "what would somebody else see?", for a creator looking at
+ * their own work.
+ *
+ * 🚨 **A preview can only ever SUBTRACT access, and that is a property of where it is
+ * applied rather than of this function.** Callers must apply it only to Works the
+ * requesting user *created* — who already sees everything of theirs — so every substituted
+ * answer is less permissive than the real one. Applied to somebody else's Work it would be
+ * a way to ask for a better answer than you are entitled to, which is why the route guards
+ * per Work rather than per request.
+ *
+ * It deliberately drives the same `resolveAccessSync` everything else does. Reimplementing
+ * gate logic for a preview would let the preview drift from reality and start lying in
+ * exactly the situation it exists to clarify.
+ */
+export function buildPreviewContext(opts: {
+	/** Whose ladder is being previewed — the creator's own. */
+	creatorId: number;
+	/** Seeds the imagined viewer has given that creator, or null for "signed out". */
+	seeds: number | null;
+	/** Whether the imagined viewer has bought the Work outright. */
+	owned: boolean;
+	/** Works the `owned` toggle applies to. */
+	workIds: number[];
+}): AccessContext {
+	const signedOut = opts.seeds === null;
+	return {
+		userId: signedOut ? null : PREVIEW_VIEWER_ID,
+		// A signed-out viewer has given nobody anything and owns nothing — both maps stay
+		// empty rather than being special-cased in the resolver.
+		seedByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.seeds ?? 0]]),
+		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
+	};
+}
+
 export type AccessReason =
 	| "owner"
 	| "free"

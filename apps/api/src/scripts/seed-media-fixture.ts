@@ -214,15 +214,27 @@ async function ensureCreator(): Promise<number> {
  */
 async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<number> {
 	const access = spec.gated ? SEED_GATED : OPEN_ACCESS;
+	// 🚨 Looked up by SLUG ALONE, not by (creator, slug). `works.slug` is globally unique
+	// and these are namespaced with `media-fixture-`, so slug is the real identity — while
+	// matching on the creator too makes the seeder unable to find a Work whose creator has
+	// changed, so it tries to INSERT and dies on the unique index instead. That is not
+	// hypothetical: reassigning one by hand to try something out was enough to wedge the
+	// whole fixture, and the error named the insert rather than the cause. `creatorId` is
+	// reconciled below for the same reason everything else here is.
 	const [existing] = await db
 		.select({ id: works.id })
 		.from(works)
-		.where(and(eq(works.creatorId, creator), eq(works.slug, spec.slug)))
+		.where(eq(works.slug, spec.slug))
 		.limit(1);
 	if (existing) {
 		await db
 			.update(works)
-			.set({ title: spec.title, seedAccess: access, lyrics: spec.lyrics ?? "" })
+			.set({
+				creatorId: creator,
+				title: spec.title,
+				seedAccess: access,
+				lyrics: spec.lyrics ?? "",
+			})
 			.where(eq(works.id, existing.id));
 		return existing.id;
 	}

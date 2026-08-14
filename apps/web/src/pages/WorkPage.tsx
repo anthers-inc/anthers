@@ -24,6 +24,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AddToBasket from "../components/basket/AddToBasket";
+import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
 import AudioPlayer from "../components/media/AudioPlayer";
 import ComicReader from "../components/media/ComicReader";
@@ -90,17 +91,34 @@ export default function WorkPage() {
 	const location = useLocation();
 	const { user, isAuthenticated } = useAuth();
 	const { playTracks } = useMediaPlayer();
+	const preview = usePreviewQuery();
+	/** Stable string for the preview, so effects re-run on a change of value not identity. */
+	const previewKey = JSON.stringify(preview);
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 
-	/** Path whose Work is already in state — see the skip below. */
-	const loadedPath = useRef<string | null>(null);
+	/**
+	 * What is already in state — the canonical path AND the preview it was fetched under.
+	 *
+	 * 🚨 The preview half is load-bearing rather than tidy. This was the path alone, which
+	 * was correct for the case it was written for (a bare `/works/{slug}` settling to its
+	 * canonical form) and silently wrong for every other reason to re-read: arriving
+	 * *already* at the canonical URL makes `loadedPath` equal the current path immediately,
+	 * so the guard below returned early on every subsequent run and the page never fetched
+	 * again. Changing the preview updated the URL and changed nothing on screen.
+	 */
+	const loadedKey = useRef<string | null>(null);
 
 	/** Re-read the Work — the access verdict changes under us when a viewer unlocks it. */
 	const refetch = useCallback(async () => {
 		if (!slug) return;
-		const res = await client.api.content.works[":id"].$get({ param: { id: slug } });
+		const res = await client.api.content.works[":id"].$get({
+			param: { id: slug },
+			// A preview changes the ANSWER, so it has to reach the server — the frontend
+			// must never compute a gate itself or it will drift from the resolver.
+			query: preview,
+		});
 		if (!res.ok) {
 			setWork(null);
 			return;
@@ -109,8 +127,8 @@ export default function WorkPage() {
 		setWork(data.work);
 		// Record the canonical path this Work answers to, so the redirect that is about to
 		// happen is recognised as "already loaded" rather than a new Work to go and get.
-		loadedPath.current = workUrl(data.work);
-	}, [slug]);
+		loadedKey.current = `${workUrl(data.work)}|${previewKey}`;
+	}, [slug, preview, previewKey]);
 
 	useEffect(() => {
 		if (!slug) return;
@@ -123,12 +141,12 @@ export default function WorkPage() {
 		// page back down to a spinner and rebuilds it. Imperceptible on a fast machine and
 		// a real double round-trip on a slow one, which is why it went unnoticed: a shared
 		// link, a stale slug, and the gauntlet's own navigation all take this path.
-		if (loadedPath.current === `/works/${slug}`) return;
+		if (loadedKey.current === `/works/${slug}|${previewKey}`) return;
 		setLoading(true);
 		refetch()
 			.catch(() => setWork(null))
 			.finally(() => setLoading(false));
-	}, [slug, refetch]);
+	}, [slug, refetch, previewKey]);
 
 	// Keep the canonical `/works/{slug}-{publicId}` URL in the bar, so a link shared from a
 	// bare id or a stale slug settles on the durable form.
@@ -234,6 +252,10 @@ export default function WorkPage() {
 
 	return (
 		<div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+			{/* Creator preview — only ever offered to the person who made it, and only ever
+			    able to subtract access (the server guards that per Work). */}
+			{isOwner && <PreviewBar />}
+
 			{work.visibility === "private" && isOwner && (
 				<div className="alert alert-warning">
 					<span>
