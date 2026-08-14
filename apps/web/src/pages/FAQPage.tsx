@@ -1,8 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// The FAQ — restyled into the Meadow design 2026-08-14, because it was still the
+// pre-design-pass page (a bare container, DaisyUI's default collapse) sitting one
+// footer link away from /for-users and /for-creators. It now composes the same shared
+// primitives they do: <MeadowDecor>, the hero/Section/Eyebrow rhythm, Fraunces over
+// Nunito, and the closing band.
+//
+// Content note: the answers are the load-bearing part. See the money figures rule
+// below, and 63.01 for the vocabulary — the gates answer in particular describes ONE
+// gate primitive pointed at a creator, because Anthers Gates were retired 2026-08-12.
+
+import { FREE_STORAGE_GIB } from "@anthers/shared/constants";
 import { DIRECTED_SEED_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { Sprig } from "@anthers/web-shared/decor/LineArt";
+import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
+import { Eyebrow, Section } from "@anthers/web-shared/decor/sections";
+import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
-import { type ReactNode, useState } from "react";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import type { ReactNode } from "react";
+
+const serif = { fontFamily: FONTS.fraunces };
 
 /**
  * Money figures come from the generated table, never typed here — see
@@ -81,17 +102,22 @@ const FAQ_ITEMS: FAQItem[] = [
 						charge, so the more Seeds you hold, the more of each one reaches its creator.
 					</li>
 					<li>
-						<strong>Give Seeds to Anthers</strong> — $3/month each. Each one funds the Time Pool
-						(shared out by the time you spend with each creator's work) and leaves a remainder that
-						funds free access and the charitable programs. Your count is your Badge (Root → Blossom,
-						and a "+" beyond) — a point-in-time choice, not a rolling total of past spend.
+						<strong>Give Seeds to Anthers</strong> — $3/month each. The first one lifts your monthly
+						Public Access limit, and every one of them funds the Time Pool (shared out by the time
+						you spend with each creator's work) and leaves a remainder that funds free access and
+						the charitable programs. So the more you give, the more your time is worth to the
+						creators you spend it with. Your count is your Badge (Root → Blossom, and a "+" beyond)
+						— a point-in-time choice, not a rolling total of past spend, and it gates nothing.
 					</li>
 				</ul>
 				<p>
-					Streaming and downloading are unlimited and cost you nothing on top — no allowance, no
-					wallet, no per-GiB charge, however many devices you use. Card processing comes out of your
-					Seeds at cost and leaves the system entirely; sales tax is the only thing added on top of
-					the price.
+					Downloading costs you nothing on top, ever — no allowance, no wallet, no per-GiB charge,
+					however many devices you use. Streaming is free too; the one limit is on{" "}
+					<strong>Public Access</strong>, the work creators leave open to everyone, which a free
+					account can watch for {FREE_PUBLIC_ACCESS_HOURS} hours a month. Anything you bought or
+					cleared a gate for never counts against it. Card processing comes out of your Seeds at
+					cost and leaves the system entirely; sales tax is the only thing added on top of the
+					price.
 				</p>
 			</div>
 		),
@@ -99,8 +125,7 @@ const FAQ_ITEMS: FAQItem[] = [
 	{
 		category: "Subscriptions & Payments",
 		question: "Is there a data cap? What does streaming cost me?",
-		answer:
-			"Nothing, and there is no cap. Streaming and downloading are unlimited on every account, free and paying alike, across as many devices as you like — and a game you bought can be re-downloaded forever at no cost. There is no allowance to run out of, no wallet to top up, and no per-GiB line on your bill. Anthers used to meter this, because delivery genuinely was expensive; our object storage now charges nothing for it at any volume, so we charge nothing for it either. Anthers charging less because it costs less is the model working as intended.",
+		answer: `There is no data cap and delivery costs you nothing, on every account, free and paying alike, across as many devices as you like — no allowance to run out of, no wallet to top up, no per-GiB line on your bill, and a game you bought re-downloads forever at no cost. Anthers used to meter this, because delivery genuinely was expensive; our object storage now charges nothing for it at any volume, so we charge nothing for it either. Anthers charging less because it costs less is the model working as intended. There is one limit, and it is measured in time rather than data: a free account can stream ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month — the work creators leave open to everyone — free forever, and a single Seed given to Anthers lifts it for as long as you hold it. Time with work you bought, work you cleared a creator's gate for, or work you made yourself never counts against those hours.`,
 	},
 	{
 		category: "Subscriptions & Payments",
@@ -120,24 +145,24 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					There are two types of gates on Anthers, and when a creator sets both on one piece of
-					content they combine with OR — clear either and you're in:
+					There is one kind of gate on Anthers and it points at a creator: a{" "}
+					<strong>Seed Gate</strong> is a threshold in whole $3 Seeds given to that creator this
+					month. Meet it and the Work opens. Creators set the thresholds themselves and name their
+					own Badges, and a gate doesn't have to sit exactly on one — a creator can gate at 3 Seeds
+					whether or not they've named a Badge there.
 				</p>
-				<ul className="list-disc list-inside space-y-1 text-base-content/70">
-					<li>
-						<strong>Seed gates</strong> — per-creator gates based on how many Seeds you've given to
-						that creator this month. Creators set the thresholds in whole Seeds and name the Badges
-						themselves.
-					</li>
-					<li>
-						<strong>Anthers gates</strong> — based on how many Seeds you've given Anthers (Root,
-						Sprout, Petal, or Blossom). These unlock the same content across every creator,
-						regardless of which one you're viewing.
-					</li>
-				</ul>
 				<p>
-					This means a creator could gate content behind "the Sprout Badge OR $6 in Seeds to me,"
-					giving users multiple paths to access.
+					A creator can offer more than one way in, and the ways combine with OR — clear any one of
+					them and you're in, never all of them. So a Work can be free to anyone giving that creator
+					3 Seeds <em>or</em> buyable outright by anyone else, and you take whichever route suits
+					you.
+				</p>
+				<p>
+					Seeds you give <strong>Anthers</strong> gate nothing at all, deliberately. Everything
+					streaming that a creator hasn't gated is <strong>Public Access</strong> — free to
+					everyone, nothing to clear and nothing to buy. A laddered commons would just mean better
+					free work for the people who paid more, which is the one thing the free layer exists to
+					avoid.
 				</p>
 			</div>
 		),
@@ -145,7 +170,7 @@ const FAQ_ITEMS: FAQItem[] = [
 	{
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus the Seeds directed to them. The only deduction anywhere is a cost paid to a third party: card processing. A $3 directed Seed reaches its creator as $${SEED.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets 50 GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
+		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from the Seeds viewers give Anthers, distributed by the time people spend with them, and paid out in full) plus the Seeds directed to them. The only deduction anywhere is a cost paid to a third party: card processing. A $3 directed Seed reaches its creator as $${SEED.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every creator gets ${FREE_STORAGE_GIB} GiB of free storage; beyond that, the only thing a creator pays is their own storage — our object store's rate plus half again, which goes to free access and the charitable programs — and that is entirely their choice.`,
 	},
 	{
 		category: "Creators",
@@ -169,56 +194,107 @@ const FAQ_ITEMS: FAQItem[] = [
 
 const CATEGORIES = [...new Set(FAQ_ITEMS.map((item) => item.category))];
 
+/**
+ * One question.
+ *
+ * A native `<details>` rather than DaisyUI's checkbox-and-sibling-selector collapse,
+ * which is what this was. The checkbox version needed `useState` per row to hold a
+ * value nothing else read, and it presented a *form control* to a screen reader for
+ * something that is not a form — `<details>` announces as a disclosure, opens on Enter
+ * and Space for free, and is findable by the browser's own in-page search when closed.
+ * The arrow is drawn here because `list-style` on a summary is the one part of this
+ * element browsers still disagree about.
+ */
 function FAQAccordion({ item }: { item: FAQItem }) {
-	const [open, setOpen] = useState(false);
-
 	return (
-		<div className="collapse collapse-arrow bg-base-200">
-			<input type="checkbox" checked={open} onChange={() => setOpen(!open)} />
-			<div className="collapse-title font-medium text-sm">{item.question}</div>
-			<div className="collapse-content text-sm text-base-content/70">
+		<details className="group rounded-2xl border border-base-content/10 bg-base-100/80 shadow-sm transition-colors open:bg-base-100 hover:border-primary/30">
+			<summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left text-sm font-medium marker:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+				{item.question}
+				<ChevronDownIcon className="h-4 w-4 shrink-0 text-primary/60 transition-transform duration-200 group-open:rotate-180" />
+			</summary>
+			<div className="space-y-2 px-5 pb-5 text-sm leading-relaxed text-base-content/70">
 				{typeof item.answer === "string" ? <p>{item.answer}</p> : item.answer}
 			</div>
-		</div>
+		</details>
 	);
 }
 
 export default function FAQPage() {
 	return (
-		<div className="container mx-auto px-4 py-8 max-w-3xl">
-			<Reveal>
-				<h1 className="text-3xl font-bold mb-2">Frequently Asked Questions</h1>
-			</Reveal>
-			<Reveal delay={120}>
-				<p className="text-base-content/60 mb-8">
-					Everything you need to know about how Anthers works.
-				</p>
-			</Reveal>
+		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
+			{/* Hero — the same three-beat fade the other marketing pages open with. */}
+			<header className="bg-base-200/70">
+				<div className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
+					<Reveal>
+						<Sprig className="mx-auto mb-5 h-11 w-11 text-primary/60" />
+						<p className="mb-5 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+							Questions &amp; Answers
+						</p>
+						<h1
+							style={serif}
+							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-6xl"
+						>
+							How this place
+							<br />
+							<em className="font-medium text-primary not-italic">actually works</em>
+						</h1>
+					</Reveal>
+					<Reveal delay={150}>
+						<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
+							Where the money goes, what a Seed does, what we haven't built yet. If something here
+							reads like a dodge, tell us — we'd rather fix the answer than the wording.
+						</p>
+						<BrandGlyph
+							name="divider-botanical"
+							className="-mb-16 -mt-4 h-24 w-52 text-primary/45"
+						/>
+					</Reveal>
+				</div>
+			</header>
 
-			{CATEGORIES.map((category) => (
-				<section key={category} className="mb-8">
-					<h2 className="text-lg font-semibold mb-3 text-base-content/80">{category}</h2>
-					<div className="flex flex-col gap-2">
+			{CATEGORIES.map((category, c) => (
+				<Section key={category} tint={c % 2 === 1}>
+					<Reveal>
+						<Eyebrow>{category}</Eyebrow>
+					</Reveal>
+					<div className="mx-auto mt-8 flex max-w-3xl flex-col gap-3 text-left">
 						{FAQ_ITEMS.filter((item) => item.category === category).map((item, i) => (
-							<Reveal key={item.question} delay={i * 60}>
+							<Reveal key={item.question} delay={i * 70}>
 								<FAQAccordion item={item} />
 							</Reveal>
 						))}
 					</div>
-				</section>
+				</Section>
 			))}
 
-			<Reveal className="text-center py-8 border-t border-base-300/50 mt-8">
-				<p className="text-sm text-base-content/50 mb-3">Still have questions?</p>
-				<div className="flex gap-3 justify-center">
-					<Link to="/about" className="btn btn-ghost btn-sm">
-						About Anthers
-					</Link>
-					<Link to="/resources" className="btn btn-ghost btn-sm">
-						Resources
-					</Link>
+			{/* Closing — the same band shape /for-users and /for-creators end on. */}
+			<section className="bg-base-200/70">
+				<div className="mx-auto max-w-6xl px-6 py-24 text-center">
+					<Reveal>
+						<Sprig className="mx-auto mb-6 h-12 w-12 text-primary/70" />
+						<h2
+							style={serif}
+							className="text-balance text-3xl font-light leading-tight sm:text-4xl"
+						>
+							Still have questions?
+						</h2>
+						<p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-base-content/70">
+							The long version of nearly all of this is written down and public.
+						</p>
+						<div className="mt-8 flex flex-wrap justify-center gap-3">
+							<Link to="/about" className="btn btn-primary rounded-lg px-7">
+								About Anthers
+							</Link>
+							<Link
+								to="/resources"
+								className="btn btn-outline rounded-lg border-base-content/20 px-7"
+							>
+								Resources
+							</Link>
+						</div>
+					</Reveal>
 				</div>
-			</Reveal>
-		</div>
+			</section>
+		</MeadowDecor>
 	);
 }

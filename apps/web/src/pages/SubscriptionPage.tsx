@@ -14,6 +14,7 @@
  */
 
 import { SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -631,7 +632,7 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
 					<InfoTip
-						text={`Each Seed given to Anthers ($${SEED_PRICE}) funds the Time Pool ($${TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Streaming and downloads are unlimited and cost nothing.`}
+						text={`Each Seed given to Anthers ($${SEED_PRICE}) funds the Time Pool ($${TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and holding a Seed lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -645,12 +646,23 @@ export default function SubscriptionPage() {
 						<div className="text-lg font-bold">{fmt(badgeView.supportsAnthers)}</div>
 						<div className="text-[11px] text-base-content/40">free access &amp; programs</div>
 					</div>
+					{/*
+					 * 🚨 Reads the Seed count, because this card is rendered for the 0-Seed rung
+					 * too and used to tell that user their streaming was "Unlimited" — the one
+					 * person on the page for whom it is false. Public Access is capped monthly
+					 * until the first Seed to Anthers lifts it; downloads are unlimited either
+					 * way, which is why the sub-label sits under both branches.
+					 */}
 					<div>
-						<div className="text-xs text-base-content/50 uppercase">Streaming</div>
-						<div className="text-lg font-bold">Unlimited</div>
+						<div className="text-xs text-base-content/50 uppercase">Public Access</div>
+						<div className="text-lg font-bold">
+							{badgeView.anthersSeeds >= 1 ? "Unlimited" : `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`}
+						</div>
 						{/* econ:allow — this states the ABSENCE of the retired mechanism, which is the
 						    one place naming it is correct. */}
-						<div className="text-[11px] text-base-content/40">no allowance, no per-GiB charge</div>
+						<div className="text-[11px] text-base-content/40">
+							downloads always free — no allowance, no per-GiB charge
+						</div>
 					</div>
 				</div>
 			</div>

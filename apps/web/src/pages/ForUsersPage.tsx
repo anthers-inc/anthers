@@ -8,19 +8,34 @@
 // flowered floor around the content.
 //
 // SKETCH (support-model keystone): the page is sequenced as TWO products, not three
-// ways — always Anthers-Seeds first, creator Seeds second. It LEADS with the Anthers
-// commons (Anthers-Seeds that support Anthers itself, fund free public content via the
-// Time Pool, and set the rank that unlocks Anthers-gated content — with the free rank
-// folded in as the commons' subsidized floor), then direct creator support (Seeds +
-// purchases, no platform cut — the wedge). Gates are framed as one primitive with
-// two directions: support the commons (Anthers Gate) or support a creator (Seed Gate).
-// All numbers derive from the support model: a Seed is $3/month, and rank =
-// Anthers-Seed count (Root–Blossom = 1–4, "+" beyond).
+// ways — always Seeds given to Anthers first, Seeds given to creators second. It LEADS
+// with the Anthers commons (Seeds to Anthers fund free public content via the Time Pool
+// and lift the viewer's own Public Access limit), then direct creator support (Seeds +
+// purchases, no platform cut — the wedge).
+//
+// 🚨 Rewritten 2026-08-14, because the page taught two retired mechanisms. It framed
+// gates as "one primitive pointed two ways" and sold Anthers' Badges on the content they
+// unlocked — but **Anthers Gates are retired** (2026-08-12): there is one gate primitive
+// and it points only at creators, so a Work is gated by its creator or it is Public
+// Access, with no Badge threshold in between. A Badge is now **standing, not
+// entitlement**. What a Seed to Anthers actually buys is the *lifted Public Access limit*
+// (the first one, whole) and a *larger Time Pool* for the creators you spend time with
+// (every one, linearly). Write the ladder as what your giving does, never as what you get
+// to see — 63.01 § Words, "Anthers' Badges".
+//
+// ⚠️ And the free tier is bounded: FREE_PUBLIC_ACCESS_HOURS a month. 63.01 makes
+// co-presence mandatory — "free forever" without the limit beside it reads as unlimited,
+// and the limit is the whole reason to give a first Seed. Never say this page's old
+// "streams without a meter".
+//
+// All numbers derive from the support model: a Seed is $3/month, and Anthers' Badges sit
+// at 1–4 Seeds given to Anthers (Root–Blossom, "+" beyond).
 //
 // Motion: content fades up on load (hero) and as it scrolls into view (sections),
 // via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
 // Both are motion-safe — a visitor who prefers reduced motion sees neither.
 
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
@@ -81,8 +96,9 @@ export default function ForUsersPage() {
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							No payment required to use Anthers, ever. Every account streams and downloads freely,
-							forever, no strings attached.
+							No payment required to use Anthers, ever. Every account downloads freely and streams{" "}
+							{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month — free forever, no trial,
+							nothing to cancel.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
@@ -111,14 +127,16 @@ export default function ForUsersPage() {
 					<div className="my-6 grid gap-8 text-left sm:grid-cols-2">
 						<Reveal delay={0} className="h-full">
 							<SignpostCard step="1" title="Support Anthers" tone="anthers">
-								Each $3/month Seed you direct to Anthers does the following:
+								Each $3/month Seed you give Anthers does the following:
 								<ul>
-									<li>Increase the pool of money distributed to creators you stream</li>
+									<li>Increase the pool of money distributed to creators you spend time with</li>
 									<li>Fund Anthers' free public access and charitable programs for all</li>
 								</ul>
-								As you increase your monthly Anthers contribution, you'll also level up your
+								The first one also lifts your monthly Public Access limit, so you can watch, read,
+								listen and play as much as you like. As you give more, you'll grow your
 								<strong className="font-semibold text-base-content/85"> Anthers Badge</strong>, from
-								Root all the way to Blossom, unlocking Anthers-gated content across every creator.
+								Root all the way to Blossom — a mark of what your giving does, not a key to
+								anything. Nothing on Anthers is ever gated behind it.
 							</SignpostCard>
 						</Reveal>
 						<Reveal delay={110} className="h-full">
@@ -138,9 +156,9 @@ export default function ForUsersPage() {
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						No matter where you direct your Seeds each month, you can rest assured that you're
 						supporting amazing creators and free public access to their work. No shareholders, no
-						advertisers, no data brokers. Every dollar goes to the real people who make what you
-						love, to delivering streaming content at cost, or to always-free public access and
-						Anthers' other charitable programs.
+						advertisers, no data brokers. Every dollar goes to one of three places: the real people
+						who make what you love, the at-cost card processing that moves the money, or what's
+						left—which funds free access and Anthers' other charitable programs.
 					</p>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						Still curious about where exactly it all goes? See our{" "}
@@ -158,19 +176,20 @@ export default function ForUsersPage() {
 					<Eyebrow>① The Anthers commons</Eyebrow>
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
-						Every account streams and downloads without a meter—no allowance to run out of, no data
-						cap, no per-gigabyte charge, on as many devices as you like. This isn't a trial or a
-						trick (we're a non-profit; there's little incentive for either), it's an attempt to
-						fulfill what we believe is a common right: for everyone to share and experience
-						creativity and community with their neighbors around the world.
+						Every account downloads without a meter—no allowance to run out of, no data cap, no
+						per-gigabyte charge, on as many devices as you like—and streams{" "}
+						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. This isn't a
+						trial or a trick (we're a non-profit; there's little incentive for either), it's an
+						attempt to fulfill what we believe is a common right: for everyone to share and
+						experience creativity and community with their neighbors around the world.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Seeds given to Anthers are how you help keep it that way. Each one funds the free public
-						content everyone enjoys—creators earn from the{" "}
+						Seeds given to Anthers are how you help keep it that way. The first one lifts that
+						monthly limit for as long as you hold it—and every one of them funds the free public
+						content everyone enjoys, because creators earn from the{" "}
 						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
-						people spend with their public work—and raises your Badge, unlocking a growing library
-						of Anthers-gated content across every creator. The more the garden fills in, the more
-						each Seed gives you.
+						people spend with their public work. Give more and your hours are worth more to the
+						people you spend them with. The more the garden fills in, the further each Seed reaches.
 					</p>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -195,11 +214,13 @@ export default function ForUsersPage() {
 							</h3>
 							<ul className="flex flex-col gap-2.5 text-sm">
 								<FreeItem yes>
-									A Time Pool that pays creators for the time you spend with their public work.
+									Public Access with no monthly limit, from your very first Seed.
 								</FreeItem>
 								<FreeItem yes>
-									A Badge that opens a growing library of Anthers-gated content, across every
-									creator.
+									A bigger Time Pool, so the same hour of your time pays the creator more.
+								</FreeItem>
+								<FreeItem yes>
+									A Badge on your profile—Root to Blossom—that says you hold the garden open.
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
@@ -313,7 +334,8 @@ export default function ForUsersPage() {
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 							Support the creators you love, on terms you can see and trust. Start now with a free
-							account you can create in seconds. No ads, no data brokers, free forever.
+							account you can create in seconds—{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
+							month, free forever. No ads, no data brokers, nothing to cancel.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to="/signup" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
@@ -329,7 +351,7 @@ export default function ForUsersPage() {
 
 // ─── Local building blocks ───
 
-/** A ✓ / – line in the "What Anthers-Seeds add" list. */
+/** A ✓ / – line in the "What Seeds to Anthers add" list. */
 function FreeItem({ yes, children }: { yes?: boolean; children: React.ReactNode }) {
 	return (
 		<li className="flex gap-2.5">

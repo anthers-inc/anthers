@@ -11,7 +11,14 @@
 // (a Seed given to Anthers — $1.50 into the Time Pool and a remainder funding free
 // access and the charitable programs). A fan's Badge IS their count of Seeds given to
 // Anthers (Root → Blossom = 1 → 4, "+" beyond). There is no bandwidth line: delivery
-// costs $0 at any volume, so streaming and downloads are unlimited and free.
+// costs $0 at any volume, so downloads are unlimited and free on both sides.
+//
+// 🚨 Corrected 2026-08-14 — this page sold **Anthers Gates**, retired 2026-08-12. There
+// is one gate primitive and it points only at you: your work is behind YOUR Seed Gate or
+// it is Public Access, with no Badge threshold in between, and a fan's Anthers Badge
+// opens nothing. What a Seed to Anthers does is lift that fan's monthly Public Access
+// limit (the first one) and grow their Time Pool (every one). The free tier is bounded —
+// FREE_PUBLIC_ACCESS_HOURS a month — so never write streaming as unlimited for everyone.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (Seeds given to you + direct sales) carries no platform cut — the
@@ -48,6 +55,7 @@ import {
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { SALE_TABLE } from "@anthers/shared/figures";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -479,13 +487,14 @@ export default function ForCreatorsPage() {
 									are the same hour
 								</li>
 								<li>
-									raises their Badge (Root → Blossom), which opens Anthers-gated work across every
-									creator, including yours
+									raises their Badge (Root → Blossom)—standing, not a key: it opens no work of yours
+									or anyone's
 								</li>
 							</ul>
-							A fan's own streaming is covered at cost inside the same Seed, and whatever is left
-							over funds free access and the charitable programs—not Anthers' pocket. Anthers is a
-							non-profit: no investors, no profit-taking.
+							Their first Seed also lifts their own monthly Public Access limit, so they can spend
+							as much time with your free work as they like. Whatever is left over funds free access
+							and the charitable programs—not Anthers' pocket. Anthers is a non-profit: no
+							investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
 				</div>
@@ -499,9 +508,9 @@ export default function ForCreatorsPage() {
 						<p className="text-sm leading-relaxed text-base-content/70">
 							Work <em className="not-italic font-medium">you</em> hand out—behind your own Seed
 							Gate, or sold—is paid by direct support, and draws nothing from the Time Pool. Work{" "}
-							<em className="not-italic font-medium">Anthers</em> hands out—free to the public, or
-							behind an Anthers Gate—is paid from the Time Pool, funded by everyone backing the
-							commons. Every piece of work pays you exactly once, from the side that carried it.
+							<em className="not-italic font-medium">Anthers</em> hands out—the streaming work you
+							leave ungated, free to everyone—is paid from the Time Pool, funded by everyone backing
+							the commons. Every piece of work pays you exactly once, from the side that carried it.
 						</p>
 					</Card>
 				</Reveal>
@@ -557,22 +566,25 @@ export default function ForCreatorsPage() {
 						split across every creator they spend time with, so what reaches you is your share of
 						their month, not the whole figure. Seeds they give you directly are separate, and carry
 						no platform cut. *A free account pays nothing; free access covers its small Time Pool,
-						so even a free viewer pays the creators they watch. Streaming and downloads cost nothing
-						on either side—no allowance, no per-GiB charge—and you get {FREE_STORAGE_GIB} GiB of
-						free storage.
+						so even a free viewer pays the creators they spend time with—up to{" "}
+						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which their first Seed to
+						Anthers lifts. Delivery costs nothing on either side—no per-GiB charge, however much
+						anyone streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
 
-			{/* Your ladder — Seed Gates, Anthers Gates, and your own Badges */}
+			{/* Your ladder — Seed Gates, Public Access, and your own Badges */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>Your ladder</Eyebrow>
-					<H2>Build your own levels, name them, draw them</H2>
+					<H2>Build your own rungs, name them, draw them</H2>
 					<Lede>
-						Gating on Anthers is one idea in two directions: a threshold of support pointed at you,
-						or at the commons. You choose which of your work sits behind which—and a fan gets in by
-						clearing <em className="not-italic underline decoration-primary/40">either</em> one.
+						There is exactly one gate on Anthers and it points at{" "}
+						<em className="not-italic underline decoration-primary/40">you</em>: a threshold of
+						Seeds given to you. Every piece of work you make is either behind one of your rungs or
+						free to everyone—and nothing sits in between, because a commons with a velvet rope isn't
+						one.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-3">
@@ -592,12 +604,12 @@ export default function ForCreatorsPage() {
 					<Reveal delay={110} className="h-full">
 						<Card className="card-lift h-full">
 							<h3 style={serif} className="mb-2 text-lg font-medium">
-								🌼&nbsp; Anthers Gates
+								🌼&nbsp; Public Access
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Or gate on a fan's Badge—Root through Blossom—and reach everyone already backing the
-								commons, including people who've never heard of you. That work is paid from the Time
-								Pool, so it earns without asking a newcomer for anything extra.
+								Or gate nothing at all. Streaming work you leave open is free to everyone, and it
+								still earns—the Time Pool pays you for the time people spend with it, so a stranger
+								who has never heard of you costs you nothing and pays you anyway.
 							</p>
 						</Card>
 					</Reveal>
@@ -820,12 +832,11 @@ const NO_CUT = "no cut";
 const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 
-// A representative engaged fan for the streaming comparison: Sprout rank — 2
-// Anthers-Seeds ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
+// A representative engaged fan for the streaming comparison: the Sprout Badge — 2 Seeds
+// given to Anthers ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
 // reference streamer the economics doc uses. Everything below is derived, never
-// typed: the creator earns the fan's Time Pool ÷ their watch-hours per watch-hour —
-// the SAME for every medium (equal-time), and independent of resolution (pay is by
-// time, not bytes). The rest of that $6 is the at-cost card fee (inside the Seed
+// typed: the creator earns the fan's Time Pool ÷ their hours, per hour — the SAME for
+// every medium (equal-time), and independent of resolution (pay is by time, not bytes). The rest of that $6 is the at-cost card fee (inside the Seed
 // since 2026-08-03) and the remainder that funds free access and the charitable
 // programs. Note the per-hour figures fall as they watch more only because the same
 // fixed monthly money is spread over more hours — nothing costs more per hour.
