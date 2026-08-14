@@ -7,7 +7,7 @@
 
 # Anthers
 
-Anthers is a creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open, distributed network. A harmonious ecosystem supported by a new non-profit foundation, where we can all nurture a creative internet worth loving again.
+Anthers is a non-profit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform. A harmonious ecosystem where we can all nurture a creative internet worth loving again.
 
 Here, your relationship with the creators and content you love belongs to you. Not to advertisers, data brokers, or billionaire edgelords. This is the place where we open the gates, and let you and the artists and artisans who inspire you be free.
 
