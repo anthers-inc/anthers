@@ -26,11 +26,14 @@ export default function AlbumView({
 	creator,
 	cover,
 	tracks,
+	action,
 }: {
 	title: string;
 	creator?: React.ReactNode;
 	cover?: string | null;
 	tracks: QueueTrack[];
+	/** An extra control beside Play and Shuffle — the Save button, on a Project. */
+	action?: React.ReactNode;
 }) {
 	const player = useMediaPlayer();
 
@@ -103,6 +106,7 @@ export default function AlbumView({
 								<ArrowsRightLeftIcon className="size-4" />
 								Shuffle
 							</button>
+							{action}
 						</div>
 					</div>
 				</header>

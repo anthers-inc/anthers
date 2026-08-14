@@ -12,6 +12,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useReportVisit } from "@/lib/attention";
 import WorkCard from "../components/cards/WorkCard";
+import SaveButton from "../components/library/SaveButton";
 import AlbumView from "../components/media/AlbumView";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import { studioUrl } from "../lib/studio";
@@ -168,6 +169,9 @@ export default function ProjectPage() {
 								username: project.creator?.username,
 								displayName: project.creator?.displayName,
 							})}
+							// People keep albums, not four loose tracks — so the record itself is
+							// savable, and saving it keeps the record rather than scattering it.
+							action={<SaveButton projectId={project.id} />}
 						/>
 						{/* The sleeve notes, under the record rather than above it. */}
 						{(project.description || project.shortDescription) && (

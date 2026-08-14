@@ -24,6 +24,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AddToBasket from "../components/basket/AddToBasket";
+import SaveButton from "../components/library/SaveButton";
 import AudioPlayer from "../components/media/AudioPlayer";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
@@ -252,7 +253,12 @@ export default function WorkPage() {
 					)}
 				</div>
 
-				<h1 className="text-3xl font-bold">{work.title || "Untitled"}</h1>
+				<div className="flex flex-wrap items-start justify-between gap-3">
+					<h1 className="text-3xl font-bold">{work.title || "Untitled"}</h1>
+					{/* Save sits beside the title rather than under the player, because it
+					    applies to a gated Work too — it keeps the thing, it does not open it. */}
+					<SaveButton workId={work.id} className="shrink-0" />
+				</div>
 
 				{/* Made, then released — never the upload date, which is bookkeeping. */}
 				<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">

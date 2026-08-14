@@ -34,6 +34,7 @@ import { getStripe } from "../lib/stripe.js";
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { applyCreditForPurchase, syncSubscriptionToAccount } from "../services/billing.js";
+import { saveOnPurchase } from "../services/library.js";
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
@@ -696,6 +697,15 @@ const paymentRoutes = new Hono()
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
 				.returning();
 			for (const completed of completedRows) {
+				// What you bought lands on your shelf, and stays there. This is the ONLY
+				// place a purchase completes, which is why the hook belongs here rather
+				// than at checkout: a card that never clears must not put anything in a
+				// Library. Note the shelf entry is a *consequence* of the purchase and
+				// never the proof of it — `services/library.ts` derives permanence by
+				// reading `purchases` back, so a failure here costs a row on a page, not
+				// an entitlement.
+				await saveOnPurchase(completed);
+
 				if (completed.type === "seeds") {
 					// A Seed buy → credit the account (not a post purchase).
 					await applyCreditForPurchase(completed);
