@@ -4,7 +4,6 @@ The Anthers brand assets that **ship**: the first-party marks and lockups, and r
 
 ```
 marks/        First-party Anthers identity — SVG masters, lockups, raster exports
-app-icons/    Desktop packaging icons (Tauri build input, not brand art)
 src/          The public API + generated icon markup
 scripts/      The codegen
 ```
@@ -66,7 +65,7 @@ icons.bee;                                    // { viewBox, inner } — build yo
 
 	⚠️ **The favicons are not wired to anything.** `apps/web` ships no `<link rel="icon">` at all, so the site currently renders with the browser default while `favicon-32.png`, `favicon-64.png` and `apple-touch-icon-180.png` sit here unused. Wiring them means copying into `apps/web/public/` and adding the tags — noted here because the assets existing is what makes the gap easy to miss.
 
-`app-icons/` is a different thing wearing a similar name: Windows/macOS/Linux packaging icons, consumed only by `apps/desktop/src-tauri/tauri.conf.json` through a relative path. It bypasses this package's `exports` because a Tauri config can't resolve one.
+`app-icons/` used to sit here — Windows/macOS/Linux packaging icons reached by `tauri.conf.json` through a `../../../` path that bypassed this package's `exports`, because a Tauri config cannot resolve one. That relative path was the tell: they were desktop **packaging**, not brand art. They moved to [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) with the app on 2026-08-14.
 
 
 # Licensing

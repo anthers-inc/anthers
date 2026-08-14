@@ -32,6 +32,6 @@ Two scoping notes, because both are easy to get backwards:
 
 First-party Anthers brand art (© Parker H. Davis, LLC) — vector masters, the wordmark lockups, and raster exports, with a palette and type note in `marks/README.txt`. An interim in-house design, pending a commissioned one. The layered sources are in [anthers-brand](https://github.com/anthers-inc/anthers-brand) rather than here.
 
-## Desktop packaging (`app-icons/`)
+## Desktop packaging
 
-Derived from the Anthers mark above; same first-party provenance.
+The Tauri packaging icons were here as `app-icons/` until 2026-08-14 and moved to [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) with the app. Derived from the Anthers mark above; same first-party provenance.

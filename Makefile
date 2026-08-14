@@ -5,8 +5,6 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
-        desktop-dev desktop-check desktop-build desktop-build-linux desktop-build-windows \
-        desktop-build-macos desktop-notarize desktop-version desktop-release
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -282,159 +280,10 @@ test-gauntlet: free-preview-port ## Run the User Gauntlet spec pass (fixture res
 # in another terminal is the expected companion. Override for other hosts with
 # ANTHERS_API_BASE.
 
-desktop-dev: ## Run the desktop app against the local dev API (needs `make dev`)
-	cd apps/desktop && bun run tauri:dev
-
-desktop-check: ## Typecheck the Rust shell without building installers
-	cd apps/desktop/src-tauri && cargo check
-
-
-# ─── Desktop packaging ───
-# There is NO cross-compilation here: each platform's installers must be built on
-# that platform. Distribution is GitHub Releases — no app stores — so the flow is
-# build on each machine, collect the bundles, then `make desktop-release`.
-#
-# `desktop-build` picks the right target for whatever you're on; the per-platform
-# targets exist so a wrong-OS invocation fails with a sentence instead of a
-# confusing toolchain error. Follows the ~/Lily pattern.
-
-DESKTOP_DIR := apps/desktop
-DESKTOP_BUNDLE := $(DESKTOP_DIR)/src-tauri/target/release/bundle
-
-desktop-build: ## Build desktop installers for THIS platform
-ifeq ($(DETECTED_OS),linux)
-	@$(MAKE) desktop-build-linux
-else ifeq ($(DETECTED_OS),macos)
-	@$(MAKE) desktop-build-macos
-else
-	@$(MAKE) desktop-build-windows
-endif
-
-ifeq ($(DETECTED_OS),linux)
-desktop-build-linux: ## Build Linux installers (.deb, .rpm, AppImage)
-	@echo "Building Linux installers — fetches the ffmpeg sidecar on first run..."
-	cd $(DESKTOP_DIR) && bun run tauri:build
-	@echo ""
-	@echo "Outputs in $(DESKTOP_BUNDLE)/: deb/ rpm/ appimage/"
-else
-desktop-build-linux:
-	@echo "ERROR: Linux installers must be built on Linux."; exit 1
-endif
-
-ifeq ($(DETECTED_OS),windows)
-desktop-build-windows: ## Build Windows installers (.msi, .exe)
-	@echo "Building Windows installers..."
-	cd $(DESKTOP_DIR); bun run tauri:build
-	@echo ""
-	@echo "Outputs in $(DESKTOP_BUNDLE)/: msi/ nsis/"
-else
-desktop-build-windows:
-	@echo "ERROR: Windows installers must be built on Windows."; exit 1
-endif
-
-ifeq ($(DETECTED_OS),macos)
-desktop-build-macos: ## Build + sign macOS installers (.app, .dmg)
-	@if [ -f .env ]; then \
-		echo "  -> Signing config from .env"; \
-	else \
-		echo "  -> WARNING: no .env — the build will be UNSIGNED and Gatekeeper will refuse it."; \
-		echo "     See .env.example for the Apple credentials required."; \
-	fi
-	@echo "Building macOS app..."
-	@# APPLE_ID/PASSWORD/TEAM_ID are unset for the build itself so Tauri's bundler
-	@# doesn't try to notarize inline — notarization is `make desktop-notarize`, after
-	@# the re-sign below. Leaving them set makes the bundler notarize a binary we are
-	@# about to replace.
-	@if [ -f .env ]; then \
-		. ./.env && \
-		( unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID && cd $(DESKTOP_DIR) && bun run tauri:build ); \
-	else \
-		cd $(DESKTOP_DIR) && bun run tauri:build; \
-	fi
-	@# Tauri's bundler signs without --timestamp, which notarization rejects. Re-sign
-	@# the inner binary, the bundled ffmpeg sidecars, and then the .app — inside-out,
-	@# because signing the bundle seals whatever it contains at that moment.
-	@if [ -f .env ]; then \
-		. ./.env && \
-		echo "" && echo "Re-signing with hardened runtime + secure timestamp..." && \
-		APP="$(DESKTOP_BUNDLE)/macos/Anthers.app" && \
-		for BIN in "$$APP/Contents/MacOS/"*; do \
-			codesign --force --options runtime --timestamp \
-				--entitlements $(DESKTOP_DIR)/src-tauri/entitlements.plist \
-				--sign "$$APPLE_SIGNING_IDENTITY" "$$BIN" || exit 1; \
-		done && \
-		codesign --force --options runtime --timestamp \
-			--entitlements $(DESKTOP_DIR)/src-tauri/entitlements.plist \
-			--sign "$$APPLE_SIGNING_IDENTITY" "$$APP" && \
-		echo "  -> Re-signed .app (including ffmpeg sidecars)" && \
-		echo "" && echo "Rebuilding DMG from the re-signed .app..." && \
-		VERSION=$$(grep '^version = ' $(DESKTOP_DIR)/src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/') && \
-		ARCH=$$(uname -m | sed 's/arm64/aarch64/') && \
-		DMG="$(DESKTOP_BUNDLE)/dmg/Anthers_$${VERSION}_$${ARCH}.dmg" && \
-		rm -f "$$DMG" && \
-		hdiutil create -volname "Anthers" -srcfolder "$$APP" -ov -format UDZO "$$DMG" && \
-		codesign --force --timestamp --sign "$$APPLE_SIGNING_IDENTITY" "$$DMG" && \
-		echo "  -> DMG rebuilt + signed: $$DMG" && \
-		echo "" && codesign --verify --deep --strict "$$APP" && echo "  -> Signature: OK" && \
-		echo "" && echo "Next: make desktop-notarize"; \
-	fi
-
-desktop-notarize: ## Submit the macOS DMG to Apple, staple, and verify Gatekeeper
-	@if [ ! -f .env ]; then echo "ERROR: .env required (see .env.example)"; exit 1; fi
-	@. ./.env && \
-	VERSION=$$(grep '^version = ' $(DESKTOP_DIR)/src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/') && \
-	ARCH=$$(uname -m | sed 's/arm64/aarch64/') && \
-	DMG="$(DESKTOP_BUNDLE)/dmg/Anthers_$${VERSION}_$${ARCH}.dmg" && \
-	if [ ! -f "$$DMG" ]; then echo "ERROR: no DMG at $$DMG — run 'make desktop-build-macos' first"; exit 1; fi && \
-	echo "Submitting $$DMG (this waits on Apple, and can take a while)..." && \
-	xcrun notarytool submit "$$DMG" --apple-id "$$APPLE_ID" --password "$$APPLE_PASSWORD" \
-		--team-id "$$APPLE_TEAM_ID" --wait && \
-	echo "" && echo "Stapling the ticket..." && \
-	xcrun stapler staple "$$DMG" && \
-	echo "" && echo "Verifying Gatekeeper..." && \
-	spctl --assess --type open --context context:primary-signature "$$DMG" 2>&1 && \
-	echo "  -> Notarized + stapled: $$DMG"
-else
-desktop-build-macos:
-	@echo "ERROR: macOS installers must be built on macOS."; exit 1
-
-desktop-notarize:
-	@echo "ERROR: macOS notarization must be run on macOS."; exit 1
-endif
-
-desktop-version: ## Show or set the desktop app version (V=X.Y.Z)
-ifndef V
-	@echo "Desktop version: $$(grep '^version = ' $(DESKTOP_DIR)/src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
-else
-	@$(SED_INPLACE) 's/^version = ".*"/version = "$(V)"/' $(DESKTOP_DIR)/src-tauri/Cargo.toml
-	@$(SED_INPLACE) 's/"version": ".*"/"version": "$(V)"/' $(DESKTOP_DIR)/src-tauri/tauri.conf.json
-	@$(SED_INPLACE) 's/"version": ".*"/"version": "$(V)"/' $(DESKTOP_DIR)/package.json
-	@echo "Desktop version set to $(V) in Cargo.toml, tauri.conf.json, package.json"
-	@echo "NOTE: the DMG/notarize targets derive their filename from Cargo.toml, so"
-	@echo "      these three must not drift."
-endif
-
-desktop-release: ## Publish whatever bundles exist to a GitHub Release (V=X.Y.Z)
-ifndef V
-	@echo "ERROR: pass the version, e.g. make desktop-release V=0.1.0"; exit 1
-else
-	@echo "Collecting bundles from $(DESKTOP_BUNDLE)/ ..."
-	@FILES=$$(find $(DESKTOP_BUNDLE) -maxdepth 2 -type f \
-		\( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
-		   -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) 2>/dev/null); \
-	if [ -z "$$FILES" ]; then \
-		echo "ERROR: no installers found. Run 'make desktop-build' on each platform first."; \
-		exit 1; \
-	fi; \
-	echo "$$FILES" | sed 's/^/  /'; \
-	echo ""; \
-	echo "Uploading to release studio-v$(V) (created as a draft if it doesn't exist)..."; \
-	gh release view "desktop-v$(V)" >/dev/null 2>&1 \
-		|| gh release create "desktop-v$(V)" --draft --title "Anthers Desktop $(V)" \
-			--notes "Desktop Creator Studio $(V). Installers are per-platform; each is built on its own OS."; \
-	echo "$$FILES" | xargs -I{} gh release upload "desktop-v$(V)" "{}" --clobber; \
-	echo ""; \
-	echo "Done. Review and publish: gh release view studio-v$(V) --web"
-endif
+# The desktop app moved to its own repository on 2026-08-14:
+#   https://github.com/anthers-inc/anthers-desktop
+# It consumes this app's BUILD (apps/web/dist) rather than any package here — clone it
+# beside this repo and its `bun run dev` builds the web app from the sibling checkout.
+# Its installers, code signing and release flow live there, on their own cadence.
 
 .DEFAULT_GOAL := help
