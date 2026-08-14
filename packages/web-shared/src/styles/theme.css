@@ -115,6 +115,25 @@
 	--btn-p: 1.25rem;
 }
 
+/* The now-playing equalizer, as a Tailwind motion token rather than an authored
+   selector — `animate-eq-bar` on each bar, with a per-bar `animationDelay` so the
+   three fall out of step. Every media surface that has to say "this is the one
+   currently playing" uses <PlayingBars>, so the keyframe lives here beside the
+   other shared motion rather than in one player. Reduced motion is handled where
+   the component is used (the bars render static at full height), because the
+   token itself has no way to branch. */
+@theme {
+	--animate-eq-bar: eq-bar 0.9s ease-in-out infinite alternate;
+	@keyframes eq-bar {
+		from {
+			transform: scaleY(0.25);
+		}
+		to {
+			transform: scaleY(1);
+		}
+	}
+}
+
 /* Crisp separation for a sticky top navbar: a hairline plus a short, soft drop so
    it lifts off the content scrolling beneath. Both parts mix from base-content, so
    it stays legible in either theme (a dark line on light, a soft light edge on
