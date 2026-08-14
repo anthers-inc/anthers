@@ -8,6 +8,7 @@
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
 		"./gauntlet": "./src/gauntlet.ts",
+		"./media-fixture": "./src/media-fixture.ts",
 		"./schema": "./src/schema/index.ts"
 	},
 	"scripts": {

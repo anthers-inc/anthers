@@ -14,52 +14,40 @@
  * suite would report a working player while the design was gone. Same family as the
  * absence-needs-a-test lesson from the third-party-request work.
  *
- * G1 is the fixture: free, streaming, real HLS from a real ffmpeg run, so the picture
- * genuinely decodes rather than a `<video>` with a dead src reporting `paused` forever.
+ * The fixture is the **media fixture**, not the gauntlet: free, streaming, real HLS from a
+ * real ffmpeg run, so the picture genuinely decodes rather than a `<video>` with a dead
+ * src reporting `paused` forever.
  *
- * Runs in the `authed` project only because that is what depends on `setup`, which is what
- * seeds the fixture — the Work itself is Public Access and the player behaves identically
- * signed out.
+ * 🚨 **Why not the gauntlet's G1, which is also a free video Work.** Because `db:gauntlet`
+ * deletes every Work belonging to the gauntlet creator, and the walk resets at the top of
+ * its own `beforeAll` — in a project that runs alongside this one. Seeding media into a
+ * fixture another suite is deleting is a race, and it lost: the transcode row vanished
+ * mid-encode and the seed script died with `job finished as "undefined"`. Two suites
+ * cannot own one fixture, so this one has its own, which nothing resets.
+ *
+ * Runs in the `authed` project only because that is what depends on `setup` — the Work
+ * itself is Public Access and the player behaves identically signed out.
  */
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { gauntletPost } from "@anthers/db/gauntlet";
+import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-const G1 = gauntletPost("G1");
+const CLIP = mediaFixtureWork("video");
 const CONTROLS = "[data-testid=video-controls]";
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-/**
- * Attach real media to the fixture.
- *
- * ⚠️ The setup project deliberately does **not** do this — it would run ffmpeg twice per
- * CI run, since the gauntlet walk resets the fixture again and throws the first result
- * away. So any spec that needs bytes seeds them itself. This one deliberately does *not*
- * reset the fixture first, unlike the walk: a reset here would delete Works out from
- * under whatever else is running in this project.
- */
-function seedMedia() {
-	execFileSync("bun", ["run", "db:gauntlet:media"], { cwd: REPO_ROOT, stdio: "inherit" });
-}
-
 test.beforeAll(() => {
-	// ffmpeg runs here; the walk's own hook budgets the same way and for the same reason.
+	// ffmpeg runs the first time on a given machine and never again — the seeder skips any
+	// Work already carrying a completed transcode. The budget is for that first run.
 	test.setTimeout(180_000);
-	seedMedia();
+	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
 });
 
-/** Open G1 and wait for the element to have a real duration — i.e. HLS actually attached. */
+/** Open the clip and wait for a real duration — i.e. HLS actually attached. */
 async function openPlayer(page: Page) {
-	await page.goto(`/works/${G1.slug}-${G1.publicId}`);
-	// The gauntlet walk resets this fixture in a project that can run alongside this one,
-	// which deletes the Work's transcode. One re-seed rather than a flake: if the player
-	// is not there, put the media back and ask again.
-	if ((await page.locator("video").count()) === 0) {
-		seedMedia();
-		await page.reload();
-	}
+	await page.goto(`/works/${CLIP.slug}-${CLIP.publicId}`);
 	await expect(page.locator("video")).toBeVisible();
 	await expect
 		.poll(() => page.evaluate(() => document.querySelector("video")?.duration ?? 0), {
@@ -85,17 +73,12 @@ const videoState = (page: Page) =>
 	});
 
 /*
- * Serial, because the fixture is a shared mutable resource and `seedMedia` deletes and
- * recreates the transcode rows. Run in parallel, the workers re-seed on top of each other
- * and every test fails on a Work that briefly has no media — a fixture collision wearing
- * the costume of a player bug.
- *
- * ⚠️ **The cost is that a sabotage run under-reports.** Serial mode skips everything after
- * the first failure, so breaking the keymap shows one red test where two are genuinely
- * broken. When measuring what a change actually breaks, run the tests one at a time
- * (`-g "<title>"`) rather than reading the count off a serial run.
+ * Deliberately NOT serial: these share no state and each opens the page for itself, and
+ * the fixture is now idempotent so parallel workers cannot re-seed on top of each other.
+ * Serial mode would skip everything after the first failure, which hides how much of the
+ * player a regression actually broke — breaking the keymap fails two of these, and a
+ * serial run reports one.
  */
-test.describe.configure({ mode: "serial" });
 
 test("the chrome is ours, not the browser's", async ({ page }) => {
 	await openPlayer(page);
