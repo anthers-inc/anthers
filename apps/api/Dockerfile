@@ -11,7 +11,11 @@ FROM oven/bun:1.3.14
 WORKDIR /app
 
 # Install FFmpeg for media transcoding (worker) and curl for healthchecks
-RUN apt-get update && apt-get install -y ffmpeg curl && rm -rf /var/lib/apt/lists/*
+# ffmpeg transcodes video and audio; poppler-utils (pdftoppm/pdfinfo) renders an
+# uploaded ebook PDF to per-page images. Both are the WORKER's dependencies — the
+# API and worker share this image, so a missing one fails a job rather than a boot,
+# which is the quieter failure and the reason they are pinned here explicitly.
+RUN apt-get update && apt-get install -y ffmpeg poppler-utils curl && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies — copy package manifests first for layer caching
 COPY package.json bun.lock ./

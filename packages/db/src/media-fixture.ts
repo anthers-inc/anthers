@@ -39,7 +39,7 @@ export interface MediaFixtureWork {
 	slug: string;
 	publicId: number;
 	title: string;
-	media: "video" | "audio";
+	media: "video" | "audio" | "ebook";
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
 	/**
@@ -68,6 +68,14 @@ export interface MediaFixtureWork {
  * the queue simply running out.
  */
 export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
+	{
+		key: "ebook",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}comic`,
+		publicId: PUBLIC_ID_BASE + 2,
+		title: "A comic that really turns",
+		media: "ebook",
+		trackNumber: 0,
+	},
 	{
 		key: "video",
 		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}video`,

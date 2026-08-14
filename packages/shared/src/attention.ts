@@ -49,6 +49,15 @@ const CONSUMPTION: Record<string, ConsumptionMode> = {
 	audio: "playback",
 	text: "presence",
 	image: "presence",
+	// An ebook — a comic, a graphic novel, a prose book — is read, which is presence:
+	// visible tab plus a sign of life. Turning pages supplies that naturally.
+	//
+	// 🚨 Registering it here is NOT optional bookkeeping. `consumptionModeFor` returns
+	// "none" for an unrecognised type, which makes it Time-Pool-ineligible — the safe
+	// default (unknown types are inert rather than free money) and the wrong answer for a
+	// real medium. A new Work type that nobody adds here earns its creator nothing, with
+	// no error anywhere to say so.
+	ebook: "presence",
 	game: "presence",
 	software: "presence",
 	physical: "none",
@@ -61,6 +70,7 @@ const EVENT_TYPE: Record<string, AttentionEventType> = {
 	audio: "listen",
 	text: "read",
 	image: "read",
+	ebook: "read",
 	game: "play",
 	software: "play",
 };

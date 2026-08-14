@@ -18,7 +18,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
-import { client } from "@anthers/web-shared/rpc";
+import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { TranscodingJob, Work } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AddToBasket from "../components/basket/AddToBasket";
 import SaveButton from "../components/library/SaveButton";
 import AudioPlayer from "../components/media/AudioPlayer";
+import ComicReader from "../components/media/ComicReader";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
 import VideoPlayer from "../components/media/VideoPlayer";
@@ -149,7 +150,20 @@ export default function WorkPage() {
 	 * Text, games, software and images have no such component — so the page holds it.
 	 */
 	const meterBudget = useMeteredBudget();
-	/** Media whose deliverable arrives in the payload rather than through a player. */
+	/**
+	 * Media whose METER the page owns, rather than the component.
+	 *
+	 * `VideoPlayer` and `AudioPlayer` each subscribe to the budget and render their own
+	 * countdown and wall, because they own the playback state the footer needs. Nothing
+	 * else does — and that now includes the **ebook** reader, which is deliberate rather
+	 * than an oversight: its pages are fetched one at a time from a metered endpoint, so
+	 * a spent allowance would otherwise surface as a reader full of broken images, which
+	 * is the dead-player failure this whole meter design exists to avoid. The page shows
+	 * the wall instead.
+	 *
+	 * (The name predates the reader. What it means is "the page holds the meter", not
+	 * "there is no player" — a distinction worth keeping straight before adding a type.)
+	 */
 	const playerless = work != null && work.type !== "video" && work.type !== "audio";
 	/**
 	 * The allowance is gone *and* it applies here. Both halves matter: a spent allowance
@@ -358,6 +372,14 @@ export default function WorkPage() {
 									</section>
 								)}
 							</>
+						)}
+						{work.type === "ebook" && (
+							<ComicReader
+								workId={work.id}
+								pageCount={work.pageCount ?? 0}
+								apiBase={apiBaseUrl()}
+								title={work.title ?? "Untitled"}
+							/>
 						)}
 						{work.type === "image" && work.sourceKey && (
 							<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
