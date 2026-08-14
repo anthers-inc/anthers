@@ -33,7 +33,7 @@ import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
  * per-job idempotency guard makes a later pg-boss retry a no-op.
  *
  * A row whose Work carries no source file is NOT an orphan — it is a job that can
- * never succeed, since both handlers throw "No source file on content item" before
+ * never succeed, since all three handlers throw on a missing source key before
  * reaching ffmpeg. Those are recorded as failed here rather than re-sent, which is
  * the same outcome the handler would reach and, unlike re-sending, takes the row out
  * of the pending/processing set for good. Re-sending them meant every worker boot

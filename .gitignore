@@ -61,3 +61,11 @@ __pycache__/
 .venv/
 venv/
 _legacy/backend/staticfiles/
+
+# Agent instructions and per-agent config. Kept local: they point into a private
+# working wiki, so on a public repo they are dangling references rather than
+# provenance. `.mcp.json` is deliberately NOT here — it registers the Playwright
+# MCP server, which is testing tooling that belongs with the repo.
+CLAUDE.md
+AGENTS.md
+.claude/
