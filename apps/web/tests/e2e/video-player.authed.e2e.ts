@@ -25,25 +25,19 @@
  * mid-encode and the seed script died with `job finished as "undefined"`. Two suites
  * cannot own one fixture, so this one has its own, which nothing resets.
  *
+ * The fixture is seeded ONCE by the setup project. It used to be seeded here, in a
+ * `beforeAll`, and so were two other specs' — three concurrent seeder processes against one
+ * dev Postgres, which surfaced as an unrelated Studio spec timing out on save.
+ *
  * Runs in the `authed` project only because that is what depends on `setup` — the Work
  * itself is Public Access and the player behaves identically signed out.
  */
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const CLIP = mediaFixtureWork("video");
 const CONTROLS = "[data-testid=video-controls]";
-const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
-
-test.beforeAll(() => {
-	// ffmpeg runs the first time on a given machine and never again — the seeder skips any
-	// Work already carrying a completed transcode. The budget is for that first run.
-	test.setTimeout(180_000);
-	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
-});
 
 /** Open the clip and wait for a real duration — i.e. HLS actually attached. */
 async function openPlayer(page: Page) {

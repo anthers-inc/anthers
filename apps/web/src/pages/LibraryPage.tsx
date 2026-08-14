@@ -42,6 +42,7 @@ import {
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
 import { removeItem, setHidden } from "../lib/library";
 
 const MEDIA_TABS = [
@@ -52,12 +53,8 @@ const MEDIA_TABS = [
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
 ] as const;
 
-interface ShelfProject {
-	id: number;
-	slug: string;
-	title: string;
-	coverImage: string | null;
-}
+/** The shelf's view of a saved Project — the album card's whole data source. */
+type ShelfProject = LensProject;
 
 interface ShelfItem {
 	id: number;
@@ -193,6 +190,15 @@ export default function LibraryPage() {
 
 	const activeTab = searchParams.get("type") ?? "";
 	const showHidden = searchParams.get("hidden") === "1";
+	/**
+	 * Which lens is applied, or the bare shelf.
+	 *
+	 * 🚨 **A lens is a view, never a container.** The shelf stays complete and usable with
+	 * no lens applied, and switching or removing one must never touch what is *in* the
+	 * Library — which matters more here than in the app this idea came from, because a
+	 * shelf entry can be a thing somebody paid for.
+	 */
+	const lens = searchParams.get("lens") ?? "";
 
 	/*
 	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
@@ -247,9 +253,49 @@ export default function LibraryPage() {
 				Everything you've kept — what you've bought, and anything free you saved.
 			</p>
 
-			<div className="mb-6 flex flex-wrap items-center gap-3">
+			{/*
+			 * The lens switcher.
+			 *
+			 * Deliberately separated from the media tabs below, and above them, because the
+			 * two do genuinely different things and putting them in one row would say they
+			 * are the same kind of control: a media tab NARROWS the shelf, a lens REORGANIZES
+			 * it. The whole point of the concept is that those are not the same move.
+			 */}
+			<div className="mb-4 flex flex-wrap items-center gap-2">
+				<span className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
+					View
+				</span>
+				{/* Named, because the page carries TWO tab groups and one of the labels
+				    ("Music") appears in both — as a lens that reorganizes, and as a media
+				    type that narrows. Sighted users get the "View" heading beside it; without
+				    these, a screen reader hears two identical tabs with different meanings. */}
+				<div role="tablist" aria-label="View" className="tabs tabs-box tabs-sm w-fit">
+					<button
+						type="button"
+						role="tab"
+						className={`tab ${lens === "" ? "tab-active" : ""}`}
+						onClick={() => setParam("lens", "")}
+					>
+						Shelf
+					</button>
+					<button
+						type="button"
+						role="tab"
+						className={`tab gap-1.5 ${lens === "music" ? "tab-active" : ""}`}
+						onClick={() => setParam("lens", "music")}
+					>
+						<MusicalNoteIcon className="size-4" />
+						Music
+					</button>
+				</div>
+			</div>
+
+			{/* The media tabs belong to the shelf. Under a lens they would be a second,
+			    competing way to narrow the same list, and the lens already decides what it
+			    draws on. */}
+			<div className={`mb-6 flex flex-wrap items-center gap-3 ${lens ? "hidden" : ""}`}>
 				{/* `tabs-box`, not the retired v4 `tabs-boxed`. */}
-				<div role="tablist" className="tabs tabs-box w-fit">
+				<div role="tablist" aria-label="Media type" className="tabs tabs-box w-fit">
 					{MEDIA_TABS.map((tab) => (
 						<button
 							key={tab.id}
@@ -291,7 +337,12 @@ export default function LibraryPage() {
 				)}
 			</div>
 
-			{filtered.length === 0 ? (
+			{lens === "music" ? (
+				// The lens draws on the same `visible` list the shelf does — it reorganizes
+				// what is there rather than fetching a different corpus, which is what keeps
+				// "a lens is a view" true rather than merely stated.
+				<MusicLens items={visible as LensItem[]} />
+			) : filtered.length === 0 ? (
 				<EmptyState
 					title={
 						activeTab
