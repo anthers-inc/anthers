@@ -3490,10 +3490,40 @@ const contentRoutes = new Hono()
 						title: projects.title,
 						coverImage: projects.coverImage,
 						creatorId: projects.creatorId,
+						creatorUsername: users.username,
+						creatorDisplayName: users.displayName,
 					})
 					.from(projects)
+					.leftJoin(users, eq(projects.creatorId, users.id))
 					.where(inArray(projects.id, projectIds))
 			: [];
+
+		/*
+		 * How many released Works a saved Project holds, and how many of those are audio.
+		 *
+		 * Enough for a shelf to render a saved Project *as an album* — cover, artist, track
+		 * count — without fetching each Project's detail, which is an N+1 on a page that
+		 * exists to show a collection. Deliberately a count rather than the members: the
+		 * tracks themselves are fetched when somebody actually presses play, and shipping
+		 * every member of every saved album on a shelf request would be the opposite trade.
+		 *
+		 * `audioCount === workCount` is what makes it a record rather than a folder — the
+		 * same rule `isAlbum` applies on a Project page, kept in step by both being about
+		 * "every member is audio" rather than by sharing code across the boundary.
+		 */
+		const memberCounts = projectIds.length
+			? await db
+					.select({
+						projectId: projectItems.projectId,
+						workCount: sql<number>`count(*)::int`,
+						audioCount: sql<number>`count(*) filter (where ${works.type} = 'audio')::int`,
+					})
+					.from(projectItems)
+					.innerJoin(works, eq(projectItems.workId, works.id))
+					.where(and(inArray(projectItems.projectId, projectIds), eq(works.visibility, "released")))
+					.groupBy(projectItems.projectId)
+			: [];
+		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
 
 		const { assetsByWork, jobByWork } = await loadWorkBundles(workIds);
 		const [ctx, spent, permanent] = await Promise.all([
@@ -3538,7 +3568,19 @@ const contentRoutes = new Hono()
 					if (!p) return null;
 					// A Project is a shelf, not a payload: it has no gates of its own and
 					// nothing to withhold. Its members resolve their own access when opened.
-					return { ...base, kind: "project" as const, purchased: false, project: p };
+					const counts = countsByProject.get(p.id);
+					return {
+						...base,
+						kind: "project" as const,
+						purchased: false,
+						project: {
+							...p,
+							trackCount: counts?.workCount ?? 0,
+							// Every released member is audio — i.e. this is a record, not a
+							// folder that happens to contain some music.
+							isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.audioCount,
+						},
+					};
 				})
 				.filter((x) => x != null),
 		});

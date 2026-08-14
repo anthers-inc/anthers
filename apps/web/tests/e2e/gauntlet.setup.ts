@@ -33,11 +33,22 @@ setup("reset the gauntlet fixture and sign the viewer in", async () => {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
-	// Media is deliberately NOT seeded here. The walk's own `beforeAll` resets the fixture
-	// again — which deletes the content items, and with them any media attached now — and
-	// then re-attaches it. Generating it here meant running ffmpeg twice per CI run and
-	// throwing the first result away. What this step must leave behind is the viewer, so
-	// the sign-in below has an account to authenticate.
+	// The GAUNTLET's media is deliberately NOT seeded here. The walk's own `beforeAll`
+	// resets the fixture again — which deletes the content items, and with them any media
+	// attached now — and then re-attaches it. Generating it here meant running ffmpeg twice
+	// per CI run and throwing the first result away. What this step must leave behind is the
+	// viewer, so the sign-in below has an account to authenticate.
+
+	// The MEDIA FIXTURE is the opposite case and does belong here: nothing ever resets it,
+	// so seeding is idempotent and instant after the first run on a machine.
+	//
+	// 🚨 It is seeded ONCE, here, rather than in each spec's `beforeAll` — which is where it
+	// started, and which broke a spec in a different file. Three specs in the `authed`
+	// project each spawning `bun run db:media-fixture` meant three concurrent Bun processes
+	// opening database connections against the same dev Postgres, and the contention showed
+	// up as an unrelated Studio modal timing out on save. A fixture that several specs share
+	// wants one owner, and the setup project is it.
+	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
 
 	// Sign in exactly as the SPA would: same route, same Origin, real Set-Cookie.
 	const res = await fetch(`${API_URL}/api/auth/sign-in`, {

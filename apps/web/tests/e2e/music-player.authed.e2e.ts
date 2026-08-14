@@ -20,8 +20,6 @@
  * Runs against the media fixture, which nothing else resets — see
  * `packages/db/src/media-fixture.ts` for why borrowing the gauntlet's was not an option.
  */
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import {
 	MEDIA_FIXTURE_PROJECT,
 	MEDIA_FIXTURE_TRACKS,
@@ -30,20 +28,12 @@ import {
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
-const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const ALBUM_URL = `/projects/${MEDIA_FIXTURE_PROJECT.slug}`;
 const BAR = "[data-testid=player-bar]";
 const NOW_PLAYING = `${BAR} [data-testid=now-playing-title]`;
 
 const GATED = mediaFixtureWork("track3");
 const FREE_WITH_LYRICS = mediaFixtureWork("track1");
-
-test.beforeAll(() => {
-	// ffmpeg runs the first time on a machine and never again — the seeder skips a Work
-	// that already carries a completed transcode.
-	test.setTimeout(180_000);
-	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
-});
 
 /** What the bar currently says is playing, or null when the bar is not up. */
 async function playing(page: Page): Promise<string | null> {
@@ -82,9 +72,21 @@ test("pressing play starts the queue and raises the bar", async ({ page }) => {
 
 	await expect(page.locator(BAR)).toBeVisible();
 	await expect.poll(() => playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
-	await expect
-		.poll(() => page.evaluate(() => !!document.querySelector("audio")?.paused === false))
-		.toBe(true);
+
+	/*
+	 * 🚨 Asserted from the CONTROL, not from a DOM query for `<audio>`.
+	 *
+	 * The first version of this line was
+	 *   `!!document.querySelector("audio")?.paused === false`
+	 * which is a tautology: the provider builds its element with `new Audio()`, so it is
+	 * never in the DOM, `querySelector` returns null, `null?.paused` is `undefined`, and
+	 * `!!undefined === false` is **true** whether or not anything is playing. It passed
+	 * against a player that had not started, and would have gone on passing forever.
+	 *
+	 * The transport's primary button reads "Pause" exactly while playback is running, so
+	 * this is the same fact asked of something that can actually be false.
+	 */
+	await expect(page.locator(BAR).getByRole("button", { name: "Pause", exact: true })).toBeVisible();
 });
 
 test("the queue steps over a gated track rather than stalling on it", async ({ page }) => {
