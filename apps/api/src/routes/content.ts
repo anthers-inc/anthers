@@ -28,6 +28,7 @@ import {
 	bookmarks,
 	comments,
 	inlineImages,
+	libraryItems,
 	postEdits,
 	posts,
 	postWorkRefs,
@@ -78,6 +79,13 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import {
+	permanentWorkIds,
+	removeItem,
+	saveProject,
+	saveWork,
+	setHidden,
+} from "../services/library.js";
 import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
 import { loadPublicAccessBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
@@ -328,6 +336,10 @@ const workBaseSchema = z
 		// type = "text": the prose itself.
 		body: z.string().optional().default(""),
 		bodyHtml: z.string().optional().default(""),
+		// type = "audio": the song's words, plain text and untimestamped. Bounded generously
+		// — a long song with repeats runs to a few thousand characters, and an epic runs to
+		// more. No sanitizer, because nothing here is ever rendered as HTML.
+		lyrics: z.string().max(20_000).optional(),
 		metadata: z.record(z.unknown()).optional().default({}),
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
@@ -582,6 +594,8 @@ function serializeWork(
 		durationSeconds: item.durationSeconds,
 		body: item.body,
 		bodyHtml: item.bodyHtml,
+		// Owner-facing, so ungated — this is the shape the Studio editor loads to edit.
+		lyrics: item.lyrics,
 		estimatedReadMinutes: item.estimatedReadMinutes,
 		metadata: stripInternalMetadata(item.metadata),
 		visibility: item.visibility,
@@ -945,6 +959,10 @@ function serializeWorkForViewer(
 		estimatedReadMinutes: work.estimatedReadMinutes,
 		visibility: work.visibility,
 		releasedAt: work.releasedAt,
+		// A buyer of a withdrawn Work needs the date to know how long the rescue window
+		// has left — it is the only warning they currently get, and it was reaching the
+		// old Library through the purchases endpoint rather than through the Work.
+		withdrawnAt: work.withdrawnAt,
 		authoredAt: work.authoredAt,
 		authoredPrecision: work.authoredPrecision,
 		streamEnabled: work.streamEnabled,
@@ -969,6 +987,14 @@ function serializeWorkForViewer(
 		body: deliverable ? work.body : "",
 		sourceKey: deliverable ? work.sourceKey : "",
 		embedUrl: deliverable ? work.embedUrl : "",
+		// 🚨 Lyrics ride WITH the payload, not with the blurb. A gated track's words are as
+		// much the deliverable as its audio, and the two failure directions are not
+		// symmetric: a creator who wants them public can put them in `description`, which
+		// stays visible when locked, while a creator who wanted them private has no way to
+		// un-serve words already handed out. Same branch as `body`, deliberately — a third
+		// rule here ("gated by access but not by the meter") would be a second mechanism
+		// for something already enforced once.
+		lyrics: deliverable ? work.lyrics : "",
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
 		// attention to the commons, not bytes** — delivery is free at any volume since R2,
 		// and a spent allowance has never had anything to do with a file you are entitled
@@ -1978,6 +2004,7 @@ const contentRoutes = new Hono()
 				durationSeconds: data.durationSeconds ?? null,
 				body: data.body ?? "",
 				bodyHtml,
+				lyrics: data.lyrics ?? "",
 				estimatedReadMinutes:
 					data.type === "text" && (bodyHtml || data.body)
 						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
@@ -2334,6 +2361,11 @@ const contentRoutes = new Hono()
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
 		if (data.body !== undefined) updates.body = data.body;
+		// Not gated on `work.type === "audio"`, unlike bodyHtml below. Only audio Works show
+		// lyrics, but refusing the write for any other type would silently discard what a
+		// creator typed if they ever changed the type — and the column is inert everywhere
+		// else, so there is nothing to protect against.
+		if (data.lyrics !== undefined) updates.lyrics = data.lyrics;
 		if (data.bodyHtml !== undefined && work.type === "text") {
 			updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
 			updates.estimatedReadMinutes = estimateReadMinutes(updates.bodyHtml as string);
@@ -3411,6 +3443,190 @@ const contentRoutes = new Hono()
 
 		if (deleted.length === 0) return c.json({ error: "Bookmark not found" }, 404);
 		return c.body(null, 204);
+	})
+
+	// ── The Library ──────────────────────────────────────────────────────────────
+	//
+	// What a user has KEPT: everything they bought, plus everything free they chose to
+	// save. Curation, never entitlement — `services/library.ts` and the table's own doc
+	// comment carry the reasoning, and `resolveAccess` does not read any of it.
+
+	/**
+	 * The user's shelf.
+	 *
+	 * Access is resolved per item exactly as the Catalog resolves it, because a shelf can
+	 * hold a Work its owner cannot currently open: a free Work they saved and its creator
+	 * later gated, or a refunded purchase. Those render locked with the route to unlock,
+	 * which is the same behaviour a gated track gets in the play queue.
+	 *
+	 * `?hidden=1` includes tidied-away entries — the "show hidden" toggle. They are
+	 * excluded by default and never deleted.
+	 */
+	.get("/library", requireAuth, async (c) => {
+		const user = c.get("user");
+		const includeHidden = c.req.query("hidden") === "1";
+
+		const conditions: SQL[] = [eq(libraryItems.userId, user.id)];
+		if (!includeHidden) conditions.push(eq(libraryItems.hidden, false));
+
+		const rows = await db
+			.select()
+			.from(libraryItems)
+			.where(and(...conditions))
+			.orderBy(asc(libraryItems.sortOrder))
+			.limit(500);
+
+		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
+		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
+
+		const workRows = workIds.length
+			? await db.select().from(works).where(inArray(works.id, workIds))
+			: [];
+		const projectRows = projectIds.length
+			? await db
+					.select({
+						id: projects.id,
+						slug: projects.slug,
+						title: projects.title,
+						coverImage: projects.coverImage,
+						creatorId: projects.creatorId,
+					})
+					.from(projects)
+					.where(inArray(projects.id, projectIds))
+			: [];
+
+		const { assetsByWork, jobByWork } = await loadWorkBundles(workIds);
+		const [ctx, spent, permanent] = await Promise.all([
+			buildAccessContext(user.id, { workIds }),
+			allowanceSpent(user.id),
+			permanentWorkIds(user.id),
+		]);
+		await Promise.all(workRows.map(resolveWorkThumbnail));
+
+		const workById = new Map(workRows.map((w) => [w.id, w]));
+		const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+		return c.json({
+			items: rows
+				.map((row) => {
+					const base = {
+						id: row.id,
+						hidden: row.hidden,
+						sortOrder: row.sortOrder,
+						savedAt: row.savedAt,
+					};
+					if (row.workId != null) {
+						const w = workById.get(row.workId);
+						if (!w) return null;
+						return {
+							...base,
+							kind: "work" as const,
+							// Derived from `purchases` on every read, never stamped on the row —
+							// so a refund releases the entry with nothing to keep in step.
+							purchased: permanent.has(w.id),
+							work: serializeWorkForViewer(
+								w,
+								assetsByWork.get(w.id) ?? [],
+								jobByWork.get(w.id) ?? null,
+								resolveAccessSync(w as AccessibleWork, ctx),
+								deliveryCtx(),
+								spent,
+							),
+						};
+					}
+					const p = row.projectId != null ? projectById.get(row.projectId) : null;
+					if (!p) return null;
+					// A Project is a shelf, not a payload: it has no gates of its own and
+					// nothing to withhold. Its members resolve their own access when opened.
+					return { ...base, kind: "project" as const, purchased: false, project: p };
+				})
+				.filter((x) => x != null),
+		});
+	})
+
+	/** Save a Work or a Project. Idempotent, and un-hides one that was tidied away. */
+	.post(
+		"/library",
+		requireAuth,
+		zValidator(
+			"json",
+			z
+				.object({
+					workId: z.number().int().positive().optional(),
+					projectId: z.number().int().positive().optional(),
+				})
+				// Exactly one — the same shape `bookmarks` uses, checked here rather than by
+				// a database constraint so the error is a sentence instead of a 500.
+				.refine((d) => (d.workId == null) !== (d.projectId == null), {
+					message: "Save either a Work or a Project, not both and not neither",
+				}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const data = c.req.valid("json");
+
+			const result =
+				data.workId != null
+					? await saveWork(user.id, data.workId)
+					: await saveProject(user.id, data.projectId as number);
+
+			if (!result.ok) {
+				return c.json(
+					{
+						error:
+							result.reason === "not_released" ? "That isn't released yet." : "That doesn't exist.",
+					},
+					404,
+				);
+			}
+			return c.json({ id: result.id }, 201);
+		},
+	)
+
+	/**
+	 * Tidy an entry off the shelf, or bring it back.
+	 *
+	 * Separate from DELETE on purpose: for a purchased Work this is the *only* control,
+	 * and conflating the two would put "remove" on a button that must never remove.
+	 */
+	.patch(
+		"/library/:id",
+		requireAuth,
+		zValidator("json", z.object({ hidden: z.boolean() })),
+		async (c) => {
+			const user = c.get("user");
+			const id = parseNumericId(c.req.param("id"));
+			if (id == null) return c.json({ error: "Not found" }, 404);
+			const ok = await setHidden(user.id, id, c.req.valid("json").hidden);
+			return ok ? c.json({ success: true }) : c.json({ error: "Not found" }, 404);
+		},
+	)
+
+	/**
+	 * Un-save.
+	 *
+	 * 🚨 **Refuses a purchased Work**, with `409` and the alternative named. Somebody who
+	 * tidies a purchase off their shelf and cannot work out how to get it back has
+	 * effectively lost the thing they paid for, so the control they get is *hide*, which
+	 * is reversible and loses nothing.
+	 */
+	.delete("/library/:id", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = parseNumericId(c.req.param("id"));
+		if (id == null) return c.json({ error: "Not found" }, 404);
+
+		const result = await removeItem(user.id, id);
+		if (result.ok) return c.body(null, 204);
+		if (result.reason === "purchased") {
+			return c.json(
+				{
+					error: "You bought this, so it stays in your Library. You can hide it instead.",
+					reason: "purchased",
+				},
+				409,
+			);
+		}
+		return c.json({ error: "Not found" }, 404);
 	});
 
 export { contentRoutes };

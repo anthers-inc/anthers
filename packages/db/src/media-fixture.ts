@@ -42,15 +42,30 @@ export interface MediaFixtureWork {
 	media: "video" | "audio";
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
+	/**
+	 * Gated behind one Seed to this creator, rather than free to everyone.
+	 *
+	 * 🚨 **The album has to contain one.** A queue that can only ever hold playable tracks
+	 * cannot demonstrate — or test — the one rule Garnet's model has no equivalent for:
+	 * that Anthers resolves access per request, so a queue legitimately holds tracks the
+	 * listener turns out not to own. An all-free fixture makes the skip logic structurally
+	 * invisible, which is the "sabotage tells you where the test ISN'T" shape.
+	 */
+	gated?: boolean;
+	/** Untimestamped words, so the lyrics surfaces have something real to render. */
+	lyrics?: string;
 }
 
 /**
  * The Works.
  *
- * One video and three audio tracks. Three rather than one because the music work needs a
- * queue with somewhere to advance *to*: a single-track album cannot tell a "next" that
- * works from a "next" that silently does nothing, which is the whole failure mode of a
- * queue built without one.
+ * One video and four audio tracks. Four rather than one because the music work needs a
+ * queue with somewhere to advance *to* — a single-track album cannot tell a "next" that
+ * works from a "next" that silently does nothing — and because **track 3 is gated**, which
+ * is what makes the skip-over-locked behaviour observable at all.
+ *
+ * The gated one is in the MIDDLE on purpose: at the end it would be indistinguishable from
+ * the queue simply running out.
  */
 export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 	{
@@ -61,14 +76,43 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		media: "video",
 		trackNumber: 0,
 	},
-	...[1, 2, 3].map((n) => ({
-		key: `track${n}`,
-		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-${n}`,
-		publicId: PUBLIC_ID_BASE + 10 + n,
-		title: `Track ${n}`,
-		media: "audio" as const,
-		trackNumber: n,
-	})),
+	{
+		key: "track1",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-1`,
+		publicId: PUBLIC_ID_BASE + 11,
+		title: "Track 1",
+		media: "audio",
+		trackNumber: 1,
+		lyrics: "First verse, first line\nFirst verse, second line\n\nChorus goes here",
+	},
+	{
+		key: "track2",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-2`,
+		publicId: PUBLIC_ID_BASE + 12,
+		title: "Track 2",
+		media: "audio",
+		trackNumber: 2,
+	},
+	{
+		key: "track3",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-3`,
+		publicId: PUBLIC_ID_BASE + 13,
+		title: "Track 3 (gated)",
+		media: "audio",
+		trackNumber: 3,
+		gated: true,
+		// Gated lyrics, so the withholding has something to withhold. A viewer without
+		// access must see neither these words nor the audio.
+		lyrics: "These words are behind the gate",
+	},
+	{
+		key: "track4",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}track-4`,
+		publicId: PUBLIC_ID_BASE + 14,
+		title: "Track 4",
+		media: "audio",
+		trackNumber: 4,
+	},
 ];
 
 /** Look a fixture Work up by key. Throws rather than returning undefined, so a typo in a

@@ -8,7 +8,7 @@ import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
-import MiniPlayer from "../media/MiniPlayer";
+import PlayerBar from "../media/PlayerBar";
 import RouteSuspense from "./RouteSuspense";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -211,7 +211,7 @@ export default function LoggedOutLayout() {
 				</RouteSuspense>
 			</main>
 
-			<MiniPlayer />
+			<PlayerBar />
 
 			{/* Meadow footer — transparent (no bg overlay), compact, sitting right atop
 				the grassy floor below it. z-10 keeps it behind the side vines (z-20). */}

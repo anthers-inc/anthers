@@ -157,8 +157,14 @@ export type UploadableWorkType = Exclude<ContentType, "text">;
 /** How precise a creator's asserted Created date is — rendered exactly as claimed. */
 export type AuthoredPrecision = "year" | "month" | "day";
 
-/** Whether a Work is still staging, or has been released to the public Catalog. */
-export type WorkVisibility = "private" | "released";
+/**
+ * Where a Work sits relative to the public Catalog.
+ *
+ * `withdrawn` is not a state a creator sets — it is what deleting a *purchased* Work does
+ * (migrations `0016`/`0017`), because a purchase outlives the Work it bought. It is
+ * excluded from every public listing and still served to the people who own it.
+ */
+export type WorkVisibility = "private" | "released" | "withdrawn";
 
 /**
  * A **Work** — one entry in a creator's Catalog, and the unit of published creative work.
@@ -189,6 +195,14 @@ export interface Work {
 	/** Prose, for `type: "text"`. Gated like any other payload. */
 	body?: string | null;
 	bodyHtml?: string | null;
+	/**
+	 * The song's words, for `type: "audio"` — plain text, untimestamped, newline-separated.
+	 *
+	 * Gated exactly like `body`: a denied viewer gets `""`, because a gated track's words
+	 * are part of what the Seed or purchase buys. The public blurb that survives a gate is
+	 * `description`.
+	 */
+	lyrics?: string | null;
 	estimatedReadMinutes?: number | null;
 	metadata: Record<string, unknown> | null;
 
@@ -196,6 +210,8 @@ export interface Work {
 	// the public sees `authoredAt` (when the work was MADE) and `releasedAt`.
 	visibility?: WorkVisibility;
 	releasedAt?: string | null;
+	/** When it left public circulation. Only ever set alongside `visibility: "withdrawn"`. */
+	withdrawnAt?: string | null;
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
 
@@ -249,8 +265,15 @@ export interface WorkInput {
 	durationSeconds?: number;
 	body?: string;
 	bodyHtml?: string;
+	/** Untimestamped song lyrics (audio Works). Plain text — never HTML. */
+	lyrics?: string;
 	metadata?: Record<string, unknown>;
-	visibility?: WorkVisibility;
+	/**
+	 * What a creator may SET. Deliberately narrower than `Work["visibility"]`:
+	 * `withdrawn` is what deleting a purchased Work does, never something a creator
+	 * chooses, so it has no place in an input type.
+	 */
+	visibility?: Exclude<WorkVisibility, "withdrawn">;
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
 	streamEnabled?: boolean;

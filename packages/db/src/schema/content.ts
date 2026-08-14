@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { sql } from "drizzle-orm";
 import {
 	bigint,
 	boolean,
@@ -109,6 +111,29 @@ export const works = pgTable(
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
+		// type = "audio": the song's words. **A column, not `metadata`** — lyrics are
+		// creator-authored, reader-visible content, the same class of thing as `description`
+		// and `body`, both of which are columns. `metadata` is for incidental shape
+		// (`clientVariants`, a physical item's note), and burying published text in the
+		// jsonb grab-bag makes it invisible to future search and to any migration that has
+		// to reason about what a creator actually wrote.
+		//
+		// Deliberately **untimestamped**: no karaoke, no per-line sync, just the words
+		// attached to the Work. Plain text rendered `white-space: pre-wrap` rather than
+		// rich text — lyrics are line-broken text, and a rich-text surface here would
+		// invite formatting nobody wants and a sanitizer nobody needs.
+		//
+		// 🚨 **Gated with the payload.** `serializeWorkForViewer` blanks this alongside
+		// `body`/`bodyHtml`/`sourceKey`, because a gated track's words are as much the
+		// deliverable as its audio. The failure is quiet in either direction, so the
+		// asymmetry decided it: a creator who wants them public can put them in
+		// `description`, which stays visible when locked — a creator who wanted them
+		// private has no way to un-publish words already served.
+		//
+		// Stored for any type rather than only `audio` (which is how `bodyHtml` is
+		// restricted to `text`), so that changing a Work's type cannot silently destroy
+		// what someone wrote. Only audio Works display them.
+		lyrics: text("lyrics").default(""),
 		// Browser-encode transport (metadata.clientVariants) + physical/service product
 		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
 		// downloadable variants (game/software builds) live in `assets`.
@@ -490,6 +515,91 @@ export const comments = pgTable(
 	],
 );
 
+/**
+ * The **Library** — the Works and Projects a user has kept.
+ *
+ * 🚨 **Curation, never entitlement.** `resolveAccess` must not read this table, and a row
+ * here grants nothing: saving a free Work is a bookmark for something you could already
+ * reach, not a purchase. If saving ever unlocked anything, "Save to Library" would be a
+ * free unlock button, which is the worst defect this platform could ship. Entitlement
+ * lives in `purchases` and only there.
+ *
+ * The consequence, which is correct and needs a real behaviour rather than a fix: **a free
+ * Work you saved can later be gated by its creator.** It stays on your shelf and becomes
+ * unplayable, exactly as a gated track sits in a queue — see `lib/music-queue.ts`, which
+ * arrived at the same rule from the other direction.
+ *
+ * ## Why this table exists at all
+ *
+ * The Library used to be `/api/payments/purchases` with Seed buys filtered out — a receipt
+ * list wearing a shelf's name. That worked while "yours" meant "paid for", and stopped
+ * working the moment the commons did: **most of what a user loves on Anthers is free**, so
+ * it was never purchasable and therefore had nowhere to live. Bookmarks half-covered it and
+ * half-covered four other things. Parker's call (2026-08-13): one place, and that place is
+ * the Library.
+ *
+ * ## Two rules that look like details and are not
+ *
+ * **A purchased Work is permanent.** It cannot be removed, only `hidden` — because a user
+ * who tidies a purchase off their shelf and cannot work out how to get it back has
+ * effectively lost the thing they paid for. Hiding is reversible from a toggle in the same
+ * view; unsaving would be a black hole with a friendly label.
+ *
+ * **Permanence is DERIVED, never stored.** There is no `source` column saying "this one was
+ * bought": that would be a second copy of a fact `purchases` already holds, and the two
+ * would disagree the first time somebody refunded. A row is permanent exactly while a
+ * completed purchase for that (user, Work) exists — so a refund, which removes the
+ * entitlement, also releases the shelf entry in the same instant and with no sweep.
+ *
+ * Polymorphic over Work | Project in the same shape `bookmarks` uses, because **people keep
+ * albums, not four loose tracks**: a Project is how an album exists here, so saving one has
+ * to save the record rather than scatter it.
+ */
+export const libraryItems = pgTable(
+	"library_items",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Exactly one of these is set; enforced at the app layer, as `bookmarks` does.
+		// Cascade is right here in a way it is NOT on `purchases.work_id`: a shelf entry
+		// is a preference, not an entitlement, so it may go when its subject does.
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+		// Tidied off the shelf without being given up. Only ever set by the user, and the
+		// only thing a purchased item's "remove" control is allowed to do.
+		hidden: boolean("hidden").notNull().default(false),
+		sortOrder: integer("sort_order").notNull().default(0),
+		savedAt: timestamp("saved_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_library_user").on(table.userId, table.sortOrder),
+		// Partial uniques, because the columns are nullable: a user saves a given Work or
+		// Project once. Without the partial predicate a second null would collide.
+		uniqueIndex("uq_library_work")
+			.on(table.userId, table.workId)
+			.where(sql`${table.workId} IS NOT NULL`),
+		uniqueIndex("uq_library_project")
+			.on(table.userId, table.projectId)
+			.where(sql`${table.projectId} IS NOT NULL`),
+		index("idx_library_work").on(table.workId),
+		index("idx_library_project").on(table.projectId),
+	],
+);
+
+/**
+ * Bookmarks — **posts only**, in practice, since 2026-08-13.
+ *
+ * The four target columns remain because the rows do, but the product line is now one verb
+ * per object: a Work or a Project is **saved** (to the Library), a creator is **followed**,
+ * and a post is **bookmarked**. Two controls that sound like the same thing on one object
+ * is what made both feel like half a feature.
+ *
+ * Migration `0035` moved every Work and Project bookmark into `library_items` and removed
+ * the originals — a move, not a deletion, and the reason the columns are not dropped is
+ * that dropping them is a separate migration with nothing to gain from being rushed.
+ */
 export const bookmarks = pgTable(
 	"bookmarks",
 	{

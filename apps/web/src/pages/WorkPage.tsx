@@ -24,6 +24,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { CalendarIcon, ClockIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AddToBasket from "../components/basket/AddToBasket";
+import SaveButton from "../components/library/SaveButton";
 import AudioPlayer from "../components/media/AudioPlayer";
 import { PublicAccessFooter, PublicAccessWall } from "../components/media/PublicAccessNotice";
 import TranscodingStatus from "../components/media/TranscodingStatus";
@@ -37,7 +38,9 @@ import ProjectRating from "../components/project/ProjectRating";
 import ContentTypeBadge from "../components/ui/ContentTypeBadge";
 import SanitizedHtml from "../components/ui/SanitizedHtml";
 import { useAttentionClaim } from "../lib/attention";
+import { useMediaPlayer } from "../lib/media-player";
 import { useMeteredBudget } from "../lib/public-access";
+import { trackFromWork } from "../lib/tracks";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 type WorkDetail = Work & {
@@ -85,6 +88,7 @@ export default function WorkPage() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const { user, isAuthenticated } = useAuth();
+	const { playTracks } = useMediaPlayer();
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -249,7 +253,12 @@ export default function WorkPage() {
 					)}
 				</div>
 
-				<h1 className="text-3xl font-bold">{work.title || "Untitled"}</h1>
+				<div className="flex flex-wrap items-start justify-between gap-3">
+					<h1 className="text-3xl font-bold">{work.title || "Untitled"}</h1>
+					{/* Save sits beside the title rather than under the player, because it
+					    applies to a gated Work too — it keeps the thing, it does not open it. */}
+					<SaveButton workId={work.id} className="shrink-0" />
+				</div>
 
 				{/* Made, then released — never the upload date, which is bookkeeping. */}
 				<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
@@ -325,12 +334,30 @@ export default function WorkPage() {
 							/>
 						)}
 						{work.type === "audio" && work.transcoding?.outputFileUrl && (
-							<AudioPlayer
-								src={work.transcoding.outputFileUrl}
-								waveform={work.transcoding.waveformData ?? undefined}
-								attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-								publicAccess={work.publicAccess ?? false}
-							/>
+							<>
+								<AudioPlayer
+									src={work.transcoding.outputFileUrl}
+									waveform={work.transcoding.waveformData ?? undefined}
+									attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+									publicAccess={work.publicAccess ?? false}
+									// Hand it to the persistent bar, so listening survives navigating
+									// away — which is the whole reason the bar exists.
+									onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
+								/>
+								{/* The words, under the player. Gated with the audio: the API blanks
+								    them for a viewer without access, so reaching this branch at all
+								    means the viewer may read them. */}
+								{work.lyrics?.trim() && (
+									<section className="mt-4 rounded-lg bg-base-200/60 p-4">
+										<h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
+											Lyrics
+										</h2>
+										<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
+											{work.lyrics}
+										</p>
+									</section>
+								)}
+							</>
 						)}
 						{work.type === "image" && work.sourceKey && (
 							<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />

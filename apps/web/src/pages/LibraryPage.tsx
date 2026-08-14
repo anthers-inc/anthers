@@ -1,21 +1,48 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * The **Library** — everything the user has kept.
+ *
+ * This page used to read `/api/payments/purchases` with Seed buys filtered out: a receipt
+ * list wearing a shelf's name. That worked while "yours" meant "paid for", and stopped
+ * working the moment the commons did — **most of what a person loves on Anthers is free**,
+ * so it was never purchasable and therefore had nowhere to live. Bookmarks half-covered
+ * that and half-covered four other things, which is why both felt like half a feature.
+ *
+ * Now it reads `/api/content/library`: purchases, which land here automatically and
+ * permanently, alongside anything free the user chose to **save**.
+ *
+ * Two behaviours worth knowing before changing anything here:
+ *
+ *   🚨 **A purchase can be hidden, never removed.** Somebody who tidies a purchase off
+ *      their shelf and can't work out how to get it back has effectively lost the thing
+ *      they paid for. The "show hidden" toggle is what makes hiding safe, so it must stay
+ *      reachable from this page — it is the only way back.
+ *
+ *   ⚠️ **A shelf entry may be unopenable, and that is not a bug.** Saving grants no
+ *      access, so a free Work whose creator later gated it stays here and stops being
+ *      openable. It renders locked with the route to unlock, the same way a gated track
+ *      sits in the play queue.
+ */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { Purchase } from "@anthers/web-shared/types";
+import type { Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
+	EyeIcon,
+	EyeSlashIcon,
+	LockClosedIcon,
 	MusicalNoteIcon,
 	PencilSquareIcon,
-	PlayIcon,
 	PuzzlePieceIcon,
 	RectangleStackIcon,
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { removeItem, setHidden } from "../lib/library";
 
 const MEDIA_TABS = [
 	{ id: "", label: "All", icon: RectangleStackIcon },
@@ -25,13 +52,27 @@ const MEDIA_TABS = [
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
 ] as const;
 
+interface ShelfProject {
+	id: number;
+	slug: string;
+	title: string;
+	coverImage: string | null;
+}
+
+interface ShelfItem {
+	id: number;
+	kind: "work" | "project";
+	hidden: boolean;
+	savedAt: string;
+	/** Derived from a completed purchase on every read — never stored on the row. */
+	purchased: boolean;
+	work?: Work | null;
+	project?: ShelfProject | null;
+}
+
 /**
  * The last day a withdrawn Work can still be rescued, or null when we don't know
  * when it was withdrawn (a row from before `0017` stamped the column).
- *
- * Null is why the copy below branches rather than always printing a date: without
- * a withdrawal date there is no honest deadline to give, and a made-up one is
- * worse than none.
  */
 function rescueDeadline(withdrawnAt: string | null | undefined): string | null {
 	if (!withdrawnAt) return null;
@@ -41,43 +82,60 @@ function rescueDeadline(withdrawnAt: string | null | undefined): string | null {
 	return at.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
-/**
- * One owned Work.
- *
- * The card is a link ONLY when the Work still has a page — `publicId` comes from the live
- * row and goes null with it, so its absence is the signal that there is nowhere to go.
- * Until now this fell back to `/posts/{slug}`, which is a different route serving a
- * different entity: every purchase in the Library led to a not-found page.
- */
-function LibraryCard({ purchase }: { purchase: Purchase }) {
-	const work = purchase.work;
-	const to = work?.publicId != null ? workUrl({ slug: work.slug, publicId: work.publicId }) : null;
+function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void }) {
+	const [busy, setBusy] = useState(false);
+	const work = item.work;
+	const project = item.project;
+
+	const title = work?.title ?? project?.title ?? "Untitled";
+	const cover = work?.thumbnail ?? project?.coverImage ?? null;
+	const to =
+		work?.publicId != null
+			? workUrl({ slug: work.slug, publicId: work.publicId })
+			: project
+				? `/projects/${project.slug}`
+				: null;
+
+	// A shelf entry the viewer cannot currently open — saved free and later gated, or
+	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
+	const locked = item.kind === "work" && work?.access?.canAccess === false;
+
+	const act = async (fn: () => Promise<unknown>) => {
+		setBusy(true);
+		try {
+			await fn();
+			onChanged();
+		} finally {
+			setBusy(false);
+		}
+	};
 
 	const body = (
 		<>
-			{work?.coverImage ? (
+			{cover ? (
 				<figure>
-					<img src={work.coverImage} alt={work.title ?? ""} className="w-full h-40 object-cover" />
+					<img src={cover} alt="" className="h-40 w-full object-cover" />
 				</figure>
 			) : (
-				<div className="w-full h-40 bg-base-300 flex items-center justify-center">
-					<span className="text-base-content/30 text-sm">No cover</span>
+				<div className="flex h-40 w-full items-center justify-center bg-base-300">
+					<span className="text-sm text-base-content/30">No cover</span>
 				</div>
 			)}
-			<div className="card-body p-4">
-				<h2 className="card-title text-sm">{work?.title ?? "Untitled"}</h2>
-				<p className="text-xs text-base-content/60">
-					Purchased {new Date(purchase.createdAt).toLocaleDateString()}
-				</p>
-				{/* Say what changed rather than letting the card look ordinary while the
-				    thing behind it has quietly left circulation. The deadline is now
-				    stated, because it is decided: 90 days from withdrawal, uniform for
-				    every buyer (51.06 § If a creator removes a Work). Three surfaces quote
-				    that number and `WITHDRAWN_RESCUE_DAYS` is the one place it lives — the
-				    Terms and the creator terms are the other two, and they must agree.
-				    Note the sweep that enforces it and the notification that warns of it
-				    are both still unbuilt, so this card is currently the ONLY warning a
-				    buyer gets. */}
+			<div className="card-body gap-1 p-4">
+				<h2 className="card-title text-sm">{title}</h2>
+				<div className="flex flex-wrap items-center gap-1.5">
+					{/* A word, not only a colour: "Purchased" is what makes the permanence
+					    rule legible when the remove control refuses. */}
+					{item.purchased && <span className="badge badge-sm badge-soft">Purchased</span>}
+					{item.kind === "project" && <span className="badge badge-sm badge-ghost">Album</span>}
+					{locked && (
+						<span className="badge badge-sm badge-ghost gap-1">
+							<LockClosedIcon className="size-3" />
+							Gated
+						</span>
+					)}
+					{item.hidden && <span className="badge badge-sm badge-ghost">Hidden</span>}
+				</div>
 				{work?.visibility === "withdrawn" && (
 					<p className="text-xs text-warning">
 						Withdrawn by the creator — still yours
@@ -91,113 +149,159 @@ function LibraryCard({ purchase }: { purchase: Purchase }) {
 		</>
 	);
 
-	return to ? (
-		<Link to={to} className="card bg-base-200 hover:shadow-lg transition-shadow">
-			{body}
-		</Link>
-	) : (
-		<div className="card bg-base-200 opacity-70">{body}</div>
+	return (
+		<div className={`card bg-base-200 ${item.hidden ? "opacity-60" : ""}`}>
+			{to ? (
+				<Link to={to} className="transition-shadow hover:shadow-lg">
+					{body}
+				</Link>
+			) : (
+				<div className="opacity-70">{body}</div>
+			)}
+			<div className="flex items-center justify-end gap-1 px-3 pb-3">
+				<button
+					type="button"
+					className="btn btn-ghost btn-xs gap-1"
+					disabled={busy}
+					onClick={() => act(() => setHidden(item.id, !item.hidden))}
+				>
+					{item.hidden ? <EyeIcon className="size-3.5" /> : <EyeSlashIcon className="size-3.5" />}
+					{item.hidden ? "Show" : "Hide"}
+				</button>
+				{/* Absent entirely on a purchase, rather than present-and-refusing. A control
+				    that exists to say no is worse than one that was never offered — and the
+				    server refuses regardless, so this is presentation, not enforcement. */}
+				{!item.purchased && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs"
+						disabled={busy}
+						onClick={() => act(() => removeItem(item.id))}
+					>
+						Remove
+					</button>
+				)}
+			</div>
+		</div>
 	);
 }
 
 export default function LibraryPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const [purchases, setPurchases] = useState<Purchase[]>([]);
+	const [items, setItems] = useState<ShelfItem[]>([]);
 	const [loading, setLoading] = useState(true);
 
 	const activeTab = searchParams.get("type") ?? "";
+	const showHidden = searchParams.get("hidden") === "1";
 
-	useEffect(() => {
-		client.api.payments.purchases
-			.$get()
+	/*
+	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
+	 *
+	 * Fetching `hidden=1` only when the toggle is on looks equivalent and is not: the
+	 * count that decides whether the toggle *renders* would then be computed from a list
+	 * the toggle had already excluded. Hiding your last item removed the toggle along with
+	 * it — leaving no way back, which is precisely the black hole that refusing to remove
+	 * a purchase exists to prevent, reproduced one layer up. Found by hiding one item in a
+	 * one-item Library.
+	 */
+	const load = useCallback(() => {
+		client.api.content.library
+			.$get({ query: { hidden: "1" } })
 			.then((res) => res.json())
-			.then((data) => setPurchases((data as { purchases: Purchase[] }).purchases))
+			.then((data) => setItems((data as unknown as { items: ShelfItem[] }).items))
 			.catch(() => {})
 			.finally(() => setLoading(false));
 	}, []);
 
-	const setTab = (id: string) => {
-		if (id) {
-			setSearchParams({ type: id }, { replace: true });
-		} else {
-			setSearchParams({}, { replace: true });
-		}
+	useEffect(load, [load]);
+
+	const setParam = (key: string, value: string) => {
+		const next = new URLSearchParams(searchParams);
+		if (value) next.set(key, value);
+		else next.delete(key);
+		setSearchParams(next, { replace: true });
 	};
 
-	// The Library is owned CONTENT, so a Seed buy has no place in it — it is a real
-	// charge with a real receipt (see Purchases), but it bought no Work, so it would
-	// render here as a titleless card linking nowhere. It only started appearing at all
-	// when `0016` stopped this endpoint dropping every purchase with no Work row.
-	const owned = purchases.filter((p) => p.type !== "seeds");
-
-	// Filter by the media type of the Work that was bought.
-	const filteredPurchases = activeTab ? owned.filter((p) => p.work?.type === activeTab) : owned;
+	// Hidden entries are filtered HERE rather than by the request — see `load`.
+	const visible = showHidden ? items : items.filter((i) => !i.hidden);
+	// A Project has no media type of its own, so a media tab necessarily excludes albums.
+	// The All tab is where they live, which is honest: an album is not "a video".
+	const filtered = activeTab
+		? visible.filter((i) => i.kind === "work" && i.work?.type === activeTab)
+		: visible;
 
 	if (loading) {
 		return (
-			<div className="flex justify-center items-center min-h-[60vh]">
+			<div className="flex min-h-[60vh] items-center justify-center">
 				<LoadingSpinner size="lg" />
 			</div>
 		);
 	}
 
+	const hiddenCount = items.filter((i) => i.hidden).length;
+
 	return (
 		<div className="container mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">Library</h1>
-			<p className="text-base-content/60 text-sm mb-6">
-				Your purchased projects and saved content, organized by media type.
+			<h1 className="mb-2 text-2xl font-bold">Library</h1>
+			<p className="mb-6 text-sm text-base-content/60">
+				Everything you've kept — what you've bought, and anything free you saved.
 			</p>
 
-			{/* Media type tabs */}
-			<div className="tabs tabs-boxed mb-6 w-fit">
-				{MEDIA_TABS.map((tab) => (
-					<button
-						key={tab.id}
-						type="button"
-						className={`tab tab-sm gap-1.5 ${activeTab === tab.id ? "tab-active" : ""}`}
-						onClick={() => setTab(tab.id)}
-					>
-						<tab.icon className="w-4 h-4" />
-						{tab.label}
-						{tab.id === "" && owned.length > 0 && (
-							<span className="badge badge-xs">{owned.length}</span>
+			<div className="mb-6 flex flex-wrap items-center gap-3">
+				{/* `tabs-box`, not the retired v4 `tabs-boxed`. */}
+				<div role="tablist" className="tabs tabs-box w-fit">
+					{MEDIA_TABS.map((tab) => (
+						<button
+							key={tab.id}
+							type="button"
+							role="tab"
+							className={`tab tab-sm gap-1.5 ${activeTab === tab.id ? "tab-active" : ""}`}
+							onClick={() => setParam("type", tab.id)}
+						>
+							<tab.icon className="size-4" />
+							{tab.label}
+							{tab.id === "" && visible.length > 0 && (
+								<span className="badge badge-xs">{visible.length}</span>
+							)}
+						</button>
+					))}
+				</div>
+
+				{/*
+				 * 🚨 The way back from Hide, and therefore not optional.
+				 *
+				 * A purchase can only ever be hidden — never removed — so if this control is
+				 * missing or hard to find, hiding becomes the black hole that refusing to
+				 * remove was supposed to prevent. Shown whenever anything is hidden, and also
+				 * while the toggle is on, so turning it off is possible.
+				 */}
+				{(showHidden || hiddenCount > 0) && (
+					<label className="label cursor-pointer gap-2 text-sm">
+						<input
+							type="checkbox"
+							className="toggle toggle-sm"
+							checked={showHidden}
+							onChange={(e) => setParam("hidden", e.target.checked ? "1" : "")}
+						/>
+						Show hidden
+						{!showHidden && hiddenCount > 0 && (
+							<span className="badge badge-xs">{hiddenCount}</span>
 						)}
-					</button>
-				))}
+					</label>
+				)}
 			</div>
 
-			{/* Tab-specific scaffolding */}
-			{activeTab === "audio" && filteredPurchases.length > 0 && (
-				<div className="bg-base-200/50 rounded-lg p-4 mb-6 flex items-center gap-3">
-					<PlayIcon className="w-5 h-5 text-primary" />
-					<p className="text-sm text-base-content/60">
-						Music player integration coming soon. You'll be able to queue and play your music
-						library directly from here.
-					</p>
-				</div>
-			)}
-
-			{activeTab === "game" && filteredPurchases.length > 0 && (
-				<div className="bg-base-200/50 rounded-lg p-4 mb-6 flex items-center gap-3">
-					<PuzzlePieceIcon className="w-5 h-5 text-primary" />
-					<p className="text-sm text-base-content/60">
-						Install tracking and download management coming soon.
-					</p>
-				</div>
-			)}
-
-			{/* Content */}
-			{filteredPurchases.length === 0 ? (
+			{filtered.length === 0 ? (
 				<EmptyState
 					title={
 						activeTab
-							? `No ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} in your library`
-							: "Your library is empty"
+							? `No ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} in your Library`
+							: "Your Library is empty"
 					}
 					description={
 						activeTab
-							? `You haven't purchased any ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} yet.`
-							: "Purchase or save content to build your library."
+							? "Nothing here yet — save something, or buy it, and it lands here."
+							: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
 					}
 					action={
 						<Link to="/discover" className="btn btn-primary btn-sm">
@@ -206,9 +310,9 @@ export default function LibraryPage() {
 					}
 				/>
 			) : (
-				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-					{filteredPurchases.map((purchase) => (
-						<LibraryCard key={purchase.id} purchase={purchase} />
+				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					{filtered.map((item) => (
+						<ShelfCard key={item.id} item={item} onChanged={load} />
 					))}
 				</div>
 			)}

@@ -33,6 +33,7 @@ export interface WorkFixture {
 	description?: string;
 	body?: string;
 	bodyHtml?: string;
+	lyrics?: string;
 	sourceKey?: string;
 	embedUrl?: string;
 	durationSeconds?: number;
@@ -61,6 +62,7 @@ export async function insertWork(fixture: WorkFixture) {
 			description: fixture.description ?? "",
 			body: fixture.body ?? "",
 			bodyHtml: fixture.bodyHtml ?? "",
+			lyrics: fixture.lyrics ?? "",
 			sourceKey: fixture.sourceKey ?? "",
 			embedUrl: fixture.embedUrl ?? "",
 			durationSeconds: fixture.durationSeconds ?? null,
