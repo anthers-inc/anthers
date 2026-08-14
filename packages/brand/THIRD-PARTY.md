@@ -16,8 +16,9 @@ The `nature/` collections are icon sets obtained from [The Noun Project](https:/
 | `nature/wildflowers-outline-271978` | 271978 | 100 |
 | `nature/wildflowers-solid-271979` | 271979 | 97 |
 
-**Note:** these are committed to a public AGPL repo. The NounPro license permits use without attribution; confirm it also permits redistributing the raw files as part of an open-source repository before relying on this long-term. If not, an alternative is to keep `svg/` untracked and have contributors supply their own downloads.
+> [!warning] Unresolved, and it stops being hypothetical the moment the repo goes public
+> These are committed to an AGPL repo that is **about to be world-readable**. The NounPro license permits use without attribution; it is a separate question whether it permits **redistributing the raw files** as part of an open-source repository, and that question has not been answered. Answer it before the repo is flipped, not after — the fallback is to keep `svg/` untracked and have the build fetch or a contributor supply their own downloads, which is a small change while the repo is private and a takedown-shaped one afterwards.
 
 ## Anthers brand (`svg/anthers/…`, `anthers/…`)
 
-First-party Anthers brand marks (© Parker H. Davis, LLC). Currently a rough logo concept (`anthers-logo-temp/`, raster) pending a commissioned vector version.
+First-party Anthers brand marks (© Parker H. Davis, LLC), in `svg/anthers/anthers-logo/` — vector marks plus raster exports and a palette/type note in that folder's `README.txt`. An interim in-house design, pending a commissioned one.

@@ -11,7 +11,7 @@
  *
  * In prod, point DATABASE_URL at the managed DB for the one command, e.g.:
  *   DATABASE_URL="$(doctl databases connection <id> --format URI --no-header)" \
- *     bun run db:admin parkerhdavis
+ *     bun run db:admin <username>
  *
  * Idempotent: granting an already-admin account (or revoking a non-admin) just
  * reports the current state. Exits non-zero if the username doesn't exist.

@@ -1,173 +1,152 @@
-![Anthers Logo](./packages/brand/svg/anthers/anthers-logo-temp-cleanup/anthers-hlock-reverse.png)
+<p align="center">
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/svg/anthers/anthers-logo/anthers-hlock-reverse.png">
+		<img alt="Anthers" src="./packages/brand/svg/anthers/anthers-logo/anthers-hlock.png" width="420">
+	</picture>
+</p>
+
 # Anthers
 
----
+**A creator-first media platform, run as a non-profit.** Creators publish games, videos, music, comics, writing and software here, and keep every dollar their audience spends on them. Anthers takes no cut of creator money — not from a sale, not from support. What funds the platform is the money people choose to give Anthers directly, and what is left of it after creators are paid funds free access for everyone else.
 
-A creator-first, non-profit media platform — **centralized-first, with per-node federation on the roadmap.** Creators host games, videos, audio, and writing. The model is one primitive: a **Seed**, a flat **$3/month**, pointed one of two ways. Given to a **creator** it goes to them with **no platform cut** and clears that creator's Seed Gates. Pointed at **Anthers**, it covers your own streaming at cost, funds the **Time Pool** that pays creators by watch-time, and leaves a **remainder** that funds free access and Anthers' charitable programs.
+`Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. That is a structural commitment rather than a promise about intentions — the organization is built so that the interests it can serve are the creators' and the audience's.
 
-`Anthers, Inc.` is a Colorado nonprofit corporation — no investors, no profit-taking. It cannot be acquired and cannot take corrupting investment. Every user dollar is money to a creator, the user's own bandwidth at cost, the remainder that funds free access and the charitable programs, or the at-cost Payments line a card transaction carries — never platform profit.
+This repository is the whole platform: the API, the web app, the creator Studio, the desktop shell, and the shared packages underneath them. It is licensed [AGPL-3.0-or-later](./LICENSE.md).
 
-## Prerequisites
+## Status
 
-- [Bun](https://bun.sh) (runtime, package manager, bundler, test runner)
-- [FFmpeg](https://ffmpeg.org/) (media transcoding — HLS, audio normalization, waveform generation)
+**Pre-launch.** [anthers.org](https://anthers.org) is live but sits behind an invite wall while the platform grows through a deliberate ladder of admission phases — each with a ceiling on accounts and creators, and each opening on a readiness checklist rather than a date. It is run by one person right now, and the ceiling exists so that the things one person must keep safe are never outrun by signups.
 
-## Getting Started
+**The source is public; contributions are closed for the moment.** That is a temporary posture, not a philosophy. The model, the schema and the product surface are all still moving fast enough that an outside pull request would be an unkind thing to accept — we would be asking someone to build against a foundation we are still pouring. This repository is public because an AGPL platform that handles other people's money and other people's work should be readable by the people it affects, and because building in the open is on the roadmap as a goal in its own right. When the platform reaches general availability and the ground stops shifting, this section is where the invitation will go.
 
-```sh
-# Clone the repository
-git clone <repo-url> && cd anthers
+In the meantime:
 
-# Copy environment config
-cp .env.example .env
+- **Security vulnerabilities are always welcome** and always in scope — see [`SECURITY.md`](./SECURITY.md).
+- **Reading, forking and learning from the code** is exactly what the license is for.
+- **Questions** are welcome at [contact@anthers.org](mailto:contact@anthers.org).
 
-# Install dependencies
-bun install
+## How the money works
 
-# Start the local Postgres (Docker; see compose.yaml)
-make db-up
+One primitive: a **Seed**, a flat $3 a month, and there is only one kind. What varies is who you give it to and what you get back.
 
-# Run database migrations
-bun run db:migrate
+**Give a Seed to a creator** and it goes to that creator. Anthers keeps nothing from it — the only deduction is its share of the at-cost card processing, which is paid to Stripe. A directed Seed also clears that creator's **Seed Gates**: thresholds they set themselves, in whole Seeds, each branded with a **Badge** they design.
 
-# (Optional) Seed the database
-bun run db:seed
+**Give a Seed to Anthers** and it backs the commons. It funds the **Time Pool**, which pays creators in proportion to the time people spend with their work — a minute is a minute whether it was spent playing, watching, reading or listening — and it covers its share of the at-cost card processing. What remains funds free access and Anthers' charitable programs. Your **Anthers Badge simply is the number of Seeds you currently give Anthers**: Root, Sprout, Petal, Blossom, and a "+" beyond. There is no plan to pick.
 
-# Start all services
-bun run dev
-```
+**Public Access** is every streaming Work a creator chose not to gate — free to everyone, with nothing to clear. It is defined by the absence of a gate rather than by anything Anthers curates. A free account watches Public Access up to a monthly limit, free forever, with no trial and no expiry; a single Seed given to Anthers removes the limit, and no Seed above the first buys any more access. What further Seeds buy is a larger Time Pool for the creators you spend time with.
 
-Dev requires a local Postgres — `make db-up` starts one in Docker (the hub left SQLite behind; production uses DigitalOcean Managed Postgres).
+**Downloads are free and unlimited**, on any number of devices, forever — a purchased Work re-downloads at no cost to anyone. Creators pay for their own storage beyond a free allowance, and that is the only creator-side charge.
 
-The API runs on `http://localhost:8000` and the frontend on `http://localhost:3000`.
+<!-- econ:begin readme-model -->
+<!-- GENERATED by `bun run econ:figures` — do not edit by hand. -->
 
-## Development Commands
+**Where a Seed given to Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.
 
-### Services
+| Badge | Seeds to Anthers | You pay | Time Pool → creators | Payments\* | Free access & programs |
+|:--|--:|--:|--:|--:|--:|
+| **Root** | 1 | $3.00 | $1.50 | $0.39 | **$1.11** |
+| **Sprout** | 2 | $6.00 | $3.00 | $0.47 | **$2.53** |
+| **Petal** | 3 | $9.00 | $4.50 | $0.56 | **$3.94** |
+| **Blossom** | 4 | $12.00 | $6.00 | $0.65 | **$5.35** |
 
-| Command | Description |
+\* Card processing, at 2.9% + $0.30, paid to Stripe and charged once per transaction. The flat part does not scale with the Seed count, which is why the remainder grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.
+
+Every account watches **10 hours of Public Access a month, free forever** — no trial, no expiry. One Seed given to Anthers removes the limit, and no Seed above the first buys any more access.
+
+**What a creator takes home.** Anthers keeps **$0.00** from every row; the only deduction is Stripe's card fee.
+
+| Sale | Creator receives | Card |
+|:--|--:|--:|
+| $10.00 digital | **$9.41** | $0.59 |
+| $20.00 digital | **$19.12** | $0.88 |
+| $25.00 physical | **$23.97** | $1.03 |
+
+A directed Seed is the same shape: $3.00 gross, $0.39 card, **$2.61** to the creator — that being the worst case, since batching several Seeds onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first 50 GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.
+
+<!-- econ:end readme-model -->
+
+Sales tax is the only thing ever added on top of a displayed price. The full model, with its reasoning, is at [anthers.org/faq](https://anthers.org/faq).
+
+## What's in here
+
+A Bun workspace monorepo. Four packages, three apps, one deployment.
+
+| Directory | What it is |
 |---|---|
-| `bun run dev` | Start all services (API + worker + frontend) |
-| `bun run dev:api` | API only (port 8000) |
-| `bun run dev:worker` | Background job worker only |
-| `bun run dev:web` | Frontend only (port 3000) |
+| `apps/api` | The hub: a Hono HTTP API on Bun, plus a separate background worker process. Owns auth, content, payments, access resolution, moderation, and every scheduled job. |
+| `apps/web` | The React SPA — the public site, the reader/viewer/player surfaces, and the creator **Studio** at `/studio`. |
+| `apps/studio-desktop` | A Tauri desktop shell around the same Studio build, with native media encoding and the session token in the OS keychain. |
+| `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
+| `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
+| `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
+| `packages/brand` | Recolor-ready SVG brand and illustration assets, normalized by codegen into a framework-agnostic map. |
 
-### Database (Drizzle ORM)
+Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 
-| Command | Description |
-|---|---|
-| `make db-up` | Start the local dev Postgres (Docker, detached) |
-| `make db-down` | Stop the local dev Postgres (keeps data) |
-| `make db-reset` | Recreate the dev Postgres from scratch (wipes data) |
-| `bun run db:generate` | Generate migrations from schema changes |
-| `bun run db:migrate` | Run migrations |
-| `bun run db:push` | Push schema directly (dev only) |
-| `bun run db:studio` | Open Drizzle Studio |
-| `bun run db:seed` | Seed the database |
-| `bun run db:seed:reset` | Reset and re-seed the database |
+## What the platform does
 
-### Quality
+**Publishing.** A creator keeps a **Catalog** of **Works** — video, audio, comics and ebooks, games, software, images and prose. A Work carries its own visibility, its own dates (uploaded, released, and the creator's own claim about when it was *made*, at whatever precision they know it), its own access gates, its own comments and reviews, and its own earnings. Uploads are transcoded server-side: HLS ladders for video, loudness-normalized audio with precomputed waveforms, page-rasterized comics. A Work can be released, gated, discussed and paid for without a post ever existing.
 
-| Command | Description |
-|---|---|
-| `bun run typecheck` | TypeScript type checking |
-| `bun run lint` | Biome lint |
-| `bun run lint:fix` | Biome lint + auto-fix |
-| `bun run format` | Biome format |
-| `bun test` | Run tests |
+**Posts and Projects.** A **Post** is an announcement that references Works — rich text with inline images, math and markdown. A **Project** is a shelf that groups Works and Posts around one subject. Neither confers access to anything; a Work always addresses itself.
 
-## Project Structure
+**Reading, watching, playing.** Three players — video, audio, and a comic/ebook reader — on one shared transport that survives navigation, so a queued album keeps playing while you browse. A **Library** holds everything a person has kept: what they bought, permanently, plus anything free they chose to save. Follows produce a chronological feed that interleaves posts and releases, so releasing never costs a creator their reach. Reviews carry a score *and* text, because a number on its own says nothing worth moderating.
 
-```
-apps/
-  api/
-    src/
-      index.ts          Hono app entry point (port 8000)
-      routes/           Route handlers by domain
-      middleware/        Auth and CSRF middleware
-      services/         Auth, ATProto, image, storage services
-      jobs/             Background worker, queue, and job handlers
-    Dockerfile          Shared by API, worker, and migration runner
-  web/
-    src/
-      pages/            Route-level components
-      components/       Organized by domain (ui, cards, media, editor, etc.)
-      lib/              Shared logic (api client, auth, media player, uploads)
-    serve.ts            Production SPA server
-    build.ts            Build script
-packages/
-  db/
-    src/
-      schema/           Drizzle schema files by domain
-      client.ts         Drizzle client
-      migrate.ts        Migration runner
-  shared/
-    src/
-      fees.ts           Fee calculation (card processing + the storage charge)
-      constants.ts      Shared constants
-```
+**Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, quantity-based Seed subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
 
-## Tech Stack
+**Operations.** An admin console with activity and job-queue telemetry, a moderation queue with the reporting taxonomy behind it, account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
+
+**Identity.** Sessions are cookie-based, with argon2id password hashing and an emailed-code path for accounts that never set a password. Bluesky identity linking works today over ATProto OAuth (DPoP + PKCE + PAR). Federation itself is a roadmap item, not a shipped one — the `atproto_uri` columns are future-proofing, and the protocol layer is a re-openable choice.
+
+## How it's built
 
 | Layer | Technology |
 |---|---|
-| Runtime | Bun |
+| Runtime | Bun — package manager, bundler, test runner, the lot |
 | Backend | Hono + Drizzle ORM |
 | Frontend | React 19 + React Router 7 + TailwindCSS 4 + DaisyUI 5 |
-| Database | **Managed Postgres** for the hub (SQLite remains for future creator nodes) |
-| Async Jobs | pg-boss (Postgres-backed queue + cron), separate worker process |
-| Media | FFmpeg (HLS, audio normalization, waveforms) |
-| Image Processing | sharp |
+| Database | Managed Postgres for the hub (SQLite is kept for the future creator-node role) |
+| Async jobs | pg-boss — Postgres-backed queue and cron, in a separate worker process |
+| Media | FFmpeg (HLS, loudness normalization, waveforms) · sharp · poppler |
 | Payments | Stripe Connect |
-| Storage | S3-compatible (DigitalOcean Spaces; local filesystem in dev) |
-| Linting/Formatting | Biome 2 |
-| Deployment | DigitalOcean App Platform + Managed Postgres (centralized hub) |
+| Storage | S3-compatible object storage — Cloudflare R2 in production, local filesystem in dev |
+| Desktop | Tauri 2 with bundled FFmpeg sidecars |
+| Tooling | Biome 2 · Playwright · DigitalOcean App Platform |
 
-## Architecture
+There is no Vite and no PostCSS: Tailwind is integrated through `bun-plugin-tailwind`, and the SPA is built by Bun's own bundler. Bun is the only runtime you need installed.
 
-### Backend
+A few choices worth knowing before reading the code:
 
-The API is a Hono application on Bun with session-based authentication (argon2id password hashing, Postgres session store, CSRF via Origin header checking). No JWT or token auth.
+- **The money is exact.** Every financial value goes through `decimal.js` with explicit rounding — never a float. The browser never imports it, so published figures are *generated* from the model at build time rather than typed into a page. `bun run econ:figures --check` fails the build if a page, a document, or this README disagrees with `fees.ts`.
+- **Access is resolved in one place** and delivery is scoped to the Work, so nothing else has to be trusted to get it right.
+- **The app makes no off-origin request.** Fonts are self-hosted, the payment SDK is loaded only when it is actually needed, and a test enforces it — a document that claims an absence needs something to keep the absence true.
 
-Async jobs run on pg-boss (`apps/api/src/jobs/queue.ts`) in a separate worker process, handling video transcoding, audio processing, cross-publishing, pool distribution, hosting-subsidy calculation, and metrics fetching. pg-boss keeps its own tables in the app database's `pgboss` schema and provides cron scheduling with multi-instance dedup.
+## Running it locally
 
-Storage is abstracted behind a `StorageService` interface with local (dev) and S3 (prod) implementations.
+You need [Bun](https://bun.sh), [FFmpeg](https://ffmpeg.org), and Docker (for the dev Postgres). Poppler is optional — without it, everything works except rasterizing an uploaded comic or ebook.
 
-### Frontend
+```sh
+cp .env.example .env
+make install
+make dev
+```
 
-A React SPA built with Bun's built-in bundler (no Vite, no PostCSS). TailwindCSS is integrated via `bun-plugin-tailwind`. The provider stack is `BrowserRouter` > `AuthProvider` > `MediaPlayerProvider` > `App`, with a persistent audio player that survives navigation.
+`make dev` brings up Postgres, applies migrations, and starts the API, the worker and the web dev server. The API listens on `:8000` and the frontend on `:3000`.
 
-### ATProto Integration
-
-Bluesky identity linking via OAuth (DPoP + PKCE + PAR). All content tables include `atprotoUri` columns as a cheap hook for future federation. Note: ATProto adoption is currently **deferred** — Anthers is centralized-first and, when federation is built, it's bespoke-first; ATProto is a re-openable choice for the eventual protocol layer, not a current dependency.
-
-## Key Concepts
-
-- **Seeds:** the single support primitive — a flat **$3/month** unit, pointed at a creator or at Anthers. **Given to a creator** it goes to them with no platform cut (only its share of the at-cost card processing, paid to Stripe) and clears that creator's **Seed Gates**, which are set in whole $3 steps. The verb is *give*. Why $3 and not $1: a $1 card charge loses ~33% to processing, a $3 charge ~13%, so micro-support is batched into a $3 unit.
-- **Seeds given to Anthers, and your Badge:** a Seed pointed at Anthers backs the commons. Your **Badge simply is your count of Seeds given to Anthers** — Free 0 / **Root** 1 / **Sprout** 2 / **Petal** 3 / **Blossom** 4, with a **"+"** beyond four — held **point-in-time** (you must currently hold a level to reach its gated content). There is no plan to subscribe to; you hold as many Seeds as you choose, in either direction.
-- **Time Pool:** each Seed given to Anthers funds **$1.50** of Time Pool — a fixed target, not a remainder — distributed across the creators you spent time with **in proportion to watch-time**: Free $0.05 (subsidized, you pay $0) / $1.50 / $3.00 / $4.50 / $6.00, and up from there. A minute is a minute across media (play/watch/read/listen). A higher Badge simply means a bigger pool, with no per-item multiplier. Only **content entities** earn — post bodies, project pages, and other connective tissue don't.
-- **The remainder:** what's left of each Seed given to Anthers after your bandwidth, the Time Pool and the at-cost Payments line — derived, not a held slice. It funds **free access and Anthers' charitable programs**, read obligations-first with Admin held ≤ 30%. Together with the half-again on creator storage it funds all free access. It is program-service revenue, not a donation.
-- **Bandwidth (folded in, no wallet):** billed **at cost** ($0.01/GiB) inside the Seeds given to Anthers. Every account gets a **15 GiB** free monthly floor drawn down first, plus ~**60 GiB per Seed** on top; unused allowance returns to the subsidy pool. Creators fund their own storage (first 50 GiB free, then DigitalOcean's rate plus half again).
-- **Payments sit inside the price** (moved back inside 2026-08-03): the at-cost card + processing line comes **out of** the whole monthly charge and is split pro-rata across the Seeds on it. Mandatory-fee disclosure law requires an advertised price to contain every mandatory fee; **sales tax is the only thing added on top**.
-- **Direct purchases (all-in list price, 0% cut):** the creator sets the buyer-facing price and the buyer pays that plus sales tax and nothing else. Card processing and the first download's bandwidth come out of it; **Anthers keeps $0** (the purchase fee was removed 2026-08-03).
-
-## Environment Variables
-
-See [`.env.example`](.env.example) for the full list. Key variables:
-
-| Variable | Purpose |
+| Command | What it does |
 |---|---|
-| `DATABASE_URL` | Postgres connection (default `postgres://anthers:anthers@localhost:5432/anthers`) |
-| `SESSION_SECRET` | Secret for session signing |
-| `SITE_PASSWORD` | Pre-launch gate password (empty disables the gate) |
-| `STORAGE_BACKEND` | `local` or `s3` |
-| `STRIPE_SECRET_KEY` | Stripe API key |
-| `ATPROTO_CLIENT_ID` | ATProto OAuth client ID |
+| `make dev` | Everything: Postgres, migrations, API, worker, web |
+| `make down` | Stop the dev servers |
+| `make db-reset` | Rebuild the dev database from migrations (wipes data) |
+| `make db-seed` | Seed fake creators, Works and posts |
+| `make verify` | The pre-push gate — typecheck, lint, unit tests, and the full Playwright suite, in CI's order |
+| `make desktop-dev` | Run the desktop Studio against the local dev API |
 
-## Deployment
-
-The centralized **hub** deploys to DigitalOcean App Platform with a managed Postgres database (decided 2026-07-01, superseding the earlier single-droplet direction). Moving the hub's DB from SQLite to managed Postgres dissolves the App Platform volume constraint; the worker runs as its own component, a pre-deploy job runs migrations, and the SPA is served as a static site. `.do/app.yaml` is being reshaped from placeholder into the live spec — see its header. SQLite remains the engine for the future self-hostable creator-node role.
+`make help` lists the rest. Configuration is documented inline in [`.env.example`](./.env.example); nothing outside it is required to boot.
 
 ## License
 
-Anthers is free software, licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See [`LICENSE.md`](./LICENSE.md) for the full text.
+Anthers is free software under the **GNU Affero General Public License v3.0 or later**. See [`LICENSE.md`](./LICENSE.md).
+
+The AGPL is a deliberate choice and not an incidental one: a platform that asks creators to trust it with their work and their livelihood should be one they can walk away with. If Anthers ever stops being worth trusting, this repository is the escape hatch.
+
+Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md) and [`apps/studio-desktop/sidecar/THIRD-PARTY.md`](./apps/studio-desktop/sidecar/THIRD-PARTY.md).

@@ -17,16 +17,19 @@
  *     test reports a leak that isn't there (it fooled me on 2026-08-08). Grep for
  *     `cbrt` or `toFraction`, which only full decimal.js has. Both are 0 today.
  *
- *  2. The wiki tables and the sample receipt, written between HTML-comment markers
- *     in the docs that publish them. Same pattern the vault already uses for roadmap
- *     bars: generated regions are never hand-edited.
+ *  2. The wiki tables and the sample receipt, and the money section of this repo's own
+ *     `README.md`, written between HTML-comment markers in the docs that publish them.
+ *     Same pattern the vault already uses for roadmap bars: generated regions are never
+ *     hand-edited. The two run on different conditions — see `REPO_BLOCKS`.
  *
  * And one guard, which is neither:
  *
- *  3. A scan of the app source for published figures that were TYPED rather than
- *     read from (1). Markers are how markdown gets covered, because markdown cannot
- *     import; the app can, so its coverage is the opposite shape — not "regenerate
- *     this region" but "no region may hold a typed figure at all". See `scanApp`.
+ *  3. A scan of the app source and the repo's published markdown for figures that were
+ *     TYPED rather than read from (1), plus copy describing a mechanism the code no
+ *     longer has. Markers are how a generated region gets covered, because markdown
+ *     cannot import; everything around it needs the opposite shape — not "regenerate
+ *     this region" but "no region may hold a typed figure at all". See `scanApp` /
+ *     `scanDocs`, which share `scanText`.
  *
  * Why it exists: the 2026-08-03 pricing revamp swept these by hand and missed three
  * of them, which then sat in the "source of truth" doc overstating the remainder by
@@ -49,6 +52,7 @@ import {
 	SEED_PRICE,
 	TIME_POOL_PER_SEED,
 } from "../packages/shared/src/constants.js";
+import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
 import {
 	badgeTable,
 	cartSaving,
@@ -154,6 +158,78 @@ function table(head: string[], align: string[], rows: string[][]): string {
 		`|${align.map((a) => `${a}|`).join("")}---|`,
 		...rows.map(line),
 		`|${head.map(() => "  |").join("")}     |`,
+	].join("\n");
+}
+
+/**
+ * A plain markdown table, for the files that are read on GitHub rather than in Obsidian.
+ *
+ * Deliberately not `table()` above: that one emits the vault's trailing empty column and
+ * row, which is a legibility rule for Obsidian's **edit mode** and reads as a rendering
+ * bug anywhere else. Same data, different house style — so the README gets its own.
+ */
+function plainTable(head: string[], align: string[], rows: string[][]): string {
+	return [
+		`| ${head.join(" | ")} |`,
+		`|${align.map((a) => `${a}|`).join("")}`,
+		...rows.map((cells) => `| ${cells.join(" | ")} |`),
+	].join("\n");
+}
+
+/**
+ * The money section of the repo's own README.
+ *
+ * The README is the file most likely to be read by someone who has neither the vault nor
+ * the app running, and until 2026-08-14 it was the *only* published surface with no guard
+ * at all — so it taught a bandwidth allowance, a per-GiB rate and a pay-by-watch-time
+ * Time Pool for two days after all three were deleted, in the repo's shop window. It has
+ * a generated region now for the same reason the wiki does: a sweep cannot be trusted to
+ * be complete, and the only figure that cannot drift is one nobody typed.
+ */
+function renderReadmeModelMarkdown(): string {
+	const badges = badgeTable();
+	const sales = [...new Map(saleTable().map((r) => [r.price, r])).values()];
+	const seed = directedSeedWorstCase();
+	return [
+		`**Where a Seed given to Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
+		"",
+		plainTable(
+			[
+				"Badge",
+				"Seeds to Anthers",
+				"You pay",
+				"Time Pool → creators",
+				"Payments\\*",
+				"Free access & programs",
+			],
+			[":--", "--:", "--:", "--:", "--:", "--:"],
+			badges.map((r) => [
+				`**${r.badge}**`,
+				String(r.seeds),
+				`$${r.charge}`,
+				`$${r.timePool}`,
+				`$${r.payments}`,
+				`**$${r.remainder}**`,
+			]),
+		),
+		"",
+		`\\* Card processing, at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, paid to Stripe and charged once per transaction. The flat part does not scale with the Seed count, which is why the remainder grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.`,
+		"",
+		`Every account watches **${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever** — no trial, no expiry. One Seed given to Anthers removes the limit, and no Seed above the first buys any more access.`,
+		"",
+		`**What a creator takes home.** Anthers keeps **$0.00** from every row; the only deduction is Stripe's card fee.`,
+		"",
+		plainTable(
+			["Sale", "Creator receives", "Card"],
+			[":--", "--:", "--:"],
+			sales.map((r) => [
+				`$${r.price} ${r.sizeGiB > 0 ? "digital" : "physical"}`,
+				`**$${r.creatorReceives}**`,
+				`$${r.cardFee}`,
+			]),
+		),
+		"",
+		`A directed Seed is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator — that being the worst case, since batching several Seeds onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.`,
 	].join("\n");
 }
 
@@ -368,7 +444,26 @@ function renderTakeHomeMarkdown(): string {
 	].join("\n");
 }
 
-const BLOCKS: { file: string; key: string; render: () => string }[] = [
+interface Block {
+	file: string;
+	key: string;
+	render: () => string;
+}
+
+/**
+ * Generated regions in markdown that lives in **this repository**.
+ *
+ * Kept apart from `BLOCKS` because of when each one runs: the wiki blocks are skipped
+ * entirely when the vault is absent, which is correct for a document only Parker has and
+ * exactly wrong for one every clone carries. CI has no vault, so a README block on the
+ * wiki path would never once be checked — and "never checked" is the state the README was
+ * already in.
+ */
+const REPO_BLOCKS: Block[] = [
+	{ file: "README.md", key: "readme-model", render: renderReadmeModelMarkdown },
+];
+
+const BLOCKS: Block[] = [
 	{
 		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
 		key: "badge-table",
@@ -433,6 +528,19 @@ const BLOCKS: { file: string; key: string; render: () => string }[] = [
 // the defect eventually does.
 
 const APP_ROOTS = ["apps/web/src", "packages/web-shared/src"];
+
+/**
+ * Markdown in this repo that is read by outsiders, and so is held to the same standard
+ * as a page.
+ *
+ * The README needed **both** halves of the guard and had neither. It carried typed money
+ * figures (a $0.01/GiB rate, a per-Badge Time Pool column) *and* retired-mechanism prose
+ * with no number attached — "pays creators by watch-time", a bandwidth allowance, a Badge
+ * that gated content — for anywhere from two days to five months after each mechanism was
+ * deleted. It drifted precisely because `APP_ROOTS` is a list of `.ts`/`.tsx` directories
+ * and nobody noticed the repo's shop window was outside it.
+ */
+const DOC_FILES = ["README.md"];
 
 /**
  * Copy for a charge that no longer exists.
@@ -687,6 +795,65 @@ async function* sourceFiles(dir: string): AsyncGenerator<string> {
 	}
 }
 
+/**
+ * Blank a markdown file down to the prose a human actually wrote.
+ *
+ * Two exclusions, and they are excluded for the same reason rather than two: a generated
+ * region is **full** of published figures — that is its entire job — and the sentences its
+ * renderers emit name retired mechanisms on purpose ("a *Bandwidth* column sat here until
+ * 2026-08-12"). Scanning either would report the generator against itself, and teach the
+ * reader to annotate correct output rather than fix incorrect prose. HTML comments go for
+ * the same reason `withoutComments` blanks `//` ones: an `econ:allow` reason is written
+ * there, and `allowance()` finds an annotation above a line by asking whether that line is
+ * blank *once comments are gone but not before*.
+ *
+ * Newlines survive so reported line numbers stay true.
+ */
+function withoutGeneratedRegions(src: string): string {
+	const blank = (s: string) => s.replace(/[^\n]/g, " ");
+	return src
+		.replace(/<!--\s*econ:begin\b[\s\S]*?econ:end\b[\s\S]*?-->/g, blank)
+		.replace(/<!--[\s\S]*?-->/g, blank);
+}
+
+/**
+ * Both halves of the guard against one file: a published figure typed by hand, and copy
+ * for a mechanism the code no longer has.
+ *
+ * `source` is what a human wrote and `prose` is that with the unscannable parts blanked —
+ * comments for code, generated regions for markdown. Keeping both is what lets the figure
+ * check run over the real text while the `econ:allow` reason is still found in the comment
+ * that carries it.
+ */
+function scanText(label: string, source: string, prose: string, index: Map<string, string[]>) {
+	const lines = source.split("\n");
+	const code = prose.split("\n");
+	code.forEach((line, i) => {
+		for (const m of line.matchAll(/\$(\d+\.\d{2})/g)) {
+			const owners = index.get(m[1]);
+			if (!owners) continue;
+			// The annotation lives in a comment, so it is looked for in the ORIGINAL.
+			const allow = allowance(lines, code, i);
+			if (allow?.[1].trim()) continue;
+			typed.push(
+				`${label}:${i + 1}\n      typed $${m[1]} — that is ${owners
+					.slice(0, 3)
+					.join(" / ")}${allow ? "\n      (econ:allow needs a reason after it)" : ""}`,
+			);
+		}
+	});
+
+	const { text, lineOf } = flatten(prose);
+	for (const { pattern, why } of RETIRED_COPY) {
+		for (const hit of text.matchAll(pattern)) {
+			const at = lineOf[hit.index] ?? 1;
+			const allow = allowance(lines, code, at - 1);
+			if (allow?.[1].trim()) continue;
+			retired.push(`${label}:${at}\n      "${hit[0]}" — ${why}`);
+		}
+	}
+}
+
 async function scanApp() {
 	const index = publishedFigures();
 	for (const root of APP_ROOTS) {
@@ -699,33 +866,23 @@ async function scanApp() {
 				exempt.push(`${relative(REPO, path)} — ${fileWide[1].trim()}`);
 				continue;
 			}
-			const lines = source.split("\n");
-			const code = withoutComments(source).split("\n");
-			code.forEach((line, i) => {
-				for (const m of line.matchAll(/\$(\d+\.\d{2})/g)) {
-					const owners = index.get(m[1]);
-					if (!owners) continue;
-					// The annotation lives in a comment, so it is looked for in the ORIGINAL.
-					const allow = allowance(lines, code, i);
-					if (allow?.[1].trim()) continue;
-					typed.push(
-						`${relative(REPO, path)}:${i + 1}\n      typed $${m[1]} — that is ${owners
-							.slice(0, 3)
-							.join(" / ")}${allow ? "\n      (econ:allow needs a reason after it)" : ""}`,
-					);
-				}
-			});
-
-			const { text, lineOf } = flatten(withoutComments(source));
-			for (const { pattern, why } of RETIRED_COPY) {
-				for (const hit of text.matchAll(pattern)) {
-					const at = lineOf[hit.index] ?? 1;
-					const allow = allowance(lines, code, at - 1);
-					if (allow?.[1].trim()) continue;
-					retired.push(`${relative(REPO, path)}:${at}\n      "${hit[0]}" — ${why}`);
-				}
-			}
+			scanText(relative(REPO, path), source, withoutComments(source), index);
 		}
+	}
+}
+
+async function scanDocs() {
+	const index = publishedFigures();
+	for (const file of DOC_FILES) {
+		const path = join(REPO, file);
+		if (!existsSync(path)) continue;
+		const source = await readFile(path, "utf8");
+		const fileWide = ALLOW_FILE.exec(source);
+		if (fileWide?.[1].trim()) {
+			exempt.push(`${file} — ${fileWide[1].trim()}`);
+			continue;
+		}
+		scanText(file, source, withoutGeneratedRegions(source), index);
 	}
 }
 
@@ -761,12 +918,17 @@ await reconcile(
 	"packages/shared/src/figures.generated.ts",
 );
 
-if (!existsSync(VAULT)) {
-	console.log("  (vault not present — skipping wiki blocks)");
-} else {
+/**
+ * Splice every block for `root` and write the files that changed.
+ *
+ * One file may carry several blocks (50.01 carries four), so the spliced text is
+ * accumulated per path before anything is written — otherwise the second block would
+ * splice into the on-disk copy and drop the first.
+ */
+async function writeBlocks(root: string, blocks: Block[]) {
 	const byFile = new Map<string, string>();
-	for (const b of BLOCKS) {
-		const path = join(VAULT, b.file);
+	for (const b of blocks) {
+		const path = join(root, b.file);
 		if (!existsSync(path)) {
 			console.warn(`  ! missing ${b.file}`);
 			continue;
@@ -780,11 +942,22 @@ if (!existsSync(VAULT)) {
 		byFile.set(path, next);
 	}
 	for (const [path, next] of byFile) {
-		await reconcile(path, next, path.slice(VAULT.length + 1));
+		await reconcile(path, next, relative(root, path));
 	}
 }
 
+// The repo's own markdown first, and unconditionally: every clone has it, CI has it, and
+// a contributor with no vault still gets the check. The wiki is the optional half.
+await writeBlocks(REPO, REPO_BLOCKS);
+
+if (!existsSync(VAULT)) {
+	console.log("  (vault not present — skipping wiki blocks)");
+} else {
+	await writeBlocks(VAULT, BLOCKS);
+}
+
 await scanApp();
+await scanDocs();
 
 if (failures.length > 0) {
 	console.error("\nThese generated regions are stale:\n");
@@ -793,13 +966,16 @@ if (failures.length > 0) {
 }
 
 if (typed.length > 0) {
-	console.error("\nThe app may DERIVE a published figure, never type one:\n");
+	console.error("\nA published figure may be DERIVED, never typed:\n");
 	for (const t of typed) console.error(`  ${t}`);
 	console.error(
-		"\nRead it from `@anthers/shared/figures` instead — the way FAQPage does.\n" +
+		"\nIn the app, read it from `@anthers/shared/figures` instead — the way FAQPage\n" +
+			"does. In markdown, move it inside an `econ:begin`/`econ:end` region and render\n" +
+			"it from a scenario, the way the README's money section is.\n" +
 			"If the number is not one of ours (a rival platform's cut, an illustrative\n" +
 			"infrastructure cost), say so on the line:\n" +
-			"    // econ:allow — Steam's 30% cut, not one of our figures\n",
+			"    // econ:allow — Steam's 30% cut, not one of our figures\n" +
+			"    <!-- econ:allow — Steam's 30% cut, not one of our figures -->\n",
 	);
 }
 

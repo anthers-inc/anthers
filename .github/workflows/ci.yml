@@ -306,19 +306,31 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
+      # The app ID comes from the DO_APP_ID repository variable and nothing else. It used
+      # to carry a hardcoded literal as a fallback — harmless while the repo was private
+      # (it is useless without the token) but it is infrastructure identity, and this repo
+      # is world-readable. A missing variable now fails loudly on the line below, which is
+      # a better failure than deploying to whatever the literal happened to still name.
       - name: Deploy ${{ github.sha }}
+        env:
+          APP_ID: ${{ vars.DO_APP_ID }}
         run: |
           set -o pipefail
+          if [ -z "$APP_ID" ]; then
+            echo "::error::DO_APP_ID is not set. Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          fi
           echo "::notice::Deploying ${{ github.sha }} to production"
           # --wait blocks until the deployment settles, so this job is red when the build
           # fails rather than green-on-submitted. App Platform keeps the previously-active
           # deployment serving throughout, so a failure here leaves prod on the last good
           # build rather than down.
-          doctl apps create-deployment ${{ vars.DO_APP_ID || '5fa8af5d-e94f-400e-8dd6-e1377fb1a7ee' }} \
-            --wait --format ID,Phase
+          doctl apps create-deployment "$APP_ID" --wait --format ID,Phase
 
       - name: Report what is now live
         if: ${{ !cancelled() }}
+        env:
+          APP_ID: ${{ vars.DO_APP_ID }}
         run: |
-          doctl apps list-deployments ${{ vars.DO_APP_ID || '5fa8af5d-e94f-400e-8dd6-e1377fb1a7ee' }} \
-            --format ID,Cause,Phase | head -3
+          [ -n "$APP_ID" ] || exit 0
+          doctl apps list-deployments "$APP_ID" --format ID,Cause,Phase | head -3
