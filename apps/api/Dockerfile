@@ -27,10 +27,13 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 # EVERY workspace listed in bun.lock must have its manifest here, even ones this image
 # never builds: `--frozen-lockfile` compares the lockfile against the workspaces it can
-# actually see, and a missing package.json reads as "the lockfile changed". The desktop
-# Studio is Rust + Tauri and ships nothing to the server, but omitting it fails the
-# install outright.
-COPY apps/studio-desktop/package.json apps/studio-desktop/
+# actually see, and a missing package.json reads as "the lockfile changed".
+#
+# 🚨 The list above must track the workspaces exactly, in BOTH directions. It carried
+# `apps/studio-desktop` until 2026-08-14, and kept carrying it after the desktop app was
+# renamed and then moved to its own repository — at which point the COPY referenced a
+# path that no longer existed and every image build failed. `make verify` cannot see
+# this: it does not build images. Adding or removing a workspace means editing here too.
 RUN bun install --frozen-lockfile
 
 # Copy source (packages + API — no frontend needed here)
