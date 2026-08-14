@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
+import { formatTime } from "./transport/format";
+import SeekBar from "./transport/SeekBar";
+import TransportButton from "./transport/TransportButton";
+import VolumeControl from "./transport/VolumeControl";
+import { useVolume } from "./transport/volume";
 import WaveformDisplay from "./WaveformDisplay";
 
 interface AudioPlayerProps {
@@ -23,12 +28,6 @@ interface AudioPlayerProps {
 	publicAccess?: boolean;
 }
 
-function formatTime(seconds: number): string {
-	const m = Math.floor(seconds / 60);
-	const s = Math.floor(seconds % 60);
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 export default function AudioPlayer({
 	src,
 	waveform,
@@ -43,6 +42,7 @@ export default function AudioPlayer({
 	/** Delivery refused — the backstop for an allowance emptied between flushes. */
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
+	const { volume, effective: effectiveVolume } = useVolume();
 
 	/*
 	 * Decided from the budget, not from the element's error.
@@ -104,6 +104,14 @@ export default function AudioPlayer({
 		};
 	}, [publicAccess]);
 
+	// The app-wide remembered volume, so turning a video down turns this down too.
+	useEffect(() => {
+		const audio = audioRef.current;
+		if (!audio) return;
+		audio.volume = effectiveVolume;
+		audio.muted = volume.muted;
+	}, [effectiveVolume, volume.muted]);
+
 	const togglePlay = () => {
 		const audio = audioRef.current;
 		if (!audio) return;
@@ -116,10 +124,11 @@ export default function AudioPlayer({
 		}
 	};
 
-	const handleSeek = (percent: number) => {
+	const seekTo = (seconds: number) => {
 		const audio = audioRef.current;
 		if (audio && duration > 0) {
-			audio.currentTime = percent * duration;
+			audio.currentTime = Math.min(Math.max(0, seconds), duration);
+			setProgress(audio.currentTime);
 		}
 	};
 
@@ -139,22 +148,41 @@ export default function AudioPlayer({
 			<audio ref={audioRef} src={src} preload="metadata" />
 
 			<div className="flex items-center gap-3">
-				<button type="button" onClick={togglePlay} className="btn btn-circle btn-primary btn-sm">
-					{isPlaying ? <PauseIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4 ml-0.5" />}
-				</button>
+				<TransportButton
+					label={isPlaying ? "Pause" : "Play"}
+					icon={isPlaying ? PauseIcon : PlayIcon}
+					onClick={togglePlay}
+					tone="primary"
+				/>
 
-				<div className="flex-1">
-					<WaveformDisplay
-						peaks={peaks}
-						progress={duration > 0 ? progress / duration : 0}
-						onSeek={handleSeek}
-						height={40}
-					/>
-				</div>
+				{/*
+				 * The waveform IS the scrub surface, so it goes inside the shared SeekBar
+				 * rather than handling its own clicks. That is what gives audio the same
+				 * keyboard seeking, focus ring and hover time the video rail has — the
+				 * painting differs, the interaction does not.
+				 */}
+				<SeekBar
+					position={progress}
+					duration={duration}
+					onSeek={seekTo}
+					label="Seek audio"
+					className="flex-1"
+					track={
+						<WaveformDisplay
+							peaks={peaks}
+							progress={duration > 0 ? progress / duration : 0}
+							height={40}
+						/>
+					}
+				/>
 
-				<span className="text-xs font-mono text-base-content/60 min-w-[4rem] text-right">
+				<span className="min-w-[4rem] text-right text-xs tabular-nums text-base-content/60">
 					{formatTime(progress)} / {formatTime(duration)}
 				</span>
+
+				<div className="hidden sm:block">
+					<VolumeControl collapsible size="xs" />
+				</div>
 			</div>
 
 			{onPlayInMiniPlayer && (
