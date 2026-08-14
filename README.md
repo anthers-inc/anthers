@@ -73,13 +73,12 @@ Sales tax is the only thing ever added on top of a displayed price. The full mod
 
 ## What's in here
 
-A Bun workspace monorepo. Four packages, three apps, one deployment.
+A Bun workspace monorepo. Four packages, two apps, one deployment. (The desktop app lives in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) — it consumes this app's *build*, not its packages.)
 
 | Directory | What it is |
 |---|---|
 | `apps/api` | The hub: a Hono HTTP API on Bun, plus a separate background worker process. Owns auth, content, payments, access resolution, moderation, and every scheduled job. |
 | `apps/web` | The React SPA — the public site, the reader/viewer/player surfaces, and the creator **Studio** at `/studio`. |
-| `apps/desktop` | A Tauri desktop shell around the same web build, with native media encoding and the session token in the OS keychain. |
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
@@ -113,7 +112,6 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 | Media | FFmpeg (HLS, loudness normalization, waveforms) · sharp · poppler |
 | Payments | Stripe Connect |
 | Storage | S3-compatible object storage — Cloudflare R2 in production, local filesystem in dev |
-| Desktop | Tauri 2 with bundled FFmpeg sidecars |
 | Tooling | Biome 2 · Playwright · DigitalOcean App Platform |
 
 There is no Vite and no PostCSS: Tailwind is integrated through `bun-plugin-tailwind`, and the SPA is built by Bun's own bundler. Bun is the only runtime you need installed.
@@ -143,7 +141,6 @@ make dev
 | `make db-reset` | Rebuild the dev database from migrations (wipes data) |
 | `make db-seed` | Seed fake creators, Works and posts |
 | `make verify` | The pre-push gate — typecheck, lint, unit tests, and the full Playwright suite, in CI's order |
-| `make desktop-dev` | Run the desktop Studio against the local dev API |
 
 `make help` lists the rest. Configuration is documented inline in [`.env.example`](./.env.example); nothing outside it is required to boot.
 
@@ -153,4 +150,4 @@ Anthers is free software under the **GNU Affero General Public License v3.0 or l
 
 The AGPL is a deliberate choice and not an incidental one: a platform that asks creators to trust it with their work and their livelihood should be one they can walk away with. If Anthers ever stops being worth trusting, this repository is the escape hatch.
 
-Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md) and [`apps/desktop/sidecar/THIRD-PARTY.md`](./apps/desktop/sidecar/THIRD-PARTY.md).
+Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md).

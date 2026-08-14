@@ -1,0 +1,65 @@
+# Publish the built web app as a release asset, for the desktop shell to bundle.
+#
+# `anthers-desktop` has no UI of its own — what goes in its window is this app, built.
+# It resolves that build from one of three sources (see `scripts/resolve-web.ts` there);
+# this workflow produces the third, the one CI and a clean machine use.
+#
+# 🚨 A RELEASE ASSET rather than a package on GitHub Packages, which is the obvious
+# choice and the wrong one. GitHub's documentation: "You need an access token to publish,
+# install, and delete private, internal, and public packages." Authentication is required
+# even for PUBLIC packages, so publishing this as a package would mean every contributor
+# and every desktop CI run needed a token to install a public dependency of a public,
+# AGPL project. A release asset downloads anonymously. Verified both ways before choosing.
+#
+# Triggered by a `web-v*` tag, deliberately separate from `desktop-v*` (which lives in the
+# desktop repo and versions the shell) and from anything the platform deploys. Tagging
+# here says "this build is one a desktop release may pin", which is a different statement
+# from "this is on production".
+name: release-web
+
+on:
+  push:
+    tags: ["web-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        # No bun-version, same reason as ci.yml: setup-bun reads `packageManager` from
+        # package.json so the runtime is declared once, in the repo, rather than twice.
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the web app
+        run: cd apps/web && bun run build
+
+      # `-C apps/web dist` puts entries under `dist/`, which is what the desktop
+      # resolver's `--strip-components=1` expects. Changing either without the other
+      # produces an archive that unpacks to the wrong depth and a window that loads
+      # nothing, with no error from tar.
+      - name: Pack
+        run: |
+          set -euo pipefail
+          test -f apps/web/dist/index.html || { echo "::error::no index.html in the build"; exit 1; }
+          tar czf web-dist.tar.gz -C apps/web dist
+          echo "packed $(du -h web-dist.tar.gz | cut -f1), $(tar tzf web-dist.tar.gz | wc -l) entries"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "Web build $TAG" \
+                 --notes "The built Anthers web app, for \`anthers-desktop\` to bundle. Pin it as \`anthersWeb\` in that repo's package.json."
+          gh release upload "$TAG" web-dist.tar.gz --clobber

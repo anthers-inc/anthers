@@ -148,7 +148,7 @@ jobs:
 
   # The two Docker images App Platform builds at deploy time. Nothing else in CI
   # exercises them, and that gap is exactly how `bcd212e` shipped: adding
-  # `apps/desktop` as a workspace changed `bun.lock`, neither Dockerfile
+  # a workspace change to `bun.lock`, neither Dockerfile
   # COPY'd its `package.json`, and `bun install --frozen-lockfile` failed inside
   # both images. Prod kept serving the previous deployment so there was no outage,
   # but nothing local or in CI could have caught it — PR #52 did the identical

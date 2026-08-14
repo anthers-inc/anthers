@@ -6,7 +6,7 @@
  * bundled into the Tauri shell, and because `@tauri-apps/api` is already a dependency of
  * this package (imported dynamically, so a browser build never loads it). Everything here
  * is guarded: in a browser `isDesktop()` is false and none of it runs. The shell injects `globalThis.__ANTHERS_DESKTOP__` before any app
- * JS (see `apps/desktop/src-tauri/src/main.rs`), which is also what
+ * JS (see `src-tauri/src/main.rs` in anthers-desktop), which is also what
  * `@anthers/web-shared`'s `apiFetch()` reads to pick its transport.
  *
  * `@tauri-apps/api` is imported dynamically so the browser build never loads it.
