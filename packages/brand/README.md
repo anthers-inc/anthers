@@ -1,25 +1,39 @@
 # @anthers/brand
 
-Shared Anthers brand assets — icon and illustration SVGs, **recolor-ready**, meant to be consumed by every Anthers deployment (the web SPA, a future desktop/Electron build, mobile, etc.). Mirrors the role `@polysemy/brand` plays across the Polysemy repos.
+The Anthers brand assets that **ship**: the first-party marks and lockups, and recolor-ready icon markup generated from the icon library. Consumed by every surface — the web SPA, the desktop shell, and anything later.
 
-The source of truth is the raw SVG files in `svg/`. A small codegen normalizes them into a framework-agnostic TypeScript map so any surface can render them however it likes (inline React SVG, CSS `mask`/`background`, `react-native-svg`, …), and — crucially — **recolor them from code** to match each theme/palette, exactly like the hand-drawn lab illustrations do with `currentColor`.
+```
+marks/        First-party Anthers identity — SVG masters, lockups, raster exports
+app-icons/    Desktop packaging icons (Tauri build input, not brand art)
+src/          The public API + generated icon markup
+scripts/      The codegen
+```
+
+
+# Where the icon library is, and why it isn't here
+
+The botanical icon set behind `iconSvg`/`iconGroup`/`iconDataUri` is ~650 Noun Project SVGs. It lived in this package until 2026-08-14, when it was **14 MiB of a 15.6 MiB repository — 91% of everything tracked**, to promote 18 icons into code. A platform's repository should not be, by weight, an icon mirror.
+
+It now lives in **[anthers-inc/Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand)** alongside the layered design working files: the studio, as against this package, which is the product.
+
+**The split costs the app nothing**, which is what made it cheap. `src/generated/icons.ts` inlines each curated icon's `viewBox` and path markup, `src/` never reads the source tree, and nothing imports a raw SVG. **The app builds identically with the library absent** — verified by regenerating with it present and diffing: byte-identical. What you lose without a checkout is only the ability to re-run the codegen, so `bun run build` prints a pointer and exits 0 rather than failing.
 
 
 # Adding an icon
 
-1. Download the icon from The Noun Project as **SVG**, **single-color black** (size is irrelevant for vector; prefer the paid download so there's no attribution watermark baked in). Multi-color art won't recolor from a single value — use single-color unless you want its colors fixed.
-2. Drop the file into `svg/` with a clear kebab-case name, e.g. `svg/bee.svg`, `svg/bee-worker.svg`.
-3. Run the codegen:
-   ```bash
-   cd packages/brand && bun run build
-   ```
-   This rewrites `src/generated/icons.ts`. The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills so the color is controlled by the consumer. (`fill="none"` is preserved, so stroke-only art passes through untouched — but it won't recolor from a single value.)
-4. Record its provenance/license in `THIRD-PARTY.md`.
+1. Clone [Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand) beside this repo (`~/Anthers-Brand`), or set `BRAND_SOURCE=/path/to/checkout`.
+2. Find the art. Its `preview/` holds per-collection contact sheets — the filenames are Noun Project `noun-<type>-<id>` and are not individually descriptive, so browse visually. If you're adding *new* art, download it as **SVG, single-color black**; multi-color art can't recolor from one value.
+3. Add `{ id, path }` to `CURATED` in `scripts/build-icons.ts`, with the path relative to the library's `svg/`.
+4. `cd packages/brand && bun run build`, and commit the regenerated `src/generated/icons.ts`.
+
+The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills so the consumer controls the color. (`fill="none"` is preserved, so stroke-only art passes through — but it won't recolor from a single value.)
+
+⚠️ **A source tree that exists but is missing a curated path is a hard error, not a skip.** Carrying on would silently drop an icon the app renders by id, so the codegen exits 1 and names what diverged. An *absent* library is fine; a *disagreeing* one is not.
 
 
 # Using it
 
-`@anthers/brand` is framework-agnostic — it exports geometry + string helpers, not components:
+Framework-agnostic on purpose — it exports geometry and string helpers, not components:
 
 ```ts
 import { icons, iconSvg, iconDataUri, iconGroup } from "@anthers/brand";
@@ -31,24 +45,30 @@ icons.bee;                                    // { viewBox, inner } — build yo
 ```
 
 - **Recolor inline (React):** `dangerouslySetInnerHTML={{ __html: icons.bee.inner }}` inside an `<svg fill="currentColor">`, then set color with `text-*`.
-- **Recolor without inlining (any single-color icon):** use `iconDataUri(name)` as a CSS `mask-image` on a `<span>` and set `background-color: currentColor` — the icon's alpha is the mask, so it takes whatever color you give it.
-- **Compose into generated SVG backgrounds** (e.g. the lab's tiled vine): splice `iconGroup(...)` into the SVG string.
+- **Recolor without inlining:** `iconDataUri(name)` as a CSS `mask-image` on a `<span>` with `background-color: currentColor` — the icon's alpha is the mask, so it takes whatever color you give it.
+- **Compose into a generated SVG background** (the tiled vines, the meadow floor): splice `iconGroup(...)` into the SVG string. `decor.ts` builds on this.
 
 
-# Logo lockups (raster)
+# The marks
 
-The Anthers wordmark lockup lives in `logo/` as full-colour PNGs — a raster placeholder for now, deliberately outside the recolor-ready SVG pipeline above (a full-colour logo can't recolor from a single value). Four cuts, exported by path (`./logo/*`) so any surface's bundler emits them as hashed assets:
+`marks/` is first-party Anthers identity. The palette and type notes are in `marks/README.txt`.
 
-- `anthers-lockup.png` / `anthers-lockup-dark.png` — full lockup with the "Our Creative Garden" tagline, for light / dark backgrounds.
-- `anthers-lockup-oneline.png` / `anthers-lockup-oneline-dark.png` — wordmark only (no tagline), the compact navbar cut.
+- **`marks/*.svg`** — the vector masters: the mark (light and reversed cuts), a flat single-color silhouette for stamps and tiny sizes, and the flower alone.
+- **`marks/lockup/*.png`** — the wordmark lockups the app actually imports. Full-colour raster, deliberately outside the recolor-ready pipeline above, because a full-colour logo can't recolor from a single value. Four cuts: `anthers-lockup` / `-dark` carry the tagline; `-oneline` / `-oneline-dark` are the compact navbar cut.
 
-```ts
-import lockup from "@anthers/brand/logo/anthers-lockup.png"; // → hashed URL string
-```
+	```ts
+	import lockup from "@anthers/brand/marks/lockup/anthers-lockup.png"; // → hashed URL string
+	```
 
-On web surfaces, prefer the shared `<Logo>` component (`@anthers/web-shared/ui/Logo`), which wraps these four and swaps light/dark live off the active theme. Swap the files here to reship the mark everywhere at once.
+	On web, prefer the shared `<Logo>` component (`@anthers/web-shared/ui/Logo`), which wraps all four and swaps light/dark off the active theme. Swap the files here to reship the mark everywhere at once.
+
+- **`marks/export/*.png`** — raster exports at fixed sizes: 1024px marks, favicons, an apple-touch icon, and lockups on a cream ground.
+
+	⚠️ **The favicons are not wired to anything.** `apps/web` ships no `<link rel="icon">` at all, so the site currently renders with the browser default while `favicon-32.png`, `favicon-64.png` and `apple-touch-icon-180.png` sit here unused. Wiring them means copying into `apps/web/public/` and adding the tags — noted here because the assets existing is what makes the gap easy to miss.
+
+`app-icons/` is a different thing wearing a similar name: Windows/macOS/Linux packaging icons, consumed only by `apps/studio-desktop/src-tauri/tauri.conf.json` through a relative path. It bypasses this package's `exports` because a Tauri config can't resolve one.
 
 
 # Licensing
 
-The package's own code is AGPL-3.0-or-later. **Icon artwork in `svg/` may be third-party** (e.g. The Noun Project) under its own license — those files are exempt from the repo's AGPL SPDX-header convention. Every asset's source and license is recorded in `THIRD-PARTY.md`. Before committing third-party assets to this public repo, confirm the source's license permits redistributing the raw files.
+The package's own code is AGPL-3.0-or-later. `marks/` is first-party. The icon artwork is third-party and lives in the source repo with its attribution — see [`THIRD-PARTY.md`](./THIRD-PARTY.md) for the summary and the terms it rests on.

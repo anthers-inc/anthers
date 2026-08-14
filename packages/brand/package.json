@@ -3,21 +3,18 @@
 	"private": true,
 	"version": "0.1.0",
 	"license": "AGPL-3.0-or-later",
-	"description": "Shared Anthers brand assets — icon/illustration SVGs (recolor-ready) usable across every deployment (web, desktop, mobile). Raw source SVGs live in svg/; `bun run build` normalizes them into recolorable TS.",
+	"description": "Anthers brand assets that ship — the first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in anthers-inc/Anthers-Brand.",
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./svg/*": "./svg/*",
-		"./logo/*": "./logo/*"
+		"./marks/*": "./marks/*"
 	},
 	"files": [
 		"src",
-		"svg",
-		"logo"
+		"marks"
 	],
 	"scripts": {
 		"build": "bun run scripts/build-icons.ts",
-		"preview": "bun run scripts/build-previews.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {

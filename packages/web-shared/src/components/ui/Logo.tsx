@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import logoFull from "@anthers/brand/logo/anthers-lockup.png";
-import logoFullDark from "@anthers/brand/logo/anthers-lockup-dark.png";
-import logoOneline from "@anthers/brand/logo/anthers-lockup-oneline.png";
-import logoOnelineDark from "@anthers/brand/logo/anthers-lockup-oneline-dark.png";
+import logoFull from "@anthers/brand/marks/lockup/anthers-lockup.png";
+import logoFullDark from "@anthers/brand/marks/lockup/anthers-lockup-dark.png";
+import logoOneline from "@anthers/brand/marks/lockup/anthers-lockup-oneline.png";
+import logoOnelineDark from "@anthers/brand/marks/lockup/anthers-lockup-oneline-dark.png";
 import { useTheme } from "../../lib/theme";
 
 type Variant = "full" | "oneline";
@@ -22,7 +22,7 @@ const SOURCES: Record<Variant, Record<"light" | "dark", string>> = {
  * useTheme() tracks the live `data-theme` on <html>, so flipping the topbar toggle
  * swaps the light/dark artwork instantly (no reload, no flash).
  *
- * The artwork is the shared brand asset — packages/brand/logo/anthers-lockup*.png (a
+ * The artwork is the shared brand asset — packages/brand/marks/lockup/anthers-lockup*.png (a
  * raster placeholder for now). Bun's bundler emits each imported PNG as a hashed asset.
  * Swap those four files in @anthers/brand for the final artwork and every call site
  * updates at once. Size via `className` height utilities — the image keeps its aspect

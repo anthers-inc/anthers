@@ -1,7 +1,7 @@
 <p align="center">
 	<picture>
-		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/svg/anthers/anthers-logo/anthers-hlock-reverse.png">
-		<img alt="Anthers" src="./packages/brand/svg/anthers/anthers-logo/anthers-hlock.png" width="420">
+		<source media="(prefers-color-scheme: dark)" srcset="./packages/brand/marks/lockup/anthers-lockup-dark.png">
+		<img alt="Anthers" src="./packages/brand/marks/lockup/anthers-lockup.png" width="420">
 	</picture>
 </p>
 
@@ -79,7 +79,7 @@ A Bun workspace monorepo. Four packages, three apps, one deployment.
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
-| `packages/brand` | Recolor-ready SVG brand and illustration assets, normalized by codegen into a framework-agnostic map. |
+| `packages/brand` | The brand assets that ship — first-party marks and lockups, plus recolor-ready icon markup generated from the icon library in [Anthers-Brand](https://github.com/anthers-inc/Anthers-Brand). |
 
 Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 

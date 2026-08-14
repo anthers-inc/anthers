@@ -1,25 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Codegen for @anthers/brand. Two outputs from svg/**:
+// Codegen for @anthers/brand: normalize the CURATED source art into
+// `src/generated/icons.ts` — recolor-ready markup that `iconSvg`/`iconGroup`/
+// `iconDataUri` read. Run `bun run build`.
 //
-//   src/generated/manifest.ts  — lightweight metadata for EVERY asset (id, path,
-//                                collection, viewBox). The searchable "index";
-//                                never imported by apps, so it costs no bundle.
-//   src/generated/icons.ts     — normalized, recolor-ready markup for the CURATED
-//                                subset actually used in code (see CURATED below).
-//                                This is what iconSvg/iconGroup/iconDataUri read.
+// 🚨 THE SOURCE ART IS NOT IN THIS REPOSITORY, and that is deliberate. The icon
+// library is ~650 Noun Project SVGs — 14 MiB, of which this file promotes 18 —
+// and it lived here until 2026-08-14, when it was 91% of everything tracked. A
+// platform's repository should not be, by weight, an icon mirror. It moved to a
+// sibling repo (see SOURCE_HINT) alongside the layered design working files.
 //
-// It also (re)writes ASSETS.md — the human/agent-facing catalog. Run `bun run build`.
+// **This costs the app nothing**, which is the whole reason the split is cheap:
+// `icons.ts` inlines each icon's viewBox and path markup, `src/` never reads the
+// source tree, and nothing imports the raw SVGs. The app builds identically with
+// the library absent. What you lose without it is only the ability to RE-RUN this
+// codegen — so it degrades with a pointer rather than failing, the same way
+// `econ:figures` skips its wiki blocks when the vault isn't present.
+//
+// Point it elsewhere with `BRAND_SOURCE=/path/to/checkout bun run build`.
 //
 // Assets are single-color FILLED art (the Noun Project "SVG, black" default);
 // normalize() strips baked fills so one injected color controls each icon.
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const SVG_ROOT = join(ROOT, "svg");
+const REPO = join(ROOT, "..", "..");
 const OUT_DIR = join(ROOT, "src", "generated");
+
+const SOURCE_HINT = "https://github.com/anthers-inc/Anthers-Brand";
+/** Where the icon library lives. A sibling checkout by default, per the repo naming convention. */
+const SVG_ROOT = join(process.env.BRAND_SOURCE ?? join(REPO, "..", "Anthers-Brand"), "svg");
 
 // ── Curated set: assets promoted for use in code, with friendly ids. Add here,
 // then reference by id via iconSvg/iconGroup/iconDataUri. Paths are relative to svg/.
@@ -45,7 +57,7 @@ const CURATED: { id: string; path: string }[] = [
 		path: "nature/botanical-borders-and-frames-228479/noun-botanical-circle-frame-7366648.svg",
 	},
 	// The single round botanical frame used behind every Anthers Badge on the
-	// marketing site (one consistent wreath for all ranks, per Parker's call).
+	// marketing site (one consistent wreath for all Badges, per Parker's call).
 	{
 		id: "frame-round",
 		path: "nature/botanical-borders-and-frames-228479/noun-botanical-round-frame-7366626.svg",
@@ -77,22 +89,6 @@ const CURATED: { id: string; path: string }[] = [
 	},
 ];
 
-// Short, human descriptions per collection folder for ASSETS.md.
-const DESCRIPTIONS: Record<string, string> = {
-	"nature/animals-38481-(bees)":
-		"Bees — top-view, angled, and flying (with dotted trails) + two bee-on-flower pollination scenes.",
-	"nature/botanical-borders-and-frames-228479":
-		"The big one: horizontal leaf/laurel dividers, L-corner frames, circular wreaths, arch/oval/hexagon/diamond frames, split borders (gap for text), vines & flourishes.",
-	"nature/floral-borders-242604":
-		"Delicate flower-on-a-baseline sprigs — poppies/wildflowers rising from a line. Ideal section dividers & accents.",
-	"nature/flower-and-foliage-167008":
-		"Large single-flower & foliage library (line + solid). General-purpose blooms and leaves.",
-	"nature/grass-289179":
-		"Grass tufts, reeds, cattails, and bushes — outline and solid. For meadow floors and ground accents.",
-	"nature/wildflowers-outline-271978": "Single wildflowers, outline style.",
-	"nature/wildflowers-solid-271979": "Single wildflowers, solid style (plus a rose).",
-};
-
 function normalize(raw: string, file: string): { viewBox: string; inner: string } {
 	const s = raw
 		.replace(/<\?xml[\s\S]*?\?>/g, "")
@@ -120,44 +116,31 @@ function normalize(raw: string, file: string): { viewBox: string; inner: string 
 	return { viewBox, inner };
 }
 
-/** All .svg under svg/, as {relPath, collection}. */
-function walk(dir: string): { relPath: string; collection: string }[] {
-	const out: { relPath: string; collection: string }[] = [];
-	for (const e of readdirSync(dir, { withFileTypes: true })) {
-		const full = join(dir, e.name);
-		if (e.isDirectory()) out.push(...walk(full));
-		else if (e.name.toLowerCase().endsWith(".svg")) {
-			const relPath = relative(SVG_ROOT, full);
-			out.push({ relPath, collection: relative(SVG_ROOT, dir) });
-		}
-	}
-	return out;
+// The generated file is committed, so a checkout without the source art is a
+// perfectly working state — say so plainly rather than failing a build over it.
+if (!existsSync(SVG_ROOT)) {
+	console.log(
+		`[brand] icon source not found at ${SVG_ROOT}\n` +
+			`        Nothing to regenerate — src/generated/icons.ts is committed and complete,\n` +
+			`        and the app builds without the source library.\n` +
+			`        To curate a new icon, clone ${SOURCE_HINT} beside this repo\n` +
+			`        (or set BRAND_SOURCE=/path/to/checkout) and run this again.`,
+	);
+	process.exit(0);
+}
+
+const missing = CURATED.filter((c) => !existsSync(join(SVG_ROOT, c.path)));
+if (missing.length > 0) {
+	// A source tree that exists but lacks a curated file is a real error, unlike an
+	// absent one: it means the library and this list have diverged, and carrying on
+	// would silently drop an icon the app renders by id.
+	console.error(`[brand] ${missing.length} curated asset(s) missing from ${SVG_ROOT}:`);
+	for (const m of missing) console.error(`          ${m.id} → ${m.path}`);
+	process.exit(1);
 }
 
 mkdirSync(OUT_DIR, { recursive: true });
 
-// ── manifest.ts (all assets, metadata only) ──
-const all = walk(SVG_ROOT).sort((a, b) => a.relPath.localeCompare(b.relPath));
-const manifestRows = all.map((a) => {
-	const { viewBox } = normalize(readFileSync(join(SVG_ROOT, a.relPath), "utf8"), a.relPath);
-	return {
-		id: a.relPath.replace(/\.svg$/i, ""),
-		path: a.relPath,
-		collection: a.collection,
-		viewBox,
-	};
-});
-writeFileSync(
-	join(OUT_DIR, "manifest.ts"),
-	`// SPDX-License-Identifier: AGPL-3.0-or-later
-// AUTO-GENERATED by scripts/build-icons.ts — do not edit. Metadata for every asset
-// in svg/ (no markup). For discovery/tooling only; not imported by apps.
-export type BrandAsset = { id: string; path: string; collection: string; viewBox: string };
-export const manifest: BrandAsset[] = ${JSON.stringify(manifestRows, null, "\t")};
-`,
-);
-
-// ── icons.ts (curated, with markup) ──
 const iconRows = CURATED.map((c) => {
 	const { viewBox, inner } = normalize(readFileSync(join(SVG_ROOT, c.path), "utf8"), c.path);
 	return `\t${JSON.stringify(c.id)}: { viewBox: ${JSON.stringify(viewBox)}, inner: ${JSON.stringify(inner)} },`;
@@ -167,7 +150,8 @@ writeFileSync(
 	`// SPDX-License-Identifier: AGPL-3.0-or-later
 // AUTO-GENERATED by scripts/build-icons.ts — do not edit by hand.
 // Curated, recolor-ready icon markup. Add entries to CURATED in the codegen, then
-// \`bun run build\`. (Artwork may be third-party; see THIRD-PARTY.md.)
+// \`bun run build\` with the icon source checked out. (Artwork is third-party and
+// attributed — see THIRD-PARTY.md.)
 export type BrandIcon = { readonly viewBox: string; readonly inner: string };
 export const icons = {
 ${iconRows}
@@ -176,45 +160,4 @@ export type BrandIconName = keyof typeof icons;
 `,
 );
 
-// ── ASSETS.md (catalog / guide) ──
-const byCollection = new Map<string, number>();
-for (const a of all) byCollection.set(a.collection, (byCollection.get(a.collection) ?? 0) + 1);
-const collectionRows = [...byCollection.entries()]
-	.sort()
-	.map(([c, n]) => {
-		const previewName = `${c.replace(/[^\w-]+/g, "_")}.png`;
-		return `| \`${c}\` | ${n} | ${DESCRIPTIONS[c] ?? "—"} | [preview](preview/${previewName}) |`;
-	})
-	.join("\n");
-const curatedRows = CURATED.map((c) => `| \`${c.id}\` | \`${c.path}\` |`).join("\n");
-writeFileSync(
-	join(ROOT, "ASSETS.md"),
-	`<!-- AUTO-GENERATED by scripts/build-icons.ts. Edit the codegen (descriptions / CURATED), not this file. -->
-# Brand asset catalog
-
-${all.length} source SVGs live in \`svg/\`, all viewBox \`0 0 100 100\`, single-color, recolor-ready. This is the map; to actually *see* the art, open the per-collection contact sheets in [\`preview/\`](preview/) (regenerate with \`bun run preview\`). Filenames are Noun Project \`noun-<type>-<id>\` — not individually descriptive, so browse visually.
-
-## Collections
-
-| Collection (\`svg/…\`) | Count | What's in it | Visual |
-|---|---|---|---|
-${collectionRows}
-
-## How to find & use
-
-- **Find:** open the collection's contact sheet in \`preview/\`, note the \`noun-…-<id>\` under the one you want. Or grep \`src/generated/manifest.ts\`.
-- **Promote for code use:** add \`{ id, path }\` to \`CURATED\` in \`scripts/build-icons.ts\`, then \`bun run build\`. It becomes available by \`id\`.
-- **Recolor + render (standalone):** \`iconDataUri(id)\` as a CSS \`mask-image\` on an element with \`background-color: currentColor\` (color follows \`text-*\`).
-- **Recolor + compose (into a generated SVG, e.g. a tiled background):** splice \`iconGroup(id, { x, y, size, color, rotate?, anchor? })\`.
-
-## Curated (baked into \`icons.ts\`, usable by id)
-
-| id | source |
-|---|---|
-${curatedRows}
-`,
-);
-
-console.log(
-	`[brand] manifest: ${all.length} assets · icons: ${CURATED.length} curated · ASSETS.md + preview links written`,
-);
+console.log(`[brand] ${CURATED.length} curated icons written to src/generated/icons.ts`);
