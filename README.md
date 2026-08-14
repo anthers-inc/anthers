@@ -13,7 +13,7 @@ Here, your relationship with the creators and content you love belongs to you. N
 
 No ads, ever. No shareholders, ever. Just freedom to see and be seen, to listen and be heard, and to understand and be understood.
 
-`Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. That is a structural commitment rather than a promise about intentions — the organization is built so that the interests it can serve are the creators' and the audience's.
+`Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. Our commitment to earnestly and unequivocally serving the interests of creators and their audiences is not just a promise, it's a structural commitment that can never be unwound.
 
 This repository is the whole platform: the API, the web app, the creator Studio, the desktop shell, and the shared packages underneath them. It is licensed [AGPL-3.0-or-later](./LICENSE.md).
 
