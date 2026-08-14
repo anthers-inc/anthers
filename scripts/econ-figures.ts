@@ -501,6 +501,44 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		pattern: new RegExp(`${NOT_NEGATED}watch[- ](?:time|hours?)`, "gi"),
 		why: 'a minute is a minute across four media — say "time" (63.01 § Vocabulary)',
 	},
+	{
+		// Retired 2026-08-12 with the second access table (migration `0029`). There is one
+		// gate primitive and it points only at a creator: a Work is gated by its creator or
+		// it is Public Access, with no Badge threshold in between. `ANTHERS_BADGES` no
+		// longer participates in resolution at all, so this describes a mechanism the code
+		// genuinely no longer has — the test this list applies.
+		//
+		// ⚠️ Earned by measurement, not suspicion: on 2026-08-14 this phrase was still live
+		// in five places across /for-users, /for-creators and /faq, two days after the
+		// mechanism was deleted, and every one of them carried a correct money figure. That
+		// is precisely the defect the figure scan cannot see.
+		//
+		// The lookahead spares the sentence the retirement *leaves behind* — "Seeds you give
+		// Anthers gate nothing at all" is the correct copy now, and a guard that flagged it
+		// would teach people to annotate good copy rather than delete bad copy.
+		pattern: new RegExp(
+			`${NOT_NEGATED}Anthers[- ](?:[Gg]ates?\\b(?!\\s+(?:nothing|no\\b))|gated)`,
+			"g",
+		),
+		why: "Anthers Gates were retired 2026-08-12 — one gate primitive, pointed only at a creator (63.01 § Seed Gate)",
+	},
+	{
+		// The other half of the same 2026-08-12 change, and the subtler one. Deleting the
+		// bandwidth allowance made "no allowance, no cap" true of *delivery* — and the copy
+		// correctly said so. What the copy never learned is that a NEW meter arrived the
+		// same day: Public Access is capped monthly on a free account. So four pages ended
+		// up claiming unbounded streaming while the app itself rendered the limit.
+		//
+		// 🚨 Downloads really are unlimited, so this must not fire on them. It matches only
+		// the retired formulations that put STREAMING inside the unbounded claim — 63.01
+		// makes "free forever" and the limit co-present, on the same rule as "no cut" and
+		// the take-home.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:stream(?:s|ing)?[^.]{0,30}without a meter|stream(?:ing|s)? and download(?:s|ing)? are unlimited|streams and downloads freely)`,
+			"gi",
+		),
+		why: "a free account's Public Access is capped monthly — say the limit beside the freedom (63.01 § Claims: co-presence)",
+	},
 ];
 
 /** `// econ:allow — <why>`: this number is not one of ours. The reason is required. */
