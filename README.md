@@ -7,7 +7,7 @@
 
 # Anthers
 
-**A creator-first media platform, run as a non-profit.** Creators publish games, videos, music, comics, writing and software here, and keep every dollar their audience spends on them. Anthers takes no cut of creator money — not from a sale, not from support. What funds the platform is the money people choose to give Anthers directly, and what is left of it after creators are paid funds free access for everyone else.
+**A creator-first media platform, run as a non-profit.** Creators publish games, videos, music, comics, writing and software here. **Anthers takes no cut of creator money — 0% platform fee**, on a sale and on support alike; the only thing deducted is card processing, at cost, paid to the processor rather than kept. What funds the platform is the money people choose to give Anthers directly, and what is left of that after creators are paid funds free access for everyone else.
 
 `Anthers, Inc.` is a Colorado nonprofit corporation. There are no investors and no profit-taking: it cannot be acquired, and it cannot take corrupting investment. That is a structural commitment rather than a promise about intentions — the organization is built so that the interests it can serve are the creators' and the audience's.
 
