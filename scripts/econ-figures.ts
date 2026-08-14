@@ -595,6 +595,40 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
 	},
 	{
+		// The organization's own name for itself, and the one place a copy error becomes a
+		// factual error: **there is one legal person and it is `Anthers, Inc.`** (63.01,
+		// retired 2026-08-05). Writing "supported by a non-profit foundation" invents a
+		// second organization for the reader to track, and does it two sentences before the
+		// page names the actual corporation — so the reader is left with two entities and no
+		// way to tell which is which.
+		//
+		// 🚨 The narrowing is the whole rule: a foundation belonging to SOMEONE ELSE is fine
+		// and real. `CompareGhostPage` correctly says Ghost's "non-profit foundation" has
+		// been building in the open since 2013 — flagging that would teach people to
+		// annotate accurate copy about a rival, which is how a guard becomes noise. Hence
+		// `our|a new|the` rather than a bare match; note `\bthe\b` cannot match inside
+		// "their", which is what spares the Ghost line.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:Anthers Foundation|\\b(?:our|a new|the)\\s+non-profit\\s+foundation)`,
+			"gi",
+		),
+		why: "there is one legal person and it is `Anthers, Inc.` — name the function, not an entity (63.01 § Words)",
+	},
+	{
+		// The federation claim wearing different clothes. The ATProto rule above matches
+		// "built on the AT Protocol"; this one matches the same assertion made without
+		// naming the protocol, which is how it got back onto the org profile, the platform
+		// README and /for-users in August 2026 while that rule sat green.
+		//
+		// ⚠️ Narrow on purpose, exactly like its sibling: a page may say federation is
+		// coming and may describe what a distributed network would mean. What it may not do
+		// is describe Anthers as being one TODAY. Anthers is centralized-first; what is
+		// true now is open-source and no lock-in, which is what the canonical intro says
+		// instead.
+		pattern: new RegExp(`${NOT_NEGATED}open,?\\s+(?:and\\s+)?distributed network`, "gi"),
+		why: "Anthers is centralized-first — federation is coming, not here (63.01; 41.01)",
+	},
+	{
 		// Not a retired *mechanism* like the two above — a retired *word* for a live one,
 		// which is the other way this list earns its keep. The Time Pool is real; calling
 		// what it measures "watch-time" makes video the default unit of a platform that

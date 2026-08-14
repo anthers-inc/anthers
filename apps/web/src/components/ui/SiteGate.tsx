@@ -186,9 +186,9 @@ export function SiteGatePanel({
 							{/* Intro copy */}
 							<div>
 								<p className="text-lg text-base-content/65 leading-relaxed mb-3 text-left sm:text-justify">
-									<b>Anthers</b> is a new non-profit building a creative garden for everyone: a
-									peaceful place for videos, games, music, writing, crafts, services, and more, all
-									on an open, distributed network.
+									<b>Anthers</b> is a non-profit creative garden for everyone: a peaceful place for
+									videos, games, music, writing, crafts, services, and more, all on an open-source,
+									ad-free platform.
 								</p>
 
 								{/* The middle two paragraphs are desktop-only (`hidden sm:block`): on phones
