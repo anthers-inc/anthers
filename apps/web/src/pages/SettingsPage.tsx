@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useAuth } from "@anthers/web-shared/auth";
+import {
+	type DesktopHome,
+	desktopHome,
+	isDesktop,
+	setDesktopHome,
+} from "@anthers/web-shared/desktop";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
@@ -25,6 +31,69 @@ function formatWhen(value: string | null): string {
 	if (mins < 60) return `${mins}m ago`;
 	if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
 	return new Date(value).toLocaleDateString();
+}
+
+/**
+ * Desktop-only: which surface the app opens on.
+ *
+ * Rendered nowhere else, because it would be meaningless in a browser — a browser has a
+ * homepage and an address bar, so "where does it open" is not the app's question to
+ * answer. The preference is per-install rather than per-account (see `desktopHome`), so
+ * it is stored locally and there is nothing to save to the server and nothing to fail.
+ */
+function DesktopHomeSection() {
+	const [home, setHome] = useState<DesktopHome>(() => desktopHome());
+	if (!isDesktop()) return null;
+
+	const choose = (next: DesktopHome) => {
+		setDesktopHome(next);
+		setHome(next);
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">When Anthers opens</h3>
+				<p className="text-sm text-base-content/60">
+					Where the app starts. This is set per computer, so you can read here and author somewhere
+					else.
+				</p>
+
+				<div className="form-control mt-2 gap-2">
+					<label className="label cursor-pointer justify-start gap-3 py-1">
+						<input
+							type="radio"
+							name="desktop-home"
+							className="radio radio-sm"
+							checked={home === "feed"}
+							onChange={() => choose("feed")}
+						/>
+						<span className="label-text">
+							<span className="font-medium">Your feed</span>
+							<span className="block text-xs text-base-content/50">
+								The creators you follow, and what they've released
+							</span>
+						</span>
+					</label>
+					<label className="label cursor-pointer justify-start gap-3 py-1">
+						<input
+							type="radio"
+							name="desktop-home"
+							className="radio radio-sm"
+							checked={home === "studio"}
+							onChange={() => choose("studio")}
+						/>
+						<span className="label-text">
+							<span className="font-medium">The Studio</span>
+							<span className="block text-xs text-base-content/50">
+								Your Catalog, uploads and drafts
+							</span>
+						</span>
+					</label>
+				</div>
+			</div>
+		</div>
+	);
 }
 
 /**
@@ -87,7 +156,7 @@ function DevicesSection() {
 								<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2">
 										<span className="font-medium truncate">
-											{s.label ?? (s.kind === "desktop" ? "Anthers Studio" : "Browser")}
+											{s.label ?? (s.kind === "desktop" ? "Anthers Desktop" : "Browser")}
 										</span>
 										{s.kind === "desktop" && <span className="badge badge-sm">Desktop</span>}
 										{s.current && <span className="badge badge-sm badge-primary">This device</span>}
@@ -655,6 +724,8 @@ export default function SettingsPage() {
 			<BlueskySection />
 
 			{/* Signed-in devices — revocation for browsers and the desktop Studio. */}
+			<DesktopHomeSection />
+
 			<DevicesSection />
 
 			{/* Blocked accounts — the only place a block can be lifted, since a blocked

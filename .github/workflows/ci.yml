@@ -148,7 +148,7 @@ jobs:
 
   # The two Docker images App Platform builds at deploy time. Nothing else in CI
   # exercises them, and that gap is exactly how `bcd212e` shipped: adding
-  # `apps/studio-desktop` as a workspace changed `bun.lock`, neither Dockerfile
+  # `apps/desktop` as a workspace changed `bun.lock`, neither Dockerfile
   # COPY'd its `package.json`, and `bun install --frozen-lockfile` failed inside
   # both images. Prod kept serving the previous deployment so there was no outage,
   # but nothing local or in CI could have caught it — PR #52 did the identical
@@ -174,7 +174,7 @@ jobs:
           # components, distinguished only by run_command in .do/app.yaml.
           - name: api
             dockerfile: apps/api/Dockerfile
-          # The separate `anthers-studio` app. Its App Platform spec exists only in
+          # The separate `anthers-studio` app (deleted 2026-08-11). Its spec existed only in
           # App Platform, not in this repo, so this is the only place in version
           # control where that deployment gets checked at all.
 

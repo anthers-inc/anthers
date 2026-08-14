@@ -282,11 +282,11 @@ test-gauntlet: free-preview-port ## Run the User Gauntlet spec pass (fixture res
 # in another terminal is the expected companion. Override for other hosts with
 # ANTHERS_API_BASE.
 
-desktop-dev: ## Run the desktop Studio against the local dev API (needs `make dev`)
-	cd apps/studio-desktop && bun run tauri:dev
+desktop-dev: ## Run the desktop app against the local dev API (needs `make dev`)
+	cd apps/desktop && bun run tauri:dev
 
 desktop-check: ## Typecheck the Rust shell without building installers
-	cd apps/studio-desktop/src-tauri && cargo check
+	cd apps/desktop/src-tauri && cargo check
 
 
 # ─── Desktop packaging ───
@@ -298,7 +298,7 @@ desktop-check: ## Typecheck the Rust shell without building installers
 # targets exist so a wrong-OS invocation fails with a sentence instead of a
 # confusing toolchain error. Follows the ~/Lily pattern.
 
-DESKTOP_DIR := apps/studio-desktop
+DESKTOP_DIR := apps/desktop
 DESKTOP_BUNDLE := $(DESKTOP_DIR)/src-tauri/target/release/bundle
 
 desktop-build: ## Build desktop installers for THIS platform
@@ -357,7 +357,7 @@ desktop-build-macos: ## Build + sign macOS installers (.app, .dmg)
 	@if [ -f .env ]; then \
 		. ./.env && \
 		echo "" && echo "Re-signing with hardened runtime + secure timestamp..." && \
-		APP="$(DESKTOP_BUNDLE)/macos/Anthers Studio.app" && \
+		APP="$(DESKTOP_BUNDLE)/macos/Anthers.app" && \
 		for BIN in "$$APP/Contents/MacOS/"*; do \
 			codesign --force --options runtime --timestamp \
 				--entitlements $(DESKTOP_DIR)/src-tauri/entitlements.plist \
@@ -370,9 +370,9 @@ desktop-build-macos: ## Build + sign macOS installers (.app, .dmg)
 		echo "" && echo "Rebuilding DMG from the re-signed .app..." && \
 		VERSION=$$(grep '^version = ' $(DESKTOP_DIR)/src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/') && \
 		ARCH=$$(uname -m | sed 's/arm64/aarch64/') && \
-		DMG="$(DESKTOP_BUNDLE)/dmg/Anthers Studio_$${VERSION}_$${ARCH}.dmg" && \
+		DMG="$(DESKTOP_BUNDLE)/dmg/Anthers_$${VERSION}_$${ARCH}.dmg" && \
 		rm -f "$$DMG" && \
-		hdiutil create -volname "Anthers Studio" -srcfolder "$$APP" -ov -format UDZO "$$DMG" && \
+		hdiutil create -volname "Anthers" -srcfolder "$$APP" -ov -format UDZO "$$DMG" && \
 		codesign --force --timestamp --sign "$$APPLE_SIGNING_IDENTITY" "$$DMG" && \
 		echo "  -> DMG rebuilt + signed: $$DMG" && \
 		echo "" && codesign --verify --deep --strict "$$APP" && echo "  -> Signature: OK" && \
@@ -384,7 +384,7 @@ desktop-notarize: ## Submit the macOS DMG to Apple, staple, and verify Gatekeepe
 	@. ./.env && \
 	VERSION=$$(grep '^version = ' $(DESKTOP_DIR)/src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/') && \
 	ARCH=$$(uname -m | sed 's/arm64/aarch64/') && \
-	DMG="$(DESKTOP_BUNDLE)/dmg/Anthers Studio_$${VERSION}_$${ARCH}.dmg" && \
+	DMG="$(DESKTOP_BUNDLE)/dmg/Anthers_$${VERSION}_$${ARCH}.dmg" && \
 	if [ ! -f "$$DMG" ]; then echo "ERROR: no DMG at $$DMG — run 'make desktop-build-macos' first"; exit 1; fi && \
 	echo "Submitting $$DMG (this waits on Apple, and can take a while)..." && \
 	xcrun notarytool submit "$$DMG" --apple-id "$$APPLE_ID" --password "$$APPLE_PASSWORD" \
@@ -429,10 +429,10 @@ else
 	echo "$$FILES" | sed 's/^/  /'; \
 	echo ""; \
 	echo "Uploading to release studio-v$(V) (created as a draft if it doesn't exist)..."; \
-	gh release view "studio-v$(V)" >/dev/null 2>&1 \
-		|| gh release create "studio-v$(V)" --draft --title "Anthers Studio $(V)" \
+	gh release view "desktop-v$(V)" >/dev/null 2>&1 \
+		|| gh release create "desktop-v$(V)" --draft --title "Anthers Desktop $(V)" \
 			--notes "Desktop Creator Studio $(V). Installers are per-platform; each is built on its own OS."; \
-	echo "$$FILES" | xargs -I{} gh release upload "studio-v$(V)" "{}" --clobber; \
+	echo "$$FILES" | xargs -I{} gh release upload "desktop-v$(V)" "{}" --clobber; \
 	echo ""; \
 	echo "Done. Review and publish: gh release view studio-v$(V) --web"
 endif

@@ -6,7 +6,7 @@
  * bundled into the Tauri shell, and because `@tauri-apps/api` is already a dependency of
  * this package (imported dynamically, so a browser build never loads it). Everything here
  * is guarded: in a browser `isDesktop()` is false and none of it runs. The shell injects `globalThis.__ANTHERS_DESKTOP__` before any app
- * JS (see `apps/studio-desktop/src-tauri/src/main.rs`), which is also what
+ * JS (see `apps/desktop/src-tauri/src/main.rs`), which is also what
  * `@anthers/web-shared`'s `apiFetch()` reads to pick its transport.
  *
  * `@tauri-apps/api` is imported dynamically so the browser build never loads it.
@@ -14,6 +14,51 @@
 import { isDesktop } from "./rpc";
 
 export { isDesktop };
+
+/**
+ * Where the desktop app opens after sign-in.
+ *
+ * A **per-install** preference rather than an account setting, deliberately: the same
+ * person reasonably wants the Studio on the machine they author on and the feed on the
+ * one they read on, and an account-level setting would force one answer onto both.
+ * That is also why it lives in `localStorage` beside `anthers_theme` rather than on the
+ * user record.
+ *
+ * Meaningless in a browser — nothing reads it there, because the browser has a real
+ * homepage and an address bar.
+ */
+export type DesktopHome = "feed" | "studio";
+
+const HOME_KEY = "anthers_desktop_home";
+const HOMES: readonly DesktopHome[] = ["feed", "studio"];
+
+/**
+ * The stored preference, defaulting to the feed.
+ *
+ * 🚨 **Anything not exactly one of the known values is treated as absent**, which is the
+ * point rather than defensiveness. `localStorage.getItem` returns `null` for a missing
+ * key and `""` for one that was set to empty, and this codebase has twice shipped a bug
+ * from assuming those behave like `undefined` — a remembered volume of silence, and a
+ * `?previewAs=` that locked a creator out of their own page. A `??` default would let
+ * `""` through here too, so the membership test is what makes empty and unknown both
+ * mean "not set".
+ */
+export function desktopHome(): DesktopHome {
+	try {
+		const raw = globalThis.localStorage?.getItem(HOME_KEY);
+		return HOMES.includes(raw as DesktopHome) ? (raw as DesktopHome) : "feed";
+	} catch {
+		// Storage can throw outright (Safari private mode, a locked-down webview). A
+		// preference is not worth failing a page load over.
+		return "feed";
+	}
+}
+
+export function setDesktopHome(home: DesktopHome): void {
+	try {
+		globalThis.localStorage?.setItem(HOME_KEY, home);
+	} catch {}
+}
 
 /** Whether the enrolled token survives a restart — the shell reports this honestly. */
 export type Persistence = "keychain" | "memoryOnly";
@@ -104,5 +149,5 @@ export function deviceLabel(): string {
 			: /Linux/.test(ua)
 				? "Linux"
 				: "Desktop";
-	return `Anthers Studio on ${os}`;
+	return `Anthers on ${os}`;
 }
