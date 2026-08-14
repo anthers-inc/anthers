@@ -151,8 +151,8 @@ export default function CompareItchPage() {
 					<Reveal delay={300}>
 						<DiffCard
 							icon={<LockOpenIcon className="h-6 w-6" />}
-							title="Built on open protocols"
-							description="Anthers is built on the AT Protocol (the same standard behind Bluesky). Your identity is a portable DID you own. Your content is stored as interoperable records. If you ever leave, your data goes with you—not by policy, but by design."
+							title="Open, and yours to leave"
+							description="The whole platform is open source under the AGPL, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You can link your Bluesky identity today; federation is a direction we're committed to, not something we've shipped."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -310,7 +310,10 @@ export default function CompareItchPage() {
 								<CompRow feature="Adjustable revenue share" patreon />
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="Subscription pool model" anthers />
-								<CompRow feature="AT Protocol / data portability" anthers />
+								{/* Identity LINKING is what ships — OAuth against a Bluesky PDS. Record sync,
+								    lexicons and federation are deferred (41.01), so the row names the live
+								    thing rather than the protocol it might one day sit on. */}
+								<CompRow feature="Bluesky identity linking" anthers />
 								<CompRow feature="Desktop client" patreon />
 								<CompRow feature="Pay-what-you-want pricing" anthers patreon />
 								<CompRow feature="Creator analytics" anthers patreon />
@@ -334,31 +337,39 @@ export default function CompareItchPage() {
 					<Eyebrow>Ownership</Eyebrow>
 					<H2>Your identity, your data, your choice</H2>
 					<Lede>
-						itch.io is a great place to publish, but your identity and content live on their
-						servers. Anthers is built on the AT Protocol — the same open standard behind Bluesky—so
-						your creator identity is a portable DID you truly own.
+						itch.io is a great place to publish, but leaving a platform usually means leaving your
+						work behind. Anthers is open source under the AGPL, and everything you make is one click
+						from a file on your own machine.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl gap-8 text-left sm:grid-cols-3">
+					{/*
+					 * 🚨 This section claimed content was "stored as ATProto records" and identity
+					 * was "a portable DID you truly own". Neither ships: `atproto_uri` columns are
+					 * future-proofing and sit unpopulated, and what exists is Bluesky identity
+					 * LINKING (41.01). The replacement is not weaker — it is two things that are
+					 * actually true and testable today, plus a promise kept in the future tense.
+					 */}
 					<Reveal delay={0}>
-						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Portable identity">
-							Your creator identity isn't locked to Anthers. It's a DID you own. If you leave, your
-							identity goes with you.
+						<PortabilityPoint
+							icon={<ArrowPathIcon className="h-6 w-6" />}
+							title="Take your work with you"
+						>
+							One button in Settings and you get a file with everything you've made — works, posts,
+							purchases, the lot. Today, not eventually.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={110}>
-						<PortabilityPoint
-							icon={<ArrowPathIcon className="h-6 w-6" />}
-							title="Exportable content"
-						>
-							Your projects, posts, ratings, and interactions are stored as ATProto records. They
-							belong to you structurally, not just by policy.
+						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Open source">
+							The whole platform is AGPL-3.0. Hosting with us is meant to be a convenience rather
+							than a requirement — and a licence is a harder promise to walk back than a policy.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={220}>
-						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="Federated future">
-							ATProto enables federation—other nodes can join the network, and content is
-							interoperable across them.
+						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="Federation, later">
+							Linking your Bluesky identity works today. Running your own node, and federating
+							between them, is a direction we're committed to — we haven't built it yet, and we'd
+							rather say so.
 						</PortabilityPoint>
 					</Reveal>
 				</div>

@@ -301,7 +301,8 @@ function BlueskySection() {
 				) : (
 					<form onSubmit={handleLink} className="flex flex-col gap-3">
 						<p className="text-sm text-base-content/60">
-							Link your Bluesky account for portable identity and future federation features.
+							Link your Bluesky account to connect the two identities. Federation is a future
+							direction — linking today doesn't move your content anywhere.
 						</p>
 						<div className="flex gap-2">
 							<input

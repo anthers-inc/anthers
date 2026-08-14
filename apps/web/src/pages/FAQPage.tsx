@@ -155,15 +155,15 @@ const FAQ_ITEMS: FAQItem[] = [
 	},
 	{
 		category: "Platform & Identity",
-		question: "What is AT Protocol / Bluesky integration?",
+		question: "What is the Bluesky integration?",
 		answer:
-			"Anthers is built on the AT Protocol, the same decentralized protocol that powers Bluesky. This means your identity, content, and relationships are portable -- you're not locked into Anthers. You can link your Bluesky account to sign in and eventually your content will be federated across the AT Protocol network.",
+			"You can link your Bluesky account to your Anthers account, so the two identities are connected. That's what exists today. Federation -- your content living across a network of independent servers -- is a direction we're committed to and haven't built yet. We'd rather say that plainly than describe it as though it already works.",
 	},
 	{
 		category: "Platform & Identity",
 		question: "Is Anthers open source?",
 		answer:
-			"Anthers is built with federation in mind. The platform uses open protocols (AT Protocol) so creators can eventually host their own nodes. The goal is that no single entity -- including Anthers itself -- can become a gatekeeper.",
+			"Yes -- the whole platform is licensed under the AGPL-3.0. You can also download everything you've made from Settings, in one click. Running your own node, and federating between them, is a direction we're committed to rather than something that ships today. The goal is that no single entity -- including Anthers itself -- can become a gatekeeper.",
 	},
 ];
 

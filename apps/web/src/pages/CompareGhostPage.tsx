@@ -150,7 +150,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									AT Protocol for data portability
+									One-click data export, and an AGPL-licensed codebase
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -300,8 +300,13 @@ export default function CompareGhostPage() {
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="0% platform revenue share" anthers ghost />
 								<CompRow feature="Self-hostable" ghost />
-								<CompRow feature="Open-source codebase" ghost />
-								<CompRow feature="AT Protocol / portable identity" anthers />
+								{/* Anthers is AGPL-3.0 — this row marked only Ghost, which understated us on the
+								    one axis where the honest differentiator actually lives. */}
+								<CompRow feature="Open-source codebase" anthers ghost />
+								{/* What actually ships is identity LINKING — OAuth against a Bluesky PDS, the DID
+								    stored on the account. Federation, record sync and portable content are
+								    deferred (41.01), so the row names the thing that exists. */}
+								<CompRow feature="Bluesky identity linking" anthers />
 								<CompRow feature="Headless CMS / API" ghost />
 								<CompRow feature="Import from other platforms" anthers ghost />
 							</tbody>
