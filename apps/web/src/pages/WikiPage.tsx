@@ -120,7 +120,6 @@ const wikiAreas: WikiArea[] = [
 				items: [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Purchasing Content", file: "01-PurchasingContent.md" },
-					{ name: "Downloads & Game Jams", file: "02-DownloadsAndGameJams.md" },
 					{ name: "Ratings & Comments", file: "03-RatingsAndComments.md" },
 				],
 			},
@@ -151,7 +150,6 @@ const wikiAreas: WikiArea[] = [
 					{ name: "Projects & Games", file: "01-ProjectsAndGames.md" },
 					{ name: "Posts & Rich Text", file: "02-PostsAndRichText.md" },
 					{ name: "Video & Audio", file: "03-VideoAndAudio.md" },
-					{ name: "Game Jams", file: "04-GameJams.md" },
 				],
 			},
 			{

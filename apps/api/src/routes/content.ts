@@ -3458,9 +3458,6 @@ const contentRoutes = new Hono()
 			case "inline-image":
 				key = `${prefix}/inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
-			case "jam-cover":
-				key = `${prefix}/jams/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
 			default:
 				key = `${prefix}/uploads/${uuid}.${ext}`;
 		}

@@ -121,9 +121,10 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
  *
  * The lesson generalises past this file: **a correlated subquery in a select list must
  * qualify its outer reference**, and the failure mode is a plausible number rather than
- * an error. `routes/jams.ts`'s `entryCount` has the identical shape against
- * `jam_entries.id` and is left alone here only because it is nothing to do with this
- * change.
+ * an error. Two other counts had the identical shape — `projects.postCount` here and
+ * `jams`' `entryCount` — and neither was ever broken, because both joined `users` and so
+ * always qualified; `derived-counts.test.ts` guards that dependency for the survivor.
+ * (Jams were retired outright on 2026-08-14, taking its half of that file with it.)
  */
 const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
 

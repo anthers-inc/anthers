@@ -77,9 +77,8 @@ export default function CompareItchPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							itch.io is a beloved platform that's done more for indie creators than almost anyone.
-							Anthers builds on that same spirit — creator-first economics, open publishing,
-							community game jams — and extends it with multi-media support, transparent pricing,
-							and data portability.
+							Anthers builds on that same spirit — creator-first economics, open publishing — and
+							extends it with multi-media support, transparent pricing, and data portability.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -299,7 +298,6 @@ export default function CompareItchPage() {
 							<tbody>
 								<CompRow feature="Game hosting & downloads" anthers patreon />
 								<CompRow feature="HTML5 web games" anthers patreon />
-								<CompRow feature="Game jams" anthers patreon />
 								<CompRow feature="Customizable project pages" anthers patreon />
 								<CompRow feature="Ratings & comments" anthers patreon />
 								<CompRow feature="Devlogs & posts" anthers patreon />

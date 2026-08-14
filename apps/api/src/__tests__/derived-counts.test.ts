@@ -12,9 +12,14 @@
  * suite then fails 3/3 while these two keep passing.
  *
  * So what is guarded here is the **dependency**, not a defect: remove the join from either
- * query and the identifier silently goes bare, binds `project_posts.id` / `jam_entries.id`
- * — both of which exist — and every count becomes a plausible constant with no error
- * anywhere. That is precisely how `accounts.ts` read 0 for months.
+ * query and the identifier silently goes bare, binds `project_posts.id` — which exists —
+ * and every count becomes a plausible constant with no error anywhere. That is precisely
+ * how `accounts.ts` read 0 for months.
+ *
+ * ⚠️ This file covered a SECOND count until 2026-08-14: `jam_entries.entryCount`, on the
+ * same reasoning. Jams were retired outright, so that half went with the feature. The
+ * lesson is unchanged and now rests on one example instead of two — which is worth knowing
+ * if the remaining one is ever refactored away, because then nothing guards the pattern.
  *
  * 🚨 **Each test asserts DISCRIMINATION between two rows, never one row's value.** The
  * broken form compares a column to itself, so it is independent of the outer row and
@@ -26,7 +31,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { gameJams, jamEntries, posts, projectPosts, projects, users } from "@anthers/db/schema";
+import { posts, projectPosts, projects, users } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -55,7 +60,6 @@ const SUFFIX = `dc${Date.now().toString(36)}`;
 let creatorId: number;
 const madeUsers: number[] = [];
 const madeProjects: number[] = [];
-const madeJams: number[] = [];
 const madePosts: number[] = [];
 
 /** How many posts this project really has, counted straight rather than via the route. */
@@ -64,15 +68,6 @@ async function realPostCount(projectId: number): Promise<number> {
 		.select({ id: projectPosts.id })
 		.from(projectPosts)
 		.where(eq(projectPosts.projectId, projectId));
-	return rows.length;
-}
-
-/** How many entries this jam really has, counted straight rather than via the route. */
-async function realEntryCount(jamId: number): Promise<number> {
-	const rows = await db
-		.select({ id: jamEntries.id })
-		.from(jamEntries)
-		.where(eq(jamEntries.jamId, jamId));
 	return rows.length;
 }
 
@@ -92,9 +87,8 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	// Jams and projects first — their join rows cascade — then posts, then the user.
+	// Projects first — their join rows cascade — then posts, then the user.
 	// `posts.creator_id` is ON DELETE SET NULL, so removing the user would orphan them.
-	if (madeJams.length > 0) await db.delete(gameJams).where(inArray(gameJams.id, madeJams));
 	if (madeProjects.length > 0) await db.delete(projects).where(inArray(projects.id, madeProjects));
 	if (madePosts.length > 0) await db.delete(posts).where(inArray(posts.id, madePosts));
 	if (madeUsers.length > 0) await db.delete(users).where(inArray(users.id, madeUsers));
@@ -144,71 +138,6 @@ describe("project listing — postCount", () => {
 			expect(rowB, "project B missing from listing").toBeDefined();
 			// The load-bearing assertion: two projects, two different counts, each its own.
 			expect({ a: rowA?.postCount, b: rowB?.postCount }).toEqual({ a: truthA, b: truthB });
-		},
-		DB_SETUP_TIMEOUT,
-	);
-});
-
-describe("jam listing — entryCount", () => {
-	it(
-		"reports the jam's own entry count, not a row id that happens to match",
-		async () => {
-			const slug = `jam-${SUFFIX}`;
-			const now = new Date();
-			const [jam] = await db
-				.insert(gameJams)
-				.values({
-					creatorId,
-					title: "Counts Jam",
-					slug,
-					description: "",
-					startAt: new Date(now.getTime() - 86_400_000),
-					endAt: new Date(now.getTime() + 86_400_000),
-					votingEndAt: new Date(now.getTime() + 172_800_000),
-				})
-				.returning({ id: gameJams.id });
-			madeJams.push(jam.id);
-
-			// Same reasoning as postCount: a second jam with a different entry count, because
-			// the broken subquery answers one constant for every jam.
-			const slugB = `jamb-${SUFFIX}`;
-			const [jamB] = await db
-				.insert(gameJams)
-				.values({
-					creatorId,
-					title: "Counts Jam B",
-					slug: slugB,
-					description: "",
-					startAt: new Date(now.getTime() - 86_400_000),
-					endAt: new Date(now.getTime() + 86_400_000),
-					votingEndAt: new Date(now.getTime() + 172_800_000),
-				})
-				.returning({ id: gameJams.id });
-			madeJams.push(jamB.id);
-
-			for (let i = 0; i < 3; i++) {
-				const postId = await makePost(`entry-${i}`);
-				await db.insert(jamEntries).values({ jamId: jam.id, postId, submittedById: creatorId });
-			}
-			const postIdB = await makePost("entryb-0");
-			await db
-				.insert(jamEntries)
-				.values({ jamId: jamB.id, postId: postIdB, submittedById: creatorId });
-
-			const truthA = await realEntryCount(jam.id);
-			const truthB = await realEntryCount(jamB.id);
-			expect({ a: truthA, b: truthB }).toEqual({ a: 3, b: 1 });
-
-			const res = await app.request("/api/jams", {
-				headers: { Origin: "http://localhost:3000" },
-			});
-			expect(res.status).toBe(200);
-			const body = (await res.json()) as { jams?: Array<{ slug: string; entryCount: number }> };
-			const rowA = (body.jams ?? []).find((j) => j.slug === slug);
-			const rowB = (body.jams ?? []).find((j) => j.slug === slugB);
-			expect(rowA, "jam A missing from listing").toBeDefined();
-			expect(rowB, "jam B missing from listing").toBeDefined();
-			expect({ a: rowA?.entryCount, b: rowB?.entryCount }).toEqual({ a: truthA, b: truthB });
 		},
 		DB_SETUP_TIMEOUT,
 	);

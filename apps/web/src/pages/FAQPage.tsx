@@ -36,8 +36,8 @@ const FAQ_ITEMS: FAQItem[] = [
 						<strong>Network:</strong> Things your follows have liked, shared, or purchased
 					</li>
 					<li>
-						<strong>Ambient:</strong> Content matching your stated interests (tags, jams) -- never
-						paid promotion
+						<strong>Ambient:</strong> Content matching your stated interests (tags) -- never paid
+						promotion
 					</li>
 				</ul>
 				<p>
@@ -152,12 +152,6 @@ const FAQ_ITEMS: FAQItem[] = [
 		question: "What kinds of content can I publish?",
 		answer:
 			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player/reader experiences.",
-	},
-	{
-		category: "Jams & Contests",
-		question: "What are Jams?",
-		answer:
-			"Jams are creative contests where sponsors put out calls for content and creators compete. They support all media types -- not just games. Jams can be sponsored by companies, educators, organizations, Anthers itself, or individual creators. Some jams are size-gated to ensure emerging creators get fair opportunities.",
 	},
 	{
 		category: "Platform & Identity",

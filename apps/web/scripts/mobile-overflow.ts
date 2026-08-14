@@ -40,7 +40,6 @@ const DEFAULT_ROUTES = [
 	"/subscribe",
 	"/faq",
 	"/roadmap",
-	"/jams",
 	"/login",
 	"/signup",
 ];

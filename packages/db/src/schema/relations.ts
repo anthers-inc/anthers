@@ -27,7 +27,6 @@ import {
 	externalMetricSnapshots,
 	platformConnections,
 } from "./integrations.js";
-import { gameJams, jamEntries, jamVotes } from "./jams.js";
 import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
 import {
 	accountCycles,
@@ -84,11 +83,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Integrations
 	platformConnections: many(platformConnections),
 	crossPublishResults: many(crossPublishResults),
-
-	// Jams
-	gameJams: many(gameJams),
-	jamEntries: many(jamEntries),
-	jamVotes: many(jamVotes),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -138,7 +132,6 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 	workRefs: many(postWorkRefs),
 	attentionEvents: many(attentionEvents),
 	crossPublishResults: many(crossPublishResults),
-	jamEntries: many(jamEntries),
 }));
 
 // Projects — they group Works and Posts.
@@ -308,23 +301,4 @@ export const externalMetricSnapshotsRelations = relations(externalMetricSnapshot
 		fields: [externalMetricSnapshots.crossPublishId],
 		references: [crossPublishResults.id],
 	}),
-}));
-
-// ─── Jams ────────────────────────────────────────────────────────────────────
-
-export const gameJamsRelations = relations(gameJams, ({ one, many }) => ({
-	creator: one(users, { fields: [gameJams.creatorId], references: [users.id] }),
-	entries: many(jamEntries),
-}));
-
-export const jamEntriesRelations = relations(jamEntries, ({ one, many }) => ({
-	jam: one(gameJams, { fields: [jamEntries.jamId], references: [gameJams.id] }),
-	post: one(posts, { fields: [jamEntries.postId], references: [posts.id] }),
-	submittedBy: one(users, { fields: [jamEntries.submittedById], references: [users.id] }),
-	votes: many(jamVotes),
-}));
-
-export const jamVotesRelations = relations(jamVotes, ({ one }) => ({
-	entry: one(jamEntries, { fields: [jamVotes.entryId], references: [jamEntries.id] }),
-	user: one(users, { fields: [jamVotes.userId], references: [users.id] }),
 }));

@@ -39,7 +39,6 @@
 		"./DashboardPage": "./src/pages/DashboardPage.tsx",
 		"./ProjectFormPage": "./src/pages/ProjectFormPage.tsx",
 		"./CatalogPage": "./src/pages/CatalogPage.tsx",
-		"./JamFormPage": "./src/pages/JamFormPage.tsx",
 		"./ImportPage": "./src/pages/ImportPage.tsx",
 		"./AnalyticsDashboardPage": "./src/pages/AnalyticsDashboardPage.tsx",
 		"./StudioSettingsPage": "./src/pages/StudioSettingsPage.tsx"

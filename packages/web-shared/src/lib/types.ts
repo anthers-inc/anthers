@@ -765,53 +765,6 @@ export interface CrossPublishResult {
 	updatedAt: string;
 }
 
-// ─── Jam Types ───
-
-export interface GameJam {
-	id: number;
-	creatorId: number;
-	title: string;
-	slug: string;
-	description: string | null;
-	theme: string | null;
-	coverImage: string | null;
-	startAt: string;
-	endAt: string;
-	votingEndAt: string;
-	maxTeamSize: number | null;
-	allowLateSubmissions: boolean | null;
-	createdAt: string;
-	updatedAt: string;
-	creator?: {
-		username: string;
-		displayName: string | null;
-	};
-	entryCount?: number;
-}
-
-export interface JamEntry {
-	id: number;
-	jamId: number;
-	postId: number;
-	submittedById: number;
-	createdAt: string;
-	post?: {
-		title: string | null;
-		slug: string;
-		coverImage: string | null;
-		contentType: string;
-	};
-	submitter?: {
-		username: string;
-	};
-	avgScore?: number;
-	voteCount?: number;
-}
-
-export interface JamEntryResult extends JamEntry {
-	rank: number;
-}
-
 // ─── Hosting-subsidy Types ───
 
 export interface CrfSubsidy {

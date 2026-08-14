@@ -35,7 +35,6 @@ const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
-const JamFormPage = lazy(() => import("@anthers/web-shared/JamFormPage"));
 const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
 const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
 
@@ -86,8 +85,6 @@ const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const ForCreatorsPage = lazy(() => import("./pages/ForCreatorsPage"));
 const InfrastructureDemoPage = lazy(() => import("./pages/InfrastructureDemoPage"));
-const JamPage = lazy(() => import("./pages/JamPage"));
-const JamsPage = lazy(() => import("./pages/JamsPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const BasketPage = lazy(() => import("./pages/BasketPage"));
@@ -280,8 +277,6 @@ export default function App() {
 					{/* A Work stands on its own — reachable whether or not a post ever mentioned it. */}
 					<Route path="/works/:slug" element={<WorkPage />} />
 					<Route path="/subscribe" element={<SubscribePage />} />
-					<Route path="/jams" element={<JamsPage />} />
-					<Route path="/jams/:slug" element={<JamPage />} />
 					<Route path="/faq" element={<FAQPage />} />
 					{/* Published PENDING — no effective date, and a banner saying so. See
 				    pages/LegalPage.tsx: the date is what turns a draft into a
@@ -322,8 +317,6 @@ export default function App() {
 						<Route path="posts/:slug/edit" element={<PostFormPage />} />
 						<Route path="projects/new" element={<ProjectFormPage />} />
 						<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
-						<Route path="jams/new" element={<JamFormPage />} />
-						<Route path="jams/:slug/edit" element={<JamFormPage />} />
 						<Route path="import" element={<ImportPage />} />
 						<Route path="settings" element={<StudioSettingsPage />} />
 					</Route>
