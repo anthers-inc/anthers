@@ -7,7 +7,7 @@
 **/.git
 # Vendored ffmpeg.wasm runtime (~32MB) — copied from node_modules at build time.
 apps/*/public/vendor
-# `**/` because the Rust build output lives at apps/studio-desktop/src-tauri/target,
+# `**/` because the Rust build output lives at apps/desktop/src-tauri/target,
 # and a bare `target` matches only the repo root. Unignored it is ~7.7 GB of local
 # build artifacts shipped into every build context — invisible in CI and on App
 # Platform, which build from a fresh checkout, but enough to make "just build the

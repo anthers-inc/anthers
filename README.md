@@ -79,7 +79,7 @@ A Bun workspace monorepo. Four packages, three apps, one deployment.
 |---|---|
 | `apps/api` | The hub: a Hono HTTP API on Bun, plus a separate background worker process. Owns auth, content, payments, access resolution, moderation, and every scheduled job. |
 | `apps/web` | The React SPA — the public site, the reader/viewer/player surfaces, and the creator **Studio** at `/studio`. |
-| `apps/studio-desktop` | A Tauri desktop shell around the same Studio build, with native media encoding and the session token in the OS keychain. |
+| `apps/desktop` | A Tauri desktop shell around the same web build, with native media encoding and the session token in the OS keychain. |
 | `packages/db` | The whole schema as code, one Drizzle file per domain — auth, content, payments, subscriptions, integrations, moderation — plus the versioned migrations and the runner that applies them. |
 | `packages/shared` | The model itself: exact money math, the Time Pool eligibility policy, the Public Access meter, and the shared constants every dial lives in. |
 | `packages/web-shared` | The authoring stack shared by the web app and the desktop shell — including the one place an API origin is ever resolved. |
@@ -153,4 +153,4 @@ Anthers is free software under the **GNU Affero General Public License v3.0 or l
 
 The AGPL is a deliberate choice and not an incidental one: a platform that asks creators to trust it with their work and their livelihood should be one they can walk away with. If Anthers ever stops being worth trusting, this repository is the escape hatch.
 
-Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md) and [`apps/studio-desktop/sidecar/THIRD-PARTY.md`](./apps/studio-desktop/sidecar/THIRD-PARTY.md).
+Third-party assets and their licenses are inventoried per package — see [`packages/brand/THIRD-PARTY.md`](./packages/brand/THIRD-PARTY.md) and [`apps/desktop/sidecar/THIRD-PARTY.md`](./apps/desktop/sidecar/THIRD-PARTY.md).

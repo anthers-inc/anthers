@@ -102,7 +102,7 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">This sign-in request has expired</h1>
 							<p className="text-sm text-base-content/60">
-								Sign-in requests are only valid for a few minutes. Start again from Anthers Studio
+								Sign-in requests are only valid for a few minutes. Start again from Anthers Desktop
 								on your computer.
 							</p>
 						</>
@@ -110,7 +110,7 @@ export default function DesktopAuthorizePage() {
 
 					{(phase === "ready" || phase === "authorizing" || phase === "error") && (
 						<>
-							<h1 className="card-title text-lg">Sign in to Anthers Studio?</h1>
+							<h1 className="card-title text-lg">Sign in to Anthers?</h1>
 							<p className="text-sm text-base-content/60">
 								This will let{" "}
 								{label ? (
@@ -145,8 +145,8 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">You're signed in</h1>
 							<p className="text-sm text-base-content/60">
-								Return to Anthers Studio on your computer — it should be signed in already. You can
-								close this tab.
+								Return to Anthers on your computer — it should be signed in already. You can close
+								this tab.
 							</p>
 						</>
 					)}

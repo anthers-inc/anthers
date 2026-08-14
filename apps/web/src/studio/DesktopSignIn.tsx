@@ -76,7 +76,7 @@ export default function DesktopSignIn() {
 		<div className="min-h-dvh flex items-center justify-center px-4">
 			<div className="card bg-base-200 w-full max-w-md">
 				<div className="card-body">
-					<h1 className="card-title text-xl">Anthers Studio</h1>
+					<h1 className="card-title text-xl">Anthers</h1>
 
 					{phase === "completing" ? (
 						<>
