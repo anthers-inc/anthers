@@ -123,9 +123,12 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
 			<Link to="/subscribe" className="btn btn-primary mt-1">
 				Give a Seed to Anthers
 			</Link>
+			{/* "watched" was wrong here on three of the four media — the allowance is one pool
+			    of time spent however the viewer likes, which is the equal-time principle the
+			    Hub is explicit about. A minute is a minute, whatever it is spent on. */}
 			{budget.usedSeconds > 0 && (
 				<p className="text-xs text-base-content/45">
-					{describeRemaining(budget.usedSeconds)} watched this month.
+					{describeRemaining(budget.usedSeconds)} of Public Access this month.
 				</p>
 			)}
 		</div>
@@ -159,8 +162,7 @@ export function AnonymousViewerBanner({ playing }: { playing: boolean }) {
 		return (
 			<div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-base-300 bg-base-200/60 px-4 py-3 text-sm">
 				<span className="min-w-0 flex-1">
-					You've been watching for a while — create a free account to save your place and keep
-					watching.
+					You've been here a while — create a free account to save your place and keep going.
 				</span>
 				<Link to="/subscribe" className="btn btn-primary btn-sm">
 					Create a free account
@@ -179,9 +181,12 @@ export function AnonymousViewerBanner({ playing }: { playing: boolean }) {
 	}
 
 	return (
+		// Deliberately medium-neutral. This banner sits under a video player, an audio
+		// player, a comic and a game, and "You're watching" read as a mistake on all but
+		// the first — the equal-time principle is the platform's, so the copy should not
+		// pick a favourite medium either.
 		<div className="mt-3 rounded-lg border border-base-300 bg-base-200/60 px-4 py-3 text-sm">
-			You're watching on Anthers — where what you spend goes straight to creators, never to the
-			platform.{" "}
+			You're on Anthers — where what you spend goes straight to creators, never to the platform.{" "}
 			<Link to="/subscribe" className="link link-primary">
 				How it works
 			</Link>

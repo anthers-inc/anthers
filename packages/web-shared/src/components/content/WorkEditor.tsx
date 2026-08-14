@@ -89,6 +89,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 
 	const [title, setTitle] = useState(editing?.title ?? "");
 	const [description, setDescription] = useState(editing?.description ?? "");
+	const [lyrics, setLyrics] = useState(editing?.lyrics ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(editing?.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		editing?.thumbnail ? keyToPreview(editing.thumbnail) : null,
@@ -364,6 +365,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		const input: WorkInput & { type: UploadableWorkType } = { type };
 		if (title.trim()) input.title = title.trim();
 		if (description.trim()) input.description = description.trim();
+		if (type === "audio" && lyrics.trim()) input.lyrics = lyrics;
 		if (thumbnailUrl) input.thumbnail = thumbnailUrl;
 		input.streamEnabled = streamEnabled;
 		input.downloadEnabled = downloadEnabled;
@@ -424,6 +426,9 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		const json: WorkInput = {
 			title: title.trim(),
 			description: description.trim(),
+			// Sent unconditionally on an audio Work, including empty — deleting the lyrics
+			// is a real edit, and an omitted field cannot express it.
+			...(current.type === "audio" ? { lyrics } : {}),
 			thumbnail: thumbnailUrl,
 			visibility,
 			streamEnabled,
@@ -657,6 +662,31 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 							placeholder="Describe this content…"
 						/>
 					</FormField>
+
+					{/*
+					 * Lyrics — audio only, plain text, untimestamped.
+					 *
+					 * The help text says the gate covers them on purpose. Lyrics ride with the
+					 * payload (`serializeWorkForViewer` blanks them alongside the audio), and a
+					 * creator who assumed the opposite would only find out from a reader. The
+					 * escape hatch is stated too: Description stays visible when locked.
+					 */}
+					{type === "audio" && (
+						<FormField label="Lyrics (optional)">
+							<textarea
+								className="textarea textarea-bordered w-full font-mono text-sm"
+								value={lyrics}
+								onChange={(e) => setLyrics(e.target.value)}
+								rows={8}
+								placeholder={"One line per line.\nBlank lines separate verses."}
+							/>
+							<p className="mt-1 text-xs text-base-content/60">
+								Shown while the track plays. Gated with the audio — if this track is behind a Seed
+								Gate or a price, the words are too. Put anything you want everyone to read in the
+								Description instead.
+							</p>
+						</FormField>
+					)}
 
 					<FormField label="Thumbnail (optional)">
 						<div className="max-w-xs">

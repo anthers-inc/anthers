@@ -328,6 +328,10 @@ const workBaseSchema = z
 		// type = "text": the prose itself.
 		body: z.string().optional().default(""),
 		bodyHtml: z.string().optional().default(""),
+		// type = "audio": the song's words, plain text and untimestamped. Bounded generously
+		// — a long song with repeats runs to a few thousand characters, and an epic runs to
+		// more. No sanitizer, because nothing here is ever rendered as HTML.
+		lyrics: z.string().max(20_000).optional(),
 		metadata: z.record(z.unknown()).optional().default({}),
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
@@ -582,6 +586,8 @@ function serializeWork(
 		durationSeconds: item.durationSeconds,
 		body: item.body,
 		bodyHtml: item.bodyHtml,
+		// Owner-facing, so ungated — this is the shape the Studio editor loads to edit.
+		lyrics: item.lyrics,
 		estimatedReadMinutes: item.estimatedReadMinutes,
 		metadata: stripInternalMetadata(item.metadata),
 		visibility: item.visibility,
@@ -969,6 +975,14 @@ function serializeWorkForViewer(
 		body: deliverable ? work.body : "",
 		sourceKey: deliverable ? work.sourceKey : "",
 		embedUrl: deliverable ? work.embedUrl : "",
+		// 🚨 Lyrics ride WITH the payload, not with the blurb. A gated track's words are as
+		// much the deliverable as its audio, and the two failure directions are not
+		// symmetric: a creator who wants them public can put them in `description`, which
+		// stays visible when locked, while a creator who wanted them private has no way to
+		// un-serve words already handed out. Same branch as `body`, deliberately — a third
+		// rule here ("gated by access but not by the meter") would be a second mechanism
+		// for something already enforced once.
+		lyrics: deliverable ? work.lyrics : "",
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
 		// attention to the commons, not bytes** — delivery is free at any volume since R2,
 		// and a spent allowance has never had anything to do with a file you are entitled
@@ -1978,6 +1992,7 @@ const contentRoutes = new Hono()
 				durationSeconds: data.durationSeconds ?? null,
 				body: data.body ?? "",
 				bodyHtml,
+				lyrics: data.lyrics ?? "",
 				estimatedReadMinutes:
 					data.type === "text" && (bodyHtml || data.body)
 						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
@@ -2334,6 +2349,11 @@ const contentRoutes = new Hono()
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.sourceUrl !== undefined) updates.sourceUrl = data.sourceUrl;
 		if (data.body !== undefined) updates.body = data.body;
+		// Not gated on `work.type === "audio"`, unlike bodyHtml below. Only audio Works show
+		// lyrics, but refusing the write for any other type would silently discard what a
+		// creator typed if they ever changed the type — and the column is inert everywhere
+		// else, so there is nothing to protect against.
+		if (data.lyrics !== undefined) updates.lyrics = data.lyrics;
 		if (data.bodyHtml !== undefined && work.type === "text") {
 			updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
 			updates.estimatedReadMinutes = estimateReadMinutes(updates.bodyHtml as string);

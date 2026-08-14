@@ -16,7 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
-import MiniPlayer from "../media/MiniPlayer";
+import PlayerBar from "../media/PlayerBar";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
@@ -252,7 +252,7 @@ function LoggedInLayoutInner() {
 				</main>
 			</div>
 
-			<MiniPlayer />
+			<PlayerBar />
 		</div>
 	);
 }

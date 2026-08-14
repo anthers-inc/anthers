@@ -109,6 +109,29 @@ export const works = pgTable(
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
+		// type = "audio": the song's words. **A column, not `metadata`** — lyrics are
+		// creator-authored, reader-visible content, the same class of thing as `description`
+		// and `body`, both of which are columns. `metadata` is for incidental shape
+		// (`clientVariants`, a physical item's note), and burying published text in the
+		// jsonb grab-bag makes it invisible to future search and to any migration that has
+		// to reason about what a creator actually wrote.
+		//
+		// Deliberately **untimestamped**: no karaoke, no per-line sync, just the words
+		// attached to the Work. Plain text rendered `white-space: pre-wrap` rather than
+		// rich text — lyrics are line-broken text, and a rich-text surface here would
+		// invite formatting nobody wants and a sanitizer nobody needs.
+		//
+		// 🚨 **Gated with the payload.** `serializeWorkForViewer` blanks this alongside
+		// `body`/`bodyHtml`/`sourceKey`, because a gated track's words are as much the
+		// deliverable as its audio. The failure is quiet in either direction, so the
+		// asymmetry decided it: a creator who wants them public can put them in
+		// `description`, which stays visible when locked — a creator who wanted them
+		// private has no way to un-publish words already served.
+		//
+		// Stored for any type rather than only `audio` (which is how `bodyHtml` is
+		// restricted to `text`), so that changing a Work's type cannot silently destroy
+		// what someone wrote. Only audio Works display them.
+		lyrics: text("lyrics").default(""),
 		// Browser-encode transport (metadata.clientVariants) + physical/service product
 		// details. Full variant/SKU modelling lands when merch/fulfillment is real; for now
 		// downloadable variants (game/software builds) live in `assets`.

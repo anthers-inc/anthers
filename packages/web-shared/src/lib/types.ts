@@ -189,6 +189,14 @@ export interface Work {
 	/** Prose, for `type: "text"`. Gated like any other payload. */
 	body?: string | null;
 	bodyHtml?: string | null;
+	/**
+	 * The song's words, for `type: "audio"` — plain text, untimestamped, newline-separated.
+	 *
+	 * Gated exactly like `body`: a denied viewer gets `""`, because a gated track's words
+	 * are part of what the Seed or purchase buys. The public blurb that survives a gate is
+	 * `description`.
+	 */
+	lyrics?: string | null;
 	estimatedReadMinutes?: number | null;
 	metadata: Record<string, unknown> | null;
 
@@ -249,6 +257,8 @@ export interface WorkInput {
 	durationSeconds?: number;
 	body?: string;
 	bodyHtml?: string;
+	/** Untimestamped song lyrics (audio Works). Plain text — never HTML. */
+	lyrics?: string;
 	metadata?: Record<string, unknown>;
 	visibility?: WorkVisibility;
 	authoredAt?: string | null;

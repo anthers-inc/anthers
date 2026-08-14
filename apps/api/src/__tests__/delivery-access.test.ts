@@ -198,6 +198,50 @@ describe("Delivery-layer access", () => {
 		expect(work.bodyHtml).toBe("");
 	});
 
+	/*
+	 * Lyrics, which are the same shape of deliverable as prose and were the easiest thing
+	 * in this file to get wrong: a new column that nobody thinks of as "media" quietly
+	 * riding out past the gate with the title and the thumbnail.
+	 *
+	 * The second assertion is the one that stops the fix being "blank everything": the
+	 * public blurb has to survive, or a locked Work cannot say what it is.
+	 */
+	it("withholds a locked track's lyrics but keeps its public blurb", async () => {
+		const track = await insertWork({
+			creatorId,
+			type: "audio",
+			title: "Locked Track",
+			description: "A song about gates.",
+			lyrics: "the gated words\nsecond line",
+			...LOCKED,
+		});
+		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: viewerCookie } });
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.access.canAccess).toBe(false);
+		expect(work.lyrics).toBe("");
+		expect(work.description).toBe("A song about gates.");
+	});
+
+	it("hands the lyrics over once the viewer can actually reach the track", async () => {
+		// Free to everyone, so `canAccess` is true and the payload is the viewer's. Without
+		// this case the assertion above passes against a build that never sends lyrics at
+		// all — an "always empty" implementation is indistinguishable from a working gate
+		// if you only ever look at the denied side.
+		const track = await insertWork({
+			creatorId,
+			type: "audio",
+			title: "Open Track",
+			lyrics: "the open words",
+			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const res = await req(`/api/content/works/${track.id}`, { headers: { Cookie: viewerCookie } });
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.access.canAccess).toBe(true);
+		expect(work.lyrics).toBe("the open words");
+	});
+
 	it("still hands the owner their own media URLs", async () => {
 		for (const workId of [audioItemId, videoItemId]) {
 			const res = await req(`/api/content/works/${workId}`, {

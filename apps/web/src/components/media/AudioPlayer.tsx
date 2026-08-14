@@ -185,9 +185,26 @@ export default function AudioPlayer({
 				</div>
 			</div>
 
+			{/*
+			 * Hand the track to the persistent bar, which survives navigation.
+			 *
+			 * ⚠️ This player pauses ITSELF first, here rather than in the caller. Two
+			 * elements playing the same track at once is not merely untidy — both register
+			 * an attention claim on the same (creator, Work), and although the policy
+			 * resolves that centrally rather than double-crediting, the listener hears the
+			 * song twice, slightly out of phase. Leaving it to every caller to remember is
+			 * how one of them eventually doesn't.
+			 */}
 			{onPlayInMiniPlayer && (
-				<button type="button" onClick={onPlayInMiniPlayer} className="btn btn-ghost btn-xs mt-2">
-					Play in mini-player
+				<button
+					type="button"
+					onClick={() => {
+						audioRef.current?.pause();
+						onPlayInMiniPlayer();
+					}}
+					className="btn btn-ghost btn-xs mt-2"
+				>
+					Listen while you browse
 				</button>
 			)}
 
