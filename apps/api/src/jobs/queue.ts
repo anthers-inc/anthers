@@ -159,6 +159,7 @@ export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
 	PACKAGE_VIDEO: "package-video", // Remux browser-encoded MP4 variants → HLS (no re-encode)
 	PROCESS_AUDIO: "process-audio",
+	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Month-end allowance draw + remainder inflows
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
@@ -190,6 +191,13 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 60,
 		expireInMinutes: 15,
+	},
+	[QUEUES.RASTERIZE_EBOOK]: {
+		retryLimit: 2,
+		retryDelay: 60,
+		// A long graphic novel is one poppler pass plus an upload per page; generous for
+		// the same reason video is, and bounded by MAX_PAGES in the job itself.
+		expireInMinutes: 30,
 	},
 	[QUEUES.CROSS_PUBLISH]: {
 		retryLimit: 2,

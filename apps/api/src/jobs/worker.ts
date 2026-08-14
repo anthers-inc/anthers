@@ -21,6 +21,7 @@ import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, JOB_OPTIONS, QUEUES, queue } from "./queue.js";
+import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 
@@ -44,10 +45,26 @@ async function resumeOrphanedTranscodes(): Promise<void> {
 			.update(transcodingJobs)
 			.set({ status: "pending", progress: 0 })
 			.where(eq(transcodingJobs.id, job.id));
-		const q = job.mediaType === "video" ? QUEUES.TRANSCODE_VIDEO : QUEUES.PROCESS_AUDIO;
+		// 🚨 A MAP, not a ternary. This was `video ? TRANSCODE : PROCESS_AUDIO`, which was
+		// correct while there were exactly two media types and silently wrong the moment
+		// there were three: an orphaned ebook job would have been resumed onto the audio
+		// handler, which would fail on a PDF for reasons that name ffmpeg. An unknown type
+		// is skipped with a warning rather than guessed at.
+		const q = RESUME_QUEUE[job.mediaType];
+		if (!q) {
+			console.warn(`Cannot resume job ${job.id}: unknown mediaType "${job.mediaType}"`);
+			continue;
+		}
 		await queue.send(q, { jobId: job.id }, JOB_OPTIONS[q]);
 	}
 }
+
+/** Which queue resumes an interrupted job, by the media type that produced it. */
+const RESUME_QUEUE: Record<string, string | undefined> = {
+	video: QUEUES.TRANSCODE_VIDEO,
+	audio: QUEUES.PROCESS_AUDIO,
+	ebook: QUEUES.RASTERIZE_EBOOK,
+};
 
 async function start() {
 	console.log("Starting job worker...");
@@ -86,6 +103,17 @@ async function start() {
 			for (const job of jobs) {
 				console.log(`[process-audio] Processing job ${job.id}`);
 				await processAudio(job.data);
+			}
+		},
+	);
+
+	await queue.work<RasterizeEbookData>(
+		QUEUES.RASTERIZE_EBOOK,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[rasterize-ebook] Processing job ${job.id}`);
+				await rasterizeEbook(job.data);
 			}
 		},
 	);

@@ -39,6 +39,7 @@ import {
 import { projectItems, projects, transcodingJobs, users, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
+import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";
 
@@ -47,6 +48,8 @@ const FORCE = process.argv.includes("--force");
 
 /** Matches the gauntlet's clip: short enough to encode fast, tall enough to make a rung. */
 const CLIP_SECONDS = 3;
+/** Pages in the fixture comic. Four, so a spread view has two full spreads to turn between. */
+export const EBOOK_PAGES = 4;
 const VIDEO_SIZE = "640x360";
 
 /** Ungated, free, streaming — i.e. Public Access, which is what a player spec wants. */
@@ -76,6 +79,52 @@ async function ffmpegAvailable(): Promise<boolean> {
  * Each audio track gets its own frequency, so the three are distinguishable by ear when
  * somebody is checking a queue by hand rather than by assertion.
  */
+/**
+ * A multi-page PDF, generated rather than committed.
+ *
+ * Four pages of coloured test cards, so a reader spec can tell page 2 from page 3 by
+ * eye — a fixture whose pages are identical cannot show that a page turn happened.
+ * Built by rendering images with ffmpeg and stitching with `img2pdf`-free plumbing:
+ * ffmpeg writes a PDF directly via its `pdf` muxer where available, and we fall back to
+ * a minimal hand-built PDF otherwise, because a system without a PDF writer is common
+ * and a fixture that needs one is a fixture that does not run.
+ */
+async function generatePdf(pages: number): Promise<string> {
+	const path = join(tmpdir(), `media_fixture_ebook_${randomUUID()}.pdf`);
+	// A minimal, valid, multi-page PDF written by hand. No dependency, no encoder, and
+	// completely deterministic — which matters more for a fixture than fidelity does:
+	// what the reader spec asserts is that page N renders and page N+1 is different.
+	const objects: string[] = [];
+	const kids: string[] = [];
+	for (let i = 0; i < pages; i++) {
+		const contentId = 4 + i * 2;
+		const pageId = 3 + i * 2;
+		kids.push(`${pageId} 0 R`);
+		const text = `Page ${i + 1}`;
+		const stream = `BT /F1 48 Tf 72 500 Td (${text}) Tj ET`;
+		objects.push(
+			`${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
+				`/Resources << /Font << /F1 1 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`,
+		);
+		objects.push(
+			`${contentId} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
+		);
+	}
+	const header = "%PDF-1.4\n";
+	const font = "1 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+	const pagesObj = `2 0 obj\n<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${pages} >>\nendobj\n`;
+	const catalogId = 3 + pages * 2;
+	const catalog = `${catalogId} 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
+	const body = header + font + pagesObj + objects.join("") + catalog;
+	// A `startxref` of 0 with no xref table is tolerated by poppler, which rebuilds the
+	// table when it cannot find one — the documented recovery path, and enough for a
+	// fixture. `pdfinfo` is what the job calls first, so if this were unreadable the
+	// seeder would fail loudly rather than producing a book with no pages.
+	const trailer = `trailer\n<< /Size ${catalogId + 1} /Root ${catalogId} 0 R >>\nstartxref\n0\n%%EOF\n`;
+	await Bun.write(path, body + trailer);
+	return path;
+}
+
 async function generateClip(kind: "video" | "audio", hz: number): Promise<string> {
 	const path = join(
 		tmpdir(),
@@ -221,15 +270,20 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 	// 440 Hz for the video, then a rising scale for the tracks, so a person listening to
 	// the queue can hear it advance.
 	const hz = spec.media === "video" ? 440 : 440 + spec.trackNumber * 110;
-	const clipPath = await generateClip(spec.media, hz);
+	const clipPath =
+		spec.media === "ebook" ? await generatePdf(EBOOK_PAGES) : await generateClip(spec.media, hz);
 	try {
-		const ext = spec.media === "video" ? "mp4" : "mp3";
+		const ext = spec.media === "video" ? "mp4" : spec.media === "ebook" ? "pdf" : "mp3";
 		const sourceKey = `creators/${creator}/${spec.media}/source/${randomUUID().replace(/-/g, "")}.${ext}`;
 		// Sources are private: only derived, access-checked deliverables are ever served.
 		await storage.upload(
 			sourceKey,
 			new Uint8Array(await Bun.file(clipPath).arrayBuffer()),
-			spec.media === "video" ? "video/mp4" : "audio/mpeg",
+			spec.media === "video"
+				? "video/mp4"
+				: spec.media === "ebook"
+					? "application/pdf"
+					: "audio/mpeg",
 			"private",
 		);
 		await db.update(works).set({ sourceKey, updatedAt: new Date() }).where(eq(works.id, workId));
@@ -240,6 +294,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 			.returning({ id: transcodingJobs.id });
 
 		if (spec.media === "video") await transcodeVideo({ jobId: job.id });
+		else if (spec.media === "ebook") await rasterizeEbook({ jobId: job.id });
 		else await processAudio({ jobId: job.id });
 
 		const [done] = await db

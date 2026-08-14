@@ -141,6 +141,8 @@ export interface TranscodingJob {
 export type ContentType =
 	| "text"
 	| "image"
+	/** A packaged multi-page document — a comic, a graphic novel, a prose book. */
+	| "ebook"
 	| "audio"
 	| "video"
 	| "game"
@@ -204,6 +206,14 @@ export interface Work {
 	 */
 	lyrics?: string | null;
 	estimatedReadMinutes?: number | null;
+	/**
+	 * How many pages an ebook has, or 0.
+	 *
+	 * ⚠️ Present even when the Work is locked — a locked book can say "48 pages", the same
+	 * way a locked video reports its duration. What a denied viewer never gets is a
+	 * pointer at any page; those are served one at a time from `/works/:id/pages/:n`.
+	 */
+	pageCount?: number;
 	metadata: Record<string, unknown> | null;
 
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;

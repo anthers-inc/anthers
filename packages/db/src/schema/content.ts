@@ -431,8 +431,50 @@ export const assets = pgTable(
 	(table) => [index("idx_assets_work").on(table.workId)],
 );
 
-/** Media processing for a Work (video HLS transcode, audio normalize) — runs once on
- *  upload to the Catalog, before the Work is released or referenced anywhere. */
+/**
+ * The pages of an **ebook** Work — a comic, a graphic novel, a prose book — one row per
+ * rendered page, in order.
+ *
+ * 🚨 **Why pages exist as rows at all, when the creator uploaded one PDF.** The delivery
+ * rule is that every derived media object is stored private and every URL to one is minted
+ * per request at an endpoint that re-resolves access. A PDF is *one* object, so a reader
+ * pointed at a signed URL for it has the whole book the moment it opens page one — which
+ * makes `download_enabled: false` a lie for this medium specifically, and would surprise
+ * a creator who had deliberately turned downloads off. Rendering to pages on upload is the
+ * same shape as the HLS ladder: one source in, many private per-unit deliverables out,
+ * each served through a check.
+ *
+ * It also makes the client *simpler* rather than heavier — the reader shows images, so no
+ * PDF parser ships to the browser at all.
+ *
+ * **Ordering and identity are deliberate**, not incidental: panel-to-panel navigation is
+ * deferred rather than dropped, and when it returns, panel regions hang off a page. A page
+ * therefore needs a stable id and a stable number now, so that later work is an addition
+ * rather than a migration.
+ */
+export const workPages = pgTable(
+	"work_pages",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** 1-based, matching how a reader counts and how `pdftoppm` numbers its output. */
+		pageNumber: integer("page_number").notNull(),
+		/** Private storage key. Never served directly — see `/works/:id/pages/:n`. */
+		file: text("file").notNull(),
+		width: integer("width"),
+		height: integer("height"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_pages").on(table.workId, table.pageNumber),
+		index("idx_work_pages_work").on(table.workId, table.pageNumber),
+	],
+);
+
+/** Media processing for a Work (video HLS transcode, audio normalize, ebook rasterize) —
+ *  runs once on upload to the Catalog, before the Work is released or referenced anywhere. */
 export const transcodingJobs = pgTable(
 	"transcoding_jobs",
 	{
@@ -440,7 +482,7 @@ export const transcodingJobs = pgTable(
 		workId: integer("work_id")
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
-		mediaType: text("media_type").notNull(), // video | audio
+		mediaType: text("media_type").notNull(), // video | audio | ebook
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
 		progress: integer("progress").default(0),
 		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)

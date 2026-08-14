@@ -40,6 +40,7 @@ import {
 	stripeAccounts,
 	transcodingJobs,
 	users,
+	workPages,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -279,6 +280,10 @@ const WORK_TYPES = [
 	"video",
 	"audio",
 	"image",
+	// A packaged multi-page document — a comic, a graphic novel, a prose book. The
+	// creator uploads ONE file (a PDF); `rasterize-ebook` renders it to private per-page
+	// images, because a single-file deliverable cannot be access-checked page by page.
+	"ebook",
 	"game",
 	"software",
 	"physical",
@@ -286,7 +291,7 @@ const WORK_TYPES = [
 ] as const;
 
 /** Work types whose media is processed asynchronously before the Work can be released. */
-const PROCESSED_WORK_TYPES = new Set(["video", "audio"]);
+const PROCESSED_WORK_TYPES = new Set(["video", "audio", "ebook"]);
 
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
@@ -547,6 +552,18 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
 			);
 		}
+		return job;
+	}
+	if (item.type === "ebook" && item.sourceKey) {
+		const [job] = await db
+			.insert(transcodingJobs)
+			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
+			.returning();
+		await queue.send(
+			QUEUES.RASTERIZE_EBOOK,
+			{ jobId: job.id },
+			JOB_OPTIONS[QUEUES.RASTERIZE_EBOOK],
+		);
 		return job;
 	}
 	if (item.type === "audio" && item.sourceKey) {
@@ -923,6 +940,15 @@ function serializeWorkForViewer(
 	 * is exactly the bug this exists to close.
 	 */
 	allowanceSpent: boolean,
+	/**
+	 * How many pages an ebook has, or 0.
+	 *
+	 * ⚠️ The COUNT is public even when the Work is locked, and the page *keys* never are.
+	 * "48 pages" is the sort of thing a locked Work has to be able to say — it is the
+	 * shape of the thing, like a video's duration, which this serializer has always sent
+	 * regardless of access. What it must not leak is a pointer at any page.
+	 */
+	pageCount = 0,
 ) {
 	const canAccess = access.canAccess;
 
@@ -995,6 +1021,7 @@ function serializeWorkForViewer(
 		// rule here ("gated by access but not by the meter") would be a second mechanism
 		// for something already enforced once.
 		lyrics: deliverable ? work.lyrics : "",
+		pageCount,
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
 		// attention to the commons, not bytes** — delivery is free at any volume since R2,
 		// and a spent allowance has never had anything to do with a file you are entitled
@@ -1049,13 +1076,16 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	worksById: Map<number, WorkRow>;
 	assetsByWork: Map<number, AssetRow[]>;
 	jobByWork: Map<number, TranscodingJobRow>;
+	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForViewer`. */
+	pagesByWork: Map<number, number>;
 }> {
 	const worksById = new Map<number, WorkRow>();
 	const assetsByWork = new Map<number, AssetRow[]>();
 	const jobByWork = new Map<number, TranscodingJobRow>();
-	if (workIds.length === 0) return { worksById, assetsByWork, jobByWork };
+	const pagesByWork = new Map<number, number>();
+	if (workIds.length === 0) return { worksById, assetsByWork, jobByWork, pagesByWork };
 
-	const [workRows, assetRows, jobRows] = await Promise.all([
+	const [workRows, assetRows, jobRows, pageRows] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
 		db.select().from(assets).where(inArray(assets.workId, workIds)),
 		db
@@ -1063,7 +1093,13 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 			.from(transcodingJobs)
 			.where(inArray(transcodingJobs.workId, workIds))
 			.orderBy(desc(transcodingJobs.createdAt)),
+		db
+			.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
+			.from(workPages)
+			.where(inArray(workPages.workId, workIds))
+			.groupBy(workPages.workId),
 	]);
+	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
 
 	await Promise.all(workRows.map(resolveWorkThumbnail));
 	for (const w of workRows) worksById.set(w.id, w);
@@ -1075,7 +1111,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	for (const j of jobRows) {
 		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
 	}
-	return { worksById, assetsByWork, jobByWork };
+	return { worksById, assetsByWork, jobByWork, pagesByWork };
 }
 
 /**
@@ -1098,7 +1134,7 @@ async function loadPostWorks(
 	if (refs.length === 0) return [];
 
 	const workIds = refs.map((r) => r.workId);
-	const { worksById, assetsByWork, jobByWork } = await loadWorkBundles(workIds);
+	const { worksById, assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
 		buildAccessContext(viewerId, { workIds }),
 		allowanceSpent(viewerId),
@@ -1117,6 +1153,7 @@ async function loadPostWorks(
 					resolveAccessSync(work as AccessibleWork, ctx),
 					delivery,
 					spent,
+					pagesByWork.get(work.id) ?? 0,
 				),
 			};
 		})
@@ -1887,6 +1924,44 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
+	// ── Ebook page delivery (access-checked, signed) ─────────────────────────────
+	//
+	// The reason `work_pages` exists, in one endpoint: a book is served ONE PAGE AT A TIME,
+	// through a check, rather than as a single file whose URL is the whole book. Same shape
+	// as the audio route above — re-resolve access, meter the commons, redirect to a
+	// short-lived signed URL.
+	.get("/works/:id/pages/:page", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const pageNumber = parseNumericId(c.req.param("page"));
+		if (pageNumber == null) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403: the reader is not forbidden, they have spent a monthly allowance
+		// that a $3 Seed removes. Reading the commons draws it exactly as watching does —
+		// the equal-time principle is about what a minute IS, not about which medium.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+
+		const [page] = await db
+			.select()
+			.from(workPages)
+			.where(and(eq(workPages.workId, work.id), eq(workPages.pageNumber, pageNumber)))
+			.limit(1);
+		if (!page) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(page.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store, for the same reason as the audio redirect: this 302 carries a signed
+		// URL and is access-dependent, so a proxy must never replay it at somebody else.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
 	// ── HLS delivery (access-checked, signed segments) ───────────────────────────
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
 	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
@@ -2158,6 +2233,15 @@ const contentRoutes = new Hono()
 					.limit(1)
 			: [undefined];
 
+		// This endpoint does not go through `loadWorkBundles`, so the page count is counted
+		// here. It is the ONE page a reader actually opens a book from, and leaving it on
+		// the parameter default would have reported every ebook as zero pages — with no
+		// error, and a reader that renders nothing.
+		const [pageRow] = await db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(workPages)
+			.where(eq(workPages.workId, work.id));
+
 		return c.json({
 			work: {
 				...serializeWorkForViewer(
@@ -2167,6 +2251,7 @@ const contentRoutes = new Hono()
 					resolveAccessSync(work as AccessibleWork, ctx),
 					deliveryCtx(),
 					await allowanceSpent(viewerId),
+					pageRow?.count ?? 0,
 				),
 				creator,
 				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
@@ -2275,7 +2360,7 @@ const contentRoutes = new Hono()
 		if (rows.length === 0) return c.json({ creator, works: [] });
 
 		const ids = rows.map((r) => r.id);
-		const { assetsByWork, jobByWork } = await loadWorkBundles(ids);
+		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
 			buildAccessContext(viewerId, { workIds: ids }),
 			allowanceSpent(viewerId),
@@ -2292,6 +2377,7 @@ const contentRoutes = new Hono()
 					resolveAccessSync(w as AccessibleWork, ctx),
 					deliveryCtx(),
 					catalogSpent,
+					pagesByWork.get(w.id) ?? 0,
 				),
 			),
 		});
@@ -2861,7 +2947,7 @@ const contentRoutes = new Hono()
 			.orderBy(asc(projectItems.sortOrder));
 
 		const memberWorkIds = itemRows.map((r) => r.work.id);
-		const { assetsByWork, jobByWork } = await loadWorkBundles(memberWorkIds);
+		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
 			buildAccessContext(viewerId, { workIds: memberWorkIds }),
 			allowanceSpent(viewerId),
@@ -2885,6 +2971,7 @@ const contentRoutes = new Hono()
 						resolveAccessSync(m.work as AccessibleWork, workCtx),
 						deliveryCtx(),
 						projectSpent,
+						pagesByWork.get(m.work.id) ?? 0,
 					),
 				})),
 				// No per-post access verdict: a post has no gates. The Works a member post
@@ -3525,7 +3612,7 @@ const contentRoutes = new Hono()
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
 
-		const { assetsByWork, jobByWork } = await loadWorkBundles(workIds);
+		const { assetsByWork, jobByWork, pagesByWork } = await loadWorkBundles(workIds);
 		const [ctx, spent, permanent] = await Promise.all([
 			buildAccessContext(user.id, { workIds }),
 			allowanceSpent(user.id),
@@ -3561,6 +3648,7 @@ const contentRoutes = new Hono()
 								resolveAccessSync(w as AccessibleWork, ctx),
 								deliveryCtx(),
 								spent,
+								pagesByWork.get(w.id) ?? 0,
 							),
 						};
 					}

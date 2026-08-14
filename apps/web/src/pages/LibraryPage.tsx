@@ -32,6 +32,7 @@ import type { Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
+	BookOpenIcon,
 	EyeIcon,
 	EyeSlashIcon,
 	LockClosedIcon,
@@ -51,6 +52,7 @@ const MEDIA_TABS = [
 	{ id: "audio", label: "Music", icon: MusicalNoteIcon },
 	{ id: "video", label: "Video", icon: VideoCameraIcon },
 	{ id: "text", label: "Writing", icon: PencilSquareIcon },
+	{ id: "ebook", label: "Books", icon: BookOpenIcon },
 ] as const;
 
 /** The shelf's view of a saved Project — the album card's whole data source. */

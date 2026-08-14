@@ -248,6 +248,14 @@ jobs:
       - name: Ensure ffmpeg
         run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
 
+      # poppler renders an uploaded PDF to per-page images (`rasterize-ebook`), which is
+      # how an ebook is delivered one checked page at a time instead of as one file whose
+      # URL is the whole book. Same reasoning as ffmpeg above: without it the media
+      # fixture's comic never gets pages and the reader spec asserts against an empty
+      # book — a quiet coverage loss rather than a loud failure.
+      - name: Ensure poppler
+        run: which pdftoppm || (sudo apt-get update && sudo apt-get install -y poppler-utils)
+
       - name: Apply database migrations
         run: bun run db:migrate
 
