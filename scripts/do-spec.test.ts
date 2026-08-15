@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { isEmptySecret } from "./do-spec";
+import { isEmptySecret, secretPlaintextLength } from "./do-spec";
 
 /** `EV[1:<24-byte nonce>:<sealed box>]`, where the box is a 16-byte GCM tag + ciphertext. */
 function ev(plaintextBytes: number): string {
@@ -61,5 +61,40 @@ describe("isEmptySecret", () => {
 	test("a malformed blob is not guessed at", () => {
 		expect(isEmptySecret({ key: "K", value: "EV[1:only-two-fields]" })).toBe(false);
 		expect(isEmptySecret({ key: "K", value: "EV[" })).toBe(false);
+	});
+});
+
+describe("secretPlaintextLength", () => {
+	test("recovers the plaintext length without the key", () => {
+		for (const n of [0, 1, 9, 32, 64, 107]) {
+			expect(secretPlaintextLength({ key: "K", value: ev(n) })).toBe(n);
+		}
+	});
+
+	test("null when there is nothing to measure", () => {
+		expect(secretPlaintextLength({ key: "K", value: "auto" })).toBeNull();
+		expect(secretPlaintextLength({ key: "K", type: "SECRET" })).toBeNull();
+		expect(secretPlaintextLength({})).toBeNull();
+	});
+
+	/**
+	 * The case `spec-apply --from-env` exists to catch: a vault entry that has drifted from
+	 * what production holds. This is the whole reason the length is worth computing — it
+	 * turns "I hope Bitwarden matches prod" into a check that runs before the apply.
+	 */
+	test("a differing length flags a value that would change production", () => {
+		const live = { key: "RESEND_API_KEY", value: ev(36) };
+		expect(secretPlaintextLength(live)).not.toBe(Buffer.byteLength("x".repeat(35)));
+		expect(secretPlaintextLength(live)).toBe(Buffer.byteLength("x".repeat(36)));
+	});
+
+	/** And the limit of the technique, stated as a test so nobody over-reads the signal. */
+	test("equal length does NOT mean equal value", () => {
+		expect(secretPlaintextLength({ key: "K", value: ev(11) })).toBe(
+			Buffer.byteLength("open-sesame"),
+		);
+		expect(secretPlaintextLength({ key: "K", value: ev(11) })).toBe(
+			Buffer.byteLength("hunter2xxxx"),
+		);
 	});
 });
