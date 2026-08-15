@@ -62,12 +62,32 @@ export const isSecret = (e: EnvEntry) => e.type === "SECRET" || (e.value ?? "").
  * today's 24-byte nonce, and decoding the tag is the fact itself.
  */
 export function isEmptySecret(e: EnvEntry): boolean {
+	return secretPlaintextLength(e) === 0;
+}
+
+/**
+ * The BYTE LENGTH of a live secret's plaintext, without decrypting it. `null` when the
+ * entry is not an `EV[…]` blob at all.
+ *
+ * The same arithmetic `isEmptySecret` rests on, generalized one step: AES-GCM ciphertext is
+ * exactly as long as its plaintext, so subtracting the 16-byte tag from the sealed box
+ * gives the original length. Zero is the clobber; other values are useful on their own.
+ *
+ * ⚠️ **A length is evidence, not identity.** Two different secrets of the same length look
+ * identical here, so this can prove a value *changed* and can never prove one didn't. Used
+ * for exactly that: warning before an apply overwrites a production secret with something
+ * of a different size. It is also how the 2026-08-15 post-mortem established that the local
+ * `.env` held the same values as production for six of seven secrets — six lengths matched
+ * and `RESEND_API_KEY` did not, which is a real finding no amount of staring at ciphertext
+ * would have produced.
+ */
+export function secretPlaintextLength(e: EnvEntry): number | null {
 	const match = /^EV\[\d+:[^:]*:([^\]]*)\]$/.exec((e.value ?? "").trim());
-	if (!match) return false;
+	if (!match) return null;
 	try {
-		return Buffer.from(match[1] as string, "base64").length <= 16;
+		return Math.max(0, Buffer.from(match[1] as string, "base64").length - 16);
 	} catch {
-		return false;
+		return null;
 	}
 }
 
@@ -84,8 +104,19 @@ export function envMap(spec: Spec): Map<string, EnvEntry> {
 	return out;
 }
 
-export async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+export async function run(
+	cmd: string[],
+	env?: Record<string, string>,
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+	// `env` is merged rather than replacing the inherited environment, and it is the way a
+	// credential reaches a child process WITHOUT going through argv — anything passed as an
+	// argument is visible in `/proc/<pid>/cmdline` to every process on the machine for as
+	// long as the call runs.
+	const proc = Bun.spawn(cmd, {
+		stdout: "pipe",
+		stderr: "pipe",
+		...(env ? { env: { ...process.env, ...env } } : {}),
+	});
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),

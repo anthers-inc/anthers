@@ -261,8 +261,8 @@ spec-diff: ## Compare .do/*.yaml against the LIVE App Platform specs (DOCTL_CONT
 # app-level secrets were wiped on 2026-08-15. This merges the live secret values (and
 # any live-only fields, like `features`) into the committed spec before sending it.
 # Dry run by default; APPLY=1 to actually update. See scripts/spec-apply.ts.
-spec-apply: ## Apply .do/app.yaml, preserving live secrets (APPLY=1 to send; DOCTL_CONTEXT=anthers)
-	bun run scripts/spec-apply.ts $(if $(APPLY),--apply,) $(if $(ALLOW_REMOVE),--allow-remove,)
+spec-apply: ## Apply .do/app.yaml, preserving live secrets (APPLY=1 sends, FROM_BWS=1 pulls from Bitwarden)
+	bun run scripts/spec-apply.ts $(if $(APPLY),--apply,) $(if $(ALLOW_REMOVE),--allow-remove,) $(if $(FROM_BWS),--from-bws,)
 
 # Compare the commit App Platform is actually serving against what `release` points
 # at. `deploy_on_push` is false on every component, so a push to release that the CI

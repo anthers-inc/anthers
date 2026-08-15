@@ -44,6 +44,16 @@
  *   DOCTL_CONTEXT=anthers make spec-apply APPLY=1            # actually update the app
  *   bun run scripts/spec-apply.ts --set NEW_SECRET=hunter2   # introduce a new secret
  *
+ * With Bitwarden Secrets Manager as the source of truth (`FROM_BWS=1` → `--from-bws`):
+ *
+ *   DOCTL_CONTEXT=anthers make spec-apply FROM_BWS=1
+ *   DOCTL_CONTEXT=anthers make spec-apply FROM_BWS=1 APPLY=1
+ *
+ * The dry run is worth reading before the second line: it reports which secrets the
+ * vault would CHANGE in production, by comparing the supplied value's byte length
+ * against the live plaintext length recovered from the encrypted blob. That catches a stale
+ * or wrong vault entry before it is sent, and it needs no ability to decrypt anything.
+ *
  * Related: `make spec-diff` reports the drift this resolves, and now fails on an empty live
  * secret so this class of damage can never again be silent.
  */
@@ -62,6 +72,7 @@ import {
 	resolveAppId,
 	run,
 	type Spec,
+	secretPlaintextLength,
 } from "./do-spec";
 
 const SPEC_PATH = ".do/app.yaml";
@@ -71,6 +82,36 @@ const argv = Bun.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const ALLOW_REMOVE = argv.includes("--allow-remove");
 const outFlag = argv.indexOf("--out");
+
+/**
+ * `--from-bws`: take secret values from Bitwarden Secrets Manager, asked directly.
+ *
+ *     DOCTL_CONTEXT=anthers make spec-apply FROM_BWS=1            # dry run
+ *     DOCTL_CONTEXT=anthers make spec-apply FROM_BWS=1 APPLY=1    # send it
+ *
+ * `.do/app.yaml` already declares exactly which keys are secret, and the vault stores them
+ * under those same names, so the two line up with no third list to maintain and drift.
+ *
+ * 🚨 **This queries `bws` rather than reading `process.env`, and the difference is not
+ * stylistic — it is the only correct option here.** The first cut was `--from-env`, meant to
+ * be wrapped in `bws run -- …`, which injects a project's secrets as environment variables.
+ * That is unusable in this repo: **Bun auto-loads `.env` into `process.env` on every `bun
+ * run`**, so the script saw the developer's LOCAL values and could not distinguish them from
+ * vault-injected ones. `make spec-apply FROM_ENV=1 APPLY=1` typed without the `bws run`
+ * wrapper would have pushed the contents of a gitignored dev file straight to production —
+ * the same clobber this tool exists to prevent, arriving through the mechanism added to fix
+ * it. It was caught only because the length check below flagged `RESEND_API_KEY` as a change
+ * nobody had asked for.
+ *
+ * An opt-in flag does not save you from ambient state, because the ambience is applied by
+ * the runtime before your first line runs. Asking the source of truth a direct question has
+ * no such failure mode.
+ */
+const FROM_BWS = argv.includes("--from-bws");
+
+/** The Secrets Manager project holding these values. Auto-resolved when the token sees one. */
+const projectFlag = argv.indexOf("--bws-project");
+const BWS_PROJECT = projectFlag >= 0 ? (argv[projectFlag + 1] as string) : "";
 
 /** `--set KEY=value`, repeatable. The one way to introduce a secret with no live value. */
 const overrides = new Map<string, string>();
@@ -96,10 +137,71 @@ function* walkEnvs(spec: Spec): Generator<{ id: string; entry: EnvEntry }> {
 	}
 }
 
+/**
+ * Every secret in the Bitwarden project, as `key → value`.
+ *
+ * The access token is read from `BWS_ACCESS_TOKEN` or, failing that, the file `bws` itself
+ * defaults its config beside — and it is handed to the child through its ENVIRONMENT, never
+ * as `--access-token` on the command line, which would publish it in `/proc/<pid>/cmdline`
+ * for the duration of the call.
+ */
+async function bwsSecrets(): Promise<Map<string, string>> {
+	const tokenFile = `${process.env.HOME}/.config/bws/token`;
+	let token = (process.env.BWS_ACCESS_TOKEN ?? "").trim();
+	if (!token)
+		token = (
+			await Bun.file(tokenFile)
+				.text()
+				.catch(() => "")
+		).trim();
+	if (!token) {
+		console.error(`spec-apply: no BWS_ACCESS_TOKEN and nothing readable at ${tokenFile}.`);
+		process.exit(2);
+	}
+	const env = { BWS_ACCESS_TOKEN: token };
+
+	let project = BWS_PROJECT;
+	if (!project) {
+		const list = await run(["bws", "project", "list", "-o", "json"], env);
+		if (!list.ok) {
+			console.error(`spec-apply: bws could not list projects.\n${list.stderr.trim()}`);
+			process.exit(2);
+		}
+		const projects = JSON.parse(list.stdout) as { id: string; name: string }[];
+		// Only auto-resolve when there is no ambiguity to resolve. Picking the first of
+		// several would be a silent guess about which vault production reads from.
+		if (projects.length !== 1) {
+			console.error(
+				`spec-apply: ${projects.length} projects visible — name one with --bws-project <id>:\n` +
+					projects.map((p) => `    ${p.id}  ${p.name}`).join("\n"),
+			);
+			process.exit(2);
+		}
+		project = (projects[0] as { id: string }).id;
+		console.log(`spec-apply: using bws project "${(projects[0] as { name: string }).name}"`);
+	}
+
+	const listed = await run(["bws", "secret", "list", project, "-o", "json"], env);
+	if (!listed.ok) {
+		console.error(`spec-apply: bws could not list secrets.\n${listed.stderr.trim()}`);
+		process.exit(2);
+	}
+	const out = new Map<string, string>();
+	for (const s of JSON.parse(listed.stdout) as { key: string; value: string }[]) {
+		out.set(s.key, s.value);
+	}
+	return out;
+}
+
 if (!(await run(["which", "doctl"])).ok) {
 	console.error("spec-apply: doctl is not installed — nothing to apply against.");
 	process.exit(2);
 }
+if (FROM_BWS && !(await run(["which", "bws"])).ok) {
+	console.error("spec-apply: --from-bws needs the `bws` CLI on PATH.");
+	process.exit(2);
+}
+const vault = FROM_BWS ? await bwsSecrets() : new Map<string, string>();
 if (CONTEXT) console.log(`spec-apply: using doctl context "${CONTEXT}"`);
 
 const committed = Bun.YAML.parse(await Bun.file(SPEC_PATH).text()) as Spec;
@@ -123,19 +225,34 @@ const merged = structuredClone(committed) as Spec;
 // ── 1–3. Secret values ────────────────────────────────────────────────────────────────
 const filled: string[] = [];
 const fromFlag: string[] = [];
+const fromVault: string[] = [];
 const emptyLive: string[] = [];
 const unresolved: string[] = [];
+const changes: string[] = [];
 
 for (const { id, entry } of walkEnvs(merged)) {
 	if (!isSecret(entry) || (entry.value ?? "") !== "") continue;
 	const key = entry.key as string;
-	const override = overrides.get(key);
-	if (override !== undefined) {
-		entry.value = override;
-		fromFlag.push(id);
+	const live = liveEnvs.get(id);
+
+	// ⚠️ An empty string counts as ABSENT, deliberately. A vault entry that exists but holds
+	// "" would otherwise be a supplied value — re-inflicting the exact clobber this tool was
+	// written to prevent, through the mechanism meant to fix it. Same family as the repo's
+	// recurring `Number("") === 0`.
+	const supplied = overrides.get(key) ?? vault.get(key);
+	if (supplied !== undefined && supplied !== "") {
+		entry.value = supplied;
+		const liveLen = secretPlaintextLength(live ?? {});
+		const newLen = Buffer.byteLength(supplied);
+		(overrides.has(key) ? fromFlag : fromVault).push(id);
+		// A length can prove a value CHANGED; it can never prove one didn't. Both readings
+		// are printed as what they are, so nobody reads "same length" as "same value".
+		if (liveLen === null) changes.push(`${id} — new, nothing live to compare`);
+		else if (liveLen !== newLen)
+			changes.push(`${id} — CHANGES live (${liveLen} → ${newLen} bytes)`);
 		continue;
 	}
-	const live = liveEnvs.get(id);
+
 	if (!live || (live.value ?? "") === "") {
 		unresolved.push(id);
 		continue;
@@ -171,6 +288,12 @@ const show = (title: string, lines: string[], note?: string) => {
 };
 show("Secret values preserved from the live app:", filled);
 show("Secret values taken from --set (plaintext on this run):", fromFlag);
+show("Secret values taken from Bitwarden (--from-bws):", fromVault);
+show(
+	"⚠ Secrets whose value would CHANGE in production:",
+	changes,
+	"→ length is evidence, not identity: it proves a change, never the absence of one.",
+);
 show(
 	"Top-level fields carried over from live (absent from the committed spec):",
 	carried,
