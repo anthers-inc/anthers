@@ -15,6 +15,16 @@
 # points at. A healthy app serving a stale build is the silent-deploy failure;
 # an unhealthy app serving the right build is a different incident.
 #
+# It also sweeps for EMPTY PRODUCTION SECRETS (added 2026-08-15). Same family of
+# failure and the same reason it needs a schedule: `doctl apps update --spec
+# .do/app.yaml` emptied all seven app-level secrets in one command, and because an
+# empty secret round-trips as a well-formed EV[1:...] blob, nothing reported it —
+# `spec get` looked intact, `make spec-diff` said the specs agreed, and only the two
+# secrets validated at boot produced any symptom at all. That check exists now, but
+# a check nobody runs is a check that does not exist, and `make spec-diff` cannot
+# join `make verify` (CI has no DigitalOcean token for the general suite). This is
+# the one job that already holds the token and already runs on a clock.
+#
 # Runs hourly. A drift window of an hour is the compromise between "the deploy job
 # is still running" (a fresh release push takes ~5 min to build on App Platform,
 # so don't alert in the first 10 min after a push) and "prod is stale for a day
@@ -55,10 +65,45 @@ jobs:
           # `origin/release` specifically, which is what App Platform builds from.
           fetch-depth: 0
 
+      # 🚨 Both of these were MISSING until 2026-08-15, and the workflow had therefore
+      # never once produced a valid signal: every scheduled run died on `bun: command
+      # not found` (exit 127). Because a red run IS the alert channel here, the watcher
+      # was crying wolf from the hour it was added — and a genuine drift would have been
+      # indistinguishable from the broken setup. A watchdog whose failure mode looks
+      # exactly like its alarm is worse than no watchdog.
+      #
+      # Neither step needs `bun install`: `deploy-status.ts` and `spec-diff.ts` use only
+      # Bun built-ins (`Bun.$`, `Bun.YAML`, `Bun.spawn`), so the run stays dependency-free.
+      - uses: oven-sh/setup-bun@v2
+        # No bun-version ON PURPOSE — setup-bun reads `packageManager` from package.json,
+        # matching ci.yml so the two cannot drift onto different runtimes.
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # ⚠️ No DOCTL_CONTEXT here, deliberately. `action-doctl` authenticates into doctl's
+      # `default` context, so the `DOCTL_CONTEXT: anthers` this workflow used to set would
+      # make every call fail on an unknown context the moment bun existed to run them —
+      # the second bug waiting behind the first. The token already scopes to the Anthers
+      # account; the context name is a LOCAL convenience for a machine holding two logins.
       - name: Check the live deployment against release
         env:
           DO_APP_ID: ${{ vars.DO_APP_ID }}
-          DOCTL_CONTEXT: anthers
-          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           REF: origin/release
         run: bun run scripts/deploy-status.ts
+
+      # Separate step, and it runs even when the drift check above failed: the two answer
+      # unrelated questions ("is prod the right commit" / "does prod still have its
+      # credentials"), and skipping the second because the first was red would hide the
+      # more urgent one behind the less urgent one.
+      #
+      # `--secrets-only` rather than the full diff ON PURPOSE. The committed spec drifts
+      # from live by default and is meant to — pushing to `release` never applies it — so
+      # an hourly alarm on ordinary drift would be red most weeks and get muted, taking
+      # this check down with it. An empty live secret is never expected and never benign.
+      - name: Check that no live secret is empty
+        if: '!cancelled()'
+        env:
+          DO_APP_ID: ${{ vars.DO_APP_ID }}
+        run: bun run scripts/spec-diff.ts --secrets-only
