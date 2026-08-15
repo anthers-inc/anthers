@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Side-effect import, and it must stay FIRST: it fills non-secret config from the
+// committed .do/app.yaml before any route module reads process.env. No-ops in
+// production, where that file is not in the image. See dev-spec-env.ts.
+import "./dev-spec-env.js";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";

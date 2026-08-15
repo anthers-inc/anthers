@@ -6,6 +6,9 @@
  * Or via: make dev-worker
  */
 
+// Must precede any import that reads process.env — see api/src/dev-spec-env.ts.
+import "../dev-spec-env.js";
+
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
