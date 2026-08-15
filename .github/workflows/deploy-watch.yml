@@ -1,0 +1,64 @@
+# Watch for silent deploy drift: the push to `release` succeeded, nothing deployed.
+#
+# `deploy_on_push` is false on every App Platform component, so the CI `deploy` job
+# in `ci.yml` is the only path to production. When it does not run — Actions billing
+# failed, an upstream job failed, the `images` job hit a Dockerfile error — the
+# push to `release` reports green and prod keeps serving the old build. Git success
+# is indistinguishable from deploy success, and the only reliable detection is
+# asserting the live deployment's `source_commit_hash` against `release`. That
+# happened twice in one day on 2026-08-14 and was caught each time by a human
+# reading stale copy on the live site, which is the failure mode this workflow
+# exists to make loud.
+#
+# What this is NOT: a health check. It does not care whether the app is serving
+# 200s, only whether the commit prod is running matches the commit `release`
+# points at. A healthy app serving a stale build is the silent-deploy failure;
+# an unhealthy app serving the right build is a different incident.
+#
+# Runs hourly. A drift window of an hour is the compromise between "the deploy job
+# is still running" (a fresh release push takes ~5 min to build on App Platform,
+# so don't alert in the first 10 min after a push) and "prod is stale for a day
+# and nobody notices" (the actual 2026-08-14 case, which is too long). The
+# `ci.yml` deploy job also asserts the live SHA after its own deploy completes,
+# so this catches the cases where that job never ran at all.
+#
+# Alert channel: a failing workflow run, deliberately. Issues are disabled on this
+# repo as part of the source-available-no-community-surface posture, and a red
+# Actions run reaches the same human via GitHub's own Actions-failure email
+# without introducing a new notification path. A failing run is also self-documenting
+# in the Actions UI — anyone looking at the repo sees the watcher is red.
+name: deploy-watch
+
+on:
+  schedule:
+    # Hourly, at :15, to avoid the top-of-the-hour pile-up every cron job aims at.
+    # `ci.yml`'s deploy runs on push, not schedule, so there is no collision here.
+    - cron: "15 * * * *"
+  # Manual trigger for testing and for "check now after a push that should have deployed"
+  workflow_dispatch:
+
+# `issues: write` would be the scoped permission for an issue-based alert path,
+# but issues are disabled on this repo. No elevated permissions are needed: the
+# run fails on drift, and that failure is the alert.
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `deploy-status.ts` reads `release` via `git rev-parse`; without a fetch
+          # the checkout only holds the scheduled-run default branch. We need
+          # `origin/release` specifically, which is what App Platform builds from.
+          fetch-depth: 0
+
+      - name: Check the live deployment against release
+        env:
+          DO_APP_ID: ${{ vars.DO_APP_ID }}
+          DOCTL_CONTEXT: anthers
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          REF: origin/release
+        run: bun run scripts/deploy-status.ts
