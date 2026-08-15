@@ -33,6 +33,44 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+
+/**
+ * The DMCA designated agent details, served to the `/copyright` page.
+ *
+ * § 512(c)(2) requires the agent's name, address, phone and email to be
+ * "available through the service, including on the website in a location
+ * accessible to the public." The registration alone is not enough — it has
+ * to be published on the site too.
+ *
+ * These are **public statutory information**, not secrets: the Copyright
+ * Office's own DMCA directory publishes them for every registered agent.
+ * They come from env vars (`DMCA_AGENT_NAME`, `DMCA_AGENT_ADDRESS`, etc.)
+ * set in `.do/app.yaml`, and are served through this endpoint rather than
+ * baked into the bundle so they can be updated without a rebuild if the
+ * agent changes (which also requires re-filing with the Copyright Office).
+ *
+ * `DMCA_AGENT_REGISTERED` gates the whole thing: when unset, the endpoint
+ * returns `registered: false` and the page renders "we are in the process
+ * of designating our DMCA agent" rather than empty fields. That gate exists
+ * because `effectiveDate: null` (the pattern the other legal pages use for
+ * "not yet in force") is **wrong for a statutory agent designation** — it
+ * is either registered or it isn't, and a pending banner would imply the
+ * protection applies before it does.
+ */
+function dmcaConfig() {
+	const registered = process.env.DMCA_AGENT_REGISTERED === "true";
+	if (!registered) {
+		return { registered: false, agentName: "", agentAddress: "", agentEmail: "", agentPhone: "" };
+	}
+	return {
+		registered: true,
+		agentName: process.env.DMCA_AGENT_NAME ?? "",
+		agentAddress: process.env.DMCA_AGENT_ADDRESS ?? "",
+		agentEmail: process.env.DMCA_AGENT_EMAIL ?? "",
+		agentPhone: process.env.DMCA_AGENT_PHONE ?? "",
+	};
+}
+
 import {
 	counterNoticeAttestationText,
 	fileCounterNotice,
@@ -91,6 +129,10 @@ const counterNoticeSchema = z.object({
 });
 
 const dmcaRoutes = new Hono()
+
+	// The DMCA agent designation details, served to the /copyright page. Public
+	// (statutory information), gated on DMCA_AGENT_REGISTERED.
+	.get("/config", (c) => c.json(dmcaConfig()))
 
 	// The attestation text, served so the intake form and any future client read
 	// the exact copy the complainant will agree to — and so a creator considering

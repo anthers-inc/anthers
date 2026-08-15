@@ -86,6 +86,7 @@ const FAQPage = lazy(() => import("./pages/FAQPage"));
 const ForCreatorsPage = lazy(() => import("./pages/ForCreatorsPage"));
 const InfrastructureDemoPage = lazy(() => import("./pages/InfrastructureDemoPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
+const CopyrightPage = lazy(() => import("./pages/CopyrightPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const BasketPage = lazy(() => import("./pages/BasketPage"));
 const ParentsPage = lazy(() => import("./pages/ParentsPage"));
@@ -284,6 +285,7 @@ export default function App() {
 					<Route path="/privacy" element={<LegalPage slug="privacy" />} />
 					<Route path="/terms" element={<LegalPage slug="terms" />} />
 					<Route path="/creator-terms" element={<LegalPage slug="creator-terms" />} />
+					<Route path="/copyright" element={<CopyrightPage />} />
 					<Route path="/parents" element={<ParentsPage />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 

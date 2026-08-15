@@ -237,6 +237,9 @@ function LoggedInLayoutInner() {
 									<Link to="/terms" className="link link-hover">
 										Terms
 									</Link>
+									<Link to="/copyright" className="link link-hover">
+										Copyright
+									</Link>
 									<Link to="/parents" className="link link-hover">
 										For Parents
 									</Link>

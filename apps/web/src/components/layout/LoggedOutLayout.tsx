@@ -57,6 +57,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		links: [
 			["Privacy", "/privacy"],
 			["Terms", "/terms"],
+			["Copyright", "/copyright"],
 			["For Parents", "/parents"],
 		],
 	},
