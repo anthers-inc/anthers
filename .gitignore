@@ -1,7 +1,9 @@
 # ─── Environment ───
-.env
-.env.local
-.env.*.local
+# `.env*` rather than a list, with .env.example negated back in. The list form
+# ignored `.env` and `.env.local` but NOT `.env.bak` — and copying .env aside
+# before editing it is the most natural thing in the world to do.
+.env*
+!.env.example
 
 # ─── Node / Bun ───
 node_modules/
