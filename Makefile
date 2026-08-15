@@ -5,6 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
+        spec-diff deploy-status \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -253,6 +254,15 @@ storage-check: ## Inspect the live Spaces bucket's ACL/policy/CORS posture (WRIT
 # are the moments the two specs part company. See 42.05 Deployment Runbook.
 spec-diff: ## Compare .do/*.yaml against the LIVE App Platform specs (DOCTL_CONTEXT=anthers for the Anthers account)
 	bun run scripts/spec-diff.ts
+
+# Compare the commit App Platform is actually serving against what `release` points
+# at. `deploy_on_push` is false on every component, so a push to release that the CI
+# `deploy` job never ran on (billing, a failing upstream job) succeeds and deploys
+# nothing — and nothing local or phase-only can tell the difference. This asserts the
+# live deployment's source_commit_hash against release. DOCTL_CONTEXT=anthers for the
+# Anthers account; REF=origin/release to compare against an arbitrary ref.
+deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CONTEXT=anthers)
+	bun run scripts/deploy-status.ts
 
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium

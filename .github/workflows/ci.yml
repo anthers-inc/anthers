@@ -327,10 +327,46 @@ jobs:
           # build rather than down.
           doctl apps create-deployment "$APP_ID" --wait --format ID,Phase
 
-      - name: Report what is now live
-        if: ${{ !cancelled() }}
+      # The `--wait` above blocks until the deployment settles, which means the new
+      # deployment should be ACTIVE by the time this step runs. Asserting that here
+      # catches the case `--wait` alone does not: a deploy that *superseded* an earlier
+      # one and reported success while the earlier build kept serving, or a build that
+      # settled into ERROR while the previously-active deployment stayed ACTIVE.
+      #
+      # This is the same check `deploy-watch.yml` runs hourly, against the same script,
+      # so a deploy that passes here and then drifts later (a manual rollback, a second
+      # deploy from somewhere) is still caught by the scheduled run. What this step
+      # adds is immediate feedback: the deploy job itself goes red if prod isn't serving
+      # what we just pushed, rather than waiting up to an hour for the watcher.
+      - name: Verify production is serving ${{ github.sha }}
         env:
           APP_ID: ${{ vars.DO_APP_ID }}
+          EXPECTED: ${{ github.sha }}
         run: |
-          [ -n "$APP_ID" ] || exit 0
-          doctl apps list-deployments "$APP_ID" --format ID,Cause,Phase | head -3
+          set -uo pipefail
+          [ -n "$APP_ID" ] || { echo "::error::DO_APP_ID not set"; exit 1; }
+          # Fetch the ACTIVE deployment's per-component commit hashes. The top-level
+          # `source_commit_hash` on a deployment is misleading — it carries the repo
+          # name, not the SHA; the real value is per-component (`services[0]`,
+          # `static_sites[0]`, etc.). `scripts/deploy-status.ts` collects all of them
+          # and would be the natural reuse, but it reads `release` from git and we want
+          # to check against the exact SHA just deployed, so inline the check instead.
+          LIVE=$(doctl apps list-deployments "$APP_ID" -o json \
+            | jq -r '[.[] | select(.phase == "ACTIVE")
+                      | (.services // []) + (.static_sites // []) + (.workers // []) + (.jobs // [])
+                      | .[].source_commit_hash]
+                    | unique | .[0] // empty')
+          if [ -z "$LIVE" ]; then
+            echo "::error::No ACTIVE deployment with a source_commit_hash found."
+            echo "  The deploy may not have taken — check the App Platform console."
+            exit 1
+          fi
+          # Compare short hashes — App Platform returns 40-char SHAs, `github.sha` is
+          # 40 chars too, so a full-hash comparison is exact. Use short for the message.
+          if [ "${LIVE:0:7}" != "${EXPECTED:0:7}" ]; then
+            echo "::error::Production is serving ${LIVE:0:7}, not ${EXPECTED:0:7}."
+            echo "  The deploy was created but did not become ACTIVE, or a different"
+            echo "  deployment is ACTIVE. Check `doctl apps list-deployments $APP_ID`."
+            exit 1
+          fi
+          echo "::notice::Production is serving ${LIVE:0:7} ✓"
