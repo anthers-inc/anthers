@@ -46,17 +46,6 @@
  *         safe to call from a machine that cannot reach DigitalOcean.
  */
 
-/**
- * Every committed spec, with the env var that overrides its app-id lookup.
- *
- * `anthers-studio` joined the list on 2026-08-11, when its spec was captured into this
- * repo for the first time. It had never been here — which this file's own header used
- * as the example of config that exists only in App Platform — and the Anthers-owned
- * account migration turned that from a documentation gap into a single point of loss,
- * since App Platform apps cannot be transferred between accounts and must be recreated
- * from a spec. Committing it without checking it would only have added a second
- * document free to drift; this is the half that keeps it honest.
- */
 import {
 	COMPONENT_KINDS,
 	CONTEXT,
@@ -70,18 +59,42 @@ import {
 	type Spec,
 } from "./do-spec";
 
+/**
+ * Every committed spec, with the env var that overrides its app-id lookup.
+ *
+ * ⚠️ One entry, and the surrounding prose has not caught up. This list and this file's
+ * header both still describe covering `anthers-studio` / `.do/studio.app.yaml` — that app
+ * was deleted on 2026-08-11 when the Studio merged into `apps/web` at `/studio`, and its
+ * spec went with it. Left as a note rather than a silent tidy because the reasoning it
+ * carried is still the live one: a spec that exists only in App Platform is a single point
+ * of loss, since apps cannot be transferred between DigitalOcean accounts and have to be
+ * recreated from a file.
+ */
 const SPECS: { path: string; idEnv: string }[] = [{ path: ".do/app.yaml", idEnv: "DO_APP_ID" }];
+
+/**
+ * `--secrets-only`: check nothing but "is any live secret empty".
+ *
+ * The mode the hourly `deploy-watch` workflow runs, and the split matters. The committed
+ * spec **drifts from live by default and is meant to** — pushing to `release` never applies
+ * it — so an hourly alarm on ordinary drift would be red most weeks and get muted, taking
+ * the empty-secret check down with it. An empty production secret is a different kind of
+ * claim: never expected, never benign, and worth waking someone for on its own.
+ */
+const SECRETS_ONLY = Bun.argv.includes("--secrets-only");
 
 /**
  * Live secrets that are *deliberately* empty, each with the reason.
  *
- * Empty is a real posture for a couple of these — `SITE_PASSWORD` empty is how the
- * pre-launch gate gets retired at launch (`matchesSitePassword` fails closed on it, so the
- * gate stops opening rather than starts) — and a check with no way to say "yes, on purpose"
- * gets switched off wholesale the first time it is inconvenient.
+ * Currently none, and note that `SITE_PASSWORD` is NOT a candidate however tempting it
+ * looks: empty seals the gate rather than lifting it (`matchesSitePassword` fails closed),
+ * so retiring it at launch is a code change, not a cleared variable. See the block above it
+ * in `.env.example`.
  *
- * Every entry is PRINTED on every run, in both the clean and dirty paths, so an exemption
- * cannot go quiet the way the thing it exempts did. Same rule as `econ:allow-file`.
+ * A check with no way to say "yes, on purpose" gets switched off wholesale the first time
+ * it is inconvenient, so the escape hatch exists — but every entry is PRINTED on every run,
+ * in both the clean and dirty paths, so an exemption cannot go quiet the way the thing it
+ * exempts did. Same rule as `econ:allow-file`.
  */
 const EXPECTED_EMPTY: Record<string, string> = {};
 
@@ -267,15 +280,16 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		}
 	}
 
-	const clean =
-		!domainDiffs.length &&
-		!onlyLive.length &&
-		!onlyRepo.length &&
-		!differs.length &&
-		!relocated.length &&
-		!sourceDiffs.length &&
-		!emptySecrets.length;
-	console.log(`\n## Spec diff — ${appName} (${appId})\n`);
+	const clean = SECRETS_ONLY
+		? !emptySecrets.length
+		: !domainDiffs.length &&
+			!onlyLive.length &&
+			!onlyRepo.length &&
+			!differs.length &&
+			!relocated.length &&
+			!sourceDiffs.length &&
+			!emptySecrets.length;
+	console.log(`\n## Spec ${SECRETS_ONLY ? "secrets" : "diff"} — ${appName} (${appId})\n`);
 
 	// First, and on its own: every other finding here is configuration that disagrees with
 	// itself, which is worth a look. This one is production missing a credential.
@@ -294,6 +308,11 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		console.log("  Empty live secrets, exempted in EXPECTED_EMPTY:");
 		for (const line of exemptEmpty.sort()) console.log(`    · ${line}`);
 		console.log("");
+	}
+
+	if (SECRETS_ONLY) {
+		if (clean) console.log(`  No live secret is empty ✓ (${liveEnvs.size} env keys checked)\n`);
+		return clean;
 	}
 
 	if (onlyLive.length) {
