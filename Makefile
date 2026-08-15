@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
-        spec-diff spec-apply deploy-status dev-vault \
+        spec-diff spec-apply deploy-status dev-local \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -64,7 +64,26 @@ hooks: ## Point git at the repo's tracked hooks (.githooks/)
 	@git config core.hooksPath .githooks
 	@echo "git hooks → .githooks (pre-push runs 'make verify'; bypass with git push --no-verify)"
 
-dev: db-ready ## Start API + worker + web dev servers
+# Secrets come from the "Anthers Dev" Bitwarden project, not from `.env`. `bws run` sets
+# REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
+# `.env` cannot shadow the vault.
+#
+# The fallback is warned rather than silent, and it is safe to have here for a reason worth
+# stating: getting it wrong costs you a dev server with a sealed site gate, which is loud
+# and local. That is the opposite of `spec-apply`, where a wrong source reaches production —
+# which is why that one refuses instead of falling back.
+dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
+	@if command -v bws >/dev/null 2>&1 && [ -s "$$HOME/.config/bws/token" ]; then \
+		PID=$$(bun run scripts/bws-project-id.ts "Anthers Dev") || exit 1; \
+		BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/token)} \
+			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
+	else \
+		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \
+		echo "     by default. Expect a sealed site gate unless you filled them in yourself."; \
+		$(MAKE) dev-local; \
+	fi
+
+dev-local: db-ready ## Start dev reading secrets from .env (offline, or no vault access)
 	@mkdir -p data
 	@bun run db:dev-account
 	@KILLED=0; \
@@ -82,19 +101,6 @@ dev: db-ready ## Start API + worker + web dev servers
 	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
 	wait $$DEV_PID 2>/dev/null; \
 	rm -f .dev.pid
-
-# Start dev with secrets injected from the "Anthers Dev" Bitwarden project, so they do
-# not have to sit in `.env` at all. Plain `make dev` still works off `.env` — that path is
-# what a contributor without vault access uses, and what works offline.
-#
-# `bws run` sets REAL environment variables, and those beat Bun's `.env` loading (verified),
-# so a leftover value in `.env` cannot shadow the vault. The project is resolved by NAME so
-# no UUID is committed; see scripts/bws-project-id.ts.
-dev-vault: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
-	@command -v bws >/dev/null 2>&1 || { echo "  bws not on PATH — plain 'make dev' reads .env instead."; exit 1; }
-	@PID=$$(bun run scripts/bws-project-id.ts "Anthers Dev") || exit 1; \
-	 BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/token)} \
-	   bws run --project-id $$PID -- '$(MAKE) dev'
 
 dev-api: db-ready ## Start API dev server only
 	@mkdir -p data
