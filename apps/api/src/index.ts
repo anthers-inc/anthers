@@ -11,6 +11,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
 import { authRoutes } from "./routes/auth.js";
 import { contentRoutes } from "./routes/content.js";
+import { dmcaRoutes } from "./routes/dmca.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
@@ -57,6 +58,7 @@ const app = new Hono()
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/moderation", moderationRoutes)
+	.route("/api/dmca", dmcaRoutes)
 	.route("/api/waitlist", waitlistRoutes)
 	.route("/api/admin", adminRoutes);
 

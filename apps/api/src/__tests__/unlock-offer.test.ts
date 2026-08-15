@@ -51,6 +51,7 @@ function gatedAt(threshold: number, price = "0"): AccessibleWork {
 			{ threshold: 0, allow: false, price: "0" },
 			{ threshold, allow: true, price },
 		],
+		takedownStatus: "active",
 	};
 }
 
@@ -157,6 +158,7 @@ describe("unlock offer — routes that would not actually open the Work", () => 
 				{ threshold: 2, allow: true, price: "0" },
 				{ threshold: 9, allow: true, price: "0" },
 			],
+			takedownStatus: "active",
 		};
 		expect(resolveAccessSync(ladder, ctx(0)).unlock?.creator?.threshold).toBe(2);
 	});
@@ -170,6 +172,7 @@ describe("unlock offer — when it is absent", () => {
 			streamEnabled: true,
 			downloadEnabled: false,
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
+			takedownStatus: "active",
 		};
 		const got = resolveAccessSync(free, ctx(0));
 		expect(got.canAccess).toBe(true);
@@ -195,6 +198,7 @@ describe("unlock offer — when it is absent", () => {
 			streamEnabled: false,
 			downloadEnabled: true,
 			seedAccess: [{ threshold: 0, allow: true, price: "9.99" }],
+			takedownStatus: "active",
 		};
 		const got = resolveAccessSync(buyable, ctx(0));
 		expect(got.reason).toBe("payment_required");

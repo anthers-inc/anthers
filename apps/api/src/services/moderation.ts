@@ -80,6 +80,13 @@ export interface ModerationSubjectRow {
  * The `user` branch exists so a person report can be validated the same way a comment
  * report is — a report naming an account that isn't there would sit in the queue with
  * nothing to render, exactly the orphan case `subjectStillExists` cleans up after.
+ *
+ * The `work` branch exists so a copyright complaint filed as a user report can be
+ * validated the same way. A Work takedown is a DMCA action with its own service
+ * (`services/dmca.ts`) and does NOT route through `hideSubject` — `isModeratableContent`
+ * returns false for `work`, which keeps the moderation hide/restore path from accepting
+ * a Work it can't handle. But a Work CAN be reported (the operator needs a one-click
+ * "this is a copyright claim → here is the path"), so `findSubject` resolves it.
  */
 export async function findSubject(
 	subjectType: ModerationSubjectType,
@@ -92,6 +99,26 @@ export async function findSubject(
 			.where(eq(users.id, subjectId))
 			.limit(1);
 		return row ? { id: row.id, userId: row.id, moderationStatus: "visible" } : null;
+	}
+
+	if (subjectType === "work") {
+		const [row] = await db
+			.select({ id: works.id, userId: works.creatorId, moderationStatus: works.takedownStatus })
+			.from(works)
+			.where(eq(works.id, subjectId))
+			.limit(1);
+		// A Work carries a `takedown_status` rather than a `moderation_status`, but the
+		// `ModerationSubjectRow` shape is the contract every caller reads. `active` is
+		// the Work's normal state and maps to "visible" for a caller that doesn't know
+		// about takedowns; `taken_down` maps to "hidden". The DMCA service reads the
+		// real column directly.
+		return row
+			? {
+					id: row.id,
+					userId: row.userId,
+					moderationStatus: row.moderationStatus === "taken_down" ? "hidden" : "visible",
+				}
+			: null;
 	}
 
 	const table = CONTENT_SUBJECTS[subjectType as ContentSubjectType];
@@ -714,6 +741,10 @@ const subjectStillExists = or(
 	and(
 		eq(moderationReports.subjectType, "user"),
 		exists(db.select({ one: sql`1` }).from(users).where(eq(users.id, moderationReports.subjectId))),
+	),
+	and(
+		eq(moderationReports.subjectType, "work"),
+		exists(db.select({ one: sql`1` }).from(works).where(eq(works.id, moderationReports.subjectId))),
 	),
 );
 

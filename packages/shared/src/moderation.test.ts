@@ -79,34 +79,46 @@ describe("Moderation states", () => {
 });
 
 describe("Subject types", () => {
-	it("covers the two user-generated row types plus a person, and validates membership", () => {
-		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating", "user"]);
+	it("covers the two user-generated row types plus a person and a Work, and validates membership", () => {
+		expect([...MODERATION_SUBJECT_TYPES]).toEqual(["comment", "rating", "user", "work"]);
 		expect(isModerationSubjectType("comment")).toBe(true);
 		expect(isModerationSubjectType("user")).toBe(true);
+		expect(isModerationSubjectType("work")).toBe(true);
 		expect(isModerationSubjectType("post")).toBe(false);
 	});
 
-	it("says a person is reportable but NOT hideable", () => {
+	it("says a person is reportable but NOT hideable, and a Work is reportable but NOT hideable through the moderation path", () => {
 		// The distinction is the whole reason `user` could be added as a value rather
 		// than as a new table: it goes through the same report path, and stops short of
 		// the same action path. Hiding an account is suspension, which has to answer what
 		// becomes of their Works, their buyers' purchases, the Seeds pointed at them and
 		// any payout in flight — none of it decided.
+		//
+		// `work` follows the same shape for a different reason: a Work takedown is a DMCA
+		// action with its own service (`services/dmca.ts`), its own table (`dmca_notices`),
+		// and its own state column (`works.takedown_status`) — NOT a moderation hide. A
+		// Work can be reported through the moderation queue, and a DMCA notice is a
+		// separate intake; `isModeratableContent` keeps the moderation hide/restore path
+		// from accepting a Work it can't handle.
 		expect(isModeratableContent("comment")).toBe(true);
 		expect(isModeratableContent("rating")).toBe(true);
 		expect(isModeratableContent("user")).toBe(false);
+		expect(isModeratableContent("work")).toBe(false);
 	});
 
-	it("requires the reporter's own words for a person, and not for content", () => {
+	it("requires the reporter's own words for a person, and not for content or a Work", () => {
 		// A comment IS the evidence; a person is not. That asymmetry is why the six
 		// reasons did NOT need a seventh entry for people — the taxonomy fits, and what
-		// doesn't transfer is the subject implying its own evidence.
+		// doesn't transfer is the subject implying its own evidence. A Work is its own
+		// evidence the way a comment is — the operator opens it and sees what the
+		// reporter saw.
 		expect(reportRequiresDetails("user")).toBe(true);
 		expect(reportRequiresDetails("comment")).toBe(false);
 		expect(reportRequiresDetails("rating")).toBe(false);
-		// Adding a person did not touch the taxonomy — pinned here because "the reasons
-		// don't fit a person" is the reasonable-sounding change that would make renaming
-		// a stored value look like a copy edit.
+		expect(reportRequiresDetails("work")).toBe(false);
+		// Adding a person and a Work did not touch the taxonomy — pinned here because
+		// "the reasons don't fit a person" is the reasonable-sounding change that would
+		// make renaming a stored value look like a copy edit.
 		expect(MODERATION_REASON_VALUES.length).toBe(6);
 	});
 });
