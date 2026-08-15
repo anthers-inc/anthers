@@ -158,6 +158,25 @@ envs:
   - key: STRIPE_WEBHOOK_SECRET
     scope: RUN_TIME
     type: SECRET
+  # DMCA designated agent — public statutory information (NOT secret). § 512(c)(2)
+  # requires the agent's details to be published on the site; the Copyright Office's
+  # own DMCA directory publishes them for every registered agent. Registered
+  # 2026-08-15. The three-year expiry clock is calendared in 51.03.
+  - key: DMCA_AGENT_REGISTERED
+    scope: RUN_TIME
+    value: "true"
+  - key: DMCA_AGENT_NAME
+    scope: RUN_TIME
+    value: "Parker Davis"
+  - key: DMCA_AGENT_ADDRESS
+    scope: RUN_TIME
+    value: "1500 N Grant St, Ste R, Denver, CO, 80203 US"
+  - key: DMCA_AGENT_EMAIL
+    scope: RUN_TIME
+    value: copyright@anthers.org
+  - key: DMCA_AGENT_PHONE
+    scope: RUN_TIME
+    value: "(720) 404-2603"
 
 ingress:
   rules:
