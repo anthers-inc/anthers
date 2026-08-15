@@ -185,6 +185,20 @@ envs:
   - key: STRIPE_WEBHOOK_SECRET
     scope: RUN_TIME
     type: SECRET
+  # The SECOND signing secret, for the *connected accounts* event destination.
+  #
+  # Stripe issues one secret per destination and scopes them separately, so the single URL
+  # above serves two: `your account` (purchases, subscriptions, refunds) and `connected
+  # accounts`, which is the only scope that ever delivers `account.updated` — creator payout
+  # enablement after Connect onboarding. `payments.ts` tries both secrets and 400s only when
+  # neither verifies; with just the primary set it behaves as it always did.
+  #
+  # 🚨 Not the same value as the one above. They are both 38-byte `whsec_` strings, so a
+  # copy-paste of the wrong one is invisible by inspection — the tell is that `account.updated`
+  # silently stops arriving while everything else keeps working.
+  - key: STRIPE_CONNECT_WEBHOOK_SECRET
+    scope: RUN_TIME
+    type: SECRET
   # DMCA designated agent — public statutory information (NOT secret). § 512(c)(2)
   # requires the agent's details to be published on the site; the Copyright Office's
   # own DMCA directory publishes them for every registered agent. Registered
