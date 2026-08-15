@@ -20,11 +20,20 @@
  *   make deploy-status               Compare live vs local `release` (default).
  *   make deploy-status REF=origin/release   Compare live vs an arbitrary ref.
  *
- * Exits 0 when they agree, 1 when they disagree, and 2 when the live state
- * cannot be determined (doctl missing/unauthenticated, or no deployment with a
- * `source_commit_hash` at all). The 2-vs-1 split is deliberate: a disagreement
- * is a finding worth a human; an unreachable API is a tooling gap, not a
- * finding, and should not read as "drift detected".
+ * It also reports how far `release` trails `main` (override with `PROMOTE_FROM`),
+ * because "`release` deployed" and "the work shipped" are different claims and
+ * only the first was ever checked — see the note above that comparison.
+ *
+ * Exit codes, and each split is deliberate:
+ *   0  live, `release` and `main` all agree.
+ *   1  live and `release` disagree — a finding worth a human.
+ *   2  the live state cannot be determined (doctl missing/unauthenticated, or no
+ *      deployment carrying a `source_commit_hash`). A tooling gap is not a
+ *      finding and must not read as "drift detected".
+ *   3  live matches `release`, but `release` is behind `main`. Production is
+ *      missing merged work — yet promoting is a deliberate act and being behind
+ *      mid-development is normal, so this is reported, not failed. A scheduled
+ *      caller can tolerate 3 while still alarming on 1.
  *
  * Needs: doctl, authenticated. Exits 0 with a notice when it is absent, so this
  *        is safe to call from a machine that cannot reach DigitalOcean — the
@@ -169,8 +178,56 @@ const agree = refFull === liveCommit || refCommit === liveCommit.slice(0, 7);
 const ageMs = Date.now() - new Date(active.created_at).getTime();
 const ageHours = (ageMs / 3_600_000).toFixed(1);
 
+/**
+ * How far `release` trails the branch work is merged to — the question this tool could not
+ * previously ask.
+ *
+ * 🚨 On 2026-08-15 twenty commits sat on `main` while production ran the morning's build,
+ * and this command reported **"in sync ✓"** the entire time — correctly, because live and
+ * `release` agreed. The invariant it held was *"`release` deployed"*, never *"the work
+ * shipped"*, and nothing anywhere held the second one. The gap surfaced only when a probe
+ * against production returned 400 for a secret that should have worked.
+ *
+ * Behind-ness is NOT a fault on its own: promoting `main` to `release` is a deliberate act,
+ * and merged-but-unshipped is a normal mid-flight state. So this reports rather than fails —
+ * with its own exit code, so a caller can decide. Making it red by default would put the
+ * hourly watcher in a permanent alarm state during ordinary development, and a watcher that
+ * cries wolf gets muted, which is how this repo lost the last one.
+ */
+const PROMOTE_FROM = process.env.PROMOTE_FROM ?? "main";
+let unshipped = 0;
+let promoteHead = "";
+if (REF !== PROMOTE_FROM) {
+	const head = await run(["git", "rev-parse", "--short=7", PROMOTE_FROM]);
+	const countResult = await run(["git", "rev-list", "--count", `${REF}..${PROMOTE_FROM}`]);
+	if (head.ok && countResult.ok) {
+		promoteHead = head.stdout.trim();
+		unshipped = Number.parseInt(countResult.stdout.trim(), 10) || 0;
+	}
+	// Failure here is not fatal: a shallow clone or a missing local `main` makes this
+	// unanswerable, and an unanswerable extra question must not break the primary check.
+}
+
+if (agree && unshipped > 0) {
+	console.log(
+		`deploy-status: live matches ${REF} ✓ — but ${REF} is ${unshipped} commit(s) behind ${PROMOTE_FROM}.`,
+	);
+	console.log(`  ${PROMOTE_FROM.padEnd(8)} ${promoteHead}`);
+	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
+	console.log(
+		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
+	);
+	console.log("");
+	console.log(`  🚨 Production does NOT contain work merged to ${PROMOTE_FROM}. This is not a`);
+	console.log("     deploy failure — it is work that was never promoted. Ship it with:");
+	console.log(`       git push origin ${PROMOTE_FROM}:${REF}`);
+	console.log("  (Exit 3, distinct from drift, so a scheduled check can tolerate it.)");
+	process.exit(3);
+}
+
 if (agree) {
 	console.log(`deploy-status: in sync ✓`);
+	if (promoteHead) console.log(`  ${PROMOTE_FROM.padEnd(8)} ${promoteHead}`);
 	console.log(`  release: ${refCommit}  (${REF})`);
 	console.log(
 		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
@@ -178,15 +235,40 @@ if (agree) {
 	process.exit(0);
 }
 
-console.error(`deploy-status: DRIFT — production is serving a stale build.`);
-console.error(`  release: ${refCommit}  (${REF})`);
+/**
+ * Which side leads, because a mismatch is not always production's fault.
+ *
+ * This used to report every disagreement as *"production is serving a stale build"* and
+ * recommend pushing again. On 2026-08-15 the mismatch ran the other way: the LOCAL `release`
+ * branch was stale (this compares against the local ref unless `REF=origin/release`), so
+ * live was **ahead**, and both the diagnosis and the suggested recovery were backwards.
+ * Confidently wrong about a deploy is worse than silent about one.
+ */
+const liveIsDescendant = (await run(["git", "merge-base", "--is-ancestor", REF, liveCommit])).ok;
+
+console.error(`deploy-status: DRIFT — live and ${REF} disagree.`);
+console.error(`  ${REF.padEnd(8)} ${refCommit}`);
 console.error(
 	`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
 );
 console.error("");
-console.error("  The push to release succeeded; nothing deployed. Likely causes:");
-console.error("    - the CI `deploy` job did not run (billing, a failing upstream job, etc.)");
-console.error("    - the deploy was created manually but from a different SHA");
-console.error("  Recover: doctl apps create-deployment <app-id>  (CI's escape hatch, by hand)");
-console.error("          or merge the missing work into release and push again.");
+if (liveIsDescendant) {
+	console.error(`  Live is AHEAD of ${REF} — production has commits your ref does not.`);
+	console.error("  Usually a stale local branch rather than a deploy problem.");
+	// Only suggest the refresh when REF is a plain local branch. For `origin/release` or
+	// `release~1` the command would be malformed, and printing a broken recovery is how a
+	// tool teaches people to stop reading its output.
+	if (/^[\w.-]+$/.test(REF)) {
+		console.error("  Check with:");
+		console.error(`    git fetch origin && git branch -f ${REF} origin/${REF}`);
+		console.error(`  or re-run against the remote: REF=origin/${REF} make deploy-status`);
+	}
+} else {
+	console.error("  Production is serving a stale build: the push succeeded, nothing deployed.");
+	console.error("  Likely causes:");
+	console.error("    - the CI `deploy` job did not run (billing, a failing upstream job, etc.)");
+	console.error("    - the deploy was created manually but from a different SHA");
+	console.error("  Recover: doctl apps create-deployment <app-id>  (CI's escape hatch, by hand)");
+	console.error("          or merge the missing work into release and push again.");
+}
 process.exit(1);
