@@ -169,17 +169,27 @@ async function bwsSecrets(): Promise<Map<string, string>> {
 			process.exit(2);
 		}
 		const projects = JSON.parse(list.stdout) as { id: string; name: string }[];
-		// Only auto-resolve when there is no ambiguity to resolve. Picking the first of
-		// several would be a silent guess about which vault production reads from.
-		if (projects.length !== 1) {
+		/**
+		 * Resolve by NAME — the app's own name from the spec — rather than by a committed
+		 * UUID. Same reasoning `ci.yml` gives for keeping `DO_APP_ID` in a repository
+		 * variable: an infrastructure identifier is useless without a token, but it is still
+		 * infrastructure identity and this repo is world-readable.
+		 *
+		 * The match is exact (case-insensitively), which is what keeps a sibling project
+		 * apart: "Anthers Dev" holds the DEVELOPMENT credentials and must never be mistaken
+		 * for the one production reads from. A prefix or fuzzy match would eventually pick it.
+		 */
+		const named = projects.filter((p) => p.name.toLowerCase() === appName.toLowerCase());
+		const chosen = named.length === 1 ? named[0] : projects.length === 1 ? projects[0] : undefined;
+		if (!chosen) {
 			console.error(
-				`spec-apply: ${projects.length} projects visible — name one with --bws-project <id>:\n` +
+				`spec-apply: cannot tell which bws project holds "${appName}" — name one with --bws-project <id>:\n` +
 					projects.map((p) => `    ${p.id}  ${p.name}`).join("\n"),
 			);
 			process.exit(2);
 		}
-		project = (projects[0] as { id: string }).id;
-		console.log(`spec-apply: using bws project "${(projects[0] as { name: string }).name}"`);
+		project = chosen.id;
+		console.log(`spec-apply: using bws project "${chosen.name}"`);
 	}
 
 	const listed = await run(["bws", "secret", "list", project, "-o", "json"], env);
@@ -202,11 +212,17 @@ if (FROM_BWS && !(await run(["which", "bws"])).ok) {
 	console.error("spec-apply: --from-bws needs the `bws` CLI on PATH.");
 	process.exit(2);
 }
-const vault = FROM_BWS ? await bwsSecrets() : new Map<string, string>();
 if (CONTEXT) console.log(`spec-apply: using doctl context "${CONTEXT}"`);
 
+// The committed spec is read FIRST because everything downstream is named by it — the
+// App Platform app, and now the Bitwarden project too. `bwsSecrets()` used to run above
+// this line and referenced `appName` before it was initialized, which under `const` is a
+// TDZ ReferenceError rather than an `undefined` to shrug at.
 const committed = Bun.YAML.parse(await Bun.file(SPEC_PATH).text()) as Spec;
 const appName = committed.name ?? "anthers";
+
+const vault = FROM_BWS ? await bwsSecrets() : new Map<string, string>();
+
 const appId = await resolveAppId(appName, ID_ENV);
 if (!appId) {
 	console.error(`spec-apply: no App Platform app named "${appName}" (declared in ${SPEC_PATH}).`);

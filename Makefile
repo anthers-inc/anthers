@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
-        spec-diff spec-apply deploy-status \
+        spec-diff spec-apply deploy-status dev-vault \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -82,6 +82,19 @@ dev: db-ready ## Start API + worker + web dev servers
 	trap "kill -- -$$DEV_PID 2>/dev/null || kill $$DEV_PID 2>/dev/null || true; rm -f .dev.pid" EXIT; \
 	wait $$DEV_PID 2>/dev/null; \
 	rm -f .dev.pid
+
+# Start dev with secrets injected from the "Anthers Dev" Bitwarden project, so they do
+# not have to sit in `.env` at all. Plain `make dev` still works off `.env` — that path is
+# what a contributor without vault access uses, and what works offline.
+#
+# `bws run` sets REAL environment variables, and those beat Bun's `.env` loading (verified),
+# so a leftover value in `.env` cannot shadow the vault. The project is resolved by NAME so
+# no UUID is committed; see scripts/bws-project-id.ts.
+dev-vault: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
+	@command -v bws >/dev/null 2>&1 || { echo "  bws not on PATH — plain 'make dev' reads .env instead."; exit 1; }
+	@PID=$$(bun run scripts/bws-project-id.ts "Anthers Dev") || exit 1; \
+	 BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/token)} \
+	   bws run --project-id $$PID -- '$(MAKE) dev'
 
 dev-api: db-ready ## Start API dev server only
 	@mkdir -p data
