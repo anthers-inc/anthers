@@ -58,6 +58,7 @@
  * secret so this class of damage can never again be silent.
  */
 
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -328,15 +329,44 @@ if (fatal) {
 	process.exit(1);
 }
 
-const outPath =
-	outFlag >= 0
-		? (argv[outFlag + 1] as string)
-		: join(tmpdir(), `anthers-spec-apply-${appName}.yaml`);
-await Bun.write(outPath, Bun.YAML.stringify(merged));
-console.log(`  Merged spec written to ${outPath}`);
-console.log(
-	"  ⚠ It holds live secret values (encrypted, and plaintext for any --set). Not for git.\n",
-);
+/**
+ * 🚨 The merged spec contains PLAINTEXT SECRETS, and where it lands is a security decision.
+ *
+ * Any value this run supplied — from `--from-bws` or `--set` — sits here unencrypted, because
+ * that is how you hand App Platform a new secret value: you send the plaintext and it
+ * encrypts on receipt. Only the values passed through untouched stay as `EV[…]` blobs.
+ *
+ * The first cut wrote it with `Bun.write` to `os.tmpdir()`, which produced
+ * `-rw-rw-r-- /tmp/anthers-spec-apply-anthers.yaml` — **six production credentials readable
+ * by every account on the machine**, sitting on disk indefinitely. The warning printed
+ * alongside it said "not for git", which is the wrong hazard named confidently: nothing was
+ * ever going to commit a file in /tmp, and the actual exposure was the mode and the location.
+ *
+ * So: `XDG_RUNTIME_DIR` when it exists (on this machine `/run/user/1000` — tmpfs, already
+ * 0700, and cleared at logout, so the plaintext never reaches persistent storage at all),
+ * falling back to the temp dir. The containing directory is created 0700 and the file 0600
+ * **at creation** rather than chmod'd afterwards, which would leave a window where the
+ * default mode applies.
+ */
+const runtimeDir = (process.env.XDG_RUNTIME_DIR ?? "").trim() || tmpdir();
+const outDir = join(runtimeDir, "anthers-spec-apply");
+const outPath = outFlag >= 0 ? (argv[outFlag + 1] as string) : join(outDir, `${appName}.yaml`);
+if (outFlag < 0) mkdirSync(outDir, { recursive: true, mode: 0o700 });
+// Remove first: `mode` in writeFileSync applies only when the file is created, so writing
+// over an existing world-readable file would silently keep its permissions.
+rmSync(outPath, { force: true });
+writeFileSync(outPath, Bun.YAML.stringify(merged), { mode: 0o600 });
+
+const plaintext = [...walkEnvs(merged)].filter(
+	({ entry }) => isSecret(entry) && !(entry.value ?? "").startsWith("EV["),
+).length;
+console.log(`  Merged spec written to ${outPath} (0600)`);
+if (plaintext) {
+	console.log(`  🚨 It holds ${plaintext} secret value(s) in PLAINTEXT. Delete it when done:`);
+	console.log(`       rm ${outPath}\n`);
+} else {
+	console.log("  All secret values in it are encrypted blobs, passed through untouched.\n");
+}
 
 if (!APPLY) {
 	console.log("  Dry run — nothing sent. Re-run with APPLY=1 (or --apply) to update the app.\n");
