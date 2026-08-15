@@ -87,11 +87,27 @@ jobs:
       # make every call fail on an unknown context the moment bun existed to run them —
       # the second bug waiting behind the first. The token already scopes to the Anthers
       # account; the context name is a LOCAL convenience for a machine holding two logins.
+      # Exit 3 means "live matches release, but release is behind main" — merged work that
+      # was never promoted. That is worth SAYING and not worth alarming on: promoting is a
+      # deliberate act, so failing the run would put this workflow in a permanent red state
+      # during ordinary development, and a watcher that cries wolf gets muted. This one
+      # already spent its first day doing exactly that for a different reason.
+      #
+      # It surfaces as a GitHub annotation instead, which shows on the run without failing it.
       - name: Check the live deployment against release
         env:
           DO_APP_ID: ${{ vars.DO_APP_ID }}
           REF: origin/release
-        run: bun run scripts/deploy-status.ts
+          PROMOTE_FROM: origin/main
+        run: |
+          set +e
+          bun run scripts/deploy-status.ts
+          code=$?
+          if [ "$code" -eq 3 ]; then
+            echo "::notice::release is behind main — merged work is not in production (not a deploy fault)"
+            exit 0
+          fi
+          exit "$code"
 
       # Separate step, and it runs even when the drift check above failed: the two answer
       # unrelated questions ("is prod the right commit" / "does prod still have its
