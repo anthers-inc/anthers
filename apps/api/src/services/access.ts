@@ -58,6 +58,15 @@ export interface AccessibleWork {
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
 	seedAccess: SeedAccessRow[] | null;
+	/**
+	 * The Work's DMCA takedown state — `active` or `taken_down`. A taken-down Work
+	 * stops delivery to EVERYONE, including the creator and buyers, because
+	 * continuing to serve infringing bytes to buyers is continuing to infringe.
+	 * Checked before every other rule in `resolveAccessSync`, so every delivery
+	 * route that calls `resolveAccess` gets the denial for free — one predicate,
+	 * not seven routes remembering. See `services/dmca.ts`.
+	 */
+	takedownStatus: string;
 }
 
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
@@ -124,7 +133,8 @@ export type AccessReason =
 	| "entitled"
 	| "payment_required"
 	| "gated"
-	| "login_required";
+	| "login_required"
+	| "takedown";
 
 /**
  * One way a denied viewer could open this Work, stated in the gate's own terms.
@@ -293,6 +303,16 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 	};
+
+	// A DMCA takedown stops delivery to EVERYONE — the creator, buyers, and entitled
+	// viewers — before any other rule is considered. Continuing to serve infringing
+	// bytes to buyers is continuing to infringe, which is the precise distinction from
+	// `withdrawn` (which deliberately keeps serving buyers). This is checked first so
+	// every delivery route that calls `resolveAccess` gets the denial for free, and no
+	// route has to remember to check it separately. See `services/dmca.ts`.
+	if (work.takedownStatus === "taken_down") {
+		return { ...base, canAccess: false, reason: "takedown" };
+	}
 
 	// Creators always see their own content.
 	if (ctx.userId != null && ctx.userId === work.creatorId) {

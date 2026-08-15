@@ -48,6 +48,7 @@ function accessible(key: string): AccessibleWork {
 		streamEnabled: spec.streamEnabled,
 		downloadEnabled: spec.downloadEnabled,
 		seedAccess: spec.seedAccess,
+		takedownStatus: "active",
 	};
 }
 

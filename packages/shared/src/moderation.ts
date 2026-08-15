@@ -32,18 +32,22 @@
  * `comment` and `rating` are user-generated rows. `user` is a **person**, added
  * because a platform where adult creators and 13–17-year-olds share a space needs a
  * way to report a pattern of behaviour, not only the one artifact that happens to
- * have survived. It is a new *value* rather than a new column and a branch in every
- * query, which is the whole reason these tables were built polymorphic.
+ * have survived. `work` is a published Work — added for DMCA takedown, where the
+ * target of a notice is a Work rather than a comment or a review.
+ *
+ * Each is a new *value* rather than a new column and a branch in every query, which
+ * is the whole reason these tables were built polymorphic.
  *
  * The three are not interchangeable in what an operator may *do* with them — see
  * `isModeratableContent`.
  */
-export type ModerationSubjectType = "comment" | "rating" | "user";
+export type ModerationSubjectType = "comment" | "rating" | "user" | "work";
 
 export const MODERATION_SUBJECT_TYPES: readonly ModerationSubjectType[] = [
 	"comment",
 	"rating",
 	"user",
+	"work",
 ];
 
 export function isModerationSubjectType(value: string): value is ModerationSubjectType {

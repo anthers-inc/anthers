@@ -189,6 +189,19 @@ export const works = pgTable(
 		viewCount: bigint("view_count", { mode: "number" }).notNull().default(0),
 		downloadCount: bigint("download_count", { mode: "number" }).notNull().default(0),
 
+		// ── Takedown (DMCA) ──
+		// A takedown is what WE did (a DMCA notice was acted on), distinct from
+		// `visibility` (what the CREATOR did) and from `moderation_status` (the
+		// hide/restore pattern on comments and ratings). A taken-down Work stops
+		// delivery to EVERYONE, including buyers — continuing to serve infringing
+		// bytes to buyers is continuing to infringe, which is the precise
+		// distinction from `withdrawn` (which deliberately keeps serving buyers).
+		//
+		// `resolveAccessSync` checks this before every other rule, so every
+		// delivery route that calls `resolveAccess` gets the denial for free —
+		// one predicate, not seven routes remembering.
+		takedownStatus: text("takedown_status").notNull().default("active"), // active | taken_down
+
 		// ── ATProto ──
 		// A Work wants its own lexicon rather than riding a post record; deferred with
 		// ATProto adoption itself, and unpopulated meanwhile.
