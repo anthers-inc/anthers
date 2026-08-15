@@ -174,6 +174,11 @@ export const QUEUES = {
 	// ever written — with its `ip_address` and `user_agent` — was filtered out of reads
 	// and kept forever. A retention promise with no mechanism behind it.
 	PRUNE_CREDENTIALS: "prune-credentials",
+	// Restore Works whose DMCA counter-notice window has closed (§ 512(g)(2)(C)).
+	// The sweep checks `restoreNoEarlierThan` and `suitFiledAt` — a suit filing
+	// prevents the restore. Runs daily; the window is 10 business days, so the
+	// latency is negligible.
+	DMCA_RESTORE: "dmca-restore",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -265,4 +270,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// is a week — a few hours' latency on the far end of it is not something a user can
 	// perceive, and a wipe that runs once a day is a wipe you can reason about.
 	[QUEUES.RUN_DELETIONS, "0 4 * * *"],
+	// 5 AM daily. The counter-notice window is 10 business days, so a daily sweep
+	// is well within the statutory tolerance — and the sweep errs toward "late"
+	// per the brief's guidance: it restores no earlier than `restoreNoEarlierThan`,
+	// never before.
+	[QUEUES.DMCA_RESTORE, "0 5 * * *"],
 ] as const;

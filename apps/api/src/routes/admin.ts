@@ -29,6 +29,15 @@ import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import {
+	dmcaSummary,
+	loadDmcaQueue,
+	loadNotice,
+	recordSuit,
+	rejectNotice,
+	restoreWork,
+	takeDownWork,
+} from "../services/dmca.js";
+import {
 	dismissReports,
 	hideSubject,
 	loadQueue,
@@ -341,6 +350,106 @@ const adminRoutes = new Hono()
 		const user = c.get("user");
 		const { subjectType, subjectId } = c.req.valid("json");
 		const result = await dismissReports({ subjectType, subjectId, actorId: user.id });
+		return c.json(result);
+	})
+
+	// ── DMCA ────────────────────────────────────────────────────────────────────
+	// The operator's DMCA queue, separate from the moderation queue. Different
+	// clocks, different record, and — per the Keepers model — non-delegable floor
+	// work. Behind `requireAdmin` today; the capability is named `floor` in a
+	// comment on the service so the Keepers migration is a rename rather than a
+	// redesign.
+	//
+	// 🚨 A user report is NOT a DMCA notice. The moderation queue carries `illegal`
+	// and `other` reasons, and an operator seeing a copyright complaint filed that
+	// way needs a one-click "this is a copyright claim → here is the path" — but a
+	// bare user report must not trigger removal. The route-out is operator-side:
+	// it answers the reporter without treating the report as a notice.
+	.get("/dmca", async (c) => {
+		const [items, summary] = await Promise.all([loadDmcaQueue(), dmcaSummary()]);
+		return c.json({ items, summary });
+	})
+
+	// Load a single notice with full detail for the operator's review.
+	.get("/dmca/:id", async (c) => {
+		const notice = await loadNotice(Number(c.req.param("id")));
+		if (!notice) return c.json({ error: "Not found" }, 404);
+		return c.json(notice);
+	})
+
+	// Act on a notice — does four things in one transaction (via the service):
+	// disable the material, append to the audit log, notify the creator (with
+	// the counter-notice route + the exposure stated), and acknowledge the
+	// complainant. No automated removal — the operator decided.
+	.post(
+		"/dmca/:id/act",
+		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		async (c) => {
+			const user = c.get("user");
+			const { note } = c.req.valid("json");
+			const result = await takeDownWork({
+				noticeId: Number(c.req.param("id")),
+				actorId: user.id,
+				note,
+			});
+			if (result === "already_taken_down") {
+				return c.json(
+					{ error: "This Work is already taken down.", code: "already_taken_down" },
+					409,
+				);
+			}
+			if (!result) return c.json({ error: "Notice or Work not found" }, 404);
+			return c.json(result);
+		},
+	)
+
+	// Reject a notice — a first-class outcome with the § 512(c)(3)(B)(ii)
+	// reach-back. The rejection copy (in the note) names which element failed,
+	// and the service records the reach-back.
+	.post(
+		"/dmca/:id/reject",
+		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		async (c) => {
+			const user = c.get("user");
+			const { note } = c.req.valid("json");
+			const result = await rejectNotice({
+				noticeId: Number(c.req.param("id")),
+				actorId: user.id,
+				note,
+			});
+			if (!result) return c.json({ error: "Notice not found" }, 404);
+			return c.json(result);
+		},
+	)
+
+	// Restore a Work manually. The scheduled sweep restores automatically at the
+	// 10–14 business day window; this is for an operator who decides to restore
+	// early (e.g., the complainant withdrew the notice).
+	.post(
+		"/dmca/:id/restore",
+		zValidator("json", z.object({ note: z.string().max(MODERATION_NOTE_MAX).optional() })),
+		async (c) => {
+			const user = c.get("user");
+			const { note } = c.req.valid("json");
+			const result = await restoreWork({
+				noticeId: Number(c.req.param("id")),
+				actorId: user.id,
+				note,
+			});
+			if (!result) return c.json({ error: "Notice or Work not found" }, 404);
+			return c.json(result);
+		},
+	)
+
+	// Record that the complainant filed a court action (§ 512(g)(2)(C)). This
+	// prevents the restore timer from firing — the sweep checks `suitFiledAt`.
+	.post("/dmca/:id/suit", async (c) => {
+		const user = c.get("user");
+		const result = await recordSuit({
+			noticeId: Number(c.req.param("id")),
+			actorId: user.id,
+		});
+		if (!result) return c.json({ error: "Notice not found" }, 404);
 		return c.json(result);
 	});
 

@@ -11,6 +11,7 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runDueDeletions } from "../services/account-deletion.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
+import { noticesReadyForRestore, restoreWork } from "../services/dmca.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
@@ -225,6 +226,20 @@ async function start() {
 		for (const job of jobs) {
 			const n = await publishScheduled();
 			if (n > 0) console.log(`[publish-scheduled] job ${job.id}: published ${n} scheduled post(s)`);
+		}
+	});
+
+	await queue.work(QUEUES.DMCA_RESTORE, async (jobs) => {
+		for (const job of jobs) {
+			const ready = await noticesReadyForRestore();
+			for (const notice of ready) {
+				const result = await restoreWork({ noticeId: notice.noticeId });
+				if (result) {
+					console.log(
+						`[dmca-restore] job ${job.id}: restored work ${notice.workId} (notice #${notice.noticeId})`,
+					);
+				}
+			}
 		}
 	});
 
