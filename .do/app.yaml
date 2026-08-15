@@ -11,10 +11,29 @@
 # SITE_ACCESS_KEYS holds the invite keys for ?invite= links that skip it.
 #
 # Deploys from the `release` branch on push. Apply with:
-#   doctl apps create --spec .do/app.yaml         (first time)
-#   doctl apps update <app-id> --spec .do/app.yaml (thereafter)
-# Secrets (type: SECRET, no value here) are set in the DO dashboard or via
-# `doctl apps update` — never commit their values.
+#   doctl apps create --spec .do/app.yaml         (first time only)
+#   make spec-apply APPLY=1                        (thereafter)
+#
+# 🚨 NEVER `doctl apps update --spec .do/app.yaml`. That header said to for months and
+# it is how production broke on 2026-08-15. Secrets below are declared `type: SECRET`
+# with NO VALUE — they have to be, the values must not be in git — and App Platform
+# reads a valueless secret as "set it to the empty string", not "leave it alone". One
+# such command emptied all seven app-level secrets at once. The api crashed on the two
+# that are validated at boot (STORAGE_KEY/STORAGE_SECRET) and the other five failed
+# silently, while `doctl apps spec get` went on reporting well-formed EV[1:…] blobs for
+# every one of them — so nothing looked wrong, and re-applying the live spec only
+# re-applied the empties. Recovery was `doctl apps spec get <app> --deployment
+# <last-good>`, which still carries the real encrypted values.
+#
+# The same command also silently dropped `features: [buildpack-stack=ubuntu-22]`, which
+# this file has never declared. Applying a partial description of production deletes
+# whatever it omits; secrets are only the most expensive case.
+#
+# `make spec-apply` merges the live secret values and any live-only fields into this
+# file before sending it, and refuses rather than sending a valueless secret. It is a
+# dry run without APPLY=1. `make spec-diff` reports the drift and now fails when a live
+# secret is empty. Secret VALUES are set in the DO dashboard, or introduced with
+# `bun run scripts/spec-apply.ts --set KEY=value` — never committed here.
 #
 # Interim postures for the gated skeleton, to tighten before public launch:
 #   - databases: a dedicated Managed Postgres cluster (anthers-pg), bound as the
@@ -33,6 +52,14 @@
 
 name: anthers
 region: nyc
+
+# The buildpack stack the static site builds on. Declared here since 2026-08-15 because it
+# was NOT: it existed only on the live app, so `doctl apps update --spec .do/app.yaml`
+# deleted it in the same command that emptied the secrets, and nothing reported either.
+# `make spec-apply` would now carry an undeclared field over rather than dropping it, but a
+# field this file states is one that cannot be lost by a tool nobody used.
+features:
+  - buildpack-stack=ubuntu-22
 
 # 🚨 DECLARED HERE, and it is not decoration. A custom domain has to be attached to the
 # APP as well as pointed at in DNS: App Platform routes on the Host header, so a correct

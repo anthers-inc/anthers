@@ -28,6 +28,15 @@
  * incident above belongs to — plus the *values* of non-secret keys, where a drifted
  * `STRIPE_PRICE_SEED` would matter. Secrets are compared on presence alone.
  *
+ * 🚨 **"Presence alone" was not enough, and 2026-08-15 is what that cost.** A
+ * `doctl apps update --spec .do/app.yaml` set all seven app-level secrets to the EMPTY
+ * STRING — the committed file declares them valueless, and App Platform reads that as an
+ * instruction rather than an omission. Every one came back from `spec get` as a
+ * well-formed `EV[1:…]`, so it was *present*, so this tool reported "specs agree ✓" while
+ * production could not boot. That is the identical shape as the custom-domains gap below,
+ * and the fix is the same: an empty secret is detectable without decrypting anything
+ * (see `isEmptySecret`), so it is now checked on the live side and fails the run.
+ *
  * It also compares each component's **`deploy_on_push` and branch**, added when the CI
  * deploy gate landed: `false` in this file is worthless if the live app says `true`, and
  * an env-only diff would have called that agreement.
@@ -48,44 +57,33 @@
  * from a spec. Committing it without checking it would only have added a second
  * document free to drift; this is the half that keeps it honest.
  */
+import {
+	COMPONENT_KINDS,
+	CONTEXT,
+	ctxArgs,
+	type EnvEntry,
+	envMap,
+	isEmptySecret,
+	isSecret,
+	resolveAppId,
+	run,
+	type Spec,
+} from "./do-spec";
+
 const SPECS: { path: string; idEnv: string }[] = [{ path: ".do/app.yaml", idEnv: "DO_APP_ID" }];
 
-type EnvEntry = { key?: string; value?: string; type?: string; scope?: string };
-type GitHubSource = { repo?: string; branch?: string; deploy_on_push?: boolean };
-type Component = {
-	name?: string;
-	envs?: EnvEntry[];
-	github?: GitHubSource;
-	instance_count?: number;
-};
-type Domain = { domain?: string; type?: string };
-type Spec = {
-	name?: string;
-	domains?: Domain[];
-	envs?: EnvEntry[];
-	services?: Component[];
-	workers?: Component[];
-	jobs?: Component[];
-	static_sites?: Component[];
-	functions?: Component[];
-};
-
-const COMPONENT_KINDS = ["services", "workers", "jobs", "static_sites", "functions"] as const;
-
-/** Flatten a spec to `component/KEY` → entry, so a key is compared where it lives. */
-function envMap(spec: Spec): Map<string, EnvEntry> {
-	const out = new Map<string, EnvEntry>();
-	for (const e of spec.envs ?? []) if (e.key) out.set(`(app)/${e.key}`, e);
-	for (const kind of COMPONENT_KINDS) {
-		for (const component of spec[kind] ?? []) {
-			const where = component.name ?? kind;
-			for (const e of component.envs ?? []) if (e.key) out.set(`${where}/${e.key}`, e);
-		}
-	}
-	return out;
-}
-
-const isSecret = (e: EnvEntry) => e.type === "SECRET" || (e.value ?? "").startsWith("EV[");
+/**
+ * Live secrets that are *deliberately* empty, each with the reason.
+ *
+ * Empty is a real posture for a couple of these — `SITE_PASSWORD` empty is how the
+ * pre-launch gate gets retired at launch (`matchesSitePassword` fails closed on it, so the
+ * gate stops opening rather than starts) — and a check with no way to say "yes, on purpose"
+ * gets switched off wholesale the first time it is inconvenient.
+ *
+ * Every entry is PRINTED on every run, in both the clean and dirty paths, so an exemption
+ * cannot go quiet the way the thing it exempts did. Same rule as `econ:allow-file`.
+ */
+const EXPECTED_EMPTY: Record<string, string> = {};
 
 /**
  * Per-component source settings — `deploy_on_push` above all.
@@ -137,52 +135,12 @@ function domainMap(spec: Spec): Map<string, string> {
 	return out;
 }
 
-async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-	const [stdout, stderr] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-	]);
-	return { ok: (await proc.exited) === 0, stdout, stderr };
-}
-
 if (!(await run(["which", "doctl"])).ok) {
 	console.log("spec-diff: doctl not installed — skipping the live comparison.");
 	process.exit(0);
 }
 
-/**
- * Which `doctl` account to compare against, via `DOCTL_CONTEXT`.
- *
- * Added 2026-08-11, when Anthers gained a SECOND DigitalOcean account: production is being
- * rebuilt under an Anthers-owned account while the original still runs on a personal one,
- * so "the live spec" stopped being a single thing. Without this the tool silently compares
- * the committed spec against whichever account `doctl` happens to be pointed at — and since
- * the committed spec now describes the R2-configured app, running it against the old
- * account reports a wall of drift that is entirely expected and tells you nothing.
- *
- *     DOCTL_CONTEXT=anthers make spec-diff
- */
-const CONTEXT = (process.env.DOCTL_CONTEXT ?? "").trim();
-const ctxArgs = CONTEXT ? ["--context", CONTEXT] : [];
 if (CONTEXT) console.log(`spec-diff: using doctl context "${CONTEXT}"`);
-
-// Fetched once and shared across specs. Asking DigitalOcean the same question once per
-// spec would only add a way for two comparisons in the same run to disagree about what
-// is live, and the answer is the same list either way.
-const appList = await run([
-	"doctl",
-	"apps",
-	"list",
-	"--format",
-	"ID,Spec.Name",
-	"--no-header",
-	...ctxArgs,
-]);
-if (!appList.ok) {
-	console.log(`spec-diff: doctl could not list apps — skipping.\n${appList.stderr.trim()}`);
-	process.exit(0);
-}
 
 /** Compare one committed spec against its live counterpart. Returns true when they agree. */
 async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promise<boolean> {
@@ -191,20 +149,13 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 	// The app id isn't in the committed spec (it's assigned at creation), so resolve it by
 	// the spec's own name rather than making every caller pass one.
 	const appName = committed.name ?? "anthers";
-	let appId = process.env[idEnv] ?? "";
+	const appId = await resolveAppId(appName, idEnv);
 	if (!appId) {
-		appId =
-			appList.stdout
-				.split("\n")
-				.map((l) => l.trim().split(/\s+/))
-				.find(([, name]) => name === appName)?.[0] ?? "";
-		if (!appId) {
-			// Dirty, not fatal: with more than one spec in play, a missing app is a finding
-			// about that app and not a reason to stop reporting on the others. The run still
-			// exits non-zero, which is what the old `process.exit(1)` was actually for.
-			console.error(`\nspec-diff: no App Platform app named "${appName}" (declared in ${path}).`);
-			return false;
-		}
+		// Dirty, not fatal: with more than one spec in play, a missing app is a finding
+		// about that app and not a reason to stop reporting on the others. The run still
+		// exits non-zero, which is what the old `process.exit(1)` was actually for.
+		console.error(`\nspec-diff: no App Platform app named "${appName}" (declared in ${path}).`);
+		return false;
 	}
 
 	const live = await run(["doctl", "apps", "spec", "get", appId, ...ctxArgs]);
@@ -222,6 +173,23 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 	const onlyLive: string[] = [];
 	const onlyRepo: string[] = [];
 	const differs: string[] = [];
+
+	/**
+	 * 🚨 Live secrets whose value is the empty string — see `isEmptySecret`.
+	 *
+	 * Checked across EVERY live secret, not only the ones the committed file also declares.
+	 * The clobber empties them all in a single command, and a key this file has forgotten to
+	 * mention is precisely the one nobody is watching — which is the whole reason the Stripe
+	 * block went unnoticed in production for weeks.
+	 */
+	const emptySecrets: string[] = [];
+	const exemptEmpty: string[] = [];
+	for (const [id, entry] of liveEnvs) {
+		if (!isEmptySecret(entry)) continue;
+		const why = EXPECTED_EMPTY[id] ?? EXPECTED_EMPTY[id.split("/")[1] ?? id];
+		if (why) exemptEmpty.push(`${id} — ${why}`);
+		else emptySecrets.push(id);
+	}
 
 	for (const [id, entry] of liveEnvs) {
 		if (!repoEnvs.has(id)) onlyLive.push(id);
@@ -305,8 +273,28 @@ async function diffSpec({ path, idEnv }: { path: string; idEnv: string }): Promi
 		!onlyRepo.length &&
 		!differs.length &&
 		!relocated.length &&
-		!sourceDiffs.length;
+		!sourceDiffs.length &&
+		!emptySecrets.length;
 	console.log(`\n## Spec diff — ${appName} (${appId})\n`);
+
+	// First, and on its own: every other finding here is configuration that disagrees with
+	// itself, which is worth a look. This one is production missing a credential.
+	if (emptySecrets.length) {
+		console.log("  🚨 LIVE SECRETS THAT ARE EMPTY:");
+		for (const id of emptySecrets.sort()) console.log(`    ! ${id}`);
+		console.log("    → Something applied a spec whose SECRET entries carried no value, and");
+		console.log("      App Platform read that as 'set it to empty'. The values are NOT");
+		console.log("      recoverable from the live spec — recover them from the last good");
+		console.log("      deployment and re-apply:");
+		console.log(`        doctl apps spec get ${appId} --deployment <last-good-id>`);
+		console.log("      then `make spec-apply`, which never sends a valueless secret.\n");
+	}
+	// Printed in both paths, clean or dirty, so an exemption cannot go quiet.
+	if (exemptEmpty.length) {
+		console.log("  Empty live secrets, exempted in EXPECTED_EMPTY:");
+		for (const line of exemptEmpty.sort()) console.log(`    · ${line}`);
+		console.log("");
+	}
 
 	if (onlyLive.length) {
 		console.log(`  Running in production, absent from ${path}:`);
