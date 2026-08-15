@@ -29,6 +29,7 @@ const ROUTE_NAMES = [
 	"about",
 	"auth",
 	"compare",
+	"copyright",
 	"creator-terms",
 	"dashboard",
 	"demo-creator-breakdown",
