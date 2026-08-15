@@ -668,18 +668,47 @@ const paymentRoutes = new Hono()
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 		const sig = c.req.header("stripe-signature");
-		const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
-		if (!sig || !secret) return c.json({ error: "Missing signature or webhook secret." }, 400);
+
+		/**
+		 * TWO signing secrets, because Stripe scopes event destinations and gives each its
+		 * own — and this one URL serves both.
+		 *
+		 * `STRIPE_WEBHOOK_SECRET` signs the *your account* destination: purchases,
+		 * subscriptions, refunds. `STRIPE_CONNECT_WEBHOOK_SECRET` signs the *connected
+		 * accounts* destination, which is the only way `account.updated` for a creator's
+		 * Connect account is ever delivered. A single-secret handler cannot serve both: one
+		 * destination's deliveries would fail verification, which is indistinguishable from
+		 * the endpoint being misconfigured — the exact failure that left production with no
+		 * working webhook at all until 2026-08-15.
+		 *
+		 * Trying each is not a weakening. Both secrets are ours, each is a legitimate signer
+		 * for its own destination, and a forged request still has to match one of them.
+		 * Stripe itself relies on this shape: rolling an endpoint's secret leaves the old and
+		 * new both active for up to 24 hours, signing one signature per secret.
+		 *
+		 * The connect secret is optional — with only the primary set this behaves exactly as
+		 * it did before, which is what keeps dev and any half-configured environment working.
+		 */
+		const secrets = [
+			process.env.STRIPE_WEBHOOK_SECRET?.trim(),
+			process.env.STRIPE_CONNECT_WEBHOOK_SECRET?.trim(),
+		].filter((s): s is string => !!s);
+		if (!sig || !secrets.length)
+			return c.json({ error: "Missing signature or webhook secret." }, 400);
 
 		// Verify against the raw body — constructEvent recomputes the HMAC, so the bytes
 		// must be untouched (no c.req.json() before this).
 		const raw = await c.req.text();
-		let event: Stripe.Event;
-		try {
-			event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
-		} catch {
-			return c.json({ error: "Signature verification failed." }, 400);
+		let event: Stripe.Event | undefined;
+		for (const secret of secrets) {
+			try {
+				event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
+				break;
+			} catch {
+				// Try the next one. Falling through every secret is the failure.
+			}
 		}
+		if (!event) return c.json({ error: "Signature verification failed." }, 400);
 
 		if (event.type === "payment_intent.succeeded") {
 			const pi = event.data.object as Stripe.PaymentIntent;

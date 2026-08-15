@@ -19,7 +19,7 @@
  * so `/api/payments/stripe/webhook` is in `CSRF_EXEMPT_PATHS`; if that exemption is ever lost
  * the whole webhook path dies in production while every other test stays green.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	accountCycles,
@@ -496,14 +496,22 @@ describe("Webhook signature verification", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("rejects when no webhook secret is configured", async () => {
+	it("rejects when NEITHER webhook secret is configured", async () => {
+		// Both, not just the primary: with the connect secret set, an absent primary is no
+		// longer an unconfigured endpoint, so deleting one would let this pass for the
+		// wrong reason.
 		const saved = process.env.STRIPE_WEBHOOK_SECRET;
+		const savedConnect = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 		delete process.env.STRIPE_WEBHOOK_SECRET;
+		delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 		try {
 			const res = await sendWebhook(stripeEvent("payment_intent.succeeded", { id: "pi_x" }));
 			expect(res.status).toBe(400);
+			expect((await res.json()).error).toBe("Missing signature or webhook secret.");
 		} finally {
 			process.env.STRIPE_WEBHOOK_SECRET = saved;
+			if (savedConnect === undefined) delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+			else process.env.STRIPE_CONNECT_WEBHOOK_SECRET = savedConnect;
 		}
 	});
 
@@ -511,6 +519,71 @@ describe("Webhook signature verification", () => {
 		const res = await sendWebhook(stripeEvent("invoice.paid", { id: "in_ignored" }));
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ received: true });
+	});
+
+	/**
+	 * The connected-accounts destination has its own signing secret, because Stripe issues
+	 * one per destination and `account.updated` is only ever delivered to that scope. One URL
+	 * therefore has to accept either signature.
+	 */
+	describe("with a second (Connect) destination secret", () => {
+		const CONNECT_SECRET = "whsec_connect_destination_secret_here";
+
+		beforeEach(() => {
+			process.env.STRIPE_CONNECT_WEBHOOK_SECRET = CONNECT_SECRET;
+		});
+		afterEach(() => {
+			delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+		});
+
+		it("accepts an event signed with the CONNECT secret", async () => {
+			const res = await sendWebhook(stripeEvent("invoice.paid", { id: "in_ignored" }), {
+				secret: CONNECT_SECRET,
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it("still accepts an event signed with the PRIMARY secret", async () => {
+			const res = await sendWebhook(stripeEvent("invoice.paid", { id: "in_ignored" }));
+			expect(res.status).toBe(200);
+		});
+
+		it("still rejects a secret that is neither", async () => {
+			// The point of the loop is to accept two known signers, not to get lax about a
+			// third. Without this, "try each secret" could decay into "try anything".
+			const res = await sendWebhook(stripeEvent("invoice.paid", { id: "in_ignored" }), {
+				secret: "whsec_a_third_secret_nobody_issued",
+			});
+			expect(res.status).toBe(400);
+			expect((await res.json()).error).toBe("Signature verification failed.");
+		});
+
+		it("delivers account.updated through the connect secret — the case this exists for", async () => {
+			// `subscriberId`, not `creatorId`: `stripe_accounts.user_id` is UNIQUE, so
+			// claiming a user another webhook test also attaches an account to makes that
+			// test fail on its insert — a failure that reads as a bug in the code under test
+			// and is really this fixture standing on its toes.
+			const acctId = `acct_${uid()}`;
+			await db.insert(stripeAccounts).values({ userId: subscriberId, stripeAccountId: acctId });
+
+			const res = await sendWebhook(
+				stripeEvent("account.updated", {
+					id: acctId,
+					object: "account",
+					charges_enabled: true,
+					payouts_enabled: true,
+					details_submitted: true,
+				}),
+				{ secret: CONNECT_SECRET },
+			);
+			expect(res.status).toBe(200);
+
+			const [row] = await db
+				.select()
+				.from(stripeAccounts)
+				.where(eq(stripeAccounts.stripeAccountId, acctId));
+			expect(row.onboardingComplete).toBe(true);
+		});
 	});
 });
 
