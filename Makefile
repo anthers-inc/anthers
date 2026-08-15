@@ -79,7 +79,9 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
 	else \
 		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \
-		echo "     by default. Expect a sealed site gate unless you filled them in yourself."; \
+		echo "     by default. Expect a sealed site gate unless you filled these in yourself:"; \
+		echo "       SITE_PASSWORD  SITE_ACCESS_KEYS  STRIPE_SECRET_KEY"; \
+		echo "       STRIPE_WEBHOOK_SECRET  RESEND_API_KEY   (use DEV values, never prod's)"; \
 		$(MAKE) dev-local; \
 	fi
 
