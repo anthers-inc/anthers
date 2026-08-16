@@ -26,6 +26,7 @@ import {
 	SALES_TAX_RATE,
 	SEED_PRICE,
 	STORAGE_PER_GIB_MONTH,
+	TIME_POOL_PER_SEED,
 	thresholdForBadge,
 } from "./constants.js";
 import {
@@ -35,6 +36,21 @@ import {
 	paymentsSplit,
 	supportBreakdown,
 } from "./fees.js";
+import {
+	affordable,
+	averageSeeds,
+	crossover,
+	decayForAverage,
+	floorPayingShare,
+	modelAt,
+	NO_STAFFING,
+	PA_INCENTIVE_CEILING,
+	PAY_DECAY,
+	PHASE_ACCOUNTS,
+	payingBadgeMix,
+	remainderPerPayingAccount,
+	staffingForPhase,
+} from "./growth.js";
 
 const money = (d: Decimal) => d.toFixed(2);
 
@@ -268,15 +284,19 @@ export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
 }
 
 /**
- * The paying-user mix behind the self-sufficiency table — what share of paying users
- * sit at each Badge. An ASSUMPTION, and the one that moves every number below: the
- * remainder a paying user generates rises faster than linearly with their Seed count,
- * because the fixed $0.30 of the card fee does not scale with it.
+ * The paying-user mix behind every figure below — what share of paying users sit at each
+ * Seed count. An ASSUMPTION, and the one that moves the most: the remainder a paying user
+ * generates rises faster than linearly with their Seed count, because the fixed $0.30 of
+ * the card fee does not scale with it.
+ *
+ * 🚨 **It is `growth.ts`'s mix now, and that unification was the point** (2026-08-16).
+ * This was four hand-typed shares — `{1: .5, 2: .3, 3: .15, 4: .05}`, average 1.75 Seeds
+ * — while the growth ladder ran on a geometric decay averaging 2.20. Two mixes meant two
+ * **floor paying shares** in circulation (10.3% here, 8.8% there), and 61.01 had to carry
+ * a warning naming which one governed. That is the same defect as a typed figure beside a
+ * generated one, wearing different clothes: two descriptions of one fact, drifting.
  */
-export const PAYING_BADGE_MIX: Record<number, number> = { 1: 0.5, 2: 0.3, 3: 0.15, 4: 0.05 };
-
-/** Fixed monthly overhead the charitable budget must cover before it is self-funding. */
-export const FIXED_MONTHLY_OVERHEAD = 12_600;
+export const PAYING_BADGE_MIX: Record<number, number> = payingBadgeMix();
 
 /** The paying shares the table reports. */
 export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
@@ -298,52 +318,82 @@ export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
  */
 export const freeUserCost = () => new Decimal(FREE_TIME_POOL);
 
+/**
+ * What one more account does to the charitable budget, at a given paying share.
+ *
+ * Measured as the model's **slope** rather than re-derived: `modelAt` at two scales,
+ * differenced. That matters more than it looks — the marginal cost of an account is the
+ * free pot *plus* free creators' storage, the Public Access exemption and variable infra,
+ * and a hand-written version of that sum is a duplicated formula that would agree with
+ * `growth.ts` right up until a term moved. Same lesson as the five hand-rolled card-fee
+ * copies and `creatorReceipt`'s storage formula.
+ *
+ * The two scales are large and far apart so fixed overhead — which is not marginal —
+ * washes out of the difference entirely.
+ */
+function marginalProgramsPerAccount(share: number): number {
+	const at = (accounts: number) =>
+		modelAt({ accounts, payingShare: share, staffing: NO_STAFFING }).programs;
+	const lo = 1_000_000;
+	const hi = 2_000_000;
+	return (at(hi) - at(lo)) / (hi - lo);
+}
+
+/**
+ * Whether the charitable budget funds itself, as a function of the paying share.
+ *
+ * 🚨 **This reads `growth.ts` now** (2026-08-16). It used to carry its own two-term
+ * model — a paying user's remainder against the free pot, and a `FIXED_MONTHLY_OVERHEAD`
+ * of $12,600 that nothing sourced — while the growth ladder ran a fuller one. The two
+ * published **different floors** for the same question, so 61.01 carried a warning saying
+ * which governed, and the ladder could only be re-derived by reviving a retired file.
+ *
+ * Two things changed in the merge and both make the number *more* honest:
+ *
+ * - **A free account is not a free account's whole cost.** Every account also carries a
+ *   share of free creators' 50 GiB, the Public Access storage exemption, and variable
+ *   infrastructure. `freeUserCost` is still the pot — that is what a *free* account adds
+ *   over a paying one — but the break-even now nets the rest off too.
+ * - **`FIXED_MONTHLY_OVERHEAD` is gone.** A named staffing level replaces it, so "solvent"
+ *   means something you can point at on the ladder instead of a constant with no
+ *   derivation. The table reports the no-salary line (the platform stops costing Parker
+ *   money) beside the full-time line (61.01's inflection 1), which is the pair the two
+ *   documents were implicitly comparing all along.
+ */
 export function selfSufficiency() {
 	const cost = freeUserCost();
-
-	// The remainder one paying user generates, weighted across the Badge mix. This no
-	// longer depends on how much anyone watches: bandwidth was the term the remainder
-	// absorbed, and it is gone, so each rung's remainder is now exact.
-	const revenuePerPayingUser = Object.entries(PAYING_BADGE_MIX).reduce((acc, [seeds, share]) => {
-		const n = Number(seeds);
-		const bd = anthersSeedBreakdown(n, {
-			// Seed COUNTS, not dollars — and the `anthers` side, because this user holds
-			// no directed Seeds and the remainder is what the Anthers side has left after
-			// its own share of the card fee. Taking `.creator` here reads as zero and
-			// silently hands the whole fee back to the remainder.
-			payments: paymentsSplit(n, 0).anthers,
-		});
-		return acc.plus(bd.foundation.times(share));
-	}, new Decimal(0));
+	const mix = PAYING_BADGE_MIX;
+	// The remainder one paying user generates, weighted across the mix. This no longer
+	// depends on how much anyone watches: bandwidth was the term the remainder absorbed,
+	// and it is gone, so each rung's remainder is now exact.
+	const revenuePerPayingUser = new Decimal(remainderPerPayingAccount(mix));
 
 	const rows = PAYING_SHARES.map((share) => {
-		const freePerPaying = new Decimal(1 - share).dividedBy(share);
-		const net = revenuePerPayingUser.minus(freePerPaying.times(cost));
+		const marginal = marginalProgramsPerAccount(share);
+		const staffing = { payingShare: share, staffing: NO_STAFFING };
 		return {
 			share,
 			sharePct: `${(share * 100).toFixed(0)}%`,
-			net: money(net),
-			// Total users — paying and free together — at which the paying cohort's net
-			// covers fixed overhead. Meaningless when each paying user loses money.
-			usersToSolvency: net.lessThanOrEqualTo(0)
-				? null
-				: Math.round(
-						new Decimal(FIXED_MONTHLY_OVERHEAD).dividedBy(net).dividedBy(share).toNumber() / 1000,
-					) * 1000,
+			// Per PAYING account, since that is the cohort carrying it.
+			net: money(new Decimal(marginal / share)),
+			/** Accounts at which the budget covers its obligations with no salary drawn. */
+			selfFunding: crossover(affordable, staffing),
+			/** Accounts at which it also affords a full-time ED inside the Admin ceiling. */
+			fullTime: crossover(affordable, { ...staffing, staffing: staffingForPhase(10) }),
 		};
 	});
 
-	// Below this share each new cohort costs more in free access than it brings in, so
-	// growth makes the gap worse rather than better. The sensitivity that used to sit
-	// beside it — the same floor if every free user drew their whole 15 GiB — is gone
-	// with the floor: free access no longer has a usage-dependent price, so there is
-	// no longer a version of this number that depends on how much free users watch.
-	const breakEven = cost.dividedBy(revenuePerPayingUser.plus(cost));
+	// Below this share each new cohort costs more than it brings in, so growth makes the
+	// gap worse rather than better. Bisected on the share through the same model the rows
+	// use, so the floor and the rows cannot disagree — the previous closed-form version
+	// could, and did, because it was solving a simpler model.
+	const breakEven = floorPayingShare({ staffing: NO_STAFFING });
 
 	return {
 		freeUserCost: money(cost),
 		revenuePerPayingUser: money(revenuePerPayingUser),
-		breakEvenPct: `${breakEven.times(100).toFixed(1)}%`,
+		averageSeeds: averageSeeds(mix).toFixed(2),
+		breakEvenPct: `${(breakEven * 100).toFixed(1)}%`,
 		rows,
 	};
 }
@@ -412,6 +462,271 @@ export function takeHomeComparison(): TakeHomeRow[] {
 		);
 		return { price: money(list), anthers: money(anthers), rivals, best: money(best) };
 	});
+}
+
+// ── The growth ladder (61.01) ────────────────────────────────────────────────
+/**
+ * The paying share the ladder is modelled at. 61.01 calls it the model default and the
+ * single biggest input to where inflection 1 falls — and the one thing the early rungs
+ * exist to *measure*, since nothing in the product has ever observed it.
+ */
+export const MODELLED_PAYING_SHARE = 0.3;
+
+export interface LadderRung {
+	phase: number;
+	accounts: number;
+	creators: number;
+	staff: number;
+	/** Admin as a share of charitable revenue at this rung's ceiling, e.g. "17%". */
+	adminPct: string;
+	/** Whether Admin clears the 30% board policy here. */
+	adminHealthy: boolean;
+	solvent: boolean;
+}
+
+/**
+ * Each rung's ceiling, and what the books look like standing on it.
+ *
+ * The ceilings are **policy** — chosen in 61.01, not derived — which is what makes them
+ * safe to quote. What is derived is the verdict beside each one: whether that rung's own
+ * planned staffing is affordable and charity-healthy at the ceiling it may grow to.
+ *
+ * Rungs 1–3 come back unhealthy on purpose. That is Parker's subsidy, and 61.01 accepts
+ * it explicitly — a model that hid it by sizing the plan to the ceiling would only ever
+ * confirm itself.
+ */
+export function growthLadder(): LadderRung[] {
+	return PHASE_ACCOUNTS.map((accounts, i) => {
+		const staffing = staffingForPhase(i + 1);
+		const m = modelAt({ accounts, payingShare: MODELLED_PAYING_SHARE, staffing });
+		return {
+			phase: i + 1,
+			accounts,
+			creators: Math.round(m.creators),
+			staff: staffing.staff,
+			adminPct: Number.isFinite(m.adminRatio) ? `${(m.adminRatio * 100).toFixed(0)}%` : "—",
+			adminHealthy: m.adminHealthy,
+			solvent: m.solvent,
+		};
+	});
+}
+
+export interface Landmark {
+	label: string;
+	accounts: number | null;
+	note: string;
+}
+
+/**
+ * The account totals at which each staffing level becomes payable.
+ *
+ * 🚨 **Solvency and charity-health are different lines and the gap is the whole design.**
+ * A full-time salary is *solvent* far earlier than it is *responsible*: paying at the
+ * solvency point would run Admin near two-thirds of charitable revenue in the same years
+ * the Form 1023 narrative is examined and the first 990s are filed. **Every salary
+ * landmark uses the charity-health line**, and the solvency line is reported beside it
+ * because "the platform stops costing Parker money" is a real milestone — just not a
+ * licence to draw a salary.
+ */
+export function salaryLandmarks(): Landmark[] {
+	const share = MODELLED_PAYING_SHARE;
+	const full = staffingForPhase(10);
+	const hire = staffingForPhase(11);
+	return [
+		{
+			label: "Platform stops costing Parker money (no salary)",
+			accounts: crossover((m) => m.solvent, { payingShare: share, staffing: NO_STAFFING }),
+			note: "inflow covers infrastructure and free access, though not yet at a healthy Admin ratio",
+		},
+		{
+			label: "Charity-healthy, no salary",
+			accounts: crossover(affordable, { payingShare: share, staffing: NO_STAFFING }),
+			note: "the platform pays for its own iron and keeps Admin under the board's 30%",
+		},
+		{
+			label: "Full-time salary — solvent",
+			accounts: crossover((m) => m.solvent, { payingShare: share, staffing: full }),
+			note: "affordable, but at an Admin ratio no 990 should carry — not a licence to draw it",
+		},
+		{
+			label: "🚩 Inflection 1 — full-time, charity-healthy",
+			accounts: crossover(affordable, { payingShare: share, staffing: full }),
+			note: "inside 60.01's ED band with Admin under 30% — the line the ladder is anchored on",
+		},
+		{
+			label: "🚩 Inflection 2 — a first hire, charity-healthy",
+			accounts: crossover(affordable, { payingShare: share, staffing: hire }),
+			note: "a full-time ED plus one hire; the organisation exists",
+		},
+	];
+}
+
+/** The paying shares 61.01 sweeps inflection 1 against. */
+export const SENSITIVITY_SHARES = [0.3, 0.25, 0.2, 0.18, 0.16, 0.15, 0.12, 0.1, 0.09];
+
+/**
+ * Inflection 1 against the paying share — the sensitivity the whole quota rests on.
+ *
+ * **Violently non-linear near the floor**, and that is the point of publishing it: above
+ * ~15% the binding constraint is the Admin ceiling, which cannot see the free pot, so the
+ * curve is gentle. Below that solvency binds, the pot enters, and the threshold runs away.
+ */
+export function payingShareSensitivity() {
+	const full = staffingForPhase(10);
+	return SENSITIVITY_SHARES.map((share) => ({
+		share,
+		sharePct: `${(share * 100).toFixed(0)}%`,
+		accounts: crossover(affordable, { payingShare: share, staffing: full }, { maxLog: 12 }),
+	}));
+}
+
+/**
+ * Inflection 1 against how many Seeds an average payer holds — 61.01's flattening risk.
+ *
+ * 🚨 **This is the single biggest risk to the ladder, and it is not an economic one.**
+ * Binary Public Access removes the reason to hold more than one Seed given to Anthers, so
+ * the paying population slides toward exactly one unless something above the first Seed
+ * earns it. Each row is a different decay in the mix; the labelled average is what the
+ * decay produces, so the axis stays a fact about the population rather than a dial name.
+ */
+export const MIX_AVERAGES = [4.65, 3.04, 1.67, 1.25];
+
+export function seedMixSensitivity() {
+	const full = staffingForPhase(10);
+	// The shipped mix is inserted by its OWN average rather than listed as a target, so
+	// the "current" row can never quietly become a nearby round number that isn't it.
+	const shipped = averageSeeds(payingBadgeMix());
+	const points = [...MIX_AVERAGES, shipped].sort((a, b) => b - a);
+	return points.map((avg) => {
+		const current = avg === shipped;
+		const mix = payingBadgeMix(current ? PAY_DECAY : decayForAverage(avg));
+		return {
+			avgSeeds: averageSeeds(mix).toFixed(2),
+			current,
+			accounts: crossover(
+				affordable,
+				{ payingShare: MODELLED_PAYING_SHARE, staffing: full, mix },
+				{ maxLog: 12 },
+			),
+		};
+	});
+}
+
+/**
+ * Candidate settings for the free-account Time Pool pot, priced by what each costs.
+ *
+ * The pot is explicitly **provisional** (Parker, 2026-08-12) and under its own review, so
+ * the thing 11.03 actually needs is not today's number but the *shape of the trade*: what
+ * each setting costs, expressed as the floor paying share below which growth never closes
+ * the gap. Generated because this document has now had three different values for it.
+ */
+export const FREE_POT_CANDIDATES = [0.05, FREE_TIME_POOL, 0.4, 0.5];
+
+export function freePotSensitivity() {
+	return FREE_POT_CANDIDATES.map((pot) => ({
+		pot: money(new Decimal(pot)),
+		shipped: pot === FREE_TIME_POOL,
+		floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeTimePool: pot }) * 100).toFixed(1)}%`,
+		/** How much more a creator earns per unit of a free viewer's attention with a Seed. */
+		multiple: TIME_POOL_PER_SEED / pot,
+	}));
+}
+
+/** 60.01's ED compensation band, as monthly all-in staff cost. */
+export const ED_BAND = [
+	{ label: "$80k (band floor — current assumption)", staff: 6_700 },
+	{ label: "$100k", staff: 8_350 },
+	{ label: "$120k (band ceiling)", staff: 10_000 },
+];
+
+/** Inflection 1 against where in 60.01's band the ED is paid. */
+export function edBandSensitivity() {
+	const base = staffingForPhase(10);
+	return ED_BAND.map(({ label, staff }) => ({
+		label,
+		accounts: crossover(
+			affordable,
+			{ payingShare: MODELLED_PAYING_SHARE, staffing: { ...base, staff } },
+			{ maxLog: 12 },
+		),
+	}));
+}
+
+/**
+ * The creator population by size, at a reference rung — who earns what, and who is
+ * carried.
+ *
+ * `attentionPct` is a share of viewer attention, **not** hours: with unlimited Public
+ * Access a viewer's hours are a free variable while their contribution is fixed by their
+ * Seed count, so a per-hour rate is an emergent ratio nobody is paid at. It is also what
+ * the equal-time principle actually governs — a minute is a minute, whichever medium it
+ * was spent on.
+ */
+export function creatorSegments(accounts = 80_000) {
+	const m = modelAt({
+		accounts,
+		payingShare: MODELLED_PAYING_SHARE,
+		staffing: staffingForPhase(10),
+	});
+	const attention = m.segments.reduce((a, s) => a + (s.count > 0 ? s.attention : 0), 0);
+	return {
+		accounts,
+		creators: Math.round(m.creators),
+		rows: m.segments.map((s) => ({
+			name: s.name,
+			count: s.count,
+			sharePct: `${(s.share * 100).toFixed(0)}%`,
+			attentionPct: `${((s.attention / attention) * 100).toFixed(0)}%`,
+			storageGiB: s.storageGiB,
+			earns: money(new Decimal(s.earnsEach)),
+			storage: money(new Decimal(s.storageCostEach + s.storageChargeEach)),
+			net: money(new Decimal(s.netEach)),
+			free: s.free,
+		})),
+	};
+}
+
+/**
+ * What the Public Access storage exemption costs against the budget line that bounds it.
+ *
+ * ⚠️ **The worst case is rung 1, not the largest rung**, which is the opposite of the
+ * intuition and was not what the retired playground's own prose claimed (it said "about
+ * 1% … and stays there at every rung"; the model says **0.29%**, flat from rung 6 up).
+ * The cost is driven by *creators per account*, and the flat 25-creator floor makes rung 1
+ * the most creator-dense the platform will ever be — 25 creators against 100 accounts,
+ * where the ratio would allow one. So the exemption very nearly breaches its 3% ceiling at
+ * the smallest rung and is negligible everywhere else.
+ *
+ * Worth carrying into 61.01's open call on the flat-25 floor: raising it raises this.
+ */
+export function paIncentiveCeiling() {
+	const rows = PHASE_ACCOUNTS.map((accounts, i) => {
+		// The exemption priced at its worst case — every creator giving their whole
+		// catalogue to the commons. Modelling it at the current 10% would report a cost we
+		// have no way to hold anyone to.
+		const m = modelAt({
+			accounts,
+			payingShare: MODELLED_PAYING_SHARE,
+			staffing: staffingForPhase(i + 1),
+			paCatalogueShare: 1,
+		});
+		return {
+			phase: i + 1,
+			accounts,
+			pct: (m.paIncentiveCost / m.charitableRevenue) * 100,
+			fits: m.paWithinCeiling,
+		};
+	});
+	const worst = rows.reduce((a, b) => (b.pct > a.pct ? b : a));
+	const atScale = rows[rows.length - 1];
+	return {
+		ceilingPct: `${(PA_INCENTIVE_CEILING * 100).toFixed(0)}%`,
+		worstPct: `${worst.pct.toFixed(2)}%`,
+		worstPhase: worst.phase,
+		atScalePct: `${atScale.pct.toFixed(2)}%`,
+		allFit: rows.every((r) => r.fits),
+		rows,
+	};
 }
 
 /** A lone directed Seed — the worst case, and the figure creator-facing copy quotes. */
