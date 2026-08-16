@@ -665,7 +665,7 @@ const BLOCKS: Block[] = [
 		render: renderSaleMarkdown,
 	},
 	{
-		file: "20-29 User Experience/20 Support Model/20.01 Badges and Seed Levels.md",
+		file: "20-29 User Experience/20 Support Model/20.01 Badges.md",
 		key: "badge-table",
 		render: renderBadgeMarkdown,
 	},
@@ -1192,7 +1192,14 @@ async function writeBlocks(root: string, blocks: Block[]) {
 	for (const b of blocks) {
 		const path = join(root, b.file);
 		if (!existsSync(path)) {
-			console.warn(`  ! missing ${b.file}`);
+			// 🚨 A FAILURE, not a warning (2026-08-16). It warned and carried on, which meant
+			// **renaming a document silently dropped its generated block from coverage** — the
+			// run stayed green while a published table quietly stopped being checked. Found by
+			// renaming `20.01 Badges and Seed Levels` during the Seed retirement: `--check`
+			// failed for an unrelated reason and the warning was two lines above it, unread.
+			// A guard that can lose a target without saying so is the failure this whole
+			// script exists to prevent, one level up.
+			failures.push(`${b.file} — no such file (renamed? then update BLOCKS)`);
 			continue;
 		}
 		const current = byFile.get(path) ?? (await readFile(path, "utf8"));
