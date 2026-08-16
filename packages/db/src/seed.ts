@@ -132,10 +132,19 @@ interface SeedProject {
 	shortDescription: string;
 	mediaType: string;
 	tags: string[];
+	/**
+	 * `"free"` or `"paid"`.
+	 *
+	 * 🚨 A third value, `"pwyw"`, lived here until 2026-08-16 with `minPrice` and
+	 * `suggestedPrice` beside it — **for a mechanism this platform has never had.**
+	 * `resolvePurchase` charges the stored price and checkout sends no amount, so there
+	 * was nothing for a minimum to be a minimum of. Its branch below read `minPrice`,
+	 * which was `"0.00"` on both works that used it, so the two seeded as free and the
+	 * suggested price was thrown away — a fiction that quietly did nothing, in the file a
+	 * developer reads to learn what the model supports.
+	 */
 	pricingType: string;
 	price?: string;
-	minPrice?: string;
-	suggestedPrice?: string;
 }
 
 interface SeedPost {
@@ -213,13 +222,12 @@ const PROJECTS_BY_CREATOR: Record<string, SeedProject[]> = {
 		{
 			title: "Bit Dungeon OST",
 			description:
-				"24-track lo-fi chiptune album from the unreleased Bit Dungeon project. Composed entirely on a modded Game Boy using LSDJ. Free to stream, pay what you want to download.",
+				"24-track lo-fi chiptune album from the unreleased Bit Dungeon project. Composed entirely on a modded Game Boy using LSDJ. Free to stream, $4 to download.",
 			shortDescription: "24-track lo-fi chiptune album.",
 			mediaType: "audio",
 			tags: ["chiptune", "lo-fi", "ost", "game-music"],
-			pricingType: "pwyw",
-			minPrice: "0.00",
-			suggestedPrice: "3.00",
+			pricingType: "paid",
+			price: "4.00",
 		},
 		{
 			title: "Starlit Caves",
@@ -280,9 +288,8 @@ const PROJECTS_BY_CREATOR: Record<string, SeedProject[]> = {
 			shortDescription: "48-page digital sketchbook zine.",
 			mediaType: "text",
 			tags: ["zine", "illustration", "art", "sketchbook"],
-			pricingType: "pwyw",
-			minPrice: "0.00",
-			suggestedPrice: "5.00",
+			pricingType: "paid",
+			price: "5.00",
 		},
 		{
 			title: "Tile Garden",
@@ -792,12 +799,7 @@ async function seed() {
 						: { streamEnabled: true, downloadEnabled: true };
 
 			// pricingType → the two access tables + a recorded base price for purchases.
-			const price =
-				work.pricingType === "paid"
-					? (work.price ?? "0.00")
-					: work.pricingType === "pwyw"
-						? (work.minPrice ?? "0.00")
-						: "0.00";
+			const price = work.pricingType === "paid" ? (work.price ?? "0.00") : "0.00";
 			priceByTitle[work.title] = price;
 			const access = work.pricingType === "free" ? freeAccess() : paidAccess(price);
 

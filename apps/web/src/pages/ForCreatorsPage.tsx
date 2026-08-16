@@ -1397,7 +1397,13 @@ function ReceiptLine({ label, amount, bold }: { label: string; amount: string; b
 	);
 }
 
-/** A pricing-model card (Free / PWYW / Fixed). */
+/**
+ * A pricing-model card (Free / Badge Access / Fixed Price).
+ *
+ * ⚠️ Said "Free / PWYW / Fixed" until 2026-08-16, and a grep is the only thing that could
+ * have caught it: `econ:figures` blanks comments before matching, deliberately, so a
+ * docstring naming a mechanism we do not have is out of the guard's reach by design.
+ */
 function PricingOption({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<Card className="text-center card-lift h-full">

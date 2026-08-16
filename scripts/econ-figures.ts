@@ -739,7 +739,21 @@ const BLOCKS: Block[] = [
 // That is the right place to catch it. Typing is the defect; drifting is only what
 // the defect eventually does.
 
-const APP_ROOTS = ["apps/web/src", "packages/web-shared/src"];
+/**
+ * ⚠️ **`packages/db/src` is here for the seed data, and joined the list 2026-08-16.**
+ * Not a page, but the seeds and the gauntlet are prose a developer reads to learn what
+ * the model supports — and they had drifted exactly as the README did, for exactly the
+ * same reason: outside the scan, so nothing looked. `seed.ts` carried a `pwyw` pricing
+ * type and a work blurb promising pay-what-you-want, for a mechanism that has never
+ * existed; the gauntlet printed a viewer's support as a Seed count. One sweep, then this
+ * line, so it is the last time.
+ *
+ * Cheap to include because the scan blanks comments first: the schema identifiers that
+ * legitimately say "seed" (`seed_allocations`, `SEED_RUNGS`, `seedGatedAccess`) are code,
+ * and every `RETIRED_COPY` pattern matches the word as prose rather than as an
+ * identifier. Adding the root found one line and no false positives.
+ */
+const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"];
 
 /**
  * Markdown in this repo that is read by outsiders, and so is held to the same standard
@@ -854,8 +868,12 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// the old one by a JSX prop — so the honest use is the annotated one. Exactly one
 		// `econ:allow` exists for it today, on that row, and a second should be argued for
 		// rather than added.
+		// `pwyw` is in the list because the acronym is how it survived in code rather than
+		// copy — a `pricingType` the seed data set on two works, which the spelled-out
+		// pattern sails straight past. Comments are blanked, so the entry above explaining
+		// why the value went is out of its reach.
 		pattern: new RegExp(
-			`${NOT_NEGATED}(?:pay[- ]what[- ]you[- ]want|name your own price|suggested price|(?:buyers?|they) (?:may|can) pay more|price is a minimum)`,
+			`${NOT_NEGATED}(?:pay[- ]what[- ]you[- ]want|\\bpwyw\\b|name your own price|suggested price|(?:buyers?|they) (?:may|can) pay more|price is a minimum)`,
 			"gi",
 		),
 		why: "pay-what-you-want has never existed — checkout charges the stored price and accepts no amount from the buyer",

@@ -107,7 +107,7 @@ const DEMO_CREATORS: DemoCreator[] = [
 				// Was "Pay what you want" — a mechanism we have never had. A demo page teaches
 				// the product as surely as a feature table does, and this one was teaching a
 				// pricing option a creator would then go looking for.
-				price: "$7.00",
+				price: "$4.00",
 				rating: 4.9,
 				ratingCount: 89,
 			},
