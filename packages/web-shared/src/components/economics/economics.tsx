@@ -48,7 +48,7 @@ export const BADGE_ART: Record<BadgeKey, { emoji: string; wreath: BrandIconName 
 	blossom: { emoji: "🌼", wreath: "frame-round" },
 };
 
-/** Ascending ladder (Root → Blossom) for the ranks section: wreath + emoji + $/mo (= $3 × Seeds). */
+/** Ascending ladder (Root → Blossom) for the ranks section: wreath + emoji + $/mo. */
 export const BADGE_LADDER: {
 	name: string;
 	emoji: string;
@@ -108,7 +108,7 @@ function Breakdown({ segments, approxLast }: { segments: Seg[]; approxLast?: boo
 	);
 }
 
-/** An indented sub-line showing part of where each Seed goes. */
+/** An indented sub-line showing part of where a month's support goes. */
 function SplitRow({
 	dot,
 	label,
@@ -135,7 +135,7 @@ function SplitRow({
 
 // ─── (2) Anthers-Seeds — interactive rank picker ───
 
-/** The five ranks as selectable chips: emoji + label + $/mo (= $3 × Anthers-Seeds). */
+/** The five ranks as selectable chips: emoji + label + $/mo. */
 function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
 	return (
 		<div className="mb-6 grid grid-cols-5 gap-2">
@@ -217,11 +217,9 @@ export function SubscriptionCalculator() {
 	return (
 		<div className="rounded-3xl border border-base-content/10 bg-base-100 p-7 text-left shadow-sm">
 			<h3 style={serif} className="mb-1 text-lg font-medium">
-				Where your Seeds to Anthers go
+				Where your support for Anthers goes
 			</h3>
-			<p className="mb-5 text-xs text-base-content/50">
-				Pick a level — each Seed is $3. Everything updates live.
-			</p>
+			<p className="mb-5 text-xs text-base-content/50">Pick a level. Everything updates live.</p>
 
 			<BadgePicker value={badge} onChange={setBadge} />
 
@@ -236,10 +234,7 @@ export function SubscriptionCalculator() {
 					<div className="flex items-center justify-between gap-3 text-sm">
 						<div className="min-w-0">
 							<span className="font-medium text-base-content/90">{badgeLabel(badge)}</span>
-							<span className="text-base-content/55">
-								{" "}
-								— {n} Seed{n === 1 ? "" : "s"} to Anthers
-							</span>
+							<span className="text-base-content/55"> — a month to Anthers</span>
 						</div>
 						<span className="w-14 text-right font-mono tabular-nums">{money(price)}</span>
 					</div>
@@ -268,7 +263,7 @@ export function SubscriptionCalculator() {
 						<span className="font-medium text-base-content/90">Payments</span>
 						<span className="text-base-content/55">
 							{" "}
-							— card processing, at cost, from inside your Seeds{" "}
+							— card processing, at cost, from inside what you give{" "}
 						</span>
 					</span>
 					<span className="shrink-0 font-mono tabular-nums">~{money(processing)}</span>
@@ -299,7 +294,7 @@ export function SubscriptionCalculator() {
 				<p className="mt-1 text-sm text-base-content/65">
 					of which{" "}
 					<span className="font-semibold text-primary tabular-nums">{money(toCreators)}</span> goes
-					to the creators you watch — plus every Seed you give a creator directly, with no platform
+					to the creators you watch — plus everything you give a creator directly, with no platform
 					cut.
 				</p>
 			</div>

@@ -144,7 +144,7 @@ export async function refundPurchase(
 	if (purchase.status !== "completed")
 		return { ok: false, code: "not_refundable", message: "This purchase can't be refunded." };
 
-	// Seeds are a monthly commitment, not a purchase: the Terms say you keep the
+	// Monthly support is a commitment, not a purchase: the Terms say you keep the
 	// cycle you have paid for and we do not pro-rate one in progress. Refunding a
 	// Seed buy here would also silently unwind an account credit that
 	// `applyCreditForPurchase` has already spent into gates and Badges.
@@ -152,7 +152,7 @@ export async function refundPurchase(
 		return {
 			ok: false,
 			code: "not_refundable",
-			message: "Seeds are a monthly commitment rather than a purchase, so they aren't refunded.",
+			message: "Monthly support is a commitment rather than a purchase, so it isn't refunded.",
 		};
 
 	// The cap bites only on a buyer's own request for something they downloaded.

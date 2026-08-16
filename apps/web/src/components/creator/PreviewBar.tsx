@@ -11,18 +11,24 @@
  * *visible*. A hidden mode that quietly changes what a creator sees is how somebody ends
  * up debugging a gate that was never broken.
  *
- * ⚠️ The dial spans **Seed counts**, with the creator's named Badges marked on it — not a
- * list of Badges. A Badge is identified by its whole-Seed threshold and never by its
- * position in a list, and **a gate needn't sit on a Badge at all**: a creator with Badges
- * at 2 and 4 may legally gate a Work at 3, and a picker offering only named rungs could
- * not preview it. (The retired `badgeRank = indexOf` made exactly that mistake in the
+ * ⚠️ The dial spans **dollars a month**, with the creator's named Badges marked on it —
+ * not a list of Badges. A Badge is identified by its threshold and never by its position
+ * in a list, and **a gate needn't sit on a Badge at all**: a creator with Badges at $6 and
+ * $12 may legally gate a Work at $9, and a picker offering only named rungs could not
+ * preview it. (The retired `badgeRank = indexOf` made exactly that mistake in the
  * resolver, and failed toward over-granting.)
+ *
+ * 🚨 The dial alone is **no longer sufficient**, which is why the rungs became buttons.
+ * Thresholds were whole Seeds until 2026-08-16, so every rung was an integer and a
+ * whole-step dial reached all of them. In dollars a rung can sit at $9.50, which no step
+ * of the dial lands on — so the marks have to be jumpable, not just readable.
  *
  * Nothing here computes access. The server re-resolves with a substituted context through
  * the same `resolveAccessSync` everything else uses, because a preview that reimplemented
  * gate logic would drift and start lying in the one situation it exists to clarify.
  */
 
+import { amountLabel } from "@anthers/shared/constants";
 import { useSearchParams } from "@anthers/web-shared/router";
 import { EyeIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useState } from "react";
@@ -33,8 +39,14 @@ export interface PreviewBadge {
 	label: string;
 }
 
-/** How far the dial goes when a creator has no gates worth speaking of. */
-const DEFAULT_MAX_SEEDS = 6;
+/**
+ * How far the dial goes when a creator has no gates worth speaking of.
+ *
+ * ⚠️ **Dollars a month, not a Seed count** — it was 6 Seeds ($18) and became $6 without
+ * anyone touching the number, when thresholds were re-denominated on 2026-08-16. $12 is
+ * the top Anthers Badge, a reasonable reach for a ladder with nothing on it.
+ */
+const DEFAULT_MAX_SUPPORT = 12;
 
 /**
  * Read the preview out of the URL. Exported so pages can pass it to the API without
@@ -62,13 +74,13 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 
 	// One rung past the highest Badge, so a creator can always see what sits *above* their
 	// top gate as well as on it.
-	const maxSeeds = Math.max(DEFAULT_MAX_SEEDS, ...badges.map((b) => b.threshold + 1));
-	const seeds = as && as !== "out" ? Number(as) : 0;
+	const maxSupport = Math.max(DEFAULT_MAX_SUPPORT, ...badges.map((b) => b.threshold + 1));
+	const support = as && as !== "out" ? Number(as) : 0;
 	/** What the slider is showing mid-drag, before it is committed to the URL. */
-	const [draft, setDraft] = useState(seeds);
+	const [draft, setDraft] = useState(support);
 	// Follow the URL when it changes from anywhere else — a link, the back button, the
 	// signed-out/signed-in switch above.
-	useEffect(() => setDraft(seeds), [seeds]);
+	useEffect(() => setDraft(support), [support]);
 
 	const set = (next: Record<string, string | null>) => {
 		const p = new URLSearchParams(params);
@@ -125,9 +137,7 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 				{as !== "out" && (
 					<>
 						<label className="flex items-center gap-2 text-sm">
-							<span className="whitespace-nowrap">
-								{draft} {draft === 1 ? "Seed" : "Seeds"} given to you
-							</span>
+							<span className="whitespace-nowrap">{amountLabel(draft)} a month given to you</span>
 							{/*
 							 * ⚠️ The value is COMMITTED on release, not on every change. A range
 							 * input fires `change` on each intermediate value while dragging, and
@@ -138,7 +148,7 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 							<input
 								type="range"
 								min={0}
-								max={maxSeeds}
+								max={maxSupport}
 								step={1}
 								value={draft}
 								onChange={(e) => setDraft(Number(e.target.value))}
@@ -146,19 +156,34 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 								onKeyUp={() => set({ previewAs: String(draft) })}
 								onBlur={() => set({ previewAs: String(draft) })}
 								className="range range-xs w-32"
-								aria-label="Seeds given to you"
+								aria-label="Monthly support given to you"
 							/>
 						</label>
 
-						{/* The named rungs, as LABELS on the dial rather than as the dial itself —
-						    so a gate that sits between two Badges is still reachable. */}
+						{/* The named rungs, as JUMP TARGETS rather than as the dial itself, so a rung
+						    the dial cannot land on is still reachable. They were plain text until
+						    2026-08-16, beside a comment claiming they made such a rung reachable —
+						    true while every threshold was a whole Seed and `step={1}` hit them all,
+						    and false the moment thresholds became dollars: $9.50 is on no whole-dollar
+						    step, so a creator could not preview their own gate. */}
 						{badges.length > 0 && (
-							<span className="text-xs text-base-content/60">
+							<span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-base-content/60">
 								{badges
 									.slice()
 									.sort((a, b) => a.threshold - b.threshold)
-									.map((b) => `${b.label} at ${b.threshold}`)
-									.join(" · ")}
+									.map((b) => (
+										<button
+											type="button"
+											key={`${b.label}-${b.threshold}`}
+											className="link link-hover"
+											onClick={() => {
+												setDraft(b.threshold);
+												set({ previewAs: String(b.threshold) });
+											}}
+										>
+											{b.label} at {amountLabel(b.threshold)}
+										</button>
+									))}
 							</span>
 						)}
 

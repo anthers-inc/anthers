@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ANTHERS_BADGES, supportAmount } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
@@ -123,14 +123,14 @@ function GiveSeedsCard({
 			});
 			if (!res.ok) {
 				const body = (await res.json()) as { error?: string };
-				throw new Error(body.error ?? "Could not give Seeds.");
+				throw new Error(body.error ?? "Could not update your support.");
 			}
 			// Both halves have to move: `onGiven` re-reads the gate ladder (so a tier flips to
 			// Unlocked), and `loadBudget` re-reads what's left to give. Refreshing only the
 			// ladder leaves the budget line stating a total the viewer has already spent.
 			await Promise.all([onGiven(), loadBudget()]);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not give Seeds.");
+			setError(err instanceof Error ? err.message : "Could not update your support.");
 		} finally {
 			setSaving(false);
 		}
@@ -244,7 +244,7 @@ function BadgesTab({
 								<span className="badge badge-sm badge-outline">{badgeNameFor(heldBadge)}</span>
 								{parseFloat(userSeed) > 0 && (
 									<span className="badge badge-sm badge-primary badge-outline">
-										${userSeed} in Seeds
+										{amountLabel(userSeed)}/mo
 									</span>
 								)}
 							</div>
@@ -292,7 +292,7 @@ function BadgesTab({
 												<div>
 													<span className="font-medium">{gate.label}</span>
 													<span className="text-base-content/40 ml-2 text-sm">
-														${gate.threshold} in Seeds
+														{amountLabel(gate.threshold)}/mo
 													</span>
 												</div>
 											</div>
@@ -322,7 +322,7 @@ function BadgesTab({
 				<div className="card bg-base-200">
 					<div className="card-body text-center">
 						<p className="text-sm text-base-content/60 mb-2">
-							Give Seeds to Anthers to start unlocking Badges, and to {creatorName} to support them
+							Support Anthers monthly to start unlocking Badges, and {creatorName} to back them
 							directly.
 						</p>
 						<Link to="/subscribe" className="btn btn-primary btn-sm mx-auto">
@@ -880,7 +880,7 @@ export default function CreatorProfilePage() {
 										</span>
 										{parseFloat(creatorStatus.seedAmount) > 0 && (
 											<span className="badge badge-sm badge-primary badge-outline">
-												${creatorStatus.seedAmount} in Seeds
+												{amountLabel(creatorStatus.seedAmount)}/mo
 											</span>
 										)}
 									</div>
