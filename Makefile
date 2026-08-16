@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify typecheck test lint lint-fix format \
         e2e-install screenshots test-e2e test-e2e-ui test-gauntlet free-preview-port \
-        spec-diff spec-apply deploy-status dev-local \
+        spec-diff spec-apply deploy-status webhook-check dev-local \
 
 # ─── OS detection ───
 # Only the desktop-packaging targets care: installers cannot be cross-compiled, so
@@ -293,6 +293,13 @@ spec-apply: ## Apply .do/app.yaml, preserving live secrets (APPLY=1 sends, FROM_
 # Anthers account; REF=origin/release to compare against an arbitrary ref.
 deploy-status: ## Assert the live deployment's commit matches release (DOCTL_CONTEXT=anthers)
 	bun run scripts/deploy-status.ts
+
+# Assert Stripe can actually reach the webhook and that production holds secrets that work.
+# Production once ran for weeks with no registered endpoint and a `stripe listen` secret
+# copied from a developer's .env, and nothing anywhere noticed. Needs `bws` (vault read) and
+# reaches the network, so it is not part of `verify` — same reasoning as spec-diff.
+webhook-check: ## Assert Stripe's webhook endpoints and that prod's signing secrets work
+	bun run scripts/webhook-check.ts
 
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium

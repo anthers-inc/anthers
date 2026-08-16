@@ -39,7 +39,8 @@
 		"@playwright/test": "1.61.1",
 		"@tauri-apps/cli": "2.11.4",
 		"drizzle-kit": "0.31.9",
-		"pg": "8.13.1"
+		"pg": "8.13.1",
+		"stripe": "22.3.2"
 	},
 	"dependencies": {
 		"drizzle-orm": "0.45.1"
