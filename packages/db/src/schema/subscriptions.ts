@@ -39,11 +39,19 @@ export const accounts = pgTable("accounts", {
 		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	anthersSeeds: integer("anthers_seeds").notNull().default(0), // count → rank + $3/Seed billing
-	creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators this cycle
+	anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers → Badge + billing
+	creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $/mo directed to creators this cycle
 	bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage charge
 	stripeCustomerId: text("stripe_customer_id").default(""),
+	/**
+	 * This creator's Stripe Product, for the line on a supporter's invoice.
+	 *
+	 * Lazily created the first time somebody supports them — a creator nobody supports
+	 * needs no Product, and creating one eagerly would make signup depend on Stripe being
+	 * reachable. See `services/billing.ts` for why a Product is needed at all.
+	 */
+	stripeProductId: text("stripe_product_id").default(""),
 	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Anthers-Seed subscription
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
@@ -66,9 +74,12 @@ export const accountCycles = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(), // YYYY-MM-01
-		anthersSeeds: integer("anthers_seeds").notNull().default(0), // Anthers-Seeds held this cycle
-		anthersSpend: numeric("anthers_spend").notNull().default("0.00"), // $ on Anthers-Seeds (count × $3)
-		creatorSeedTotal: numeric("creator_seed_total").notNull().default("0.00"), // $ directed to creators
+		// 🚨 ONE column, not two. This carried `anthers_seeds` (a count) beside
+		// `anthers_spend` (that count × $3) until 2026-08-16 — two descriptions of one fact,
+		// which is the defect the whole Seed retirement is about. The count is gone and the
+		// dollars are the record.
+		anthersSupport: numeric("anthers_support").notNull().default("0.00"), // $/mo to Anthers this cycle
+		creatorSupportTotal: numeric("creator_support_total").notNull().default("0.00"), // $ directed to creators
 		timePool: numeric("time_pool").notNull().default("0.00"), // Time Pool budget this cycle
 		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle
 		bandwidthUsedGiB: numeric("bandwidth_used_gib").notNull().default("0"), // DEAD since 2026-08-12
@@ -257,15 +268,19 @@ export const poolDistributions = pgTable(
 /**
  * Creator-defined gate ladder — the creator's *named* rungs.
  *
- * `threshold` is **whole Seeds for both gate types** (unified in migration `0007`, which
- * divided the `seed` rungs by 3). `seed` rungs read the Seeds directed to this creator
- * this cycle; `anthers_badge` rungs read the viewer's *currently held* Anthers-Seed count.
- * One unit, one comparison — the direction is the only difference.
+ * `threshold` is **monthly dollars**. `seed` rungs read what the viewer directs to this
+ * creator this cycle; the direction is the only difference between gate types.
  *
- * The `seed` rungs previously counted dollars, which meant the price of a Seed was baked
- * into every stored gate and the same concept was spelled two ways across this table and
- * `posts.seed_access`. Naming the rungs is this table's job; deciding a post's access is
- * `posts.seed_access`'s, and a post may gate at a threshold no rung is named for.
+ * 🚨 **It has been through both units and landed back on dollars, which is worth knowing
+ * before anyone changes it again.** It counted dollars originally; migration `0007`
+ * divided by 3 to store whole Seeds, because the price of a Seed was otherwise baked into
+ * every stored gate. That reasoning died with the unit on 2026-08-16 — a creator sets
+ * their own levels to any amount now, so there is no shared price to leak, and storing
+ * Seeds would instead bake in a *conversion* that no longer means anything. Migration
+ * `0041` multiplied back by 3.
+ *
+ * Naming the rungs is this table's job; deciding a Work's access is `works.seed_access`'s,
+ * and a Work may gate at a threshold no rung is named for.
  */
 export const creatorGates = pgTable(
 	"creator_gates",
@@ -275,7 +290,7 @@ export const creatorGates = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		gateType: text("gate_type").notNull().default("seed"), // "seed" | "anthers_badge"
-		threshold: numeric("threshold").notNull(), // whole Seeds, both gate types
+		threshold: numeric("threshold").notNull(), // monthly $ required, both gate types
 		label: text("label").notNull(),
 		description: text("description").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),

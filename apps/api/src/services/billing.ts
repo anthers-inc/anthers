@@ -2,24 +2,30 @@
 /**
  * Stripe Billing helpers for the support model.
  *
- * ONE subscription carries every Seed a user holds, at the single **$3 Seed** price, with
- * **quantity = the total** — Anthers' and the creators' together. Someone giving a Seed to
- * Anthers and one to each of two creators is quantity 3, $9/month, one charge. That is
- * 51.02's fully prepaid monthly charge, and it is also what amortises the fixed $0.30
- * across every creator on it.
+ * ONE subscription carries everything a user gives, as **one item per destination** —
+ * Anthers and each creator, each priced at that destination's own monthly amount. Someone
+ * giving Anthers $3, Alice $5 and Bob $2.50 has three items totalling $10.50, on one
+ * invoice and one charge. That is 51.02's fully prepaid monthly charge, and it is also
+ * what amortises the fixed $0.30 across every creator on it.
  *
- * 🚨 Quantity is therefore NOT the Anthers count. The split rides in subscription
- * metadata (`anthersSeeds`, and `directed` for the per-creator picks) — see
- * `anthersSeedsFromSub`, where getting this wrong inflates a Badge and the Time Pool.
+ * 🚨 **This was ONE item with `quantity` = the total Seed count until 2026-08-16**, with
+ * the Anthers/creator split riding in subscription metadata. Arbitrary amounts ended that:
+ * a quantity of a shared unit cannot express $2.50, and the unit itself retired. What must
+ * survive the change is the LESSON PR #223 paid for — a number read as if it meant
+ * something else, with no error anywhere. That hazard has not gone, it has moved: the
+ * amounts are now structural and legible on the invoice, but **which destination an item
+ * belongs to is still a stamp**, and reading an item's amount without checking its
+ * `destination` metadata funds the wrong Time Pool exactly as silently as before.
+ * `splitFromSub` is the one place that check lives.
  *
  * The DB follows Stripe: subscription webhooks are the source of truth for both halves,
  * and the picks are applied on activation rather than at request time, so a declined card
- * cannot leave Seeds directed that nobody paid for.
+ * cannot leave support directed that nobody paid for.
  */
 import { db } from "@anthers/db/client";
 import { accountCycles, accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { SEED_PRICE, seedCost } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, cardFee } from "@anthers/shared/fees";
+import { supportAmount } from "@anthers/shared/constants";
+import { anthersSupportBreakdown, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -33,15 +39,14 @@ function currentBillingCycle(): string {
 /** Record this cycle's snapshot (Anthers-Seeds + their decomposition + creator-Seeds). */
 async function snapshotCycle(
 	userId: number,
-	anthersSeeds: number,
-	creatorSeedTotal: number,
+	anthersSupport: number,
+	creatorSupportTotal: number,
 ): Promise<void> {
-	const bd = anthersSeedBreakdown(anthersSeeds);
+	const bd = anthersSupportBreakdown(anthersSupport);
 	const values = {
-		anthersSeeds,
-		anthersSpend: new Decimal(seedCost(anthersSeeds)).toFixed(2),
+		anthersSupport: new Decimal(anthersSupport).toFixed(2),
 		timePool: bd.timePool.toFixed(2),
-		creatorSeedTotal: creatorSeedTotal.toFixed(2),
+		creatorSupportTotal: creatorSupportTotal.toFixed(2),
 		foundation: Decimal.max(0, bd.foundation).toFixed(2),
 	};
 	await db
@@ -53,46 +58,154 @@ async function snapshotCycle(
 		});
 }
 
-/** The configured recurring Stripe price for a single $3 Anthers-Seed (null if unset). */
-export function seedPriceId(): string | null {
-	return process.env.STRIPE_PRICE_SEED?.trim() || null;
+/** The Stripe Product the Anthers line is billed against (null if unset). */
+export function anthersProductId(): string | null {
+	return process.env.STRIPE_PRODUCT_ANTHERS?.trim() || null;
 }
 
-/** Every Seed on the subscription — Anthers' and the creators' together. */
-export function totalSeedsFromSub(sub: Stripe.Subscription): number {
-	return Math.max(0, sub.items.data[0]?.quantity ?? 0);
+/** What one subscription item is for. `null` creatorId means the Anthers line. */
+export interface SupportItem {
+	itemId: string;
+	creatorId: number | null;
+	/** Monthly dollars on this line. */
+	amount: number;
 }
 
 /**
- * The **Anthers** Seed count — the subscription's quantity is the whole charge.
+ * Every destination on a subscription, with what each is given.
  *
- * 🚨 One subscription carries every Seed a user holds, because 51.02 is one fully
- * prepaid monthly charge and batching is what amortises the fixed $0.30 across the
- * creators on it. So quantity is 3 for someone giving one Seed to Anthers and one to
- * each of two creators — and quantity is emphatically NOT the Anthers count.
+ * 🚨 **The `destination` stamp is what makes an item's amount mean anything**, and this is
+ * the one place that is read. An item priced at $5 says nothing on its own about whether
+ * $5 reaches Anthers' Time Pool or reaches Alice — and crediting the wrong one is silent,
+ * because both are plausible numbers on a well-formed subscription. That is the same
+ * failure PR #223 existed to prevent, wearing the shape the N-item model gives it.
  *
- * That distinction is load-bearing: `accounts.anthersSeeds` is the Badge and it sets the
- * Time Pool, so reading quantity here would make that user a 3-Seed Petal funding $4.50
- * of Time Pool off a $3 gift to Anthers. The split rides in subscription metadata, which
- * the create call has always written.
- *
- * The fallback is the migration path rather than a guess: every subscription that
- * predates directed Seeds is Anthers-only, so for those quantity *is* the Anthers count.
+ * An **unstamped** item is treated as the Anthers line rather than dropped, which is the
+ * migration path and not a guess: every subscription predating this change carried one
+ * item, and the accounts on them were Anthers-only or had their split in metadata that no
+ * longer applies. Dropping it instead would silently zero a paying supporter's Badge.
  */
-export function anthersSeedsFromSub(sub: Stripe.Subscription): number {
-	const total = totalSeedsFromSub(sub);
-	const raw = sub.metadata?.anthersSeeds;
-	// A blank stamp is UNSTAMPED, not zero. `Number("")` is 0, which would hand every Seed
-	// on the charge to the creators' side and drop the user's Badge to Free.
-	if (typeof raw !== "string" || raw.trim() === "") return total;
-	const stamped = Number(raw);
-	if (!Number.isFinite(stamped) || stamped < 0) return total;
-	return Math.min(Math.floor(stamped), total);
+export function itemsFromSub(sub: Stripe.Subscription): SupportItem[] {
+	return sub.items.data.map((item) => {
+		const raw = item.metadata?.destination?.trim();
+		// A blank stamp is UNSTAMPED, not creator 0. `Number("")` is 0, which would credit
+		// a real supporter's money to whichever account happens to hold user id 0.
+		const creatorId = !raw || raw === "anthers" ? null : Number(raw);
+		const unitCents = item.price?.unit_amount ?? 0;
+		return {
+			itemId: item.id,
+			creatorId: Number.isFinite(creatorId) && creatorId !== null && creatorId > 0 ? creatorId : null,
+			amount: (unitCents * Math.max(0, item.quantity ?? 1)) / 100,
+		};
+	});
 }
 
-/** The Seeds on the charge that are pointed at creators rather than at Anthers. */
-export function directedSeedsFromSub(sub: Stripe.Subscription): number {
-	return Math.max(0, totalSeedsFromSub(sub) - anthersSeedsFromSub(sub));
+/** Everything on the charge — Anthers' line and the creators' together. */
+export function totalSupportFromSub(sub: Stripe.Subscription): number {
+	return itemsFromSub(sub).reduce((sum, i) => sum + i.amount, 0);
+}
+
+/**
+ * The monthly dollars pointed at **Anthers** — the Badge, and what sets the Time Pool.
+ *
+ * `accounts.anthersSupport` is the Badge *and* it sets the Time Pool, so reading the whole
+ * charge here would make a user who gives Anthers $3 and two creators $3 each look like a
+ * $9 Blossom funding $4.50 of Time Pool off a $3 gift — with no error anywhere.
+ */
+export function anthersSupportFromSub(sub: Stripe.Subscription): number {
+	return itemsFromSub(sub)
+		.filter((i) => i.creatorId === null)
+		.reduce((sum, i) => sum + i.amount, 0);
+}
+
+/** The monthly dollars on the charge pointed at creators rather than at Anthers. */
+export function directedSupportFromSub(sub: Stripe.Subscription): number {
+	return itemsFromSub(sub)
+		.filter((i) => i.creatorId !== null)
+		.reduce((sum, i) => sum + i.amount, 0);
+}
+
+/**
+ * The per-creator picks, read from the items themselves.
+ *
+ * ⚠️ These used to travel in subscription **metadata**, applied on activation and then
+ * cleared, because the amounts lived nowhere else — a quantity of a shared unit could not
+ * say who each Seed was for. With one item per destination the picks ARE the subscription,
+ * so there is no stamp to go stale, no clearing step, and no window in which Stripe and the
+ * database disagree about who is being supported.
+ */
+export function directedPicksFromSub(sub: Stripe.Subscription): { creatorId: number; amount: number }[] {
+	return itemsFromSub(sub)
+		.filter((i): i is SupportItem & { creatorId: number } => i.creatorId !== null && i.amount > 0)
+		.map((i) => ({ creatorId: i.creatorId, amount: i.amount }));
+}
+
+/** The billing period end, read across items rather than from the first one. */
+export function periodEndFromSub(sub: Stripe.Subscription): number | null {
+	// Every item on one subscription shares a period, but `items.data[0]` is now an
+	// arbitrary destination rather than "the" item — so take the latest and stop depending
+	// on which creator happens to sort first.
+	const ends = sub.items.data.map((i) => i.current_period_end).filter((n): n is number => !!n);
+	return ends.length > 0 ? Math.max(...ends) : null;
+}
+
+/**
+ * The Stripe Product a creator's line is billed against, created on first use.
+ *
+ * `price_data` on a subscription item takes a Product **id**, not a name — so without one
+ * per creator every line on a supporter's invoice would carry the same label and the
+ * itemised receipt would say nothing. This is the whole reason the N-item model needs a
+ * column at all.
+ *
+ * Lazy rather than eager: a creator nobody supports needs no Product, and creating one at
+ * signup would make registering an account depend on Stripe being reachable.
+ */
+export async function ensureCreatorProduct(creatorId: number, handle: string): Promise<string> {
+	const stripe = getStripe();
+	if (!stripe) throw new Error("Stripe not configured");
+	const [acct] = await db.select().from(accounts).where(eq(accounts.userId, creatorId)).limit(1);
+	if (acct?.stripeProductId) return acct.stripeProductId;
+	const product = await stripe.products.create({
+		name: `Support for @${handle}`,
+		metadata: { creatorId: String(creatorId) },
+	});
+	await db
+		.update(accounts)
+		.set({ stripeProductId: product.id, updatedAt: new Date() })
+		.where(eq(accounts.userId, creatorId));
+	return product.id;
+}
+
+/**
+ * One subscription item per destination, priced inline.
+ *
+ * 🚨 **`metadata.destination` is not decoration — it is the only thing that says whose
+ * money this line is.** `itemsFromSub` reads it back, and an unstamped item is credited to
+ * Anthers. Adding a destination here without stamping it therefore routes a creator's
+ * support into the Time Pool silently, which is the N-item shape of the hazard PR #223
+ * paid for.
+ */
+export function supportItems(
+	anthersProduct: string,
+	anthersDollars: number,
+	directed: { creatorId: number; product: string; amount: number }[],
+): Stripe.SubscriptionCreateParams.Item[] {
+	const monthly = (product: string, dollars: number, destination: string) => ({
+		price_data: {
+			currency: "usd",
+			product,
+			unit_amount: Math.round(dollars * 100),
+			recurring: { interval: "month" as const },
+		},
+		quantity: 1,
+		metadata: { destination },
+	});
+	const items: Stripe.SubscriptionCreateParams.Item[] = [];
+	if (anthersDollars > 0) items.push(monthly(anthersProduct, anthersDollars, "anthers"));
+	for (const d of directed) {
+		if (d.amount > 0) items.push(monthly(d.product, d.amount, String(d.creatorId)));
+	}
+	return items;
 }
 
 /** Create (once) and persist the user's Stripe customer id. */
@@ -200,19 +313,18 @@ export async function applyCreditForPurchase(purchase: {
 		.where(eq(accounts.userId, purchase.buyerId))
 		.limit(1);
 	if (!acct) return;
-	const next = (Number(acct.creatorSeedTotal) + Number(purchase.amount)).toFixed(2);
+	const next = (Number(acct.creatorSupportTotal) + Number(purchase.amount)).toFixed(2);
 	await db
 		.update(accounts)
-		.set({ creatorSeedTotal: next, updatedAt: new Date() })
+		.set({ creatorSupportTotal: next, updatedAt: new Date() })
 		.where(eq(accounts.id, acct.id));
-	await snapshotCycle(purchase.buyerId, acct.anthersSeeds, Number(next));
+	await snapshotCycle(purchase.buyerId, supportAmount(acct.anthersSupport), Number(next));
 }
 
 /**
  * Reconcile the account row to a subscription's current state — called from the
- * webhook on customer.subscription.created/updated/deleted. The subscription's
- * quantity is the user's Anthers-Seed count; a canceled/expired subscription
- * reverts to 0 (Free).
+ * webhook on customer.subscription.created/updated/deleted. A canceled or expired
+ * subscription reverts the account to $0 (Free).
  */
 export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promise<void> {
 	const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
@@ -230,7 +342,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		await db
 			.update(accounts)
 			.set({
-				anthersSeeds: 0,
+				anthersSupport: "0.00",
 				stripeSubscriptionId: "",
 				isActive: true,
 				canceledAt: null,
@@ -241,17 +353,22 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	}
 
 	const active = sub.status === "active" || sub.status === "trialing";
-	const anthersSeeds = anthersSeedsFromSub(sub);
-	// The paid-for creator-Seed balance is the rest of the same charge. It is set from the
-	// subscription rather than accumulated, so a user who lowers their count next month
-	// cannot keep directing Seeds they have stopped paying for.
-	const directedTotal = directedSeedsFromSub(sub) * SEED_PRICE;
-	const periodEndUnix = sub.items.data[0]?.current_period_end;
+	const anthersSupport = anthersSupportFromSub(sub);
+	// The paid-for directed balance is the rest of the same charge. It is set from the
+	// subscription rather than accumulated, so a user who lowers what they give next month
+	// cannot keep directing support they have stopped paying for.
+	const directedTotal = directedSupportFromSub(sub);
+	const periodEndUnix = periodEndFromSub(sub);
 
 	await db
 		.update(accounts)
 		.set({
-			...(active ? { anthersSeeds, creatorSeedTotal: directedTotal.toFixed(2) } : {}),
+			...(active
+				? {
+						anthersSupport: new Decimal(anthersSupport).toFixed(2),
+						creatorSupportTotal: new Decimal(directedTotal).toFixed(2),
+					}
+				: {}),
 			stripeSubscriptionId: sub.id,
 			isActive: active,
 			...(periodEndUnix ? { currentPeriodEnd: new Date(periodEndUnix * 1000) } : {}),
@@ -261,40 +378,38 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		.where(eq(accounts.id, acct.id));
 
 	if (active) {
-		await applyDirectedSeedsFromSub(acct.userId, sub);
-		await snapshotCycle(acct.userId, anthersSeeds, directedTotal);
+		await applyDirectedSupportFromSub(acct.userId, sub);
+		await snapshotCycle(acct.userId, anthersSupport, directedTotal);
 	}
 }
 
 /**
- * Write the per-creator allocations the user chose when they subscribed.
+ * Write the per-creator allocations the user is paying for this cycle.
  *
- * The picks travel on the subscription's metadata because that is the record that
- * survives the gap between "confirm this payment" and "the webhook says it succeeded" —
- * writing allocations at request time would direct Seeds that were never paid for if the
- * card then declined.
+ * 🚨 **Read from the subscription's ITEMS, not from metadata** (2026-08-16). The picks used
+ * to travel as a JSON blob on `sub.metadata.directed`, applied on activation and then
+ * cleared — necessary while a quantity of a shared unit could not say who each Seed was
+ * for, and a genuine hazard: between "confirm this payment" and "the webhook says it
+ * succeeded" the truth lived in a string that had to be parsed, trusted, and unset exactly
+ * once. The items ARE the picks now, so there is no stamp to go stale and no clearing step
+ * whose failure would replay them.
+ *
+ * The property that mattered survives untouched: nothing is written until the subscription
+ * is **active**, so a card that declines cannot leave support directed that nobody paid for.
  *
  * Idempotent: the webhook can deliver the same event more than once, so each row is an
- * upsert keyed on (user, creator, cycle) and the metadata is cleared once applied.
+ * upsert keyed on (user, creator, cycle).
  */
-async function applyDirectedSeedsFromSub(userId: number, sub: Stripe.Subscription): Promise<void> {
-	const raw = sub.metadata?.directed;
-	if (!raw) return;
-
-	let picks: { creatorId: number; seeds: number }[];
-	try {
-		picks = JSON.parse(raw) as { creatorId: number; seeds: number }[];
-	} catch {
-		return;
-	}
-	if (!Array.isArray(picks) || picks.length === 0) return;
+async function applyDirectedSupportFromSub(
+	userId: number,
+	sub: Stripe.Subscription,
+): Promise<void> {
+	const picks = directedPicksFromSub(sub);
+	if (picks.length === 0) return;
 
 	const cycle = currentBillingCycle();
 	for (const pick of picks) {
-		if (!Number.isInteger(pick?.creatorId) || !Number.isInteger(pick?.seeds) || pick.seeds <= 0) {
-			continue;
-		}
-		const amount = (pick.seeds * SEED_PRICE).toFixed(2);
+		const amount = new Decimal(pick.amount).toFixed(2);
 		await db
 			.insert(seedAllocations)
 			.values({ userId, creatorId: pick.creatorId, amount, billingCycle: cycle })
@@ -304,10 +419,5 @@ async function applyDirectedSeedsFromSub(userId: number, sub: Stripe.Subscriptio
 				// direction is never walked back by a replayed webhook.
 				set: { amount: sql`GREATEST(${seedAllocations.amount}, ${amount}::numeric)` },
 			});
-	}
-
-	const stripe = getStripe();
-	if (stripe) {
-		await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, directed: "" } });
 	}
 }

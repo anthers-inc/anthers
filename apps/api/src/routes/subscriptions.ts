@@ -2,7 +2,7 @@
 /**
  * Account & economics routes — the support model.
  *
- * A user's account holds a count of **Anthers-Seeds** (`anthersSeeds`) — that
+ * A user's account holds a monthly **amount** given to Anthers (`anthersSupport`) — that
  * count is their rank and, at $3 each, their Anthers subscription (a single $3
  * Seed price × quantity in Stripe). Directed creator-Seeds are tracked in
  * `seed_allocations`; `creatorSeedTotal` is the balance the user directs.
@@ -28,7 +28,7 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
-import { heldBadgeName, SEED_PRICE, seedsMeet } from "@anthers/shared/constants";
+import { amountMeets, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { badgeViews } from "@anthers/shared/fees";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -41,17 +41,20 @@ import { requireAuth, requireVerified } from "../middleware/auth.js";
 import {
 	type AccessibleWork,
 	buildAccessContext,
-	heldAnthersSeeds,
+	heldAnthersSupport,
 	resolveAccess,
 	resolveAccessSync,
-	seedsFromDollars,
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import {
 	createOneTimeCharge,
 	ensureStripeCustomer,
 	savedCardFor,
-	seedPriceId,
+	anthersProductId,
+	ensureCreatorProduct,
+	itemsFromSub,
+	periodEndFromSub,
+	supportItems,
 } from "../services/billing.js";
 import { loadPublicAccessBudget } from "../services/public-access.js";
 
@@ -69,18 +72,32 @@ import { loadPublicAccessBudget } from "../services/public-access.js";
  * a request. Note `/seeds/buy` caps quantity at 1000 rather than 100 — a different bound
  * for a different path, left alone here, but worth one number if they should agree.
  */
-const MAX_ANTHERS_SEEDS = 100;
+const MAX_ANTHERS_SUPPORT = 300;
+
+/**
+ * The smallest a whole monthly charge may come to.
+ *
+ * 🚨 **A floor on the INVOICE, never on a destination**, and that distinction is the point
+ * of retiring the $3 unit. The old floor was per-Seed and justified by card economics — a
+ * $1 charge loses ~33% to processing — but PR #223 made one subscription carry everything a
+ * user gives, so the fixed $0.30 is paid once a month whatever the denomination. What the
+ * fee actually argues for is a minimum total, which is here, and a creator may set a $1
+ * Badge without it costing anyone a third of it.
+ *
+ * $0.50 because that is Stripe's own minimum charge; going lower is not ours to choose.
+ */
+const MIN_INVOICE_TOTAL = 0.5;
 
 /** The Badge ladder (Free … Blossom), each with its Seed count + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
 
 /** The Badge view for a count of Seeds given to Anthers (capped at Blossom for display). */
-function badgeViewFor(anthersSeeds: number) {
+function badgeViewFor(anthersSupport: number) {
 	// Look the rung up by its Badge, never by array position. `thresholdForBadge` returns a
 	// THRESHOLD, and a threshold only doubles as an index while Anthers' Badges sit at
 	// 1/2/3/4; the moment they don't, indexing returns the wrong rung or undefined.
-	const held = heldBadgeName(anthersSeeds);
+	const held = heldBadgeName(anthersSupport);
 	return BADGE_VIEWS.find((v) => v.id === held) ?? BADGE_VIEWS[0];
 }
 
@@ -228,8 +245,8 @@ const subscriptionRoutes = new Hono()
 		if (!acct) {
 			return c.json({
 				account: {
-					anthersSeeds: 0,
-					creatorSeedTotal: "0.00",
+					anthersSupport: "0.00",
+					creatorSupportTotal: "0.00",
 					bandwidthUsedGiB: "0",
 					isSelfHosting: false,
 					isActive: true,
@@ -237,7 +254,7 @@ const subscriptionRoutes = new Hono()
 					currentPeriodEnd: null,
 					canceledAt: null,
 				},
-				anthersSeeds: 0,
+				anthersSupport: 0,
 				badge: "free",
 				badgeView: BADGE_VIEWS[0],
 			});
@@ -245,18 +262,21 @@ const subscriptionRoutes = new Hono()
 
 		return c.json({
 			account: acct,
-			anthersSeeds: acct.anthersSeeds,
-			badge: heldBadgeName(acct.anthersSeeds),
-			badgeView: badgeViewFor(acct.anthersSeeds),
+			anthersSupport: supportAmount(acct.anthersSupport),
+			badge: heldBadgeName(supportAmount(acct.anthersSupport)),
+			badgeView: badgeViewFor(supportAmount(acct.anthersSupport)),
 		});
 	})
 
-	// ── Preview an Anthers-Seed count (no charge) — powers the confirmation modal ──
-	.get("/preview/:seeds", requireAuth, async (c) => {
+	// ── Preview a monthly amount to Anthers (no charge) — powers the confirmation modal ──
+	.get("/preview/:amount", requireAuth, async (c) => {
 		const user = c.get("user");
-		const target = Number(c.req.param("seeds"));
-		if (!Number.isInteger(target) || target < 0 || target > MAX_ANTHERS_SEEDS) {
-			return c.json({ error: "Invalid Seed count" }, 400);
+		// ⚠️ NOT `Number.isInteger`. Amounts carry cents since the Seed retired as a unit,
+		// so an integer check here would refuse to preview any amount a creator's own
+		// ladder can actually sit at.
+		const target = supportAmount(c.req.param("amount"));
+		if (!Number.isFinite(target) || target < 0 || target > MAX_ANTHERS_SUPPORT) {
+			return c.json({ error: "Invalid amount" }, 400);
 		}
 		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
@@ -265,19 +285,19 @@ const subscriptionRoutes = new Hono()
 
 		// Cancel preview (→ 0 / Free): what you keep, and until when.
 		if (target === 0) {
-			if (!acct.stripeSubscriptionId || acct.anthersSeeds === 0) {
-				return c.json({ error: "No Seeds to Anthers to cancel" }, 400);
+			if (!acct.stripeSubscriptionId || supportAmount(acct.anthersSupport) === 0) {
+				return c.json({ error: "Nothing given to Anthers to cancel" }, 400);
 			}
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			return c.json({
 				isCancel: true,
-				anthersSeeds: 0,
-				currentSeeds: acct.anthersSeeds,
-				nextBillingUnix: sub?.items.data[0]?.current_period_end ?? null,
+				anthersSupport: 0,
+				currentSupport: supportAmount(acct.anthersSupport),
+				nextBillingUnix: sub ? periodEndFromSub(sub) : null,
 			});
 		}
 
-		const price = SEED_PRICE * target;
+		const price = target;
 
 		// The card on file — attached when a subscription's first payment is confirmed.
 		let savedCard: { id: string; brand: string; last4: string } | null = null;
@@ -299,18 +319,34 @@ const subscriptionRoutes = new Hono()
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			if (sub && (sub.status === "active" || sub.status === "trialing")) {
 				isChange = true;
-				const priceId = seedPriceId();
-				if (priceId) {
+				const product = anthersProductId();
+				if (product) {
+					// Preview only the ANTHERS line moving. Sending the whole item set would
+					// price a change to every creator the user supports as well, which is not
+					// what this modal is asking about.
+					const existing = itemsFromSub(sub).find((i) => i.creatorId === null);
 					const preview = await stripe.invoices.createPreview({
 						customer: acct.stripeCustomerId ?? undefined,
 						subscription: sub.id,
 						subscription_details: {
-							items: [{ id: sub.items.data[0].id, price: priceId, quantity: target }],
+							items: [
+								{
+									...(existing ? { id: existing.itemId } : {}),
+									price_data: {
+										currency: "usd",
+										product,
+										unit_amount: Math.round(target * 100),
+										recurring: { interval: "month" as const },
+									},
+									quantity: 1,
+									metadata: { destination: "anthers" },
+								},
+							],
 							proration_behavior: "always_invoice",
 						},
 					});
 					chargeNow = Math.max(0, preview.amount_due / 100).toFixed(2);
-					nextBillingUnix = sub.items.data[0]?.current_period_end ?? null;
+					nextBillingUnix = periodEndFromSub(sub);
 				}
 			}
 		}
@@ -322,7 +358,7 @@ const subscriptionRoutes = new Hono()
 
 		return c.json({
 			isCancel: false,
-			anthersSeeds: target,
+			anthersSupport: target,
 			isChange,
 			recurring: { amount: price.toFixed(2), interval: "month" as const },
 			chargeNow,
@@ -331,7 +367,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Set the Anthers-Seed count (subscribe / change / cancel) ─────────────
+	// ── Set the monthly support (subscribe / change / cancel) ────────────────
 	.post(
 		"/account",
 		requireAuth,
@@ -339,34 +375,42 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				anthersSeeds: z.number().int().min(0).max(MAX_ANTHERS_SEEDS),
 				/**
-				 * Seeds pointed at creators, on the SAME charge. One Seed to Anthers and one
-				 * each to two creators is quantity 3 — $9/month, one card fee. Optional so
-				 * every existing caller (the post unlock, /subscription) keeps working
-				 * untouched, where it simply means "no directed Seeds on this charge".
+				 * Monthly dollars to Anthers. **Not an integer** — there is no unit any more,
+				 * and refusing $2.50 here would reimpose the granularity the Seed retirement
+				 * removed. `$${PUBLIC_ACCESS_PRICE}` buys unlimited Public Access; above that
+				 * is standing, never more reach.
+				 */
+				anthersSupport: z.number().min(0).max(MAX_ANTHERS_SUPPORT),
+				/**
+				 * Support pointed at creators, on the SAME charge — one subscription item
+				 * each, so the invoice names them. Optional, so every existing caller (the
+				 * post unlock, /subscription) keeps working untouched and simply means
+				 * "nothing directed on this charge".
 				 */
 				directed: z
-					.array(z.object({ creatorId: z.number().int(), seeds: z.number().int().min(1).max(99) }))
+					.array(
+						z.object({
+							creatorId: z.number().int(),
+							amount: z.number().min(0.5).max(MAX_ANTHERS_SUPPORT),
+						}),
+					)
 					.max(50)
 					.optional(),
 			}),
 		),
 		async (c) => {
 			const user = c.get("user");
-			const { anthersSeeds, directed = [] } = c.req.valid("json");
+			const { anthersSupport, directed = [] } = c.req.valid("json");
 			const stripe = getStripe();
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
-			const directedSeeds = directed.reduce((sum, d) => sum + d.seeds, 0);
-			const totalSeeds = anthersSeeds + directedSeeds;
-			// The picks travel to the webhook on the subscription rather than being written
-			// now: a card that declines must not leave Seeds directed that nobody paid for.
-			const directedMeta = directed.length > 0 ? JSON.stringify(directed) : "";
+			const directedTotal = directed.reduce((sum, d) => sum + d.amount, 0);
+			const total = anthersSupport + directedTotal;
 
 			// Nothing at all → cancel the subscription at period end (webhook reverts).
-			if (totalSeeds === 0) {
+			if (total === 0) {
 				if (acct.stripeSubscriptionId) {
 					await stripe.subscriptions.update(acct.stripeSubscriptionId, {
 						cancel_at_period_end: true,
@@ -379,44 +423,79 @@ const subscriptionRoutes = new Hono()
 				return c.json({ pending: false, account: await getAccount(user.id) });
 			}
 
-			const priceId = seedPriceId();
-			if (!priceId) return c.json({ error: "No Stripe price configured for Seeds" }, 500);
+			/**
+			 * 🚨 The one floor left, and it is a floor on the **invoice**, not on any
+			 * destination.
+			 *
+			 * The retired $3 unit was justified by card economics — a $1 charge loses ~33%
+			 * to processing — and that argument only ever supported a minimum *total*, since
+			 * PR #223 made one subscription carry everything and the fixed $0.30 is paid once
+			 * a month whatever the denomination. So a creator may sit at $1; a whole month's
+			 * charge may not, and Stripe would refuse it anyway below $0.50.
+			 */
+			if (total < MIN_INVOICE_TOTAL) {
+				return c.json(
+					{ error: `A monthly charge has to come to at least $${MIN_INVOICE_TOTAL.toFixed(2)}.` },
+					400,
+				);
+			}
+
+			const product = anthersProductId();
+			if (!product) return c.json({ error: "No Stripe product configured for Anthers" }, 500);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
 
-			// Changing the count on an active subscription → set the quantity with proration.
+			// A Product per creator, so each line on the invoice names who it is for.
+			const creators =
+				directed.length > 0
+					? await db
+							.select({ id: users.id, username: users.username })
+							.from(users)
+							.where(inArray(users.id, directed.map((d) => d.creatorId)))
+					: [];
+			const byId = new Map(creators.map((u) => [u.id, u.username ?? String(u.id)]));
+			const picks: { creatorId: number; product: string; amount: number }[] = [];
+			for (const d of directed) {
+				const handle = byId.get(d.creatorId);
+				if (!handle) return c.json({ error: "Unknown creator in the directed list" }, 400);
+				picks.push({
+					creatorId: d.creatorId,
+					product: await ensureCreatorProduct(d.creatorId, handle),
+					amount: d.amount,
+				});
+			}
+			const items = supportItems(product, anthersSupport, picks);
+
+			// Changing an active subscription → replace the whole item set with proration.
+			//
+			// ⚠️ Every existing item is listed with `deleted: true` alongside the new ones.
+			// Stripe does NOT remove an item you simply omit, so leaving that out would keep
+			// charging for a creator the user just stopped supporting — silently, and
+			// visibly on their next invoice rather than anywhere we would see it.
 			if (acct.stripeSubscriptionId) {
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
 				if (sub.status === "active" || sub.status === "trialing") {
 					await stripe.subscriptions.update(sub.id, {
-						items: [{ id: sub.items.data[0].id, price: priceId, quantity: totalSeeds }],
+						items: [
+							...sub.items.data.map((i) => ({ id: i.id, deleted: true as const })),
+							...items,
+						],
 						proration_behavior: "always_invoice",
 						cancel_at_period_end: false,
-						// Re-stamped on every change: the split is not derivable from the
-						// quantity, so a stale stamp would misreport the Badge from here on.
-						metadata: {
-							...sub.metadata,
-							userId: String(user.id),
-							anthersSeeds: String(anthersSeeds),
-							directed: directedMeta,
-						},
+						metadata: { ...sub.metadata, userId: String(user.id) },
 					});
 					return c.json({ pending: false, account: await getAccount(user.id) });
 				}
 			}
 
 			// New subscription → create it incomplete and hand back the confirmation secret so
-			// the user confirms the first payment inline; the webhook applies the count on success.
+			// the user confirms the first payment inline; the webhook applies it on success.
 			const sub = await stripe.subscriptions.create({
 				customer: customerId,
-				items: [{ price: priceId, quantity: totalSeeds }],
+				items,
 				payment_behavior: "default_incomplete",
 				payment_settings: { save_default_payment_method: "on_subscription" },
 				expand: ["latest_invoice.confirmation_secret"],
-				metadata: {
-					userId: String(user.id),
-					anthersSeeds: String(anthersSeeds),
-					directed: directedMeta,
-				},
+				metadata: { userId: String(user.id) },
 			});
 			await db
 				.update(accounts)
@@ -434,26 +513,29 @@ const subscriptionRoutes = new Hono()
 		},
 	)
 
-	// ── Buy directed creator-Seeds (to give to creators) ─────────────────────
+	// ── Top up the directed-support balance (a one-off, not the subscription) ──
 	.post(
 		"/seeds/buy",
 		requireAuth,
 		requireVerified,
-		zValidator("json", z.object({ quantity: z.number().int().min(1).max(1000) })),
+		zValidator("json", z.object({ amount: z.number().min(MIN_INVOICE_TOTAL).max(3000) })),
 		async (c) => {
 			const user = c.get("user");
-			const { quantity } = c.req.valid("json");
+			const { amount } = c.req.valid("json");
 			const stripe = getStripe();
 			if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 			await ensureAccount(user.id);
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
-			// Charge quantity × $3 all-in via Stripe — the card fee comes out of it, not on
-			// top; the webhook credits the balance on success.
+			// Charged all-in via Stripe — the card fee comes out of it, not on top; the
+			// webhook credits the balance on success. ⚠️ A one-off charge pays the fixed
+			// $0.30 by itself, which is exactly the cost the monthly subscription exists to
+			// amortise — so this path is genuinely expensive at small amounts, and nothing
+			// in the UI reaches it.
 			const charge = await createOneTimeCharge({
 				userId: user.id,
 				customerId,
 				type: "seeds",
-				base: quantity * SEED_PRICE,
+				base: amount,
 			});
 			return c.json({ ...charge, savedCard: await savedCardFor(customerId) });
 		},
@@ -480,7 +562,7 @@ const subscriptionRoutes = new Hono()
 	.post("/cancel", requireAuth, async (c) => {
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
-		if (!acct || acct.anthersSeeds === 0) {
+		if (!acct || supportAmount(acct.anthersSupport) === 0) {
 			return c.json({ error: "No Seeds to Anthers to cancel" }, 400);
 		}
 		// Refuse outright when payments aren't configured, like the other seven payment
@@ -757,7 +839,7 @@ const subscriptionRoutes = new Hono()
 	// Gates. (What actually reaches the creator is net of the Seed's pro-rata share of
 	// the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
 	// Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is
-	// always a multiple of SEED_PRICE — the API rejects anything else rather than
+	// any amount at all — the API no longer rejects non-multiples, because
 	// silently storing a fraction of a Seed.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -774,7 +856,7 @@ const subscriptionRoutes = new Hono()
 			.where(and(eq(seedAllocations.userId, user.id), eq(seedAllocations.billingCycle, cycle)));
 
 		const acct = await getAccount(user.id);
-		const budget = Number(acct?.creatorSeedTotal ?? 0);
+		const budget = Number(acct?.creatorSupportTotal ?? 0);
 		const allocated = result.reduce((sum, r) => sum + Number(r.seed.amount), 0);
 
 		return c.json({
@@ -802,9 +884,11 @@ const subscriptionRoutes = new Hono()
 				amount: z
 					.string()
 					.regex(/^\d+\.\d{2}$/, "Amount must be in X.XX format")
-					.refine((v) => Number(v) % SEED_PRICE === 0, {
-						message: `Seeds are $${SEED_PRICE} each — the amount must be a whole number of Seeds`,
-					}),
+					// 🚨 A `% SEED_PRICE === 0` refinement stood here until 2026-08-16, forcing
+					// every allocation onto a $3 step. It went with the unit: a creator sets
+					// their own Badge levels to any amount, so refusing $2.50 here would make
+					// their own ladder unreachable through this route.
+					.refine((v) => Number(v) > 0, { message: "Amount must be more than zero" }),
 				cycle: z
 					.string()
 					.regex(/^\d{4}-\d{2}-01$/)
@@ -831,7 +915,7 @@ const subscriptionRoutes = new Hono()
 			}
 
 			const acct = await getAccount(user.id);
-			const budget = Number(acct?.creatorSeedTotal ?? 0);
+			const budget = Number(acct?.creatorSupportTotal ?? 0);
 
 			if (budget <= 0) {
 				return c.json({ error: "You have no Seeds to give this cycle" }, 400);
@@ -1074,8 +1158,8 @@ const subscriptionRoutes = new Hono()
 		}
 
 		// The viewer's held Anthers-Seeds (point-in-time) and their Seeds to this creator.
-		const anthersSeeds = await heldAnthersSeeds(currentUserId);
-		const badge = heldBadgeName(anthersSeeds);
+		const anthersSupport = await heldAnthersSupport(currentUserId);
+		const badge = heldBadgeName(anthersSupport);
 		const cycle = getCurrentBillingCycle();
 		const [seed] = await db
 			.select({ amount: seedAllocations.amount })
@@ -1091,13 +1175,14 @@ const subscriptionRoutes = new Hono()
 
 		const seedAmount = seed?.amount ?? "0.00";
 
-		// Both gate types are a whole-Seed threshold (migration `0007`) — the Anthers Gate reads
-		// Anthers-Seeds held, the Seed Gate reads Seeds given here. Same comparison, two counts.
-		// The dollar ledger is converted once, so no threshold is ever compared against money.
-		const givenSeeds = seedsFromDollars(seedAmount);
+		// Both gate types are a dollar threshold — one reads what is given to Anthers, the
+		// other what is given to this creator. Same comparison, two amounts, and no
+		// conversion between them any more: the ledger, the threshold and the comparison are
+		// all in the same unit, which is what removed the reinterpretation hazard.
+		const given = supportAmount(seedAmount);
 		const unlockedGates = gates
 			.filter((g) =>
-				seedsMeet(g.gateType === "anthers_badge" ? anthersSeeds : givenSeeds, Number(g.threshold)),
+				amountMeets(g.gateType === "anthers_badge" ? anthersSupport : given, Number(g.threshold)),
 			)
 			.map((g) => g.id);
 

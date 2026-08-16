@@ -865,7 +865,8 @@ function parseNumericId(raw: string): number | null {
 /**
  * A creator's **preview** request, if they made one.
  *
- * `?previewAs=out` for signed-out, `?previewAs=<n>` for a viewer holding n Seeds, plus
+ * `?previewAs=out` for signed-out, `?previewAs=<amount>` for a viewer giving that much a
+ * month, plus
  * `?previewOwned=1` for one who bought it outright. Absent or malformed → null, and the
  * viewer sees the truth, which is the only safe way for this to fail.
  */
@@ -891,19 +892,22 @@ const catalogQuerySchema = previewQuerySchema.extend({
 
 function previewRequest(c: {
 	req: { query: (k: string) => string | undefined };
-}): { seeds: number | null; owned: boolean } | null {
+}): { given: number | null; owned: boolean } | null {
 	// 🚨 `?previewAs=` gives an EMPTY STRING, not undefined — and `Number("")` is **0**,
 	// which passes every range check below. So the obvious `raw == null` guard alone reads
-	// a blank parameter as "preview as a viewer with zero Seeds" and quietly locks a
-	// creator out of their own page. Second time this exact trap has bitten today; the
-	// first was `Number(localStorage.getItem(...))` defaulting the remembered volume to
-	// silence. Treat empty as absent, always.
+	// a blank parameter as "preview as a viewer giving nothing" and quietly locks a
+	// creator out of their own page. Second time this exact trap has bitten; the first was
+	// `Number(localStorage.getItem(...))` defaulting the remembered volume to silence.
+	// Treat empty as absent, always.
 	const raw = c.req.query("previewAs")?.trim();
 	if (!raw) return null;
-	if (raw === "out") return { seeds: null, owned: false };
-	const seeds = Number(raw);
-	if (!Number.isInteger(seeds) || seeds < 0 || seeds > 999) return null;
-	return { seeds, owned: c.req.query("previewOwned") === "1" };
+	if (raw === "out") return { given: null, owned: false };
+	// ⚠️ NOT `Number.isInteger` any more. Amounts carry cents since the Seed retired as a
+	// unit, so an integer check would silently refuse to preview any creator whose own
+	// ladder sits at $2.50 — the exact case a preview exists to let them see.
+	const given = Number(raw);
+	if (!Number.isFinite(given) || given < 0 || given > 999) return null;
+	return { given, owned: c.req.query("previewOwned") === "1" };
 }
 
 /**
@@ -920,12 +924,12 @@ function contextFor(
 	work: { id: number; creatorId: number | null },
 	viewerId: number | null,
 	real: AccessContext,
-	preview: { seeds: number | null; owned: boolean } | null,
+	preview: { given: number | null; owned: boolean } | null,
 ): AccessContext {
 	if (!preview || viewerId == null || work.creatorId !== viewerId) return real;
 	return buildPreviewContext({
 		creatorId: viewerId,
-		seeds: preview.seeds,
+		given: preview.given,
 		owned: preview.owned,
 		workIds: [work.id],
 	});
@@ -2844,7 +2848,7 @@ const contentRoutes = new Hono()
 				// The Seed table compares against Seeds given to *that Work's creator*, a
 				// different number per row, so the viewer's allocations travel as a jsonb
 				// map keyed by creator id and are looked up per row.
-				const seedMap = JSON.stringify(Object.fromEntries(ctx.seedByCreator));
+				const seedMap = JSON.stringify(Object.fromEntries(ctx.supportByCreator));
 				// Coerced explicitly because the ids are inlined rather than bound: they
 				// come from our own `purchases` rows and are integers already, and this is
 				// what keeps that true if the source ever changes.

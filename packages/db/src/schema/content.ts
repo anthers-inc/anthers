@@ -16,13 +16,16 @@ import {
 import { users } from "./auth.js";
 
 /**
- * A Work has **one access table**, and every row is a whole-Seed threshold pointed at the
- * Work's own creator.
+ * A Work has **one access table**, and every row is a **monthly dollar** threshold pointed
+ * at the Work's own creator.
  *
- * `threshold` is **whole Seeds** — never dollars, never a list position. Migration `0007`
- * converted it from *dollars* (÷ 3, Seeds being indivisible $3 units since #123), which
- * had leaked the price of a Seed into every stored gate. A gate needs no Badge to sit on
- * it: with Badges at 2 and 4, a gate at 3 is legal and a 3-Seed viewer clears it.
+ * `threshold` is **dollars** — never a Seed count, never a list position. 🚨 It has been
+ * through both units: dollars originally, whole Seeds from migration `0007` (because the
+ * price of a Seed was otherwise baked into every stored gate), and dollars again from
+ * `0041`, when **the Seed retired as a financial unit**. A creator sets their own levels
+ * to any amount now, so there is no shared price left to leak — and storing Seeds would
+ * instead bake in a conversion that no longer means anything. A gate needs no Badge to sit
+ * on it: with Badges at $2 and $4, a gate at $3 is legal and a viewer giving $3 clears it.
  *
  * `threshold: 0` is the **baseline** row — everyone. It is what makes a Work free to all
  * (allow, price 0) or buyable by all (allow, price > 0), and it is not a gate at all.
@@ -45,14 +48,14 @@ import { users } from "./auth.js";
  * genuinely free via one and gated via the other. A gate belongs to the thing being gated.
  */
 export interface AccessRow {
-	/** Whole Seeds required to qualify for this row. 0 = everyone. */
+	/** Monthly dollars required to qualify for this row. 0 = everyone. */
 	threshold: number;
 	allow: boolean;
 	/** Money string; "0" = free at this threshold when allowed. */
 	price: string;
 }
 
-/** A row in a Work's **Seed Access** table — `threshold` is Seeds given to the creator. */
+/** A row in a Work's access table — `threshold` is monthly dollars given to the creator. */
 export type SeedAccessRow = AccessRow;
 
 /** How precise a Work's creator-asserted Created date is. */

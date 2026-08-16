@@ -18,7 +18,6 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
-import { SEED_PRICE } from "@anthers/shared/constants";
 import type { SeedAccessRow } from "./schema/content.js";
 
 /** The fixture's creator. The `gauntlet_` prefix marks every row this fixture owns. */
@@ -54,15 +53,23 @@ export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
  * place gates at any Seed levels, and a consecutive ladder (1,2,3) makes a threshold and
  * its list position coincide — which is exactly the accident that let the retired
  * `badgeRank = BADGE_ORDER.indexOf(name)` look correct while mis-resolving any set with
- * gaps, toward over-granting. With 5 and 7 in the ladder, a viewer holding 4 Seeds must
- * clear rung 3 and NOT rung 5, and any implementation that has drifted back to counting
- * positions fails the walk instead of passing it.
+ * gaps, toward over-granting. With $15 and $21 in the ladder, a viewer giving $12 must
+ * clear the $9.50 rung and NOT the $15 one, and any implementation that has drifted back
+ * to counting positions fails the walk instead of passing it.
  *
  * It grew from three rungs to five on 2026-08-12, when Anthers Gates were retired: G2–G5
  * were Badge rungs, and rather than let the staircase get four steps shorter, the walk
  * now climbs the one gate type that still exists, further and less evenly.
+ *
+ * 🚨 **Re-denominated from whole Seeds to dollars on 2026-08-16, and one rung deliberately
+ * carries CENTS.** The old ladder was `[1, 2, 3, 5, 7]` Seeds; a straight × 3 would have
+ * given `[3, 6, 9, 15, 21]`, every rung round, and would have exercised none of the new
+ * hazard. Thresholds are floats off `numeric` columns now, so `$9.50` is here to catch a
+ * resolver that has quietly started comparing them without rounding to cents — the failure
+ * that denies a supporter the exact Badge they paid for. A sparse ladder catches position
+ * comparison; a non-round rung catches float comparison. The walk needs both.
  */
-export const SEED_RUNGS = [1, 2, 3, 5, 7] as const;
+export const SEED_RUNGS = [3, 6, 9.5, 15, 21] as const;
 
 /**
  * The Seed counts the staircase actually walks: every rung, plus one count sitting in
@@ -75,14 +82,24 @@ export const SEED_RUNGS = [1, 2, 3, 5, 7] as const;
  *
  * Ascending, because the walk asserts the ladder only ever climbs.
  */
-export const SEED_WALK: number[] = SEED_RUNGS.flatMap((seeds, i) => {
+export const SEED_WALK: number[] = SEED_RUNGS.flatMap((amount, i) => {
 	const next = SEED_RUNGS[i + 1];
-	return next != null && next - seeds > 1 ? [seeds, seeds + 1] : [seeds];
+	// A gap state must sit strictly between two rungs. The midpoint rather than "one more"
+	// because the rungs are dollars now and adjacent ones can be a cent apart — `amount + 1`
+	// would step straight over the next rung and assert the opposite of what it means to.
+	if (next == null || next - amount <= 0.01) return [amount];
+	return [amount, Math.round(((amount + next) / 2) * 100) / 100];
 });
 
-/** What a rung costs the viewer — the money side of a Seed count. */
-export function rungDollars(seeds: number): number {
-	return seeds * SEED_PRICE;
+/**
+ * What a rung costs the viewer.
+ *
+ * Identity since 2026-08-16 — a rung IS its dollars. Kept as a function rather than
+ * inlined at every call site so the conversion has one place to come back to if a rung
+ * ever stops being denominated the way a payment is.
+ */
+export function rungDollars(amount: number): number {
+	return amount;
 }
 
 /** The purchase rung's list price — what the creator receives; fees are added on top. */
@@ -193,10 +210,10 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 			`G${2 + i}`,
 			`seed-${seeds}`,
 			`For readers who've given ${seedLabel(seeds)}`,
-			`≥ ${seedLabel(seeds)} ($${rungDollars(seeds)}) given to this creator`,
+			`≥ ${seedLabel(seeds)}/month given to this creator`,
 			i === 0
 				? "The first Seed rung — only Seeds given to this creator this cycle open it. Nothing about a viewer's Badge is consulted anywhere on this ladder."
-				: `Seed rung at ${seedLabel(seeds)}. ${seedLabel(SEED_RUNGS[i - 1])} is not enough; ${seedLabel(seeds)} or more opens it.`,
+				: `Rung at ${seedLabel(seeds)}. ${seedLabel(SEED_RUNGS[i - 1])} is not enough; ${seedLabel(seeds)} or more opens it.`,
 			{
 				seedAccess: seedRung(seeds),
 				// Gated + real audio on the SECOND rung: the mirror of G1, where the bytes must
@@ -254,8 +271,8 @@ export interface StaircaseState {
 	/** Whether the viewer follows the creator. MUST NOT affect any reason — that's the point. */
 	following: boolean;
 	/** The viewer's Anthers-Seed count; rank (badge) derives from it (`heldBadgeName`). */
-	anthersSeeds: number;
-	/** Whole Seeds given to the gauntlet creator this cycle (× SEED_PRICE for the money). */
+	anthersSupport: number;
+	/** Monthly dollars given to the gauntlet creator this cycle. */
 	seedsGiven: number;
 	/** Keys of posts the viewer has a completed purchase for. */
 	purchased: string[];
@@ -305,21 +322,27 @@ function reasonsFor(seedsGiven: number, purchased: boolean): Record<string, Gaun
  * *structurally* incapable of affecting access rather than merely asserted not to. The
  * field rides along here as documentation and for the e2e walk to set.
  */
-/** "1 Seed" / "2 Seeds" — the ladder is counted in Seeds, not dollars. */
-function seedLabel(seeds: number): string {
-	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
+/**
+ * "$3" / "$9.50" — the ladder is dollars, and the cents show only when there are any.
+ *
+ * Printing `$9.50` as `$9.5` or `$10` would both defeat the rung's purpose: it exists to
+ * assert that a non-round threshold survives the round trip, so the label has to be able
+ * to show one.
+ */
+function seedLabel(amount: number): string {
+	return `$${Number.isInteger(amount) ? amount : amount.toFixed(2)}`;
 }
 
-/** A staircase row's label for the Seed rungs, e.g. "2 Seeds given". */
-function seedState(seeds: number): string {
-	return `${seedLabel(seeds)} given`;
+/** A staircase row's label for the rungs, e.g. "$6 given". */
+function seedState(amount: number): string {
+	return `${seedLabel(amount)} given`;
 }
 
 export const EXPECTED_STAIRCASE: StaircaseState[] = [
 	{
 		state: "Free, unfollowed",
 		following: false,
-		anthersSeeds: 0,
+		anthersSupport: 0,
 		seedsGiven: 0,
 		purchased: [],
 		reasons: reasonsFor(0, false),
@@ -327,7 +350,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 	{
 		state: "Free, following",
 		following: true,
-		anthersSeeds: 0,
+		anthersSupport: 0,
 		seedsGiven: 0,
 		purchased: [],
 		reasons: reasonsFor(0, false),
@@ -338,7 +361,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 		// the count. It is the cell that would have been four cells before 2026-08-12.
 		state: "Blossom, no Seeds given",
 		following: true,
-		anthersSeeds: 4,
+		anthersSupport: 12,
 		seedsGiven: 0,
 		purchased: [],
 		reasons: reasonsFor(0, false),
@@ -348,7 +371,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 			? seedState(seeds)
 			: `${seedLabel(seeds)} given — between two rungs`,
 		following: true,
-		anthersSeeds: 0,
+		anthersSupport: 0,
 		seedsGiven: seeds,
 		purchased: [] as string[],
 		reasons: reasonsFor(seeds, false),
@@ -356,7 +379,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 	{
 		state: "+ purchased",
 		following: true,
-		anthersSeeds: 0,
+		anthersSupport: 0,
 		seedsGiven: SEED_RUNGS[SEED_RUNGS.length - 1],
 		purchased: ["G7"],
 		reasons: reasonsFor(SEED_RUNGS[SEED_RUNGS.length - 1], true),

@@ -24,8 +24,8 @@
 
 import { db } from "@anthers/db";
 import { accountCycles, accounts, crfLedger, seedAllocations } from "@anthers/db/schema";
-import { SEED_PRICE, seedCost } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, paymentsSplit } from "@anthers/shared/fees";
+import { supportAmount } from "@anthers/shared/constants";
+import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -46,7 +46,7 @@ function defaultCycle(): string {
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 async function settleAccount(
-	acct: { id: number; userId: number; anthersSeeds: number; creatorSeedTotal: string },
+	acct: { id: number; userId: number; anthersSupport: string; creatorSupportTotal: string },
 	cycle: string,
 ): Promise<boolean> {
 	// Idempotency: a marker row in the charitable ledger per (user, cycle).
@@ -58,7 +58,7 @@ async function settleAccount(
 		.limit(1);
 	if (already) return false;
 
-	const n = Math.max(0, Number(acct.anthersSeeds ?? 0));
+	const n = supportAmount(acct.anthersSupport);
 
 	// Directed creator-Seeds this cycle. Needed BEFORE the remainder inflow, because
 	// the at-cost card fee is charged on the whole batched monthly charge and split
@@ -75,8 +75,8 @@ async function settleAccount(
 	//    leaves more, because the fixed $0.30 is per charge). Passing `payments` here
 	//    is load-bearing — omit it and the charitable ledger is over-credited by the
 	//    card fee, which typechecks fine because the option is optional.
-	const split = paymentsSplit(n, directedSeeds.div(SEED_PRICE).toNumber());
-	const bd = anthersSeedBreakdown(n, { payments: split.anthers });
+	const split = paymentsSplit(n, directedSeeds.toNumber());
+	const bd = anthersSupportBreakdown(n, { payments: split.anthers });
 	const inflow = CENTS(Decimal.max(0, bd.foundation));
 
 	await db.insert(crfLedger).values({
@@ -90,9 +90,8 @@ async function settleAccount(
 
 	// 2. Record the cycle snapshot.
 	const snapshot = {
-		anthersSeeds: n,
-		anthersSpend: new Decimal(seedCost(n)).toFixed(2),
-		creatorSeedTotal: directedSeeds.toFixed(2),
+		anthersSupport: new Decimal(n).toFixed(2),
+		creatorSupportTotal: directedSeeds.toFixed(2),
 		timePool: bd.timePool.toFixed(2),
 		foundation: inflow.toFixed(2),
 	};

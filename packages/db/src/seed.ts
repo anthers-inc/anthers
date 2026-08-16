@@ -13,11 +13,10 @@
 import {
 	ANTHERS_BADGES,
 	heldBadgeLabel,
-	SEED_PRICE,
-	seedCost,
+	PUBLIC_ACCESS_PRICE,
 	timePoolFor,
 } from "@anthers/shared/constants";
-import { anthersSeedBreakdown, paymentsSplit } from "@anthers/shared/fees";
+import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import { eq, like, sql } from "drizzle-orm";
 import {
 	accountCycles,
@@ -532,21 +531,21 @@ const TEST_USERS: SeedUser[] = [
  * free (0) / root (1) / sprout (2) / petal (3) / blossom (4). Creators also hold
  * an account (they consume too).
  */
-const ACCOUNT_CONFIG: Record<string, { anthersSeeds: number; creatorSeeds?: number }> = {
+const ACCOUNT_CONFIG: Record<string, { anthersSupport: number; creatorSupport?: number }> = {
 	// Creators — spread to cover every rank.
-	[`${SEED_PREFIX}novapixel`]: { anthersSeeds: 3, creatorSeeds: 3 },
-	[`${SEED_PREFIX}sagemoreno`]: { anthersSeeds: 1, creatorSeeds: 1 },
-	[`${SEED_PREFIX}fluxbeats`]: { anthersSeeds: 2, creatorSeeds: 2 },
-	[`${SEED_PREFIX}marisol`]: { anthersSeeds: 1, creatorSeeds: 1 },
-	[`${SEED_PREFIX}hexbound`]: { anthersSeeds: 0 },
+	[`${SEED_PREFIX}novapixel`]: { anthersSupport: 9, creatorSupport: 9 },
+	[`${SEED_PREFIX}sagemoreno`]: { anthersSupport: 3, creatorSupport: 3 },
+	[`${SEED_PREFIX}fluxbeats`]: { anthersSupport: 6, creatorSupport: 6 },
+	[`${SEED_PREFIX}marisol`]: { anthersSupport: 3, creatorSupport: 3 },
+	[`${SEED_PREFIX}hexbound`]: { anthersSupport: 0 },
 	// Test subscribers.
-	[`${SEED_PREFIX}casey`]: { anthersSeeds: 4, creatorSeeds: 6 },
-	[`${SEED_PREFIX}jordan`]: { anthersSeeds: 0, creatorSeeds: 1 },
+	[`${SEED_PREFIX}casey`]: { anthersSupport: 12, creatorSupport: 18 },
+	[`${SEED_PREFIX}jordan`]: { anthersSupport: 0, creatorSupport: 3 },
 };
 
 /** Resolve a user's account config, defaulting to Free (0 Anthers-Seeds). */
-function accountConfig(username: string): { anthersSeeds: number; creatorSeeds?: number } {
-	return ACCOUNT_CONFIG[username] ?? { anthersSeeds: 0 };
+function accountConfig(username: string): { anthersSupport: number; creatorSupport?: number } {
+	return ACCOUNT_CONFIG[username] ?? { anthersSupport: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -613,9 +612,9 @@ function buildAttentionEvents(
 }
 
 /**
- * Insert a user's `account` (their Anthers-Seed count, held point-in-time) and its
+ * Insert a user's `account` (what they give Anthers monthly, held point-in-time) and its
  * current-cycle `account_cycle` snapshot. The cycle's Time Pool and remainder are
- * derived from the Anthers-Seed count via `anthersSeedBreakdown`.
+ * derived from that amount via `anthersSupportBreakdown`.
  *
  * Stream usage was a third input until 2026-08-12 — it priced the account's
  * bandwidth against its allowance — and is gone with the per-GiB charge. The
@@ -623,19 +622,19 @@ function buildAttentionEvents(
  */
 async function seedAccountAndCycle(params: {
 	userId: number;
-	anthersSeeds: number;
-	creatorSeedTotal: number;
+	anthersSupport: number;
+	creatorSupportTotal: number;
 	cycleStart: Date;
 	cycleEnd: Date;
 	billingCycle: string;
 }) {
-	const bd = anthersSeedBreakdown(params.anthersSeeds);
+	const bd = anthersSupportBreakdown(params.anthersSupport);
 
 	try {
 		await db.insert(accounts).values({
 			userId: params.userId,
-			anthersSeeds: params.anthersSeeds,
-			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
+			anthersSupport: params.anthersSupport.toFixed(2),
+			creatorSupportTotal: params.creatorSupportTotal.toFixed(2),
 			isActive: true,
 			currentPeriodStart: params.cycleStart,
 			currentPeriodEnd: params.cycleEnd,
@@ -647,9 +646,8 @@ async function seedAccountAndCycle(params: {
 		await db.insert(accountCycles).values({
 			userId: params.userId,
 			billingCycle: params.billingCycle,
-			anthersSeeds: params.anthersSeeds,
-			anthersSpend: seedCost(params.anthersSeeds).toFixed(2),
-			creatorSeedTotal: params.creatorSeedTotal.toFixed(2),
+			anthersSupport: params.anthersSupport.toFixed(2),
+			creatorSupportTotal: params.creatorSupportTotal.toFixed(2),
 			timePool: bd.timePool.toFixed(2),
 			foundation: Math.max(0, bd.foundation.toNumber()).toFixed(2),
 		});
@@ -759,8 +757,8 @@ async function seed() {
 		const cfg = accountConfig(creator.username);
 		await seedAccountAndCycle({
 			userId,
-			anthersSeeds: cfg.anthersSeeds,
-			creatorSeedTotal: (cfg.creatorSeeds ?? 0) * SEED_PRICE,
+			anthersSupport: cfg.anthersSupport,
+			creatorSupportTotal: cfg.creatorSupport ?? 0,
 			cycleStart,
 			cycleEnd,
 			billingCycle,
@@ -1264,17 +1262,17 @@ async function seed() {
 
 		// -- Account (Anthers-Seeds) --
 		const cfg = accountConfig(tu.username);
-		const creatorSeedTotal = (cfg.creatorSeeds ?? 0) * SEED_PRICE;
+		const creatorSupportTotal = cfg.creatorSupport ?? 0;
 		await seedAccountAndCycle({
 			userId,
-			anthersSeeds: cfg.anthersSeeds,
-			creatorSeedTotal,
+			anthersSupport: cfg.anthersSupport,
+			creatorSupportTotal,
 			cycleStart,
 			cycleEnd,
 			billingCycle,
 		});
 		console.log(
-			`    account: ${heldBadgeLabel(cfg.anthersSeeds)} (${cfg.anthersSeeds} Anthers-Seeds, creator Seeds $${creatorSeedTotal.toFixed(2)})`,
+			`    account: ${heldBadgeLabel(cfg.anthersSupport)} (${cfg.anthersSupport} Anthers-Seeds, creator Seeds $${creatorSupportTotal.toFixed(2)})`,
 		);
 
 		// -- Attention events --
@@ -1301,30 +1299,30 @@ async function seed() {
 		// user hasn't pointed is not creator income (it would fund free access and the charitable programs), so
 		// attributing a fractional leftover to creators by time would seed a state the
 		// model doesn't produce.
-		const timePool = timePoolFor(cfg.anthersSeeds);
-		if (timePool > 0 || creatorSeedTotal > 0) {
+		const timePool = timePoolFor(cfg.anthersSupport);
+		if (timePool > 0 || creatorSupportTotal > 0) {
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 
 			// Whole Seeds by time, largest-remainder for the ones that don't divide evenly.
 			const directed = new Map<string, number>();
-			const seedsToGive = Math.round(creatorSeedTotal / SEED_PRICE);
+			const toGive = creatorSupportTotal;
 			const shares = entries.map(([username, target]) => {
-				const exact = (totalSeconds > 0 ? target.seconds / totalSeconds : 0) * seedsToGive;
+				const exact = (totalSeconds > 0 ? target.seconds / totalSeconds : 0) * toGive;
 				return { username, whole: Math.floor(exact), remainder: exact - Math.floor(exact) };
 			});
 			let assigned = shares.reduce((sum, r) => sum + r.whole, 0);
 			for (const r of [...shares].sort((a, b) => b.remainder - a.remainder)) {
-				if (assigned >= seedsToGive) break;
+				if (assigned >= toGive) break;
 				r.whole += 1;
 				assigned += 1;
 			}
-			for (const r of shares) directed.set(r.username, r.whole * SEED_PRICE);
+			for (const r of shares) directed.set(r.username, r.whole * PUBLIC_ACCESS_PRICE);
 
 			// The creator side's share of the at-cost card fee, which `distribute-pool.ts`
 			// deducts before crediting a payout. The fixture has to deduct it too, or dev
 			// shows earnings the real job would never produce.
-			const creatorCardFee = paymentsSplit(cfg.anthersSeeds, seedsToGive).creator.toNumber();
+			const creatorCardFee = paymentsSplit(cfg.anthersSupport, toGive).creator.toNumber();
 
 			for (const [creatorUsername, target] of entries) {
 				const creatorId = createdUserIds[creatorUsername];
@@ -1336,8 +1334,8 @@ async function seed() {
 				// the card fee — whole Seeds in, a payout figure out.
 				const gross = directed.get(creatorUsername) ?? 0;
 				const share =
-					creatorSeedTotal > 0
-						? Math.round(creatorCardFee * (gross / creatorSeedTotal) * 100) / 100
+					creatorSupportTotal > 0
+						? Math.round(creatorCardFee * (gross / creatorSupportTotal) * 100) / 100
 						: 0;
 				const seedAmt = Math.max(0, Math.round((gross - share) * 100) / 100);
 
@@ -1426,7 +1424,7 @@ async function seed() {
 			Object.values(POSTS_BY_CREATOR).flat().length
 		} posts (works + stream), grouped into Projects`,
 	);
-	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).anthersSeeds > 0);
+	const paidTestUsers = TEST_USERS.filter((u) => accountConfig(u.username).anthersSupport > 0);
 	console.log(
 		`  ${TEST_USERS.length} test users (${paidTestUsers.length} paid, ${TEST_USERS.length - paidTestUsers.length} free)`,
 	);
@@ -1435,7 +1433,7 @@ async function seed() {
 	console.log("\n  Test accounts:");
 	for (const tu of TEST_USERS) {
 		console.log(
-			`    ${tu.username} — ${heldBadgeLabel(accountConfig(tu.username).anthersSeeds)} rank — ${tu.displayName}`,
+			`    ${tu.username} — ${heldBadgeLabel(accountConfig(tu.username).anthersSupport)} rank — ${tu.displayName}`,
 		);
 	}
 	for (const c of CREATORS) {

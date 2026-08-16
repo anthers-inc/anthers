@@ -27,6 +27,7 @@
 
 import { db } from "@anthers/db/client";
 import { accounts, attentionEvents } from "@anthers/db/schema";
+import { supportAmount } from "@anthers/shared/constants";
 import { type PublicAccessBudget, publicAccessBudget } from "@anthers/shared/public-access";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
@@ -80,12 +81,12 @@ export async function loadPublicAccessBudget(
 
 	const [[acct], used] = await Promise.all([
 		db
-			.select({ anthersSeeds: accounts.anthersSeeds })
+			.select({ anthersSupport: accounts.anthersSupport })
 			.from(accounts)
 			.where(eq(accounts.userId, userId))
 			.limit(1),
 		publicAccessSecondsThisMonth(userId, now),
 	]);
 
-	return publicAccessBudget(Math.max(0, Number(acct?.anthersSeeds ?? 0)), used);
+	return publicAccessBudget(supportAmount(acct?.anthersSupport), used);
 }
