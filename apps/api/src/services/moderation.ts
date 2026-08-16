@@ -42,6 +42,7 @@ import {
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
 import { and, count, desc, eq, exists, inArray, max, or, sql } from "drizzle-orm";
+import { notify } from "./notifications.js";
 
 /**
  * Subject type → the table it lives in. The only place the mapping is written down.
@@ -282,6 +283,63 @@ export async function restoreSubject(input: {
 	});
 
 	return { status: "visible" };
+}
+
+/**
+ * Answer a reporter who has filed what is really a copyright claim, and point
+ * them at the path that can actually handle it.
+ *
+ * 🚨 **This takes no action on the content, and that is the whole point.** A user
+ * report is not a DMCA notice: the six reason codes are answerable by one
+ * operator looking at one artifact, and copyright ownership is the opposite —
+ * a claim about the world, made under penalty of perjury, with required elements
+ * and a statutory clock. So a report reasoned as `illegal` or `other` that turns
+ * out to be a copyright complaint must **never** become a removal. It gets
+ * cleared from the queue and its reporter gets told where to go.
+ *
+ * The § 512(c)(3)(B)(ii) reach-back has the same shape and is worth noticing:
+ * where a defective *notice* substantially complies, we help the sender fix it
+ * rather than binning it. This is that instinct applied one step earlier, to
+ * someone who has not filed a notice at all.
+ *
+ * The reports are dismissed rather than resolved because nothing was done to the
+ * content — `dismiss` is already the console's "I looked, it's fine" outcome, and
+ * "I looked, and this belongs somewhere else" closes the same way.
+ */
+export async function routeToCopyright(input: {
+	subjectType: ModerationSubjectType;
+	subjectId: number;
+	actorId: number;
+}): Promise<{ dismissed: number; reportersNotified: number }> {
+	const rows = await db
+		.update(moderationReports)
+		.set({ status: "dismissed", resolvedAt: new Date(), resolvedBy: input.actorId })
+		.where(
+			and(
+				eq(moderationReports.subjectType, input.subjectType),
+				eq(moderationReports.subjectId, input.subjectId),
+				eq(moderationReports.status, "open"),
+			),
+		)
+		.returning({ id: moderationReports.id, reporterId: moderationReports.reporterId });
+
+	// One message per person, not per report: someone who filed twice about the
+	// same thing does not need telling twice. `reporterId` is null once the
+	// reporter deleted their account — there is nobody left to answer.
+	const reporters = new Set(rows.map((r) => r.reporterId).filter((id): id is number => id != null));
+	for (const userId of reporters) {
+		await notify({
+			userId,
+			category: "activity",
+			kind: "report_routed_copyright",
+			title: "Your report looks like a copyright claim",
+			body: "Thanks for reporting this. What you've described is a copyright claim, and that is a different process from a content report — it has legal requirements we can't meet on your behalf, and we can't remove anything on a report alone. If you own the copyright, or act for the owner, you can file a formal notice at /copyright and we will act on it. We have closed the report; filing the notice is the step that matters.",
+			linkPath: "/copyright",
+			dedupeKey: `report-routed-copyright:${input.subjectType}:${input.subjectId}:${userId}`,
+		});
+	}
+
+	return { dismissed: rows.length, reportersNotified: reporters.size };
 }
 
 /** Dismiss a subject's open reports without touching the content. */

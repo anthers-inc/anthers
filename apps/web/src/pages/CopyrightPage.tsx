@@ -21,8 +21,25 @@
  * elements (§ 512(c)(3)(A)(i)–(vi)) are individual fields so a rejection can
  * name which one failed. Email to `copyright@anthers.org` is the statutory
  * fallback a web form cannot replace, and is stated alongside the form.
+ *
+ * The page serves three audiences, and only the first is obvious:
+ *
+ * 1. **A rights holder** — the agent details and the notice form.
+ * 2. **A creator whose work came down** (`MyNotices`, added 2026-08-16). The
+ *    counter-notice existed only as an API endpoint until then, so the takedown
+ *    notification pointed a creator at a page explaining a right they had no way
+ *    to exercise. A remedy nobody can reach is not a remedy. This half also
+ *    carries the *concede* action, which is the answer nobody thinks to build.
+ * 3. **Anyone at all** — the transparency counts, which are what make the
+ *    repeat-infringer policy legible rather than merely asserted.
+ *
+ * 🚨 The counter-notice exposure is rendered ABOVE the fields, not beside the
+ * submit button. For a pseudonymous creator, whether to counter-notice *is* the
+ * decision, and it must be made before they have already typed their home
+ * address in.
  */
 
+import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
@@ -47,6 +64,34 @@ interface DmcaAgentConfig {
 interface AttestationText {
 	notice: string;
 	counterNotice: string;
+}
+
+/** A notice filed against one of the signed-in creator's own Works. */
+interface MyNotice {
+	id: number;
+	status: string;
+	workTitle: string;
+	complainantName: string;
+	copyrightedWorkDescription: string;
+	infringingMaterialDescription: string;
+	actionedAt: string | null;
+	counterNoticeDueBy: string | null;
+	counterNoticeFiledAt: string | null;
+	restoreNoEarlierThan: string | null;
+	suitFiledAt: string | null;
+	finalizedAt: string | null;
+}
+
+/** Aggregate notice counts — see `dmcaSummary` in the API for what is and isn't published. */
+interface DmcaCounts {
+	received: number;
+	screening: number;
+	actioned: number;
+	rejected: number;
+	counterNoticed: number;
+	restored: number;
+	withdrawn: number;
+	total: number;
 }
 
 const SIX_ELEMENTS: { label: string; hint: string }[] = [
@@ -76,6 +121,9 @@ const SIX_ELEMENTS: { label: string; hint: string }[] = [
 export default function CopyrightPage() {
 	const [agent, setAgent] = useState<DmcaAgentConfig | null>(null);
 	const [attestation, setAttestation] = useState<AttestationText | null>(null);
+	const [counts, setCounts] = useState<DmcaCounts | null>(null);
+	const [myNotices, setMyNotices] = useState<MyNotice[]>([]);
+	const { user } = useAuth();
 
 	useEffect(() => {
 		window.scrollTo(0, 0);
@@ -87,7 +135,27 @@ export default function CopyrightPage() {
 			.then((r) => r.json())
 			.then(setAttestation)
 			.catch(() => {});
+		apiFetch("/api/dmca/transparency")
+			.then((r) => r.json())
+			.then(setCounts)
+			.catch(() => {});
 	}, []);
+
+	// Gated on being signed in rather than firing and handling the 401. The
+	// endpoint refuses a stranger either way, so this is not the access control —
+	// it is that /copyright is a page a signed-out rights holder is *expected* to
+	// land on, and greeting every one of them with a 401 in the console makes the
+	// page look broken to anyone who looks.
+	useEffect(() => {
+		if (!user) {
+			setMyNotices([]);
+			return;
+		}
+		apiFetch("/api/dmca/notices/mine")
+			.then((r) => (r.ok ? r.json() : { notices: [] }))
+			.then((d) => setMyNotices(d.notices ?? []))
+			.catch(() => {});
+	}, [user]);
 
 	return (
 		<div className="container mx-auto max-w-3xl px-4 py-10">
@@ -179,8 +247,39 @@ export default function CopyrightPage() {
 						If the creator files a counter-notice, we forward it to you and the material is restored
 						in 10–14 business days — unless you file a court action to restrain them first.
 					</li>
+					<li>
+						If no counter-notice arrives within 10 business days, or the creator concedes, the
+						removal is <strong>final</strong> — and anyone who had bought the work is refunded in
+						full.
+					</li>
 				</ol>
 			</Section>
+
+			<Section title="If you bought something that is taken down">
+				<p>
+					Everywhere else on Anthers, <strong>what you buy, you keep</strong>. A copyright takedown
+					is the one case where a third party — not you, and not the creator — can take that away,
+					and we would rather say so plainly here than let you find out.
+				</p>
+				<p>
+					If a work you bought is removed following a copyright notice, you lose access to it and{" "}
+					<strong>we refund what you paid, in full</strong>. Continuing to deliver the work to you
+					would mean continuing to infringe, so keeping the promise is not something we are able to
+					choose.
+				</p>
+				<p className="text-sm text-base-content/70">
+					<strong>The refund comes when the removal is final</strong>, not the moment the work comes
+					down — the creator has 10 business days to answer the notice, and a work that comes back
+					is a sale that was never wrong. If the creator does answer and the work is restored, it
+					returns to sale rather than to your library: your money has already come back to you, and
+					buying it again is your choice to make.
+				</p>
+				<p className="text-sm text-base-content/70">
+					A refund for a takedown never counts against your refund limit. It was not your decision.
+				</p>
+			</Section>
+
+			<MyNotices notices={myNotices} attestation={attestation?.counterNotice ?? null} />
 
 			<Section title="Counter-notice">
 				<p>
@@ -211,9 +310,21 @@ export default function CopyrightPage() {
 					by case — we do not use an automatic strike counter, because that turns a bad notice into
 					an instant penalty and a good-faith mistake into a strike.
 				</p>
+				<p>
+					A termination is a decision a person makes and records, and you can ask us why and get a
+					real answer. We publish no strike threshold — a stated number invites gaming from both
+					directions, and § 512(i) does not ask for one.
+				</p>
 				<p className="text-sm text-base-content/70">
-					This policy is stated in our [Terms of Service](/terms) and [Creator
-					Terms](/creator-terms), and you agreed to it when you signed up.
+					This policy is stated in our{" "}
+					<Link className="link link-primary" to="/terms">
+						Terms of Service
+					</Link>{" "}
+					and{" "}
+					<Link className="link link-primary" to="/creator-terms">
+						Creator Terms
+					</Link>
+					, and you agreed to it when you signed up.
 				</p>
 			</Section>
 
@@ -236,6 +347,8 @@ export default function CopyrightPage() {
 				</ul>
 			</Section>
 
+			<TransparencySection counts={counts} />
+
 			<div className="mt-12 border-t border-base-300 pt-6 text-sm text-base-content/60">
 				<p>
 					Questions about this process go to{" "}
@@ -246,6 +359,320 @@ export default function CopyrightPage() {
 				</p>
 			</div>
 		</div>
+	);
+}
+
+function formatDate(iso: string | null): string {
+	if (!iso) return "";
+	return new Date(iso).toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
+}
+
+/**
+ * The creator's side: notices filed against their own Works, with the two
+ * answers they can give.
+ *
+ * Without this the counter-notice existed only as an API endpoint, and the
+ * takedown notification pointed a creator at a page that explained a right they
+ * had no way to exercise. A remedy nobody can reach is not a remedy.
+ *
+ * Renders nothing for a signed-out visitor or a creator with no notices, so the
+ * page reads the same for everyone else.
+ */
+function MyNotices({ notices, attestation }: { notices: MyNotice[]; attestation: string | null }) {
+	if (notices.length === 0) return null;
+
+	return (
+		<Section title="Notices about your work">
+			<p>
+				These are copyright notices filed against Works you published. Nobody else can see this
+				section.
+			</p>
+			{notices.map((notice) => (
+				<MyNoticeCard key={notice.id} notice={notice} attestation={attestation} />
+			))}
+		</Section>
+	);
+}
+
+function MyNoticeCard({ notice, attestation }: { notice: MyNotice; attestation: string | null }) {
+	const [open, setOpen] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [done, setDone] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	const [subscriberName, setSubscriberName] = useState("");
+	const [subscriberAddress, setSubscriberAddress] = useState("");
+	const [subscriberPhone, setSubscriberPhone] = useState("");
+	const [agreed, setAgreed] = useState(false);
+
+	const answered = notice.status !== "actioned" || notice.counterNoticeFiledAt != null;
+
+	async function submitCounter(e: React.FormEvent) {
+		e.preventDefault();
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch(`/api/dmca/notices/${notice.id}/counter`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					subscriberName,
+					subscriberAddress,
+					subscriberPhone,
+					jurisdictionConsent: attestation ?? "I consent to federal jurisdiction.",
+					goodFaithStatement:
+						"I swear under penalty of perjury that the material was removed as a result of mistake or misidentification.",
+				}),
+			});
+			const body = await res.json();
+			if (!res.ok) {
+				setError(body.error ?? "Could not file the counter-notice.");
+				return;
+			}
+			setDone(
+				`Counter-notice filed. Your name, address and telephone number have been forwarded to ${notice.complainantName}. The work is restored on or after ${formatDate(body.restoreNoEarlierThan)} unless they file a court action.`,
+			);
+		} catch {
+			setError("Could not file the counter-notice. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function concede() {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch(`/api/dmca/notices/${notice.id}/concede`, { method: "POST" });
+			const body = await res.json();
+			if (!res.ok) {
+				setError(body.error ?? "Could not record that.");
+				return;
+			}
+			setDone(
+				body.buyersRefunded > 0
+					? `Recorded. ${body.buyersRefunded} buyer${body.buyersRefunded === 1 ? " has" : "s have"} been refunded.`
+					: "Recorded. There were no buyers to refund.",
+			);
+		} catch {
+			setError("Could not record that. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div className="rounded-box border border-base-300 p-4">
+			<h3 className="font-bold">{notice.workTitle || "A Work of yours"}</h3>
+			<p className="mt-1 text-sm text-base-content/70">
+				Filed by <strong>{notice.complainantName}</strong>
+				{notice.actionedAt ? ` · removed ${formatDate(notice.actionedAt)}` : ""}
+			</p>
+			<p className="mt-2 text-sm">
+				<strong>They say they own:</strong> {notice.copyrightedWorkDescription}
+			</p>
+			<p className="mt-1 text-sm">
+				<strong>And that this infringes it:</strong> {notice.infringingMaterialDescription}
+			</p>
+
+			{notice.counterNoticeFiledAt && (
+				<p className="mt-3 text-sm">
+					You filed a counter-notice on {formatDate(notice.counterNoticeFiledAt)}.{" "}
+					{notice.suitFiledAt
+						? "They have filed a court action, so the work stays down until a court decides."
+						: `The work is restored on or after ${formatDate(notice.restoreNoEarlierThan)}.`}
+				</p>
+			)}
+			{notice.status === "restored" && <p className="mt-3 text-sm">This work is back up.</p>}
+			{notice.finalizedAt && notice.status === "actioned" && (
+				<p className="mt-3 text-sm text-base-content/70">
+					This removal is settled and any buyers have been refunded. You can still answer it — the
+					deadline governed the refunds, not your right to reply.
+				</p>
+			)}
+
+			{done && <div className="alert alert-success mt-3 text-sm">{done}</div>}
+			{error && <div className="alert alert-error mt-3 text-sm">{error}</div>}
+
+			{!answered && !done && (
+				<>
+					{notice.counterNoticeDueBy && (
+						<p className="mt-3 text-sm">
+							If you do nothing by <strong>{formatDate(notice.counterNoticeDueBy)}</strong>, we
+							treat the removal as final and refund anyone who bought this work.
+						</p>
+					)}
+					<div className="mt-3 flex flex-wrap gap-2">
+						<button
+							type="button"
+							className="btn btn-sm btn-primary"
+							onClick={() => setOpen((v) => !v)}
+						>
+							{open ? "Cancel" : "File a counter-notice"}
+						</button>
+						<button
+							type="button"
+							className="btn btn-sm btn-ghost"
+							disabled={busy}
+							onClick={concede}
+						>
+							I agree the notice was right
+						</button>
+					</div>
+
+					{open && (
+						<form className="mt-4 space-y-3" onSubmit={submitCounter}>
+							{/* The exposure sits ABOVE the fields, not beside the submit button.
+							    For a pseudonymous creator this is the decision, and it has to be
+							    made before they have already typed their address in. */}
+							<div className="alert alert-warning text-sm">
+								<div>
+									<p className="font-semibold">
+										Everything you enter below is sent to {notice.complainantName}.
+									</p>
+									<p className="mt-1">
+										A counter-notice requires your legal name, postal address and telephone number,
+										and your consent to be sued in federal court where you live. We are required to
+										forward all of it to them. If you publish under a name that is not your own,
+										this hands your accuser your identity and your address.
+									</p>
+								</div>
+							</div>
+
+							<label className="form-control">
+								<span className="label-text">Your legal name</span>
+								<input
+									className="input input-bordered"
+									required
+									value={subscriberName}
+									onChange={(e) => setSubscriberName(e.target.value)}
+								/>
+							</label>
+							<label className="form-control">
+								<span className="label-text">Your postal address</span>
+								<textarea
+									className="textarea textarea-bordered"
+									required
+									rows={2}
+									value={subscriberAddress}
+									onChange={(e) => setSubscriberAddress(e.target.value)}
+								/>
+							</label>
+							<label className="form-control">
+								<span className="label-text">Your telephone number</span>
+								<input
+									className="input input-bordered"
+									required
+									value={subscriberPhone}
+									onChange={(e) => setSubscriberPhone(e.target.value)}
+								/>
+							</label>
+
+							{attestation && (
+								<pre className="whitespace-pre-wrap rounded-box bg-base-200 p-3 text-xs">
+									{attestation}
+								</pre>
+							)}
+							<label className="flex items-start gap-2 text-sm">
+								<input
+									type="checkbox"
+									className="checkbox checkbox-sm mt-0.5"
+									checked={agreed}
+									onChange={(e) => setAgreed(e.target.checked)}
+								/>
+								<span>
+									I have read the above, I swear to it under penalty of perjury, and I understand
+									that my contact details are forwarded to the person who filed the notice.
+								</span>
+							</label>
+
+							<button type="submit" className="btn btn-primary" disabled={busy || !agreed}>
+								{busy ? "Filing…" : "File counter-notice"}
+							</button>
+						</form>
+					)}
+				</>
+			)}
+		</div>
+	);
+}
+
+/**
+ * The transparency numbers — Phase 6.1, Parker's call to publish (2026-08-16).
+ *
+ * Counts only. No per-notice detail: publishing a notice publishes the
+ * complainant's contact details and identifies the creator, which is a privacy
+ * decision rather than a default. Lumen-style per-notice publication is deferred,
+ * not declined.
+ *
+ * ⚠️ The honest caveat is rendered on the page rather than kept in a comment: at
+ * launch volumes these numbers are close to naming someone, and a reader deserves
+ * to know that before drawing a conclusion from "1".
+ */
+function TransparencySection({ counts }: { counts: DmcaCounts | null }) {
+	// Render nothing at all rather than a row of zeroes on a failed fetch — a
+	// zero we did not measure is a claim we did not make.
+	if (!counts) return null;
+
+	const rows: { label: string; value: number; hint: string }[] = [
+		{ label: "Notices received", value: counts.total, hint: "Every notice filed, by any route." },
+		{
+			label: "Acted on",
+			value: counts.actioned,
+			hint: "A work was removed following the notice.",
+		},
+		{
+			label: "Rejected",
+			value: counts.rejected,
+			hint: "Facially defective. We contacted the sender to help them correct it.",
+		},
+		{
+			label: "Counter-noticed",
+			value: counts.counterNoticed,
+			hint: "The creator answered under § 512(g)(3).",
+		},
+		{ label: "Restored", value: counts.restored, hint: "The work went back up." },
+		{
+			label: "Withdrawn",
+			value: counts.withdrawn,
+			hint: "The complainant withdrew the notice.",
+		},
+	];
+
+	return (
+		<Section title="Transparency">
+			<p>
+				What this process has actually done, in numbers. A repeat-infringer policy nobody can see
+				the shape of is a claim rather than a practice.
+			</p>
+			<div className="overflow-x-auto">
+				<table className="table table-sm">
+					<tbody>
+						{rows.map((row) => (
+							<tr key={row.label}>
+								<th className="font-semibold">{row.label}</th>
+								<td className="font-mono text-lg">{row.value}</td>
+								<td className="text-sm text-base-content/70">{row.hint}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+			<p className="text-sm text-base-content/70">
+				We publish counts and not notices. Publishing a notice would publish the complainant's name,
+				address and telephone number, and would identify the creator it names — so per-notice
+				publication is a decision we have deferred rather than one we have taken by default.
+			</p>
+			<p className="text-sm text-base-content/70">
+				<strong>Read small numbers carefully.</strong> While these totals are low, a single count
+				beside a work that visibly went missing can identify the people involved. We would rather
+				publish them from the start than begin only once there is volume to hide in.
+			</p>
+		</Section>
 	);
 }
 

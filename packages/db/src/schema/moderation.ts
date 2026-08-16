@@ -52,6 +52,14 @@ export const moderationReports = pgTable(
 		status: text("status").notNull().default("open"), // open | resolved | dismissed
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		/**
+		 * When the reporter's own words and their identity were dropped — see
+		 * `services/retention.ts`. `details` is `notNull` and defaults to `""`, so
+		 * without this stamp a blank report is ambiguous between *"redacted on
+		 * schedule"* and *"reported with no comment"*, which are different facts.
+		 * Also what keeps the sweep from rescanning settled rows forever.
+		 */
+		redactedAt: timestamp("redacted_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

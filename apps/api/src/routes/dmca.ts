@@ -73,9 +73,12 @@ function dmcaConfig() {
 
 import {
 	counterNoticeAttestationText,
+	dmcaSummary,
 	fileCounterNotice,
 	fileNotice,
+	finalizeNotice,
 	noticeAttestationText,
+	noticesForCreator,
 } from "../services/dmca.js";
 
 /**
@@ -134,6 +137,24 @@ const dmcaRoutes = new Hono()
 	// (statutory information), gated on DMCA_AGENT_REGISTERED.
 	.get("/config", (c) => c.json(dmcaConfig()))
 
+	// ── Transparency (Phase 6.1) ────────────────────────────────────────────
+	// Aggregate counts, public. Counts only — no per-notice detail, so no
+	// complainant contact details and no creator identified. This is the thing
+	// that makes the policy legible: a notice loop nobody can see the shape of is
+	// a claim rather than a practice. See `dmcaSummary` for what publishing at
+	// launch volumes costs, and why it is published anyway.
+	.get("/transparency", async (c) => c.json(await dmcaSummary()))
+
+	// ── A creator's own notices ─────────────────────────────────────────────
+	// What makes the counter-notice path reachable by a person: the takedown
+	// notification points here, and this is what the page has to show them.
+	// Requires auth and returns only the caller's own — see `noticesForCreator`
+	// for what it deliberately withholds about the complainant.
+	.get("/notices/mine", requireAuth, async (c) => {
+		const user = c.get("user");
+		return c.json({ notices: await noticesForCreator(user.id) });
+	})
+
 	// The attestation text, served so the intake form and any future client read
 	// the exact copy the complainant will agree to — and so a creator considering
 	// a counter-notice sees the exposure before filling anything in.
@@ -156,13 +177,15 @@ const dmcaRoutes = new Hono()
 		// (a private Work is not publicly accessible, so it cannot be the target
 		// of a copyright claim through this path).
 		const [work] = await db
-			.select({ id: works.id, visibility: works.visibility })
+			.select({ id: works.id, visibility: works.visibility, title: works.title })
 			.from(works)
 			.where(eq(works.id, input.workId))
 			.limit(1);
 		if (!work) return c.json({ error: "Work not found.", code: "work_not_found" }, 404);
 
-		const { noticeId } = await fileNotice(input);
+		// The title is snapshotted onto the notice — `workId` is `set null`, so the
+		// join that renders the queue can stop resolving. See the schema comment.
+		const { noticeId } = await fileNotice({ ...input, workTitle: work.title ?? "" });
 
 		// Deliberately no signal about what happens next: whether the Work is
 		// already taken down, whether the notice is under review, or whether it
@@ -220,6 +243,53 @@ const dmcaRoutes = new Hono()
 			},
 			201,
 		);
+	})
+
+	// ── Concede a takedown ──────────────────────────────────────────────────
+	// The creator's other answer, and the one nobody thinks to build: agreeing
+	// that the notice was right. It exists because finality otherwise waits out a
+	// clock that both sides already know the answer to — the buyers stay
+	// un-refunded for ten business days for no reason.
+	//
+	// It is NOT the counter-notice's opposite in effect: conceding settles the
+	// money, it does not waive anything. The Work stays down either way.
+	.post("/notices/:id/concede", requireAuth, async (c) => {
+		const user = c.get("user");
+		const noticeId = Number(c.req.param("id"));
+
+		const [notice] = await db
+			.select({ workId: dmcaNotices.workId, status: dmcaNotices.status })
+			.from(dmcaNotices)
+			.where(eq(dmcaNotices.id, noticeId))
+			.limit(1);
+		if (!notice) return c.json({ error: "Notice not found." }, 404);
+		if (!notice.workId) return c.json({ error: "This notice has no target Work." }, 400);
+
+		// Same ownership rule as the counter-notice: only the subscriber whose
+		// material came down can answer for it, in either direction.
+		const [work] = await db
+			.select({ creatorId: works.creatorId })
+			.from(works)
+			.where(eq(works.id, notice.workId))
+			.limit(1);
+		if (!work) return c.json({ error: "Work not found." }, 404);
+		if (work.creatorId !== user.id) {
+			return c.json({ error: "Only the Work's creator can concede a notice." }, 403);
+		}
+
+		const result = await finalizeNotice({ noticeId, reason: "conceded" });
+		if (!result) return c.json({ error: "Notice not found." }, 404);
+		if (!result.finalized) {
+			return c.json(
+				{ error: "This notice is not in a state that can be conceded.", code: result.reason },
+				400,
+			);
+		}
+
+		return c.json({
+			conceded: true,
+			buyersRefunded: result.buyersRefunded,
+		});
 	});
 
 export { dmcaRoutes };

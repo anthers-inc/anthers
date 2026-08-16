@@ -179,6 +179,19 @@ export const QUEUES = {
 	// prevents the restore. Runs daily; the window is 10 business days, so the
 	// latency is negligible.
 	DMCA_RESTORE: "dmca-restore",
+	// Settle takedowns that have become final: refund every buyer of the Work.
+	//
+	// 🚨 A SEPARATE queue from DMCA_RESTORE on purpose, and the reason is failure
+	// isolation rather than tidiness. Restoring is the statutory obligation and
+	// touches only our own database; refunding is our promise and reaches Stripe.
+	// Sharing a handler would let a Stripe outage stop restores from happening —
+	// spending the safe harbour to protect the money, which is exactly backwards.
+	DMCA_FINALIZE: "dmca-finalize",
+	// Age the personal detail out of settled safety and copyright records. Blanks
+	// contact fields in place after RECORD_REDACTION_YEARS; never deletes a row,
+	// because § 512(i) needs the pattern and an appeal needs the decision. See
+	// `services/retention.ts`.
+	REDACT_RECORDS: "redact-records",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -275,4 +288,14 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// per the brief's guidance: it restores no earlier than `restoreNoEarlierThan`,
 	// never before.
 	[QUEUES.DMCA_RESTORE, "0 5 * * *"],
+	// 5:30 AM daily, deliberately AFTER the restore sweep. A notice that is being
+	// restored this morning must not be finalized this morning — `finalizeNotice`
+	// refuses a Work that is no longer taken down, so the ordering is belt and
+	// braces rather than load-bearing, but running the refund pass second means
+	// the money is always the last thing to move.
+	[QUEUES.DMCA_FINALIZE, "30 5 * * *"],
+	// 6 AM daily, after both DMCA sweeps. Ordering is not load-bearing — the
+	// threshold is three YEARS, so a day either way is noise — but running last
+	// means a record is never redacted in the same pass that settles it.
+	[QUEUES.REDACT_RECORDS, "0 6 * * *"],
 ] as const;

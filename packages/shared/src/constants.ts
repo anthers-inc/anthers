@@ -433,6 +433,26 @@ export const REFUND_CAP_WINDOW_MONTHS = 12;
  */
 export const WITHDRAWN_RESCUE_DAYS = 90;
 
+/**
+ * How long a safety or copyright record keeps its **personal detail**, in years,
+ * counted from the last thing that happened to it. Settled 2026-08-16.
+ *
+ * The record itself is never deleted — the row, its reason and its outcome are
+ * permanent, and only the contact details and a reporter's own words age out. See
+ * `apps/api/src/services/retention.ts` for why redaction rather than deletion is
+ * the only shape that satisfies § 512(i) and the right of appeal at once.
+ *
+ * **Three, because of 17 U.S.C. § 507(b)** — the copyright limitation period,
+ * which also bounds a § 512(f) misrepresentation claim in either direction. The
+ * detail survives exactly as long as somebody could still sue over it. It is one
+ * number rather than one per table on purpose: a retention section with a
+ * different figure everywhere is one nobody can follow and nobody notices
+ * breaking.
+ *
+ * Stated in 51.05 and in the app's own copy of it. Import it; never retype the 3.
+ */
+export const RECORD_REDACTION_YEARS = 3;
+
 // ── Payouts ──────────────────────────────────────────────────────────────────
 /**
  * Minimum accrued creator balance before a Connect payout fires ($). Higher →
