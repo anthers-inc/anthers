@@ -216,6 +216,17 @@ export const dmcaNotices = pgTable(
 		actorId: integer("actor_id").references(() => users.id, { onDelete: "set null" }),
 		actorRole: text("actor_role").notNull().default("operator"),
 		note: text("note").notNull().default(""),
+		/**
+		 * When the complainant's contact details were blanked — see
+		 * `services/retention.ts`.
+		 *
+		 * 🚨 **Its job is to make a blank field READABLE.** Every contact column here
+		 * is `notNull`, so redaction writes `""`, and without this stamp an empty
+		 * address is ambiguous between *"we deleted it on schedule"* and *"it was
+		 * never given"* — which are opposite facts about whether the notice was ever
+		 * valid. It is also what stops the sweep rescanning the same rows forever.
+		 */
+		redactedAt: timestamp("redacted_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [

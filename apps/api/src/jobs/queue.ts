@@ -187,6 +187,11 @@ export const QUEUES = {
 	// Sharing a handler would let a Stripe outage stop restores from happening —
 	// spending the safe harbour to protect the money, which is exactly backwards.
 	DMCA_FINALIZE: "dmca-finalize",
+	// Age the personal detail out of settled safety and copyright records. Blanks
+	// contact fields in place after RECORD_REDACTION_YEARS; never deletes a row,
+	// because § 512(i) needs the pattern and an appeal needs the decision. See
+	// `services/retention.ts`.
+	REDACT_RECORDS: "redact-records",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -289,4 +294,8 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// braces rather than load-bearing, but running the refund pass second means
 	// the money is always the last thing to move.
 	[QUEUES.DMCA_FINALIZE, "30 5 * * *"],
+	// 6 AM daily, after both DMCA sweeps. Ordering is not load-bearing — the
+	// threshold is three YEARS, so a day either way is noise — but running last
+	// means a record is never redacted in the same pass that settles it.
+	[QUEUES.REDACT_RECORDS, "0 6 * * *"],
 ] as const;

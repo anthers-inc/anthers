@@ -20,6 +20,7 @@ import {
 	noticesReadyForRestore,
 	restoreWork,
 } from "../services/dmca.js";
+import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
@@ -274,6 +275,21 @@ async function start() {
 						`[dmca-finalize] job ${job.id}: notice #${notice.noticeId} not finalized (${result.reason})`,
 					);
 				}
+			}
+		}
+	});
+
+	// Age the personal detail out of settled safety and copyright records. Logs
+	// only when it actually redacted something — a daily "0 records" line for a
+	// three-year threshold is noise that trains people to skip the log.
+	await queue.work(QUEUES.REDACT_RECORDS, async (jobs) => {
+		for (const job of jobs) {
+			const result = await runRetentionSweep();
+			const total = result.dmcaNotices + result.moderationReports;
+			if (total > 0) {
+				console.log(
+					`[redact-records] job ${job.id}: redacted ${result.dmcaNotices} DMCA notice(s), ${result.moderationReports} moderation report(s)`,
+				);
 			}
 		}
 	});
