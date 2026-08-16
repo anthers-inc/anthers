@@ -111,3 +111,31 @@ export const DIRECTED_SUPPORT_WORST_CASE = {
 	net: "2.61",
 	cardFee: "0.39",
 } as const;
+
+/**
+ * The storefronts a creator actually compares us with, and their revenue share.
+ *
+ * Generated rather than typed into the Studio because 63.01 § Comparisons binds every
+ * comparison to **all-in against all-in** — a rival's take-home has to be computed from
+ * the same card fee ours is, and must move when that fee moves. `absorbsProcessing` is
+ * Valve's model: their 30% covers the card cost, so nothing further comes off.
+ *
+ * ⚠️ **The rates themselves are perishable** and hand-maintained in `scenarios.ts`
+ * (checked 2026-08-03). Generation guarantees the arithmetic, never the inputs.
+ */
+export const RIVAL_STOREFRONTS = [
+	{
+		name: "Steam",
+		share: 0.3,
+		absorbsProcessing: true,
+	},
+	{
+		name: "itch.io",
+		share: 0.1,
+	},
+	{
+		name: "Bandcamp",
+		share: 0.15,
+		maxPrice: 20,
+	},
+] as const;

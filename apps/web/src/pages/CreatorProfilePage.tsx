@@ -253,12 +253,12 @@ function BadgesTab({
 				</div>
 			)}
 
-			{/* Seed Badges */}
+			{/* The creator's Badge ladder */}
 			{seedGates.length > 0 && (
 				<div>
-					<h3 className="text-lg font-bold mb-1">Seed Badges</h3>
+					<h3 className="text-lg font-bold mb-1">Badges</h3>
 					<p className="text-sm text-base-content/50 mb-3">
-						Badges set by {creatorName}. Give them Seeds to unlock.
+						Badges set by {creatorName}. Support them monthly to unlock.
 					</p>
 					{canGiveSeeds && (
 						<div className="mb-3">

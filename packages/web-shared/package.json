@@ -24,6 +24,7 @@
 		"./decor/sections": "./src/components/decor/sections.tsx",
 		"./economics": "./src/components/economics/economics.tsx",
 		"./economics/SupportStepper": "./src/components/economics/SupportStepper.tsx",
+		"./economics/TakeHome": "./src/components/economics/TakeHome.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeToggle": "./src/components/ui/ThemeToggle.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",

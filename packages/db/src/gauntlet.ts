@@ -18,6 +18,7 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
+import { amountLabel } from "@anthers/shared/constants";
 import type { SeedAccessRow } from "./schema/content.js";
 
 /** The fixture's creator. The `gauntlet_` prefix marks every row this fixture owns. */
@@ -43,14 +44,10 @@ export const GAUNTLET_VIEWER_PASSWORD = "gauntletpassword123";
 export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
 
 /**
- * The Seed ladder's rungs, in **whole Seeds** — one, two and three.
+ * The Badge ladder's rungs, in **dollars a month**.
  *
- * Seeds, not dollars: a gate threshold counts Seeds (migration `0007`), and a Seed is an
- * indivisible $3 unit, so a rung between two whole Seeds isn't expressible in the product
- * and the fixture must not pretend otherwise. Use `rungDollars` where money is meant.
- *
- * 🚨 **DELIBERATELY SPARSE, and that is the point of the 5 and the 7.** A creator may
- * place gates at any Seed levels, and a consecutive ladder (1,2,3) makes a threshold and
+ * 🚨 **DELIBERATELY SPARSE, and that is the point of the $15 and the $21.** A creator may
+ * place gates at any level, and a consecutive ladder (1,2,3) makes a threshold and
  * its list position coincide — which is exactly the accident that let the retired
  * `badgeRank = BADGE_ORDER.indexOf(name)` look correct while mis-resolving any set with
  * gaps, toward over-granting. With $15 and $21 in the ladder, a viewer giving $12 must
@@ -72,13 +69,14 @@ export const GAUNTLET_SLUG_PREFIX = "gauntlet-";
 export const SEED_RUNGS = [3, 6, 9.5, 15, 21] as const;
 
 /**
- * The Seed counts the staircase actually walks: every rung, plus one count sitting in
- * each GAP between two rungs.
+ * The amounts the staircase actually walks: every rung, plus one amount sitting in each
+ * GAP between two rungs.
  *
  * ⭐ The gap states are the payoff of a sparse ladder and cannot exist on a consecutive
- * one. At 4 Seeds a viewer is above the rung at 3 and below the rung at 5 — so a resolver
- * comparing list POSITIONS rather than thresholds (the retired `badgeRank = indexOf`
- * shape) opens one post too many, toward over-granting, in exactly this state.
+ * one. At $12 a viewer is above the rung at $9.50 and below the rung at $15 — so a
+ * resolver comparing list POSITIONS rather than thresholds (the retired
+ * `badgeRank = indexOf` shape) opens one post too many, toward over-granting, in exactly
+ * this state.
  *
  * Ascending, because the walk asserts the ladder only ever climbs.
  */
@@ -91,24 +89,13 @@ export const SEED_WALK: number[] = SEED_RUNGS.flatMap((amount, i) => {
 	return [amount, Math.round(((amount + next) / 2) * 100) / 100];
 });
 
-/**
- * What a rung costs the viewer.
- *
- * Identity since 2026-08-16 — a rung IS its dollars. Kept as a function rather than
- * inlined at every call site so the conversion has one place to come back to if a rung
- * ever stops being denominated the way a payment is.
- */
-export function rungDollars(amount: number): number {
-	return amount;
-}
-
 /** The purchase rung's list price — what the creator receives; fees are added on top. */
 export const DOWNLOAD_PRICE = "9.99";
 
 /** publicIds are stable and sit well clear of `seed.ts`'s 100_000_00x range. */
 const PUBLIC_ID_BASE = 900_000_000;
 
-/** The "everyone" baseline denied, then one Seed rung allowed at `threshold` whole Seeds. */
+/** The "everyone" baseline denied, then one rung allowed at `threshold` dollars a month. */
 function seedRung(threshold: number): SeedAccessRow[] {
 	return [
 		{ threshold: 0, allow: false, price: "0" },
@@ -330,7 +317,7 @@ function reasonsFor(seedsGiven: number, purchased: boolean): Record<string, Gaun
  * to show one.
  */
 function seedLabel(amount: number): string {
-	return `$${Number.isInteger(amount) ? amount : amount.toFixed(2)}`;
+	return amountLabel(amount);
 }
 
 /** A staircase row's label for the rungs, e.g. "$6 given". */
@@ -408,6 +395,6 @@ export const GAUNTLET_GATES: Array<{
 	// bug instead of catching it. With a sparse ladder the two genuinely differ.
 	threshold: String(seeds),
 	label: seedLabel(seeds),
-	description: `Readers who've given at least ${seedLabel(seeds)} ($${rungDollars(seeds)}) this cycle.`,
+	description: `Readers who've given at least ${seedLabel(seeds)} this cycle.`,
 	sortOrder: i,
 }));

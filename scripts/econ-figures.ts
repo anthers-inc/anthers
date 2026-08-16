@@ -147,6 +147,19 @@ export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 
 /** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
 export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
+
+/**
+ * The storefronts a creator actually compares us with, and their revenue share.
+ *
+ * Generated rather than typed into the Studio because 63.01 § Comparisons binds every
+ * comparison to **all-in against all-in** — a rival's take-home has to be computed from
+ * the same card fee ours is, and must move when that fee moves. \`absorbsProcessing\` is
+ * Valve's model: their 30% covers the card cost, so nothing further comes off.
+ *
+ * ⚠️ **The rates themselves are perishable** and hand-maintained in \`scenarios.ts\`
+ * (checked 2026-08-03). Generation guarantees the arithmetic, never the inputs.
+ */
+export const RIVAL_STOREFRONTS = ${j(RIVAL_STOREFRONTS)} as const;
 `;
 }
 
@@ -726,7 +739,21 @@ const BLOCKS: Block[] = [
 // That is the right place to catch it. Typing is the defect; drifting is only what
 // the defect eventually does.
 
-const APP_ROOTS = ["apps/web/src", "packages/web-shared/src"];
+/**
+ * ⚠️ **`packages/db/src` is here for the seed data, and joined the list 2026-08-16.**
+ * Not a page, but the seeds and the gauntlet are prose a developer reads to learn what
+ * the model supports — and they had drifted exactly as the README did, for exactly the
+ * same reason: outside the scan, so nothing looked. `seed.ts` carried a `pwyw` pricing
+ * type and a work blurb promising pay-what-you-want, for a mechanism that has never
+ * existed; the gauntlet printed a viewer's support as a Seed count. One sweep, then this
+ * line, so it is the last time.
+ *
+ * Cheap to include because the scan blanks comments first: the schema identifiers that
+ * legitimately say "seed" (`seed_allocations`, `SEED_RUNGS`, `seedGatedAccess`) are code,
+ * and every `RETIRED_COPY` pattern matches the word as prose rather than as an
+ * identifier. Adding the root found one line and no false positives.
+ */
+const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"];
 
 /**
  * Markdown in this repo that is read by outsiders, and so is held to the same standard
@@ -821,6 +848,35 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			"gi",
 		),
 		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
+	},
+	{
+		// The second mechanism the code never had, and the one that had spread furthest: a
+		// /for-creators pricing card, a ✓ in the itch comparison, the demo storefront, and
+		// the sentence the creator reads directly above the price field all promised
+		// pay-what-you-want. **Checkout has never accepted an amount.** `resolvePurchase`
+		// reads the stored `access.price` and `ProjectPricing` posts `{ slug }` with no
+		// body, so the buyer has no way to send one.
+		//
+		// 🚨 This one earns a guard rather than a sweep for a reason the ATProto rule does
+		// not have: a creator who prices low believing tips will follow **loses money on
+		// every sale**, and the take-home display built alongside this is the thing that
+		// tells them so. A page still promising the tips would put the two surfaces in
+		// direct contradiction at the exact moment the number is chosen.
+		//
+		// ⚠️ Broad on purpose, unlike ATProto's. There is no lexical difference between
+		// claiming it and crediting a rival for it — the itch comparison row differs from
+		// the old one by a JSX prop — so the honest use is the annotated one. Exactly one
+		// `econ:allow` exists for it today, on that row, and a second should be argued for
+		// rather than added.
+		// `pwyw` is in the list because the acronym is how it survived in code rather than
+		// copy — a `pricingType` the seed data set on two works, which the spelled-out
+		// pattern sails straight past. Comments are blanked, so the entry above explaining
+		// why the value went is out of its reach.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:pay[- ]what[- ]you[- ]want|\\bpwyw\\b|name your own price|suggested price|(?:buyers?|they) (?:may|can) pay more|price is a minimum)`,
+			"gi",
+		),
+		why: "pay-what-you-want has never existed — checkout charges the stored price and accepts no amount from the buyer",
 	},
 	{
 		// The organization's own name for itself, and the one place a copy error becomes a
@@ -927,6 +983,24 @@ const ALLOW = /econ:allow(?!-file)\b[\s:—-]*(.*)$/;
 const ALLOW_FILE = /econ:allow-file\b[\s:—-]*(.*)$/m;
 
 /**
+ * A line that carries no code once its comments are gone.
+ *
+ * 🚨 **The braces are why this is a function and not `=== ""`.** `withoutComments`
+ * blanks the comment body but cannot blank the `{` and `}` a JSX comment wraps it in, so
+ * such a comment leaves `{` on its first line and `}` on its last. That single surviving
+ * brace stopped the walk below dead — which meant **an `econ:allow` written as a JSX
+ * comment had never once worked**, in the only syntax available inside a JSX tree. Two
+ * were sitting in the app reading as though they did (`CompareItchPage:196`,
+ * `SubscriptionPage:663`); both happen to guard lines nothing currently matches, so
+ * nobody found out. Discovered 2026-08-16 by writing a third one that was load-bearing.
+ *
+ * An escape hatch that silently does nothing is worse than one that does not exist: the
+ * next person concludes the annotation is unsupported and reaches for `econ:allow-file`,
+ * which silences the whole file.
+ */
+const blankish = (line: string) => line.replace(/[{}]/g, "").trim() === "";
+
+/**
  * Find the annotation covering line `i`: on the line itself, or anywhere in the
  * comment block immediately above it — the reason for a coincidence is often two
  * lines, and a guard that silently ignores the second one teaches people to write
@@ -937,7 +1011,7 @@ const ALLOW_FILE = /econ:allow-file\b[\s:—-]*(.*)$/m;
  */
 function allowance(lines: string[], code: string[], i: number): RegExpExecArray | null {
 	let found = ALLOW.exec(lines[i]);
-	for (let k = i - 1; !found && k >= 0 && code[k].trim() === "" && lines[k].trim() !== ""; k--) {
+	for (let k = i - 1; !found && k >= 0 && blankish(code[k]) && lines[k].trim() !== ""; k--) {
 		found = ALLOW.exec(lines[k]);
 	}
 	return found;

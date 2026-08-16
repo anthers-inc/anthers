@@ -453,7 +453,7 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`  Creator  /${GAUNTLET_CREATOR_USERNAME}  (${GAUNTLET_POSTS.length} posts)`);
 	console.log(
-		`  Viewer   ${viewer.username}  —  Free badge · 0 Seeds · not following · nothing purchased`,
+		`  Viewer   ${viewer.username}  —  Free badge · giving $0 · not following · nothing purchased`,
 	);
 	console.log("");
 	for (const spec of GAUNTLET_POSTS) {

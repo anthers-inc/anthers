@@ -116,7 +116,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-game-hosting",
 							title: "Game Hosting & Marketplace",
 							description:
-								"Host games with build management, differential updates, web game embedding, and flexible pricing (free / PWYW / fixed / gated).",
+								"Host games with build management, differential updates, web game embedding, and flexible pricing (free / fixed / Badge-gated).",
 							status: "active",
 							startQ: 0,
 							endQ: 1,

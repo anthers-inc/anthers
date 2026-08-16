@@ -10,11 +10,12 @@
  * why the input steps by 1 rather than by a cent, and why the dollar figure beside it is
  * derived for display rather than typed.
  */
-import { supportAmount } from "@anthers/shared/constants";
+import { amountLabel, supportAmount } from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { CreatorGate } from "../../lib/types";
+import { TakeHome } from "../economics/TakeHome";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
 function rungAmount(v: string): string {
@@ -27,8 +28,7 @@ function rungAmount(v: string): string {
 
 /** "$6/mo" — the amount IS the gate now, so nothing has to be derived from it. */
 function rungLabel(threshold: string | number): string {
-	const amount = supportAmount(threshold);
-	return `$${Number.isInteger(amount) ? amount : amount.toFixed(2)}/mo`;
+	return `${amountLabel(threshold)}/mo`;
 }
 
 export default function BadgeLadderEditor() {
@@ -175,11 +175,12 @@ export default function BadgeLadderEditor() {
 											className="input input-bordered input-sm w-28"
 											value={editThreshold}
 											onChange={(e) => setEditThreshold(e.target.value)}
-											min="1"
-											step="1"
+											min="0.01"
+											step="0.01"
 											placeholder="$/mo"
 										/>
 									</div>
+									<TakeHome amount={Number(editThreshold) || 0} kind="badge" />
 									<input
 										type="text"
 										className="input input-bordered input-sm w-full"
@@ -255,11 +256,17 @@ export default function BadgeLadderEditor() {
 									className="input input-bordered input-sm w-28"
 									value={newThreshold}
 									onChange={(e) => setNewThreshold(e.target.value)}
-									min="1"
-									step="1"
+									min="0.01"
+									step="0.01"
 									placeholder="$/mo"
 								/>
 							</div>
+							{/* 🚨 Beside the field the creator is typing in. Until 2026-08-16 this input
+							    stepped whole $3 units, so there was nothing to explain — every level
+							    was a multiple and the deduction was always ~13%. With any amount
+							    allowed, a $1 rung is legal and keeps 67%, and the creator should see
+							    that before they choose rather than discover it on a payout. */}
+							<TakeHome amount={Number(newThreshold) || 0} kind="badge" />
 							<input
 								type="text"
 								className="input input-bordered input-sm w-full"
