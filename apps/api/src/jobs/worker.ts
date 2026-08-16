@@ -14,7 +14,12 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runDueDeletions } from "../services/account-deletion.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
-import { noticesReadyForRestore, restoreWork } from "../services/dmca.js";
+import {
+	finalizeNotice,
+	noticesReadyForFinality,
+	noticesReadyForRestore,
+	restoreWork,
+} from "../services/dmca.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { type CrossPublishData, crossPublish } from "./cross-publish.js";
@@ -240,6 +245,33 @@ async function start() {
 				if (result) {
 					console.log(
 						`[dmca-restore] job ${job.id}: restored work ${notice.workId} (notice #${notice.noticeId})`,
+					);
+				}
+			}
+		}
+	});
+
+	// Settle takedowns whose counter-notice window closed with no answer: refund
+	// every buyer of the Work. Separate from the restore sweep so a Stripe outage
+	// cannot stop a statutory restore — see the comment on QUEUES.DMCA_FINALIZE.
+	await queue.work(QUEUES.DMCA_FINALIZE, async (jobs) => {
+		for (const job of jobs) {
+			const ready = await noticesReadyForFinality();
+			for (const notice of ready) {
+				const result = await finalizeNotice({
+					noticeId: notice.noticeId,
+					reason: "no_counter_notice",
+				});
+				if (result?.finalized) {
+					console.log(
+						`[dmca-finalize] job ${job.id}: notice #${notice.noticeId} final, refunded ${result.buyersRefunded} buyer(s)`,
+					);
+				} else if (result && !result.finalized) {
+					// Not an error in most cases — a Work restored early, or a notice
+					// already settled. `refunds_failed` IS one, and stays un-final so
+					// tomorrow's sweep retries it.
+					console.log(
+						`[dmca-finalize] job ${job.id}: notice #${notice.noticeId} not finalized (${result.reason})`,
 					);
 				}
 			}

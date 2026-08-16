@@ -116,7 +116,11 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	// Clean up: delete the works first (they cascade their DMCA notices), then the users.
+	// Notices explicitly, then works, then users. `dmca_notices.work_id` is
+	// `set null` rather than `cascade` (changed 2026-08-16, so an infringer cannot
+	// erase the record by deleting the Work) — so deleting the Work no longer
+	// takes the notices with it, and a suite that assumed it would leaves litter.
+	await db.execute(sql`DELETE FROM dmca_notices WHERE work_id IN (${workId}, ${otherWorkId})`);
 	await db.execute(sql`DELETE FROM works WHERE id IN (${workId}, ${otherWorkId})`);
 	await db.execute(
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${adminName}, ${otherCreatorName})`,

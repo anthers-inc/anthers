@@ -85,6 +85,10 @@ export interface CounterNotice {
  *
  * `suitFiledAt` is set separately — a court action to restrain the subscriber
  * prevents the restore timer from firing, regardless of the notice's status.
+ *
+ * So is `finalizedAt`: a takedown becoming final is what releases the buyer
+ * refunds, and it is deliberately NOT a status — see the column comment for why
+ * making it one would have barred a late counter-notice.
  */
 export type DmcaNoticeStatus =
 	| "received"
@@ -123,7 +127,22 @@ export const dmcaNotices = pgTable(
 		id: serial("id").primaryKey(),
 		// The Work the notice targets. A DMCA notice is always against a Work
 		// (for now); the moderation surface handles comments/ratings/users.
-		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		//
+		// 🚨 **`set null`, not `cascade`** (changed 2026-08-16). It was `cascade`,
+		// on the reasoning that a notice is about that Work specifically — which is
+		// true and is the wrong conclusion, because it made the *infringer* able to
+		// erase the record of their own infringement by deleting the Work. § 512(i)
+		// conditions the safe harbour on a repeat-infringer policy that is
+		// *reasonably implemented*, and the terms now published say we judge a
+		// pattern; a pattern held in rows the subject can delete is not a record.
+		// Same reasoning `moderation_reports` already applies to accounts: a
+		// decision outlives what it was about.
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
+		// The Work's title at the time the notice was filed. Snapshotted for the
+		// same reason `attestationTextSnapshot` is: once `workId` can go null, the
+		// join that rendered the queue can return nothing, and a notice nobody can
+		// read is a record only in the technical sense.
+		workTitle: text("work_title").notNull().default(""),
 		// The complainant — § 512(c)(3)(A)(iv): contact information including
 		// address, telephone number, and email if available.
 		complainantName: text("complainant_name").notNull(),
@@ -166,6 +185,33 @@ export const dmcaNotices = pgTable(
 		// (§ 512(g)(2)(C)), recording this prevents the restore timer from
 		// firing. Set separately from the notice status.
 		suitFiledAt: timestamp("suit_filed_at", { withTimezone: true }),
+		// ── Finality, and why it is a timestamp rather than a status ──────────
+		// A takedown becomes FINAL when the creator has had a fair chance to
+		// counter-notice and hasn't (`counterNoticeDueBy` passes), or when they
+		// concede. Finality is what releases the buyer refunds — the brief's
+		// reasoning: refunding at removal and then restoring on day 12 leaves a
+		// refunded buyer holding restored access, and spends the remainder on a
+		// claim that turned out to be wrong.
+		//
+		// 🚨 These are TIMESTAMPS, deliberately, not a `final` entry in
+		// `DmcaNoticeStatus`. A status would have closed the counter-notice door
+		// — the route admits a counter-notice only on an `actioned` notice — and
+		// § 512(g) sets NO deadline for filing one. A self-imposed deadline that
+		// bars a late counter-notice is exactly the competitor-removal weapon the
+		// brief refuses to build. So the window governs *when we refund*, and
+		// never *whether the creator may still answer*.
+		/** When the creator's counter-notice window closes. Set at takedown. */
+		counterNoticeDueBy: timestamp("counter_notice_due_by", { withTimezone: true }),
+		/** When the takedown became final and the buyer refunds were released. */
+		finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+		/** `no_counter_notice` | `conceded` — how finality was reached. */
+		finalizedReason: text("finalized_reason").notNull().default(""),
+		/**
+		 * How many buyers were refunded at finality. Derivable from `purchases`,
+		 * and stored anyway: it is a record of what the finalization DID, which is
+		 * the same reason `moderation_actions` exists beside `moderation_status`.
+		 */
+		buyersRefunded: integer("buyers_refunded").notNull().default(0),
 		// Operator who acted — set null, same as moderation_actions.actorId.
 		actorId: integer("actor_id").references(() => users.id, { onDelete: "set null" }),
 		actorRole: text("actor_role").notNull().default("operator"),
@@ -180,6 +226,9 @@ export const dmcaNotices = pgTable(
 		// The restore timer sweep scans for counter_noticed rows whose window
 		// has passed and no suit was filed.
 		index("idx_dmca_notices_restore").on(table.status, table.restoreNoEarlierThan),
+		// The finality sweep scans for actioned rows whose counter-notice window
+		// has passed and that have not been finalized yet.
+		index("idx_dmca_notices_finality").on(table.status, table.counterNoticeDueBy),
 		// The actor who decided — the decision outlives the account.
 		index("idx_dmca_notices_actor").on(table.actorId),
 	],

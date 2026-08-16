@@ -44,6 +44,7 @@ import {
 	moderationSummary,
 	type QueueFilter,
 	restoreSubject,
+	routeToCopyright,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
 
@@ -350,6 +351,17 @@ const adminRoutes = new Hono()
 		const user = c.get("user");
 		const { subjectType, subjectId } = c.req.valid("json");
 		const result = await dismissReports({ subjectType, subjectId, actorId: user.id });
+		return c.json(result);
+	})
+
+	// The route-out: this report is really a copyright claim. Clears the reports
+	// and answers the reporter with the path that can handle it — and takes NO
+	// action on the content, because a bare user report is not a DMCA notice and
+	// must never cause a removal. See `routeToCopyright`.
+	.post("/moderation/route-to-copyright", zValidator("json", subjectSchema), async (c) => {
+		const user = c.get("user");
+		const { subjectType, subjectId } = c.req.valid("json");
+		const result = await routeToCopyright({ subjectType, subjectId, actorId: user.id });
 		return c.json(result);
 	})
 
