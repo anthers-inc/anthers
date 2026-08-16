@@ -13,8 +13,14 @@
  *     bun run scripts/bws-project-id.ts "Anthers Dev"
  */
 
-const name = (Bun.argv[2] ?? "").trim();
-if (!name) {
+// A module rather than a global script, and not merely for tidiness: without it `name`
+// collides with the DOM global of that name, top-level `await` is rejected, and the file
+// cannot be typechecked at all. It went unnoticed because `scripts/` sat outside
+// `bun run typecheck` until 2026-08-16.
+export {};
+
+const projectName = (Bun.argv[2] ?? "").trim();
+if (!projectName) {
 	console.error('bws-project-id: usage: bun run scripts/bws-project-id.ts "<project name>"');
 	process.exit(2);
 }
@@ -46,10 +52,10 @@ if ((await proc.exited) !== 0) {
 }
 
 const projects = JSON.parse(out) as { id: string; name: string }[];
-const match = projects.filter((p) => p.name.toLowerCase() === name.toLowerCase());
+const match = projects.filter((p) => p.name.toLowerCase() === projectName.toLowerCase());
 if (match.length !== 1) {
 	console.error(
-		`bws-project-id: ${match.length} projects named "${name}". Visible:\n` +
+		`bws-project-id: ${match.length} projects named "${projectName}". Visible:\n` +
 			projects.map((p) => `    ${p.name}`).join("\n"),
 	);
 	process.exit(1);
