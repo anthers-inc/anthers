@@ -48,22 +48,32 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FREE_STORAGE_GIB,
+	formatMultiple,
 	SALES_TAX_RATE,
 	SEED_PRICE,
 	TIME_POOL_PER_SEED,
 } from "../packages/shared/src/constants.js";
+import { CREATOR_FLOOR, PHASE_ACCOUNTS } from "../packages/shared/src/growth.js";
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
 import {
 	badgeTable,
 	cartSaving,
 	creatorReceipt,
+	creatorSegments,
 	directedSeedWorstCase,
-	FIXED_MONTHLY_OVERHEAD,
+	edBandSensitivity,
+	freePotSensitivity,
+	growthLadder,
+	MODELLED_PAYING_SHARE,
 	PAYING_BADGE_MIX,
+	paIncentiveCeiling,
+	payingShareSensitivity,
 	purchaseExamples,
 	RIVAL_STOREFRONTS,
+	salaryLandmarks,
 	saleTable,
 	sampleReceipt,
+	seedMixSensitivity,
 	selfSufficiency,
 	takeHomeComparison,
 } from "../packages/shared/src/scenarios.js";
@@ -387,19 +397,24 @@ function renderCreatorReceiptMarkdown(): string {
 /** Whether the charitable budget funds itself, as a function of the paying share. */
 function renderSelfSufficiencyMarkdown(): string {
 	const s = selfSufficiency();
+	// Only the rungs carrying a whole percent — the tail runs to ten Seeds and printing
+	// "0% at 9" teaches the reader the mix stops there, which is the opposite of true.
 	const mix = Object.entries(PAYING_BADGE_MIX)
+		.filter(([, share]) => Number(share) >= 0.01)
 		.map(([seeds, share]) => `${(Number(share) * 100).toFixed(0)}% at ${seeds}`)
-		.join(", ");
+		.join(", ")
+		.concat(", trailing off beyond that");
 	return [
 		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidised Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
 		"",
 		table(
-			["Paying share", "Net per paying user", "Users to solvency"],
-			["--:", "--:", "--:"],
+			["Paying share", "Net per paying user", "Self-funding at", "Full-time at"],
+			["--:", "--:", "--:", "--:"],
 			s.rows.map((r) => [
 				r.sharePct,
 				r.net.startsWith("-") ? `−$${r.net.slice(1)}` : `$${r.net}`,
-				r.usersToSolvency === null ? "**never**" : `~${r.usersToSolvency.toLocaleString("en-US")}`,
+				accounts(r.selfFunding),
+				accounts(r.fullTime),
 			]),
 		),
 		"",
@@ -407,7 +422,9 @@ function renderSelfSufficiencyMarkdown(): string {
 		"",
 		`**That floor no longer moves with how much free users watch**, and until 2026-08-12 it did. A free account's cost was its streaming bandwidth plus its Time Pool, so the generosity of the free floor and the platform's self-sufficiency were the same dial and raising one priced the other. Delivery is free on R2, the floor is gone, and what remains — the $${s.freeUserCost} Time Pool — is a flat cost per free account however much it watches. **Free access stopped having a usage-dependent price.**`,
 		"",
-		`Two ASSUMPTIONS drive every number here and neither is a dial: the paying-user Badge mix (${mix} Seeds) and $${FIXED_MONTHLY_OVERHEAD.toLocaleString("en-US")}/month of fixed overhead. The mix matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it.`,
+		`**Self-funding** is where the budget covers its obligations with no salary drawn; **full-time** is where it also affords an ED inside the Admin ceiling — 61.01's inflection 1. Both come from the same growth model the ladder does, so the two documents cannot disagree.`,
+		"",
+		`One ASSUMPTION drives every number here and it is not a dial: the paying-user Badge mix, a decay putting the average payer at **${s.averageSeeds} Seeds** (${mix}). It matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it. Until 2026-08-16 this document and 61.01 assumed **different mixes** and so published different floors; there is one model now.`,
 	].join("\n");
 }
 
@@ -444,11 +461,192 @@ function renderTakeHomeMarkdown(): string {
 	].join("\n");
 }
 
+// ── The growth ladder (61.01) ────────────────────────────────────────────────
+//
+// These landmarks were hand-typed derived figures until 2026-08-16, produced by running a
+// RETIRED HTML playground's `computeAll` headless and copying the answers across. 61.01
+// said so in its own standing instruction, and had rotted twice in three days by the time
+// it was acted on. The playground was also the only model carrying the per-rung ladder, so
+// re-deriving a number meant reviving a file that had been retired to the Graveyard.
+//
+// The ceilings themselves are NOT generated and must not become so — they are policy,
+// chosen in 61.01, and that is exactly what makes them safe to quote.
+
+/**
+ * Accounts, rounded the way a landmark should be read: to a scale, not to a person.
+ *
+ * Three significant figures rather than a fixed step, because these span four orders of
+ * magnitude. A flat round-to-100 reads fine at 33,100 and **destroys** the small end —
+ * the "platform stops costing Parker money" landmark at 239 accounts came out as ~200,
+ * which is a different claim about the smallest and most decision-dense rung on the ladder.
+ */
+const accounts = (n: number | null) => {
+	if (n === null) return "**never**";
+	const mag = 10 ** Math.max(0, Math.floor(Math.log10(n)) - 2);
+	return `~${(Math.round(n / mag) * mag).toLocaleString("en-US")}`;
+};
+
+/** A money string from `scenarios.ts` (always 2dp), grouped for reading. */
+const usd = (s: string) =>
+	`$${Number(s).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function renderLandmarksMarkdown(): string {
+	const s = selfSufficiency();
+	return [
+		`Every figure below is derived from \`fees.ts\` through \`packages/shared/src/growth.ts\`, at the model's **${(MODELLED_PAYING_SHARE * 100).toFixed(0)}% paying share** and the shipped free-account Time Pool of **$${s.freeUserCost}**. They move when a dial moves, and \`bun run econ:figures --check\` fails CI if this block and the model disagree.`,
+		"",
+		table(
+			["Landmark", "Accounts", "What it means"],
+			[":--", "--:", ":--"],
+			salaryLandmarks().map((l) => [l.label, accounts(l.accounts), l.note]),
+		),
+		"",
+		`**Solvency and charity-health are different lines, and the gap is the whole design.** A full-time salary is affordable at ${accounts(salaryLandmarks()[2].accounts)} accounts and *responsible* at ${accounts(salaryLandmarks()[3].accounts)} — a factor of about ${(
+			(salaryLandmarks()[3].accounts as number) / (salaryLandmarks()[2].accounts as number)
+		).toFixed(
+			1,
+		)}. Paying at the solvency point would run Admin near two-thirds of charitable revenue in the same years the Form 1023 narrative is examined and the first 990s are filed, so **every salary landmark here uses the charity-health line.**`,
+	].join("\n");
+}
+
+function renderLadderVerdictMarkdown(): string {
+	return [
+		`What the books say when standing on each ceiling, carrying that rung's own planned staffing. **The ceilings are policy and are not derived** — this is only the verdict beside them.`,
+		"",
+		table(
+			["Phs", "Accounts", "Creators", "Staff/mo", "Admin", "Charity-healthy"],
+			["--:", "--:", "--:", "--:", "--:", ":-:"],
+			growthLadder().map((r) => [
+				String(r.phase),
+				r.accounts.toLocaleString("en-US"),
+				r.creators.toLocaleString("en-US"),
+				r.staff === 0 ? "—" : `$${r.staff.toLocaleString("en-US")}`,
+				r.adminPct,
+				r.adminHealthy ? "✅" : r.solvent ? "⚠️ solvent only" : "🚫 underwater",
+			]),
+		),
+		"",
+		`**Rungs 1–3 come back underwater on purpose.** That is Parker's own subsidy, and a model that hid it — by sizing each rung's plan to what that rung can afford — could only ever confirm itself. Admin's share then *declines* with scale, which is 50.01's stated design target.`,
+	].join("\n");
+}
+
+function renderPayingShareMarkdown(): string {
+	const rows = payingShareSensitivity();
+	const floor = selfSufficiency().breakEvenPct;
+	return [
+		table(
+			["Paying share", "Inflection 1"],
+			["--:", "--:"],
+			rows.map((r) => [
+				r.share === MODELLED_PAYING_SHARE ? `**${r.sharePct}** *(model default)*` : r.sharePct,
+				r.share === MODELLED_PAYING_SHARE ? `**${accounts(r.accounts)}**` : accounts(r.accounts),
+			]),
+		),
+		"",
+		`**Violently non-linear near the floor, and the reason is structural.** Above roughly 15% paying the binding constraint is the **Admin ≤ 30% ceiling**, which is a ratio of overhead to charitable *revenue* and cannot see the free-access pot at all — so the curve is gentle. Below that **solvency** binds, the pot enters, and the threshold runs away. Below **${floor} paying there is no scale that works**: each new cohort costs more in free access than it brings in, so growth makes the gap worse rather than better.`,
+	].join("\n");
+}
+
+function renderSeedMixMarkdown(): string {
+	const rows = seedMixSensitivity();
+	const current = rows.find((r) => r.current);
+	const collapse = rows[rows.length - 1];
+	return [
+		table(
+			["Avg Seeds / payer", "Inflection 1"],
+			["--:", "--:"],
+			rows.map((r) => [
+				r.current ? `**${r.avgSeeds}** *(current assumption)*` : r.avgSeeds,
+				r.current ? `**${accounts(r.accounts)}**` : accounts(r.accounts),
+			]),
+		),
+		"",
+		`🚨 **The single biggest risk to the ladder is it flattening, not the economics.** Binary Public Access removes the reason to hold more than one Seed given to Anthers, so the paying population slides toward exactly one unless something above the first Seed earns it. A near-total collapse to ${collapse.avgSeeds} Seeds a payer puts inflection 1 at ${accounts(collapse.accounts)} against ${accounts(current?.accounts ?? null)} today — **still worse than the ~57,500 of the pre-R2 world**, so the R2 windfall does not quite cover it, but by about ${(((collapse.accounts as number) / 57_500) * 100 - 100).toFixed(0)}% rather than the ninety it was once thought to be.`,
+	].join("\n");
+}
+
+function renderEdBandMarkdown(): string {
+	const rows = edBandSensitivity();
+	return [
+		table(
+			["ED salary", "Inflection 1"],
+			[":--", "--:"],
+			rows.map((r) => [r.label, accounts(r.accounts)]),
+		),
+		"",
+		`Still the single number with the most leverage on where the ladder's anchor falls — but no longer a painful choice: paying at the **top** of 60.01's band now reaches inflection 1 at ${accounts(rows[2].accounts)}, comfortably below where the **bottom** of the band landed under the pre-R2 economics (~57,500).`,
+	].join("\n");
+}
+
+function renderCreatorSegmentsMarkdown(): string {
+	const s = creatorSegments();
+	return [
+		`The modelled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by their Seed count, so a per-hour rate is an emergent ratio nobody is paid at.`,
+		"",
+		table(
+			["Segment", "Creators", "Attention", "Catalogue", "Time Pool /mo", "Storage /mo", "Net /mo"],
+			[":--", "--:", "--:", "--:", "--:", "--:", "--:"],
+			s.rows.map((r) => [
+				r.free ? `${r.name} *(subsidised)*` : r.name,
+				r.count.toLocaleString("en-US"),
+				r.attentionPct,
+				`${r.storageGiB} GiB`,
+				usd(r.earns),
+				r.free ? "—" : usd(r.storage),
+				usd(r.net),
+			]),
+		),
+		"",
+		`**Free creators' first ${FREE_STORAGE_GIB} GiB is a free-access obligation**, funded from users' Seeds — the only cost line that scales with creators and is paid for by users. Everything above the free tier is the creator's own opt-in cost: the object-store rate plus half again, and nothing else, because delivery costs nobody anything.`,
+	].join("\n");
+}
+
+function renderPaCeilingMarkdown(): string {
+	const c = paIncentiveCeiling();
+	return [
+		`Public Access content never counts against a creator's storage, so Anthers carries it — the first creator incentive. Incentives are held under **one aggregate budget line, ${c.ceilingPct} of charitable revenue**, because individually healthy incentives can still sum to a cost problem.`,
+		"",
+		`Priced at the **worst case** — every creator giving their whole catalogue to the commons — the exemption costs **${c.atScalePct}** of charitable revenue at scale, and ${c.allFit ? "fits inside the ceiling at every rung" : "**exceeds the ceiling at some rung**"}.`,
+		"",
+		`⚠️ **The worst case is rung ${c.worstPhase}, at ${c.worstPct}, and that is the opposite of the intuition.** The cost is driven by creators *per account*, and the flat ${CREATOR_FLOOR}-creator floor makes the smallest rung the most creator-dense the platform will ever be — ${CREATOR_FLOOR} creators against ${PHASE_ACCOUNTS[0]} accounts, where the ratio alone would allow one. So the exemption very nearly touches its ceiling at rung ${c.worstPhase} and is negligible everywhere above. **Raising the flat creator floor raises this**, which is a live constraint on that open call.`,
+	].join("\n");
+}
+
+/**
+ * What each candidate free-account Time Pool pot costs, as the floor paying share.
+ *
+ * 11.03 carried these three by hand and they had been wrong twice — a table whose entire
+ * purpose is to price a decision that has not been taken is exactly the table that must
+ * not be typed. ⚠️ Note the reversal this generation produced: the revamp's own ~15.7%
+ * for a $0.50 pot, which 11.03 recorded as "does not reproduce, do not carry forward",
+ * **reproduces exactly** under the unified model. What did not reproduce was the four-rung
+ * Badge mix `selfSufficiency()` used to assume, not the figure.
+ */
+function renderFreePotMarkdown(): string {
+	const rows = freePotSensitivity();
+	const shipped = rows.find((r) => r.shipped);
+	return [
+		table(
+			["Free pot / account", "Creator earns, with a Seed", "Floor paying share"],
+			["--:", "--:", "--:"],
+			rows.map((r) => [
+				r.shipped ? `**$${r.pot}** *(shipped)*` : `$${r.pot}`,
+				`${formatMultiple(r.multiple)} more`,
+				r.shipped ? `**${r.floorPct}**` : r.floorPct,
+			]),
+		),
+		"",
+		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioural guess underneath it. Raising it sends more money to the creators a free viewer spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
+	].join("\n");
+}
+
 interface Block {
 	file: string;
 	key: string;
 	render: () => string;
 }
+
+const LADDER = "60-69 Strategy/61 Roadmap & Growth/61.01 Growth Phases and Join Quotas.md";
 
 /**
  * Generated regions in markdown that lives in **this repository**.
@@ -508,6 +706,20 @@ const BLOCKS: Block[] = [
 		file: "60-69 Strategy/62 Positioning & Audience/62.04 Creator Take-Home Comparisons.md",
 		key: "take-home",
 		render: renderTakeHomeMarkdown,
+	},
+	// The growth ladder. 61.01 is canonical for the RUNGS, which are policy and stay
+	// hand-written; everything derived from them is generated here.
+	{ file: LADDER, key: "growth-landmarks", render: renderLandmarksMarkdown },
+	{ file: LADDER, key: "growth-ladder", render: renderLadderVerdictMarkdown },
+	{ file: LADDER, key: "growth-paying-share", render: renderPayingShareMarkdown },
+	{ file: LADDER, key: "growth-seed-mix", render: renderSeedMixMarkdown },
+	{ file: LADDER, key: "growth-ed-band", render: renderEdBandMarkdown },
+	{ file: LADDER, key: "growth-creator-segments", render: renderCreatorSegmentsMarkdown },
+	{ file: LADDER, key: "growth-pa-ceiling", render: renderPaCeilingMarkdown },
+	{
+		file: "10-19 Overview/11 Model & Mission/11.03 Open Questions re the Support Model.md",
+		key: "free-pot",
+		render: renderFreePotMarkdown,
 	},
 ];
 

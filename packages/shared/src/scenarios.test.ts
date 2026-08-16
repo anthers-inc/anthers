@@ -17,9 +17,21 @@ import {
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
 import {
+	affordable,
+	averageSeeds,
+	crossover,
+	floorPayingShare,
+	modelAt,
+	NO_STAFFING,
+	payingBadgeMix,
+	remainderPerPayingAccount,
+	staffingForPhase,
+} from "./growth.js";
+import {
 	badgeTable,
 	creatorReceipt,
 	directedSeedWorstCase,
+	PAYING_BADGE_MIX,
 	saleTable,
 	sampleReceipt,
 	selfSufficiency,
@@ -191,36 +203,84 @@ describe("selfSufficiency", () => {
 		expect(s.freeUserCost).toBe(new Decimal(FREE_TIME_POOL).toFixed(2));
 	});
 
-	test("net per paying user is revenue less the free users they carry", () => {
-		// Recomputed from the ROUNDED published figures, so the tolerance has to scale
-		// with the multiplier: at a 10% paying share each paying user carries 9 free ones,
-		// which turns a half-cent of rounding in `freeUserCost` into four and a half. The
-		// implementation works at full precision and rounds once, for display — that is
-		// the correct order, and it is why this asserts closeness rather than equality.
+	/**
+	 * 🚨 **The assertion that retires the two-floor warning.**
+	 *
+	 * Until 2026-08-16 this module and `growth.ts` answered the same question with two
+	 * different models — a hand-typed four-rung Badge mix here, a geometric decay there —
+	 * and published **10.3%** and **8.8%** for the floor paying share. 61.01 had to carry a
+	 * warning naming which one governed, and the ladder could only be re-derived by reviving
+	 * a file that had been retired to the Graveyard.
+	 *
+	 * Asserting that the two now agree is the guard against that reopening. It is cheap
+	 * precisely because there is only one model left: if this ever fails, someone has given
+	 * `selfSufficiency` a second opinion again.
+	 */
+	test("the floor here is the floor the growth ladder uses — one model, one number", () => {
+		expect(Number(s.breakEvenPct.replace("%", ""))).toBeCloseTo(
+			floorPayingShare({ staffing: NO_STAFFING }) * 100,
+			1,
+		);
+	});
+
+	test("the mix is the growth model's, averaging 2.20 Seeds per payer", () => {
+		expect(s.averageSeeds).toBe(averageSeeds(payingBadgeMix()).toFixed(2));
+		expect(Number(s.revenuePerPayingUser)).toBeCloseTo(
+			remainderPerPayingAccount(PAYING_BADGE_MIX),
+			2,
+		);
+	});
+
+	/**
+	 * The rows report the two lines 11.02 and 61.01 were implicitly comparing all along, so
+	 * each must equal the ladder's own landmark at that share. A `FIXED_MONTHLY_OVERHEAD`
+	 * of $12,600 stood here instead, sourced to nothing — which is how the two documents
+	 * came to disagree without either being wrong on its own terms.
+	 */
+	test("each row's landmarks are the ladder's, at that paying share", () => {
 		for (const row of s.rows) {
-			const freePerPaying = new Decimal(1 - row.share).dividedBy(row.share);
-			const expected = new Decimal(s.revenuePerPayingUser).minus(
-				freePerPaying.times(s.freeUserCost),
+			expect(row.selfFunding).toBe(
+				crossover(affordable, { payingShare: row.share, staffing: NO_STAFFING }),
 			);
-			const tolerance = freePerPaying.times(0.005).plus(0.005).toNumber();
-			expect(Math.abs(new Decimal(row.net).minus(expected).toNumber())).toBeLessThan(tolerance);
+			expect(row.fullTime).toBe(
+				crossover(affordable, { payingShare: row.share, staffing: staffingForPhase(10) }),
+			);
 		}
 	});
 
-	test("net rises with the paying share, and solvency gets easier", () => {
+	test("net rises with the paying share, and both landmarks get nearer", () => {
 		const nets = s.rows.map((r) => Number(r.net));
 		expect([...nets].sort((a, b) => a - b)).toEqual(nets);
-		const scales = s.rows.filter((r) => r.usersToSolvency !== null).map((r) => r.usersToSolvency);
-		expect([...scales].sort((a, b) => (b as number) - (a as number))).toEqual(scales);
+		for (const key of ["selfFunding", "fullTime"] as const) {
+			const scales = s.rows.map((r) => r[key]).filter((n): n is number => n !== null);
+			expect([...scales].sort((a, b) => b - a)).toEqual(scales);
+		}
 	});
 
-	test("the break-even share is exactly where net per paying user reaches zero", () => {
-		const p = Number(s.breakEvenPct.replace("%", "")) / 100;
-		const freePerPaying = new Decimal(1 - p).dividedBy(p);
-		const net = new Decimal(s.revenuePerPayingUser).minus(freePerPaying.times(s.freeUserCost));
-		// Same rounding caveat, plus the share itself is published to one decimal — at
-		// ~10% that last digit alone moves the free-per-paying multiplier by ~0.1.
-		expect(Math.abs(net.toNumber())).toBeLessThan(0.06);
+	/**
+	 * `net` is the model's **slope** — what one more account does to the budget, divided
+	 * across the paying cohort carrying it. So the break-even share is where it reaches
+	 * zero, and asserting that is asserting what the figure means rather than how it is
+	 * computed. The old version of this test recomputed `revenue − freePerPaying × cost`,
+	 * which was the implementation copied into the test file and could only ever agree.
+	 */
+	test("net per paying user reaches zero exactly at the break-even share", () => {
+		const floor = Number(s.breakEvenPct.replace("%", "")) / 100;
+		const netAt = (share: number) => {
+			const at = (n: number) =>
+				modelAt({ accounts: n, payingShare: share, staffing: NO_STAFFING }).programs;
+			return (at(2e6) - at(1e6)) / 1e6 / share;
+		};
+		// `breakEvenPct` is published to one decimal, so `floor` can sit up to half a
+		// tenth of a percent off the true crossing — and `net` is per PAYING account, so
+		// that half-step is divided by the share and comes back magnified. The tolerance
+		// is derived from the publishing precision rather than tuned until it passed:
+		// a bare 0.01 looks tighter and is only an assertion about today's rounding.
+		const halfStep = 0.0005;
+		const slopePerShare = Number(s.revenuePerPayingUser) + Number(s.freeUserCost);
+		expect(Math.abs(netAt(floor))).toBeLessThan((halfStep * slopePerShare) / floor);
+		expect(netAt(floor - 0.02)).toBeLessThan(0);
+		expect(netAt(floor + 0.02)).toBeGreaterThan(0);
 	});
 
 	/**
@@ -236,26 +296,6 @@ describe("selfSufficiency", () => {
 	 */
 	test("free access has no usage-dependent price — a free user costs a flat Time Pool", () => {
 		expect(Number(s.freeUserCost)).toBe(FREE_TIME_POOL);
-	});
-
-	/**
-	 * ⚠️ **`FREE_TIME_POOL` is the dial this whole table pivots on, and it is provisional.**
-	 * It moved $0.05 → $0.25 on 2026-08-12 and is expected to move again once there is real
-	 * conversion data. So the assertion is the *relationship*, computed independently of
-	 * `selfSufficiency`'s own arithmetic — a break-even share is exactly the point where one
-	 * paying user's remainder covers the free users beside them:
-	 *
-	 *     breakEven = cost / (revenue + cost)
-	 *
-	 * A guard here previously read `revenue > cost × 10`, which was a number picked to pass
-	 * at $0.05 and said nothing about the model. It failed the moment the dial moved — the
-	 * right outcome for a bad assertion, and the reason it is replaced rather than retuned.
-	 */
-	test("the break-even share is cost / (revenue + cost), whatever the dial is set to", () => {
-		const cost = new Decimal(s.freeUserCost);
-		const revenue = new Decimal(s.revenuePerPayingUser);
-		const expected = cost.dividedBy(revenue.plus(cost)).times(100);
-		expect(Number(s.breakEvenPct.replace("%", ""))).toBeCloseTo(expected.toNumber(), 1);
 	});
 
 	test("the model is viable at a plausible paying share", () => {
