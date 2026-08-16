@@ -47,13 +47,13 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import {
-	createOneTimeCharge,
-	ensureStripeCustomer,
-	savedCardFor,
 	anthersProductId,
+	createOneTimeCharge,
 	ensureCreatorProduct,
+	ensureStripeCustomer,
 	itemsFromSub,
 	periodEndFromSub,
+	savedCardFor,
 	supportItems,
 } from "../services/billing.js";
 import { loadPublicAccessBudget } from "../services/public-access.js";
@@ -255,7 +255,10 @@ const subscriptionRoutes = new Hono()
 					canceledAt: null,
 				},
 				anthersSupport: 0,
-				badge: "free",
+				// Derived rather than typed as the literal "free": inside `c.json` a string
+				// literal widens to `string`, and the RPC client then cannot see it is a
+				// BadgeKey at all.
+				badge: heldBadgeName(0),
 				badgeView: BADGE_VIEWS[0],
 			});
 		}
@@ -450,7 +453,12 @@ const subscriptionRoutes = new Hono()
 					? await db
 							.select({ id: users.id, username: users.username })
 							.from(users)
-							.where(inArray(users.id, directed.map((d) => d.creatorId)))
+							.where(
+								inArray(
+									users.id,
+									directed.map((d) => d.creatorId),
+								),
+							)
 					: [];
 			const byId = new Map(creators.map((u) => [u.id, u.username ?? String(u.id)]));
 			const picks: { creatorId: number; product: string; amount: number }[] = [];
@@ -475,10 +483,7 @@ const subscriptionRoutes = new Hono()
 				const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId);
 				if (sub.status === "active" || sub.status === "trialing") {
 					await stripe.subscriptions.update(sub.id, {
-						items: [
-							...sub.items.data.map((i) => ({ id: i.id, deleted: true as const })),
-							...items,
-						],
+						items: [...sub.items.data.map((i) => ({ id: i.id, deleted: true as const })), ...items],
 						proration_behavior: "always_invoice",
 						cancel_at_period_end: false,
 						metadata: { ...sub.metadata, userId: String(user.id) },

@@ -18,7 +18,6 @@ import {
 	badgeLabel,
 	cardFeeDisplay,
 	SALES_TAX_RATE,
-	seedCost,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -58,7 +57,7 @@ export const BADGE_LADDER: {
 }[] = BADGE_ORDER.filter((b) => b !== "free").map((b) => ({
 	name: badgeLabel(b),
 	emoji: BADGE_ART[b].emoji,
-	threshold: `$${seedCost(thresholdForBadge(b))}/mo`,
+	threshold: `$${thresholdForBadge(b)}/mo`,
 	wreath: BADGE_ART[b].wreath,
 }));
 
@@ -142,7 +141,7 @@ function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: Badge
 		<div className="mb-6 grid grid-cols-5 gap-2">
 			{BADGE_ORDER.map((b) => {
 				const active = b === value;
-				const price = seedCost(thresholdForBadge(b));
+				const price = thresholdForBadge(b);
 				return (
 					<button
 						key={b}
@@ -193,7 +192,7 @@ function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: Badge
 export function SubscriptionCalculator() {
 	const [badge, setBadge] = useState<BadgeKey>("root");
 	const n = thresholdForBadge(badge);
-	const price = seedCost(n);
+	const price = n;
 	const timePool = timePoolFor(n);
 	// "Supports Anthers" is the remainder — what funds free access and the charitable
 	// programs.

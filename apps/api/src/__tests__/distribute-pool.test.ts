@@ -13,7 +13,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { accounts, poolDistributions, seedAllocations, users } from "@anthers/db/schema";
-import { SEED_PRICE } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
@@ -39,14 +39,17 @@ async function makeUser(tag: string): Promise<number> {
 	return row.id;
 }
 
-/** A viewer holding `anthersSeeds`, with `directed` dollars pointed at each creator. */
-async function seedCycle(anthersSeeds: number, directed: { creatorId: number; amount: string }[]) {
+/** A viewer giving Anthers `anthersSupport`, with `directed` dollars at each creator. */
+async function seedCycle(
+	anthersSupport: number,
+	directed: { creatorId: number; amount: string }[],
+) {
 	const userId = await makeUser("viewer");
 	const [acct] = await db
 		.insert(accounts)
 		.values({
 			userId,
-			anthersSeeds,
+			anthersSupport: anthersSupport.toFixed(2),
 			currentPeriodStart: PERIOD_START,
 			currentPeriodEnd: PERIOD_END,
 			isActive: true,
@@ -78,13 +81,13 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 	it("pays the model's figure exactly for the worst case: one Seed, alone", async () => {
 		const creatorId = await makeUser("creator");
 		const { userId, accountId } = await seedCycle(0, [
-			{ creatorId, amount: SEED_PRICE.toFixed(2) },
+			{ creatorId, amount: PUBLIC_ACCESS_PRICE.toFixed(2) },
 		]);
 
 		await distributePool({ accountId });
 
 		// $3.00 gross − $0.39 card = $2.61. Asserted against the model, not a literal.
-		const expected = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 }).creatorNet;
+		const expected = supportBreakdown({ anthersDollars: 0, creatorDollars: 3 }).creatorNet;
 		expect(expected.toFixed(2)).toBe("2.61"); // the figure the marketing copy quotes
 		expect((await payouts(userId)).get(creatorId)?.toFixed(2)).toBe(expected.toFixed(2));
 	});
@@ -93,10 +96,12 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		const soloCreator = await makeUser("creator");
 		const batchedCreator = await makeUser("creator");
 
-		const solo = await seedCycle(0, [{ creatorId: soloCreator, amount: SEED_PRICE.toFixed(2) }]);
-		// Same single directed Seed, but riding on a charge that also carries 3 to Anthers.
-		const batched = await seedCycle(3, [
-			{ creatorId: batchedCreator, amount: SEED_PRICE.toFixed(2) },
+		const solo = await seedCycle(0, [
+			{ creatorId: soloCreator, amount: PUBLIC_ACCESS_PRICE.toFixed(2) },
+		]);
+		// The same $3 to one creator, riding on a charge that also carries $9 to Anthers.
+		const batched = await seedCycle(9, [
+			{ creatorId: batchedCreator, amount: PUBLIC_ACCESS_PRICE.toFixed(2) },
 		]);
 
 		await distributePool({ accountId: solo.accountId });
@@ -106,7 +111,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		const batchedPaid = (await payouts(batched.userId)).get(batchedCreator)!;
 		expect(batchedPaid.greaterThan(soloPaid)).toBe(true);
 		expect(batchedPaid.toFixed(2)).toBe(
-			supportBreakdown({ anthersSeeds: 3, creatorSeeds: 1 }).creatorNet.toFixed(2),
+			supportBreakdown({ anthersDollars: 9, creatorDollars: 3 }).creatorNet.toFixed(2),
 		);
 	});
 
@@ -116,7 +121,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		const a = await makeUser("creator");
 		const b = await makeUser("creator");
 		const c = await makeUser("creator");
-		const { userId, accountId } = await seedCycle(1, [
+		const { userId, accountId } = await seedCycle(3, [
 			{ creatorId: a, amount: "3.00" },
 			{ creatorId: b, amount: "6.00" },
 			{ creatorId: c, amount: "9.00" },
@@ -127,7 +132,7 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		const paid = await payouts(userId);
 		const total = [a, b, c].reduce((acc, id) => acc.plus(paid.get(id) ?? 0), new Decimal(0));
 		const gross = new Decimal(18);
-		const fee = paymentsSplit(1, 6).creator;
+		const fee = paymentsSplit(3, 18).creator;
 		expect(total.toFixed(2)).toBe(gross.minus(fee).toFixed(2));
 		// And nobody was paid more than was directed at them.
 		expect(paid.get(a)!.lessThan(3)).toBe(true);

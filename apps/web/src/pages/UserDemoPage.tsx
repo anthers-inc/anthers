@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SEED_PRICE } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -72,7 +72,7 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 const PETAL = BADGE_TABLE.find((r) => r.badge === "Petal")!;
 const DEMO_PLAN = {
 	badge: PETAL.badge,
-	anthersSeeds: PETAL.seeds,
+	anthersSupport: PETAL.monthly,
 	price: Number(PETAL.charge),
 	timePool: Number(PETAL.timePool), // to creators, distributed by time
 	seeds: 3, // directed creator-Seeds (count, $3 each)
@@ -451,7 +451,7 @@ function SubscriptionDashboardDemo() {
 	const handleSeedChange = (idx: number, seeds: number) => {
 		const next = [...seedAllocs];
 		const budget = DEMO_PLAN.seedPool;
-		const wanted = Math.max(0, Math.min(budget, seeds * SEED_PRICE));
+		const wanted = Math.max(0, Math.min(budget, seeds * PUBLIC_ACCESS_PRICE));
 		let owed = wanted - next[idx];
 		next[idx] = wanted;
 		// Take (or return) whole Seeds from the largest other allocations first.
@@ -461,8 +461,8 @@ function SubscriptionDashboardDemo() {
 				if (i !== idx && next[i] > 0 && (from === -1 || next[i] > next[from])) from = i;
 			}
 			if (from === -1) break; // nothing left to reclaim — clamp instead
-			next[from] -= SEED_PRICE;
-			owed -= SEED_PRICE;
+			next[from] -= PUBLIC_ACCESS_PRICE;
+			owed -= PUBLIC_ACCESS_PRICE;
 		}
 		if (owed > 0) next[idx] -= owed; // budget exhausted: don't overspend
 		setSeedAllocs(next);
@@ -476,7 +476,7 @@ function SubscriptionDashboardDemo() {
 					Your Anther—{DEMO_PLAN.month}
 				</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.badge} — {DEMO_PLAN.anthersSeeds} Seeds to Anthers ($
+					{DEMO_PLAN.badge} — {DEMO_PLAN.anthersSupport} Seeds to Anthers ($
 					{DEMO_PLAN.price.toFixed(2)}/mo)
 				</p>
 			</div>
@@ -495,7 +495,7 @@ function SubscriptionDashboardDemo() {
 						<p className="text-xs text-base-content/50 uppercase tracking-wide">Seed Pool</p>
 						<p className="text-xl font-bold text-primary">${totalSeeds.toFixed(2)}</p>
 						<p className="text-xs text-base-content/40">
-							{DEMO_PLAN.seeds} × $3 &middot; drag to adjust
+							${DEMO_PLAN.anthersSupport}/month &middot; drag to adjust
 						</p>
 					</div>
 				</div>
@@ -557,9 +557,9 @@ function SubscriptionDashboardDemo() {
 												<input
 													type="range"
 													min={0}
-													max={DEMO_PLAN.seedPool / SEED_PRICE}
+													max={DEMO_PLAN.seedPool / PUBLIC_ACCESS_PRICE}
 													step={1}
-													value={seedAllocs[idx] / SEED_PRICE}
+													value={seedAllocs[idx] / PUBLIC_ACCESS_PRICE}
 													onChange={(e) => handleSeedChange(idx, parseInt(e.target.value, 10))}
 													className="range range-xs range-primary flex-1"
 													aria-label={`Seeds to @${alloc.displayName}`}

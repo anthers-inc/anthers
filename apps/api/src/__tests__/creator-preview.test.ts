@@ -177,13 +177,35 @@ describe("creator preview", () => {
 		// Failing back to the truth is the only safe direction: a preview nobody asked for
 		// is confusing, but a preview that silently resolved as somebody else would be
 		// worse than either.
-		for (const q of ["?previewAs=", "?previewAs=lots", "?previewAs=-3", "?previewAs=1.5"]) {
+		// ⚠️ `?previewAs=1.5` sat in this list until 2026-08-16 and has MOVED to the test
+		// below. It was malformed only because a Seed was indivisible; $1.50 is now an
+		// ordinary amount for a supporter to give, and refusing to preview it would deny a
+		// creator a view of their own ladder in exactly the case they most need it.
+		for (const q of ["?previewAs=", "?previewAs=lots", "?previewAs=-3", "?previewAs=abc"]) {
 			const work = await view(gatedId, creatorCookie, q);
 			// Back to the owner shape — the truth — rather than a preview at some guessed
 			// level. Note this also means the owner short-circuit is intact for these.
 			expect(work.access, `for ${q}`).toBeUndefined();
 			expect(work.sourceKey, `for ${q}`).toBeDefined();
 		}
+	});
+
+	/**
+	 * 🚨 The case the whole-Seed model could not express, and the one a creator setting a
+	 * $2.50 Badge needs most.
+	 *
+	 * It is asserted as a *preview that resolves*, not merely as "not rejected": the
+	 * distinction matters because the old integer guard failed back to the owner shape,
+	 * which looks like success — full media keys, no error — and is the truth rather than
+	 * the preview. So the assertion is that `access` is PRESENT and denies, which the owner
+	 * shape can never produce.
+	 */
+	it("previews an amount carrying cents, which the whole-Seed guard refused", async () => {
+		const work = await view(gatedId, creatorCookie, "?previewAs=1.50");
+		expect(work.access).toBeDefined();
+		expect(work.access?.canAccess).toBe(false);
+		// And the media payload is withheld, which is the point of previewing at all.
+		expect(work.sourceKey).toBeFalsy();
 	});
 
 	// ── The catalog, which is where a creator actually looks ───────────────────

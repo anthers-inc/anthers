@@ -239,7 +239,10 @@ async function main(): Promise<void> {
 
 	// Report the state actually in the database — the number the caller should trust.
 	const [acct] = await db
-		.select({ anthersSupport: accounts.anthersSupport, creatorSupportTotal: accounts.creatorSupportTotal })
+		.select({
+			anthersSupport: accounts.anthersSupport,
+			creatorSupportTotal: accounts.creatorSupportTotal,
+		})
 		.from(accounts)
 		.where(eq(accounts.userId, viewerId))
 		.limit(1);

@@ -13,8 +13,8 @@ import {
 	BADGE_ORDER,
 	cardFeeDisplay,
 	PUBLIC_ACCESS_PRICE,
-	thresholdForBadge,
 	TIME_POOL_RATE,
+	thresholdForBadge,
 	timePoolFor,
 } from "./constants.js";
 import {

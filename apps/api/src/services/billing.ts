@@ -94,7 +94,8 @@ export function itemsFromSub(sub: Stripe.Subscription): SupportItem[] {
 		const unitCents = item.price?.unit_amount ?? 0;
 		return {
 			itemId: item.id,
-			creatorId: Number.isFinite(creatorId) && creatorId !== null && creatorId > 0 ? creatorId : null,
+			creatorId:
+				Number.isFinite(creatorId) && creatorId !== null && creatorId > 0 ? creatorId : null,
 			amount: (unitCents * Math.max(0, item.quantity ?? 1)) / 100,
 		};
 	});
@@ -134,7 +135,9 @@ export function directedSupportFromSub(sub: Stripe.Subscription): number {
  * so there is no stamp to go stale, no clearing step, and no window in which Stripe and the
  * database disagree about who is being supported.
  */
-export function directedPicksFromSub(sub: Stripe.Subscription): { creatorId: number; amount: number }[] {
+export function directedPicksFromSub(
+	sub: Stripe.Subscription,
+): { creatorId: number; amount: number }[] {
 	return itemsFromSub(sub)
 		.filter((i): i is SupportItem & { creatorId: number } => i.creatorId !== null && i.amount > 0)
 		.map((i) => ({ creatorId: i.creatorId, amount: i.amount }));

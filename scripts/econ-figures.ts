@@ -49,10 +49,10 @@ import {
 	CARD_RATE,
 	FREE_STORAGE_GIB,
 	formatMultiple,
-	timePoolFor,
-	SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
+	SALES_TAX_RATE,
 	TIME_POOL_RATE,
+	timePoolFor,
 } from "../packages/shared/src/constants.js";
 import { CREATOR_FLOOR, PHASE_ACCOUNTS } from "../packages/shared/src/growth.js";
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
@@ -205,13 +205,7 @@ function renderReadmeModelMarkdown(): string {
 		`**Where what you give Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
 		plainTable(
-			[
-				"Badge",
-				"You pay",
-				"Time Pool → creators",
-				"Payments\\*",
-				"Free access & programs",
-			],
+			["Badge", "You pay", "Time Pool → creators", "Payments\\*", "Free access & programs"],
 			[":--", "--:", "--:", "--:", "--:"],
 			badges.map((r) => [
 				`**${r.badge}**`,
@@ -770,6 +764,35 @@ const DOC_FILES = ["README.md"];
  */
 const NOT_NEGATED = /(?<!\b(?:no|never|not|without|nor|zero) )/.source;
 const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
+	{
+		// 🚨 The Seed retired as a FINANCIAL UNIT on 2026-08-16 — thresholds, Badge levels
+		// and every support amount are dollars, at any amount. This rule exists because
+		// `econ:figures` is otherwise **blind to a retired premise carrying no number**:
+		// "in $3 increments" quotes a figure that is still perfectly current ($3 is still
+		// the Public Access price) while describing a mechanism that is gone, so the typed
+		// figure scan cannot see it and neither can the marker blocks.
+		//
+		// That blindness is exactly what the Public Access revamp paid for once already,
+		// when five marketing pages described a bandwidth allowance for two days after it
+		// was deleted and nothing said a word.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:\\$3 (?:increments|steps|units)|in \\$3s|whole[- ]Seed|whole number of Seeds|multiple of a Seed|per[- ]Seed)`,
+			"gi",
+		),
+		why: "the Seed retired as a financial unit 2026-08-16 — amounts are dollars, at any level, with no granularity floor",
+	},
+	{
+		// The unit as a countable noun. Deliberately narrow: it matches the Seed being
+		// COUNTED, which is what retired, and not the word in any other use — a
+		// `seed_allocations` table, a database seed script, a seed round. The scan blanks
+		// comments before matching, so engineering prose is out of reach by construction.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:\\d+ Seeds?\\b|(?:a|one|another) Seed\\b|Seed count|Seeds? you hold|holds? \\d+ Seeds?)`,
+			"g",
+		),
+		why: "a Seed is no longer a unit anything is counted in — say the amount ($3, $7.50) or say 'Badge'",
+	},
+
 	{
 		pattern: new RegExp(`${NOT_NEGATED}(?:buyer'?s? )?first download`, "gi"),
 		why: "delivery has been free at any volume since 2026-08-12 — there is no first-download charge to deduct",

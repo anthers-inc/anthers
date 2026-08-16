@@ -42,7 +42,7 @@
 //   • Seeds to a CREATOR ride on the SAME subscription as the Anthers one — quantity is
 //     every Seed the user holds, so one Seed to Anthers and one each to two creators is
 //     quantity 3 at $9/month, one charge. The split rides in subscription metadata; see
-//     `anthersSeedsFromSub` in services/billing.ts, where reading quantity as the Anthers
+//     `anthersSupportFromSub` in services/billing.ts, where reading quantity as the Anthers
 //     count would inflate the Badge and the Time Pool.
 //     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator-Seed
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
@@ -51,8 +51,8 @@
 import {
 	cardFeeDisplay,
 	FREE_TIME_POOL,
-	SEED_PRICE,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
+	timePoolFor,
 } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -78,10 +78,10 @@ import SubscriptionPaymentModal, {
  */
 
 /** Where a Seed given to Anthers goes, at the single-Seed worst case. */
-const ANTHERS_PAYMENTS = cardFeeDisplay(SEED_PRICE);
-const ANTHERS_REMAINDER = SEED_PRICE - TIME_POOL_PER_SEED - ANTHERS_PAYMENTS;
+const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
+const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
 /** What a lone directed Seed reaches its creator as — gross, less its share of the fee. */
-const CREATOR_NET = SEED_PRICE - ANTHERS_PAYMENTS;
+const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
 
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
@@ -288,7 +288,7 @@ function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }
 			</ul>
 			<div className="mt-3 flex items-baseline justify-between border-t border-base-content/10 pt-3">
 				<span className="font-bold">Total</span>
-				<span className="text-xl font-bold tabular-nums">{money(SEED_PRICE)}/mo</span>
+				<span className="text-xl font-bold tabular-nums">{money(PUBLIC_ACCESS_PRICE)}/mo</span>
 			</div>
 			<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
 			<p className="mt-3 text-xs leading-relaxed text-base-content/50">{note}</p>
@@ -608,7 +608,7 @@ function CreatorFinder({
 										aria-pressed={seeded}
 										onClick={() => onToggle(creator.username, "seed")}
 									>
-										{seeded ? "✓ Seed added" : "Give a Seed"}
+										{seeded ? "✓ Supporting" : "Support"}
 									</button>
 								</div>
 							</div>
@@ -839,8 +839,8 @@ export default function SubscribePage() {
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 	const [pending, setPending] = useState<{
-		anthersSeeds: number;
-		directed: { creatorId: number; seeds: number }[];
+		anthersSupport: number;
+		directed: { creatorId: number; amount: number }[];
 		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
@@ -917,8 +917,8 @@ export default function SubscribePage() {
 
 	const byUsername = useMemo(() => new Map(creators.map((c) => [c.username, c])), [creators]);
 
-	const anthersSeeds = picks.anthers === true ? 1 : 0;
-	const total = (anthersSeeds + picks.seed.length) * SEED_PRICE;
+	const anthersSupport = picks.anthers === true ? 1 : 0;
+	const total = (anthersSupport + picks.seed.length) * PUBLIC_ACCESS_PRICE;
 
 	/** Step 3's answer, in the shape the echo and the summary both render. */
 	const anthersLines: PickLine[] = useMemo(
@@ -929,7 +929,7 @@ export default function SubscribePage() {
 							key: "anthers",
 							label: "A Seed for Anthers",
 							sub: "watch as much Public Access as you like",
-							amount: SEED_PRICE,
+							amount: PUBLIC_ACCESS_PRICE,
 						},
 					]
 				: [],
@@ -944,8 +944,8 @@ export default function SubscribePage() {
 				return {
 					key: username,
 					label: creator ? nameOf(creator) : username,
-					sub: picks.seed.includes(username) ? "following · one Seed" : "following",
-					amount: picks.seed.includes(username) ? SEED_PRICE : 0,
+					sub: picks.seed.includes(username) ? "following · supporting" : "following",
+					amount: picks.seed.includes(username) ? PUBLIC_ACCESS_PRICE : 0,
 				};
 			}),
 		[picks.follow, picks.seed, byUsername],
@@ -1019,7 +1019,7 @@ export default function SubscribePage() {
 			const directed = picks.seed
 				.map((username) => byUsername.get(username))
 				.filter((creator): creator is PublicUser => !!creator)
-				.map((creator) => ({ creatorId: creator.id, seeds: 1 }));
+				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
 
 			const anthers = picks.anthers === true ? 1 : 0;
 			const totalSeeds = anthers + directed.length;
@@ -1040,8 +1040,8 @@ export default function SubscribePage() {
 
 			// Preview prices the whole charge, so the modal quotes the total the user is
 			// actually agreeing to rather than the Anthers half of it.
-			const res = await client.api.subscriptions.preview[":seeds"].$get({
-				param: { seeds: String(totalSeeds) },
+			const res = await client.api.subscriptions.preview[":amount"].$get({
+				param: { amount: String(totalSeeds) },
 			});
 			if (!res.ok) {
 				setError("Couldn't load the charge details. Please try again.");
@@ -1049,7 +1049,7 @@ export default function SubscribePage() {
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
-				anthersSeeds: anthers,
+				anthersSupport: anthers,
 				directed,
 				// The honest label is the count: a commit needn't land on a Badge, and
 				// naming one would describe only the Anthers half of this charge.
@@ -1132,7 +1132,7 @@ export default function SubscribePage() {
 			? "You'll see the exact charge before anything is confirmed. Change or stop any month."
 			: total > 0
 				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
-				: "We'll email you a code to confirm the address. A card is only needed if you choose a Seed.",
+				: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
 		onSubmit: submit,
 		onDrop: dropPick,
 	};
@@ -1180,9 +1180,9 @@ export default function SubscribePage() {
 						    page look like it asked three things when it asks two. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								Going further is one thing: a <strong>Seed</strong>, {money(SEED_PRICE)} a month. It
-								is the only unit of support on Anthers — you hold as many as you like, and you
-								choose where each one points.
+								Going further is one thing: a <strong>Seed</strong>, {money(PUBLIC_ACCESS_PRICE)} a
+								month. It is the only unit of support on Anthers — you hold as many as you like, and
+								you choose where each one points.
 							</p>
 							<div className="mt-6 grid gap-4 sm:grid-cols-2">
 								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
@@ -1208,7 +1208,7 @@ export default function SubscribePage() {
 						<StepHeading n={2} title="A Seed for Anthers">
 							Watch as much Public Access as you like, for as long as you hold it — and{" "}
 							<strong>
-								{money(TIME_POOL_PER_SEED)} of every {money(SEED_PRICE)}
+								{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every {money(PUBLIC_ACCESS_PRICE)}
 							</strong>{" "}
 							goes into the Time Pool, split among the creators whose work you spent time with.
 						</StepHeading>
@@ -1216,7 +1216,7 @@ export default function SubscribePage() {
 							segments={[
 								{
 									tone: "pool",
-									amount: TIME_POOL_PER_SEED,
+									amount: timePoolFor(PUBLIC_ACCESS_PRICE),
 									label: "To creators, through the Time Pool",
 									desc: "split by the share of your time each one earned",
 								},
@@ -1233,12 +1233,12 @@ export default function SubscribePage() {
 									desc: "card & processing, at cost, paid to the processor",
 								},
 							]}
-							note={`The first Seed lifts your monthly limit. Each one after it adds another ${money(TIME_POOL_PER_SEED)} to the creators you spend time with, and helps keep other people's accounts free. Shown at the worst case — a single Seed on the charge; hold more and the fixed card fee spreads across them.`}
+							note={`The first Seed lifts your monthly limit. Each one after it adds another ${money(timePoolFor(PUBLIC_ACCESS_PRICE))} to the creators you spend time with, and helps keep other people's accounts free. Shown at the worst case — a single Seed on the charge; hold more and the fixed card fee spreads across them.`}
 						/>
 						<Ask
-							title="Add a Seed for Anthers?"
+							title="Support Anthers too?"
 							value={picks.anthers}
-							yesLabel={`Yes — ${money(SEED_PRICE)} a month`}
+							yesLabel={`Yes — ${money(PUBLIC_ACCESS_PRICE)} a month`}
 							noLabel={`The free ${FREE_PUBLIC_ACCESS_HOURS} hours suit me`}
 							onChange={(v) => setPicks((prev) => ({ ...prev, anthers: v }))}
 						>
@@ -1260,7 +1260,7 @@ export default function SubscribePage() {
 						<StepHeading n={3} title="A Seed for a creator">
 							It goes to them.{" "}
 							<strong>
-								{money(CREATOR_NET)} of every {money(SEED_PRICE)}
+								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
 							</strong>{" "}
 							reaches the creator, with card processing the only deduction — Anthers takes no cut of
 							a single cent of it.
@@ -1284,8 +1284,8 @@ export default function SubscribePage() {
 						/>
 						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
 							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
-							tap a medium to meet a few. Following is free — add a Seed when you&rsquo;d like to
-							back them.
+							tap a medium to meet a few. Following is free — support someone when you&rsquo;d like
+							to back them.
 						</p>
 						<CreatorFinder
 							creators={creators}
@@ -1342,7 +1342,7 @@ export default function SubscribePage() {
 
 			{pending && (
 				<SubscriptionPaymentModal
-					anthersSeeds={pending.anthersSeeds}
+					anthersSupport={pending.anthersSupport}
 					directed={pending.directed}
 					badgeName={pending.badgeName}
 					preview={pending.preview}

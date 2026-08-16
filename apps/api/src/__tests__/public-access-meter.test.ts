@@ -131,11 +131,14 @@ function playlist(workId: number, cookie?: string) {
 	});
 }
 
-async function setSeeds(userId: number, anthersSeeds: number) {
+async function setSeeds(userId: number, anthersSupport: number) {
 	await db
 		.insert(accounts)
-		.values({ userId, anthersSeeds, isActive: true })
-		.onConflictDoUpdate({ target: accounts.userId, set: { anthersSeeds } });
+		.values({ userId, anthersSupport: anthersSupport.toFixed(2), isActive: true })
+		.onConflictDoUpdate({
+			target: accounts.userId,
+			set: { anthersSupport: anthersSupport.toFixed(2) },
+		});
 }
 
 beforeAll(async () => {

@@ -49,15 +49,3 @@ SET "seed_access" = (
 )
 WHERE "seed_access" IS NOT NULL AND jsonb_array_length("seed_access") > 0;
 
---> statement-breakpoint
--- 5. A Stripe Product per destination, so an invoice line can name who it is for.
---
--- The subscription carried ONE item at a shared $3 Seed price with `quantity` = the total,
--- and the Anthers/creator split rode in metadata. Arbitrary amounts end that: the
--- subscription now carries one item per destination, each priced with inline `price_data`.
--- `price_data` takes a Product **id**, not a name, so each creator needs a durable Product
--- for their line to read "Support for @handle" rather than repeating one shared label.
---
--- Nullable and lazily filled: a creator who has never been supported needs no Product, and
--- creating one eagerly for every account would make signup depend on Stripe being up.
-ALTER TABLE "accounts" ADD COLUMN "stripe_product_id" text DEFAULT '';

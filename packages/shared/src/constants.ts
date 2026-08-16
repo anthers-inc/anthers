@@ -285,11 +285,20 @@ export function amountMeets(held: number, threshold: number): boolean {
  *
  * 🚨 **Load-bearing, and the reason it exists at all.** Thresholds were whole Seeds until
  * 2026-08-16, so every comparison was integer-against-integer and could not go wrong. In
- * dollars they are floats coming off `numeric` columns, and `0.1 + 0.2 > 0.3` is the
- * oldest bug there is: a creator who sets a Badge at $7.30 and a supporter who gives
- * exactly $7.30 must clear it, and a naive `>=` on the parsed doubles is one representation
- * away from denying them with no error anywhere. Rounding both sides to cents first makes
- * the comparison exact, and cents is the right grain because it is what Stripe charges in.
+ * dollars they are floats, and `0.1 + 0.2 !== 0.3` is the oldest bug there is: a supporter
+ * who gives exactly what a Badge asks must clear it, and a naive `>=` on the parsed doubles
+ * is one representation away from denying them with no error anywhere.
+ *
+ * ⚠️ **ROUND, never floor — and the reason is subtler than it first looks.** Flooring is
+ * the obvious way to stop a sub-cent amount opening a gate, and against a *symmetric*
+ * comparison it is harmless: both sides floor identically, so equality survives. It breaks
+ * where the two sides are reached **differently** — a held amount arrived at by ADDING two
+ * allocations against a threshold stored as one literal. `$1.00 + $1.14` is
+ * `2.1399999999999997`, which floors to 213 cents against a `$2.14` threshold's 214, and
+ * the supporter is denied a Badge they paid for exactly. There are **2,180 such pairs
+ * under $2 alone**; rounding has none.
+ *
+ * Cents is the grain because it is what Stripe charges in — finer cannot be paid.
  *
  * Deliberately NOT decimal.js: this is a comparison, not arithmetic on money that moves,
  * and `constants.ts` is imported by the browser — pulling decimal.js in here is the one

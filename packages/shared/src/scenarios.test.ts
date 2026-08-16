@@ -12,8 +12,8 @@ import {
 	AFF_INFRA_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
-	SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
+	SALES_TAX_RATE,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
 import {
@@ -179,12 +179,12 @@ describe("directedSupportWorstCase", () => {
 	 */
 	test("a small amount is only expensive ALONE, which is why the floor went", () => {
 		const alone = supportBreakdown({ anthersDollars: 0, creatorDollars: 1 });
-		const deduction = D(1).minus(alone.creatorNet).dividedBy(1);
+		const deduction = D("1").minus(alone.creatorNet).dividedBy(1);
 		expect(deduction.toNumber()).toBeGreaterThan(0.3); // ~33% — the old argument
 
 		// The same $1 riding on a month that already carries the Public Access price.
 		const batched = supportBreakdown({ anthersDollars: PUBLIC_ACCESS_PRICE, creatorDollars: 1 });
-		const share = D(1).minus(batched.creatorNet).dividedBy(1);
+		const share = D("1").minus(batched.creatorNet).dividedBy(1);
 		expect(share.toNumber()).toBeLessThan(0.12);
 	});
 });

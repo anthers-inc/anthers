@@ -553,7 +553,6 @@ export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 export interface BadgeView {
 	id: Badge;
 	name: string;
-	anthersSeeds: number;
 	price: number;
 	timePool: string;
 	supportsAnthers: string;
@@ -571,8 +570,18 @@ export interface BadgeView {
 export interface Account {
 	id?: number;
 	userId?: number;
-	anthersSeeds: number;
-	creatorSeedTotal: string;
+	/**
+	 * Monthly $ given to Anthers, as a **money string** — this is the raw row.
+	 *
+	 * 🚨 It was `anthersSeeds: number` (a count) until 2026-08-16, and a blanket rename
+	 * would have left it typed `number` against a `numeric` column that arrives as
+	 * "3.00". That is the shape that produces a silently wrong comparison — `"3.00" >= 3`
+	 * is true by coercion, `"10.00" >= 9` is FALSE by string ordering — so the type has to
+	 * say string and callers have to parse. `AccountResponse.anthersSupport` is the parsed
+	 * number beside it, which is why both exist.
+	 */
+	anthersSupport: string;
+	creatorSupportTotal: string;
 	bandwidthUsedGiB: string;
 	isSelfHosting: boolean;
 	stripeCustomerId?: string | null;
@@ -588,7 +597,7 @@ export interface Account {
 /** Response of GET /subscriptions/me — the account plus the Badge it currently holds. */
 export interface AccountResponse {
 	account: Account;
-	anthersSeeds: number;
+	anthersSupport: number;
 	badge: Badge;
 	badgeView: BadgeView;
 }

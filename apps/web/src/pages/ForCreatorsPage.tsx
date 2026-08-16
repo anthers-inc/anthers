@@ -48,9 +48,7 @@ import {
 	CARD_RATE,
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
-	SEED_PRICE,
-	seedCost,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -259,12 +257,12 @@ export default function ForCreatorsPage() {
 								icon={<ServerStackIcon className="h-5 w-5" />}
 								title="No fee on your sales"
 							>
-								Anthers takes <strong>nothing</strong> from a sale or a Seed. The only charge that
-								touches a creator is half again on your storage past the free {FREE_STORAGE_GIB} GiB
-								— your own infrastructure, opt-in, and nothing to do with what you sell. Free access
-								and the charitable programs are funded by what's left of a fan's Seeds to Anthers
-								after the Time Pool and the card cost, and by lean operations—Anthers itself never
-								profits.
+								Anthers takes <strong>nothing</strong> from a sale or from monthly support. The only
+								charge that touches a creator is half again on your storage past the free{" "}
+								{FREE_STORAGE_GIB} GiB — your own infrastructure, opt-in, and nothing to do with
+								what you sell. Free access and the charitable programs are funded by what's left of
+								a fan's Seeds to Anthers after the Time Pool and the card cost, and by lean
+								operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -444,9 +442,9 @@ export default function ForCreatorsPage() {
 					<Lede>
 						There's one thing to support on Anthers: a{" "}
 						<strong className="font-semibold text-base-content/80">Seed</strong>,{" "}
-						{fmtMoney(SEED_PRICE)} a month. A fan points it at you—and we take no cut of it—or at
-						Anthers, where part of it becomes the Time Pool that pays for the work Anthers hands out
-						on your behalf. Both reach creators; neither is a cut of your earnings.
+						{fmtMoney(PUBLIC_ACCESS_PRICE)} a month. A fan points it at you—and we take no cut of
+						it—or at Anthers, where part of it becomes the Time Pool that pays for the work Anthers
+						hands out on your behalf. Both reach creators; neither is a cut of your earnings.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
@@ -456,8 +454,8 @@ export default function ForCreatorsPage() {
 							<ul>
 								<li>
 									<strong className="font-semibold text-base-content/85">Seeds given to you</strong>{" "}
-									— {fmtMoney(SEED_PRICE)}/month each, recurring like a membership, with no platform
-									cut and no payout processing
+									— {fmtMoney(PUBLIC_ACCESS_PRICE)}/month each, recurring like a membership, with no
+									platform cut and no payout processing
 								</li>
 								<li>
 									<strong className="font-semibold text-base-content/85">Anything you sell</strong>{" "}
@@ -478,7 +476,7 @@ export default function ForCreatorsPage() {
 							pointed at the platform itself. Each one:
 							<ul>
 								<li>
-									puts {fmtMoney(TIME_POOL_PER_SEED)} into that fan's{" "}
+									puts {fmtMoney(timePoolFor(PUBLIC_ACCESS_PRICE))} into that fan's{" "}
 									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
 									across the creators they spend time with, by time
 								</li>
@@ -546,7 +544,7 @@ export default function ForCreatorsPage() {
 											</td>
 											<td className="text-right text-base-content/70">{n}</td>
 											<td className="text-right text-base-content/70">
-												{isFree ? "$0" : fmtMoney(seedCost(n))}
+												{isFree ? "$0" : fmtMoney(n)}
 											</td>
 											<td className="text-right font-medium text-primary">
 												${timePoolFor(n).toFixed(2)}
@@ -594,10 +592,10 @@ export default function ForCreatorsPage() {
 								🌱&nbsp; Seed Gates
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Your own rungs, set in whole Seeds—{fmtMoney(SEED_PRICE)},{" "}
-								{fmtMoney(SEED_PRICE * 2)}, {fmtMoney(SEED_PRICE * 3)} a month and up. You write the
-								names and pick what each one opens. Because Seeds are given deliberately, nobody
-								backs into your inner circle by watching.
+								Your own rungs, at any amount you like—{fmtMoney(PUBLIC_ACCESS_PRICE)},{" "}
+								{fmtMoney(PUBLIC_ACCESS_PRICE * 2)}, {fmtMoney(PUBLIC_ACCESS_PRICE * 3)} a month and
+								up. You write the names and pick what each one opens. Because Seeds are given
+								deliberately, nobody backs into your inner circle by watching.
 							</p>
 						</Card>
 					</Reveal>
@@ -842,7 +840,7 @@ const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")
 // fixed monthly money is spread over more hours — nothing costs more per hour.
 const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
-const STREAM_FAN_SPEND = seedCost(STREAM_FAN_SEEDS);
+const STREAM_FAN_SPEND = STREAM_FAN_SEEDS;
 const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
 const STREAM_FAN_CARD = cardFeeDisplay(STREAM_FAN_SPEND);
 const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
@@ -855,7 +853,7 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STRE
 // The Seed scenario: Seeds come in whole $3 units, so the comparison uses two of
 // them — $6/month — and the rival rows are scaled to the same $6.
 const SEED_COUNT = 2;
-const SEED_SPEND = seedCost(SEED_COUNT);
+const SEED_SPEND = SEED_COUNT;
 const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
 /** The at-cost card fee if these Seeds were the fan's ENTIRE monthly charge — the
  * worst case, and what a creator should plan against. A fan who also gives Seeds
@@ -872,7 +870,7 @@ const rivalSeedAllIn = (cutRate: number, absorbsProcessing = false) => {
 };
 const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
 const SEED_SCENARIO = `A fan gives you ${SEED_COUNT} Seeds a month (${SEED_SPEND_STR})`;
-const SEED_NOTE = `Seeds are whole ${fmtMoney(SEED_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are all-in take-home at the same $6 — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
+const SEED_NOTE = `Seeds are whole ${fmtMoney(PUBLIC_ACCESS_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are all-in take-home at the same $6 — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
 
 /** Rival all-in take-home on a sale: list × (1 − cutRate), minus the at-cost card
  * fee unless the rival absorbs processing (as Steam and Apple do — they fold the

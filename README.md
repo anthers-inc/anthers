@@ -31,11 +31,11 @@ In the meantime:
 
 ## How the money works
 
-One primitive: a **Seed**, a flat $3 a month, and there is only one kind. What varies is who you give it to and what you get back.
+One primitive: a **monthly amount**, in dollars. What varies is who you give it to and what you get back.
 
-**Give a Seed to a creator** and it goes to that creator. Anthers keeps nothing from it — the only deduction is its share of the at-cost card processing, which is paid to Stripe. A directed Seed also clears that creator's **Seed Gates**: thresholds they set themselves, in whole Seeds, each branded with a **Badge** they design.
+**Support a creator** and it goes to that creator. Anthers keeps nothing from it — the only deduction is its share of the at-cost card processing, which is paid to Stripe. Supporting a creator also clears their **Badges**: levels they set themselves, at any amount they choose, each branded with a **Badge** they design.
 
-**Give a Seed to Anthers** and it backs the commons. It funds the **Time Pool**, which pays creators in proportion to the time people spend with their work — a minute is a minute whether it was spent playing, watching, reading or listening — and it covers its share of the at-cost card processing. What remains funds free access and Anthers' charitable programs. Your **Anthers Badge simply is the number of Seeds you currently give Anthers**: Root, Sprout, Petal, Blossom, and a "+" beyond. There is no plan to pick.
+**Support Anthers** and it backs the commons. It funds the **Time Pool**, which pays creators in proportion to the time people spend with their work — a minute is a minute whether it was spent playing, watching, reading or listening — and it covers its share of the at-cost card processing. What remains funds free access and Anthers' charitable programs. Your **Anthers Badge simply is the number of Seeds you currently give Anthers**: Root, Sprout, Petal, Blossom, and a "+" beyond. There is no plan to pick.
 
 **Public Access** is every streaming Work a creator chose not to gate — free to everyone, with nothing to clear. It is defined by the absence of a gate rather than by anything Anthers curates. A free account watches Public Access up to a monthly limit, free forever, with no trial and no expiry; a single Seed given to Anthers removes the limit, and no Seed above the first buys any more access. What further Seeds buy is a larger Time Pool for the creators you spend time with.
 

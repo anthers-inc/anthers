@@ -37,8 +37,8 @@
 // effectively at cost, with no ads and no profit-taking. The earnings levers are
 // Seeds and direct sales, and Anthers takes no cut of either.
 //
-// Anthers figures derive from packages/shared/src/constants.ts (SEED_PRICE $3,
-// TIME_POOL_PER_SEED $1.50). There is no delivery charge anywhere — it was retired
+// Anthers figures derive from packages/shared/src/constants.ts (PUBLIC_ACCESS_PRICE $3,
+// timePoolFor(PUBLIC_ACCESS_PRICE) $1.50). There is no delivery charge anywhere — it was retired
 // 2026-08-12 — and no platform
 // fee on a purchase — that went 2026-08-03. Competitor figures are their public
 // rates, checked 2026-08-03 and perishable; re-check before publishing.
@@ -48,8 +48,7 @@
 
 import {
 	cardFeeDisplay,
-	SEED_PRICE,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -130,7 +129,7 @@ const REF_HR_PAY = money(timePoolFor(thresholdForBadge("sprout")) / REF_HOURS);
 // The Seed scenario: Seeds are whole $3 units, so the membership matchups use two of
 // them ($6/month) and the rival rows are scaled to the same $6.
 const SEED_COUNT = 2;
-const SEED_SPEND = SEED_PRICE * SEED_COUNT;
+const SEED_SPEND = PUBLIC_ACCESS_PRICE * SEED_COUNT;
 /** What a rival keeps of the same $6 after its headline cut, and its card cost. */
 const rivalKeeps = (cutRate: number) => money(SEED_SPEND * (1 - cutRate));
 const CARD_ON_SEEDS = money(cardFeeDisplay(SEED_SPEND));
@@ -159,7 +158,7 @@ const aPrice = (list: string, net: string): Side => ({
 });
 const A_SEED: Side = {
 	keep: SEED_NET,
-	keepSub: `${SEED_COUNT} × $${SEED_PRICE} Seeds less the at-cost card fee (${CARD_ON_SEEDS} on the whole monthly charge) — no platform cut, no payout processing`,
+	keepSub: `${SEED_COUNT} × $${PUBLIC_ACCESS_PRICE} Seeds less the at-cost card fee (${CARD_ON_SEEDS} on the whole monthly charge) — no platform cut, no payout processing`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -183,7 +182,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "55%",
 				},
-				note: `The Seeds a fan gives Anthers set a monthly Time Pool (${money(TIME_POOL_PER_SEED)} each) that's split across everyone they spend time with, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
+				note: `The Seeds a fan gives Anthers set a monthly Time Pool (${money(timePoolFor(PUBLIC_ACCESS_PRICE))} each) that's split across everyone they spend time with, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from Seeds and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
 			},
 		],
 	},
@@ -380,15 +379,15 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Seeds</b> — a flat $3/month each. A fan gives Seeds
 					straight to creators ($3, no platform cut) and holds{" "}
 					<b className="text-base-content/70">Seeds</b> pointed at Anthers; each one splits into a
-					Time Pool ({money(TIME_POOL_PER_SEED)}, distributed to the creators they watch by time)
-					and <b className="text-base-content/70">the remainder</b> that funds free access and the
-					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
-					the listed price is the at-cost card processing, paid to the processor.
+					Time Pool ({money(timePoolFor(PUBLIC_ACCESS_PRICE))}, distributed to the creators they
+					watch by time) and <b className="text-base-content/70">the remainder</b> that funds free
+					access and the creator programs. On a direct sale Anthers takes nothing at all; the only
+					deduction from the listed price is the at-cost card processing, paid to the processor.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
 					their monthly time, the same rate for every medium (equal-time). Each Seed to Anthers adds
-					${TIME_POOL_PER_SEED.toFixed(2)} of Time Pool —{" "}
+					${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of Time Pool —{" "}
 					{PAID_POOLS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}

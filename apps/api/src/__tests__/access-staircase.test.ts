@@ -23,7 +23,6 @@ import {
 	rungDollars,
 	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
-import { SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -70,7 +69,7 @@ type PostKey = string;
 function ctx(seedsGiven: number, purchased: number[] = []): AccessContext {
 	return {
 		userId: VIEWER_ID,
-		seedByCreator: new Map(seedsGiven > 0 ? [[CREATOR_ID, seedsGiven]] : []),
+		supportByCreator: new Map(seedsGiven > 0 ? [[CREATOR_ID, seedsGiven]] : []),
 		purchasedWorkIds: new Set(purchased),
 	};
 }
@@ -161,15 +160,25 @@ describe("User Gauntlet — expected-access staircase", () => {
 		expect(gaps.some((g) => g > 1)).toBe(true);
 	});
 
-	it("every Seed rung is a whole number of Seeds", () => {
-		// The product can't express a fraction of a Seed — the stepper steps whole Seeds and
-		// POST /seeds rejects the rest — so a fractional threshold would be testing a state no
-		// user can reach. Thresholds count Seeds now, so "whole" is the assertion; the $3 that
-		// a Seed costs is a separate fact, checked against the money helper.
+	/**
+	 * 🚨 **This assertion INVERTED on 2026-08-16, and the inversion is the point.**
+	 *
+	 * It read *"every Seed rung is a whole number of Seeds"* — justified because the product
+	 * could not express a fraction of a Seed, so a fractional threshold would have tested a
+	 * state no user could reach. Retiring the unit made the opposite true: any amount is
+	 * reachable, so a ladder of round numbers tests a *narrower* state than users can
+	 * occupy, and would sail past a resolver comparing floats without rounding to cents.
+	 *
+	 * So the ladder must now contain at least one rung that is NOT round, and this asserts
+	 * that rather than its opposite.
+	 */
+	it("the ladder carries at least one rung with cents, and every rung is payable", () => {
+		expect(SEED_RUNGS.some((r) => !Number.isInteger(r))).toBe(true);
 		for (const rung of SEED_RUNGS) {
-			expect(Number.isInteger(rung)).toBe(true);
 			expect(rung).toBeGreaterThan(0);
-			expect(rungDollars(rung) % SEED_PRICE).toBe(0);
+			expect(rungDollars(rung)).toBeGreaterThan(0);
+			// Payable means a whole number of cents — finer than that cannot be charged.
+			expect(Math.round(rung * 100)).toBeCloseTo(rung * 100, 6);
 		}
 	});
 });
@@ -189,7 +198,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("an anonymous viewer is 'login_required' where a logged-in one is 'gated'", () => {
 		const anon: AccessContext = {
 			userId: null,
-			seedByCreator: new Map(),
+			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
@@ -220,7 +229,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("the creator always sees their own gated content", () => {
 		const owner = resolveAccessSync(POSTS.G3, {
 			userId: CREATOR_ID,
-			seedByCreator: new Map(),
+			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 		});
 		expect(owner.canAccess).toBe(true);
@@ -230,7 +239,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	it("Seeds given to one creator don't unlock another's gates", () => {
 		const elsewhere: AccessContext = {
 			userId: VIEWER_ID,
-			seedByCreator: new Map([[CREATOR_ID + 1, 99]]),
+			supportByCreator: new Map([[CREATOR_ID + 1, 99]]),
 			purchasedWorkIds: new Set(),
 		};
 		expect(resolveAccessSync(POSTS.G2, elsewhere).reason).toBe("gated");

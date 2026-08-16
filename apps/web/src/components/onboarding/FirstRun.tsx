@@ -25,7 +25,7 @@
  * *first* ask rather than a second.
  */
 
-import { FREE_TIME_POOL, SEED_PRICE } from "@anthers/shared/constants";
+import { FREE_TIME_POOL, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
@@ -40,7 +40,7 @@ const PICKS_KEY = "anthers_subscribe_picks";
  *
  * Read from the picks `/subscribe` left rather than from the server, and the reason is
  * timing: **the Seed count is applied by a Stripe webhook**, so an account that has just
- * paid may still read `anthersSeeds: 0` for a moment. Branching on server truth would
+ * paid may still read `anthersSupport: 0` for a moment. Branching on server truth would
  * greet someone who just paid with the free-tier message — the single worst outcome
  * available here. What they *chose* is known immediately and is what the copy should
  * answer.
@@ -113,7 +113,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 					{backing && arrival.anthers
 						? `You're backing ${backing} directly, and your Seed for Anthers keeps Public Access open — with no monthly limit for you.`
 						: backing
-							? `You're backing ${backing} directly. Every one of those $${SEED_PRICE} Seeds reaches them with no platform cut.`
+							? `You're backing ${backing} directly. Every one of those $${PUBLIC_ACCESS_PRICE} Seeds reaches them with no platform cut.`
 							: "Your Seed for Anthers keeps Public Access open to everyone — and there's no monthly limit on what you watch."}{" "}
 					From here, the time you spend with a creator's work is what pays them.
 				</p>
@@ -184,7 +184,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 			 * here to do — which is find something to read or watch.
 			 */}
 			<p className="mt-3 text-base leading-relaxed text-base-content/70">
-				When you want to go further, that's a Seed — ${SEED_PRICE} a month, pointed at Anthers or
+				When you want to go further, it's ${PUBLIC_ACCESS_PRICE} a month, pointed at Anthers or
 				straight at a creator.{" "}
 				<Link to="/subscribe" className="link link-primary">
 					How support works

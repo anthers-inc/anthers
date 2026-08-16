@@ -16,8 +16,8 @@
 // The sparse ladder below is deliberately not round for exactly that reason.
 import { describe, expect, test } from "bun:test";
 import {
-	amountMeets,
 	ANTHERS_BADGES,
+	amountMeets,
 	type BadgeDef,
 	type BadgeKey,
 	badgeFor,
@@ -130,28 +130,34 @@ describe("gates are thresholds, and need not sit on a Badge", () => {
 	});
 
 	/**
-	 * 🚨 **Cents are ROUNDED, not floored, and flooring is the trap that looks safer.**
+	 * 🚨 **Cents are ROUNDED, not floored — and a sabotage is the only reason this test is
+	 * right.**
 	 *
-	 * Flooring is the obvious way to stop a sub-cent amount opening a gate, and it is
-	 * wrong: `1.15 * 100` is `114.99999999999999` in IEEE754, so `Math.floor` turns $1.15
-	 * into 114 cents and a supporter giving **exactly** a $1.15 Badge is denied it. That is
-	 * the failure this whole comparison exists to prevent, reintroduced by the fix for a
-	 * problem that cannot occur — every amount reaching here comes from Stripe (integer
-	 * cents) or a `numeric(_, 2)` column, so sub-cent values do not exist in real data.
+	 * The first version of this asserted `amountMeets(1.15, 1.15)` and claimed flooring
+	 * would deny it. **It would not**: both sides floor identically, so a symmetric
+	 * comparison survives flooring untouched, and replacing `Math.round` with `Math.floor`
+	 * failed **zero** of 978 tests. Predicted two. The prediction being wrong was the
+	 * finding — the docstring's reasoning was wrong and the test was asserting a property
+	 * the implementation did not need.
 	 *
-	 * ⚠️ It is not a rare corner: **287 of the 5,000 cent-amounts under $50** floor wrong,
-	 * $0.29 and $2.01 among them. Counted, not guessed — a first draft of this test named
-	 * $2.90 as the example and $2.90 is fine, which is exactly how a plausible-looking
-	 * landmine gets written down without being checked.
-	 *
-	 * The residual is that a hypothetical $4.999 clears a $5 gate. Half a cent, on input
-	 * that cannot arise, in exchange for exactness on input that does.
+	 * The real hazard is **asymmetry**: a held amount reached by ADDING two allocations,
+	 * against a threshold stored as one literal. `$1.00 + $1.14` is `2.1399999999999997`,
+	 * which floors to 213 cents against a `$2.14` threshold's 214 — so a supporter who paid
+	 * exactly the asking amount is refused, silently. There are 2,180 such pairs under $2
+	 * alone (counted, not estimated). Rounding has none.
 	 */
-	test("rounding to cents is exact where it matters, and cannot deny an exact payer", () => {
-		expect(Math.floor(1.15 * 100)).toBe(114); // the landmine, asserted so it stays known
-		expect(amountMeets(2.9, 2.9)).toBe(true);
-		expect(amountMeets(8.7, 8.7)).toBe(true);
-		expect(amountMeets(1.15, 1.15)).toBe(true);
+	test("an amount reached by ADDING allocations still clears the threshold it equals", () => {
+		// The pair that made the sabotage fail, so the sabotage stays meaningful.
+		expect(1 + 1.14).not.toBe(2.14); // the premise, asserted so it cannot rot
+		expect(amountMeets(1 + 1.14, 2.14)).toBe(true);
+		expect(amountMeets(3.03 + 1, 4.03)).toBe(true);
+		expect(amountMeets(7.97 + 1, 8.97)).toBe(true);
+		// …and a genuinely short payer is still short.
+		expect(amountMeets(1 + 1.13, 2.14)).toBe(false);
+	});
+
+	test("symmetric equality holds too, whichever amounts are used", () => {
+		for (const a of [1.15, 2.9, 8.7, 0.29, 2.01]) expect(amountMeets(a, a)).toBe(true);
 		expect(amountMeets(4.99, 5)).toBe(false);
 	});
 });

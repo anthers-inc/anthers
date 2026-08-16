@@ -153,7 +153,7 @@ export default function PlayerBar() {
 						That's your {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access this month — the music
 						stays free, the hours reset.{" "}
 						<Link to="/subscribe" className="link link-primary">
-							Give a Seed to Anthers
+							Support Anthers
 						</Link>
 					</Notice>
 				) : player.locked ? (

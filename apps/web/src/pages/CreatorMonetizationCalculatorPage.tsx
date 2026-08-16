@@ -3,9 +3,7 @@
 import {
 	type BadgeKey,
 	badgeLabel,
-	SEED_PRICE,
-	seedCost,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -23,7 +21,7 @@ import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 // principle — a minute is a minute across every medium). There is no bandwidth term:
 // delivery costs $0 at any volume, so it appears on nobody's bill.
 //
-// Rates/dials come from @anthers/shared/constants (SEED_PRICE, timePoolFor, …) —
+// Rates/dials come from @anthers/shared/constants (PUBLIC_ACCESS_PRICE, timePoolFor, …) —
 // the same source of truth the API charges against.
 // ---------------------------------------------------------------------------
 
@@ -37,7 +35,7 @@ const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
 /** "Supports Anthers" — the non-Time-Pool half of each Seed given to Anthers: the
  * remainder that funds free access and the charitable programs. */
 const supportsAnthersOf = (badge: BadgeKey) =>
-	Math.max(0, seedCost(thresholdForBadge(badge)) - timePoolFor(thresholdForBadge(badge)));
+	Math.max(0, thresholdForBadge(badge) - timePoolFor(thresholdForBadge(badge)));
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -74,13 +72,13 @@ function ConversionEngine() {
 		const directedSeeds = Math.min(seedsToYou, planSeeds);
 
 		const tp = timePoolOf(badge);
-		const seeds = planSeeds * SEED_PRICE;
+		const seeds = planSeeds * PUBLIC_ACCESS_PRICE;
 		const supportsAnthers = supportsAnthersOf(badge);
-		const price = seedCost(thresholdForBadge(badge));
+		const price = thresholdForBadge(badge);
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;
-		const seedEarn = directedSeeds * SEED_PRICE;
+		const seedEarn = directedSeeds * PUBLIC_ACCESS_PRICE;
 		const earn = tpEarn + seedEarn;
 
 		const perHour = tp / safeTotal; // Time Pool value of a view-hour
@@ -479,7 +477,7 @@ function AudienceBuilder() {
 			const directedSeeds = Math.min(s.seedsToYou, seedsOf(s.badge));
 			const share = you / total;
 			const tpPerSub = share * tp;
-			const seedPerSub = directedSeeds * SEED_PRICE;
+			const seedPerSub = directedSeeds * PUBLIC_ACCESS_PRICE;
 			const perSub = tpPerSub + seedPerSub;
 			const segRev = perSub * s.subs;
 			rev += segRev;
@@ -762,9 +760,9 @@ export default function CreatorMonetizationCalculatorPage() {
 								<li>
 									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
 									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($
-									{TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and <b>Supports Anthers</b>{" "}
-									(the remainder, which funds free access and the charitable programs). Directed{" "}
-									<b>Seeds</b> ($3 each, no platform cut) are given alongside.
+									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and{" "}
+									<b>Supports Anthers</b> (the remainder, which funds free access and the charitable
+									programs). Directed <b>Seeds</b> ($3 each, no platform cut) are given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}

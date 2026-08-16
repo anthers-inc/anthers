@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ANTHERS_BADGES, badgeLabel, seedCost, thresholdForBadge } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, badgeLabel, thresholdForBadge } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
-import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
+import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
@@ -142,7 +142,7 @@ function GiveSeedsCard({
 							{remaining.toFixed(2)} of ${budget.toFixed(2)} left to give this month.
 						</p>
 					</div>
-					<SeedStepper
+					<SupportStepper
 						value={pending}
 						min={committed}
 						max={max}
