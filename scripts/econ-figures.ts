@@ -240,11 +240,11 @@ function renderBadgeMarkdown(): string {
 	const rows = badgeTable();
 	return [
 		table(
-			["Badge", "Seeds given to Anthers", "Charge", "Time Pool", "Payments\\*", "→ Remainder"],
+			["Badge", "Monthly to Anthers", "Charge", "Time Pool", "Payments\\*", "→ Remainder"],
 			[":--", "--:", "--:", "--:", "--:", "--:"],
 			rows.map((r) => [
 				`**${r.badge}**`,
-				String(r.seeds),
+				`$${r.monthly}`,
 				`$${r.charge}`,
 				`$${r.timePool}`,
 				`$${r.payments}`,
@@ -252,7 +252,7 @@ function renderBadgeMarkdown(): string {
 			]),
 		),
 		"",
-		`\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per Seed, it does not scale with the Seed count — which is why the remainder grows faster than linearly.`,
+		`\\* **Payments is INSIDE the charge** (since 2026-08-03), charged once per transaction at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} and split pro-rata. Because the $${CARD_FLAT.toFixed(2)} is fixed per charge rather than per destination, it does not scale with the amount — which is why the remainder grows faster than linearly.`,
 		"",
 		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
@@ -411,7 +411,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		"",
 		`**Self-funding** is where the budget covers its obligations with no salary drawn; **full-time** is where it also affords an ED inside the Admin ceiling — 61.01's inflection 1. Both come from the same growth model the ladder does, so the two documents cannot disagree.`,
 		"",
-		`One ASSUMPTION drives every number here and it is not a dial: the paying-user Badge mix, a decay putting the average payer at **${s.averageSeeds} Seeds** (${mix}). It matters more than it looks — the remainder a paying user generates rises **faster than linearly** with their Seed count, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it. Until 2026-08-16 this document and 61.01 assumed **different mixes** and so published different floors; there is one model now.`,
+		`One ASSUMPTION drives every number here and it is not a dial: the paying-user Badge mix, a decay putting the average payer at **$${s.averageSupport} a month** (${mix}). It matters more than it looks — the remainder a paying user generates rises **faster than linearly** with the amount, because the fixed $${CARD_FLAT.toFixed(2)} of the card fee does not scale with it. Until 2026-08-16 this document and 61.01 assumed **different mixes** and so published different floors; there is one model now.`,
 	].join("\n");
 }
 
@@ -958,7 +958,7 @@ function publishedFigures(): Map<string, string[]> {
 		if (!at.includes(name)) at.push(name);
 		index.set(value, at);
 	};
-	const record = (owner: string, row: Record<string, unknown>, keyField?: string) => {
+	const record = <T extends object>(owner: string, row: T, keyField?: keyof T & string) => {
 		const at = keyField ? `${owner}[${row[keyField]}]` : owner;
 		for (const [k, v] of Object.entries(row)) add(v, `${at}.${k}`);
 	};
@@ -1148,7 +1148,37 @@ async function scanDocs() {
 	}
 }
 
+/**
+ * 🚨 **A generated block may never contain the string `undefined` (or `NaN`).**
+ *
+ * Added 2026-08-16 after two shipped. Renaming `BadgeRow.seeds` → `monthly` and
+ * `selfSufficiency().averageSeeds` → `averageSupport` left two renderers reading fields
+ * that no longer existed, so 20.01 published a column of `undefined` and 11.02 published
+ * *"the average payer at **undefined Seeds**"*.
+ *
+ * **`--check` was green the whole time**, and that is the part worth internalising: a
+ * generator that is consistently wrong produces output that consistently matches itself.
+ * Drift-checking compares today's render against the page; it cannot see a value that was
+ * never right in the first place.
+ *
+ * The root cause was that `scripts/` sat outside `bun run typecheck`, which is
+ * `--filter '*'` over **workspaces** and `scripts/` is not one — so `r.seeds` on a type
+ * with no such field raised nothing at all. That is fixed too (`scripts/tsconfig.json`,
+ * wired into the `typecheck` script), and this is the belt to its braces: a renderer can
+ * still interpolate an optional that happens to be absent, and TypeScript is right to
+ * allow that.
+ */
+function assertRendered(key: string, body: string): void {
+	if (/\b(undefined|NaN)\b/.test(body)) {
+		throw new Error(
+			`econ-figures: block "${key}" rendered a literal undefined/NaN — a renderer is ` +
+				`reading a field that no longer exists. Fix the renderer; do not commit the block.`,
+		);
+	}
+}
+
 function splice(source: string, key: string, body: string): string | null {
+	assertRendered(key, body);
 	const begin = `<!-- econ:begin ${key} -->`;
 	const end = `<!-- econ:end ${key} -->`;
 	const i = source.indexOf(begin);
