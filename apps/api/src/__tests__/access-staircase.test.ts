@@ -20,7 +20,6 @@ import {
 	EXPECTED_STAIRCASE,
 	GAUNTLET_POSTS,
 	gauntletPost,
-	rungDollars,
 	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
 import {
@@ -176,7 +175,6 @@ describe("User Gauntlet — expected-access staircase", () => {
 		expect(SEED_RUNGS.some((r) => !Number.isInteger(r))).toBe(true);
 		for (const rung of SEED_RUNGS) {
 			expect(rung).toBeGreaterThan(0);
-			expect(rungDollars(rung)).toBeGreaterThan(0);
 			// Payable means a whole number of cents — finer than that cannot be charged.
 			expect(Math.round(rung * 100)).toBeCloseTo(rung * 100, 6);
 		}

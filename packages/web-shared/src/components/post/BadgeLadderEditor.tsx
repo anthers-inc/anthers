@@ -10,7 +10,7 @@
  * why the input steps by 1 rather than by a cent, and why the dollar figure beside it is
  * derived for display rather than typed.
  */
-import { supportAmount } from "@anthers/shared/constants";
+import { amountLabel, supportAmount } from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
@@ -28,8 +28,7 @@ function rungAmount(v: string): string {
 
 /** "$6/mo" — the amount IS the gate now, so nothing has to be derived from it. */
 function rungLabel(threshold: string | number): string {
-	const amount = supportAmount(threshold);
-	return `$${Number.isInteger(amount) ? amount : amount.toFixed(2)}/mo`;
+	return `${amountLabel(threshold)}/mo`;
 }
 
 export default function BadgeLadderEditor() {

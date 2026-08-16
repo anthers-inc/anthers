@@ -17,6 +17,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	ANTHERS_BADGES,
+	amountLabel,
 	amountMeets,
 	type BadgeDef,
 	type BadgeKey,
@@ -211,5 +212,44 @@ describe("Anthers Badge resolution is point-in-time and monotone", () => {
 		expect(meets("root", "blossom")).toBe(false);
 		expect(meets("petal", "petal")).toBe(true);
 		expect(meets("free", "root")).toBe(false);
+	});
+});
+
+describe("amountLabel — the one place an amount is written for a human", () => {
+	/**
+	 * 🚨 The cents case is why this function exists. `${9.5}` renders **"$9.5"**, which
+	 * reads as a typo — and when it appears beside a correctly formatted copy of the same
+	 * number, as a bug. Both shipped on 2026-08-16: the access table's threshold hint said
+	 * `$9.5+/month` under a heading that said `$9.50`, and the gauntlet advertised a rung as
+	 * "at least $9.50 ($9.5)".
+	 */
+	test("a rung carrying cents keeps both of them", () => {
+		expect(amountLabel(9.5)).toBe("$9.50");
+		expect(amountLabel("9.5")).toBe("$9.50");
+		expect(amountLabel(12.99)).toBe("$12.99");
+		expect(amountLabel(0.5)).toBe("$0.50");
+	});
+
+	test("a whole dollar loses the .00 — the common case stays clean", () => {
+		expect(amountLabel(3)).toBe("$3");
+		expect(amountLabel("21")).toBe("$21");
+		expect(amountLabel(0)).toBe("$0");
+	});
+
+	// Same normalisation as everything else that reads an amount: it goes through `cents`,
+	// so a negative floors and sub-cent precision drops rather than reaching a reader.
+	test("it normalises rather than trusting its input", () => {
+		expect(amountLabel(-5)).toBe("$0");
+		expect(amountLabel(null)).toBe("$0");
+		expect(amountLabel(undefined)).toBe("$0");
+		expect(amountLabel(3.004)).toBe("$3");
+		expect(amountLabel(3.006)).toBe("$3.01");
+	});
+
+	// The float the Badge model actually has to survive: 1.15 * 100 is 114.999… in binary,
+	// and truncating instead of rounding would render "$1.14".
+	test("it rounds the binary-float amounts the ladder can genuinely hold", () => {
+		expect(amountLabel(1.15)).toBe("$1.15");
+		expect(amountLabel(2.9)).toBe("$2.90");
 	});
 });

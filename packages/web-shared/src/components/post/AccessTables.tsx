@@ -16,6 +16,7 @@
  * with access the OR across both. Anthers Gates are retired — they stratified the commons
  * — so a Work is gated by its creator or it is Public Access, and there is one table.
  */
+import { amountLabel } from "@anthers/shared/constants";
 import type { CreatorGate, SeedAccessRow } from "../../lib/types";
 import { TakeHome } from "../economics/TakeHome";
 
@@ -129,7 +130,10 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 										label is already "Everyone", and printing both rendered "Everyone
 										Everyone" — invisible until this table got its first consumer. */}
 										{row.threshold > 0 && (
-											<span className="text-base-content/50"> ${row.threshold}+/month</span>
+											<span className="text-base-content/50">
+												{" "}
+												{amountLabel(row.threshold)}+/month
+											</span>
 										)}
 									</td>
 									<td className="text-center">

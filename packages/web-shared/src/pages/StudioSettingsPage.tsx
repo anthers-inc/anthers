@@ -361,7 +361,7 @@ export default function StudioSettingsPage() {
 				<StripeOnboardingSection />
 				<PlatformConnectionsSection />
 				<div>
-					<h2 className="text-lg font-semibold mb-2">Seed Badges</h2>
+					<h2 className="text-lg font-semibold mb-2">Badges</h2>
 					<BadgeLadderEditor />
 				</div>
 			</div>

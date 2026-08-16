@@ -109,9 +109,9 @@ const ACCESS_BADGES: Record<AccessState, { label: string; className: string; tit
 	},
 	sale: { label: "For sale", className: "badge-info", title: "Anyone can buy this." },
 	gated: {
-		label: "Seed gated",
+		label: "Badge gated",
 		className: "badge-info badge-outline",
-		title: "Reachable by people who give you enough Seeds.",
+		title: "Reachable by people supporting you at one of your Badge levels.",
 	},
 };
 

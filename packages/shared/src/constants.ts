@@ -313,6 +313,23 @@ export function supportAmount(amount: string | number | null | undefined): numbe
 	return cents(amount) / 100;
 }
 
+/**
+ * An amount for display: `$3`, `$9.50`, `$12.99`. Whole dollars lose the `.00`.
+ *
+ * 🚨 **The cents half is the whole reason this exists.** Interpolating the number
+ * directly renders a `9.5` rung as **"$9.5"**, which reads as a typo and, beside a
+ * correctly formatted copy of itself, as a bug. That shipped in two places at once when
+ * the Seed retired — the access table's threshold hint and the gauntlet's rung
+ * descriptions — because whole Seeds could never carry cents and every call site had
+ * quietly assumed integers.
+ *
+ * Five copies of this expression existed by then, none shared. This is the one.
+ */
+export function amountLabel(amount: string | number | null | undefined): string {
+	const n = supportAmount(amount);
+	return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+}
+
 // ── Derived amounts ──────────────────────────────────────────────────────────
 /**
  * Time Pool $ funded by giving Anthers `dollars` a month (giving nothing = the

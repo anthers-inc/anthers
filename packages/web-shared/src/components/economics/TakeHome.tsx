@@ -115,7 +115,10 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 				>
 					{net < 0 ? `−${usd(-net)}` : usd(net)}
 					<span className="ml-1 text-xs font-normal text-base-content/50">
-						of {usd(amount)} ({keptPct.toFixed(0)}%)
+						{/* `toFixed` yields an ASCII hyphen, which sat a character away from the
+						    typographic minus on the headline and read as a rendering bug. */}
+						of {usd(amount)} ({keptPct < 0 ? "−" : ""}
+						{Math.abs(keptPct).toFixed(0)}%)
 					</span>
 				</span>
 			</div>
