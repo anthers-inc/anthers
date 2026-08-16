@@ -35,7 +35,7 @@ import {
 	SEED_WALK,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
-import { SEED_PRICE } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 
 /** The purchase rung's key — derived, so extending SEED_RUNGS doesn't strand it. */
 const BUY = `G${2 + SEED_RUNGS.length}`;
@@ -115,8 +115,8 @@ async function expectPostLocked(page: Page, key: string): Promise<void> {
 	// The ask must be marginal and must name a destination — never a bare "Join to unlock".
 	await expect(
 		page
-			.getByRole("button", { name: /Unlock with \d+ more Seeds? to / })
-			.or(page.getByRole("link", { name: /Unlock with \d+ more Seeds? to / })),
+			.getByRole("button", { name: /Unlock with \$[\d.]+ more to / })
+			.or(page.getByRole("link", { name: /Unlock with \$[\d.]+ more to / })),
 	).toBeVisible();
 	// The API strips a locked post's body server-side; trust nothing client-side.
 	await expect(page.getByText(spec.body)).toBeHidden();
@@ -171,7 +171,7 @@ async function mediaItem(page: Page, key: string): Promise<ContentItemView | nul
 }
 
 /** The access-checked delivery routes for one Work. No post is involved. */
-function hlsUrl(key: string, itemId: number, file = "master.m3u8"): string {
+function hlsUrl(_key: string, itemId: number, file = "master.m3u8"): string {
 	return `${API_URL}/api/content/works/${itemId}/hls/${file}`;
 }
 function audioUrl(_key: string, itemId: number): string {
@@ -233,7 +233,7 @@ async function expectVideoBytes(page: Page, key: string): Promise<void> {
 }
 
 /** Follow the audio redirect and confirm real MP3 bytes come back. */
-async function expectAudioBytes(page: Page, key: string): Promise<void> {
+async function _expectAudioBytes(page: Page, key: string): Promise<void> {
 	const item = await mediaItem(page, key);
 	expect(item?.transcoding?.status, `${key} transcode status`).toBe("completed");
 	expect(
@@ -378,10 +378,10 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	await expectPostLocked(page, "G3");
 
 	// The exact number, at the one state where it's unambiguous: holding nothing, G2's
-	// first Seed rung asks for exactly one more. Pinning the arithmetic here is what stops
+	// first rung asks for exactly its own amount. Pinning the arithmetic here is what stops
 	// the panel drifting back to quoting the THRESHOLD instead of the gap.
 	await page.goto(`/works/${gauntletPost("G2").slug}`);
-	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
+	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
 
 	await expectStaircase(page, "Free, unfollowed");
 
@@ -457,16 +457,16 @@ test("rung 3 — comment on the free post", async ({ page }) => {
  */
 test("rung 4 — Blossom unlocks nothing; a Badge is standing, not access", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
-	hop("--anthers-seeds", "4");
+	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE * 4));
 
 	await expectPostUnlocked(page, "G1");
 	await expectPostLocked(page, "G2");
-	await expectStaircase(page, "Blossom, no Seeds given");
+	await expectStaircase(page, "Blossom, nothing given");
 
 	// And no surface offers the Badge as a route in. The unlock control on a gated Work
 	// must name the creator, never Anthers.
 	await page.goto(`/works/${gauntletPost("G2").slug}`);
-	await expect(page.getByRole("link", { name: /^Unlock with 1 more Seed to / })).toBeVisible();
+	await expect(page.getByRole("link", { name: /^Unlock with \$3\.00 more to / })).toBeVisible();
 	await expect(page.getByRole("button", { name: /Seed to Anthers/ })).toBeHidden();
 
 	if (mediaSeeded) await expectMediaWithheld(page, "G3");
@@ -478,19 +478,25 @@ test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	// Enough budget for the whole ladder. Holding budget is not giving it — the staircase
 	// must still read exactly as it did before.
-	hop("--seed-budget", String(SEED_PRICE * SEED_RUNGS[SEED_RUNGS.length - 1]));
-	await expectStaircase(page, "Blossom, no Seeds given");
+	hop("--seed-budget", String(SEED_RUNGS[SEED_RUNGS.length - 1]));
+	await expectStaircase(page, "Blossom, nothing given");
 	expect(errors).toEqual([]);
 });
 
 /**
- * One click per Seed: the stepper steps whole Seeds ($3), so every state on the walk is
- * reached by exactly one more click than the one before it.
+ * The walk TYPES each amount rather than clicking to it.
  *
- * ⭐ **The ladder is sparse (`SEED_RUNGS` = 1, 2, 3, 5, 7), so some clicks land BETWEEN
- * rungs and must unlock nothing.** That is the point of walking every count rather than
- * only the rungs: a surface that compared a viewer's position in the ladder to the rung's
- * position would open a post at 4 Seeds, and only a between-state can catch it.
+ * 🚨 It clicked once per Seed until 2026-08-16, which worked only because every state was
+ * a whole $3 step above the last. With amounts free the stepper's arrows are a $1
+ * convenience, and the ladder's `$9.50` rung **cannot be reached by clicking at all** — so
+ * a click-driven walk would silently stop covering the one rung that guards the float
+ * comparison. Filling the field is also closer to what a supporter choosing an amount
+ * actually does.
+ *
+ * ⭐ **The ladder is sparse, so some states land BETWEEN rungs and must unlock nothing.**
+ * That is the point of walking every state rather than only the rungs: a surface comparing
+ * a viewer's position in the ladder to the rung's position would open a post in a
+ * between-state, and only a between-state can catch it.
  */
 for (const [i, seeds] of SEED_WALK.entries()) {
 	const rungIndex = SEED_RUNGS.indexOf(seeds as (typeof SEED_RUNGS)[number]);
@@ -500,20 +506,18 @@ for (const [i, seeds] of SEED_WALK.entries()) {
 	// of the ladder, where there is nothing left to stay locked.
 	const nextIndex = SEED_RUNGS.findIndex((t) => t > seeds);
 	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
-	const clicks = seeds - (SEED_WALK[i - 1] ?? 0);
+	const added = seeds - (SEED_WALK[i - 1] ?? 0);
 
-	test(`rung 5 — at ${seeds} Seed${seeds === 1 ? "" : "s"} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
+	test(`rung 5 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
 		await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
-		for (let n = 0; n < clicks; n++) {
-			await page.getByRole("button", { name: "More seeds" }).click();
-		}
-		await page.getByRole("button", { name: `Give $${(SEED_PRICE * clicks).toFixed(2)}` }).click();
+		await page.getByLabel("Monthly amount").fill(String(seeds));
+		await page.getByRole("button", { name: `Give $${added.toFixed(2)}` }).click();
 		// The give settles when the button returns to its resting label.
-		await expect(page.getByRole("button", { name: "Give Seeds" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Give", exact: true })).toBeVisible();
 
 		if (unlocked) await expectPostUnlocked(page, unlocked);
 		if (stillLocked) await expectPostLocked(page, stillLocked);
@@ -526,7 +530,7 @@ test("rung 5 — the ratchet: the stepper cannot walk back down", async ({ page 
 	const errors = trackErrorsStrict(page, ALLOWED);
 	await page.goto(`/${GAUNTLET_CREATOR_USERNAME}?tab=badges`);
 	// The full ladder is committed; within the cycle the control's floor IS that amount.
-	await expect(page.getByRole("button", { name: "Fewer seeds" })).toBeDisabled();
+	await expect(page.getByRole("button", { name: "Give less" })).toBeDisabled();
 	expect(errors).toEqual([]);
 });
 
@@ -586,7 +590,7 @@ test("the meter — a free viewer is warned before the limit, not after", async 
 	// Down to Free, and 9½ hours spent. `--watched-minutes` writes real `attention_events`
 	// rows stamped as Public Access, which is what the budget is derived from — there is
 	// no stored total to fake.
-	hop("--anthers-seeds", "0", "--watched-minutes", "570");
+	hop("--anthers-support", "0", "--watched-minutes", "570");
 
 	await page.goto(`/works/${gauntletPost("G1").slug}`);
 
@@ -624,11 +628,13 @@ test("the meter — spent, the player gives way to an explanation", async ({ pag
 	expect(errors).toEqual([]);
 });
 
-test("the meter — one Seed removes it, and nothing above the first buys more", async ({ page }) => {
+test("the meter — the Public Access price removes it, and nothing above it buys more", async ({
+	page,
+}) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 
-	// Same 10 hours spent; the only change is holding a Seed.
-	hop("--anthers-seeds", "1");
+	// Same 10 hours spent; the only change is supporting Anthers at the Public Access price.
+	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE));
 	await page.goto(`/works/${gauntletPost("G1").slug}`);
 
 	await expect(page.locator("video")).toBeVisible();
@@ -637,8 +643,9 @@ test("the meter — one Seed removes it, and nothing above the first buys more",
 	// and showing one would state a restriction that does not exist.
 	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
 
-	// The model's central claim about access — binary, and whole at the first Seed.
-	hop("--anthers-seeds", "4");
+	// The model's central claim about access — binary, and whole at the first dollar that
+	// buys it. Four times the amount buys no more reach.
+	hop("--anthers-support", String(PUBLIC_ACCESS_PRICE * 4));
 	await page.goto(`/works/${gauntletPost("G1").slug}`);
 	await expect(page.locator("video")).toBeVisible();
 	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);

@@ -9,7 +9,7 @@
  * `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the Give-Seeds stepper — and
  * hops the *billing* facts here, at the same three columns the webhooks would have written:
- * `accounts.anthersSeeds`, `accounts.creatorSeedTotal`, and a completed `purchases` row.
+ * `accounts.anthersSupport`, `accounts.creatorSupportTotal`, and a completed `purchases` row.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
  *
  * Usage (flags compose; each is applied only when passed):
@@ -25,14 +25,13 @@
  * Spec: `40-59 PhD Projects/43 Platforms/Anthers/70-79 Testing & QA/70 - User Gauntlet.md`
  */
 
-import { badgeLabel, heldBadgeName, SEED_PRICE, seedsFromDollars } from "@anthers/shared/constants";
+import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
 import {
 	accounts,
 	attentionEvents,
 	db,
-	posts,
 	purchases,
 	seedAllocations,
 	users,
@@ -54,6 +53,24 @@ function intFlag(name: string, min: number, max: number): number | undefined {
 		throw new Error(`${name} must be an integer in [${min}, ${max}], got "${raw}"`);
 	}
 	return n;
+}
+
+/**
+ * A dollar-amount flag.
+ *
+ * Separate from `intFlag` because support amounts stopped being whole units on
+ * 2026-08-16 — walking the staircase to its `$9.50` rung is impossible through a flag
+ * that rejects anything but an integer, and that rung is the one guarding the float
+ * comparison.
+ */
+function numFlag(name: string, min: number, max: number): number | undefined {
+	const raw = flagValue(name);
+	if (raw === undefined) return undefined;
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n < min || n > max) {
+		throw new Error(`${name} must be a number in [${min}, ${max}], got "${raw}"`);
+	}
+	return Math.round(n * 100) / 100;
 }
 
 /** First day of the current month, `YYYY-MM-DD` — the app's billing-cycle key. */
@@ -80,9 +97,9 @@ async function main(): Promise<void> {
 	const viewerId = await userIdByUsername(viewerUsername, "Viewer");
 	const creatorId = await userIdByUsername(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator");
 
-	const anthersSeeds = intFlag("--anthers-seeds", 0, 4);
-	const seedBudget = intFlag("--seed-budget", 0, 100);
-	const give = intFlag("--give", 0, 100);
+	const anthersSupport = numFlag("--anthers-support", 0, 300);
+	const seedBudget = numFlag("--seed-budget", 0, 300);
+	const give = numFlag("--give", 0, 300);
 	const purchaseSlug = flagValue("--purchase");
 	/**
 	 * Public Access minutes already spent this month.
@@ -100,10 +117,10 @@ async function main(): Promise<void> {
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
 	// Account row: the two billing facts the subscription/seed-buy webhooks would write.
-	if (anthersSeeds !== undefined || seedBudget !== undefined) {
+	if (anthersSupport !== undefined || seedBudget !== undefined) {
 		const patch = {
-			...(anthersSeeds !== undefined ? { anthersSeeds } : {}),
-			...(seedBudget !== undefined ? { creatorSeedTotal: seedBudget.toFixed(2) } : {}),
+			...(anthersSupport !== undefined ? { anthersSupport: anthersSupport.toFixed(2) } : {}),
+			...(seedBudget !== undefined ? { creatorSupportTotal: seedBudget.toFixed(2) } : {}),
 			updatedAt: new Date(),
 		};
 		const [existing] = await db
@@ -166,7 +183,7 @@ async function main(): Promise<void> {
 			.limit(1);
 		// `--give` counts SEEDS, like every other threshold in the model; the ledger stores
 		// the money, so the conversion happens here rather than in the flag's meaning.
-		const amount = (give * SEED_PRICE).toFixed(2);
+		const amount = give.toFixed(2);
 		if (existing) {
 			await db
 				.update(seedAllocations)
@@ -221,7 +238,10 @@ async function main(): Promise<void> {
 
 	// Report the state actually in the database — the number the caller should trust.
 	const [acct] = await db
-		.select({ anthersSeeds: accounts.anthersSeeds, creatorSeedTotal: accounts.creatorSeedTotal })
+		.select({
+			anthersSupport: accounts.anthersSupport,
+			creatorSupportTotal: accounts.creatorSupportTotal,
+		})
 		.from(accounts)
 		.where(eq(accounts.userId, viewerId))
 		.limit(1);
@@ -236,7 +256,7 @@ async function main(): Promise<void> {
 			),
 		)
 		.limit(1);
-	const seeds = Number(acct?.anthersSeeds ?? 0);
+	const support = supportAmount(acct?.anthersSupport);
 	// Report the meter from the same derivation the app uses, not from the flag we were
 	// handed — a hop that prints its own input tells you nothing about whether it landed.
 	const [watched] = await db
@@ -245,11 +265,13 @@ async function main(): Promise<void> {
 		.where(and(eq(attentionEvents.userId, viewerId), eq(attentionEvents.publicAccess, true)));
 	const watchedSeconds = Number(watched?.total ?? 0);
 	console.log(
-		`${TAG} ${viewerUsername}: ${seeds} Anthers-Seed${seeds === 1 ? "" : "s"} (${badgeLabel(
-			heldBadgeName(seeds),
-		)}) · budget $${Number(acct?.creatorSeedTotal ?? 0).toFixed(2)} · given ${seedsFromDollars(
-			alloc?.amount,
-		)} Seeds ($${Number(alloc?.amount ?? 0).toFixed(2)}) to ${GAUNTLET_CREATOR_USERNAME} · Public Access watched ${(watchedSeconds / 3600).toFixed(2)}h`,
+		`${TAG} ${viewerUsername}: $${support.toFixed(2)}/mo to Anthers (${badgeLabel(
+			heldBadgeName(support),
+		)}) · budget $${Number(acct?.creatorSupportTotal ?? 0).toFixed(2)} · given $${Number(
+			alloc?.amount ?? 0,
+		).toFixed(2)} to ${GAUNTLET_CREATOR_USERNAME} · Public Access watched ${(
+			watchedSeconds / 3600
+		).toFixed(2)}h`,
 	);
 }
 

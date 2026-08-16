@@ -13,9 +13,9 @@
  * line — streaming and downloads are unlimited and free.
  */
 
-import { SEED_PRICE, TIME_POOL_PER_SEED } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
-import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
+import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
@@ -632,7 +632,7 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your Seeds to Anthers fund
 					<InfoTip
-						text={`Each Seed given to Anthers ($${SEED_PRICE}) funds the Time Pool ($${TIME_POOL_PER_SEED.toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and holding a Seed lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
+						text={`What you give Anthers funds the Time Pool ($${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and ${PUBLIC_ACCESS_PRICE} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -656,7 +656,9 @@ export default function SubscriptionPage() {
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Public Access</div>
 						<div className="text-lg font-bold">
-							{badgeView.anthersSeeds >= 1 ? "Unlimited" : `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`}
+							{badgeView.price >= PUBLIC_ACCESS_PRICE
+								? "Unlimited"
+								: `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`}
 						</div>
 						{/* econ:allow — this states the ABSENCE of the retired mechanism, which is the
 						    one place naming it is correct. */}
@@ -671,7 +673,7 @@ export default function SubscriptionPage() {
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
 					Creators You Support
-					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and Seeds (whole $3 units you direct to specific creators, with no platform cut — only the at-cost card processing comes out)." />
+					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and support you direct to specific creators, at any amount, with no platform cut — only the at-cost card processing comes out)." />
 				</div>
 				{attention && (
 					<p className="text-xs text-base-content/40 text-center mb-3">
@@ -781,7 +783,7 @@ export default function SubscriptionPage() {
 														{row.displayName || row.username}
 													</Link>
 													{canEdit ? (
-														<SeedStepper
+														<SupportStepper
 															value={row.pendingSeed}
 															min={floor}
 															max={maxForThis}

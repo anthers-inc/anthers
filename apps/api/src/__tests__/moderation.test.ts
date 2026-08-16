@@ -81,7 +81,7 @@ const creatorName = `mod_creator_${id}`;
 const adminName = `mod_admin_${id}`;
 const viewerAName = `mod_a_${id}`;
 const viewerBName = `mod_b_${id}`;
-const FREE = [{ threshold: 0, allow: true, price: "0" }];
+const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creator: string;
 let admin: string;

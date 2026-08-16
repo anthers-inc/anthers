@@ -31,7 +31,7 @@
 
 import { db } from "@anthers/db";
 import { accounts, attentionEvents, poolDistributions, seedAllocations } from "@anthers/db/schema";
-import { SEED_PRICE, timePoolFor } from "@anthers/shared/constants";
+import { supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, gte, lt, sum } from "drizzle-orm";
@@ -45,8 +45,8 @@ export interface DistributePoolData {
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
 /** The Time Pool a user funds this cycle = $1.50 per Anthers-Seed (subsidised at rank 0). */
-function computeTimePoolAmount(anthersSeeds: number): Decimal {
-	return new Decimal(timePoolFor(anthersSeeds));
+function computeTimePoolAmount(anthersSupport: number): Decimal {
+	return new Decimal(timePoolFor(anthersSupport));
 }
 
 function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
@@ -76,7 +76,7 @@ interface Dist {
 async function distributeForAccount(acct: {
 	id: number;
 	userId: number;
-	anthersSeeds: number;
+	anthersSupport: string;
 	currentPeriodStart: Date | null;
 	currentPeriodEnd: Date | null;
 }) {
@@ -142,8 +142,8 @@ async function distributeForAccount(acct: {
 	// Seed alone: $3.00 gross → $2.61 net.
 	if (grossDirected.gt(0)) {
 		const creatorFee = paymentsSplit(
-			acct.anthersSeeds,
-			grossDirected.div(SEED_PRICE).toNumber(),
+			supportAmount(acct.anthersSupport),
+			grossDirected.toNumber(),
 		).creator;
 		if (creatorFee.gt(0)) {
 			for (const d of distributions.values()) {
@@ -165,7 +165,7 @@ async function distributeForAccount(acct: {
 	}
 
 	// 3. Distribute the Time Pool proportionally by watch-time.
-	const timePool = computeTimePoolAmount(acct.anthersSeeds);
+	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
 	if (totalAttention > 0 && timePool.gt(0)) {
 		for (const [creatorId, seconds] of attentionByCreator) {
 			const proportion = new Decimal(seconds).div(totalAttention);

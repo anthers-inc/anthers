@@ -17,7 +17,7 @@ import { FREE_TIME_POOL } from "./constants.js";
 import {
 	ADMIN_CEILING,
 	affordable,
-	averageSeeds,
+	averageSupport,
 	creatorCap,
 	crossover,
 	decayForAverage,
@@ -295,13 +295,16 @@ describe("the Public Access incentive ceiling", () => {
 });
 
 describe("the paying-user mix", () => {
-	test("the shipped decay puts the average payer at 2.20 Seeds", () => {
-		expect(averageSeeds(payingBadgeMix())).toBeCloseTo(2.2, 2);
+	test("the shipped decay puts the average payer at $6.59 a month", () => {
+		// 2.20 rungs at $3 — the figure 61.01 names as its current assumption, in the
+		// dollars the model has been denominated in since the Seed retired as a unit.
+		expect(averageSupport(payingBadgeMix())).toBeCloseTo(6.59, 2);
+		expect(averageSupport(payingBadgeMix()) / 3).toBeCloseTo(2.2, 2);
 	});
 
 	test("an average is solved for, so the published axis is the mix it describes", () => {
-		for (const target of [1.25, 1.67, 3.04, 4.65]) {
-			expect(averageSeeds(payingBadgeMix(decayForAverage(target)))).toBeCloseTo(target, 3);
+		for (const target of [3.75, 5.01, 9.12, 13.95]) {
+			expect(averageSupport(payingBadgeMix(decayForAverage(target)))).toBeCloseTo(target, 3);
 		}
 	});
 
@@ -317,13 +320,13 @@ describe("the paying-user mix", () => {
 				staffing: full,
 				mix: payingBadgeMix(decayForAverage(avg)),
 			}) as number;
-		const points = [4.65, 3.04, 2.2, 1.67, 1.25].map(at);
+		const points = [13.95, 9.12, 6.59, 5.01, 3.75].map(at);
 		expect([...points].sort((a, b) => a - b)).toEqual(points);
 		// A full collapse to ~one Seed is still worse than the pre-R2 world's ~57,500 —
 		// so the R2 windfall does not quite cover it — but by 1.15x, not the 1.9x that was
 		// published while the $0.50 pot was assumed.
-		expect(at(1.25) / 57_500).toBeGreaterThan(1);
-		expect(at(1.25) / 57_500).toBeLessThan(1.25);
+		expect(at(3.75) / 57_500).toBeGreaterThan(1);
+		expect(at(3.75) / 57_500).toBeLessThan(1.25);
 	});
 });
 

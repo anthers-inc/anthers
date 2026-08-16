@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { SEED_PRICE } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -119,7 +119,7 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 
 	// A Seed buy has no title of its own; name it by what it bought. Seeds are sold in
 	// whole $3 units, so the count is recoverable from the amount.
-	const seedCount = Math.round(parseFloat(p.amount) / SEED_PRICE);
+	const seedCount = Math.round(parseFloat(p.amount) / PUBLIC_ACCESS_PRICE);
 	const label =
 		p.type === "seeds"
 			? `${seedCount} ${seedCount === 1 ? "Seed" : "Seeds"}`

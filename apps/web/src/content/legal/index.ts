@@ -131,7 +131,7 @@ const TERMS: LegalDocument = {
 		"You're responsible for what happens under your account, and for keeping your password to yourself.",
 
 		"## What you can expect from us",
-		"Anthers is a nonprofit. **We take no cut of what you give creators** — the only deduction on a Seed or a purchase is the card processing that the payment network charges, which goes to the processor and not to us.",
+		"Anthers is a nonprofit. **We take no cut of what you give creators** — the only deduction on monthly support or a purchase is the card processing that the payment network charges, which goes to the processor and not to us.",
 		"We'll keep the platform running as well as we reasonably can, and we'll tell you before we make a change that materially affects your rights.",
 		"**We won't sell your data, show you advertising, or optimise anything here to consume more of your attention.**",
 

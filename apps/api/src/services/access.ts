@@ -42,7 +42,7 @@
 import { db } from "@anthers/db/client";
 import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
-import { seedCost, seedsFromDollars, seedsMeet } from "@anthers/shared/constants";
+import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
@@ -73,7 +73,7 @@ export interface AccessibleWork {
 export interface AccessContext {
 	userId: number | null;
 	/** creatorId → whole Seeds the viewer has given to that creator this cycle */
-	seedByCreator: Map<number, number>;
+	supportByCreator: Map<number, number>;
 	/** Work ids the viewer has a completed purchase for */
 	purchasedWorkIds: Set<number>;
 }
@@ -109,19 +109,19 @@ export const PREVIEW_VIEWER_ID = -1;
 export function buildPreviewContext(opts: {
 	/** Whose ladder is being previewed — the creator's own. */
 	creatorId: number;
-	/** Seeds the imagined viewer has given that creator, or null for "signed out". */
-	seeds: number | null;
+	/** Monthly $ the imagined viewer gives that creator, or null for "signed out". */
+	given: number | null;
 	/** Whether the imagined viewer has bought the Work outright. */
 	owned: boolean;
 	/** Works the `owned` toggle applies to. */
 	workIds: number[];
 }): AccessContext {
-	const signedOut = opts.seeds === null;
+	const signedOut = opts.given === null;
 	return {
 		userId: signedOut ? null : PREVIEW_VIEWER_ID,
 		// A signed-out viewer has given nobody anything and owns nothing — both maps stay
 		// empty rather than being special-cased in the resolver.
-		seedByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.seeds ?? 0]]),
+		supportByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.given ?? 0]]),
 		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
 	};
 }
@@ -221,19 +221,19 @@ export function currentBillingCycle(): string {
  * the Badge.
  *
  * A raw count, not a Badge name: a Badge is the highest threshold you meet, so collapsing
- * to it first rounds a 3-Seed holder down to a 2-Seed Badge. Name the Badge only for
+ * to it first rounds someone giving $9 down to a $6 Badge. Name the Badge only for
  * display.
  */
-export async function heldAnthersSeeds(userId: number): Promise<number> {
+export async function heldAnthersSupport(userId: number): Promise<number> {
 	const [row] = await db
-		.select({ anthersSeeds: accounts.anthersSeeds })
+		.select({ anthersSupport: accounts.anthersSupport })
 		.from(accounts)
 		.where(eq(accounts.userId, userId))
 		.limit(1);
-	return Math.max(0, Math.floor(Number(row?.anthersSeeds ?? 0)));
+	// ⚠️ NOT floored. It rounded down to a whole Seed until 2026-08-16, which is right for
+	// a count and destroys a real amount: $2.50 became $2 and stopped clearing its own gate.
+	return supportAmount(row?.anthersSupport);
 }
-
-export { seedsFromDollars };
 
 function money(n: number): string {
 	return (Math.round(n * 100) / 100).toFixed(2);
@@ -245,13 +245,13 @@ interface Offer {
 	baseline: boolean;
 }
 
-/** The allowed rows a viewer holding `heldSeeds` toward this creator qualifies for. */
-function offersFor(rows: AccessRow[], heldSeeds: number): Offer[] {
+/** The allowed rows a viewer giving `given` a month to this creator qualifies for. */
+function offersFor(rows: AccessRow[], given: number): Offer[] {
 	const offers: Offer[] = [];
 	for (const row of rows) {
 		if (!row.allow) continue;
 		const threshold = Number(row.threshold ?? 0);
-		if (!seedsMeet(heldSeeds, threshold)) continue;
+		if (!amountMeets(given, threshold)) continue;
 		offers.push({ price: Number(row.price ?? "0"), baseline: threshold <= 0 });
 	}
 	return offers;
@@ -267,7 +267,7 @@ function offersFor(rows: AccessRow[], heldSeeds: number): Offer[] {
  */
 export function unlockRoute(
 	rows: AccessRow[],
-	heldSeeds: number,
+	given: number,
 	badges: readonly { name: string; threshold: number }[],
 ): UnlockRoute | null {
 	let best: number | null = null;
@@ -275,7 +275,7 @@ export function unlockRoute(
 		if (!row.allow) continue;
 		if (Number(row.price ?? "0") > 0) continue;
 		const threshold = Number(row.threshold ?? 0);
-		if (seedsMeet(heldSeeds, threshold)) continue; // already met — not a route in
+		if (amountMeets(given, threshold)) continue; // already met — not a route in
 		if (best === null || threshold < best) best = threshold;
 	}
 	if (best === null) return null;
@@ -284,8 +284,8 @@ export function unlockRoute(
 	const badge = badges.find((b) => b.threshold === best) ?? null;
 	return {
 		threshold: best,
-		moreNeeded: Math.max(0, best - heldSeeds),
-		price: money(seedCost(best)),
+		moreNeeded: Math.max(0, best - given),
+		price: money(best),
 		badge: badge?.name ?? null,
 	};
 }
@@ -324,8 +324,8 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "purchased" };
 	}
 
-	const givenSeeds = work.creatorId == null ? 0 : (ctx.seedByCreator.get(work.creatorId) ?? 0);
-	const offers = offersFor(work.seedAccess ?? [], givenSeeds);
+	const given = work.creatorId == null ? 0 : (ctx.supportByCreator.get(work.creatorId) ?? 0);
+	const offers = offersFor(work.seedAccess ?? [], given);
 
 	// No qualifying allowed row → hard gate. Report what would open it, from here.
 	if (offers.length === 0) {
@@ -338,7 +338,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 				// No Badge set: a creator's Badges are their own rows, not carried on the Work
 				// (thresholds are levels, not Badge identities — migration 0007). The creator's
 				// name is the identity the UI shows here, so it needs no Badge.
-				creator: unlockRoute(work.seedAccess ?? [], givenSeeds, []),
+				creator: unlockRoute(work.seedAccess ?? [], given, []),
 			},
 		};
 	}
@@ -379,7 +379,7 @@ export async function buildAccessContext(
 	opts: { workIds?: number[] } = {},
 ): Promise<AccessContext> {
 	if (userId == null) {
-		return { userId: null, seedByCreator: new Map(), purchasedWorkIds: new Set() };
+		return { userId: null, supportByCreator: new Map(), purchasedWorkIds: new Set() };
 	}
 
 	const cycle = currentBillingCycle();
@@ -405,14 +405,20 @@ export async function buildAccessContext(
 	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
 	// gate. Gates count Seeds, so the dollars are divided here, at the one boundary where
 	// the two meet, rather than by every caller that compares against a threshold.
-	const seedByCreator = new Map<number, number>();
+	const supportByCreator = new Map<number, number>();
 	for (const s of seedRows) {
-		seedByCreator.set(s.creatorId, seedsFromDollars(s.amount));
+		// 🚨 Dollars straight off the ledger, with NO conversion. This read
+		// `seedsFromDollars(s.amount)` until 2026-08-16 — dividing a recorded payment by
+		// the CURRENT Seed price — so moving that price silently reinterpreted every
+		// in-flight allocation, retroactively changing which gates a supporter cleared for
+		// money they had already paid. Retiring the unit removed the conversion and the
+		// hazard together; do not reintroduce one.
+		supportByCreator.set(s.creatorId, supportAmount(s.amount));
 	}
 
 	return {
 		userId,
-		seedByCreator,
+		supportByCreator,
 		// Seed one-time charges have a null workId — only real Work purchases unlock.
 		purchasedWorkIds: new Set(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),

@@ -11,10 +11,10 @@
 // symptom and no error, which is exactly the kind of claim this codebase has learned to
 // pin down (see the third-party-requests lesson — where a document claims an absence,
 // that absence needs a test).
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { db } from "@anthers/db/client";
 import { signupCodes, users } from "@anthers/db/schema";
-import { eq, inArray, like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import {
 	checkSignupCode,

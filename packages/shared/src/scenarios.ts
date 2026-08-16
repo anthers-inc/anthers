@@ -19,18 +19,16 @@
  */
 import Decimal from "decimal.js";
 import {
-	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
+	PUBLIC_ACCESS_PRICE,
 	SALES_TAX_RATE,
-	SEED_PRICE,
-	STORAGE_PER_GIB_MONTH,
-	TIME_POOL_PER_SEED,
 	thresholdForBadge,
+	timePoolFor,
 } from "./constants.js";
 import {
-	anthersSeedBreakdown,
+	anthersSupportBreakdown,
 	calculateFees,
 	estimateStorageCost,
 	paymentsSplit,
@@ -38,7 +36,7 @@ import {
 } from "./fees.js";
 import {
 	affordable,
-	averageSeeds,
+	averageSupport,
 	crossover,
 	decayForAverage,
 	floorPayingShare,
@@ -56,8 +54,9 @@ const money = (d: Decimal) => d.toFixed(2);
 
 export interface BadgeRow {
 	badge: string;
-	seeds: number;
-	/** The all-in monthly charge for those Seeds. */
+	/** Monthly dollars this rung takes. */
+	monthly: number;
+	/** The all-in monthly charge at that level. */
 	charge: string;
 	timePool: string;
 	/** This side's share of the at-cost card fee — INSIDE the charge since 2026-08-03. */
@@ -77,13 +76,13 @@ export interface BadgeRow {
 export function badgeTable(): BadgeRow[] {
 	return BADGE_ORDER.filter((b) => thresholdForBadge(b) > 0).map((badge) => {
 		const n = thresholdForBadge(badge);
-		// No directed Seeds in this scenario, so the whole card fee sits on this side.
+		// Nothing directed at creators in this scenario, so the whole card fee sits here.
 		const payments = paymentsSplit(n, 0).anthers;
-		const b = anthersSeedBreakdown(n, { payments });
+		const b = anthersSupportBreakdown(n, { payments });
 		return {
 			badge: badge.charAt(0).toUpperCase() + badge.slice(1),
-			seeds: n,
-			charge: money(b.seedValue),
+			monthly: n,
+			charge: money(b.given),
 			timePool: money(b.timePool),
 			payments: money(b.payments),
 			remainder: money(b.foundation),
@@ -92,9 +91,9 @@ export function badgeTable(): BadgeRow[] {
 }
 
 export interface ReceiptScenario {
-	anthersSeeds: number;
-	creatorSeeds: number;
-	/** Gross directed-Seed value — what the user chose to give. */
+	anthersDollars: number;
+	creatorDollars: number;
+	/** Gross directed value — what the user chose to give creators. */
 	directedGross: string;
 	/** What actually reaches those creators, net of their share of the card fee. */
 	directedNet: string;
@@ -106,7 +105,7 @@ export interface ReceiptScenario {
 	/** The creator side's share, already deducted from `directedNet`. */
 	paymentsCreator: string;
 	remainder: string;
-	seedsSubtotal: string;
+	supportSubtotal: string;
 	salesTax: string;
 	/** All-in: the subtotal plus sales tax, and nothing else. */
 	totalBilled: string;
@@ -120,14 +119,14 @@ export interface ReceiptScenario {
  * IS what the user pays, and sales tax is the only thing added. Payments appears
  * as a line inside the Seeds, never beneath the subtotal.
  */
-export function sampleReceipt(anthersSeeds = 2, creatorSeeds = 2): ReceiptScenario {
-	const s = supportBreakdown({ anthersSeeds, creatorSeeds });
-	const split = paymentsSplit(anthersSeeds, creatorSeeds);
-	const anthers = anthersSeedBreakdown(anthersSeeds, { payments: split.anthers });
-	const salesTax = new Decimal(s.seedsSubtotal).mul(SALES_TAX_RATE).toDecimalPlaces(2);
+export function sampleReceipt(anthersDollars = 6, creatorDollars = 6): ReceiptScenario {
+	const s = supportBreakdown({ anthersDollars, creatorDollars });
+	const split = paymentsSplit(anthersDollars, creatorDollars);
+	const anthers = anthersSupportBreakdown(anthersDollars, { payments: split.anthers });
+	const salesTax = new Decimal(s.supportSubtotal).mul(SALES_TAX_RATE).toDecimalPlaces(2);
 	return {
-		anthersSeeds,
-		creatorSeeds,
+		anthersDollars,
+		creatorDollars,
 		directedGross: money(s.creatorDirect),
 		directedNet: money(s.creatorNet),
 		timePool: money(s.timePool),
@@ -135,9 +134,9 @@ export function sampleReceipt(anthersSeeds = 2, creatorSeeds = 2): ReceiptScenar
 		paymentsAnthers: money(split.anthers),
 		paymentsCreator: money(split.creator),
 		remainder: money(anthers.foundation),
-		seedsSubtotal: money(s.seedsSubtotal),
+		supportSubtotal: money(s.supportSubtotal),
 		salesTax: money(salesTax),
-		totalBilled: money(s.seedsSubtotal.plus(salesTax)),
+		totalBilled: money(s.supportSubtotal.plus(salesTax)),
 		toCreators: money(s.toCreators),
 	};
 }
@@ -392,7 +391,7 @@ export function selfSufficiency() {
 	return {
 		freeUserCost: money(cost),
 		revenuePerPayingUser: money(revenuePerPayingUser),
-		averageSeeds: averageSeeds(mix).toFixed(2),
+		averageSupport: averageSupport(mix).toFixed(2),
 		breakEvenPct: `${(breakEven * 100).toFixed(1)}%`,
 		rows,
 	};
@@ -589,19 +588,28 @@ export function payingShareSensitivity() {
  * earns it. Each row is a different decay in the mix; the labelled average is what the
  * decay produces, so the axis stays a fact about the population rather than a dial name.
  */
-export const MIX_AVERAGES = [4.65, 3.04, 1.67, 1.25];
+/**
+ * Average monthly support per payer, for the flattening-risk sweep.
+ *
+ * ⚠️ **These were Seed COUNTS (4.65 / 3.04 / 1.67 / 1.25) until 2026-08-16** and are the
+ * same points re-denominated at $3 a rung, so every landmark below is unchanged and only
+ * the published axis label moved. Re-denominating rather than re-choosing is deliberate:
+ * the rows are a comparison against 61.01's recorded sensitivity, and picking new round
+ * numbers would have quietly broken that comparison while looking tidier.
+ */
+export const MIX_AVERAGES = [13.95, 9.12, 5.01, 3.75];
 
 export function seedMixSensitivity() {
 	const full = staffingForPhase(10);
 	// The shipped mix is inserted by its OWN average rather than listed as a target, so
 	// the "current" row can never quietly become a nearby round number that isn't it.
-	const shipped = averageSeeds(payingBadgeMix());
+	const shipped = averageSupport(payingBadgeMix());
 	const points = [...MIX_AVERAGES, shipped].sort((a, b) => b - a);
 	return points.map((avg) => {
 		const current = avg === shipped;
 		const mix = payingBadgeMix(current ? PAY_DECAY : decayForAverage(avg));
 		return {
-			avgSeeds: averageSeeds(mix).toFixed(2),
+			avgSeeds: averageSupport(mix).toFixed(2),
 			current,
 			accounts: crossover(
 				affordable,
@@ -628,7 +636,7 @@ export function freePotSensitivity() {
 		shipped: pot === FREE_TIME_POOL,
 		floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeTimePool: pot }) * 100).toFixed(1)}%`,
 		/** How much more a creator earns per unit of a free viewer's attention with a Seed. */
-		multiple: TIME_POOL_PER_SEED / pot,
+		multiple: timePoolFor(PUBLIC_ACCESS_PRICE) / pot,
 	}));
 }
 
@@ -729,11 +737,11 @@ export function paIncentiveCeiling() {
 	};
 }
 
-/** A lone directed Seed — the worst case, and the figure creator-facing copy quotes. */
-export function directedSeedWorstCase() {
-	const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
+/** A lone $3 to one creator — the worst case, and the figure creator-facing copy quotes. */
+export function directedSupportWorstCase(monthly = PUBLIC_ACCESS_PRICE) {
+	const s = supportBreakdown({ anthersDollars: 0, creatorDollars: monthly });
 	return {
-		gross: money(new Decimal(SEED_PRICE)),
+		gross: money(new Decimal(monthly)),
 		net: money(s.creatorNet),
 		cardFee: money(s.payments),
 	};

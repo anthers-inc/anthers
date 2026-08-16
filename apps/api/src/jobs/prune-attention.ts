@@ -44,7 +44,7 @@
  */
 
 import { db } from "@anthers/db";
-import { attentionDaily, attentionEvents } from "@anthers/db/schema";
+import { attentionEvents } from "@anthers/db/schema";
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
 import { lt, sql } from "drizzle-orm";
 

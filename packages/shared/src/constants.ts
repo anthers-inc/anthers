@@ -4,22 +4,30 @@ export const APP_NAME = "Anthers";
 /**
  * Support-model economics constants (supersedes the V4 "Badge plans" model).
  *
- * One primitive: a **Seed** — a flat **$3/month** — pointed one of two ways:
- *   - at a **creator** (a *directed Seed*): **no platform cut** and no payout
- *     processing — the only deduction is the Seed's pro-rata share of the at-cost
- *     card fee, paid to Stripe (see `paymentsSplit`), so a lone $3 Seed reaches its
- *     creator as $2.61 and batching pays them more; clears that creator's Seed
- *     Gates in $3 increments; or
- *   - at **Anthers** (an *Anthers-Seed*): funds the **Time Pool** ($1.50/Seed, to
- *     creators by time), earns **Anthers' Badges**, and leaves a
- *     **remainder** for Anthers.
+ * A user gives a **monthly amount**, in dollars, pointed one of two ways:
+ *   - at a **creator**: **no platform cut** and no payout processing — the only
+ *     deduction is that amount's pro-rata share of the at-cost card fee, paid to
+ *     Stripe (see `paymentsSplit`), so a lone $3 reaches its creator as $2.61 and
+ *     batching pays them more; it clears that creator's **Badge** levels; or
+ *   - at **Anthers**: buys unlimited **Public Access** at $3, funds the **Time Pool**
+ *     (half of what you give, to creators by time), earns **Anthers' Badges**, and
+ *     leaves a **remainder** for Anthers.
  *
- * A **Seed** is what the user gives; a **Badge** is what the recipient returns.
- * Anthers is a recipient like any creator — it simply defines its own Badge set
- * (root/sprout/petal/blossom at 1/2/3/4 Anthers-Seeds).
+ * A **Badge** is what the recipient returns for a level of monthly support. Anthers is a
+ * recipient like any creator — it simply defines its own set (root/sprout/petal/blossom
+ * at $3/$6/$9/$12).
+ *
+ * 🚨 **THE SEED IS RETIRED AS A FINANCIAL UNIT (2026-08-16).** There was a `SEED_PRICE`
+ * of $3, every amount was a whole multiple of it, and every threshold counted Seeds. All
+ * of that is gone: amounts are dollars, creators set their own Badge levels to anything,
+ * and $3 survives only as the price of unlimited Public Access — *just $3*, not a unit.
+ * See `BadgeDef` for why the unit stopped earning its place. **Do not reintroduce a
+ * granularity floor**: if the fixed $0.30 ever argues for a floor it argues for a minimum
+ * *invoice total*, never a minimum per-creator amount, and that is a different mechanism
+ * in a different place.
  *
  * **There is no bandwidth term.** Delivery was metered at cost ($0.01/GiB) against
- * a 15 GiB free floor plus 60 GiB per Seed until 2026-08-12. That whole apparatus
+ * a 15 GiB free floor plus a per-Seed allowance until 2026-08-12. That whole apparatus
  * was cost-recovery for one vendor's price list — `BANDWIDTH_PER_GIB` was *exactly*
  * DigitalOcean Spaces' egress rate — and Cloudflare R2 charges $0 egress at any
  * volume, so it metered a cost nobody pays. Downloads are unlimited and free,
@@ -35,53 +43,85 @@ export const APP_NAME = "Anthers";
  * a card cost gets none, which is why the old "like sales tax" framing was hollow.
  * The claim that survives is **"Anthers takes no cut"** — unconditionally true —
  * not "100% to the creator", which is retired. There is no platform margin and no
- * fixed "Community Share": the remainder is what's left of each Anthers-Seed, read
- * obligations-first, and it absorbs the *Anthers side's* share of the Payments line.
+ * fixed "Community Share": the remainder is what's left of what a user gives Anthers,
+ * read obligations-first, and it absorbs the *Anthers side's* share of the Payments line.
  * It does NOT absorb the creator side's — `supportBreakdown` charges each side its
  * pro-rata share, which is the only coherent answer for a pure-direct user, who has
- * no remainder to absorb anything. (This comment used to claim creator pay was never
- * touched; that contradicted `paymentsSplit` and `economics.test.ts`.)
+ * no remainder to absorb anything.
  *
- * Seed price is locked at $3; Time-Pool-per-Seed is the current tuned value — see
- * Subscription Economics (50.01).
+ * Unlimited Public Access is $3/month; the Time Pool rate is the current tuned
+ * value — see Subscription Economics (50.01).
  */
-
-// ── Badges (what a recipient returns for Seeds) ───────────────────────────────
+// ── Badges (what a recipient returns for monthly support) ─────────────────────
 /**
- * A Badge: a name at a whole-Seed threshold. This shape is the whole point — a
- * Badge is identified by the Seeds it takes to hold, never by its position in a
- * list, because an issuer may place Badges at ANY Seed levels. A creator's set of
- * 1/3/5/7 is exactly as valid as Anthers' 1/2/3/4; the only rule is that the
- * granularity floor is one Seed.
+ * A Badge: a name at a **dollar** threshold. This shape is the whole point — a Badge is
+ * identified by what it takes to hold, never by its position in a list, because an issuer
+ * may place Badges at ANY level. A creator's set of $2/$7/$15 is exactly as valid as
+ * Anthers' $3/$6/$9/$12, and there is **no granularity floor at all**.
  *
- * This replaced an enum whose *index* was compared against a Seed count. That
- * worked only because Anthers' Badges happen to sit at consecutive integers, so
- * index and threshold coincided — an accident, not a design. Under any
- * non-consecutive set it mis-resolved access silently: no error, just wrong
- * answers. Compare thresholds, never positions.
+ * 🚨 **The threshold was WHOLE SEEDS until 2026-08-16, and the unit change is the point.**
+ * The Seed retired as a financial unit: everything is denominated in dollars now, creators
+ * set their own Badge levels to any amount exactly as they set a direct-purchase list
+ * price, and Anthers keeps $3 for unlimited Public Access — which is *just $3*, not "a
+ * Seed". The $3 unit's written justification had died under it: it existed because a $1
+ * card charge loses ~33% to processing against ~13% on $3, and PR #223 made one
+ * subscription carry everything a user gives, so the fixed $0.30 is paid **once a month
+ * regardless of denomination**. What that argues for is a minimum *invoice total*, never a
+ * minimum per-creator amount. Against that, $3 steps were the coarsest tier granularity in
+ * the market at exactly the point where tiers live — a 100% jump from the first rung to the
+ * second, and no way to say $5, $10 or $25.
+ *
+ * This shape also replaced an enum whose *index* was compared against a held count. That
+ * worked only because Anthers' Badges happened to sit at consecutive integers, so index and
+ * threshold coincided — an accident, not a design. Under any non-consecutive set it
+ * mis-resolved access silently: no error, just wrong answers. **Compare thresholds, never
+ * positions** — and note the unit change makes non-consecutive sets the ordinary case
+ * rather than the exotic one.
  */
 export interface BadgeDef {
 	name: string;
-	/** Whole Seeds given to the issuer required to hold this Badge. */
+	/** Monthly dollars given to the issuer required to hold this Badge. */
 	threshold: number;
 }
 
-/** Anthers' own Badge set — ordinary Badges; Anthers just defines its own. */
+/**
+ * Anthers' own Badge set — ordinary Badges; Anthers just defines its own.
+ *
+ * $3 buys unlimited Public Access and nothing above it buys more access. The higher rungs
+ * keep the amounts they had as 2/3/4 Seeds: their prices and their perks are each due
+ * their own discussion, and re-denominating the unit is not the moment to pre-empt it.
+ */
 export const ANTHERS_BADGES: readonly BadgeDef[] = [
-	{ name: "root", threshold: 1 },
-	{ name: "sprout", threshold: 2 },
-	{ name: "petal", threshold: 3 },
-	{ name: "blossom", threshold: 4 },
+	{ name: "root", threshold: 3 },
+	{ name: "sprout", threshold: 6 },
+	{ name: "petal", threshold: 9 },
+	{ name: "blossom", threshold: 12 },
 ] as const;
 
 /** The names in Anthers' set, for the places that still need a closed union. */
 export type Badge = "root" | "sprout" | "petal" | "blossom";
 
-// ── Seed dials (Seed price locked; allocation dials tuned-but-tunable) ────────
-/** A Seed — a flat $3/month unit of support (creator-directed or an Anthers-Seed). */
-export const SEED_PRICE = 3;
-/** Time Pool funded per Anthers-Seed ($), distributed to creators by time. */
-export const TIME_POOL_PER_SEED = 1.5;
+// ── Support dials (the Public Access price is locked; the rest are tuned) ─────
+/**
+ * What unlimited Public Access costs, per month.
+ *
+ * It is **just $3** — not "a Seed", not a unit anything else is denominated in. Whether $3
+ * is the right number is its own later conversation; what retired on 2026-08-16 is the
+ * claim that it was a *unit*, which is what forced every creator's Badge levels onto
+ * multiples of it.
+ */
+export const PUBLIC_ACCESS_PRICE = 3;
+/**
+ * Share of what a user gives Anthers that funds the Time Pool, paid to creators by time.
+ *
+ * 🚨 **A RATE, since 2026-08-16 — it was `TIME_POOL_PER_SEED = 1.5`, a per-unit
+ * coefficient, and a per-unit coefficient cannot survive the unit going away.** The rate
+ * reproduces the old model exactly at every Anthers Badge level ($3 → $1.50, $6 → $3.00,
+ * $9 → $4.50, $12 → $6.00) because $1.50 was always exactly half of $3 — so nothing about
+ * creator pay moved in this change, which is the point. What it gains is an answer for the
+ * amounts between and beyond those rungs, which the coefficient had no way to express.
+ */
+export const TIME_POOL_RATE = 0.5;
 /**
  * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free
  * viewer's watching still pays the creators they watch. The user pays $0.
@@ -136,29 +176,32 @@ export const ATTENTION_RAW_RETENTION_DAYS = 180;
  * with a "+".
  *
  * The rule, uniformly: your Badge is the **highest-threshold Badge whose threshold
- * you meet**; holding *strictly more* Seeds than that threshold adds a "+". The "+"
+ * you meet**; giving *strictly more* than that threshold adds a "+". The "+"
  * applies BETWEEN Badges, not only past the top of the set — with Badges at 2 and 4,
- * a holder of 3 Seeds has the 2-Seed Badge with a "+". It honours someone who chose
+ * someone giving $3 holds the $2 Badge with a "+". It honours someone who chose
  * to give a little extra; whether it *carries* anything is the issuer's choice.
  *
  * Returns `badge: null` below the lowest threshold (no Badge held).
  */
 export function badgeFor(
-	seeds: number,
+	amount: number,
 	badges: readonly BadgeDef[] = ANTHERS_BADGES,
 ): { badge: BadgeDef | null; plus: boolean } {
-	const held = Math.max(0, Math.floor(seeds));
+	// In cents, for the reason `cents` gives: a supporter giving exactly a Badge's amount
+	// must hold it, and a float `>=` on two parsed `numeric` columns is one representation
+	// away from saying otherwise.
+	const held = cents(amount);
 	let best: BadgeDef | null = null;
 	for (const b of badges) {
-		if (b.threshold <= held && (best === null || b.threshold > best.threshold)) best = b;
+		if (cents(b.threshold) <= held && (best === null || b.threshold > best.threshold)) best = b;
 	}
-	return { badge: best, plus: best !== null && held > best.threshold };
+	return { badge: best, plus: best !== null && held > cents(best.threshold) };
 }
 
 /**
  * A display key covering "no Badge held" alongside the real ones.
  *
- * 0 Seeds is the *absence* of a Badge, not a Badge named "free" — but the UI still
+ * Giving nothing is the *absence* of a Badge, not a Badge named "free" — but the UI still
  * needs something to key its art and labels on for that state, and `Record<Badge, …>`
  * maps predate the distinction. This is the seam: the model says four Badges, the
  * display says five states.
@@ -173,7 +216,7 @@ export type BadgeKey = Badge | "free";
  * threshold, never by its position here — the two coincide for Anthers' own set (1/2/3/4)
  * and that coincidence is what made the retired `badgeRank = BADGE_ORDER.indexOf(name)`
  * look correct while silently mis-resolving any set with gaps. Never reintroduce an
- * `indexOf` against this; use `thresholdForBadge` or `seedsMeet`.
+ * `indexOf` against this; use `thresholdForBadge` or `amountMeets`.
  */
 export const BADGE_ORDER: readonly BadgeKey[] = [
 	"free",
@@ -181,7 +224,7 @@ export const BADGE_ORDER: readonly BadgeKey[] = [
 ] as const;
 
 /**
- * Whole Seeds required for a named Badge — its **threshold**, and 0 for "free", which
+ * Monthly dollars required for a named Badge — its **threshold**, and 0 for "free", which
  * is the absence of a Badge rather than a Badge sitting at zero.
  */
 export function thresholdForBadge(badge: BadgeKey): number {
@@ -189,16 +232,16 @@ export function thresholdForBadge(badge: BadgeKey): number {
 }
 
 /**
- * The Badge name held at `anthersSeeds`, or "free" below the lowest threshold.
+ * The Badge name held at `anthersDollars`, or "free" below the lowest threshold.
  *
- * Note this **collapses** a Seed count onto a Badge and so throws away the remainder —
- * a 3-Seed holder in a set with Badges at 2 and 4 answers "the 2-Seed Badge". That is
+ * Note this **collapses** an amount onto a Badge and so throws away the remainder —
+ * someone giving $3 to a set with Badges at $2 and $4 answers "the $2 Badge". That is
  * right for *labelling* what someone holds and wrong for *resolving access*, which must
- * compare the Seed count against the gate's own threshold via `seedsMeet`. Rounding down
+ * compare the amount against the gate's own threshold via `amountMeets`. Rounding down
  * to a Badge first is how a viewer gets denied a gate they actually clear.
  */
-export function heldBadgeName(anthersSeeds: number): BadgeKey {
-	return (badgeFor(anthersSeeds).badge?.name as Badge) ?? "free";
+export function heldBadgeName(anthersDollars: number): BadgeKey {
+	return (badgeFor(anthersDollars).badge?.name as Badge) ?? "free";
 }
 
 /** Title-case a Badge name for display ("root" → "Root"). */
@@ -211,59 +254,77 @@ export function badgeLabel(name: string): string {
  * "Blorp+". `emptyLabel` is what to show below the lowest Badge (default "Free").
  */
 export function heldBadgeLabel(
-	seeds: number,
+	amount: number,
 	badges: readonly BadgeDef[] = ANTHERS_BADGES,
 	emptyLabel = "Free",
 ): string {
-	const { badge, plus } = badgeFor(seeds, badges);
+	const { badge, plus } = badgeFor(amount, badges);
 	if (!badge) return emptyLabel;
 	return `${badgeLabel(badge.name)}${plus ? "+" : ""}`;
 }
 
-/** Whole Seeds required for a named Badge in a set, or null if the set has no such Badge. */
+/** Monthly dollars required for a named Badge in a set, or null if the set has no such Badge. */
 export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_BADGES) {
 	return badges.find((b) => b.name === name)?.threshold ?? null;
 }
 
 /**
- * Does a held Seed count clear a gate at `threshold` whole Seeds?
+ * Does a monthly amount clear a gate at `threshold` dollars?
  *
  * This is the ONLY comparison access resolution needs, for both directions — an
- * Anthers Gate and a Seed Gate differ solely in which Seed count is passed in. A
- * gate needn't sit on a Badge: with Badges at 2 and 4, a gate at 3 is legal and a
- * 3-Seed holder clears it.
+ * Anthers' Badges and a creator's differ solely in which amount is passed in. A gate
+ * needn't sit on a Badge: with Badges at $2 and $4, a gate at $3 is legal and someone
+ * giving $3 clears it.
  */
-export function seedsMeet(heldSeeds: number, threshold: number): boolean {
-	return Math.floor(heldSeeds) >= threshold;
+export function amountMeets(held: number, threshold: number): boolean {
+	return cents(held) >= cents(threshold);
 }
 
 /**
- * Whole Seeds represented by a dollar amount of support ($3 = 1 Seed).
+ * A dollar amount as whole cents — the unit every support comparison is made in.
  *
- * The one place money becomes Seeds. `seed_allocations.amount` is a payment ledger and
- * stays money; gates count Seeds. Converting here — rather than at each comparison —
- * keeps a dollar figure from ever being compared against a threshold.
+ * 🚨 **Load-bearing, and the reason it exists at all.** Thresholds were whole Seeds until
+ * 2026-08-16, so every comparison was integer-against-integer and could not go wrong. In
+ * dollars they are floats, and `0.1 + 0.2 !== 0.3` is the oldest bug there is: a supporter
+ * who gives exactly what a Badge asks must clear it, and a naive `>=` on the parsed doubles
+ * is one representation away from denying them with no error anywhere.
  *
- * Floors, because a partial Seed does not clear a gate; since Seeds were made indivisible
- * a partial should not exist outside legacy rows anyway.
+ * ⚠️ **ROUND, never floor — and the reason is subtler than it first looks.** Flooring is
+ * the obvious way to stop a sub-cent amount opening a gate, and against a *symmetric*
+ * comparison it is harmless: both sides floor identically, so equality survives. It breaks
+ * where the two sides are reached **differently** — a held amount arrived at by ADDING two
+ * allocations against a threshold stored as one literal. `$1.00 + $1.14` is
+ * `2.1399999999999997`, which floors to 213 cents against a `$2.14` threshold's 214, and
+ * the supporter is denied a Badge they paid for exactly. There are **2,180 such pairs
+ * under $2 alone**; rounding has none.
+ *
+ * Cents is the grain because it is what Stripe charges in — finer cannot be paid.
+ *
+ * Deliberately NOT decimal.js: this is a comparison, not arithmetic on money that moves,
+ * and `constants.ts` is imported by the browser — pulling decimal.js in here is the one
+ * import that would put it in the SPA bundle.
  */
-export function seedsFromDollars(amount: string | number | null | undefined): number {
-	return Math.max(0, Math.floor(Number(amount ?? 0) / SEED_PRICE));
+export function cents(amount: string | number | null | undefined): number {
+	return Math.round(Math.max(0, Number(amount ?? 0)) * 100);
 }
 
-// ── Per-Seed derived amounts ─────────────────────────────────────────────────
-/** Monthly $ for `n` Seeds (Anthers or creator-directed): n × $3. */
-export function seedCost(n: number): number {
-	return SEED_PRICE * Math.max(0, n);
+/** A dollar amount of monthly support, normalised — negatives floor at 0, extra precision drops. */
+export function supportAmount(amount: string | number | null | undefined): number {
+	return cents(amount) / 100;
 }
 
-/** Time Pool $ funded by holding `n` Anthers-Seeds (free rank = subsidised FREE_TIME_POOL). */
-export function timePoolFor(anthersSeeds: number): number {
-	return anthersSeeds <= 0 ? FREE_TIME_POOL : TIME_POOL_PER_SEED * anthersSeeds;
+// ── Derived amounts ──────────────────────────────────────────────────────────
+/**
+ * Time Pool $ funded by giving Anthers `dollars` a month (giving nothing = the
+ * subsidised `FREE_TIME_POOL`, which the user does not pay for).
+ */
+export function timePoolFor(anthersDollars: number): number {
+	return anthersDollars <= 0 ? FREE_TIME_POOL : supportAmount(anthersDollars) * TIME_POOL_RATE;
 }
 
 /**
- * How much more a creator earns from an hour of your attention once you hold a Seed.
+ * How much more a creator earns from an hour of your attention once you give Anthers
+ * `dollars` a month, against giving nothing.
  *
  * 🚨 **This is the free-limit prompt's headline number and it must never be typed into
  * copy.** 21.01 §9.4 reads *"every creator you spend time with is also paid six times
@@ -274,17 +335,26 @@ export function timePoolFor(anthersSeeds: number): number {
  * argument rests on. Same reasoning as the generated econ figures: a published number
  * with a formula behind it is generated, never transcribed.
  *
+ * ⚠️ **It became a FUNCTION on 2026-08-16 and the reason matters for copy.** It was a
+ * constant — `TIME_POOL_PER_SEED / FREE_TIME_POOL` — because every supporter gave a
+ * multiple of one $3 Seed, so "a Seed" named exactly one multiple. With amounts free the
+ * multiple depends on what *this* user gives, so a page that says "six times" is now
+ * asserting something about a specific amount and has to say which. At the $3 Public
+ * Access price it is still 6.
+ *
  * Not in `figures.generated.ts` because that file is money *tables* built by a script;
  * this is a one-line derivation and belongs beside the dials it divides.
  */
-export const FREE_TIME_POOL_MULTIPLE = TIME_POOL_PER_SEED / FREE_TIME_POOL;
+export function timePoolMultipleFor(anthersDollars: number = PUBLIC_ACCESS_PRICE): number {
+	return timePoolFor(anthersDollars) / FREE_TIME_POOL;
+}
 
 /**
  * Render a multiple for copy — `6×`, or `3.8×` when the dials stop dividing evenly.
  *
  * The current dials give a whole 6, which makes it tempting to assume one. They are not
  * required to: moving `FREE_TIME_POOL` to $0.40 gives 3.75. Rounding that to "4×" would
- * overstate what a Seed buys, and printing `3.75×` reads like a spreadsheet, so it goes
+ * overstate what supporting buys, and printing `3.75×` reads like a spreadsheet, so it goes
  * to one decimal and keeps the trailing digit only when there is one.
  */
 export function formatMultiple(n: number): string {

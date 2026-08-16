@@ -16,13 +16,16 @@ import SubscriptionPaymentModal, {
 } from "../subscribe/SubscriptionPaymentModal";
 
 /** "1 Seed" / "3 Seeds" — thresholds count Seeds, so the copy must too. */
-function seedCount(seeds: number): string {
+function _seedCount(seeds: number): string {
 	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
 }
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
 function seedsToGo(moreNeeded: number): string {
-	return `${moreNeeded} more Seed${moreNeeded === 1 ? "" : "s"}`;
+	// ⚠️ A MONEY amount, since 2026-08-16 — it was a Seed count. Rendering it as a count
+	// would be wrong in two directions at once now: there is no unit to count, and a
+	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
+	return `$${moreNeeded.toFixed(2)} more`;
 }
 
 /** Only the creator identity is needed — this works for any gated thing. */
@@ -40,7 +43,7 @@ export default function InlineUnlock({
 	onUnlocked: () => void;
 }) {
 	const [pending, setPending] = useState<{
-		anthersSeeds: number;
+		anthersSupport: number;
 		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
@@ -77,8 +80,8 @@ export default function InlineUnlock({
 		try {
 			// The gate's own threshold, not the Badge's — buying up to the named Badge could
 			// overshoot, and buying the Badge below would not clear the gate at all.
-			const res = await client.api.subscriptions.preview[":seeds"].$get({
-				param: { seeds: String(minAnthersSeeds) },
+			const res = await client.api.subscriptions.preview[":amount"].$get({
+				param: { amount: String(minAnthersSeeds) },
 			});
 			if (!res.ok) {
 				setError("Couldn't load the details. Please try again.");
@@ -86,7 +89,7 @@ export default function InlineUnlock({
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
-				anthersSeeds: minAnthersSeeds,
+				anthersSupport: minAnthersSeeds,
 				// Name the Badge only when the gate actually sits on one; otherwise the
 				// level itself is the honest label for what's being bought.
 				badgeName: anthersRoute?.badge
@@ -151,7 +154,7 @@ export default function InlineUnlock({
 
 			{pending && (
 				<SubscriptionPaymentModal
-					anthersSeeds={pending.anthersSeeds}
+					anthersSupport={pending.anthersSupport}
 					badgeName={pending.badgeName}
 					preview={pending.preview}
 					onComplete={() => {

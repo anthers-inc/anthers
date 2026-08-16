@@ -31,7 +31,6 @@ import {
 	stripeAccounts,
 	users,
 } from "@anthers/db/schema";
-import { seedCost } from "@anthers/shared/constants";
 import { calculateFees, cardFee } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, sql } from "drizzle-orm";
@@ -149,30 +148,48 @@ function uid() {
  * 2026-02 API version and is the kind of thing a hand-rolled fixture gets wrong once
  * and then asserts forever.
  */
+/**
+ * A Stripe subscription fixture, as ONE ITEM PER DESTINATION.
+ *
+ * 🚨 It took a `quantity` until 2026-08-16 and built a single item, because the whole
+ * charge was a count of $3 Seeds. That shape cannot express what the model now allows, and
+ * — more importantly for a fixture — it cannot express the thing most worth testing: an
+ * item whose amount is real but whose **destination stamp** is missing or wrong. `anthers`
+ * and `directed` are separate so a test can build exactly that.
+ */
 function subscription(opts: {
 	id?: string;
 	customer?: string;
 	status?: string;
-	quantity?: number;
+	/** Monthly dollars on the Anthers line. */
+	anthers?: number;
+	/** Monthly dollars per creator, keyed by creator id. */
+	directed?: Record<number, number>;
+	/** Items with no `destination` stamp — the migration case, credited to Anthers. */
+	unstamped?: number[];
 	periodEnd?: number;
 	cancelAtPeriodEnd?: boolean;
 }) {
+	const periodEnd = opts.periodEnd ?? 1_800_000_000;
+	const item = (dollars: number, destination?: string) => ({
+		id: `si_${uid()}`,
+		anthers: 3,
+		price: { unit_amount: Math.round(dollars * 100) },
+		current_period_end: periodEnd,
+		...(destination ? { metadata: { destination } } : {}),
+	});
+	const data = [
+		...(opts.anthers != null ? [item(opts.anthers, "anthers")] : []),
+		...Object.entries(opts.directed ?? {}).map(([id, amt]) => item(amt, id)),
+		...(opts.unstamped ?? []).map((amt) => item(amt)),
+	];
 	return {
 		id: opts.id ?? `sub_${uid()}`,
 		object: "subscription",
 		customer: opts.customer ?? `cus_${uid()}`,
 		status: opts.status ?? "active",
 		cancel_at_period_end: opts.cancelAtPeriodEnd ?? false,
-		items: {
-			object: "list",
-			data: [
-				{
-					id: `si_${uid()}`,
-					quantity: opts.quantity ?? 1,
-					current_period_end: opts.periodEnd ?? 1_800_000_000,
-				},
-			],
-		},
+		items: { object: "list", data: data.length > 0 ? data : [item(3, "anthers")] },
 	};
 }
 
@@ -387,7 +404,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 			const res = await req("/api/subscriptions/account", {
 				method: "POST",
 				headers: { ...json, Cookie: subscriberCookie },
-				body: JSON.stringify({ anthersSeeds: 2 }),
+				body: JSON.stringify({ anthersSupport: 6 }),
 			});
 			expect(res.status).toBe(503);
 		});
@@ -398,7 +415,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 			const res = await req("/api/subscriptions/seeds/buy", {
 				method: "POST",
 				headers: { ...json, Cookie: subscriberCookie },
-				body: JSON.stringify({ quantity: 2 }),
+				body: JSON.stringify({ amount: 6 }),
 			});
 			expect(res.status).toBe(503);
 		});
@@ -423,10 +440,14 @@ describe("Payments not configured — every guarded route refuses", () => {
 	it("refuses to cancel — and leaves the account untouched", async () => {
 		await db
 			.insert(accounts)
-			.values({ userId: subscriberId, anthersSeeds: 2, stripeSubscriptionId: `sub_${uid()}` })
+			.values({
+				userId: subscriberId,
+				anthersSupport: "6.00",
+				stripeSubscriptionId: `sub_${uid()}`,
+			})
 			.onConflictDoUpdate({
 				target: accounts.userId,
-				set: { anthersSeeds: 2, canceledAt: null },
+				set: { anthersSupport: "6.00", canceledAt: null },
 			});
 
 		await withoutStripe(async () => {
@@ -439,7 +460,7 @@ describe("Payments not configured — every guarded route refuses", () => {
 
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
 		expect(acct.canceledAt).toBeNull();
-		expect(acct.anthersSeeds).toBe(2);
+		expect(acct.anthersSupport).toBe("6.00");
 	});
 
 	it("refuses to resume — and leaves the cancellation in place", async () => {
@@ -627,8 +648,8 @@ describe("Webhook: payment_intent.succeeded", () => {
 	it("credits a Seed buy to the account exactly once", async () => {
 		await db
 			.insert(accounts)
-			.values({ userId: buyerId, creatorSeedTotal: "0.00" })
-			.onConflictDoUpdate({ target: accounts.userId, set: { creatorSeedTotal: "0.00" } });
+			.values({ userId: buyerId, creatorSupportTotal: "0.00" })
+			.onConflictDoUpdate({ target: accounts.userId, set: { creatorSupportTotal: "0.00" } });
 
 		const piId = `pi_${uid()}`;
 		const [pending] = await db
@@ -651,7 +672,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect((await sendWebhook(event)).status).toBe(200);
 
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
-		expect(new Decimal(acct.creatorSeedTotal).toFixed(2)).toBe("9.00");
+		expect(new Decimal(acct.creatorSupportTotal).toFixed(2)).toBe("9.00");
 
 		// A Seed buy is not a post purchase — it must not touch the charitable ledger.
 		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
@@ -664,7 +685,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		// Redelivery must not double-credit: $9 stays $9, it does not become $18.
 		expect((await sendWebhook(event)).status).toBe(200);
 		const [again] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
-		expect(new Decimal(again.creatorSeedTotal).toFixed(2)).toBe("9.00");
+		expect(new Decimal(again.creatorSupportTotal).toFixed(2)).toBe("9.00");
 	});
 
 	it("ignores a PaymentIntent it has no purchase row for", async () => {
@@ -782,39 +803,39 @@ describe("Webhook: customer.subscription.*", () => {
 		subId = `sub_${uid()}`;
 		await db
 			.insert(accounts)
-			.values({ userId: subscriberId, stripeCustomerId: customerId, anthersSeeds: 0 })
+			.values({ userId: subscriberId, stripeCustomerId: customerId, anthersSupport: "0.00" })
 			.onConflictDoUpdate({
 				target: accounts.userId,
-				set: { stripeCustomerId: customerId, anthersSeeds: 0, stripeSubscriptionId: "" },
+				set: { stripeCustomerId: customerId, anthersSupport: "0.00", stripeSubscriptionId: "" },
 			});
 	}, DB_SETUP_TIMEOUT);
 
-	it("takes the Anthers-Seed count from the line item quantity", async () => {
+	it("takes the Anthers amount from the item stamped for Anthers", async () => {
 		const periodEnd = 1_900_000_000;
 		await sendWebhook(
 			stripeEvent(
 				"customer.subscription.created",
-				subscription({ id: subId, customer: customerId, quantity: 3, periodEnd }),
+				subscription({ id: subId, customer: customerId, anthers: 9, periodEnd }),
 			),
 		);
 
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSeeds).toBe(3);
+		expect(acct.anthersSupport).toBe("9.00");
 		expect(acct.isActive).toBe(true);
 		expect(acct.stripeSubscriptionId).toBe(subId);
 		// The period end reads off the ITEM, not the subscription — the 2026-02 API move.
 		expect(acct.currentPeriodEnd?.getTime()).toBe(periodEnd * 1000);
 	});
 
-	it("follows a quantity change up and down", async () => {
+	it("follows an amount change up and down", async () => {
 		await sendWebhook(
 			stripeEvent(
 				"customer.subscription.updated",
-				subscription({ id: subId, customer: customerId, quantity: 1 }),
+				subscription({ id: subId, customer: customerId, anthers: 3 }),
 			),
 		);
 		const [down] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(down.anthersSeeds).toBe(1);
+		expect(down.anthersSupport).toBe("3.00");
 	});
 
 	it("records a pending cancellation without dropping the Seeds", async () => {
@@ -822,12 +843,12 @@ describe("Webhook: customer.subscription.*", () => {
 		await sendWebhook(
 			stripeEvent(
 				"customer.subscription.updated",
-				subscription({ id: subId, customer: customerId, quantity: 1, cancelAtPeriodEnd: true }),
+				subscription({ id: subId, customer: customerId, anthers: 3, cancelAtPeriodEnd: true }),
 			),
 		);
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
 		expect(acct.canceledAt).not.toBeNull();
-		expect(acct.anthersSeeds).toBe(1);
+		expect(acct.anthersSupport).toBe("3.00");
 	});
 
 	it("ignores a canceled subscription that isn't the account's current one", async () => {
@@ -840,7 +861,7 @@ describe("Webhook: customer.subscription.*", () => {
 			),
 		);
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSeeds).toBe(1);
+		expect(acct.anthersSupport).toBe("3.00");
 		expect(acct.stripeSubscriptionId).toBe(subId);
 	});
 
@@ -848,11 +869,11 @@ describe("Webhook: customer.subscription.*", () => {
 		await sendWebhook(
 			stripeEvent(
 				"customer.subscription.deleted",
-				subscription({ id: subId, customer: customerId, status: "canceled", quantity: 1 }),
+				subscription({ id: subId, customer: customerId, status: "canceled", anthers: 3 }),
 			),
 		);
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, subscriberId));
-		expect(acct.anthersSeeds).toBe(0);
+		expect(acct.anthersSupport).toBe("0.00");
 		expect(acct.stripeSubscriptionId).toBe("");
 		expect(acct.canceledAt).toBeNull();
 	});
@@ -1196,15 +1217,15 @@ describe("Checkout — destination charge construction", () => {
  * it survived, and why it needs a test rather than a second reading of the code.
  */
 describe("Seed buy — the price is all-in", () => {
-	const QUANTITY = 2;
-	const base = new Decimal(seedCost(QUANTITY));
+	const TOPUP_AMOUNT = 6;
+	const base = new Decimal(TOPUP_AMOUNT);
 
 	async function buySeeds() {
 		fake.reset();
 		const res = await req("/api/subscriptions/seeds/buy", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: subscriberCookie },
-			body: JSON.stringify({ quantity: QUANTITY }),
+			body: JSON.stringify({ amount: TOPUP_AMOUNT }),
 		});
 		return { res, body: await res.json() };
 	}
@@ -1279,7 +1300,7 @@ describe("remainder — a heavy streamer costs the mission nothing", () => {
 
 		const [acct] = await db
 			.insert(accounts)
-			.values({ userId: heavyId, anthersSeeds: 1, isActive: true })
+			.values({ userId: heavyId, anthersSupport: "3.00", isActive: true })
 			.returning();
 		heavyAccountId = acct.id;
 

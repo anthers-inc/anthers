@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ANTHERS_BADGES, badgeLabel, seedCost, thresholdForBadge } from "@anthers/shared/constants";
+import { ANTHERS_BADGES, supportAmount } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
-import { SeedStepper } from "@anthers/web-shared/economics/SeedStepper";
+import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { Link, useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
@@ -23,13 +23,11 @@ import {
 	EllipsisHorizontalIcon,
 	LinkIcon,
 	LockClosedIcon,
-	LockOpenIcon,
 	MapPinIcon,
 	NoSymbolIcon,
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
 import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
@@ -49,11 +47,11 @@ function badgeNameFor(id: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Give Seeds                                                         */
+/*  Support this creator                                              */
 /* ------------------------------------------------------------------ */
 
 /**
- * Give Seeds to this creator — the entry point where the intent actually forms.
+ * Support this creator — the entry point where the intent actually forms.
  *
  * The subscription dashboard can only list creators it already knows about (settled pool
  * distributions unioned with existing allocations), so a creator you just followed can't be
@@ -79,7 +77,13 @@ function GiveSeedsCard({
 	given: string;
 	onGiven: () => void | Promise<void>;
 }) {
-	const committed = Math.round(Number(given) || 0);
+	// 🚨 `Math.round(Number(given))` until 2026-08-16, which rounded a DOLLAR amount to
+	// whole dollars. It was invisible while every amount was a $3 multiple — rounding a
+	// multiple of three to the nearest integer changes nothing — and silently turned $4.50
+	// into $5.00 the moment amounts were free. Found by the gauntlet walk, which reported
+	// "$5.00 given" while the budget line beside it said $4.50 had been spent: two readings
+	// of the same fact, disagreeing, which is the shape this whole change is about.
+	const committed = supportAmount(given);
 	const [budget, setBudget] = useState<number | null>(null);
 	const [remaining, setRemaining] = useState(0);
 	const [pending, setPending] = useState(committed);
@@ -106,7 +110,8 @@ function GiveSeedsCard({
 	// case — rendering our own "give Seeds" CTA here would just duplicate it.
 	if (budget === null || budget <= 0) return null;
 
-	const max = committed + Math.floor(remaining);
+	// Not floored, for the same reason: $2.50 of remaining budget is $2.50 of headroom.
+	const max = supportAmount(committed + remaining);
 	const dirty = pending !== committed;
 
 	const give = async () => {
@@ -136,13 +141,13 @@ function GiveSeedsCard({
 			<div className="card-body py-4 px-5 gap-3">
 				<div className="flex items-center justify-between gap-4 flex-wrap">
 					<div>
-						<h4 className="font-medium">Give Seeds to {creatorName}</h4>
+						<h4 className="font-medium">Support {creatorName}</h4>
 						<p className="text-xs text-base-content/50 mt-0.5">
-							$3 each, no platform cut — only the at-cost card processing comes out. You have $
+							Any amount, no platform cut — only the at-cost card processing comes out. You have $
 							{remaining.toFixed(2)} of ${budget.toFixed(2)} left to give this month.
 						</p>
 					</div>
-					<SeedStepper
+					<SupportStepper
 						value={pending}
 						min={committed}
 						max={max}
@@ -153,8 +158,8 @@ function GiveSeedsCard({
 
 				{committed > 0 && (
 					<p className="text-xs text-base-content/50">
-						You've given {creatorName} ${committed.toFixed(2)} this month. Seeds can be added
-						mid-month but not taken back — next month's are yours to redirect.
+						You've given {creatorName} ${committed.toFixed(2)} this month. It can be raised
+						mid-month but not taken back — next month's is yours to redirect.
 					</p>
 				)}
 
@@ -166,7 +171,7 @@ function GiveSeedsCard({
 					disabled={!dirty || saving}
 					onClick={give}
 				>
-					{saving ? "Giving…" : dirty ? `Give $${(pending - committed).toFixed(2)}` : "Give Seeds"}
+					{saving ? "Giving…" : dirty ? `Give $${(pending - committed).toFixed(2)}` : "Give"}
 				</button>
 			</div>
 		</div>
@@ -174,12 +179,14 @@ function GiveSeedsCard({
 }
 
 /**
- * The Badge sitting at an Anthers Gate's threshold (1 = Root … 4 = Blossom).
+ * The Badge sitting exactly at a gate's threshold ($3 = Root … $12 = Blossom).
  *
- * Matches on threshold rather than indexing by it: a gate is any whole-Seed level, and a
- * Badge need not sit at every level, so "no Badge at this threshold" is a real answer.
+ * Matches on threshold rather than indexing by it: a gate is any amount, and a Badge need
+ * not sit at every amount, so "no Badge at this threshold" is a real answer — and it is
+ * now the ORDINARY answer rather than an edge case, since a creator sets their own levels
+ * to whatever they like.
  */
-function anthersBadgeForRank(rank: number): Badge | null {
+function _anthersBadgeForRank(rank: number): Badge | null {
 	return (ANTHERS_BADGES.find((b) => b.threshold === rank)?.name as Badge | undefined) ?? null;
 }
 
@@ -341,7 +348,7 @@ export default function CreatorProfilePage() {
 
 	const [creator, setCreator] = useState<PublicUser | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
-	const [posts, setPosts] = useState<PostListItem[]>([]);
+	const [_posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// viewer here to act, and dropping them on the default tab loses the intent they arrived with.
@@ -366,7 +373,7 @@ export default function CreatorProfilePage() {
 	const isOwnProfile = currentUser?.username === username;
 	const preview = usePreviewQuery();
 	/** Stable string for the preview, so the load effect re-runs on value not identity. */
-	const previewKey = JSON.stringify(preview);
+	const _previewKey = JSON.stringify(preview);
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -384,7 +391,7 @@ export default function CreatorProfilePage() {
 		const res = await apiFetch(`/api/subscriptions/creator-status/${username}`, {});
 		if (!res.ok) return;
 		setCreatorStatus((await res.json()) as CreatorStatus);
-	}, [username, previewKey]);
+	}, [username]);
 
 	// Edit mode state
 	const [editing, setEditing] = useState(false);
@@ -538,7 +545,7 @@ export default function CreatorProfilePage() {
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
-	}, [username]);
+	}, [username, preview]);
 
 	/**
 	 * Block this person. Confirmed first, because it is the one control here that

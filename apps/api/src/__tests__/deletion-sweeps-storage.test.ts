@@ -27,7 +27,7 @@
  * the storage cases, and stubbing either cleanup to `return 0` fails the credential ones.
  */
 
-import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	poolDistributions,

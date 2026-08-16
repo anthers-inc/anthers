@@ -1,0 +1,18 @@
+-- A Stripe Product per creator, so an invoice line can name who it is for.
+--
+-- The subscription carried ONE item at a shared $3 Seed price with `quantity` = the total,
+-- and the Anthers/creator split rode in metadata. Arbitrary amounts ended that: it now
+-- carries one item per destination, each priced with inline `price_data`. `price_data`
+-- takes a Product **id**, not a name, so each creator needs a durable Product for their
+-- line to read "Support for @handle" rather than repeating one shared label.
+--
+-- Nullable and lazily filled: a creator nobody supports needs no Product, and creating one
+-- at signup would make registering an account depend on Stripe being reachable.
+--
+-- 🚨 **Its own migration rather than an edit to 0041, and that is not tidiness.** It was
+-- appended to 0041 after 0041 had already been applied, and re-running `db:migrate` was a
+-- SILENT NO-OP: drizzle's journal tracks which entries have run, so an edited file is never
+-- reconsidered. The column simply did not exist, `bun run typecheck` was perfectly happy
+-- because the schema said it did, and the failure surfaced two layers away as an opaque
+-- insert error in an unrelated suite. **Never edit an applied migration — add one.**
+ALTER TABLE "accounts" ADD COLUMN "stripe_product_id" text DEFAULT '';

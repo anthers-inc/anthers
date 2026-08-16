@@ -1,34 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Settings card: the creator's Seed ladder — the rungs that populate every post's
- * Seed Access table. Each rung is a Seed gate (label + Seed threshold + description).
+ * Settings card: the creator's **Badge ladder** — the rungs that populate every Work's
+ * access table. Each rung is a Badge (label + monthly amount + description).
  * Wired to the subscriptions gates API (own seed-type gates only).
  *
- * Thresholds are **whole Seeds**, not dollars (migration `0007`). A Seed is an
- * indivisible $3 unit, so a rung between two whole Seeds is not expressible — which is
+ * 🚨 **Thresholds are DOLLARS, and any amount is expressible** (migration `0041`). They
+ * were whole Seeds — an indivisible $3 unit — so a rung between two of them could not be
+ * written down at all, which
  * why the input steps by 1 rather than by a cent, and why the dollar figure beside it is
  * derived for display rather than typed.
  */
-import { SEED_PRICE } from "@anthers/shared/constants";
+import { supportAmount } from "@anthers/shared/constants";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { CreatorGate } from "../../lib/types";
 
-/** Coerce to a whole Seed count ≥ 1 — the API stores thresholds as whole Seeds. */
-function wholeSeeds(v: string): string {
-	const n = Math.floor(Number(v));
-	if (!Number.isFinite(n) || n < 1) return "1";
-	return String(n);
+/** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
+function rungAmount(v: string): string {
+	// ⚠️ It floored to a whole Seed until 2026-08-16. Flooring a DOLLAR amount silently
+	// turns a creator's $2.50 rung into $2 — the granularity the unit retirement removed,
+	// reintroduced by a coercion nobody would look at twice.
+	const n = supportAmount(v);
+	return (n > 0 ? n : 1).toFixed(2);
 }
 
-/** "2 Seeds ($6/mo)" — the count is the gate; the money is derived for the creator's sake. */
+/** "$6/mo" — the amount IS the gate now, so nothing has to be derived from it. */
 function rungLabel(threshold: string | number): string {
-	const seeds = Math.max(0, Math.floor(Number(threshold) || 0));
-	return `${seeds} Seed${seeds === 1 ? "" : "s"} ($${seeds * SEED_PRICE}/mo)`;
+	const amount = supportAmount(threshold);
+	return `$${Number.isInteger(amount) ? amount : amount.toFixed(2)}/mo`;
 }
 
-export default function SeedLadderEditor() {
+export default function BadgeLadderEditor() {
 	const [gates, setGates] = useState<CreatorGate[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export default function SeedLadderEditor() {
 		try {
 			const res = await client.api.subscriptions.gates.$post({
 				json: {
-					threshold: wholeSeeds(newThreshold),
+					threshold: rungAmount(newThreshold),
 					label: newLabel.trim(),
 					description: newDescription.trim(),
 					gateType: "seed",
@@ -103,7 +106,7 @@ export default function SeedLadderEditor() {
 			const res = await client.api.subscriptions.gates[":id"].$patch({
 				param: { id: String(id) },
 				json: {
-					threshold: wholeSeeds(editThreshold),
+					threshold: rungAmount(editThreshold),
 					label: editLabel.trim(),
 					description: editDescription.trim(),
 				},
@@ -137,10 +140,10 @@ export default function SeedLadderEditor() {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Seed Ladder</h3>
+				<h3 className="card-title text-lg">Badge Ladder</h3>
 				<p className="text-sm text-base-content/60 mb-2">
-					Seed rungs let supporters unlock content by giving you a number of Seeds — ${SEED_PRICE}
-					/mo each. These rungs appear as rows in every post's Seed Access table.
+					Badges let supporters unlock work by giving you a monthly amount — you choose the levels,
+					at any amount you like. They appear as rows in every Work's access table.
 				</p>
 
 				{error && (
@@ -174,7 +177,7 @@ export default function SeedLadderEditor() {
 											onChange={(e) => setEditThreshold(e.target.value)}
 											min="1"
 											step="1"
-											placeholder="Seeds"
+											placeholder="$/mo"
 										/>
 									</div>
 									<input
@@ -254,7 +257,7 @@ export default function SeedLadderEditor() {
 									onChange={(e) => setNewThreshold(e.target.value)}
 									min="1"
 									step="1"
-									placeholder="Seeds"
+									placeholder="$/mo"
 								/>
 							</div>
 							<input

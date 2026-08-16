@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { TIME_POOL_PER_SEED } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { BADGE_TABLE } from "@anthers/shared/figures";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -502,9 +502,9 @@ function UnitCostCalculator() {
 							Egress is $0 at any volume on Cloudflare R2, so there is no allowance, no wallet and
 							no per-GiB line on anyone's bill. Creator earnings were always{" "}
 							<span className="font-semibold text-success">decoupled</span> from delivery: they come
-							from the Time Pool their Seeds to Anthers fund (${TIME_POOL_PER_SEED.toFixed(2)}{" "}
-							each), distributed by time (equal-time), plus directed Seeds — both of which reach
-							creators in full.
+							from the Time Pool their Seeds to Anthers fund ($
+							{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} each), distributed by time (equal-time),
+							plus directed Seeds — both of which reach creators in full.
 						</p>
 					</div>
 				</div>
@@ -831,11 +831,11 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>YouTube takes 45% of ad revenue.</p>
 					<p>
-						Anthers Sprout Badge: {SPROUT.seeds} Seeds to Anthers (${SPROUT.charge}) → $
-						{SPROUT.timePool} Time Pool to creators and ${SPROUT.payments} of at-cost card
-						processing, leaving ${SPROUT.remainder} to fund free access and the charitable programs.
-						Seeds given straight to a creator carry no platform cut. Time Pool is distributed by
-						time. Delivery is free and appears nowhere in the split.
+						Anthers Sprout Badge: ${SPROUT.monthly}/month to Anthers → ${SPROUT.timePool} Time Pool
+						to creators and ${SPROUT.payments} of at-cost card processing, leaving $
+						{SPROUT.remainder} to fund free access and the charitable programs. Seeds given straight
+						to a creator carry no platform cut. Time Pool is distributed by time. Delivery is free
+						and appears nowhere in the split.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Delivery: ~4 MB/min blended.</p>
 					<p>

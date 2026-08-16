@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import {
-	seedCost,
-	TIME_POOL_PER_SEED,
-	thresholdForBadge,
-	timePoolFor,
-} from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -140,7 +135,7 @@ const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] a
 		const timePool = timePoolFor(n);
 		return {
 			badge: b.charAt(0).toUpperCase() + b.slice(1),
-			price: seedCost(n),
+			price: n,
 			timePool,
 			toCreators: timePool,
 		};
@@ -778,9 +773,10 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
 				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($
-				{TIME_POOL_PER_SEED.toFixed(2)}, distributed to creators by time) and a remainder that funds
-				free access and the charitable programs. Seeds given straight to a creator carry no platform
-				cut. "To creators" here is the Time Pool. {creator.displayName} earns their share —{" "}
+				{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, distributed to creators by time) and a
+				remainder that funds free access and the charitable programs. Seeds given straight to a
+				creator carry no platform cut. "To creators" here is the Time Pool. {creator.displayName}{" "}
+				earns their share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
 				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
 			</p>

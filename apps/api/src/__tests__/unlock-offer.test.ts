@@ -21,7 +21,6 @@
  * creator's own Badges will arrive through.
  */
 import { describe, expect, it } from "bun:test";
-import { SEED_PRICE } from "@anthers/shared/constants";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -35,7 +34,7 @@ const VIEWER = 701;
 function ctx(seedsGiven = 0): AccessContext {
 	return {
 		userId: VIEWER,
-		seedByCreator: new Map(seedsGiven > 0 ? [[CREATOR, seedsGiven]] : []),
+		supportByCreator: new Map(seedsGiven > 0 ? [[CREATOR, seedsGiven]] : []),
 		purchasedWorkIds: new Set(),
 	};
 }
@@ -66,9 +65,22 @@ describe("unlock offer — the marginal ask", () => {
 	});
 
 	it("prices the threshold, not the gap", () => {
-		// You pay for the level you end up holding — $3 × 3 — not for the two you added.
-		const got = resolveAccessSync(gatedAt(3), ctx(1));
-		expect(got.unlock?.creator?.price).toBe((SEED_PRICE * 3).toFixed(2));
+		// You pay for the level you end up holding — $9 — not the $6 you added to reach it.
+		const got = resolveAccessSync(gatedAt(9), ctx(3));
+		expect(got.unlock?.creator?.price).toBe("9.00");
+		expect(got.unlock?.creator?.moreNeeded).toBe(6);
+	});
+
+	/**
+	 * The gate a whole-Seed ladder could not express, and the one a creator is most likely
+	 * to actually set. `moreNeeded` is subtraction on money, so it is where a float error
+	 * would surface as a nonsense ask like "$2.4999999999999996 more".
+	 */
+	it("prices and asks for a threshold carrying cents", () => {
+		const got = resolveAccessSync(gatedAt(7.5), ctx(5));
+		expect(got.reason).toBe("gated");
+		expect(got.unlock?.creator?.price).toBe("7.50");
+		expect(got.unlock?.creator?.moreNeeded).toBeCloseTo(2.5, 10);
 	});
 
 	it("counts from zero for a viewer holding nothing", () => {
@@ -95,7 +107,7 @@ describe("unlock offer — there is no Anthers route any more", () => {
 		// Seeds given to a different creator do not travel. This is the property that used
 		// to be shared with the Anthers table and is now the only one there is.
 		const other = new Map([[CREATOR + 1, 99]]);
-		const got = resolveAccessSync(gatedAt(2), { ...ctx(0), seedByCreator: other });
+		const got = resolveAccessSync(gatedAt(2), { ...ctx(0), supportByCreator: other });
 		expect(got.canAccess).toBe(false);
 		expect(resolveAccessSync(gatedAt(2), ctx(2)).canAccess).toBe(true);
 	});
@@ -183,7 +195,7 @@ describe("unlock offer — when it is absent", () => {
 	it("is absent for a logged-out viewer, whose standing we don't know", () => {
 		const anon: AccessContext = {
 			userId: null,
-			seedByCreator: new Map(),
+			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 		};
 		const got = resolveAccessSync(gatedAt(2), anon);

@@ -23,7 +23,7 @@
  * badge would start lying about what readers can open.
  *
  * Verified by sabotage before being committed, and the numbers are measured, not guessed:
- * dropping the `seedsMeet` check from `offersFor` fails 6; ignoring the `allow` flag fails
+ * dropping the `amountMeets` check from `offersFor` fails 6; ignoring the `allow` flag fails
  * 7; marking every allowed row `baseline: true` fails 1 — and that last one failed *none*
  * until the entitled-vs-free case at the bottom was written for it. See the note there.
  */
@@ -42,7 +42,7 @@ const STRANGER_ID = 701;
 /** A signed-in viewer who has given nothing to anyone and bought nothing. */
 const stranger: AccessContext = {
 	userId: STRANGER_ID,
-	seedByCreator: new Map(),
+	supportByCreator: new Map(),
 	purchasedWorkIds: new Set(),
 };
 
@@ -79,7 +79,7 @@ const baselineIsOpenToAll = (rows: SeedAccessRow[]) => {
  * The obvious version of this test compared `resolved.isFree` against `baselineIsOpenToAll`
  * and passed 18/18 — because the resolver *already* computes `isFree` as "some allowed
  * baseline row is priced at or below zero", so the assertion was its own implementation
- * copied across a package boundary. Sabotaging `seedsMeet` out of `offersFor` broke exactly
+ * copied across a package boundary. Sabotaging `amountMeets` out of `offersFor` broke exactly
  * one of those tests, which is what a tautology looks like from the outside: green, plausible
  * and load-bearing on nothing.
  *
@@ -251,7 +251,7 @@ describe("the properties the badge's individual states rest on", () => {
 	it("clearing a rung makes a viewer entitled, not the Work free", () => {
 		const generous: AccessContext = {
 			userId: STRANGER_ID,
-			seedByCreator: new Map([[CREATOR_ID, 5]]),
+			supportByCreator: new Map([[CREATOR_ID, 5]]),
 			purchasedWorkIds: new Set(),
 		};
 		const rows = [row(0, false), row(2, true)];

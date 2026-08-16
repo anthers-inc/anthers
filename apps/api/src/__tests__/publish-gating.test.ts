@@ -54,7 +54,7 @@ const ownerName = `lib_${id}`;
 const strangerName = `lib_other_${id}`;
 
 /** Free baseline so the created posts are readable back by the owner. */
-const FREE = [{ threshold: 0, allow: true, price: "0" }];
+const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 describe("Catalog CRUD and post links", () => {
 	let ownerCookie: string;

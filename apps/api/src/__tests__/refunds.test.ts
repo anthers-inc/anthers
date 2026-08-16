@@ -139,7 +139,7 @@ const PRICE = "5.00";
  */
 const ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
-const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
+const _LOCKED = [{ threshold: 0, allow: false, price: "0" }];
 
 const fees = calculateFees(new Decimal(PRICE), { type: "digital" });
 

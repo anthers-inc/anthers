@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import SeedLadderEditor from "../components/post/SeedLadderEditor";
+import BadgeLadderEditor from "../components/post/BadgeLadderEditor";
 import { apiFetch, client } from "../lib/rpc";
 import type { PlatformConnection, StripeAccountStatus } from "../lib/types";
 
@@ -362,7 +362,7 @@ export default function StudioSettingsPage() {
 				<PlatformConnectionsSection />
 				<div>
 					<h2 className="text-lg font-semibold mb-2">Seed Badges</h2>
-					<SeedLadderEditor />
+					<BadgeLadderEditor />
 				</div>
 			</div>
 		</div>

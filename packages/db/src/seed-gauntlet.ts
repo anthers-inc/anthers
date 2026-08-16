@@ -332,12 +332,12 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 	if (account) {
 		await db
 			.update(accounts)
-			.set({ anthersSeeds: 0, creatorSeedTotal: "0.00", updatedAt: new Date() })
+			.set({ anthersSupport: "0.00", creatorSupportTotal: "0.00", updatedAt: new Date() })
 			.where(eq(accounts.userId, viewerId));
 	} else {
 		await db
 			.insert(accounts)
-			.values({ userId: viewerId, anthersSeeds: 0, creatorSeedTotal: "0.00" });
+			.values({ userId: viewerId, anthersSupport: "0.00", creatorSupportTotal: "0.00" });
 	}
 
 	await db

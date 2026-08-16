@@ -11,7 +11,7 @@
 // gate primitive pointed at a creator, because Anthers Gates were retired 2026-08-12.
 
 import { FREE_STORAGE_GIB } from "@anthers/shared/constants";
-import { DIRECTED_SEED_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
+import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -30,7 +30,7 @@ const serif = { fontFamily: FONTS.fraunces };
  * `scripts/econ-figures.ts`. A hand-typed $9.40 sat in this file for months against a
  * model that said something else.
  */
-const SEED = DIRECTED_SEED_WORST_CASE;
+const SEED = DIRECTED_SUPPORT_WORST_CASE;
 const GAME_10 = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
 
 interface FAQItem {
@@ -97,9 +97,9 @@ const FAQ_ITEMS: FAQItem[] = [
 					<li>
 						<strong>Give Seeds to a creator</strong> — $3/month each, sent straight to creators you
 						pick, Patreon-style. <strong>Anthers takes no cut at all.</strong> The only deduction is
-						the at-cost card processing, paid to the processor — on a single $3 Seed that is $
+						the at-cost card processing, paid to the processor — on a single $3 a month that is $
 						{SEED.cardFee}, so the creator receives ${SEED.net}. It is one fee on your whole monthly
-						charge, so the more Seeds you hold, the more of each one reaches its creator.
+						charge, so the more you give in a month, the more of each dollar reaches its creator.
 					</li>
 					<li>
 						<strong>Give Seeds to Anthers</strong> — $3/month each. The first one lifts your monthly
@@ -145,16 +145,15 @@ const FAQ_ITEMS: FAQItem[] = [
 		answer: (
 			<div className="space-y-2">
 				<p>
-					There is one kind of gate on Anthers and it points at a creator: a{" "}
-					<strong>Seed Gate</strong> is a threshold in whole $3 Seeds given to that creator this
-					month. Meet it and the Work opens. Creators set the thresholds themselves and name their
-					own Badges, and a gate doesn't have to sit exactly on one — a creator can gate at 3 Seeds
-					whether or not they've named a Badge there.
+					There is one kind of gate on Anthers and it points at a creator: a <strong>Badge</strong>{" "}
+					is a monthly amount given to that creator this month. Meet it and the Work opens. Creators
+					set the thresholds themselves and name their own Badges, and a gate doesn't have to sit
+					exactly on one — a creator can gate at $9 whether or not they've named a Badge there.
 				</p>
 				<p>
 					A creator can offer more than one way in, and the ways combine with OR — clear any one of
 					them and you're in, never all of them. So a Work can be free to anyone giving that creator
-					3 Seeds <em>or</em> buyable outright by anyone else, and you take whichever route suits
+					$9 a month <em>or</em> buyable outright by anyone else, and you take whichever route suits
 					you.
 				</p>
 				<p>
@@ -241,8 +240,8 @@ export default function FAQPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
-							Where the money goes, what a Seed does, what we haven't built yet. If something here
-							reads like a dodge, tell us — we'd rather fix the answer than the wording.
+							Where the money goes, what supporting does, what we haven't built yet. If something
+							here reads like a dodge, tell us — we'd rather fix the answer than the wording.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"

@@ -22,7 +22,6 @@ import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client, isDesktop } from "../../lib/rpc";
 import type {
-	Asset,
 	AuthoredPrecision,
 	CreatorGate,
 	UploadableWorkType,
@@ -681,7 +680,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 								placeholder={"One line per line.\nBlank lines separate verses."}
 							/>
 							<p className="mt-1 text-xs text-base-content/60">
-								Shown while the track plays. Gated with the audio — if this track is behind a Seed
+								Shown while the track plays. Gated with the audio — if this track is behind a Badge
 								Gate or a price, the words are too. Put anything you want everyone to read in the
 								Description instead.
 							</p>

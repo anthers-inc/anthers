@@ -21,7 +21,11 @@
  * nag, so nothing here appears until the last hour and nothing here blocks a page.
  */
 
-import { FREE_TIME_POOL_MULTIPLE, formatMultiple, SEED_PRICE } from "@anthers/shared/constants";
+import {
+	formatMultiple,
+	PUBLIC_ACCESS_PRICE,
+	timePoolMultipleFor,
+} from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
@@ -40,19 +44,19 @@ import {
 /**
  * The multiplier, derived rather than typed.
  *
- * 21.01 §9.4 words this as "six times more", and six is `TIME_POOL_PER_SEED /
+ * 21.01 §9.4 words this as "six times more", and six is `timePoolFor(PUBLIC_ACCESS_PRICE) /
  * FREE_TIME_POOL` — a ratio between two dials, one of which (`FREE_TIME_POOL`) is
  * explicitly provisional. Typing it would put a silent lie in the single piece of copy
  * the conversion argument rests on, the day anyone tunes it.
  */
-const MULTIPLE = formatMultiple(FREE_TIME_POOL_MULTIPLE);
+const MULTIPLE = formatMultiple(timePoolMultipleFor());
 
 /** Shared close: what a Seed does, in the two sentences that are actually true. */
 function SeedPitch({ compact = false }: { compact?: boolean }) {
 	return (
 		<p className={compact ? "text-xs text-base-content/60" : "text-sm text-base-content/70"}>
-			A Seed for Anthers is ${SEED_PRICE} a month and removes the limit entirely — and every creator
-			you spend time with is paid <strong>{MULTIPLE} more</strong> for your attention.
+			A Seed for Anthers is ${PUBLIC_ACCESS_PRICE} a month and removes the limit entirely — and
+			every creator you spend time with is paid <strong>{MULTIPLE} more</strong> for your attention.
 		</p>
 	);
 }
@@ -91,7 +95,7 @@ export function PublicAccessCountdown() {
 			</p>
 			<SeedPitch compact />
 			<Link to="/subscribe" className="btn btn-primary btn-sm mt-3">
-				Give a Seed to Anthers
+				Support Anthers
 			</Link>
 		</div>
 	);
@@ -121,7 +125,7 @@ export function PublicAccessWall({ budget }: { budget: PublicAccessBudget }) {
 				<SeedPitch />
 			</div>
 			<Link to="/subscribe" className="btn btn-primary mt-1">
-				Give a Seed to Anthers
+				Support Anthers
 			</Link>
 			{/* "watched" was wrong here on three of the four media — the allowance is one pool
 			    of time spent however the viewer likes, which is the equal-time principle the

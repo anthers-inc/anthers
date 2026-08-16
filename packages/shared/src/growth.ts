@@ -11,7 +11,7 @@
  * precisely the situation retiring it was meant to end.
  *
  * **`fees.ts` is upstream of this and 61.01 is upstream of the ladder.** Every per-user
- * money term comes from `anthersSeedBreakdown`, so a dial move in `constants.ts` reaches
+ * money term comes from `anthersSupportBreakdown`, so a dial move in `constants.ts` reaches
  * the landmarks without anyone remembering to re-run anything. The rungs themselves are
  * **policy** — chosen in 61.01, copied here, and if the two ever disagree 61.01 is right.
  *
@@ -38,9 +38,10 @@ import {
 	AFF_INFRA_RATE,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
+	PUBLIC_ACCESS_PRICE,
 	STORAGE_PER_GIB_MONTH,
 } from "./constants.js";
-import { anthersSeedBreakdown, paymentsSplit } from "./fees.js";
+import { anthersSupportBreakdown, paymentsSplit } from "./fees.js";
 
 // ── The ladder (policy — canonical in 61.01, mirrored here) ──────────────────
 /**
@@ -109,38 +110,43 @@ export const creatorCap = (accounts: number) => Math.max(CREATOR_FLOOR, accounts
 
 // ── Modelled populations ─────────────────────────────────────────────────────
 /**
- * How the paying population spreads across Seed counts: a geometric decay, `0.55^(n-1)`.
+ * How the paying population spreads across monthly amounts: a geometric decay, `0.55^(n-1)`
+ * over Anthers' own rungs — $3, $6, $9, and up in the same steps.
  *
  * Parametric rather than hand-typed on purpose. It is the distribution 61.01's
  * flattening-risk table sweeps — that table's rows *are* different decay values — and it
- * admits holdings above Blossom, which the product supports ("+" beyond four). At 0.55 the
- * average payer holds **2.20 Seeds**, which is the figure 61.01 names as its current
- * assumption.
+ * admits amounts above Blossom, which the product supports ("+" beyond the top rung).
+ *
+ * ⚠️ **Re-keyed from Seed counts to dollars on 2026-08-16 when the Seed retired as a unit,
+ * and the model did not move**: the rungs were `n` and are `n × $3`, so every landmark is
+ * unchanged and only the published axis label differs. It steps at `PUBLIC_ACCESS_PRICE`
+ * because those are **Anthers'** own Badge levels — creators may sit anywhere, but this
+ * model is about Anthers' books and only Anthers-directed money reaches them.
  *
  * 🚨 **This replaced four hand-typed shares on 2026-08-16, and the replacement was the
  * point of that task, not a side effect.** `scenarios.ts` carried `{1: .5, 2: .3, 3: .15,
- * 4: .05}` — average 1.75 Seeds — while the ladder ran on this one, so the two models
+ * 4: .05}` — a lighter distribution — while the ladder ran on this one, so the two models
  * published **two different floor paying shares** (10.3% and 8.8%) and 61.01 had to carry
  * a warning saying which governed. Two descriptions of one fact is the failure every
  * generated figure in this repo exists to prevent; a mix is no different.
  */
 export const PAY_DECAY = 0.55;
-/** Seed counts the mix spans. Beyond ten the weights are noise (0.55^10 ≈ 0.003). */
-export const MAX_MODELLED_SEEDS = 10;
+/** Rungs the mix spans. Beyond ten the weights are noise (0.55^10 ≈ 0.003). */
+export const MAX_MODELLED_RUNGS = 10;
 
-/** The normalised paying-user Badge mix — `{seeds: share}`, summing to 1. */
+/** The normalised paying-user mix — `{monthlyDollars: share}`, summing to 1. */
 export function payingBadgeMix(
 	decay = PAY_DECAY,
-	max = MAX_MODELLED_SEEDS,
+	max = MAX_MODELLED_RUNGS,
 ): Record<number, number> {
 	const weights = Array.from({ length: max }, (_, i) => decay ** i);
 	const total = weights.reduce((a, b) => a + b, 0);
-	return Object.fromEntries(weights.map((w, i) => [i + 1, w / total]));
+	return Object.fromEntries(weights.map((w, i) => [(i + 1) * PUBLIC_ACCESS_PRICE, w / total]));
 }
 
-/** Average Seeds held by a paying account under a mix — 61.01's flattening-risk axis. */
-export const averageSeeds = (mix: Record<number, number>) =>
-	Object.entries(mix).reduce((acc, [seeds, share]) => acc + Number(seeds) * share, 0);
+/** Average monthly support per paying account — 61.01's flattening-risk axis. */
+export const averageSupport = (mix: Record<number, number>) =>
+	Object.entries(mix).reduce((acc, [amount, share]) => acc + Number(amount) * share, 0);
 
 /**
  * The decay that produces a given average holding.
@@ -150,15 +156,16 @@ export const averageSeeds = (mix: Record<number, number>) =>
  * mean the published axis label and the mix it describes could disagree by a rounding,
  * which is the small version of the whole defect this file exists to close.
  *
- * Bounded by the mix's own reach: with ten levels the average cannot exceed 5.5 (decay 1,
- * a flat distribution) and cannot fall below 1 (decay 0, everyone at one Seed).
+ * Bounded by the mix's own reach: with ten rungs the average cannot exceed 5.5 rungs' worth
+ * (decay 1, a flat distribution) and cannot fall below one rung (decay 0, everyone at the
+ * bottom).
  */
-export function decayForAverage(target: number, max = MAX_MODELLED_SEEDS): number {
+export function decayForAverage(target: number, max = MAX_MODELLED_RUNGS): number {
 	let lo = 1e-6;
 	let hi = 1;
 	for (let i = 0; i < 80; i++) {
 		const mid = (lo + hi) / 2;
-		if (averageSeeds(payingBadgeMix(mid, max)) < target) lo = mid;
+		if (averageSupport(payingBadgeMix(mid, max)) < target) lo = mid;
 		else hi = mid;
 	}
 	return hi;
@@ -167,19 +174,19 @@ export function decayForAverage(target: number, max = MAX_MODELLED_SEEDS): numbe
 /**
  * The charitable remainder one paying account generates per month, under a mix.
  *
- * Read from `anthersSeedBreakdown`, never re-derived — so a move in `SEED_PRICE`,
- * `TIME_POOL_PER_SEED` or the card rate reaches every landmark below without anyone
+ * Read from `anthersSupportBreakdown`, never re-derived — so a move in `PUBLIC_ACCESS_PRICE`,
+ * `TIME_POOL_RATE` or the card rate reaches every landmark below without anyone
  * remembering to re-run anything. The `.anthers` side of the split is the one that
- * matters: this account holds no directed Seeds, so the whole card fee sits on it, and
+ * matters: this account directs nothing at creators, so the whole card fee sits on it, and
  * taking `.creator` here reads as zero and silently hands the fee back to the remainder.
  *
- * It rises **faster than linearly** with Seed count, because the fixed $0.30 does not
+ * It rises **faster than linearly** with the amount given, because the fixed $0.30 does not
  * scale with it — which is why the mix moves every number here more than it looks.
  */
 export function remainderPerPayingAccount(mix: Record<number, number>): number {
-	return Object.entries(mix).reduce((acc, [seeds, share]) => {
-		const n = Number(seeds);
-		const bd = anthersSeedBreakdown(n, { payments: paymentsSplit(n, 0).anthers });
+	return Object.entries(mix).reduce((acc, [amount, share]) => {
+		const n = Number(amount);
+		const bd = anthersSupportBreakdown(n, { payments: paymentsSplit(n, 0).anthers });
 		return acc + bd.foundation.toNumber() * share;
 	}, 0);
 }
@@ -244,7 +251,7 @@ export const INFRA = {
 // ── The ledger at a given scale ──────────────────────────────────────────────
 export interface GrowthInputs {
 	accounts: number;
-	/** Share of accounts holding at least one Seed given to Anthers, 0..1. */
+	/** Share of accounts giving Anthers anything at all, 0..1. */
 	payingShare: number;
 	staffing: Staffing;
 	/** Defaults to the shipped `FREE_TIME_POOL`; a parameter so 11.03's review can sweep it. */
@@ -324,18 +331,18 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	const payingAccounts = Math.max(0, Math.round(accounts) - freeAccounts);
 
 	// ---- Users ----
-	const seedLevels = Object.keys(mix)
+	const rungs = Object.keys(mix)
 		.map(Number)
 		.sort((a, b) => a - b);
 	const byLevel = apportion(
 		payingAccounts,
-		seedLevels.map((n) => mix[n]),
+		rungs.map((n) => mix[n]),
 	);
 	let charitableFromUsers = 0;
 	let timePoolToCreators = freeTimePool * freeAccounts;
-	seedLevels.forEach((n, i) => {
+	rungs.forEach((n, i) => {
 		const count = byLevel[i];
-		const bd = anthersSeedBreakdown(n, { payments: paymentsSplit(n, 0).anthers });
+		const bd = anthersSupportBreakdown(n, { payments: paymentsSplit(n, 0).anthers });
 		charitableFromUsers += bd.foundation.toNumber() * count;
 		timePoolToCreators += bd.timePool.toNumber() * count;
 	});
