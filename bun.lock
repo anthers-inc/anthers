@@ -13,6 +13,7 @@
         "@tauri-apps/cli": "2.11.4",
         "drizzle-kit": "0.31.9",
         "pg": "8.13.1",
+        "stripe": "22.3.2",
       },
     },
     "apps/api": {
