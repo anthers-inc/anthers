@@ -24,7 +24,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, purchases, transcodingJobs, users, works } from "@anthers/db/schema";
+import { assets, purchases, transcodingJobs, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";

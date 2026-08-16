@@ -4,8 +4,6 @@ import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { LinkIcon } from "@heroicons/react/24/outline";
-import ContentTypeBadge from "../ui/ContentTypeBadge";
-import PricingBadge from "../ui/PricingBadge";
 
 export default function PostCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {

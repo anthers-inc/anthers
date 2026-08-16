@@ -16,13 +16,16 @@ import SubscriptionPaymentModal, {
 } from "../subscribe/SubscriptionPaymentModal";
 
 /** "1 Seed" / "3 Seeds" — thresholds count Seeds, so the copy must too. */
-function seedCount(seeds: number): string {
+function _seedCount(seeds: number): string {
 	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
 }
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
 function seedsToGo(moreNeeded: number): string {
-	return `${moreNeeded} more Seed${moreNeeded === 1 ? "" : "s"}`;
+	// ⚠️ A MONEY amount, since 2026-08-16 — it was a Seed count. Rendering it as a count
+	// would be wrong in two directions at once now: there is no unit to count, and a
+	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
+	return `$${moreNeeded.toFixed(2)} more`;
 }
 
 /** Only the creator identity is needed — this works for any gated thing. */

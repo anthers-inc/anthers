@@ -51,8 +51,8 @@ import {
 	GAUNTLET_MEDIA_POSTS,
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
-import { posts, postWorkRefs, transcodingJobs, users, works } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { transcodingJobs, users, works } from "@anthers/db/schema";
+import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";

@@ -74,11 +74,11 @@ const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `rv_creator_${id}`;
 const viewerAName = `rv_a_${id}`;
 const viewerBName = `rv_b_${id}`;
-const FREE = [{ threshold: 0, allow: true, price: "0" }];
+const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 
 let creator: string;
 let viewerA: string;
-let viewerB: string;
+let _viewerB: string;
 let workId: number;
 
 beforeAll(async () => {
@@ -87,7 +87,7 @@ beforeAll(async () => {
 	);
 	creator = await signUp(creatorName);
 	viewerA = await signUp(viewerAName);
-	viewerB = await signUp(viewerBName);
+	_viewerB = await signUp(viewerBName);
 
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",

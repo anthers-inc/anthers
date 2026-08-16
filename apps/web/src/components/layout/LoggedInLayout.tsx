@@ -71,7 +71,7 @@ function LoggedInLayoutInner() {
 				<div className="navbar-end gap-1">
 					<ThemeToggle />
 					<div className="dropdown dropdown-end">
-						<label tabIndex={0} className="btn btn-ghost btn-circle">
+						<label className="btn btn-ghost btn-circle">
 							{user?.avatar ? (
 								<img
 									src={user.avatar}
@@ -82,10 +82,7 @@ function LoggedInLayoutInner() {
 								<UserCircleIcon className="w-8 h-8" />
 							)}
 						</label>
-						<ul
-							tabIndex={0}
-							className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52"
-						>
+						<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
 							<li className="menu-title px-4 py-1">
 								{/* An account that hasn't finished onboarding has no handle to print and
 								    no profile to link to, so the menu offers the way to get one instead

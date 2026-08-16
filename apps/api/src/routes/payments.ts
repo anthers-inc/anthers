@@ -16,7 +16,6 @@
 
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	crfLedger,
 	crfSubsidies,
 	purchases,

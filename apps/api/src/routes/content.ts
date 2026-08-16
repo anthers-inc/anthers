@@ -300,11 +300,28 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
 /**
  * Both access tables are the same row: a whole-Seed threshold, an allow flag, a price.
  * The Anthers table's threshold counts Anthers-Seeds held; the Seed table's counts Seeds
- * given to this creator. Integer-only — a gate sits at a whole Seed or nowhere, and
- * accepting 2.5 would let a row be written that no viewer can ever exactly meet.
+ * given to this creator.
+ *
+ * 🚨 **`z.number().int()` until 2026-08-16, and the justification inverted.** It read
+ * *"a gate sits at a whole Seed or nowhere, and accepting 2.5 would let a row be written
+ * that no viewer can ever exactly meet"* — true while Seeds were indivisible, and exactly
+ * backwards once they retired: $2.50 is now an ordinary thing to give, so refusing it
+ * writes off the amounts a creator is most likely to choose.
+ *
+ * Two cents of precision, because that is what can be charged and what `amountMeets`
+ * compares in. Finer would be a threshold nobody could pay to the cent.
  */
 const accessRowSchema = z.object({
-	threshold: z.number().int().nonnegative(),
+	threshold: z
+		.number()
+		.nonnegative()
+		.refine(
+			(v) =>
+				Number.isInteger(Math.round(v * 100)) && Math.abs(v * 100 - Math.round(v * 100)) < 1e-6,
+			{
+				message: "Threshold must be a whole number of cents",
+			},
+		),
 	allow: z.boolean(),
 	price: z.string().regex(MONEY),
 });
@@ -2376,7 +2393,7 @@ const contentRoutes = new Hono()
 		/** True when this access table has a row opening the Work to everyone, for free. */
 		const openToEveryone = (column: SQL | unknown) => sql`EXISTS (
 			SELECT 1 FROM jsonb_array_elements(COALESCE(${column}, '[]'::jsonb)) AS access_row
-			WHERE (access_row->>'threshold')::int = 0
+			WHERE (access_row->>'threshold')::numeric = 0
 			  AND (access_row->>'allow')::boolean IS TRUE
 			  AND COALESCE((access_row->>'price')::numeric, 0) = 0
 		)`;
@@ -2824,12 +2841,14 @@ const contentRoutes = new Hono()
 		// "show me free things" with "only wholly-free Projects" would hide it.
 		if (pricing === "free") {
 			conditions.push(
-				containsWork(anyAccessRow(sql`(r->>'threshold')::int = 0 AND (r->>'price')::numeric <= 0`)),
+				containsWork(
+					anyAccessRow(sql`(r->>'threshold')::numeric = 0 AND (r->>'price')::numeric <= 0`),
+				),
 			);
 		} else if (pricing === "paid") {
 			conditions.push(containsWork(anyAccessRow(sql`(r->>'price')::numeric > 0`)));
 		} else if (pricing === "gated") {
-			conditions.push(containsWork(anyAccessRow(sql`(r->>'threshold')::int > 0`)));
+			conditions.push(containsWork(anyAccessRow(sql`(r->>'threshold')::numeric > 0`)));
 
 			// "Show locked content" is OFF by default, so a gated browse shows only what
 			// this viewer can actually open. That needs the access rules in SQL rather
@@ -2845,9 +2864,9 @@ const contentRoutes = new Hono()
 			const viewerId = await getOptionalUserId(c);
 			if (showLocked !== "true" && viewerId != null) {
 				const ctx = await buildAccessContext(viewerId);
-				// The Seed table compares against Seeds given to *that Work's creator*, a
-				// different number per row, so the viewer's allocations travel as a jsonb
-				// map keyed by creator id and are looked up per row.
+				// The access table compares against what the viewer gives *that Work's creator*,
+				// a different number per row, so the viewer's allocations travel as a jsonb map
+				// keyed by creator id and are looked up per row.
 				const seedMap = JSON.stringify(Object.fromEntries(ctx.supportByCreator));
 				// Coerced explicitly because the ids are inlined rather than bound: they
 				// come from our own `purchases` rows and are integers already, and this is
@@ -2860,8 +2879,15 @@ const contentRoutes = new Hono()
 						OR EXISTS (
 							SELECT 1 FROM jsonb_array_elements(COALESCE(w.seed_access, '[]'::jsonb)) r
 							WHERE (r->>'allow')::boolean AND (r->>'price')::numeric <= 0
-								AND (r->>'threshold')::int
-									<= COALESCE((${seedMap}::jsonb ->> w.creator_id::text)::int, 0)
+								-- 🚨 ::numeric on BOTH sides. Every one of these casts was ::int
+								-- until 2026-08-16, which was correct while a threshold counted
+								-- whole Seeds and is now a hard 500: Postgres refuses "9.5" as an
+								-- integer outright. Found by the gauntlet's deliberately
+								-- non-round $9.50 rung — added to catch a FLOAT comparison in
+								-- JS, and it caught an integer cast in SQL instead, which is the
+								-- better argument for having put it there.
+								AND (r->>'threshold')::numeric
+									<= COALESCE((${seedMap}::jsonb ->> w.creator_id::text)::numeric, 0)
 						)
 					)`),
 				);

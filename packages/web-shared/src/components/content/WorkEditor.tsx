@@ -22,7 +22,6 @@ import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client, isDesktop } from "../../lib/rpc";
 import type {
-	Asset,
 	AuthoredPrecision,
 	CreatorGate,
 	UploadableWorkType,

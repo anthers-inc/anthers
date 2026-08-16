@@ -19,13 +19,11 @@
  */
 import Decimal from "decimal.js";
 import {
-	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
 	SALES_TAX_RATE,
-	STORAGE_PER_GIB_MONTH,
 	thresholdForBadge,
 	timePoolFor,
 } from "./constants.js";

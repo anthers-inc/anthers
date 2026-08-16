@@ -16,7 +16,6 @@ import {
 	attentionEvents,
 	creatorGates,
 	poolDistributions,
-	posts,
 	seedAllocations,
 	users,
 	works,
@@ -1039,10 +1038,13 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				// Whole Seeds, both gate types (migration `0007`) — Seeds given to this creator for
-				// `seed`, Anthers-Seeds held for `anthers_badge`. Digits only: a fractional gate is
-				// one no viewer could ever exactly meet, since Seeds are indivisible.
-				threshold: z.string().regex(/^\d+$/),
+				// 🚨 Monthly DOLLARS, both gate types (migration `0041`) — what is given to this
+				// creator for `seed`, what is given to Anthers for `anthers_badge`. It was
+				// `/^\d+$/` (digits only) until 2026-08-16 on the reasoning that a fractional
+				// gate was one no viewer could exactly meet, since Seeds were indivisible. The
+				// unit went and so did the reasoning: refusing "9.50" now rejects the levels a
+				// creator is most likely to set. Cents, because that is what can be charged.
+				threshold: z.string().regex(/^\d+(\.\d{1,2})?$/),
 				label: z.string().min(1).max(100),
 				description: z.string().max(1000).optional().default(""),
 				gateType: z.enum(["seed", "anthers_badge"]).optional().default("seed"),
@@ -1072,7 +1074,10 @@ const subscriptionRoutes = new Hono()
 		zValidator(
 			"json",
 			z.object({
-				threshold: z.string().regex(/^\d+$/).optional(),
+				threshold: z
+					.string()
+					.regex(/^\d+(\.\d{1,2})?$/)
+					.optional(),
 				label: z.string().min(1).max(100).optional(),
 				description: z.string().max(1000).optional(),
 			}),

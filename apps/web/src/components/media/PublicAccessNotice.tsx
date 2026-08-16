@@ -24,7 +24,6 @@
 import {
 	formatMultiple,
 	PUBLIC_ACCESS_PRICE,
-	timePoolFor,
 	timePoolMultipleFor,
 } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";

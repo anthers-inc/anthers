@@ -32,7 +32,6 @@ import {
 	accounts,
 	attentionEvents,
 	db,
-	posts,
 	purchases,
 	seedAllocations,
 	users,

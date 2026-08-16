@@ -35,9 +35,12 @@ export function cheapestRoute(
 	return null;
 }
 
-/** "2 more Seeds" / "1 more Seed" — always the MARGINAL ask, never the threshold. */
+/** "$6.00 more" — always the MARGINAL ask, never the threshold. */
 function seedsToGo(moreNeeded: number): string {
-	return `${moreNeeded} more Seed${moreNeeded === 1 ? "" : "s"}`;
+	// ⚠️ A MONEY amount, since 2026-08-16 — it was a Seed count. Rendering it as a count
+	// would be wrong in two directions at once now: there is no unit to count, and a
+	// marginal ask of $2.50 has no whole-number form to round to that isn't a lie.
+	return `$${moreNeeded.toFixed(2)} more`;
 }
 
 /**

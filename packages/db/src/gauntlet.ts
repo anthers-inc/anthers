@@ -212,7 +212,7 @@ export const GAUNTLET_POSTS: GauntletPost[] = [
 			`For readers who've given ${seedLabel(seeds)}`,
 			`≥ ${seedLabel(seeds)}/month given to this creator`,
 			i === 0
-				? "The first Seed rung — only Seeds given to this creator this cycle open it. Nothing about a viewer's Badge is consulted anywhere on this ladder."
+				? "The first rung — only what is given to this creator this cycle opens it. Nothing about a viewer's Anthers Badge is consulted anywhere on this ladder."
 				: `Rung at ${seedLabel(seeds)}. ${seedLabel(SEED_RUNGS[i - 1])} is not enough; ${seedLabel(seeds)} or more opens it.`,
 			{
 				seedAccess: seedRung(seeds),
@@ -359,7 +359,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 		// Blossom — the top Badge — and it unlocks NOTHING. The row exists to say so out
 		// loud at the layer a reader looks at, even though the resolver can no longer see
 		// the count. It is the cell that would have been four cells before 2026-08-12.
-		state: "Blossom, no Seeds given",
+		state: "Blossom, nothing given",
 		following: true,
 		anthersSupport: 12,
 		seedsGiven: 0,
@@ -389,7 +389,7 @@ export const EXPECTED_STAIRCASE: StaircaseState[] = [
 /**
  * The creator's advertised gate ladder — the named rungs a visitor sees on the profile.
  * Distinct from the per-post access table above, which is what actually authorizes.
- * Thresholds are **whole Seeds given to this creator** (migration `0007`).
+ * Thresholds are **monthly dollars given to this creator** (migration `0041`).
  *
  * An `anthers_badge` half sat beside this until 2026-08-12, advertising Root/Sprout/
  * Petal/Blossom as rungs a creator could gate on. Anthers Gates are retired, so a

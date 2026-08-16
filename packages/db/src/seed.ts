@@ -10,14 +10,9 @@
  * and removed without affecting real data.
  */
 
-import {
-	ANTHERS_BADGES,
-	heldBadgeLabel,
-	PUBLIC_ACCESS_PRICE,
-	timePoolFor,
-} from "@anthers/shared/constants";
+import { heldBadgeLabel, PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
-import { eq, like, sql } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import {
 	accountCycles,
 	accounts,

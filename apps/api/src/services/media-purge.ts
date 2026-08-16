@@ -20,7 +20,7 @@
  */
 
 import { assets, db, transcodingJobs, works } from "@anthers/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 
 type WorkRow = typeof works.$inferSelect;
