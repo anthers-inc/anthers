@@ -147,6 +147,19 @@ export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 
 /** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
 export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
+
+/**
+ * The storefronts a creator actually compares us with, and their revenue share.
+ *
+ * Generated rather than typed into the Studio because 63.01 § Comparisons binds every
+ * comparison to **all-in against all-in** — a rival's take-home has to be computed from
+ * the same card fee ours is, and must move when that fee moves. \`absorbsProcessing\` is
+ * Valve's model: their 30% covers the card cost, so nothing further comes off.
+ *
+ * ⚠️ **The rates themselves are perishable** and hand-maintained in \`scenarios.ts\`
+ * (checked 2026-08-03). Generation guarantees the arithmetic, never the inputs.
+ */
+export const RIVAL_STOREFRONTS = ${j(RIVAL_STOREFRONTS)} as const;
 `;
 }
 
@@ -823,6 +836,31 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
 	},
 	{
+		// The second mechanism the code never had, and the one that had spread furthest: a
+		// /for-creators pricing card, a ✓ in the itch comparison, the demo storefront, and
+		// the sentence the creator reads directly above the price field all promised
+		// pay-what-you-want. **Checkout has never accepted an amount.** `resolvePurchase`
+		// reads the stored `access.price` and `ProjectPricing` posts `{ slug }` with no
+		// body, so the buyer has no way to send one.
+		//
+		// 🚨 This one earns a guard rather than a sweep for a reason the ATProto rule does
+		// not have: a creator who prices low believing tips will follow **loses money on
+		// every sale**, and the take-home display built alongside this is the thing that
+		// tells them so. A page still promising the tips would put the two surfaces in
+		// direct contradiction at the exact moment the number is chosen.
+		//
+		// ⚠️ Broad on purpose, unlike ATProto's. There is no lexical difference between
+		// claiming it and crediting a rival for it — the itch comparison row differs from
+		// the old one by a JSX prop — so the honest use is the annotated one. Exactly one
+		// `econ:allow` exists for it today, on that row, and a second should be argued for
+		// rather than added.
+		pattern: new RegExp(
+			`${NOT_NEGATED}(?:pay[- ]what[- ]you[- ]want|name your own price|suggested price|(?:buyers?|they) (?:may|can) pay more|price is a minimum)`,
+			"gi",
+		),
+		why: "pay-what-you-want has never existed — checkout charges the stored price and accepts no amount from the buyer",
+	},
+	{
 		// The organization's own name for itself, and the one place a copy error becomes a
 		// factual error: **there is one legal person and it is `Anthers, Inc.`** (63.01,
 		// retired 2026-08-05). Writing "supported by a non-profit foundation" invents a
@@ -927,6 +965,24 @@ const ALLOW = /econ:allow(?!-file)\b[\s:—-]*(.*)$/;
 const ALLOW_FILE = /econ:allow-file\b[\s:—-]*(.*)$/m;
 
 /**
+ * A line that carries no code once its comments are gone.
+ *
+ * 🚨 **The braces are why this is a function and not `=== ""`.** `withoutComments`
+ * blanks the comment body but cannot blank the `{` and `}` a JSX comment wraps it in, so
+ * such a comment leaves `{` on its first line and `}` on its last. That single surviving
+ * brace stopped the walk below dead — which meant **an `econ:allow` written as a JSX
+ * comment had never once worked**, in the only syntax available inside a JSX tree. Two
+ * were sitting in the app reading as though they did (`CompareItchPage:196`,
+ * `SubscriptionPage:663`); both happen to guard lines nothing currently matches, so
+ * nobody found out. Discovered 2026-08-16 by writing a third one that was load-bearing.
+ *
+ * An escape hatch that silently does nothing is worse than one that does not exist: the
+ * next person concludes the annotation is unsupported and reaches for `econ:allow-file`,
+ * which silences the whole file.
+ */
+const blankish = (line: string) => line.replace(/[{}]/g, "").trim() === "";
+
+/**
  * Find the annotation covering line `i`: on the line itself, or anywhere in the
  * comment block immediately above it — the reason for a coincidence is often two
  * lines, and a guard that silently ignores the second one teaches people to write
@@ -937,7 +993,7 @@ const ALLOW_FILE = /econ:allow-file\b[\s:—-]*(.*)$/m;
  */
 function allowance(lines: string[], code: string[], i: number): RegExpExecArray | null {
 	let found = ALLOW.exec(lines[i]);
-	for (let k = i - 1; !found && k >= 0 && code[k].trim() === "" && lines[k].trim() !== ""; k--) {
+	for (let k = i - 1; !found && k >= 0 && blankish(code[k]) && lines[k].trim() !== ""; k--) {
 		found = ALLOW.exec(lines[k]);
 	}
 	return found;

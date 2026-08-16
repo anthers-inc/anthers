@@ -261,8 +261,8 @@ export default function ForCreatorsPage() {
 								charge that touches a creator is half again on your storage past the free{" "}
 								{FREE_STORAGE_GIB} GiB — your own infrastructure, opt-in, and nothing to do with
 								what you sell. Free access and the charitable programs are funded by what's left of
-								a fan's Seeds to Anthers after the Time Pool and the card cost, and by lean
-								operations—Anthers itself never profits.
+								a fan's monthly support to Anthers after the Time Pool and the card cost, and by
+								lean operations—Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -275,9 +275,15 @@ export default function ForCreatorsPage() {
 						</PricingOption>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
-						<PricingOption title="Pay What You Want">
-							Set a suggested price and an optional minimum. Let your audience decide what your work
-							is worth to them.
+						{/* 🚨 This card said "Pay What You Want" until 2026-08-16 and we have never built
+						    it — `resolvePurchase` charges the stored price and the checkout call sends no
+						    amount at all, so there was nothing behind the card. Replaced rather than
+						    deleted: the third option is real and shipped, and a two-card row in a
+						    three-column grid reads as something missing. */}
+						<PricingOption title="Badge Access">
+							Open it to supporters at a Badge level you set—any monthly amount you choose. The same
+							work can carry a purchase price alongside it; a supporter at that level simply doesn't
+							need to pay it.
 						</PricingOption>
 					</Reveal>
 					<Reveal delay={220} className="h-full">

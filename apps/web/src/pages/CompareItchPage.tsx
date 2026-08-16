@@ -315,7 +315,14 @@ export default function CompareItchPage() {
 								    thing rather than the protocol it might one day sit on. */}
 								<CompRow feature="Bluesky identity linking" anthers />
 								<CompRow feature="Desktop client" patreon />
-								<CompRow feature="Pay-what-you-want pricing" anthers patreon />
+								{/* 🚨 Ours was checked here until 2026-08-16 and **we have never had it**.
+								    `resolvePurchase` charges the stored `access.price` and the checkout call
+								    sends no amount at all, so there is nothing a buyer could pay more with.
+								    itch genuinely does have it, so the row stays and the ✓ moves — 63.01
+								    § Comparisons requires conceding where we lose, and deleting the row
+								    would concede by omission.
+								    econ:allow — credits itch.io, not us; `patreon` is the itch column */}
+								<CompRow feature="Pay-what-you-want pricing" patreon />
 								<CompRow feature="Creator analytics" anthers patreon />
 								<CompRow feature="Bundles" patreon />
 							</tbody>
