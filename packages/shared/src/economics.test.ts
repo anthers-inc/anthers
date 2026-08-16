@@ -12,12 +12,13 @@ import Decimal from "decimal.js";
 import {
 	BADGE_ORDER,
 	cardFeeDisplay,
-	SEED_PRICE,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
+	thresholdForBadge,
+	TIME_POOL_RATE,
 	timePoolFor,
 } from "./constants.js";
 import {
-	anthersSeedBreakdown,
+	anthersSupportBreakdown,
 	badgeViews,
 	calculateFees,
 	cardFee,
@@ -26,28 +27,42 @@ import {
 } from "./fees.js";
 import { BADGE_TABLE } from "./figures.generated.js";
 
-const PAID_SEEDS = [1, 2, 3, 4];
+/** Anthers' own rungs, in dollars — $3/$6/$9/$12 since the Seed retired as a unit. */
+const PAID_RUNGS = [3, 6, 9, 12];
 
-describe("anthersSeedBreakdown", () => {
-	test("seed value + Time Pool + Payments + remainder conserve exactly, every count", () => {
-		for (const n of PAID_SEEDS) {
+describe("anthersSupportBreakdown", () => {
+	test("what you give + Time Pool + Payments + remainder conserve exactly, every rung", () => {
+		for (const n of PAID_RUNGS) {
 			const payments = paymentsSplit(n, 0).anthers;
-			const b = anthersSeedBreakdown(n, { payments });
-			expect(b.seedValue.toFixed(2)).toBe((SEED_PRICE * n).toFixed(2));
+			const b = anthersSupportBreakdown(n, { payments });
+			expect(b.given.toFixed(2)).toBe(n.toFixed(2));
 			const sum = b.timePool.plus(b.payments).plus(b.foundation);
-			expect(sum.toFixed(2)).toBe(b.seedValue.toFixed(2));
+			expect(sum.toFixed(2)).toBe(b.given.toFixed(2));
 		}
 	});
 
-	test("Time Pool is $1.50 per Anthers-Seed", () => {
-		for (const n of PAID_SEEDS) {
-			expect(anthersSeedBreakdown(n).timePool.toNumber()).toBe(TIME_POOL_PER_SEED * n);
+	test("Time Pool is half of what you give Anthers", () => {
+		for (const n of PAID_RUNGS) {
+			expect(anthersSupportBreakdown(n).timePool.toNumber()).toBe(TIME_POOL_RATE * n);
 		}
+	});
+
+	/**
+	 * 🚨 The property the retired per-unit coefficient could not express, and the reason
+	 * the dial had to become a RATE rather than simply be renamed. `TIME_POOL_PER_SEED = 1.5`
+	 * had no answer for $4.50 — there was no such thing as one and a half Seeds — so an
+	 * arbitrary amount would have had to be floored onto a rung, silently under-paying
+	 * creators by up to a whole rung on every account sitting between two.
+	 */
+	test("an amount between the rungs has an answer, and it is proportional", () => {
+		expect(anthersSupportBreakdown(4.5).timePool.toNumber()).toBe(2.25);
+		expect(anthersSupportBreakdown(1).timePool.toNumber()).toBe(0.5);
+		expect(anthersSupportBreakdown(7.5).timePool.toNumber()).toBe(3.75);
 	});
 
 	test("the remainder is what's left — it shrinks as Payments grows (shock absorber)", () => {
-		const cheap = anthersSeedBreakdown(1, { payments: new Decimal("0.20") });
-		const dear = anthersSeedBreakdown(1, { payments: new Decimal("0.50") });
+		const cheap = anthersSupportBreakdown(3, { payments: new Decimal("0.20") });
+		const dear = anthersSupportBreakdown(3, { payments: new Decimal("0.50") });
 		expect(dear.foundation.lt(cheap.foundation)).toBe(true);
 		expect(dear.timePool.toFixed(2)).toBe(cheap.timePool.toFixed(2)); // Time Pool stays fixed
 	});
@@ -63,14 +78,14 @@ describe("anthersSeedBreakdown", () => {
 	test("nothing about the decomposition depends on consumption", () => {
 		// Hand-computed rather than re-derived: a Sprout's $6.00 charge, less $3.00 of
 		// Time Pool and the $0.47 card fee on $6.00, leaves $2.53 — whatever they watch.
-		const b = anthersSeedBreakdown(2, { payments: paymentsSplit(2, 0).anthers });
+		const b = anthersSupportBreakdown(6, { payments: paymentsSplit(6, 0).anthers });
 		expect(b.payments.toFixed(2)).toBe("0.47");
 		expect(b.foundation.toFixed(2)).toBe("2.53");
 	});
 
 	test("free rank (0 Seeds) pays $0 and funds no charitable remainder, but has a subsidised Time Pool", () => {
-		const b = anthersSeedBreakdown(0);
-		expect(b.seedValue.toNumber()).toBe(0);
+		const b = anthersSupportBreakdown(0);
+		expect(b.given.toNumber()).toBe(0);
 		expect(b.foundation.toNumber()).toBe(0);
 		expect(b.subsidised).toBe(true);
 		expect(b.timePool.toNumber()).toBeGreaterThan(0);
@@ -98,11 +113,11 @@ describe("anthersSeedBreakdown", () => {
 	 */
 	test("The remainder can go negative — the remainder has no floor, by design", () => {
 		// One Seed ($3), $1.50 of Time Pool, and a $2.00 cost against it: −$0.50.
-		const b = anthersSeedBreakdown(1, { payments: new Decimal("2.00") });
+		const b = anthersSupportBreakdown(3, { payments: new Decimal("2.00") });
 		expect(b.foundation.isNegative()).toBe(true);
 		expect(b.foundation.toFixed(2)).toBe("-0.50");
 		// Conservation still holds exactly, which is the reason not to clamp here.
-		expect(b.timePool.plus(b.payments).plus(b.foundation).toFixed(2)).toBe(b.seedValue.toFixed(2));
+		expect(b.timePool.plus(b.payments).plus(b.foundation).toFixed(2)).toBe(b.given.toFixed(2));
 		// The Time Pool is untouched: creators are paid the same by a user who cost more
 		// to serve than they paid in.
 		expect(b.timePool.toFixed(2)).toBe("1.50");
@@ -156,9 +171,9 @@ describe("cardFeeDisplay — the browser's copy of the formula", () => {
 describe("supportBreakdown", () => {
 	test("the Seed price is all-in: Payments comes out of the charge, never on top", () => {
 		// 2 creator-Seeds + 1 Anthers-Seed.
-		const s = supportBreakdown({ anthersSeeds: 1, creatorSeeds: 2 });
+		const s = supportBreakdown({ anthersDollars: 3, creatorDollars: 6 });
 		expect(s.creatorDirect.toFixed(2)).toBe("6.00"); // 2 × $3 gross
-		expect(s.seedsSubtotal.toFixed(2)).toBe("9.00"); // (2 + 1) × $3
+		expect(s.supportSubtotal.toFixed(2)).toBe("9.00"); // $6 to creators + $3 to Anthers
 		expect(s.payments.toFixed(2)).toBe(cardFee(9).toFixed(2)); // one fee on the whole $9
 		// The user pays the subtotal and nothing more — sales tax is the only add-on,
 		// and it is applied by the caller, not here.
@@ -166,8 +181,8 @@ describe("supportBreakdown", () => {
 	});
 
 	test("Payments splits pro-rata; creators are paid net and the split reconstructs the fee", () => {
-		const s = supportBreakdown({ anthersSeeds: 1, creatorSeeds: 2 });
-		const split = paymentsSplit(1, 2);
+		const s = supportBreakdown({ anthersDollars: 3, creatorDollars: 6 });
+		const split = paymentsSplit(3, 6);
 		// Two-thirds of the charge is directed, so two-thirds of the fee is.
 		expect(split.creator.plus(split.anthers).toFixed(2)).toBe(split.total.toFixed(2));
 		expect(s.creatorNet.toFixed(2)).toBe(s.creatorDirect.minus(split.creator).toFixed(2));
@@ -179,14 +194,14 @@ describe("supportBreakdown", () => {
 	});
 
 	test("batching pays creators MORE — the fixed $0.30 amortises across a bigger charge", () => {
-		const alone = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
-		const batched = supportBreakdown({ anthersSeeds: 3, creatorSeeds: 1 });
+		const alone = supportBreakdown({ anthersDollars: 0, creatorDollars: 3 });
+		const batched = supportBreakdown({ anthersDollars: 9, creatorDollars: 3 });
 		// Same one directed Seed, but riding on a $12 charge instead of a $3 one.
 		expect(batched.creatorNet.greaterThan(alone.creatorNet)).toBe(true);
 	});
 
 	test("a pure-direct user pays exactly their Seeds and funds no charitable remainder", () => {
-		const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
+		const s = supportBreakdown({ anthersDollars: 0, creatorDollars: 3 });
 		expect(s.creatorDirect.toFixed(2)).toBe("3.00");
 		expect(s.foundation.toNumber()).toBe(0);
 		expect(s.payments.toFixed(2)).toBe("0.39"); // worst case: $0.30 borne alone
@@ -196,16 +211,18 @@ describe("supportBreakdown", () => {
 });
 
 describe("badgeViews", () => {
-	test("one row per rank; price = $3 × Anthers-Seed count; money renders to 2dp", () => {
+	test("one row per rung; price is the rung's threshold; money renders to 2dp", () => {
 		const views = badgeViews();
 		expect(views).toHaveLength(BADGE_ORDER.length);
 		views.forEach((v, i) => {
-			expect(v.anthersSeeds).toBe(i);
-			expect(v.price).toBe(SEED_PRICE * i);
+			expect(v.price).toBe(thresholdForBadge(BADGE_ORDER[i]));
 			expect(v.timePool).toMatch(/^\d+\.\d{2}$/);
 			expect(v.supportsAnthers).toMatch(/^\d+\.\d{2}$/);
-			expect(Number(v.timePool)).toBe(timePoolFor(i));
+			expect(Number(v.timePool)).toBe(timePoolFor(v.price));
 		});
+		// The bottom rung is the absence of a Badge; the first real one is Public Access.
+		expect(views[0].price).toBe(0);
+		expect(views[1].price).toBe(PUBLIC_ACCESS_PRICE);
 	});
 
 	// 🚨 The test above is the one that let a wrong number through for as long as it
@@ -216,8 +233,8 @@ describe("badgeViews", () => {
 	test("supportsAnthers is the remainder NET of the Payments line", () => {
 		const views = badgeViews();
 		for (const row of BADGE_TABLE) {
-			const v = views.find((x) => x.anthersSeeds === row.seeds);
-			expect(v, `no view for ${row.seeds} Seed(s)`).toBeDefined();
+			const v = views.find((x) => x.price === row.monthly);
+			expect(v, `no view for $${row.monthly}`).toBeDefined();
 			// Pinned against `figures.generated.ts`, which `econ:figures` derives
 			// independently — never against badgeViews' own arithmetic, which is what an
 			// assertion copied from the implementation would do.
@@ -237,7 +254,7 @@ describe("badgeViews", () => {
 		// charge = Time Pool + Payments + remainder. Stated here so a future change that
 		// drops a term fails on the arithmetic and not only on a pinned constant.
 		for (const row of BADGE_TABLE) {
-			const v = badgeViews().find((x) => x.anthersSeeds === row.seeds);
+			const v = badgeViews().find((x) => x.price === row.monthly);
 			const sum = new Decimal(v?.timePool ?? 0).plus(row.payments).plus(v?.supportsAnthers ?? 0);
 			expect({ badge: row.badge, sum: sum.toFixed(2) }).toEqual({
 				badge: row.badge,

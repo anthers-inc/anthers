@@ -49,9 +49,10 @@ import {
 	CARD_RATE,
 	FREE_STORAGE_GIB,
 	formatMultiple,
+	timePoolFor,
 	SALES_TAX_RATE,
-	SEED_PRICE,
-	TIME_POOL_PER_SEED,
+	PUBLIC_ACCESS_PRICE,
+	TIME_POOL_RATE,
 } from "../packages/shared/src/constants.js";
 import { CREATOR_FLOOR, PHASE_ACCOUNTS } from "../packages/shared/src/growth.js";
 import { FREE_PUBLIC_ACCESS_HOURS } from "../packages/shared/src/public-access.js";
@@ -60,7 +61,7 @@ import {
 	cartSaving,
 	creatorReceipt,
 	creatorSegments,
-	directedSeedWorstCase,
+	directedSupportWorstCase,
 	edBandSensitivity,
 	freePotSensitivity,
 	growthLadder,
@@ -118,7 +119,7 @@ function renderModule(): string {
 	const badges = badgeTable();
 	const sales = saleTable();
 	const receipt = sampleReceipt();
-	const seed = directedSeedWorstCase();
+	const seed = directedSupportWorstCase();
 	const j = (v: unknown) => JSON.stringify(v, null, "\t").replace(/\n/g, "\n");
 	return `// SPDX-License-Identifier: AGPL-3.0-or-later
 //
@@ -144,8 +145,8 @@ export const SALE_TABLE = ${j(sales)} as const;
 /** The sample monthly receipt: a Sprout who also directs two Seeds. */
 export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 
-/** A lone directed Seed — the worst case, and what creator-facing copy quotes. */
-export const DIRECTED_SEED_WORST_CASE = ${j(seed)} as const;
+/** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
+export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
 `;
 }
 
@@ -199,23 +200,21 @@ function plainTable(head: string[], align: string[], rows: string[][]): string {
 function renderReadmeModelMarkdown(): string {
 	const badges = badgeTable();
 	const sales = [...new Map(saleTable().map((r) => [r.price, r])).values()];
-	const seed = directedSeedWorstCase();
+	const seed = directedSupportWorstCase();
 	return [
-		`**Where a Seed given to Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
+		`**Where what you give Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
 		plainTable(
 			[
 				"Badge",
-				"Seeds to Anthers",
 				"You pay",
 				"Time Pool → creators",
 				"Payments\\*",
 				"Free access & programs",
 			],
-			[":--", "--:", "--:", "--:", "--:", "--:"],
+			[":--", "--:", "--:", "--:", "--:"],
 			badges.map((r) => [
 				`**${r.badge}**`,
-				String(r.seeds),
 				`$${r.charge}`,
 				`$${r.timePool}`,
 				`$${r.payments}`,
@@ -223,9 +222,9 @@ function renderReadmeModelMarkdown(): string {
 			]),
 		),
 		"",
-		`\\* Card processing, at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, paid to Stripe and charged once per transaction. The flat part does not scale with the Seed count, which is why the remainder grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.`,
+		`\\* Card processing, at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, paid to Stripe and charged once per transaction. The flat part does not scale with the amount, which is why the remainder grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.`,
 		"",
-		`Every account watches **${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever** — no trial, no expiry. One Seed given to Anthers removes the limit, and no Seed above the first buys any more access.`,
+		`Every account watches **${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever** — no trial, no expiry. **$${PUBLIC_ACCESS_PRICE} a month to Anthers removes the limit**, and nothing above it buys any more access.`,
 		"",
 		`**What a creator takes home.** Anthers keeps **$0.00** from every row; the only deduction is Stripe's card fee.`,
 		"",
@@ -276,19 +275,13 @@ function renderReceiptMarkdown(): string {
 		"Your Anthers — February 2026",
 		"",
 		"━".repeat(66),
-		pad(
-			`Seeds to creators (${r.creatorSeeds} × $${SEED_PRICE}.00, directed by you)`,
-			`$${r.directedGross}`,
-		),
+		pad(`To creators (directed by you)`, `$${r.directedGross}`),
 		pad(
 			`  → reaching them, less their $${r.paymentsCreator} share of the card fee`,
 			`$${r.directedNet}`,
 		),
 		"",
-		pad(
-			`Seeds given to Anthers (${r.anthersSeeds} · Sprout)`,
-			`$${(r.anthersSeeds * SEED_PRICE).toFixed(2)}`,
-		),
+		pad(`To Anthers (Sprout)`, `$${r.anthersDollars.toFixed(2)}`),
 		// "creators you spent time with", not "creators you watched", and "by time" rather
 		// than "by watch-time": the platform hosts four media and measures them on one
 		// clock. Naming the video one makes it the default unit of a thing it is a quarter
@@ -298,7 +291,7 @@ function renderReceiptMarkdown(): string {
 		pad("  Payments → this side's share of the card fee (at cost)", `$${r.paymentsAnthers}`),
 		pad("  Free access & programs (the remainder)", `$${r.remainder}`),
 		"─".repeat(66),
-		pad("Seeds subtotal (all-in)", `$${r.seedsSubtotal}`),
+		pad("Support subtotal (all-in)", `$${r.supportSubtotal}`),
 		pad(
 			`Sales tax (${(SALES_TAX_RATE * 100).toFixed(1)}%, the only thing added on top)`,
 			`+$${r.salesTax}`,
@@ -316,7 +309,7 @@ function renderSaleMarkdown(): string {
 	// 2 GiB game took home different amounts — and since 2026-08-12 it doesn't, so
 	// keeping both would print the same row twice.
 	const rows = [...new Map(saleTable().map((r) => [r.price, r])).values()];
-	const seed = directedSeedWorstCase();
+	const seed = directedSupportWorstCase();
 	return [
 		table(
 			["Sale", "Creator receives", "Card"],
@@ -553,15 +546,15 @@ function renderSeedMixMarkdown(): string {
 	const collapse = rows[rows.length - 1];
 	return [
 		table(
-			["Avg Seeds / payer", "Inflection 1"],
+			["Avg monthly support / payer", "Inflection 1"],
 			["--:", "--:"],
 			rows.map((r) => [
-				r.current ? `**${r.avgSeeds}** *(current assumption)*` : r.avgSeeds,
+				r.current ? `**$${r.avgSeeds}** *(current assumption)*` : `$${r.avgSeeds}`,
 				r.current ? `**${accounts(r.accounts)}**` : accounts(r.accounts),
 			]),
 		),
 		"",
-		`🚨 **The single biggest risk to the ladder is it flattening, not the economics.** Binary Public Access removes the reason to hold more than one Seed given to Anthers, so the paying population slides toward exactly one unless something above the first Seed earns it. A near-total collapse to ${collapse.avgSeeds} Seeds a payer puts inflection 1 at ${accounts(collapse.accounts)} against ${accounts(current?.accounts ?? null)} today — **still worse than the ~57,500 of the pre-R2 world**, so the R2 windfall does not quite cover it, but by about ${(((collapse.accounts as number) / 57_500) * 100 - 100).toFixed(0)}% rather than the ninety it was once thought to be.`,
+		`🚨 **The single biggest risk to the ladder is it flattening, not the economics.** Binary Public Access removes the reason to give Anthers more than the Public Access price, so the paying population slides toward exactly that unless something above it earns more. A near-total collapse to $${collapse.avgSeeds} a payer puts inflection 1 at ${accounts(collapse.accounts)} against ${accounts(current?.accounts ?? null)} today — **still worse than the ~57,500 of the pre-R2 world**, so the R2 windfall does not quite cover it, but by about ${(((collapse.accounts as number) / 57_500) * 100 - 100).toFixed(0)}% rather than the ninety it was once thought to be.`,
 	].join("\n");
 }
 
@@ -948,13 +941,13 @@ function publishedFigures(): Map<string, string[]> {
 	};
 	// The two dials prose quotes directly, named first so the message points at the
 	// import a page actually wants rather than at the table row that happens to equal it.
-	add(SEED_PRICE.toFixed(2), "SEED_PRICE (@anthers/shared/constants)");
-	add(TIME_POOL_PER_SEED.toFixed(2), "TIME_POOL_PER_SEED (@anthers/shared/constants)");
+	add(PUBLIC_ACCESS_PRICE.toFixed(2), "PUBLIC_ACCESS_PRICE (@anthers/shared/constants)");
+	add(timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2), "timePoolFor(PUBLIC_ACCESS_PRICE)");
 	for (const r of badgeTable()) record("BADGE_TABLE", r, "badge");
 	for (const r of saleTable()) record("SALE_TABLE", r, "label");
 	for (const r of purchaseExamples()) record("purchaseExamples()", r, "label");
 	record("SAMPLE_RECEIPT", sampleReceipt());
-	record("DIRECTED_SEED_WORST_CASE", directedSeedWorstCase());
+	record("DIRECTED_SUPPORT_WORST_CASE", directedSupportWorstCase());
 	record("cartSaving()", cartSaving());
 	record("creatorReceipt()", creatorReceipt());
 	const s = selfSufficiency();
@@ -1155,7 +1148,7 @@ async function reconcile(path: string, next: string, label: string) {
 
 // ── run ──────────────────────────────────────────────────────────────────────
 console.log(
-	`econ-figures: SEED_PRICE=$${SEED_PRICE} TIME_POOL_PER_SEED=$${TIME_POOL_PER_SEED} CARD=${(CARD_RATE * 100).toFixed(1)}%+$${CARD_FLAT.toFixed(2)}`,
+	`econ-figures: PUBLIC_ACCESS_PRICE=$${PUBLIC_ACCESS_PRICE} TIME_POOL_RATE=${TIME_POOL_RATE} CARD=${(CARD_RATE * 100).toFixed(1)}%+$${CARD_FLAT.toFixed(2)}`,
 );
 
 await reconcile(

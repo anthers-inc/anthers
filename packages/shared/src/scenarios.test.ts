@@ -13,12 +13,12 @@ import {
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	SALES_TAX_RATE,
-	SEED_PRICE,
+	PUBLIC_ACCESS_PRICE,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
 import {
 	affordable,
-	averageSeeds,
+	averageSupport,
 	crossover,
 	floorPayingShare,
 	modelAt,
@@ -30,7 +30,7 @@ import {
 import {
 	badgeTable,
 	creatorReceipt,
-	directedSeedWorstCase,
+	directedSupportWorstCase,
 	PAYING_BADGE_MIX,
 	saleTable,
 	sampleReceipt,
@@ -47,10 +47,16 @@ describe("badgeTable", () => {
 		}
 	});
 
-	test("the charge is exactly $3 per Seed — the price is all-in", () => {
+	test("the charge IS the rung's amount — the price is all-in", () => {
 		for (const r of badgeTable()) {
-			expect(r.charge).toBe((SEED_PRICE * r.seeds).toFixed(2));
+			expect(r.charge).toBe(r.monthly.toFixed(2));
 		}
+	});
+
+	test("the first rung is the Public Access price, and nothing above it buys more access", () => {
+		// The one Anthers amount that is a product decision rather than a dial: $3 opens
+		// the whole commons, and the rungs above it buy standing, never reach.
+		expect(badgeTable()[0].monthly).toBe(PUBLIC_ACCESS_PRICE);
 	});
 
 	test("the remainder is strictly positive at every Badge", () => {
@@ -77,7 +83,7 @@ describe("sampleReceipt", () => {
 		// The bug this test was written for: showing `payments` (the total) here instead
 		// of `paymentsAnthers` double-counts the creator side's share and the block
 		// overshoots the charge.
-		const anthersCharge = D((r.anthersSeeds * SEED_PRICE).toFixed(2));
+		const anthersCharge = D(r.anthersDollars.toFixed(2));
 		const sum = D(r.timePool).plus(r.paymentsAnthers).plus(r.remainder);
 		expect(sum.toFixed(2)).toBe(anthersCharge.toFixed(2));
 	});
@@ -90,9 +96,9 @@ describe("sampleReceipt", () => {
 		expect(D(r.directedGross).minus(r.paymentsCreator).toFixed(2)).toBe(r.directedNet);
 	});
 
-	test("the subtotal is the Seeds themselves, and tax is the ONLY thing added", () => {
-		const subtotal = D(((r.anthersSeeds + r.creatorSeeds) * SEED_PRICE).toFixed(2));
-		expect(r.seedsSubtotal).toBe(subtotal.toFixed(2));
+	test("the subtotal is what was given, and tax is the ONLY thing added", () => {
+		const subtotal = D((r.anthersDollars + r.creatorDollars).toFixed(2));
+		expect(r.supportSubtotal).toBe(subtotal.toFixed(2));
 		expect(r.salesTax).toBe(subtotal.mul(SALES_TAX_RATE).toDecimalPlaces(2).toFixed(2));
 		expect(r.totalBilled).toBe(subtotal.plus(r.salesTax).toFixed(2));
 	});
@@ -103,7 +109,7 @@ describe("sampleReceipt", () => {
 
 	test("nothing is unaccounted for — the whole subtotal lands somewhere", () => {
 		const accounted = D(r.toCreators).plus(r.payments).plus(r.remainder);
-		expect(accounted.toFixed(2)).toBe(r.seedsSubtotal);
+		expect(accounted.toFixed(2)).toBe(r.supportSubtotal);
 	});
 });
 
@@ -143,20 +149,43 @@ describe("saleTable", () => {
 	});
 });
 
-describe("directedSeedWorstCase", () => {
-	test("matches supportBreakdown's creatorNet for a lone Seed", () => {
-		const w = directedSeedWorstCase();
-		const s = supportBreakdown({ anthersSeeds: 0, creatorSeeds: 1 });
+describe("directedSupportWorstCase", () => {
+	test("matches supportBreakdown's creatorNet for a lone monthly gift", () => {
+		const w = directedSupportWorstCase();
+		const s = supportBreakdown({ anthersDollars: 0, creatorDollars: PUBLIC_ACCESS_PRICE });
 		expect(w.net).toBe(s.creatorNet.toFixed(2));
 		expect(D(w.gross).minus(w.cardFee).toFixed(2)).toBe(w.net);
 	});
 
 	test("is genuinely the worst case — batching always pays the creator more", () => {
-		const worst = D(directedSeedWorstCase().net);
-		for (const n of [1, 2, 3, 4]) {
-			const batched = supportBreakdown({ anthersSeeds: n, creatorSeeds: 1 }).creatorNet;
+		const worst = D(directedSupportWorstCase().net);
+		for (const anthersDollars of [3, 6, 9, 12]) {
+			const batched = supportBreakdown({
+				anthersDollars,
+				creatorDollars: PUBLIC_ACCESS_PRICE,
+			}).creatorNet;
 			expect(batched.greaterThan(worst)).toBe(true);
 		}
+	});
+
+	/**
+	 * 🚨 The claim the retired $3 unit rested on, and it is now checkable at any amount.
+	 *
+	 * "A $1 charge loses ~33% to processing, a $3 charge ~13%" was the whole written
+	 * justification for a granularity floor. It is still true of a charge **in isolation**
+	 * — and irrelevant, because since PR #223 one subscription carries everything a user
+	 * gives, so the fixed $0.30 is paid once a month whatever the denomination. A creator
+	 * set at $1 beside anything else is not paying a $1 charge's processing.
+	 */
+	test("a small amount is only expensive ALONE, which is why the floor went", () => {
+		const alone = supportBreakdown({ anthersDollars: 0, creatorDollars: 1 });
+		const deduction = D(1).minus(alone.creatorNet).dividedBy(1);
+		expect(deduction.toNumber()).toBeGreaterThan(0.3); // ~33% — the old argument
+
+		// The same $1 riding on a month that already carries the Public Access price.
+		const batched = supportBreakdown({ anthersDollars: PUBLIC_ACCESS_PRICE, creatorDollars: 1 });
+		const share = D(1).minus(batched.creatorNet).dividedBy(1);
+		expect(share.toNumber()).toBeLessThan(0.12);
 	});
 });
 
@@ -224,7 +253,7 @@ describe("selfSufficiency", () => {
 	});
 
 	test("the mix is the growth model's, averaging 2.20 Seeds per payer", () => {
-		expect(s.averageSeeds).toBe(averageSeeds(payingBadgeMix()).toFixed(2));
+		expect(s.averageSupport).toBe(averageSupport(payingBadgeMix()).toFixed(2));
 		expect(Number(s.revenuePerPayingUser)).toBeCloseTo(
 			remainderPerPayingAccount(PAYING_BADGE_MIX),
 			2,

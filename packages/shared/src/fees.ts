@@ -13,7 +13,7 @@ import {
 	SALES_TAX_RATE,
 	SELF_HOST_FEE,
 	STORAGE_PER_GIB_MONTH,
-	seedCost,
+	supportAmount,
 	timePoolFor,
 } from "./constants.js";
 
@@ -39,22 +39,26 @@ export function cardFee(amount: Decimal | number): Decimal {
 }
 
 /**
- * Split the at-cost card fee on a whole batched monthly charge between the
- * Anthers-Seeds and the directed Seeds riding on it, pro-rata by dollar value.
+ * Split the at-cost card fee on a whole batched monthly charge between what a user
+ * gives Anthers and what they give creators, pro-rata by dollar value.
  *
- * The fixed $0.30 is per *charge*, not per Seed, so a user who gives directed
- * Seeds alongside Anthers-Seeds amortises it across a bigger charge — which
- * leaves a fatter remainder AND pays their creators more. That effect
- * is the whole reason every Seed batches onto one monthly transaction.
+ * The fixed $0.30 is per *charge*, not per recipient, so a user supporting creators
+ * alongside Anthers amortises it across a bigger charge — which leaves a fatter
+ * remainder AND pays their creators more. That effect is the whole reason everything a
+ * user gives batches onto one monthly transaction, and since 2026-08-16 it is also the
+ * whole of the argument the retired $3 unit used to carry: the fee is paid once a month
+ * whatever the denomination, so it can only ever justify a minimum *invoice total*.
+ *
+ * ⚠️ Both arguments are **dollars** now, not counts. They were whole Seed counts until
+ * 2026-08-16, and the old body floored them — which is exactly the coercion that has to
+ * go, or a $7.50 gift silently becomes $7.
  */
 export function paymentsSplit(
-	anthersSeeds: number,
-	creatorSeeds: number,
+	anthersDollars: number,
+	creatorDollars: number,
 ): { total: Decimal; anthers: Decimal; creator: Decimal } {
-	const a = Math.max(0, Math.floor(anthersSeeds));
-	const c = Math.max(0, Math.floor(creatorSeeds));
-	const anthersValue = new Decimal(seedCost(a));
-	const creatorValue = new Decimal(seedCost(c));
+	const anthersValue = new Decimal(supportAmount(anthersDollars));
+	const creatorValue = new Decimal(supportAmount(creatorDollars));
 	const charge = anthersValue.plus(creatorValue);
 	const total = cardFee(charge);
 	if (charge.lte(0))
@@ -67,11 +71,11 @@ export function paymentsSplit(
 
 // ── Anthers-Seed decomposition ────────────────────────────────────────────────
 /**
- * Decompose a user's Anthers-Seeds into where each $3 goes:
+ * Decompose what a user gives Anthers into where it goes:
  *
- *   Anthers-Seed value ($3 × n) = Time Pool + Payments + remainder
+ *   what they give = Time Pool + Payments + remainder
  *
- * Time Pool ($1.50/Seed) is a fixed target to creators and never moves; `payments`
+ * Time Pool (half of what they give) is a fixed target to creators and never moves; `payments`
  * is this side's share of the at-cost card fee (see `paymentsSplit`); the
  * **remainder is what's left** — the shock absorber, so an expensive charge shrinks
  * the mission share while creator pay stays exactly the same. Free (n = 0) pays $0:
@@ -83,39 +87,44 @@ export function paymentsSplit(
  * anywhere else, because the remainder is the residual by construction — which made
  * that retirement an increase in charitable funding, not a deleted fee.
  *
+ * ⚠️ It took a whole **Seed count** until 2026-08-16 and takes **dollars** now. The old
+ * body floored its argument, which is the coercion that had to go with the unit: an
+ * issuer may sit at any amount, so flooring $7.50 to $7 would quietly under-credit both
+ * the Time Pool and the remainder.
+ *
  * `payments` defaults to 0 so a caller that only wants the Time-Pool view is
  * unaffected — but anything crediting the **charitable ledger** must pass it, or
  * the charitable ledger is over-credited by the card fee.
  */
-export function anthersSeedBreakdown(
-	anthersSeeds: number,
+export function anthersSupportBreakdown(
+	anthersDollars: number,
 	opts: { payments?: Decimal | number } = {},
 ): {
-	anthersSeeds: number;
-	seedValue: Decimal;
+	anthersDollars: number;
+	given: Decimal;
 	timePool: Decimal;
 	payments: Decimal;
 	foundation: Decimal;
 	subsidised: boolean;
 } {
-	const n = Math.max(0, Math.floor(anthersSeeds));
-	const seedValue = new Decimal(seedCost(n));
+	const n = supportAmount(anthersDollars);
+	const given = new Decimal(n);
 	const timePool = new Decimal(timePoolFor(n));
 	const payments = new Decimal(opts.payments ?? 0);
 	if (n === 0) {
 		return {
-			anthersSeeds: 0,
-			seedValue: new Decimal(0),
+			anthersDollars: 0,
+			given: new Decimal(0),
 			timePool,
 			payments: new Decimal(0),
 			foundation: new Decimal(0),
 			subsidised: true,
 		};
 	}
-	const foundation = seedValue.minus(timePool).minus(payments);
+	const foundation = given.minus(timePool).minus(payments);
 	return {
-		anthersSeeds: n,
-		seedValue,
+		anthersDollars: n,
+		given,
 		timePool,
 		payments,
 		foundation,
@@ -124,54 +133,52 @@ export function anthersSeedBreakdown(
 }
 
 /**
- * The full monthly support breakdown for a user holding `anthersSeeds` Anthers-
- * Seeds and `creatorSeeds` directed Seeds.
+ * The full monthly support breakdown for a user giving Anthers `anthersDollars` and
+ * creators `creatorDollars` a month.
  *
  * Anthers takes **no cut** — but the at-cost card fee comes out of the charge
- * rather than riding on top of it, so a directed Seed reaches its creator less
- * that Seed's pro-rata share. `total` is therefore the Seed subtotal itself: the
+ * rather than riding on top of it, so directed support reaches its creator less
+ * its pro-rata share. `total` is therefore the support subtotal itself: the
  * price is all-in, and sales tax is the only thing a caller adds on top.
  *
- * `creatorDirect` is the **gross** directed-Seed value; `creatorNet` is what
+ * `creatorDirect` is the **gross** directed value; `creatorNet` is what
  * actually reaches creators. Use `creatorNet` for anything describing payout.
  */
-export function supportBreakdown(params: { anthersSeeds: number; creatorSeeds: number }): {
+export function supportBreakdown(params: { anthersDollars: number; creatorDollars: number }): {
 	creatorDirect: Decimal;
 	creatorNet: Decimal;
 	timePool: Decimal;
 	foundation: Decimal;
 	toCreators: Decimal;
-	seedsSubtotal: Decimal;
+	supportSubtotal: Decimal;
 	payments: Decimal;
 	total: Decimal;
 } {
-	const split = paymentsSplit(params.anthersSeeds, params.creatorSeeds);
-	const anthers = anthersSeedBreakdown(params.anthersSeeds, { payments: split.anthers });
-	const creatorDirect = new Decimal(seedCost(Math.max(0, Math.floor(params.creatorSeeds))));
+	const split = paymentsSplit(params.anthersDollars, params.creatorDollars);
+	const anthers = anthersSupportBreakdown(params.anthersDollars, { payments: split.anthers });
+	const creatorDirect = new Decimal(supportAmount(params.creatorDollars));
 	const creatorNet = creatorDirect.minus(split.creator);
-	const seedsSubtotal = creatorDirect.plus(anthers.seedValue);
+	const supportSubtotal = creatorDirect.plus(anthers.given);
 	return {
 		creatorDirect,
 		creatorNet,
 		timePool: anthers.timePool,
 		foundation: anthers.foundation,
 		toCreators: creatorNet.plus(anthers.timePool),
-		seedsSubtotal,
+		supportSubtotal,
 		payments: split.total,
-		total: seedsSubtotal,
+		total: supportSubtotal,
 	};
 }
 
 /** A rung of Anthers' Badge ladder as a display view model — money pre-rounded to 2dp. */
 export interface BadgeView {
-	/** Badge name, or "free" for the 0-Seed rung, which is the absence of a Badge. */
+	/** Badge name, or "free" for the $0 rung, which is the absence of a Badge. */
 	id: BadgeKey;
 	name: string;
-	/** Anthers-Seeds required for this rung (0 = no Badge … 4 = blossom). */
-	anthersSeeds: number;
-	/** Monthly $ to hold this rank ($3 × anthersSeeds). */
+	/** Monthly $ to hold this rung (0 = no Badge … 12 = blossom). */
 	price: number;
-	/** Time Pool $ at this rank (to creators, by time). */
+	/** Time Pool $ at this rung (to creators, by time). */
 	timePool: string;
 	/** "Supports Anthers" — the remainder, funding free access and the programs. */
 	supportsAnthers: string;
@@ -179,40 +186,37 @@ export interface BadgeView {
 }
 
 /**
- * The rank ladder as view models, low → high (free … blossom). Pure and static —
- * derived from the Seed dials, no per-user data — so the Subscribe page, the
+ * The rung ladder as view models, low → high (free … blossom). Pure and static —
+ * derived from the dials, no per-user data — so the Subscribe page, the
  * `/subscriptions/ranks` route, and inline-unlock all render the same numbers and
  * can't drift. "Supports Anthers" is the remainder — what is left of the charge
  * after the Time Pool, funding free access and the charitable programs.
  */
 export function badgeViews(): BadgeView[] {
-	// The 0-Seed rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's
-	// prepended here for display only. Seed counts come from each Badge's THRESHOLD,
+	// The $0 rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's
+	// prepended here for display only. Amounts come from each Badge's THRESHOLD,
 	// never from its position: this list is ordered by threshold, but nothing reads
 	// the index, so a Badge set with gaps renders correctly too.
-	const rungs: Array<{ id: BadgeKey; seeds: number }> = [
-		{ id: "free", seeds: 0 },
-		...ANTHERS_BADGES.map((b) => ({ id: b.name as Badge, seeds: b.threshold })),
+	const rungs: Array<{ id: BadgeKey; amount: number }> = [
+		{ id: "free", amount: 0 },
+		...ANTHERS_BADGES.map((b) => ({ id: b.name as Badge, amount: b.threshold })),
 	];
-	return rungs.map(({ id, seeds }) => {
-		const badge = id;
-		const n = seeds;
-		const price = seedCost(n);
-		// Delegated to `anthersSeedBreakdown` rather than re-derived. It used to compute
+	return rungs.map(({ id, amount }) => {
+		const price = supportAmount(amount);
+		// Delegated to `anthersSupportBreakdown` rather than re-derived. It used to compute
 		// `price - timePool` inline, which silently OMITTED the Payments term and so
 		// overstated the remainder by exactly the card fee — $1.50 at Root against a true
 		// $1.11. Same shape as the five hand-rolled card-fee copies and as `creatorReceipt`
 		// re-deriving the storage formula: a duplicated formula agrees with its original
 		// right up until a term moves, and here the term had already moved.
-		const bd = anthersSeedBreakdown(n, { payments: n === 0 ? 0 : cardFee(price) });
+		const bd = anthersSupportBreakdown(price, { payments: price === 0 ? 0 : cardFee(price) });
 		return {
-			id: badge,
-			name: badgeLabel(badge),
-			anthersSeeds: n,
+			id,
+			name: badgeLabel(id),
 			price,
 			timePool: bd.timePool.toFixed(2),
 			supportsAnthers: bd.foundation.toFixed(2),
-			subsidised: n === 0,
+			subsidised: price === 0,
 		};
 	});
 }

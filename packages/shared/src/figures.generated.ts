@@ -14,7 +14,7 @@
 export const BADGE_TABLE = [
 	{
 		badge: "Root",
-		seeds: 1,
+		monthly: 3,
 		charge: "3.00",
 		timePool: "1.50",
 		payments: "0.39",
@@ -22,7 +22,7 @@ export const BADGE_TABLE = [
 	},
 	{
 		badge: "Sprout",
-		seeds: 2,
+		monthly: 6,
 		charge: "6.00",
 		timePool: "3.00",
 		payments: "0.47",
@@ -30,7 +30,7 @@ export const BADGE_TABLE = [
 	},
 	{
 		badge: "Petal",
-		seeds: 3,
+		monthly: 9,
 		charge: "9.00",
 		timePool: "4.50",
 		payments: "0.56",
@@ -38,7 +38,7 @@ export const BADGE_TABLE = [
 	},
 	{
 		badge: "Blossom",
-		seeds: 4,
+		monthly: 12,
 		charge: "12.00",
 		timePool: "6.00",
 		payments: "0.65",
@@ -90,8 +90,8 @@ export const SALE_TABLE = [
 
 /** The sample monthly receipt: a Sprout who also directs two Seeds. */
 export const SAMPLE_RECEIPT = {
-	anthersSeeds: 2,
-	creatorSeeds: 2,
+	anthersDollars: 6,
+	creatorDollars: 6,
 	directedGross: "6.00",
 	directedNet: "5.67",
 	timePool: "3.00",
@@ -99,14 +99,14 @@ export const SAMPLE_RECEIPT = {
 	paymentsAnthers: "0.32",
 	paymentsCreator: "0.33",
 	remainder: "2.68",
-	seedsSubtotal: "12.00",
+	supportSubtotal: "12.00",
 	salesTax: "0.78",
 	totalBilled: "12.78",
 	toCreators: "8.67",
 } as const;
 
-/** A lone directed Seed — the worst case, and what creator-facing copy quotes. */
-export const DIRECTED_SEED_WORST_CASE = {
+/** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
+export const DIRECTED_SUPPORT_WORST_CASE = {
 	gross: "3.00",
 	net: "2.61",
 	cardFee: "0.39",
