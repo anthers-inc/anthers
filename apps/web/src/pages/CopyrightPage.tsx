@@ -39,6 +39,7 @@
  * address in.
  */
 
+import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
@@ -122,6 +123,7 @@ export default function CopyrightPage() {
 	const [attestation, setAttestation] = useState<AttestationText | null>(null);
 	const [counts, setCounts] = useState<DmcaCounts | null>(null);
 	const [myNotices, setMyNotices] = useState<MyNotice[]>([]);
+	const { user } = useAuth();
 
 	useEffect(() => {
 		window.scrollTo(0, 0);
@@ -137,13 +139,23 @@ export default function CopyrightPage() {
 			.then((r) => r.json())
 			.then(setCounts)
 			.catch(() => {});
-		// 401 for a signed-out visitor, which is the ordinary case rather than an
-		// error — the section simply doesn't render.
+	}, []);
+
+	// Gated on being signed in rather than firing and handling the 401. The
+	// endpoint refuses a stranger either way, so this is not the access control —
+	// it is that /copyright is a page a signed-out rights holder is *expected* to
+	// land on, and greeting every one of them with a 401 in the console makes the
+	// page look broken to anyone who looks.
+	useEffect(() => {
+		if (!user) {
+			setMyNotices([]);
+			return;
+		}
 		apiFetch("/api/dmca/notices/mine")
 			.then((r) => (r.ok ? r.json() : { notices: [] }))
 			.then((d) => setMyNotices(d.notices ?? []))
 			.catch(() => {});
-	}, []);
+	}, [user]);
 
 	return (
 		<div className="container mx-auto max-w-3xl px-4 py-10">
