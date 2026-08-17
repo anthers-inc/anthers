@@ -4,6 +4,7 @@
 // database — the DB half (`apps/api/src/services/public-access.ts`) only feeds it, and
 // the enforcement half is pinned in `apps/api/src/__tests__/public-access-meter.test.ts`.
 import { describe, expect, test } from "bun:test";
+import { PUBLIC_ACCESS_PRICE } from "./constants.js";
 import {
 	FREE_PUBLIC_ACCESS_HOURS,
 	FREE_PUBLIC_ACCESS_SECONDS,
@@ -41,42 +42,60 @@ describe("the free allowance", () => {
 	});
 });
 
-describe("what a Seed given to Anthers does", () => {
+describe("what supporting Anthers does", () => {
 	/**
-	 * The model's central claim about access, and the reason it is asserted across a wide
-	 * range rather than at one value: **access is binary and arrives whole at the first
-	 * Seed.** Nothing above it buys more. A regression here would most likely look like
-	 * someone reintroducing a ladder — a limit that scales per Seed — which is precisely
-	 * the stratified commons that retiring Anthers Gates was for.
+	 * The model's central claim about access, asserted across a wide range rather than at
+	 * one value: **access is binary and arrives whole at the Public Access price.** Nothing
+	 * above it buys more. A regression here would most likely look like someone
+	 * reintroducing a ladder — a limit that scales with the amount — which is precisely the
+	 * stratified commons that retiring Anthers Gates was for.
 	 */
-	test("one Seed removes the limit, and every count above it is identical", () => {
-		const one = publicAccessBudget(1, 500 * HOUR);
-		expect(one.unlimited).toBe(true);
-		expect(one.allowed).toBe(true);
-		expect(one.limitSeconds).toBeNull();
-		expect(one.remainingSeconds).toBeNull();
+	test("the Public Access price removes the limit, and every amount above it is identical", () => {
+		const at = publicAccessBudget(PUBLIC_ACCESS_PRICE, 500 * HOUR);
+		expect(at.unlimited).toBe(true);
+		expect(at.allowed).toBe(true);
+		expect(at.limitSeconds).toBeNull();
+		expect(at.remainingSeconds).toBeNull();
 
-		for (const seeds of [2, 3, 4, 5, 12, 100]) {
-			expect(publicAccessBudget(seeds, 500 * HOUR)).toEqual(one);
+		for (const amount of [3.01, 6, 9, 12, 25, 300]) {
+			expect(publicAccessBudget(amount, 500 * HOUR)).toEqual(at);
 		}
 	});
 
-	test("a Seed-holder who has watched enormously is still allowed", () => {
-		// There is no accumulation to exhaust — the point of "unlimited".
-		expect(publicAccessBudget(1, 10_000 * HOUR).allowed).toBe(true);
+	/**
+	 * 🚨 **The regression test for a live production defect.** This function took a Seed
+	 * COUNT and tested `Math.floor(seeds) >= 1` until 2026-08-17, while its caller had
+	 * already been converted to pass DOLLARS — so every amount from $1.00 to $2.99 bought
+	 * unlimited access priced at $3.
+	 *
+	 * The suite could not see it, because it also still called this in Seeds. That is what
+	 * a green suite looks like when a **contract** moves rather than an implementation, and
+	 * it is why these cases are pinned by amount rather than by unit-free integers.
+	 */
+	test("an amount below the price does NOT buy unlimited access", () => {
+		for (const amount of [0.01, 0.99, 1, 1.5, 2, 2.99]) {
+			const b = publicAccessBudget(amount, 0);
+			expect(b.unlimited, `$${amount}`).toBe(false);
+			expect(b.limitSeconds, `$${amount}`).toBe(FREE_PUBLIC_ACCESS_SECONDS);
+		}
+		// And the cent either side of the threshold, since the comparison is in cents.
+		expect(publicAccessBudget(PUBLIC_ACCESS_PRICE - 0.01, 0).unlimited).toBe(false);
+		expect(publicAccessBudget(PUBLIC_ACCESS_PRICE, 0).unlimited).toBe(true);
 	});
 
-	test("a fractional or negative Seed count is not a Seed", () => {
-		// Seeds are indivisible $3 units; a partial one cannot exist outside legacy rows,
-		// and must not round up into free unlimited access.
-		expect(publicAccessBudget(0.9, 0).unlimited).toBe(false);
+	test("a supporter who has watched enormously is still allowed", () => {
+		// There is no accumulation to exhaust — the point of "unlimited".
+		expect(publicAccessBudget(PUBLIC_ACCESS_PRICE, 10_000 * HOUR).allowed).toBe(true);
+	});
+
+	test("a negative amount is not support", () => {
 		expect(publicAccessBudget(-3, 0).unlimited).toBe(false);
 	});
 });
 
 describe("the shape of the answer", () => {
 	test("usage is reported even when unlimited, so the UI can still show it", () => {
-		expect(publicAccessBudget(2, 3 * HOUR).usedSeconds).toBe(3 * HOUR);
+		expect(publicAccessBudget(PUBLIC_ACCESS_PRICE, 3 * HOUR).usedSeconds).toBe(3 * HOUR);
 	});
 
 	test("usage is floored and never negative", () => {

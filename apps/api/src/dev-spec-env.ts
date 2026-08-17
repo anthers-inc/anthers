@@ -49,7 +49,6 @@ import { dirname, join } from "node:path";
  */
 const SHARED_FROM_SPEC = [
 	"PORT",
-	"STRIPE_PRICE_SEED",
 	"STRIPE_PUBLISHABLE_KEY",
 	"DMCA_AGENT_REGISTERED",
 	"DMCA_AGENT_NAME",

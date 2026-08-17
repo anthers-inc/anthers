@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { PUBLIC_ACCESS_PRICE } from "./constants.js";
+
 /**
  * The Public Access meter — how much ungated streaming a free account may watch each
- * month, and what a Seed given to Anthers does about it.
+ * month, and what supporting Anthers does about it.
  *
  * Pure (no clock, no I/O, no database), the same shape as `attention.ts` and
  * `services/access.ts`'s `resolveAccessSync`, so the whole policy is exhaustively
  * testable without a browser.
  *
  * **The rule, in full.** Every account watches **10 hours of Public Access a month, free
- * forever**. A single Seed given to Anthers removes the limit for as long as it is held,
- * and **no Seed above the first buys any more access** — what further Seeds buy is a
+ * forever**. Giving Anthers the Public Access price removes the limit for as long as it is
+ * kept up, and **nothing above it buys any more access** — what more buys is a
  * larger Time Pool for the creators the user watches. Access is binary and arrives whole
  * at the first Seed.
  *
@@ -64,15 +66,29 @@ export interface PublicAccessBudget {
 /**
  * Resolve a viewer's Public Access standing from the two facts it depends on.
  *
- * `anthersSeeds` is the count the viewer *currently holds* — point-in-time, like
- * everything else in the model. **One is the only number that matters**: the comparison
- * is `>= 1`, deliberately not `seedsMeet` against a Badge threshold, because a Badge no
- * longer decides access and reaching for that helper here is how the ladder would creep
- * back in.
+ * `anthersSupport` is the **monthly amount in dollars** the viewer currently gives Anthers
+ * — point-in-time, like everything else in the model. Reaching the Public Access price is
+ * the only threshold that matters, and nothing above it buys more.
+ *
+ * 🚨 **This took a Seed COUNT until 2026-08-17 and tested `Math.floor(seeds) >= 1`.** The
+ * Seed retirement converted the caller — `services/public-access.ts` began passing
+ * `supportAmount(...)`, i.e. dollars — and left this contract behind, so **$1 a month
+ * bought unlimited access priced at $3**, for anything above a dollar and below three.
+ *
+ * The unit tests could not see it: they still called this in Seeds (`publicAccessBudget(1,
+ * …)`), which is exactly what a passing suite looks like when a *contract* moves rather
+ * than an implementation. Comparing against the price rather than a bare `1` is what makes
+ * the units legible at the call site, and is why the constant is read here instead of a
+ * literal.
  */
-export function publicAccessBudget(anthersSeeds: number, usedSeconds: number): PublicAccessBudget {
+export function publicAccessBudget(
+	anthersSupport: number,
+	usedSeconds: number,
+): PublicAccessBudget {
 	const used = Math.max(0, Math.floor(usedSeconds));
-	if (Math.floor(anthersSeeds) >= 1) {
+	// Cents, because both sides are floats off a `numeric` column and dollars-as-floats is
+	// the comparison the Badge model already learned not to trust.
+	if (Math.round(anthersSupport * 100) >= Math.round(PUBLIC_ACCESS_PRICE * 100)) {
 		return {
 			unlimited: true,
 			usedSeconds: used,

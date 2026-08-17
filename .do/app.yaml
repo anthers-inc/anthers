@@ -162,8 +162,8 @@ envs:
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
   # catch and very nearly didn't: the two entries sat at different paths, so a key-set
   # comparison reported "one here, one there" without ever comparing the values.
-  # Stripe — TEST MODE in production, deliberately. Prod's STRIPE_PRICE_SEED is a
-  # test-mode object ($3/mo recurring, livemode:false), so no real money can move;
+  # Stripe — TEST MODE in production, deliberately. Every Stripe object here is
+  # test-mode (livemode:false), so no real money can move;
   # the site is behind SiteGate besides. This block was missing from this file
   # entirely while prod carried the values, which is how the drift went unnoticed:
   # `lib/stripe.ts` builds its client from STRIPE_SECRET_KEY alone, so having that
@@ -171,9 +171,12 @@ envs:
   # while the client still had no publishable key to mount Elements with.
   # STRIPE_SUBSCRIPTION_WEBHOOK_SECRET is deliberately NOT here — PR #118 removed
   # its last consumer, though the live spec still carries it.
-  - key: STRIPE_PRICE_SEED
-    scope: RUN_TIME
-    value: price_1TuuxeKtfvGGDfeNhvZrL2tm
+  # ⚠️ STRIPE_PRICE_SEED was here until 2026-08-17 and had been read by nothing since
+  # PR #24: the Seed retirement replaced one Price billed by quantity with a Product per
+  # destination priced inline, because a quantity can only express whole multiples of one
+  # unit. Its replacement is provisioned on demand (`ensureAnthersProduct`) rather than
+  # declared, since an id an operator must remember to set in every environment is the
+  # failure mode that took subscribing down in production the day the retirement shipped.
   # Publishable, i.e. designed to be shipped to browsers — a value, not a SECRET.
   # Read at RUNTIME by `GET /api/payments/stripe/config`; it is not a build-time var.
   - key: STRIPE_PUBLISHABLE_KEY

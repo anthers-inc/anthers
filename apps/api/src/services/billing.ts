@@ -58,9 +58,52 @@ async function snapshotCycle(
 		});
 }
 
-/** The Stripe Product the Anthers line is billed against (null if unset). */
-export function anthersProductId(): string | null {
-	return process.env.STRIPE_PRODUCT_ANTHERS?.trim() || null;
+/**
+ * The Stripe Product the Anthers line is billed against, provisioned on demand.
+ *
+ * 🚨 **This read `process.env.STRIPE_PRODUCT_ANTHERS` and nothing ever set it.** PR #24
+ * replaced the old one-price-times-a-quantity model with a Product per destination and
+ * introduced this variable; it was declared in no spec, no `.env.example` and no dev
+ * helper, and was absent from the running production app. `POST /account` returns **500**
+ * when it is null — so from the moment the retirement deployed, **subscribing was dead in
+ * production** and no test could see it, because tests supply their own Stripe double.
+ *
+ * The fix is not to declare the variable. A value an operator must remember to set in
+ * every environment is the failure, and this repo has now been bitten by that exact shape
+ * twice — `STUDIO_URL` is the other. So the platform Product is provisioned the same way a
+ * creator's is by `ensureCreatorProduct` below: looked up, created if absent, and found
+ * again by its metadata stamp rather than by a copied id.
+ *
+ * The env var still wins when set, so an operator who wants to pin a specific Product
+ * (a migration, a shared sandbox) can — it is an override, no longer a requirement.
+ */
+let cachedAnthersProduct: string | null = null;
+
+export async function ensureAnthersProduct(): Promise<string> {
+	const pinned = process.env.STRIPE_PRODUCT_ANTHERS?.trim();
+	if (pinned) return pinned;
+	if (cachedAnthersProduct) return cachedAnthersProduct;
+
+	const stripe = getStripe();
+	if (!stripe) throw new Error("Stripe not configured");
+
+	// `metadata.anthers = "platform"` is the stamp, and it is why this survives a restart
+	// without a database column: the Product is found by what it IS, not by an id someone
+	// wrote down. Search is eventually consistent on new objects, so the list is the
+	// authority and search is not used here.
+	for await (const product of stripe.products.list({ limit: 100, active: true })) {
+		if (product.metadata?.anthers === "platform") {
+			cachedAnthersProduct = product.id;
+			return product.id;
+		}
+	}
+
+	const created = await stripe.products.create({
+		name: "Support for Anthers",
+		metadata: { anthers: "platform" },
+	});
+	cachedAnthersProduct = created.id;
+	return created.id;
 }
 
 /** What one subscription item is for. `null` creatorId means the Anthers line. */

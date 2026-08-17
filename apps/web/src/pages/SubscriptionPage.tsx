@@ -13,7 +13,7 @@
  * There is no bandwidth line — streaming and downloads are unlimited and free.
  */
 
-import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { SupportStepper } from "@anthers/web-shared/economics/SupportStepper";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
@@ -434,7 +434,7 @@ export default function SubscriptionPage() {
 			.filter((r) => r.creatorId !== creatorId)
 			.reduce((s, r) => s + r.pendingSeed, 0);
 		const maxForThis = Math.max(floor, seedBudget - otherAllocated);
-		const clamped = Math.max(floor, Math.min(Math.floor(newVal), maxForThis));
+		const clamped = Math.max(floor, Math.min(supportAmount(newVal), maxForThis));
 		setPendingSeeds((prev) => {
 			const next = new Map(prev);
 			if (clamped === committed) next.delete(creatorId);
@@ -632,7 +632,7 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your support for Anthers funds
 					<InfoTip
-						text={`What you give Anthers funds the Time Pool ($${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and ${PUBLIC_ACCESS_PRICE} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
+						text={`What you give Anthers funds the Time Pool ($${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${PUBLIC_ACCESS_PRICE} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">

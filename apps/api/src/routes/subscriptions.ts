@@ -46,8 +46,8 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import {
-	anthersProductId,
 	createOneTimeCharge,
+	ensureAnthersProduct,
 	ensureCreatorProduct,
 	ensureStripeCustomer,
 	itemsFromSub,
@@ -321,7 +321,7 @@ const subscriptionRoutes = new Hono()
 			const sub = await stripe.subscriptions.retrieve(acct.stripeSubscriptionId).catch(() => null);
 			if (sub && (sub.status === "active" || sub.status === "trialing")) {
 				isChange = true;
-				const product = anthersProductId();
+				const product = await ensureAnthersProduct();
 				if (product) {
 					// Preview only the ANTHERS line moving. Sending the whole item set would
 					// price a change to every creator the user supports as well, which is not
@@ -442,8 +442,7 @@ const subscriptionRoutes = new Hono()
 				);
 			}
 
-			const product = anthersProductId();
-			if (!product) return c.json({ error: "No Stripe product configured for Anthers" }, 500);
+			const product = await ensureAnthersProduct();
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
 
 			// A Product per creator, so each line on the invoice names who it is for.

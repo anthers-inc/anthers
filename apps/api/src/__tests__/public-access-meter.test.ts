@@ -31,6 +31,7 @@ import {
 	transcodingJobs,
 	users,
 } from "@anthers/db/schema";
+import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -131,7 +132,14 @@ function playlist(workId: number, cookie?: string) {
 	});
 }
 
-async function setSeeds(userId: number, anthersSupport: number) {
+/**
+ * Set what this user gives Anthers, **in dollars**.
+ *
+ * ⚠️ Named `setSeeds` and called with Seed-era integers until 2026-08-17 — which is how
+ * this suite stayed green while `publicAccessBudget` compared dollars against `>= 1` and
+ * $1 a month bought unlimited access priced at $3.
+ */
+async function setSupport(userId: number, anthersSupport: number) {
 	await db
 		.insert(accounts)
 		.values({ userId, anthersSupport: anthersSupport.toFixed(2), isActive: true })
@@ -240,7 +248,7 @@ beforeAll(async () => {
 
 describe("the meter withholds bytes, not just numbers", () => {
 	it("serves Public Access to a free account inside its allowance", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await spend(viewerId, 60);
 		// Not a 402. (Storage has no real playlist behind the fixture URL, so a 404 here
 		// is the *pass* — it means the request got past every gate to the fetch.)
@@ -248,7 +256,7 @@ describe("the meter withholds bytes, not just numbers", () => {
 	});
 
 	it("refuses Public Access once the allowance is spent — 402, not 403", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await spend(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const res = await playlist(paWorkId, viewerCookie);
@@ -263,11 +271,11 @@ describe("the meter withholds bytes, not just numbers", () => {
 
 	/**
 	 * 🚨 The claim the whole model rests on: **access is binary and arrives whole at the
-	 * first Seed.** A regression would most plausibly look like a per-Seed allowance
+	 * Public Access price.** A regression would most plausibly look like a per-dollar allowance
 	 * creeping back in — the stratified commons retiring Anthers Gates was meant to end.
 	 */
-	it("one Seed removes the limit, however much has been watched", async () => {
-		await setSeeds(seededId, 1);
+	it("the Public Access price removes the limit, however much has been watched", async () => {
+		await setSupport(seededId, PUBLIC_ACCESS_PRICE);
 		await spend(seededId, FREE_PUBLIC_ACCESS_SECONDS * 5);
 		expect((await playlist(paWorkId, seededCookie)).status).not.toBe(402);
 	});
@@ -278,7 +286,7 @@ describe("what the meter must NOT charge for", () => {
 		// Over the limit AND holding a Seed given to this creator: the gate opens, and the
 		// meter must not close it. Billing a supporter's free allowance for work they paid
 		// a creator to reach charges them twice for one thing.
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await db.execute(sql`
 			INSERT INTO seed_allocations (user_id, creator_id, amount, billing_cycle)
 			VALUES (${viewerId}, ${creatorId}, '3.00', to_char(now(), 'YYYY-MM-01'))
@@ -309,7 +317,7 @@ describe("what the meter must NOT charge for", () => {
 	it("a creator's own catalogue draws no allowance", async () => {
 		// The creator is over any limit by construction — they have an account with no
 		// Seeds — and `owner` access is not free access.
-		await setSeeds(creatorId, 0);
+		await setSupport(creatorId, 0);
 		await spend(creatorId, FREE_PUBLIC_ACCESS_SECONDS * 2);
 		expect((await playlist(paWorkId, creatorCookie)).status).not.toBe(402);
 	});
@@ -324,7 +332,7 @@ describe("the stamp is taken at write time", () => {
 	 */
 	it("seconds stamped as non-Public-Access never draw the allowance", async () => {
 		const { cookie, id } = await signUp(`pam_stamp_${run}`);
-		await setSeeds(id, 0);
+		await setSupport(id, 0);
 		// Far past the limit, but none of it was the commons.
 		await spend(id, FREE_PUBLIC_ACCESS_SECONDS * 3, false);
 
@@ -337,7 +345,7 @@ describe("the stamp is taken at write time", () => {
 
 	it("the attention endpoint stamps the flag from the viewer's real access", async () => {
 		const { cookie, id } = await signUp(`pam_write_${run}`);
-		await setSeeds(id, 0);
+		await setSupport(id, 0);
 
 		const post = (workId: number) =>
 			req("/api/subscriptions/attention", {
@@ -375,7 +383,7 @@ describe("the stamp is taken at write time", () => {
 	 */
 	it("records gated work the viewer CLEARED without stamping it Public Access", async () => {
 		const { cookie, id } = await signUp(`pam_cleared_${run}`);
-		await setSeeds(id, 0);
+		await setSupport(id, 0);
 		// A Seed given to this creator this cycle: the gate opens for this viewer.
 		await db.execute(sql`
 			INSERT INTO seed_allocations (user_id, creator_id, amount, billing_cycle)
@@ -443,7 +451,7 @@ describe("media with no player of their own", () => {
 	}
 
 	it("serves a Public Access essay inside the allowance", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, 60);
 
 		const { work } = await fetchWork(textWorkId, viewerCookie);
@@ -451,7 +459,7 @@ describe("media with no player of their own", () => {
 	});
 
 	it("withholds the essay once the allowance is spent", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const { work } = await fetchWork(textWorkId, viewerCookie);
@@ -461,7 +469,7 @@ describe("media with no player of their own", () => {
 	});
 
 	it("withholds a game's embed once the allowance is spent", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const { work } = await fetchWork(gameWorkId, viewerCookie);
@@ -469,7 +477,7 @@ describe("media with no player of their own", () => {
 	});
 
 	it("🚨 still reports the Work as FREE — the meter is not a gate on the Work", async () => {
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const { work } = await fetchWork(textWorkId, viewerCookie);
@@ -485,12 +493,12 @@ describe("media with no player of their own", () => {
 		expect(work.publicAccess).toBe(true);
 	});
 
-	it("one Seed restores it, and nothing above the first buys more", async () => {
+	it("the Public Access price restores it, and nothing above it buys more", async () => {
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
-		await setSeeds(viewerId, 1);
+		await setSupport(viewerId, PUBLIC_ACCESS_PRICE);
 		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
 
-		await setSeeds(viewerId, 4);
+		await setSupport(viewerId, PUBLIC_ACCESS_PRICE * 4);
 		expect((await fetchWork(textWorkId, viewerCookie)).work.bodyHtml).toBe(TEXT_BODY);
 	});
 
@@ -509,7 +517,7 @@ describe("media with no player of their own", () => {
 		 * requires `access.isFree`. Gated work the viewer cleared is accessible but NOT
 		 * free, so it is untouched. Widen that condition to "canAccess" and this fails.
 		 */
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const { work } = await fetchWork(gatedTextWorkId, viewerCookie);
@@ -523,7 +531,7 @@ describe("media with no player of their own", () => {
 		// access reason alone — asserted so a refactor cannot collapse the two reasons
 		// into one flag: they mean different things and produce different UI.
 		const { cookie, id } = await signUp(`pam_nogate_${run}`);
-		await setSeeds(id, 0);
+		await setSupport(id, 0);
 		await setSpent(id, 0);
 
 		const { work } = await fetchWork(gatedTextWorkId, cookie);
@@ -555,7 +563,7 @@ describe("media with no player of their own", () => {
 		 * Found by sabotage — switching `assets` from `canAccess` to `deliverable` broke
 		 * no test in the entire suite before this one existed.
 		 */
-		await setSeeds(viewerId, 0);
+		await setSupport(viewerId, 0);
 		await setSpent(viewerId, FREE_PUBLIC_ACCESS_SECONDS);
 
 		const res = await req(`/api/content/works/${downloadableWorkId}`, {

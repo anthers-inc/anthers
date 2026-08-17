@@ -1430,7 +1430,11 @@ if (retired.length > 0) {
 }
 
 if (exempt.length > 0) {
-	console.log(`\necon-figures: ${exempt.length} file(s) exempt from the app scan:`);
+	// "file(s) … from the app scan" until 2026-08-17, when `allowRetired` started pushing
+	// generated BLOCKS onto the same list — so every line it printed was mislabelled as a
+	// file and attributed to a scan it never went through. A guard that misreports its own
+	// exemptions is teaching the reader to skim them.
+	console.log(`\necon-figures: ${exempt.length} exemption(s), each with a stated reason:`);
 	for (const e of exempt) console.log(`  ${e}`);
 	console.log("");
 }
