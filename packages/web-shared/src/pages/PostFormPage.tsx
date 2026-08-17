@@ -17,6 +17,7 @@ import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { postUrl } from "../lib/postUrl";
 import { client } from "../lib/rpc";
+import { studioEditPostUrl, studioUrl } from "../lib/studio";
 import type { Post, Project, Work } from "../lib/types";
 
 /** Parse `#hashtag` tokens out of the body text into a deduped tag list. */
@@ -138,9 +139,9 @@ export default function PostFormPage() {
 			workIds: linkedWorks.map((w) => w.id),
 		};
 
-		// After save: publish → the live post view (a separate origin on the Studio, which
-		// ConsumerRedirect carries the creator to); draft → stay in the Studio editor so
-		// they can keep filling media (E50 Phase 3 — authoring lives in the Studio, v1).
+		// After save: publish → the live post view; draft → stay in the Studio editor so they
+		// can keep filling media. Both are ordinary in-app paths — the Studio stopped being a
+		// separate origin on 2026-08-11, so there is no ConsumerRedirect hop any more.
 		try {
 			if (isEdit && slug) {
 				const res = await client.api.content.posts[":slug"].$patch({
@@ -152,7 +153,7 @@ export default function PostFormPage() {
 					return;
 				}
 				const { post } = (await res.json()) as { post: Post };
-				navigate(publish ? postUrl(post) : `/posts/${post.slug}/edit`);
+				navigate(publish ? postUrl(post) : studioEditPostUrl(post.slug));
 			} else {
 				const json = projectId ? { ...base, projectId: Number(projectId) } : base;
 				const res = await client.api.content.posts.$post({ json });
@@ -161,7 +162,7 @@ export default function PostFormPage() {
 					return;
 				}
 				const { post } = (await res.json()) as { post: Post };
-				navigate(publish ? postUrl(post) : `/posts/${post.slug}/edit`);
+				navigate(publish ? postUrl(post) : studioEditPostUrl(post.slug));
 			}
 		} catch {
 			setError("Failed to save post.");
@@ -320,7 +321,7 @@ export default function PostFormPage() {
 						<button
 							type="button"
 							className="btn btn-ghost"
-							onClick={() => navigate("/dashboard")}
+							onClick={() => navigate(studioUrl("/"))}
 							disabled={saving}
 						>
 							Cancel

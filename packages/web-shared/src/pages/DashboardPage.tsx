@@ -15,6 +15,13 @@ import { useAuth } from "../lib/auth";
 import { postUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
+import {
+	studioEditPostUrl,
+	studioEditProjectUrl,
+	studioNewPostUrl,
+	studioNewProjectUrl,
+	studioUrl,
+} from "../lib/studio";
 import type { CreatorEarnings, PostListItem, Project } from "../lib/types";
 
 export default function DashboardPage() {
@@ -149,19 +156,19 @@ export default function DashboardPage() {
 				<h1 className="text-2xl font-bold">Dashboard</h1>
 				{user?.isCreator && (
 					<div className="flex gap-2">
-						<Link to="/import" className="btn btn-ghost btn-sm">
+						<Link to={studioUrl("/import")} className="btn btn-ghost btn-sm">
 							<ArrowDownTrayIcon className="w-4 h-4" />
 							Import
 						</Link>
-						<Link to="/analytics" className="btn btn-ghost btn-sm">
+						<Link to={studioUrl("/analytics")} className="btn btn-ghost btn-sm">
 							<ChartBarIcon className="w-4 h-4" />
 							Analytics
 						</Link>
-						<Link to="/projects/new" className="btn btn-primary btn-sm">
+						<Link to={studioNewProjectUrl()} className="btn btn-primary btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Project
 						</Link>
-						<Link to="/posts/new" className="btn btn-outline btn-sm">
+						<Link to={studioNewPostUrl()} className="btn btn-outline btn-sm">
 							<PlusIcon className="w-4 h-4" />
 							New Post
 						</Link>
@@ -256,7 +263,7 @@ export default function DashboardPage() {
 										</td>
 										<td className="flex gap-1">
 											<Link
-												to={`/projects/${project.slug}/edit`}
+												to={studioEditProjectUrl(project.slug)}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
@@ -282,7 +289,7 @@ export default function DashboardPage() {
 						description="Create your first project to get started."
 						action={
 							user?.isCreator ? (
-								<Link to="/projects/new" className="btn btn-primary btn-sm">
+								<Link to={studioNewProjectUrl()} className="btn btn-primary btn-sm">
 									Create Project
 								</Link>
 							) : (
@@ -340,7 +347,7 @@ export default function DashboardPage() {
 										</td>
 										<td className="flex gap-1">
 											<Link
-												to={`/posts/${post.slug}/edit`}
+												to={studioEditPostUrl(post.slug)}
 												className="btn btn-ghost btn-xs"
 												title="Edit"
 											>
@@ -378,7 +385,7 @@ export default function DashboardPage() {
 						description="Write your first devlog or update."
 						action={
 							user?.isCreator ? (
-								<Link to="/posts/new" className="btn btn-primary btn-sm">
+								<Link to={studioNewPostUrl()} className="btn btn-primary btn-sm">
 									Write a Post
 								</Link>
 							) : undefined
