@@ -6,7 +6,8 @@
 	"license": "AGPL-3.0-or-later",
 	"workspaces": [
 		"packages/*",
-		"apps/*"
+		"apps/*",
+		"scripts"
 	],
 	"scripts": {
 		"dev": "bun run --filter '*' dev",
@@ -14,7 +15,7 @@
 		"dev:worker": "bun run --filter api dev:worker",
 		"dev:web": "bun run --filter web dev",
 		"build": "bun run --filter '*' build",
-		"typecheck": "bun run --filter '*' typecheck && bunx tsc --noEmit -p scripts/tsconfig.json",
+		"typecheck": "bun run --filter '*' typecheck",
 		"test": "bun run --filter '*' test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",

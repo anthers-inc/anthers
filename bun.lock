@@ -154,11 +154,20 @@
         "react-router-dom": "^7.0.0",
       },
     },
+    "scripts": {
+      "name": "@anthers/scripts",
+      "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "^5.8.0",
+      },
+    },
   },
   "packages": {
     "@anthers/brand": ["@anthers/brand@workspace:packages/brand"],
 
     "@anthers/db": ["@anthers/db@workspace:packages/db"],
+
+    "@anthers/scripts": ["@anthers/scripts@workspace:scripts"],
 
     "@anthers/shared": ["@anthers/shared@workspace:packages/shared"],
 
