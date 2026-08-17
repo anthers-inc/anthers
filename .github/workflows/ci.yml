@@ -237,8 +237,39 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # 🚨 NOT `--with-deps`, and the browser download was never the expensive half.
+      # Measured on the 2026-08-17 release run, which blew the 15-minute job timeout in
+      # this step alone (13m19s, against ~45-70s on a good day): the Chromium + headless
+      # shell + ffmpeg downloads took **10 seconds** end to end. The other ~12 minutes was
+      # `--with-deps` running apt-get against a stalled azure.archive.ubuntu.com mirror,
+      # in single gaps of 101s, 163s, 79s, 297s, 50s and 28s — every one of them fetching
+      # a FONT package (fonts-freefont-ttf, fonts-tlwg-loma-otf, fonts-wqy-zenhei,
+      # xfonts-encodings/utils/scalable). So the fix people reach for first — caching
+      # ~/.cache/ms-playwright while keeping --with-deps — would have saved ten seconds
+      # and left the failure exactly where it was.
+      #
+      # The runner image already ships Chromium's shared libraries (it carries Chrome and
+      # Edge), so what --with-deps actually adds here is glyph coverage for scripts this
+      # suite never renders. Our specs assert DOM text and visibility, and the site serves
+      # its OWN webfonts from public/fonts — a missing system font would change pixels,
+      # not `getByText`. Dropping it takes apt out of the critical path entirely.
+      #
+      # Deliberately NOT the official Playwright container, which would fix this too: it
+      # has to be pinned to the Playwright version, and that is a second copy of a version
+      # the lockfile already states — the exact drift the setup-bun comment above refuses.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Keyed on the lockfile, so a Playwright bump gets fresh binaries. It also
+          # invalidates on unrelated dependency changes; a miss costs the ten seconds
+          # measured above, so correctness is worth more here than the hit rate.
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      # A no-op when the cache restored the binaries, a re-download when it did not — so
+      # this is the self-healing step and the cache is only ever an optimization.
       - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install chromium
 
       # The gauntlet fixture generates a short clip and runs it through the real transcode
       # job, so the walk can assert delivered bytes rather than access reasons. Without
