@@ -142,7 +142,7 @@ export const BADGE_TABLE = ${j(badges)} as const;
  */
 export const SALE_TABLE = ${j(sales)} as const;
 
-/** The sample monthly receipt: a Sprout who also directs two Seeds. */
+/** The sample monthly receipt: a Sprout who also directs $6 to creators. */
 export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 
 /** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
@@ -245,7 +245,7 @@ function renderReadmeModelMarkdown(): string {
 			]),
 		),
 		"",
-		`A directed Seed is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator — that being the worst case, since batching several Seeds onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.`,
+		`A directed $${seed.gross} a month is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator — that being the worst case, since batching several destinations onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.`,
 	].join("\n");
 }
 
@@ -269,7 +269,7 @@ function renderBadgeMarkdown(): string {
 		"",
 		`Every row conserves exactly: Time Pool + Payments + remainder = the charge. **The remainder is the residual**, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
-		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's watch-hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
+		`**No row depends on how much anyone watches.** A *Bandwidth* column sat between the charge and the Time Pool until 2026-08-12, priced off a representative streamer's hours — so every remainder here was a scenario rather than a figure. Delivery costs $0 on R2 at any volume, so the column is gone and these numbers are exact. Watching more is free, and it takes nothing from the mission.`,
 	].join("\n");
 }
 
@@ -330,7 +330,7 @@ function renderSaleMarkdown(): string {
 		"",
 		`**Download size does not appear, because it no longer changes anything.** A digital sale used to carry the first download's bandwidth at cost, and redownloads drew the buyer's own allowance; delivery is free on R2, so every download of a purchased work is included, forever, on any number of devices.`,
 		"",
-		`A lone directed Seed is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator. Batching Seeds onto one monthly charge pays every creator on it more, because the $${CARD_FLAT.toFixed(2)} is fixed per charge.`,
+		`A lone directed $${seed.gross} a month is the same shape: $${seed.gross} gross, $${seed.cardFee} card, **$${seed.net}** to the creator. Batching every destination onto one monthly charge pays each creator on it more, because the $${CARD_FLAT.toFixed(2)} is fixed per charge.`,
 		"",
 		`Anthers keeps **$0.00** from every row. Creator storage is the only creator-side charge: the first ${FREE_STORAGE_GIB} GiB free, then the object-store rate plus half again.`,
 	].join("\n");
@@ -378,7 +378,7 @@ function renderCreatorReceiptMarkdown(): string {
 		"Your Earnings — February 2026                                  @LifeOfRiza",
 		"",
 		"━".repeat(66),
-		pad("Time Pool (by time spent) + directed Seeds (net of card)", `$${r.gross}`),
+		pad("Time Pool (by time spent) + directed support (net of card)", `$${r.gross}`),
 		pad(
 			`Storage (${r.libraryGiB} GiB library − ${r.freeGiB} GiB free = ${r.billableGiB} GiB, at cost)`,
 			`−$${r.storage}`,
@@ -389,7 +389,7 @@ function renderCreatorReceiptMarkdown(): string {
 		pad("Net earnings", `$${r.net}`),
 		"",
 		"Payouts carry no processing (Connect transfers are free); the only",
-		"deduction from a directed Seed is its share of the card fee.",
+		"deduction from directed support is its share of the card fee.",
 		"```",
 	].join("\n");
 }
@@ -581,7 +581,7 @@ function renderEdBandMarkdown(): string {
 function renderCreatorSegmentsMarkdown(): string {
 	const s = creatorSegments();
 	return [
-		`The modelled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by their Seed count, so a per-hour rate is an emergent ratio nobody is paid at.`,
+		`The modelled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by what they give, so a per-hour rate is an emergent ratio nobody is paid at.`,
 		"",
 		table(
 			["Segment", "Creators", "Attention", "Catalogue", "Time Pool /mo", "Storage /mo", "Net /mo"],
@@ -597,7 +597,7 @@ function renderCreatorSegmentsMarkdown(): string {
 			]),
 		),
 		"",
-		`**Free creators' first ${FREE_STORAGE_GIB} GiB is a free-access obligation**, funded from users' Seeds — the only cost line that scales with creators and is paid for by users. Everything above the free tier is the creator's own opt-in cost: the object-store rate plus half again, and nothing else, because delivery costs nobody anything.`,
+		`**Free creators' first ${FREE_STORAGE_GIB} GiB is a free-access obligation**, funded from what users give — the only cost line that scales with creators and is paid for by users. Everything above the free tier is the creator's own opt-in cost: the object-store rate plus half again, and nothing else, because delivery costs nobody anything.`,
 	].join("\n");
 }
 
@@ -627,7 +627,7 @@ function renderFreePotMarkdown(): string {
 	const shipped = rows.find((r) => r.shipped);
 	return [
 		table(
-			["Free pot / account", "Creator earns, with a Seed", "Floor paying share"],
+			["Free pot / account", "Creator earns, with support", "Floor paying share"],
 			["--:", "--:", "--:"],
 			rows.map((r) => [
 				r.shipped ? `**$${r.pot}** *(shipped)*` : `$${r.pot}`,
@@ -644,6 +644,20 @@ interface Block {
 	file: string;
 	key: string;
 	render: () => string;
+	/**
+	 * Why this block is exempt from the `RETIRED_COPY` self-check, when it is.
+	 *
+	 * A generated region **cannot carry an `econ:allow`** — the annotation would either be
+	 * overwritten on the next run or become part of the published output — so the exemption
+	 * has to live here, beside the renderer. Same contract as `econ:allow` otherwise: a
+	 * reason is required, and every exemption is printed on every run.
+	 *
+	 * ⚠️ The legitimate use is a **historical** sentence: "a digital sale *used to* carry the
+	 * first download's bandwidth" is true, and the word "first" is load-bearing — it names
+	 * which download was charged. `NOT_NEGATED` cannot express past tense, and rewording
+	 * around the guard would trade an accurate sentence for a passing one.
+	 */
+	allowRetired?: string;
 }
 
 const LADDER = "60-69 Strategy/61 Roadmap & Growth/61.01 Growth Phases and Join Quotas.md";
@@ -676,6 +690,8 @@ const BLOCKS: Block[] = [
 		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
+		allowRetired:
+			"names the retired first-download charge in the past tense, to explain why size left the table",
 	},
 	{
 		file: "20-29 User Experience/20 Support Model/20.01 Badges.md",
@@ -686,11 +702,14 @@ const BLOCKS: Block[] = [
 		file: "30-39 Creator Experience/31 Monetization/31.02 Direct Creator Purchases.md",
 		key: "purchase-examples",
 		render: renderPurchaseExamplesMarkdown,
+		allowRetired:
+			"names the retired first-download charge in the past tense, to explain why size is shown for scale only",
 	},
 	{
 		file: "60-69 Strategy/63 Brand/63.01 Copy Style Guide.md",
 		key: "sale-table",
 		render: renderSaleMarkdown,
+		allowRetired: "same renderer as 50.01's sale-table, and the same past-tense sentence",
 	},
 	{
 		file: "50-59 Business and Finance/50 Economics & Model/50.01 Support Model Economics and Milestones.md",
@@ -1258,17 +1277,44 @@ async function scanDocs() {
  * still interpolate an optional that happens to be absent, and TypeScript is right to
  * allow that.
  */
-function assertRendered(key: string, body: string): void {
+function assertRendered(key: string, body: string, allowRetired?: string): void {
 	if (/\b(undefined|NaN)\b/.test(body)) {
 		throw new Error(
 			`econ-figures: block "${key}" rendered a literal undefined/NaN — a renderer is ` +
 				`reading a field that no longer exists. Fix the renderer; do not commit the block.`,
 		);
 	}
+
+	// 🚨 **The generator is held to its own RETIRED_COPY rules**, added 2026-08-16.
+	//
+	// It was not, and the blind spot is structural rather than an oversight: `scanDocs`
+	// blanks generated regions before matching (`withoutGeneratedRegions`), precisely so a
+	// figure it just wrote is not then flagged as hand-typed. The consequence nobody drew
+	// is that **the one region no human may edit was also the one region nothing checked**
+	// — so the tool that guards this vocabulary spent the Seed retirement publishing
+	// "A lone directed Seed is the same shape" into four wiki docs, and `--check` passed.
+	//
+	// It surfaced the worst way available: a hand-sweep of those docs "fixed" the wording,
+	// which made the blocks stale, which failed a pre-push `make verify` on a production
+	// release. The words would otherwise have come back on the next generation.
+	if (allowRetired) {
+		exempt.push(`block "${key}" — ${allowRetired}`);
+		return;
+	}
+	for (const { pattern, why } of RETIRED_COPY) {
+		const hit = new RegExp(pattern.source, pattern.flags.replace("g", "")).exec(body);
+		if (hit) {
+			throw new Error(
+				`econ-figures: block "${key}" renders "${hit[0]}" — ${why}.\n` +
+					`      Fix the RENDERER, not the document: a hand edit inside a generated ` +
+					`region is reverted by the next run.`,
+			);
+		}
+	}
 }
 
-function splice(source: string, key: string, body: string): string | null {
-	assertRendered(key, body);
+function splice(source: string, key: string, body: string, allowRetired?: string): string | null {
+	assertRendered(key, body, allowRetired);
 	const begin = `<!-- econ:begin ${key} -->`;
 	const end = `<!-- econ:end ${key} -->`;
 	const i = source.indexOf(begin);
@@ -1323,7 +1369,7 @@ async function writeBlocks(root: string, blocks: Block[]) {
 			continue;
 		}
 		const current = byFile.get(path) ?? (await readFile(path, "utf8"));
-		const next = splice(current, b.key, b.render());
+		const next = splice(current, b.key, b.render(), b.allowRetired);
 		if (next === null) {
 			console.warn(`  ! no <!-- econ:begin ${b.key} --> markers in ${b.file}`);
 			continue;

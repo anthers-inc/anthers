@@ -65,7 +65,7 @@ Every account watches **10 hours of Public Access a month, free forever** — no
 | $20.00 digital | **$19.12** | $0.88 |
 | $25.00 physical | **$23.97** | $1.03 |
 
-A directed Seed is the same shape: $3.00 gross, $0.39 card, **$2.61** to the creator — that being the worst case, since batching several Seeds onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first 50 GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.
+A directed $3.00 a month is the same shape: $3.00 gross, $0.39 card, **$2.61** to the creator — that being the worst case, since batching several destinations onto one monthly charge pays every creator on it more. Download size does not appear because it changes nothing: every download of a purchased work is included, forever, on any number of devices. Creator storage is the only creator-side charge — the first 50 GiB free, then the object-store rate plus half again, and that half is what funds free access and the programs.
 
 <!-- econ:end readme-model -->
 

@@ -88,7 +88,7 @@ export const SALE_TABLE = [
 	},
 ] as const;
 
-/** The sample monthly receipt: a Sprout who also directs two Seeds. */
+/** The sample monthly receipt: a Sprout who also directs $6 to creators. */
 export const SAMPLE_RECEIPT = {
 	anthersDollars: 6,
 	creatorDollars: 6,
