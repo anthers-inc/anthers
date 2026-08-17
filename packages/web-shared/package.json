@@ -12,6 +12,7 @@
 		"./auth": "./src/lib/auth.tsx",
 		"./theme": "./src/lib/theme.ts",
 		"./postUrl": "./src/lib/postUrl.ts",
+		"./nextPath": "./src/lib/next-path.ts",
 		"./upload": "./src/lib/upload.ts",
 		"./transcode": "./src/lib/transcode.ts",
 		"./fonts": "./src/styles/fonts.ts",

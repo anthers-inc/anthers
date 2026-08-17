@@ -71,7 +71,8 @@ import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { Link, useNavigate } from "@anthers/web-shared/router";
+import { sanitizeNextPath, withNextPath } from "@anthers/web-shared/nextPath";
+import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -857,7 +858,22 @@ function Summary({
 export default function SubscribePage() {
 	const { user, refreshUser } = useAuth();
 	const navigate = useNavigate();
+	const location = useLocation();
 	const signedIn = !!user;
+
+	/**
+	 * Where to hand the visitor back to once this is over, if they came from somewhere.
+	 *
+	 * Set by the gated-post unlock modal, which is the case that matters: someone who
+	 * clicked "Create an account" to read one particular thing. It rides through the whole
+	 * detour — ceremony, possible payment modal, `/welcome` — and onboarding does the final
+	 * hop, because a new account still owes a handle and the terms before it goes anywhere.
+	 *
+	 * 🚨 Read through `sanitizeNextPath` every time, never off `URLSearchParams` directly:
+	 * this value is attacker-controlled, and it decides where a person lands seconds after
+	 * typing a code from their inbox.
+	 */
+	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
 	const [email, setEmail] = useState("");
 	/** The address a ceremony is open for, or null when it isn't. */
@@ -1089,7 +1105,15 @@ export default function SubscribePage() {
 				// handle it hasn't claimed — and sending it there is the difference between
 				// finishing the ceremony and abandoning someone on a marketing page.
 				if (justSignedUp.current) {
-					await leave("/welcome");
+					await leave(withNextPath("/welcome", next));
+					return;
+				}
+				// A RETURNING account, signed in by the ceremony rather than created by it.
+				// It owes no handle, so there is no onboarding to pass through — but if it
+				// came from somewhere, that somewhere is still the point of the visit, and
+				// a success message on a marketing page is not it.
+				if (next) {
+					await leave(next);
 					return;
 				}
 				setSuccess(
@@ -1121,7 +1145,7 @@ export default function SubscribePage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [byUsername, leave, picks]);
+	}, [byUsername, leave, next, picks]);
 
 	/**
 	 * Commit what can be committed.
@@ -1414,10 +1438,14 @@ export default function SubscribePage() {
 					onComplete={() => {
 						setPending(null);
 						// A brand-new account owes a handle before anything else — including
-						// before the page that would show off the Seeds it just bought, which
-						// is a poor place to discover you have no profile. An existing user
-						// goes where the webhook's work becomes visible.
-						void leave(justSignedUp.current ? "/welcome" : "/subscription");
+						// before the page that would show off the support it just bought, which
+						// is a poor place to discover you have no profile. `next` rides along so
+						// onboarding can hand them back to whatever they came here to read. An
+						// existing user goes straight there, or to where the webhook's work
+						// becomes visible.
+						void leave(
+							justSignedUp.current ? withNextPath("/welcome", next) : (next ?? "/subscription"),
+						);
 					}}
 					onClose={() => {
 						setPending(null);
@@ -1425,7 +1453,7 @@ export default function SubscribePage() {
 						// signed in, because verification made it. That is the correct
 						// outcome and takes no unwinding: they have a free account, and the
 						// only thing still owed is the handle.
-						if (justSignedUp.current) void leave("/welcome");
+						if (justSignedUp.current) void leave(withNextPath("/welcome", next));
 					}}
 				/>
 			)}

@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { sanitizeNextPath } from "@anthers/web-shared/nextPath";
 import FormField from "@anthers/web-shared/ui/FormField";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -32,8 +33,15 @@ export default function LoginPage() {
 
 	// Where to land after auth: an explicit ?next=, else the route that bounced us
 	// here (ProtectedRoute stashes it in location.state.from), else the feed.
-	const nextParam = new URLSearchParams(location.search).get("next");
-	const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
+	//
+	// ⚠️ Both go through `sanitizeNextPath`. The `?next=` half read the parameter raw
+	// until 2026-08-17, which is an open redirect waiting for someone to swap `navigate()`
+	// for `location.assign()`; `state.from` is set by our own router and is checked anyway,
+	// because "this one is ours" is the assumption that stops being true first.
+	const nextParam = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
+	const from = sanitizeNextPath(
+		(location.state as { from?: { pathname: string } })?.from?.pathname,
+	);
 	const redirectTo = nextParam || from || "/feed";
 
 	const [login, setLogin] = useState("");

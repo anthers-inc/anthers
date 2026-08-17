@@ -6,7 +6,8 @@
  * lowest Badge rung — right where the viewer hit the gate.
  */
 import { amountLabel, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
-import { Link } from "@anthers/web-shared/router";
+import { withNextPath } from "@anthers/web-shared/nextPath";
+import { Link, useLocation } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
 import { LockClosedIcon } from "@heroicons/react/24/solid";
@@ -44,16 +45,39 @@ export default function InlineUnlock({
 	} | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const location = useLocation();
 
 	const creatorName = post.creator?.displayName || post.creator?.username || "this creator";
 	const creatorUsername = post.creator?.username;
 
-	// Not logged in → send them to log in and return to the post.
+	/*
+	 * Not logged in → both doors, and both of them come back here.
+	 *
+	 * 🚨 This offered **only "Log in"**, and it did not return anyone anywhere: no `?next=`,
+	 * no router state. So a visitor with no account had nothing to click at all, and one
+	 * with an account was signed in and dropped on their feed, having lost the Work they
+	 * were looking at. The comment above this block said "return to the post" and had said
+	 * so since it was written — the behaviour was never there.
+	 *
+	 * ⚠️ It is easy to think this was collateral from deleting the Create Account card on
+	 * 2026-08-17. It wasn't: `UnlockModal` in `web-shared/post/unlock.tsx` is the component
+	 * that carried a return, and **it has no callers anywhere in the repo**. This is the
+	 * live gated-Work surface (`WorkPage`), and it never had one.
+	 *
+	 * `?next=` rather than router state, because it has to survive the whole signup detour
+	 * — `/subscribe` → an emailed code → a possible payment modal → `/welcome` — and a
+	 * reload in the middle of it, which is a normal thing to do while checking your email.
+	 * Sanitized at every read; see `web-shared/lib/next-path.ts`.
+	 */
 	if (access.reason === "login_required") {
+		const back = `${location.pathname}${location.search}`;
 		return (
-			<UnlockCard blurb={`Log in to check your access to this post from ${creatorName}.`}>
-				<Link to="/login" className="btn btn-primary btn-wide">
+			<UnlockCard blurb={`Log in to check your access to this Work from ${creatorName}.`}>
+				<Link to={withNextPath("/login", back)} className="btn btn-primary btn-wide">
 					Log in to unlock
+				</Link>
+				<Link to={withNextPath("/subscribe", back)} className="btn btn-ghost btn-sm">
+					Create an account
 				</Link>
 			</UnlockCard>
 		);
