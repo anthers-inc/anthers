@@ -30,6 +30,85 @@ import { expect, test } from "./fixtures";
 const addr = () =>
 	`e2e-ceremony-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
+/**
+ * There is exactly ONE way to mint an account from the browser, and it is `/subscribe`.
+ *
+ * 🚨 These are the *absence* assertions for the 2026-08-17 consolidation, and they exist
+ * because the thing they guard cannot fail loudly. The four-field Create Account card at
+ * `/signup` was deleted; nothing breaks if someone adds a second signup form back, and
+ * the cost of one is not obvious from either page — two doors have to keep agreeing about
+ * terms acceptance, onboarding, and where a new account lands, and the pair that existed
+ * had already drifted (only `/welcome` asks for the terms now, so a second door that
+ * doesn't ask would create accounts that never agreed to anything).
+ *
+ * Same family as the third-party-request spec: where a design claims there is only one of
+ * something, that claim needs a test, because a second one arrives silently.
+ */
+test.describe("one signup door", () => {
+	test("/signup is a redirect to /subscribe, not a form", async ({ page }) => {
+		await page.goto("/signup");
+
+		await expect(page.getByRole("heading", { name: /anthers is free/i })).toBeVisible();
+		expect(new URL(page.url()).pathname).toBe("/subscribe");
+	});
+
+	test("no page in the logged-out surface offers a second account form", async ({ page }) => {
+		// Asking for a password TWICE is the tell, and it is a structural one: the ceremony
+		// has no password step at all (the handle and an optional password are asked for at
+		// /welcome, after the account exists), and /login asks once. Two boxes on either
+		// page means a Create Account card has grown back, whatever its fields are called.
+		//
+		// ⚠️ The first draft of this asserted `getByLabel(/confirm password/i)` had count 0,
+		// which is a TAUTOLOGY: `FormField` renders its label as a *sibling* of the input
+		// with no `htmlFor`, so `getByLabel` matches nothing on this site whether or not a
+		// form is there. It passed against the deleted card as happily as against the live
+		// page. Count what the DOM actually contains.
+		for (const path of ["/subscribe", "/login"]) {
+			await page.goto(path);
+			await expect(page.locator("h1").first()).toBeVisible();
+			const passwords = await page.locator('input[type="password"]').count();
+			expect(
+				passwords,
+				`${path} asks for a password ${passwords}× — a signup form is back`,
+			).toBeLessThanOrEqual(1);
+			await expect(
+				page.getByText(/confirm password/i),
+				`${path} asks to confirm a password — a signup form is back`,
+			).toHaveCount(0);
+		}
+	});
+
+	test("the header offers both doors, and they lead to different places", async ({ page }) => {
+		await page.goto("/");
+
+		const header = page.locator("header").first();
+		await expect(header.getByRole("link", { name: "Log In", exact: true })).toHaveAttribute(
+			"href",
+			"/login",
+		);
+		await expect(header.getByRole("link", { name: "Sign Up", exact: true })).toHaveAttribute(
+			"href",
+			"/subscribe",
+		);
+	});
+
+	test("/login signs people in and sends everyone else to the one door", async ({ page }) => {
+		await page.goto("/login");
+
+		await expect(page.getByRole("heading", { name: "Log In" })).toBeVisible();
+		// Scoped to the card, because the header and the footer both offer a "Sign Up"
+		// too — three routes to one door is the intended state, and an unscoped locator
+		// just fails on strict mode rather than telling you anything.
+		const card = page.locator("[data-auth-fade]");
+		// The prompt used to flip this same card into signup mode. It is a link now, and
+		// where it points is the whole property.
+		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
+			"href",
+			"/subscribe",
+		);
+	});
+});
+
 test.describe("starting an account from /subscribe", () => {
 	test("the ceremony opens on the page, and does not send anyone to /signup", async ({ page }) => {
 		await page.goto("/subscribe");

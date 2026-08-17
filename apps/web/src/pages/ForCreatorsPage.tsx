@@ -93,7 +93,9 @@ const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2
 
 export default function ForCreatorsPage() {
 	const { isAuthenticated } = useAuth();
-	const startHref = isAuthenticated ? "/dashboard" : "/signup";
+	// /subscribe is the one signup door since 2026-08-17 — /signup is now only a
+	// redirect to it, and a hop through a redirect is not better than a direct link.
+	const startHref = isAuthenticated ? "/dashboard" : "/subscribe";
 
 	return (
 		<MeadowDecor floor={false} style={{ fontFamily: FONTS.nunito }}>
@@ -395,7 +397,13 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<ArrowPathIcon className="h-6 w-6" />}
 							title="Follow and feed"
-							description="Follow creators you care about and get their updates in a personalized feed. New project? Devlog post? Game jam entry? It all shows up in one timeline."
+							// ⚠️ "Game jam entry?" sat in this list until 2026-08-17. Jams were retired
+							// tables and all (migration 0037), so a feed item type named after them
+							// claims a feature Anthers doesn't have — the distinction the retirement
+							// sweep drew is that a jam existing *in the world* is still true (a creator
+							// may upload work made for Ludum Dare) while Anthers *providing* one is not,
+							// and a list of things that "show up in your timeline" is the second sense.
+							description="Follow creators you care about and get their updates in a personalized feed. New project? Devlog post? A track, a chapter, a new build? It all shows up in one timeline."
 						/>
 					</Reveal>
 				</div>

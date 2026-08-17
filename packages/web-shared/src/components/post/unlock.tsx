@@ -193,7 +193,14 @@ export function UnlockModal({
 				<Link to="/login" state={returnState} className="btn btn-primary btn-block">
 					Log in
 				</Link>
-				<Link to="/signup" state={returnState} className="btn btn-ghost btn-block">
+				{/* ⚠️ No `state` on this one, and that is a real difference rather than an
+				    oversight. It carried `returnState` while it pointed at the old Create
+				    Account card, which honoured `location.state.from` and dropped you back on
+				    the post afterwards. /subscribe is the only signup door since 2026-08-17 and
+				    its ceremony ends at /welcome — the handle and the terms — so there is
+				    nowhere to thread a return through yet. Passing state nothing reads would
+				    only make the behaviour look supported. */}
+				<Link to="/subscribe" className="btn btn-ghost btn-block">
 					Create an account
 				</Link>
 			</>
