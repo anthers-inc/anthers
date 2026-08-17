@@ -65,7 +65,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 				json: { anthersSupport, ...(directed?.length ? { directed } : {}) },
 			});
 			if (!res.ok) {
-				setError("Couldn't update your Seeds. Please try again.");
+				setError("Couldn't update your support. Please try again.");
 				setProcessing(false);
 				return;
 			}
@@ -102,7 +102,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 			}
 			onComplete();
 		} catch {
-			setError("Couldn't update your Seeds. Please try again.");
+			setError("Couldn't update your support. Please try again.");
 			setProcessing(false);
 		}
 	};
@@ -134,8 +134,8 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 					)}
 				</div>
 				<p className="text-xs text-base-content/50 mb-3">
-					Renews automatically. Stop anytime — your Seeds stay active through the period you've paid
-					for.
+					Renews automatically. Stop anytime — your support stays active through the period you've
+					paid for.
 				</p>
 
 				<form onSubmit={submit} className="flex flex-col gap-3">

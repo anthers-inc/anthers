@@ -10,7 +10,7 @@
  *
  * 🚨 **The whole point is to speak before the stop, not after it.** A limit that arrives
  * unannounced reads as a broken player, and the person it happens to has no way to know
- * they were three minutes from the end of a monthly allowance — or that one Seed removes
+ * they were three minutes from the end of a monthly allowance — or that $3 a month removes
  * it. That is why the countdown exists at all: the wall on its own would be a working
  * feature and a dishonest one.
  *
@@ -51,11 +51,11 @@ import {
  */
 const MULTIPLE = formatMultiple(timePoolMultipleFor());
 
-/** Shared close: what a Seed does, in the two sentences that are actually true. */
+/** Shared close: what supporting Anthers does, in the two sentences that are actually true. */
 function SeedPitch({ compact = false }: { compact?: boolean }) {
 	return (
 		<p className={compact ? "text-xs text-base-content/60" : "text-sm text-base-content/70"}>
-			A Seed for Anthers is ${PUBLIC_ACCESS_PRICE} a month and removes the limit entirely — and
+			Supporting Anthers is ${PUBLIC_ACCESS_PRICE} a month and removes the limit entirely — and
 			every creator you spend time with is paid <strong>{MULTIPLE} more</strong> for your attention.
 		</p>
 	);

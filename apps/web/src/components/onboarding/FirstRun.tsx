@@ -107,14 +107,14 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 					You're in, @{username}
 				</p>
 				<h1 style={serif} className="mt-2 text-3xl font-light leading-tight sm:text-4xl">
-					Your Seeds are set up
+					You're all set up
 				</h1>
 				<p className="mt-3 text-base leading-relaxed text-base-content/70">
 					{backing && arrival.anthers
-						? `You're backing ${backing} directly, and your Seed for Anthers keeps Public Access open — with no monthly limit for you.`
+						? `You're backing ${backing} directly, and your support for Anthers keeps Public Access open — with no monthly limit for you.`
 						: backing
-							? `You're backing ${backing} directly. Every one of those $${PUBLIC_ACCESS_PRICE} Seeds reaches them with no platform cut.`
-							: "Your Seed for Anthers keeps Public Access open to everyone — and there's no monthly limit on what you watch."}{" "}
+							? `You're backing ${backing} directly. Every dollar of it reaches them with no platform cut.`
+							: "Your support for Anthers keeps Public Access open to everyone — and there's no monthly limit on what you watch."}{" "}
 					From here, the time you spend with a creator's work is what pays them.
 				</p>
 				{/* Deliberately no ask. They have just given; the next useful thing is to
@@ -122,7 +122,7 @@ export default function FirstRun({ arrival, username }: { arrival: Arrival; user
 				    with — which is the thing that decides where their money actually goes. */}
 				<Actions
 					primary={["Find more creators", "/discover"]}
-					secondary={["See your Seeds", "/subscription"]}
+					secondary={["See your support", "/subscription"]}
 				/>
 			</div>
 		);

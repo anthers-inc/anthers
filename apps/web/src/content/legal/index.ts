@@ -47,7 +47,7 @@ const PRIVACY: LegalDocument = {
 		"**Information created by using Anthers.** Your posts, Works, comments, reviews, follows, bookmarks, and projects.",
 		"**What you view, and for how long.** When you play, watch, read, or listen to a Work, we record that it happened, which Work it was, and for how long. **We have to**: this is how creators get paid by time, and there is no way to pay someone for the time you spend with their work without recording the time you spend with their work. See *How long we keep it* below.",
 		"**Technical information.** Your IP address and browser user-agent, recorded with each sign-in session so you can review and revoke your own sessions and so we can investigate abuse.",
-		"**Payment information.** If you give Seeds or buy something, **your card details go directly to Stripe and never touch our servers.** We keep a record of the transaction: what was bought, the amounts, the fees, sales tax, and Stripe's identifier for the payment.",
+		"**Payment information.** If you give monthly support or buy something, **your card details go directly to Stripe and never touch our servers.** We keep a record of the transaction: what was bought, the amounts, the fees, sales tax, and Stripe's identifier for the payment.",
 		"**Safety information.** If you report content or someone, or if something of yours is reported, we keep a record of the report, the decision, and who made it.",
 		"**Copyright notices — the one place we hold a full postal identity.** If you file a copyright notice against something published here, we keep your name, postal address, email address and telephone number, your description of the work and of the material you say infringes it, and the exact wording of the statements you agreed to at the version you were shown them. **You do not need an account to file one**, so for a complainant this may be the only thing we ever hold about you — and it is more identifying than anything we hold about an ordinary reader. The law requires each of those elements; a notice missing them is not a notice.",
 		"**If your work is taken down and you answer**, a counter-notice requires your legal name, postal address and telephone number and your consent to federal jurisdiction, and **we are required to forward all of it to the person who filed the notice.** That is a disclosure to another person rather than to a service provider, and it is not something we can decline to do. It is why our [copyright page](/copyright) states what a counter-notice exposes before you fill anything in.",
@@ -123,7 +123,7 @@ const TERMS: LegalDocument = {
 	summary: "The agreement between you and Anthers, Inc.",
 	effectiveDate: null,
 	blocks: [
-		"These are the terms for using Anthers as a person — reading, watching, playing, commenting, giving Seeds, and buying things. If you publish work here, the [Creator Terms](/creator-terms) apply on top of these.",
+		"These are the terms for using Anthers as a person — reading, watching, playing, commenting, supporting creators, and buying things. If you publish work here, the [Creator Terms](/creator-terms) apply on top of these.",
 		"We've tried to write these so you can actually read them. Where something is a genuine legal requirement we've said so plainly rather than burying it.",
 
 		"## Who can use Anthers",
@@ -151,7 +151,7 @@ const TERMS: LegalDocument = {
 		"You can also report content or a person, which is different: that asks a human to look. We don't tell you what happened to an individual report.",
 
 		"## Money",
-		"**Seeds** are $3 each, monthly, and you choose who they go to. Seeds you give a creator go to that creator; Seeds you give Anthers fund the pool that pays creators by the time you spend, pay their share of card processing at cost, and what's left funds free access and our charitable programs.",
+		"**Monthly support** is an amount you choose, and you choose who it goes to. What you give a creator goes to that creator; what you give Anthers funds the pool that pays creators by the time you spend, pays its share of card processing at cost, and what's left funds free access and our charitable programs.",
 		"**Direct purchases** are one-off. You pay the price the creator set, plus sales tax where it applies, and nothing else.",
 		"Prices shown include every mandatory fee. Sales tax is the only thing added at checkout.",
 
@@ -199,8 +199,8 @@ const CREATOR_TERMS: LegalDocument = {
 		"You're responsible for having the rights to everything you publish, including music, art, and code you didn't make yourself.",
 
 		"## Getting paid",
-		"**Anthers takes no cut.** On a direct purchase you receive the price you set, less the card processing the payment network charges — the only deduction there is. Delivery costs nothing, however large the work or however many times the buyer downloads it. On Seeds given to you directly, you receive the full $3 less its share of card processing.",
-		"You are also paid from the pool funded by Seeds given to Anthers, in proportion to time people spend with your work. A minute is a minute regardless of whether it's a game, a video, audio, or writing.",
+		"**Anthers takes no cut.** On a direct purchase you receive the price you set, less the card processing the payment network charges — the only deduction there is. Delivery costs nothing, however large the work or however many times the buyer downloads it. On monthly support given to you directly, you receive the full amount less its share of card processing.",
+		"You are also paid from the pool funded by what people give Anthers, in proportion to time they spend with your work. A minute is a minute regardless of whether it's a game, a video, audio, or writing.",
 		"Payouts run through Stripe on their schedule. Tax is yours to handle; we report what we're required to report.",
 
 		"## Storage",
