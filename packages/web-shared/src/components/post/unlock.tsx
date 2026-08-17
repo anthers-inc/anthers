@@ -1,36 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Locked-post presentation. When a post is gated to the viewer, the WHOLE post locks
- * (body + media are withheld server-side) — the viewer sees the title, a blurred
- * cover, and a reason-aware "unlock" call to action, mirroring the Patreon lock UX.
+ * Locked-Work presentation — the *chrome* around a gate, not the flow through one.
  *
- * 🚨 **`UnlockPanel` and `UnlockModal` below have NO CALLERS anywhere in the repo**
- * (checked 2026-08-17). The live gated surface is `apps/web/src/components/post/
- * InlineUnlock.tsx`, rendered by `WorkPage`, and `LockedCover` + the three pure helpers
- * here are what the app actually uses. That matters because reading this file is how you
- * would conclude the logged-out unlock flow is handled — the two components look like the
- * answer and are not reached. They are kept rather than deleted because the reason-aware
- * shape is still the design; if you are changing what a locked Work offers, change
- * `InlineUnlock` **as well as or instead of** anything here, and check with a grep rather
- * than by reading.
+ * When a Work is gated to the viewer the whole thing locks (body + media are withheld
+ * server-side), and this file supplies what a card or a page shows in its place: a blurred
+ * cover with a lock chip, and the two labels that name what the lock IS and what to do
+ * about it. Consumers are `WorkCard` and `WorkPage`.
+ *
+ * 🚨 **The unlock FLOW is not here — it is `apps/web/src/components/post/InlineUnlock.tsx`,
+ * rendered by `WorkPage`.** This file used to also export `UnlockPanel` and `UnlockModal`,
+ * two reason-aware components that offered log-in / sign-up / join-the-creator routes and
+ * had **no callers anywhere in the repo** (deleted 2026-08-17). They are worth a note
+ * rather than a silent removal, because of what believing in them cost: when the signup
+ * consolidation landed, "the logged-out viewer lost their way back to the post" was
+ * diagnosed against `UnlockModal` — which did carry a return destination — and the real
+ * live surface, `InlineUnlock`, turned out never to have had one at all. **Reading a file
+ * tells you what a component would do, not whether anything renders it.** Grep first.
  */
 import { ANTHERS_BADGES, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { LockClosedIcon } from "@heroicons/react/24/solid";
-import { useEffect } from "react";
-import { useAuth } from "../../lib/auth";
-import { withNextPath } from "../../lib/next-path";
-import { postUrl } from "../../lib/postUrl";
-import { Link } from "../../lib/router";
-import type { AccessResult, PostListItem, UnlockRoute } from "../../lib/types";
+import type { AccessResult, UnlockRoute } from "../../lib/types";
 
 /**
- * The cheapest route into a gated post, and who the money would go to.
+ * The cheapest route into a gated Work, and who the money would go to.
  *
  * "Cheapest" is the smallest amount the viewer still has to add, which is what they asked
  * for; a tie goes to the creator, since what a viewer gives a creator reaches them in full.
- * Returns null when the post isn't gate-openable (purchase-only, or logged out).
+ * Returns null when the Work isn't gate-openable (purchase-only, or logged out).
+ *
+ * Module-private since 2026-08-17 — the two components that used it from outside the two
+ * label helpers below are gone, and an export nobody imports is an invitation to grow a
+ * second caller that doesn't know the labels exist.
  */
-export function cheapestRoute(
+function cheapestRoute(
 	access: AccessResult,
 	creatorName: string,
 ): { route: UnlockRoute; target: string } | null {
@@ -69,7 +71,7 @@ export function unlockLabel(access: AccessResult, creatorName = "this creator"):
 }
 
 /**
- * What the post is locked BY, for the lock chip — the Badge sitting at the gate, when
+ * What the Work is locked BY, for the lock chip — the Badge sitting at the gate, when
  * one does. Null when the gate falls between Badges, which is legal and must not be
  * papered over by naming the nearest one.
  */
@@ -115,162 +117,6 @@ export function LockedCover({
 					{lockedBy ? `Locked · ${lockedBy}` : "Locked"}
 				</span>
 			</div>
-		</div>
-	);
-}
-
-/**
- * Reason-aware unlock panel for the post page (login / join-or-support). The
- * one-time-purchase case is handled by ProjectPricing, which has the checkout flow.
- */
-export function UnlockPanel({
-	access,
-	creatorName,
-	creatorUsername,
-}: {
-	access: AccessResult;
-	creatorName: string;
-	creatorUsername?: string;
-}) {
-	const isLogin = access.reason === "login_required";
-	const cheapest = cheapestRoute(access, creatorName);
-	// No message when there's a route — the CTA below already names the ask and its
-	// destination, and repeating it in a sentence above makes the reader read it twice.
-	// Kept only for the states nothing else explains.
-	const message = isLogin
-		? `Log in to check your access to this post from ${creatorName}.`
-		: cheapest
-			? null
-			: `Support ${creatorName} monthly to unlock this post and their other members-only work.`;
-	// Land on the tiers tab, where the ladder and the giving control actually are —
-	// the profile's default tab drops the intent the viewer arrived with.
-	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}?tab=badges` : "/subscribe";
-	return (
-		<div className="card bg-base-200 border border-base-300">
-			<div className="card-body items-center text-center gap-3">
-				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
-					<LockClosedIcon className="w-6 h-6 text-base-content/70" />
-				</div>
-				<h3 className="font-bold text-lg">
-					{lockedByBadge(access, creatorName)
-						? `Locked · ${lockedByBadge(access, creatorName)}`
-						: "Unlock this post"}
-				</h3>
-				{message ? <p className="text-sm text-base-content/60 max-w-sm">{message}</p> : null}
-				<Link to={to} className="btn btn-primary btn-wide">
-					{unlockLabel(access, creatorName)}
-				</Link>
-			</div>
-		</div>
-	);
-}
-
-/**
- * Quick-unlock modal, opened from a locked timeline card. Adapts to the viewer:
- * anonymous → log in / sign up (returning to the post after auth); logged-in but
- * gated → join the creator; priced → go to the post's purchase flow.
- */
-export function UnlockModal({
-	post,
-	access,
-	onClose,
-}: {
-	post: PostListItem;
-	access: AccessResult;
-	onClose: () => void;
-}) {
-	const { isAuthenticated } = useAuth();
-
-	// Close on Escape.
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [onClose]);
-
-	const path = postUrl(post);
-	const creatorName = post.creator?.displayName || post.creator?.username || "this creator";
-	const avatar = post.creator?.avatar;
-	// Log in / sign up return to the post so it unlocks in place after auth.
-	const returnState = { from: { pathname: path } };
-
-	let body: React.ReactNode;
-	if (!isAuthenticated) {
-		body = (
-			<>
-				<p className="text-sm text-base-content/60">Log in or sign up for access.</p>
-				<Link to="/login" state={returnState} className="btn btn-primary btn-block">
-					Log in
-				</Link>
-				{/* A `?next=` rather than the `state` the log-in link uses, because this one
-				    survives a longer journey: /subscribe → the emailed-code ceremony → a
-				    possible payment modal → /welcome → back here. Router state does not
-				    survive that (the page is torn down and rebuilt when the auth context
-				    refreshes — see `leave()` in SubscribePage), and a query parameter also
-				    survives a reload mid-ceremony, which is a real thing to do while you go
-				    and read your email. Sanitized at every read: `sanitizeNextPath`. */}
-				<Link to={withNextPath("/subscribe", path)} className="btn btn-ghost btn-block">
-					Create an account
-				</Link>
-			</>
-		);
-	} else if (access.reason === "payment_required") {
-		body = (
-			<>
-				<p className="text-sm text-base-content/60">
-					One purchase unlocks everything in this post.
-				</p>
-				<Link to={path} className="btn btn-primary btn-block">
-					{unlockLabel(access)}
-				</Link>
-			</>
-		);
-	} else {
-		const cheapest = cheapestRoute(access, creatorName);
-		body = (
-			<>
-				{cheapest ? null : (
-					<p className="text-sm text-base-content/60">
-						Support {creatorName} monthly to unlock this and their members-only work.
-					</p>
-				)}
-				<Link
-					to={post.creator?.username ? `/${post.creator.username}?tab=badges` : "/subscribe"}
-					className="btn btn-primary btn-block"
-				>
-					{unlockLabel(access, creatorName)}
-				</Link>
-			</>
-		);
-	}
-
-	return (
-		<div className="modal modal-open" role="dialog">
-			<div className="modal-box max-w-sm text-center flex flex-col items-center gap-3">
-				<button
-					type="button"
-					className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-					onClick={onClose}
-					aria-label="Close"
-				>
-					✕
-				</button>
-				{avatar ? (
-					<img src={avatar} alt="" className="w-14 h-14 rounded-full object-cover" />
-				) : (
-					<div className="w-14 h-14 rounded-full bg-base-300 flex items-center justify-center">
-						<LockClosedIcon className="w-6 h-6 text-base-content/70" />
-					</div>
-				)}
-				<h3 className="font-bold text-lg leading-tight">Unlock this post from {creatorName}</h3>
-				<div className="flex flex-col gap-2 w-full mt-1">{body}</div>
-			</div>
-			{/* Backdrop click closes. */}
-			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close">
-				close
-			</button>
 		</div>
 	);
 }

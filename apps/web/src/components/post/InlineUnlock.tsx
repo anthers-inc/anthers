@@ -60,9 +60,11 @@ export default function InlineUnlock({
 	 * so since it was written — the behaviour was never there.
 	 *
 	 * ⚠️ It is easy to think this was collateral from deleting the Create Account card on
-	 * 2026-08-17. It wasn't: `UnlockModal` in `web-shared/post/unlock.tsx` is the component
-	 * that carried a return, and **it has no callers anywhere in the repo**. This is the
-	 * live gated-Work surface (`WorkPage`), and it never had one.
+	 * 2026-08-17. It wasn't. The component that carried a return was `UnlockModal` in
+	 * `web-shared/post/unlock.tsx` — which **nothing rendered**, and which was deleted the
+	 * same day for that reason. This is the live gated-Work surface (`WorkPage`), and it
+	 * never had one. The transferable half: reading a file tells you what a component would
+	 * do, not whether anything renders it.
 	 *
 	 * `?next=` rather than router state, because it has to survive the whole signup detour
 	 * — `/subscribe` → an emailed code → a possible payment modal → `/welcome` — and a
