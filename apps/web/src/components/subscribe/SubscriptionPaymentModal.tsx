@@ -16,15 +16,22 @@ export interface SubscriptionPreview {
 }
 
 interface Props {
-	/** The target Anthers-Seed count — the Anthers half of the charge, not its quantity. */
+	/**
+	 * ⚠️ **Dollars a month, not a count.** It is `number` either way, so a caller passing a
+	 * count typechecks and bills the wrong amount — which `/subscribe` did between the Seed
+	 * retirement and 2026-08-16, subscribing people at $1.
+	 */
 	anthersSupport: number;
 	/**
-	 * Seeds pointed at creators, riding on the same charge.
+	 * Support pointed at creators, riding on the same charge.
 	 *
-	 * The subscription's quantity is `anthersSupport` plus these, because every Seed a user
-	 * holds arrives on one monthly charge — which is also what amortises the fixed card
-	 * fee across the creators on it. Omitted everywhere the caller only changes the
-	 * Anthers count (the post unlock, /subscription).
+	 * The subscription carries ONE ITEM PER DESTINATION — `anthersSupport` and each of
+	 * these — because everything a user gives arrives on one monthly charge, which is also
+	 * what amortises the fixed card fee across the creators on it. ⚠️ This said the
+	 * *quantity* was `anthersSupport` plus these until 2026-08-16; a quantity can only
+	 * express multiples of one unit, so the retirement replaced it with itemised amounts.
+	 * Omitted everywhere the caller only changes the Anthers amount (the post unlock,
+	 * /subscription).
 	 */
 	directed?: { creatorId: number; amount: number }[];
 	badgeName: string;
@@ -43,6 +50,23 @@ function formatDate(unix: number | null): string | null {
 	});
 }
 
+/**
+ * Whether what the user was quoted differs from what the POST would bill.
+ *
+ * Compared in whole cents, because both sides arrive as floats and a cent is the finest
+ * grain anything can actually be charged at.
+ */
+export function quoteDisagrees(
+	quotedAmount: string,
+	anthersSupport: number,
+	directed?: { amount: number }[],
+): boolean {
+	const quoted = Number(quotedAmount);
+	if (!Number.isFinite(quoted)) return true;
+	const billed = (directed ?? []).reduce((sum, d) => sum + d.amount, anthersSupport);
+	return Math.round(quoted * 100) !== Math.round(billed * 100);
+}
+
 function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete, onClose }: Props) {
 	const stripe = useStripe();
 	const elements = useElements();
@@ -56,8 +80,36 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 	const nextDate = formatDate(preview.nextBillingUnix);
 	const { savedCard, isChange } = preview;
 
+	/**
+	 * 🚨 **The quote and the charge must be the same number**, checked at the last point
+	 * before money moves.
+	 *
+	 * This modal is the only place that holds both: `preview.recurring.amount`, which is
+	 * what the user has just read, and `anthersSupport + directed`, which is what the POST
+	 * will bill. They are derived independently by the caller, and on 2026-08-16
+	 * `/subscribe` derived them **differently** — quoting $9 and charging $1 — with nothing
+	 * between the discrepancy and the card.
+	 *
+	 * ⚠️ Honest about what it is: `recurring.amount` echoes the amount the client asked
+	 * `preview/:amount` about, so this is a **consistency** check and not server
+	 * verification. That is still exactly the defect class — one caller computing the
+	 * displayed number and the billed number by two routes — and it is the shape the
+	 * ceremony bug had. Real server-side authority would mean the preview issuing a token
+	 * the charge has to present, which is a larger change than this guard.
+	 *
+	 * `chargeNow` is deliberately NOT compared: on a change it is a real Stripe proration
+	 * and legitimately differs from the recurring amount.
+	 */
+	const mismatch = quoteDisagrees(preview.recurring.amount, anthersSupport, directed);
+
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		if (mismatch) {
+			// Never silently charge the other number. A refusal a user can retry past is a
+			// worse outcome than the one this prevents, so it stops here.
+			setError("This doesn't add up — we won't charge you. Please reload and try again.");
+			return;
+		}
 		setProcessing(true);
 		setError(null);
 		try {
@@ -65,7 +117,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 				json: { anthersSupport, ...(directed?.length ? { directed } : {}) },
 			});
 			if (!res.ok) {
-				setError("Couldn't update your Seeds. Please try again.");
+				setError("Couldn't update your support. Please try again.");
 				setProcessing(false);
 				return;
 			}
@@ -102,7 +154,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 			}
 			onComplete();
 		} catch {
-			setError("Couldn't update your Seeds. Please try again.");
+			setError("Couldn't update your support. Please try again.");
 			setProcessing(false);
 		}
 	};
@@ -134,8 +186,8 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 					)}
 				</div>
 				<p className="text-xs text-base-content/50 mb-3">
-					Renews automatically. Stop anytime — your Seeds stay active through the period you've paid
-					for.
+					Renews automatically. Stop anytime — your support stays active through the period you've
+					paid for.
 				</p>
 
 				<form onSubmit={submit} className="flex flex-col gap-3">
@@ -187,7 +239,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 						<button type="button" className="btn btn-ghost" onClick={onClose} disabled={processing}>
 							Cancel
 						</button>
-						<button type="submit" className="btn btn-primary" disabled={processing}>
+						<button type="submit" className="btn btn-primary" disabled={processing || mismatch}>
 							{processing
 								? "Processing…"
 								: isChange

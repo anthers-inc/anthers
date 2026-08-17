@@ -155,12 +155,12 @@ const wikiAreas: WikiArea[] = [
 			{
 				name: "Monetization & Analytics",
 				path: "32-Monetization-And-Analytics",
-				description: "Pricing, earnings, analytics, and Seeds",
+				description: "Pricing, earnings, analytics, and support",
 				items: [
 					{ name: "Overview", file: "README.md" },
 					{ name: "Pricing Your Content", file: "01-PricingYourContent.md" },
 					{ name: "Earnings & Payouts", file: "02-EarningsAndPayouts.md" },
-					{ name: "Seeds & Premium Content", file: "03-BoostPoolAndPremiumContent.md" },
+					{ name: "Support & Premium Content", file: "03-BoostPoolAndPremiumContent.md" },
 					{ name: "Analytics Dashboard", file: "04-AnalyticsDashboard.md" },
 				],
 			},

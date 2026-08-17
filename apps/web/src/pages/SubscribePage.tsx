@@ -2,16 +2,17 @@
 //
 // The Support page (route: /subscribe) — the middle of the funnel.
 //
-// Its job is to explain how support works and then open a door: a free account, or Seeds
-// pointed at Anthers and at creators. It is NOT a report on what a user already holds —
-// that is /subscription, and conflating the two is what the previous revision did.
+// Its job is to explain how support works and then open a door: a free account, or a
+// monthly amount pointed at Anthers and at creators. It is NOT a report on what a user
+// already holds — that is /subscription, and conflating the two is what the previous
+// revision did.
 //
 // The page is a guided sequence, and the order is the argument:
 //
 //   1. Anthers is free, stated on its own, shown with a reel of work anyone can open, and
-//      closing with what a Seed is — one thing, $3, and the destination is the difference.
-//   2. What a Seed to Anthers does, with its breakdown, ending in a yes/no.
-//   3. What a Seed to a creator does, with the same breakdown, ending in a creator search.
+//      closing with what support is — one thing, and the destination is the difference.
+//   2. What support for Anthers does, with its breakdown, ending in a yes/no.
+//   3. What support for a creator does, with the same breakdown, ending in a creator search.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -20,7 +21,7 @@
 // consequence in different eyelines.
 //
 // The question the page asks is *whether*, never *how much*: a creator pick is
-// follow-or-Seed rather than a stepper, because the amount is a conversation for after
+// follow-or-back rather than a stepper, because the amount is a conversation for after
 // the account exists and asking it here costs conversion for no information.
 //
 // ⚠️ PROPOSAL vs. SHIPPED. Public Access is a proposal — the working plan is the vault's
@@ -36,19 +37,21 @@
 //     proposal, so the endpoint needed no opinion about which gate kinds exist.
 //   • The creator finder is REAL — `GET /api/accounts/creators`, whose `mediums` come from
 //     what each creator has actually released rather than anything they declare.
-//   • Seeds to ANTHERS commit for real, through the same preview + modal ceremony the
+//   • Support for ANTHERS commits for real, through the same preview + modal ceremony the
 //     inline post unlock uses.
 //   • Following commits for real.
-//   • Seeds to a CREATOR ride on the SAME subscription as the Anthers one — quantity is
-//     every Seed the user holds, so one Seed to Anthers and one each to two creators is
-//     quantity 3 at $9/month, one charge. The split rides in subscription metadata; see
-//     `anthersSupportFromSub` in services/billing.ts, where reading quantity as the Anthers
-//     count would inflate the Badge and the Time Pool.
-//     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator-Seed
+//   • Support for a CREATOR rides on the SAME subscription as the Anthers one — ONE ITEM
+//     PER DESTINATION, itemised, so the invoice names them. ⚠️ This described a shared
+//     *quantity* until 2026-08-16 ("one to Anthers and one each to two creators is quantity
+//     3 at $9/month"); the Seed retirement replaced that with N items carrying their own
+//     amounts, because a quantity can only express multiples of one unit. The split rides
+//     in subscription metadata; see `anthersSupportFromSub` in services/billing.ts.
+//     (`POST /subscriptions/seeds/buy` also exists as a one-off top-up of the creator
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
 
 import {
+	amountLabel,
 	cardFeeDisplay,
 	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
@@ -77,10 +80,10 @@ import SubscriptionPaymentModal, {
  * which is exactly why it must not be transcribed here. See its note in `constants.ts`.
  */
 
-/** Where a Seed given to Anthers goes, at the single-Seed worst case. */
+/** Where support for Anthers goes, at the worst case of it alone on the charge. */
 const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
 const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
-/** What a lone directed Seed reaches its creator as — gross, less its share of the fee. */
+/** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
 const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
 
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
@@ -120,9 +123,31 @@ interface Picks {
 
 const EMPTY_PICKS: Picks = { anthers: null, follow: [], seed: [] };
 
-function money(n: number): string {
-	return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
+/**
+ * What the whole charge comes to, in **dollars a month**.
+ *
+ * 🚨 **This was a COUNT until 2026-08-16, and both of its consumers take an amount.**
+ * `anthers` was `1` for "ticked" and the total was `1 + directed.length`, which the page
+ * then handed to `preview/:amount` and to the subscribe body's `anthersSupport`. That was
+ * correct while a Seed was an indivisible $3 and the server multiplied by it; the
+ * retirement made the server take dollars and multiply by nothing, so the ceremony
+ * **quoted $3 for a $9 charge** and then subscribed the user at **$1 a month** — under the
+ * $3 that lifts the Public Access limit they had just agreed to pay for.
+ *
+ * Extracted rather than inlined so the conversion has a test. Nothing else on this page
+ * can be unit-tested — the ceremony's own e2e cannot complete a payment, because the
+ * emailed code is argon2-hashed at rest by design.
+ */
+export function supportTotal(
+	anthers: boolean | null,
+	directed: { amount: number }[],
+	anthersPrice = PUBLIC_ACCESS_PRICE,
+): number {
+	const toAnthers = anthers === true ? anthersPrice : 0;
+	return directed.reduce((sum, d) => sum + d.amount, toAnthers);
 }
+
+const money = amountLabel;
 
 function initialsOf(name: string): string {
 	return (
@@ -917,8 +942,20 @@ export default function SubscribePage() {
 
 	const byUsername = useMemo(() => new Map(creators.map((c) => [c.username, c])), [creators]);
 
-	const anthersSupport = picks.anthers === true ? 1 : 0;
-	const total = (anthersSupport + picks.seed.length) * PUBLIC_ACCESS_PRICE;
+	/**
+	 * 🚨 **The displayed total and the charged total are the SAME function**, and were two
+	 * independent expressions until 2026-08-16.
+	 *
+	 * They agreed, so nothing was visibly wrong — but the page's summary said
+	 * `(anthers + creators) × price` while the charge said `1 + creators`, and only the
+	 * second one was broken by the Seed retirement. A page that computes what it shows and
+	 * what it bills by different routes is one edit away from showing a number it does not
+	 * charge, which is the exact failure the confirmation ceremony exists to prevent.
+	 */
+	const total = supportTotal(
+		picks.anthers,
+		picks.seed.map(() => ({ amount: PUBLIC_ACCESS_PRICE })),
+	);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. */
 	const anthersLines: PickLine[] = useMemo(
@@ -927,7 +964,7 @@ export default function SubscribePage() {
 				? [
 						{
 							key: "anthers",
-							label: "A Seed for Anthers",
+							label: "Support for Anthers",
 							sub: "watch as much Public Access as you like",
 							amount: PUBLIC_ACCESS_PRICE,
 						},
@@ -1015,16 +1052,17 @@ export default function SubscribePage() {
 				await client.api.accounts.users[":username"].follow.$post({ param: { username } });
 			}
 
-			// One Seed each, to the creators picked — on the SAME charge as the Anthers one.
+			// The Public Access price each, to the creators picked — on the SAME charge as
+			// the Anthers one.
 			const directed = picks.seed
 				.map((username) => byUsername.get(username))
 				.filter((creator): creator is PublicUser => !!creator)
 				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
 
-			const anthers = picks.anthers === true ? 1 : 0;
-			const totalSeeds = anthers + directed.length;
+			const anthers = picks.anthers === true ? PUBLIC_ACCESS_PRICE : 0;
+			const total = supportTotal(picks.anthers, directed);
 
-			if (totalSeeds === 0) {
+			if (total === 0) {
 				// Nothing to charge. A brand-new account still has somewhere to be — the
 				// handle it hasn't claimed — and sending it there is the difference between
 				// finishing the ceremony and abandoning someone on a marketing page.
@@ -1041,7 +1079,7 @@ export default function SubscribePage() {
 			// Preview prices the whole charge, so the modal quotes the total the user is
 			// actually agreeing to rather than the Anthers half of it.
 			const res = await client.api.subscriptions.preview[":amount"].$get({
-				param: { amount: String(totalSeeds) },
+				param: { amount: String(total) },
 			});
 			if (!res.ok) {
 				setError("Couldn't load the charge details. Please try again.");
@@ -1051,9 +1089,9 @@ export default function SubscribePage() {
 			setPending({
 				anthersSupport: anthers,
 				directed,
-				// The honest label is the count: a commit needn't land on a Badge, and
+				// The honest label is the amount: a commit needn't land on a Badge, and
 				// naming one would describe only the Anthers half of this charge.
-				badgeName: `${totalSeeds} Seed${totalSeeds === 1 ? "" : "s"}`,
+				badgeName: `${amountLabel(total)} a month`,
 				preview,
 			});
 		} catch {
@@ -1180,9 +1218,9 @@ export default function SubscribePage() {
 						    page look like it asked three things when it asks two. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								Going further is one thing: a <strong>Seed</strong>, {money(PUBLIC_ACCESS_PRICE)} a
-								month. It is the only unit of support on Anthers — you hold as many as you like, and
-								you choose where each one points.
+								Going further is one thing: a monthly amount, from{" "}
+								<strong>{money(PUBLIC_ACCESS_PRICE)}</strong>. You choose how much, and you choose
+								where it points.
 							</p>
 							<div className="mt-6 grid gap-4 sm:grid-cols-2">
 								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
@@ -1203,9 +1241,9 @@ export default function SubscribePage() {
 						</div>
 					</Reveal>
 
-					{/* ── 2 · A Seed for Anthers ─────────────────────────────── */}
+					{/* ── 2 · Support for Anthers ────────────────────────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={2} title="A Seed for Anthers">
+						<StepHeading n={2} title="Support Anthers">
 							Watch as much Public Access as you like, for as long as you hold it — and{" "}
 							<strong>
 								{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every {money(PUBLIC_ACCESS_PRICE)}
@@ -1233,7 +1271,7 @@ export default function SubscribePage() {
 									desc: "card & processing, at cost, paid to the processor",
 								},
 							]}
-							note={`The first Seed lifts your monthly limit. Each one after it adds another ${money(timePoolFor(PUBLIC_ACCESS_PRICE))} to the creators you spend time with, and helps keep other people's accounts free. Shown at the worst case — a single Seed on the charge; hold more and the fixed card fee spreads across them.`}
+							note={`${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit. Every dollar past it adds more to the creators you spend time with, and helps keep other people's accounts free. Shown at the worst case — this alone on the charge; give more and the fixed card fee spreads across it.`}
 						/>
 						<Ask
 							title="Support Anthers too?"
@@ -1255,9 +1293,9 @@ export default function SubscribePage() {
 						/>
 					</Reveal>
 
-					{/* ── 3 · A Seed for a creator ───────────────────────────── */}
+					{/* ── 3 · Support for a creator ──────────────────────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={3} title="A Seed for a creator">
+						<StepHeading n={3} title="Support a creator">
 							It goes to them.{" "}
 							<strong>
 								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
@@ -1280,7 +1318,7 @@ export default function SubscribePage() {
 									desc: "card & processing, at cost, paid to the processor",
 								},
 							]}
-							note="Shown at the worst case — a single Seed on the charge. Hold more and the fixed card fee spreads across them, so every creator on it receives a little more."
+							note="Shown at the worst case — this alone on the charge. Give more, or back more than one creator, and the fixed card fee spreads across it, so every creator on it receives a little more."
 						/>
 						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
 							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or

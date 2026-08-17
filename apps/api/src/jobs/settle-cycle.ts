@@ -62,7 +62,7 @@ async function settleAccount(
 
 	// Directed creator-Seeds this cycle. Needed BEFORE the remainder inflow, because
 	// the at-cost card fee is charged on the whole batched monthly charge and split
-	// pro-rata — so directed Seeds amortise the fixed $0.30 and leave a fatter
+	// pro-rata — so directed support amortises the fixed $0.30 and leaves a fatter
 	// remainder. Anthers takes no cut of these; they are recorded, not an inflow.
 	const [dir] = await db
 		.select({ total: sql<string>`COALESCE(SUM(CAST(amount AS numeric)), 0)` })
@@ -70,7 +70,7 @@ async function settleAccount(
 		.where(and(eq(seedAllocations.userId, acct.userId), eq(seedAllocations.billingCycle, cycle)));
 	const directedSeeds = new Decimal(dir?.total ?? 0);
 
-	// 1. remainder inflow: the remainder of this account's Anthers-Seeds, after their
+	// 1. remainder inflow: the remainder of what this account gives Anthers, after their
 	//    Time Pool and their share of the at-cost Payments line (a bigger basket
 	//    leaves more, because the fixed $0.30 is per charge). Passing `payments` here
 	//    is load-bearing — omit it and the charitable ledger is over-credited by the
@@ -82,9 +82,7 @@ async function settleAccount(
 	await db.insert(crfLedger).values({
 		amount: inflow.toFixed(2),
 		description: inflow.gt(0)
-			? `${marker} remainder $${inflow.toFixed(2)} from ${n} Anthers-Seed${
-					n === 1 ? "" : "s"
-				} (Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)})`
+			? `${marker} remainder $${inflow.toFixed(2)} from $${n.toFixed(2)} to Anthers (Time Pool $${bd.timePool.toFixed(2)}, Payments $${bd.payments.toFixed(2)})`
 			: `${marker} no remainder inflow (free rank)`,
 	});
 

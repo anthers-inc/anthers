@@ -215,7 +215,7 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Seed income is load-bearing — directed Seeds account for over half of revenue at Sprout and above. Serving ~106 TB a month used to cost ~$1,060 and now costs nothing at all, which is why the hardest case in the model is no longer a hard case.",
+			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Direct support is load-bearing — it accounts for over half of revenue at Sprout and above. Serving ~106 TB a month used to cost ~$1,060 and now costs nothing at all, which is why the hardest case in the model is no longer a hard case.",
 		infraBreakdown: [
 			{ label: "CDN delivery (~106 TB)", cost: 0 },
 			{ label: "Object storage (~133 GB)", cost: 2 },
@@ -772,13 +772,13 @@ function TierRevenueTable({ creator }: { creator: DemoCreatorBreakdown }) {
 				</tbody>
 			</table>
 			<p className="text-xs text-base-content/40 mt-2">
-				Users give Seeds to Anthers ($3 each); each funds a Time Pool ($
-				{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, distributed to creators by time) and a
-				remainder that funds free access and the charitable programs. Seeds given straight to a
-				creator carry no platform cut. "To creators" here is the Time Pool. {creator.displayName}{" "}
-				earns their share —{" "}
+				Users give Anthers a monthly amount; it funds a Time Pool ($
+				{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}, distributed
+				to creators by time) and a remainder that funds free access and the charitable programs.
+				Support given straight to a creator carries no platform cut. "To creators" here is the Time
+				Pool. {creator.displayName} earns their share —{" "}
 				{creator.id === "video" ? "~8.6%" : creator.id === "podcast" ? "~6.8%" : "~5.2%"} of a
-				typical subscriber's time — of the Time Pool, plus any Seeds directed to them.
+				typical subscriber's time — of the Time Pool, plus anything directed to them.
 			</p>
 		</div>
 	);

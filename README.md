@@ -35,9 +35,9 @@ One primitive: a **monthly amount**, in dollars. What varies is who you give it 
 
 **Support a creator** and it goes to that creator. Anthers keeps nothing from it — the only deduction is its share of the at-cost card processing, which is paid to Stripe. Supporting a creator also clears their **Badges**: levels they set themselves, at any amount they choose, each branded with a **Badge** they design.
 
-**Support Anthers** and it backs the commons. It funds the **Time Pool**, which pays creators in proportion to the time people spend with their work — a minute is a minute whether it was spent playing, watching, reading or listening — and it covers its share of the at-cost card processing. What remains funds free access and Anthers' charitable programs. Your **Anthers Badge simply is the number of Seeds you currently give Anthers**: Root, Sprout, Petal, Blossom, and a "+" beyond. There is no plan to pick.
+**Support Anthers** and it backs the commons. It funds the **Time Pool**, which pays creators in proportion to the time people spend with their work — a minute is a minute whether it was spent playing, watching, reading or listening — and it covers its share of the at-cost card processing. What remains funds free access and Anthers' charitable programs. Your **Anthers Badge simply is the amount you currently give Anthers**: Root, Sprout, Petal, Blossom, and a "+" beyond. There is no plan to pick.
 
-**Public Access** is every streaming Work a creator chose not to gate — free to everyone, with nothing to clear. It is defined by the absence of a gate rather than by anything Anthers curates. A free account watches Public Access up to a monthly limit, free forever, with no trial and no expiry; a single Seed given to Anthers removes the limit, and no Seed above the first buys any more access. What further Seeds buy is a larger Time Pool for the creators you spend time with.
+**Public Access** is every streaming Work a creator chose not to gate — free to everyone, with nothing to clear. It is defined by the absence of a gate rather than by anything Anthers curates. A free account watches Public Access up to a monthly limit, free forever, with no trial and no expiry; supporting Anthers at the Public Access price removes the limit, and nothing above it buys any more access. What more buys is a larger Time Pool for the creators you spend time with.
 
 **Downloads are free and unlimited**, on any number of devices, forever — a purchased Work re-downloads at no cost to anyone. Creators pay for their own storage beyond a free allowance, and that is the only creator-side charge.
 
@@ -94,7 +94,7 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 **Reading, watching, playing.** Three players — video, audio, and a comic/ebook reader — on one shared transport that survives navigation, so a queued album keeps playing while you browse. A **Library** holds everything a person has kept: what they bought, permanently, plus anything free they chose to save. Follows produce a chronological feed that interleaves posts and releases, so releasing never costs a creator their reach. Reviews carry a score *and* text, because a number on its own says nothing worth moderating.
 
-**Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, quantity-based Seed subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
+**Money.** Stripe Connect onboarding and payouts, direct purchases at an all-in list price, itemised monthly support subscriptions, per-item refunds that reconcile identically whether the buyer or the Stripe dashboard starts them, monthly cycle settlement, and daily Time Pool distribution across the creators each person actually spent time with.
 
 **Operations.** An admin console with activity and job-queue telemetry, a moderation queue with the reporting taxonomy behind it, account export and deletion, analytics for creators, cross-publishing, and an itch.io importer.
 
@@ -139,7 +139,7 @@ make dev
 | `make dev` | Everything: Postgres, migrations, API, worker, web |
 | `make down` | Stop the dev servers |
 | `make db-reset` | Rebuild the dev database from migrations (wipes data) |
-| `make db-seed` | Seed fake creators, Works and posts |
+| `make db-seed` | <!-- econ:allow — the database seed script, not the retired payment noun -->Seed fake creators, Works and posts |
 | `make verify` | The pre-push gate — typecheck, lint, unit tests, and the full Playwright suite, in CI's order |
 
 `make help` lists the rest. Configuration is documented inline in [`.env.example`](./.env.example); nothing outside it is required to boot.

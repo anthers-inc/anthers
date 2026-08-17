@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import { amountLabel } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -117,13 +117,11 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 	const to =
 		p.work?.publicId != null ? workUrl({ slug: p.work.slug, publicId: p.work.publicId }) : null;
 
-	// A Seed buy has no title of its own; name it by what it bought. Seeds are sold in
-	// whole $3 units, so the count is recoverable from the amount.
-	const seedCount = Math.round(parseFloat(p.amount) / PUBLIC_ACCESS_PRICE);
+	// 🚨 Support has no title of its own, so it is named by its amount. It divided by
+	// $3 and rendered a COUNT until 2026-08-16 — which was already wrong by then, because
+	// any amount is payable: $7.50 of support rendered as "3 Seeds", and $1 as "0 Seeds".
 	const label =
-		p.type === "seeds"
-			? `${seedCount} ${seedCount === 1 ? "Seed" : "Seeds"}`
-			: (p.work?.title ?? "Untitled");
+		p.type === "seeds" ? `${amountLabel(p.amount)} of support` : (p.work?.title ?? "Untitled");
 
 	return (
 		<div className="card bg-base-200">

@@ -142,7 +142,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									0% platform fee on every Seed and sale—no revenue share, ever
+									0% platform fee on all support and sales—no revenue share, ever
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -451,8 +451,8 @@ export default function CompareGhostPage() {
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 							If you're a writer or journalist, Ghost is an excellent choice. If you make games,
 							videos, music, or multimedia creative work — Anthers was built for you. Free to use,
-							and Anthers takes no cut of any Seed or sale — the only deductions are card processing
-							and delivery, at cost, itemized in full.
+							and Anthers takes no cut of any support or sale — the only deductions are card
+							processing and delivery, at cost, itemized in full.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to={startHref} className="btn btn-primary rounded-full px-7">

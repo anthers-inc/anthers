@@ -13,10 +13,10 @@ import { Link } from "../../lib/router";
 import type { AccessResult, PostListItem, UnlockRoute } from "../../lib/types";
 
 /**
- * The cheapest route into a gated post, and who the Seeds would go to.
+ * The cheapest route into a gated post, and who the money would go to.
  *
- * "Cheapest" is the fewest Seeds the viewer still has to add, which is what they asked
- * for; a tie goes to the creator, since Seeds given to a creator reach them in full.
+ * "Cheapest" is the smallest amount the viewer still has to add, which is what they asked
+ * for; a tie goes to the creator, since what a viewer gives a creator reaches them in full.
  * Returns null when the post isn't gate-openable (purchase-only, or logged out).
  */
 export function cheapestRoute(
@@ -45,8 +45,9 @@ function seedsToGo(moreNeeded: number): string {
 
 /**
  * The imperative: what to do, in the fewest words, about the gap the viewer is actually
- * facing. One Seed, named by where it goes — there is no second kind (see the Copy Style
- * Guide: "Seeds are just Seeds; it's a matter of who you give them to").
+ * facing. One kind of giving, named by where it goes — there is no second kind. (The
+ * guide entry this used to quote taught the Seed, and retired with it on 2026-08-16; the
+ * point it made survives, because what changed was the unit and not the shape.)
  */
 export function unlockLabel(access: AccessResult, creatorName = "this creator"): string {
 	if (access.reason === "login_required") return "Log in to unlock";
@@ -108,7 +109,7 @@ export function LockedCover({
 }
 
 /**
- * Reason-aware unlock panel for the post page (login / join-or-give-Seeds). The
+ * Reason-aware unlock panel for the post page (login / join-or-support). The
  * one-time-purchase case is handled by ProjectPricing, which has the checkout flow.
  */
 export function UnlockPanel({
@@ -129,8 +130,8 @@ export function UnlockPanel({
 		? `Log in to check your access to this post from ${creatorName}.`
 		: cheapest
 			? null
-			: `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`;
-	// Land on the tiers tab, where the ladder and the Give Seeds control actually are —
+			: `Support ${creatorName} monthly to unlock this post and their other members-only work.`;
+	// Land on the tiers tab, where the ladder and the giving control actually are —
 	// the profile's default tab drops the intent the viewer arrived with.
 	const to = isLogin ? "/login" : creatorUsername ? `/${creatorUsername}?tab=badges` : "/subscribe";
 	return (
@@ -214,7 +215,7 @@ export function UnlockModal({
 			<>
 				{cheapest ? null : (
 					<p className="text-sm text-base-content/60">
-						Give Seeds to {creatorName} to unlock this and their members-only work.
+						Support {creatorName} monthly to unlock this and their members-only work.
 					</p>
 				)}
 				<Link

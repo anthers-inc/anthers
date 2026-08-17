@@ -3,9 +3,9 @@
  * Inline unlock for a gated **Work**. Instead of bouncing the viewer to the creator's
  * Badges page, this offers the *exact minimum upgrade* that unlocks it — the lowest
  * allowed Anthers threshold (subscribe inline, with the confirmation modal) and/or the
- * lowest Seed rung — right where the viewer hit the gate.
+ * lowest Badge rung — right where the viewer hit the gate.
  */
-import { type BadgeKey, badgeLabel } from "@anthers/shared/constants";
+import { amountLabel, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
@@ -14,11 +14,6 @@ import { useState } from "react";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../subscribe/SubscriptionPaymentModal";
-
-/** "1 Seed" / "3 Seeds" — thresholds count Seeds, so the copy must too. */
-function _seedCount(seeds: number): string {
-	return `${seeds} Seed${seeds === 1 ? "" : "s"}`;
-}
 
 /** The MARGINAL ask — what the viewer still has to add, not what the gate requires. */
 function seedsToGo(moreNeeded: number): string {
@@ -71,17 +66,17 @@ export default function InlineUnlock({
 	// Badge sitting EXACTLY at the threshold, or null when none does.
 	const anthersRoute = access.unlock?.anthers ?? null;
 	const creatorRoute = access.unlock?.creator ?? null;
-	const minAnthersSeeds = anthersRoute?.threshold;
+	const minAnthersAmount = anthersRoute?.threshold;
 
 	const unlockWithBadge = async () => {
-		if (minAnthersSeeds == null) return;
+		if (minAnthersAmount == null) return;
 		setLoading(true);
 		setError(null);
 		try {
 			// The gate's own threshold, not the Badge's — buying up to the named Badge could
 			// overshoot, and buying the Badge below would not clear the gate at all.
 			const res = await client.api.subscriptions.preview[":amount"].$get({
-				param: { amount: String(minAnthersSeeds) },
+				param: { amount: String(minAnthersAmount) },
 			});
 			if (!res.ok) {
 				setError("Couldn't load the details. Please try again.");
@@ -89,12 +84,12 @@ export default function InlineUnlock({
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
-				anthersSupport: minAnthersSeeds,
+				anthersSupport: minAnthersAmount,
 				// Name the Badge only when the gate actually sits on one; otherwise the
 				// level itself is the honest label for what's being bought.
 				badgeName: anthersRoute?.badge
 					? badgeLabel(anthersRoute.badge as BadgeKey)
-					: `${minAnthersSeeds} Seed${minAnthersSeeds === 1 ? "" : "s"}`,
+					: `${amountLabel(minAnthersAmount)} a month`,
 				preview,
 			});
 		} catch {
@@ -105,7 +100,7 @@ export default function InlineUnlock({
 	};
 
 	// Whichever side asks for less is the primary action; a tie goes to the creator, since
-	// Anthers takes no cut of a Seed given to a creator.
+	// Anthers takes no cut of what a viewer gives a creator.
 	const anthersFirst =
 		!!anthersRoute && (!creatorRoute || anthersRoute.moreNeeded < creatorRoute.moreNeeded);
 	const lockedBy = anthersFirst && anthersRoute?.badge ? badgeLabel(anthersRoute.badge) : null;
@@ -118,7 +113,7 @@ export default function InlineUnlock({
 			// The blurb survives only where nothing else explains the situation.
 			blurb={
 				!anthersRoute && !creatorRoute
-					? `Give Seeds to ${creatorName} to unlock this post and their other members-only work.`
+					? `Support ${creatorName} monthly to unlock this post and their other members-only work.`
 					: undefined
 			}
 		>

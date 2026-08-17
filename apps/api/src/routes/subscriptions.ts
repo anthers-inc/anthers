@@ -567,7 +567,10 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const acct = await getAccount(user.id);
 		if (!acct || supportAmount(acct.anthersSupport) === 0) {
-			return c.json({ error: "No Seeds to Anthers to cancel" }, 400);
+			return c.json(
+				{ error: "You are not supporting Anthers, so there is nothing to cancel" },
+				400,
+			);
 		}
 		// Refuse outright when payments aren't configured, like the other seven payment
 		// routes. This used to be `if (stripe && …)`, which silently SKIPPED Stripe and
@@ -913,7 +916,7 @@ const subscriptionRoutes = new Hono()
 
 			if (cycle !== currentCycle && cycle !== nextCycle) {
 				return c.json(
-					{ error: "Can only direct Seeds for the current or next billing cycle" },
+					{ error: "Can only direct support for the current or next billing cycle" },
 					400,
 				);
 			}
@@ -922,7 +925,7 @@ const subscriptionRoutes = new Hono()
 			const budget = Number(acct?.creatorSupportTotal ?? 0);
 
 			if (budget <= 0) {
-				return c.json({ error: "You have no Seeds to give this cycle" }, 400);
+				return c.json({ error: "You have nothing to give this cycle" }, 400);
 			}
 
 			// Current month: allocation locks — can only increase a creator, not decrease.
@@ -940,7 +943,10 @@ const subscriptionRoutes = new Hono()
 					.limit(1);
 
 				if (existing && amountNum < Number(existing.amount)) {
-					return c.json({ error: "Cannot reduce Seeds given in the current billing cycle" }, 400);
+					return c.json(
+						{ error: "Cannot reduce what you have already given in this billing cycle" },
+						400,
+					);
 				}
 			}
 
@@ -960,13 +966,13 @@ const subscriptionRoutes = new Hono()
 
 			const otherAllocated = Number(currentAllocated.total);
 			if (otherAllocated + amountNum > budget) {
-				return c.json({ error: "Exceeds the Seeds you hold this cycle" }, 400);
+				return c.json({ error: "Exceeds what you are giving this cycle" }, 400);
 			}
 
 			if (amountNum === 0) {
 				// Remove allocation (only allowed for next month)
 				if (cycle === currentCycle) {
-					return c.json({ error: "Cannot remove Seeds in the current billing cycle" }, 400);
+					return c.json({ error: "Cannot remove a creator in the current billing cycle" }, 400);
 				}
 				await db
 					.delete(seedAllocations)

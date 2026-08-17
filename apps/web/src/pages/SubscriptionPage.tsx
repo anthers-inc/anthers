@@ -3,14 +3,14 @@
 /*
  * Account dashboard — the support model.
  *
- * The user holds a count of Anthers-Seeds (their rank, free/root/sprout/petal/
- * blossom = 0…4+). This page surfaces:
- *   1. The rank (each Anthers-Seed: Time Pool + Supports Anthers).
- *   2. The creator-Seed budget + per-creator Seed allocations (directed, $3 units).
+ * The user gives Anthers a monthly amount, which names their Badge (free/root/
+ * sprout/petal/blossom at $0/$3/$6/$9/$12). This page surfaces:
+ *   1. That Badge, and where the amount goes (Time Pool + Supports Anthers).
+ *   2. The budget for creators + per-creator allocations (directed, any amount).
  *   3. Pool distributions (poolAmount + seedAmount) and, for creators, earnings.
  *
- * Rank changes happen on /subscribe; here we direct Seeds. There is no bandwidth
- * line — streaming and downloads are unlimited and free.
+ * The amount to Anthers is changed on /subscribe; here it is directed at creators.
+ * There is no bandwidth line — streaming and downloads are unlimited and free.
  */
 
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -228,11 +228,11 @@ interface CreatorRow {
 	avatar: string | null;
 	timeSeconds: number;
 	poolAmount: number;
-	/** Settled Seeds to this creator this cycle (from the distribution row). */
+	/** Settled support for this creator this cycle (from the distribution row). */
 	settledSeed: number;
-	/** Committed (saved) Seed allocation, whole dollars. */
+	/** Committed (saved) allocation to this creator, in dollars. */
 	committedSeed: number;
-	/** Effective Seed allocation including local pending edits. */
+	/** Effective allocation including local pending edits. */
 	pendingSeed: number;
 	gates: CreatorGate[];
 }
@@ -458,15 +458,15 @@ export default function SubscriptionPage() {
 				});
 				if (!res.ok) {
 					const data = (await res.json()) as { error?: string };
-					setError(data.error ?? "Failed to give Seeds.");
+					setError(data.error ?? "Failed to save.");
 					break;
 				}
 			}
-			setSuccess("Your Seeds are given.");
+			setSuccess("Your support is saved.");
 			setPendingSeeds(new Map());
 			await fetchCycleData(selectedCycle);
 		} catch {
-			setError("Failed to give Seeds.");
+			setError("Failed to save.");
 		} finally {
 			setActionLoading(null);
 		}
@@ -481,7 +481,7 @@ export default function SubscriptionPage() {
 			const res = await client.api.subscriptions.cancel.$post();
 			setAccount(((await res.json()) as unknown as { account: Account }).account);
 			setSuccess(
-				"The Seeds you give Anthers will revert to Free at the end of the current billing period.",
+				"Your support for Anthers will revert to Free at the end of the current billing period.",
 			);
 		} catch {
 			setError("Failed to cancel.");
@@ -536,7 +536,7 @@ export default function SubscriptionPage() {
 				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
 				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
 				<Link to="/subscribe" className="btn btn-primary">
-					Give Seeds
+					Support Anthers
 				</Link>
 			</div>
 		);
@@ -585,7 +585,7 @@ export default function SubscriptionPage() {
 											onClick={handleResume}
 											disabled={!!actionLoading}
 										>
-											{actionLoading === "resume" ? "Resuming…" : "Resume giving Seeds"}
+											{actionLoading === "resume" ? "Resuming…" : "Resume supporting"}
 										</button>
 									) : (
 										<button
@@ -594,7 +594,7 @@ export default function SubscriptionPage() {
 											onClick={handleCancel}
 											disabled={!!actionLoading}
 										>
-											{actionLoading === "cancel" ? "Stopping…" : "Stop giving Seeds"}
+											{actionLoading === "cancel" ? "Stopping…" : "Stop supporting"}
 										</button>
 									))}
 							</>
@@ -616,21 +616,21 @@ export default function SubscriptionPage() {
 							{viewMode === "past"
 								? "Read-only view of a closed cycle."
 								: viewMode === "next"
-									? "Preview — you can direct next month's Seeds now."
+									? "Preview — you can direct next month's support now."
 									: ""}
 						</p>
 					</div>
 
 					<div className="md:w-40 flex md:justify-end order-3">
 						<Link to="/subscribe" className="btn btn-primary btn-sm">
-							Adjust Seeds
+							Adjust support
 						</Link>
 					</div>
 				</div>
 
-				{/* Where the month's Seeds go */}
+				{/* Where the month's support goes */}
 				<div className="divider text-sm text-base-content/50 my-3">
-					What your Seeds to Anthers fund
+					What your support for Anthers funds
 					<InfoTip
 						text={`What you give Anthers funds the Time Pool ($${timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and ${PUBLIC_ACCESS_PRICE} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
@@ -719,10 +719,10 @@ export default function SubscriptionPage() {
 							</div>
 						</div>
 
-						{/* Seeds */}
+						{/* Directed support */}
 						<div className="flex flex-col">
 							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-								Seeds
+								To creators
 							</p>
 
 							{/* Budget summary */}
@@ -745,9 +745,9 @@ export default function SubscriptionPage() {
 
 							{seedBudget <= 0 ? (
 								<div className="text-sm text-base-content/50 text-center py-4">
-									<p>You've given no Seeds this cycle.</p>
+									<p>You've given nothing to creators this cycle.</p>
 									<Link to="/subscribe" className="link link-primary text-sm">
-										Upgrade to give Seeds
+										Upgrade to support creators
 									</Link>
 								</div>
 							) : (
@@ -825,7 +825,7 @@ export default function SubscriptionPage() {
 												onClick={handleSaveSeeds}
 												disabled={!hasPendingSeeds || !!actionLoading}
 											>
-												{actionLoading === "seeds" ? "Giving…" : "Give Seeds"}
+												{actionLoading === "seeds" ? "Giving…" : "Give"}
 											</button>
 											<button
 												type="button"
@@ -864,7 +864,7 @@ export default function SubscriptionPage() {
 							<div className="text-xl font-bold text-success">{fmt(earnings.poolTotal)}</div>
 						</div>
 						<div>
-							<div className="text-xs text-base-content/50 uppercase">Seed income</div>
+							<div className="text-xs text-base-content/50 uppercase">Support income</div>
 							<div className="text-xl font-bold text-success">{fmt(earnings.seedTotal)}</div>
 						</div>
 						<div>
@@ -890,7 +890,7 @@ export default function SubscriptionPage() {
 
 			{account.currentPeriodEnd && viewMode === "current" && (
 				<p className="text-xs text-base-content/40 text-center">
-					{isCanceling ? "Seeds end" : "Next renewal"}:{" "}
+					{isCanceling ? "Support ends" : "Next renewal"}:{" "}
 					{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
 						month: "long",
 						day: "numeric",
