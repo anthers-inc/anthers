@@ -7,11 +7,19 @@
 // <MeadowDecor> supplies the pollen surface, woven climbing side vines, and grassy
 // flowered floor around the content.
 //
-// SKETCH (support-model keystone): the page is sequenced as TWO products, not three
-// ways — always support for Anthers first, support for creators second. It LEADS with
-// the Anthers commons (what goes to Anthers funds free public content via the Time Pool
-// and lifts the viewer's own Public Access limit), then direct creator support (monthly
-// giving + purchases, no platform cut — the wedge).
+// The page is sequenced as TWO products, not three ways: direct creator support first
+// (monthly giving + purchases, no platform cut — the wedge), the Anthers commons second
+// (what goes to Anthers funds free public content via the Time Pool and lifts the
+// viewer's own Public Access limit).
+//
+// 🚨 RESEQUENCED 2026-08-17, and it ran the other way round for as long as this page had
+// existed. Support for Anthers led because it used to be the load-bearing gate — it paid
+// for streaming bandwidth generally, so everyone needed some. It buys **Public Access**
+// now, and nothing else, and early visitors arrive at the invitation of a creator who is
+// already here: with few creators there is little Public Access to want yet, so the
+// commons is not the tip of the funnel. Lead with *support the creators you love, and
+// Anthers takes no cut, so you pay less and they make more*; Public Access is the
+// second, optional thing. Reordering this back is a product decision, not a layout one.
 //
 // 🚨 Rewritten 2026-08-14, because the page taught two retired mechanisms. It framed
 // gates as "one primitive pointed two ways" and sold Anthers' Badges on the content they
@@ -92,14 +100,22 @@ export default function ForUsersPage() {
 					</Reveal>
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
-							<Link to="/signup" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
+							{/* 🚨 /subscribe, not /signup, and the sentence below is the reason. `/subscribe`
+							    collects an address and nothing else — the handle and any password are asked
+							    for at `/welcome`, after the account exists — while `/signup` is still the
+							    four-field form. Sending a reader who has just been promised "an email address
+							    is all it takes" to a username + password + confirm form makes the promise
+							    false at the click. It also puts the creator picker in front of a new account,
+							    which is the thing this page now leads with. */}
+							<Link to="/subscribe" className={`btn btn-primary rounded-lg px-8 ${ctaMotion}`}>
 								Start Exploring
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							No payment required to use Anthers, ever. Every account downloads freely and streams{" "}
-							{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month — free forever, no trial,
-							nothing to cancel.
+							An email address is all it takes — no card, no trial, nothing to cancel. Every account
+							downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
+							month, free forever. You'll only ever be asked to pay when you decide to back a
+							creator.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
@@ -109,26 +125,42 @@ export default function ForUsersPage() {
 				</div>
 			</header>
 
-			{/* How it works — two products, the Anthers commons first */}
+			{/* How it works — two products, direct creator support first */}
 			<Section>
 				<Reveal>
 					<Eyebrow>How it works</Eyebrow>
 					<H2>Support the creators you love, and grow the garden for all</H2>
 					<Lede>
-						Everything on Anthers starts{" "}
-						<strong className="font-semibold text-base-content/80">free</strong>, with no ads or
-						strings attached. We believe creative and informative media is a common good, and should
-						be available to the community with no obligations or ulterior motives.
+						Anthers is where you back the people whose work you love. Give a creator a{" "}
+						<strong className="font-semibold text-base-content/80">monthly amount</strong>, or buy
+						something they made outright — and Anthers takes no cut of either one. You pay less and
+						they keep more, which is most of the reason this place exists.
 					</Lede>
 					<Lede>
-						When you want to go past free public access, give a
-						<strong className="font-semibold text-base-content/80"> monthly amount </strong>
-						in one of two ways:
+						The rest of it is that everything a creator leaves ungated starts{" "}
+						<strong className="font-semibold text-base-content/80">free</strong>, with no ads or
+						strings attached. We believe creative and informative media is a common good, and should
+						be available to the community with no obligations or ulterior motives. So a monthly
+						amount points one of two ways:
 					</Lede>
 					<div className="my-6 grid gap-8 text-left sm:grid-cols-2">
 						<Reveal delay={0} className="h-full">
-							<SignpostCard step="1" title="Support Anthers" tone="anthers">
-								Giving Anthers a monthly amount does the following:
+							<SignpostCard step="1" title="Support Creators" tone="creator">
+								Directing a monthly amount to a creator does the following:
+								<ul>
+									<li>Send that creator your support with no platform cut</li>
+									<li>Unlock new creator-gated content and interactions</li>
+									<li>Receive special discounts and early access on direct purchases</li>
+								</ul>
+								And remember: whether you back a creator monthly or buy from them directly, Anthers
+								takes no cut of it. The price you see is the price you pay, and sales tax is the
+								only thing ever added.
+							</SignpostCard>
+						</Reveal>
+						<Reveal delay={110} className="h-full">
+							<SignpostCard step="2" title="Support Anthers" tone="anthers">
+								Giving Anthers a monthly amount — entirely optional, and separate from anything you
+								give a creator — does the following:
 								<ul>
 									<li>Increase the pool of money distributed to creators you spend time with</li>
 									<li>Fund Anthers' free public access and charitable programs for all</li>
@@ -139,19 +171,6 @@ export default function ForUsersPage() {
 								<strong className="font-semibold text-base-content/85"> Anthers Badge</strong>, from
 								Root all the way to Blossom — a mark of what your giving does, not a key to
 								anything. Nothing on Anthers is ever gated behind it.
-							</SignpostCard>
-						</Reveal>
-						<Reveal delay={110} className="h-full">
-							<SignpostCard step="2" title="Support Creators" tone="creator">
-								Directing a monthly amount to a creator does the following:
-								<ul>
-									<li>Send that creator your support with no platform cut</li>
-									<li>Unlock new creator-gated content and interactions</li>
-									<li>Receive special discounts and early access on direct purchases</li>
-								</ul>
-								And remember: whether you back a creator monthly or buy from them directly, Anthers
-								takes no cut of it. The price you see is the price you pay, and sales tax is the
-								only thing ever added.
 							</SignpostCard>
 						</Reveal>
 					</div>
@@ -172,23 +191,83 @@ export default function ForUsersPage() {
 				</Reveal>
 			</Section>
 
-			{/* ① The Anthers commons — free floor + support for Anthers + Time Pool */}
+			{/* ① Support creators directly — the wedge, and the tip of the funnel */}
 			<Section tint>
 				<Reveal>
-					<Eyebrow>① The Anthers commons</Eyebrow>
+					<Eyebrow>① Support creators directly</Eyebrow>
+					<H2>When you pay a creator, that's what they get</H2>
+					<Lede>
+						We all deserve a way to support the people we love without tossing more money onto a
+						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
+						give creators crumbs even if we start paying. Our favorite game stores take 30% of every
+						sale. Our favorite music apps pay less than a cent per stream. The problem is
+						straightforward: these are for-profit companies. It doesn't{" "}
+						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
+					</Lede>
+					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+						On Anthers there are two ways to back a creator directly, and both reach them in full:
+					</p>
+				</Reveal>
+				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
+					<Reveal delay={0} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🌱&nbsp; Back them monthly
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Pick an amount and give it to a creator every month—whatever you like, changed
+								whenever you like. Anthers takes no cut of it — no fee, no skim — and it keeps going
+								until you change it. It is also how you unlock that creator's own gated content.
+							</p>
+						</Card>
+					</Reveal>
+					<Reveal delay={110} className="h-full">
+						<Card className="card-lift h-full">
+							<h3 style={serif} className="mb-3 text-xl font-medium">
+								🎁&nbsp; Buy their work
+							</h3>
+							<p className="text-sm leading-relaxed text-base-content/70">
+								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
+								keep. You pay the listed price plus your state's sales tax, and nothing else.
+								Anthers keeps none of it: the one thing that comes out of that price is card
+								processing, at cost. Downloading it again, on any device, costs nothing.
+							</p>
+						</Card>
+					</Reveal>
+				</div>
+				<Reveal delay={120} className="mx-auto mt-10 block max-w-3xl">
+					<PurchaseExample />
+				</Reveal>
+				<Reveal>
+					<p
+						style={serif}
+						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
+					>
+						0% cut. Not a cent of it is ours. That's why Anthers is a non-profit; it's not about us.
+					</p>
+				</Reveal>
+			</Section>
+
+			{/* ② The Anthers commons — free floor + support for Anthers + Time Pool.
+			    Second, deliberately: see the resequencing note in the page header. */}
+			<Section>
+				<Reveal>
+					<Eyebrow>② The Anthers commons</Eyebrow>
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
-						Every account downloads without a meter—no allowance to run out of, no data cap, no
-						per-gigabyte charge, on as many devices as you like—and streams{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. This isn't a
-						trial or a trick (we're a non-profit; there's little incentive for either), it's an
-						attempt to fulfill what we believe is a common right: for everyone to share and
+						Everything above is between you and a creator. This part is the ground it grows in, and
+						you are never asked to pay for it: every account downloads without a meter—no allowance
+						to run out of, no data cap, no per-gigabyte charge, on as many devices as you like—and
+						streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. This
+						isn't a trial or a trick (we're a non-profit; there's little incentive for either), it's
+						an attempt to fulfill what we believe is a common right: for everyone to share and
 						experience creativity and community with their neighbors around the world.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						Supporting Anthers is how you help keep it that way. ${PUBLIC_ACCESS_PRICE} a month
-						lifts that limit for as long as you keep it up—and every dollar of it funds the free
-						public content everyone enjoys, because creators earn from the{" "}
+						If you want more time than that, or simply want to hold the gates open for everyone
+						else, ${PUBLIC_ACCESS_PRICE} a month to Anthers lifts that limit for as long as you keep
+						it up—and every dollar of it funds the free public content everyone enjoys, because
+						creators earn from the{" "}
 						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
 						people spend with their public work. Give more and your hours are worth more to the
 						people you spend them with. The more the garden fills in, the further each dollar
@@ -263,63 +342,6 @@ export default function ForUsersPage() {
 				</div>
 			</Section>
 
-			{/* ② Support creators directly — the wedge */}
-			<Section>
-				<Reveal>
-					<Eyebrow>② Support creators directly</Eyebrow>
-					<H2>When you pay a creator, that's what they get</H2>
-					<Lede>
-						We all deserve a way to support the people we love without tossing more money onto a
-						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
-						give creators crumbs even if we start paying. Our favorite game stores take 30% of every
-						sale. Our favorite music apps pay less than a cent per stream. The problem is
-						straightforward: these are for-profit companies. It doesn't{" "}
-						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
-					</Lede>
-					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						On Anthers there are two ways to back a creator directly, and both reach them in full:
-					</p>
-				</Reveal>
-				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
-					<Reveal delay={0} className="h-full">
-						<Card className="card-lift h-full">
-							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🌱&nbsp; Back them monthly
-							</h3>
-							<p className="text-sm leading-relaxed text-base-content/70">
-								Pick an amount and give it to a creator every month—whatever you like, changed
-								whenever you like. Anthers takes no cut of it — no fee, no skim — and it keeps going
-								until you change it. It is also how you unlock that creator's own gated content.
-							</p>
-						</Card>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
-						<Card className="card-lift h-full">
-							<h3 style={serif} className="mb-3 text-xl font-medium">
-								🎁&nbsp; Buy their work
-							</h3>
-							<p className="text-sm leading-relaxed text-base-content/70">
-								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
-								keep. You pay the listed price plus your state's sales tax, and nothing else.
-								Anthers keeps none of it: the one thing that comes out of that price is card
-								processing, at cost. Downloading it again, on any device, costs nothing.
-							</p>
-						</Card>
-					</Reveal>
-				</div>
-				<Reveal delay={120} className="mx-auto mt-10 block max-w-3xl">
-					<PurchaseExample />
-				</Reveal>
-				<Reveal>
-					<p
-						style={serif}
-						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
-					>
-						0% cut. Not a cent of it is ours. That's why Anthers is a non-profit; it's not about us.
-					</p>
-				</Reveal>
-			</Section>
-
 			{/* Closing */}
 			<section className="bg-base-200/70">
 				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
@@ -332,12 +354,14 @@ export default function ForUsersPage() {
 							Plant something worth growing
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Support the creators you love, on terms you can see and trust. Start now with a free
-							account you can create in seconds—{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
+							Support the creators you love, on terms you can see and trust. Start with a free
+							account and an email address—that's the whole of it, and a card is only ever needed
+							when you decide to back someone. {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
 							month, free forever. No ads, no data brokers, nothing to cancel.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
-							<Link to="/signup" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
+							{/* /subscribe for the same reason as the hero CTA — see the note there. */}
+							<Link to="/subscribe" className={`btn btn-primary rounded-lg px-7 ${ctaMotion}`}>
 								Start Exploring
 							</Link>
 						</div>

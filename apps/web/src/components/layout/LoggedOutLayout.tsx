@@ -179,13 +179,19 @@ export default function LoggedOutLayout() {
 						</li>
 					</ul>
 
-					{/* Right: single CTA — opens the combined auth page on its signup card
-						(/signup deep-links into signup mode). A soft primary-green glow makes it
-						stand out; text-sm matches the nav links so it isn't overshadowed. flex-1
-						+ justify-end mirror the brand side so the center links stay centered. */}
+					{/* Right: single CTA — /subscribe, the email-only start. A soft primary-green
+						glow makes it stand out; text-sm matches the nav links so it isn't
+						overshadowed. flex-1 + justify-end mirror the brand side so the center links
+						stay centered.
+
+						⚠️ It pointed at /signup — the four-field form — until 2026-08-17. It moved
+						with the homepage's own "Start Exploring" buttons rather than after them:
+						the two carry the SAME LABEL on the same page, so leaving one behind would
+						have made one string mean two destinations. /signup is unchanged and still
+						where "Start Creating" sends a creator, who needs the full account anyway. */}
 					<div className="flex flex-1 items-center justify-end">
 						<Link
-							to="/signup"
+							to="/subscribe"
 							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
 						>
 							Start Exploring

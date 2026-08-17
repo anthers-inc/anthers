@@ -447,10 +447,14 @@ export default function ForCreatorsPage() {
 					<H2>Two ways money reaches you</H2>
 					<Lede>
 						There's one thing to support on Anthers: a{" "}
-						<strong className="font-semibold text-base-content/80">monthly amount</strong>, from{" "}
-						{fmtMoney(PUBLIC_ACCESS_PRICE)}. A fan points it at you—and we take no cut of it—or at
-						Anthers, where part of it becomes the Time Pool that pays for the work Anthers hands out
-						on your behalf. Both reach creators; neither is a cut of your earnings.
+						<strong className="font-semibold text-base-content/80">monthly amount</strong>, at
+						whatever levels you set. A fan points it at you—and we take no cut of it—or at Anthers,
+						where part of it becomes the Time Pool that pays for the work Anthers hands out on your
+						behalf. Both reach creators; neither is a cut of your earnings, and{" "}
+						<strong className="font-semibold text-base-content/80">
+							neither one needs the other
+						</strong>
+						—a fan who never gives Anthers a cent can still back you in full.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
@@ -598,10 +602,14 @@ export default function ForCreatorsPage() {
 							<h3 style={serif} className="mb-2 text-lg font-medium">
 								🌱&nbsp; Your gates
 							</h3>
+							{/* ⚠️ These example rungs were `PUBLIC_ACCESS_PRICE × 1/2/3` — the Anthers
+							    ladder, borrowed. Read as a creator's own options it teaches a $3 step
+							    that no longer exists (63.01 § Badge: no granularity floor, "$2 / $7.50
+							    / $15 is as valid as $3 / $6 / $9 / $12"), so the illustration is
+							    deliberately uneven and deliberately not derived from our price. */}
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Your own rungs, at any amount you like—{fmtMoney(PUBLIC_ACCESS_PRICE)},{" "}
-								{fmtMoney(PUBLIC_ACCESS_PRICE * 2)}, {fmtMoney(PUBLIC_ACCESS_PRICE * 3)} a month and
-								up. You write the names and pick what each one opens. Because support is given
+								Your own rungs, at any amount you like—$2, $7.50, $15 a month, whatever suits your
+								work. You write the names and pick what each one opens. Because support is given
 								deliberately, nobody backs into your inner circle by watching.
 							</p>
 						</Card>
