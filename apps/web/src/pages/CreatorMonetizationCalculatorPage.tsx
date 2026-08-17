@@ -12,11 +12,11 @@ import { useMemo, useState } from "react";
 import { CalcPageHeader, SegControl } from "../components/calculators/ui";
 
 // ---------------------------------------------------------------------------
-// Support-model economics. A viewer holds Anthers-Seeds — $3 each; the count is
-// their rank (Root 1 … Blossom 4). Each Anthers-Seed's $3 splits into a Time Pool
-// ($1.50, to creators by time) and "Supports Anthers" (the remainder funding
-// free access and programs). Money to creators = the Time Pool + Seeds a viewer gives
-// directly to a creator ($3 each, no platform cut). The Time Pool is distributed
+// Support-model economics. A viewer gives Anthers a monthly amount, which names their
+// Badge (Root $3 … Blossom $12). That amount splits into a Time Pool (a share of it, to
+// creators by time) and "Supports Anthers" (the remainder funding free access and
+// programs). Money to creators = the Time Pool + what a viewer gives directly to a
+// creator (any amount, no platform cut). The Time Pool is distributed
 // across the creators a viewer watches, in proportion to time (equal-time
 // principle — a minute is a minute across every medium). There is no bandwidth term:
 // delivery costs $0 at any volume, so it appears on nobody's bill.
@@ -30,9 +30,17 @@ const BADGE_KEYS: BadgeKey[] = ["free", "root", "sprout", "petal", "blossom"];
 const PAID_PLANS: BadgeKey[] = ["root", "sprout", "petal", "blossom"];
 
 const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
-/** A loose illustrative cap on directable creator-Seeds by rank (Seeds are independent). */
-const seedsOf = (badge: BadgeKey) => thresholdForBadge(badge);
-/** "Supports Anthers" — the non-Time-Pool half of each Seed given to Anthers: the
+/**
+ * A loose illustrative cap on what a viewer directs to creators, by Badge — **dollars a
+ * month**, and independent of what they give Anthers.
+ *
+ * 🚨 It was a Seed COUNT, and `thresholdForBadge` started returning dollars when the Seed
+ * retired on 2026-08-16. Everything downstream still multiplied by $3, so Blossom modelled
+ * a viewer directing **$36** rather than $12 — the whole page overstated creator revenue
+ * threefold, silently, because nothing here is a typed figure `econ:figures` could catch.
+ */
+const supportOf = (badge: BadgeKey) => thresholdForBadge(badge);
+/** "Supports Anthers" — the non-Time-Pool part of what is given to Anthers: the
  * remainder that funds free access and the charitable programs. */
 const supportsAnthersOf = (badge: BadgeKey) =>
 	Math.max(0, thresholdForBadge(badge) - timePoolFor(thresholdForBadge(badge)));
@@ -63,32 +71,32 @@ function ConversionEngine() {
 	const [badge, setBadge] = useState<BadgeKey>("sprout");
 	const [total, setTotal] = useState(20);
 	const [you, setYou] = useState(8);
-	const [seedsToYou, setSeedsToYou] = useState(1);
+	const [directedToYou, setDirectedToYou] = useState(3);
 
 	const m = useMemo(() => {
 		const safeTotal = total > 0 ? total : 0.0001;
 		const youCapped = Math.min(you, safeTotal);
-		const planSeeds = seedsOf(badge);
-		const directedSeeds = Math.min(seedsToYou, planSeeds);
+		const planSupport = supportOf(badge);
+		const directed = Math.min(directedToYou, planSupport);
 
 		const tp = timePoolOf(badge);
-		const seeds = planSeeds * PUBLIC_ACCESS_PRICE;
+		const toCreatorsDirect = planSupport;
 		const supportsAnthers = supportsAnthersOf(badge);
 		const price = thresholdForBadge(badge);
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;
-		const seedEarn = directedSeeds * PUBLIC_ACCESS_PRICE;
+		const seedEarn = directed;
 		const earn = tpEarn + seedEarn;
 
 		const perHour = tp / safeTotal; // Time Pool value of a view-hour
 
 		return {
 			youCapped,
-			directedSeeds,
-			planSeeds,
+			directed,
+			planSupport,
 			tp,
-			seeds,
+			toCreatorsDirect,
 			supportsAnthers,
 			price,
 			share,
@@ -96,11 +104,11 @@ function ConversionEngine() {
 			seedEarn,
 			earn,
 			perHour,
-			toCreators: tp + seeds,
+			toCreators: tp + toCreatorsDirect,
 		};
-	}, [badge, total, you, seedsToYou]);
+	}, [badge, total, you, directedToYou]);
 
-	// Split bar over what the viewer's Anthers-Seeds cost them.
+	// Split bar over what the viewer gives Anthers.
 	const seg = [
 		{ label: "Time Pool", note: "to creators", v: m.tp, color: "#34d399" },
 		{
@@ -119,7 +127,7 @@ function ConversionEngine() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the Badge a viewer chose, then how they spend their month. Their Time Pool is split
-					across everyone they watch, by time; your slice of their time — plus any Seeds they direct
+					across everyone they watch, by time; your slice of their time — plus anything they direct
 					to you — is what you take home from them. Anthers is a non-profit—no profit-taking.
 				</p>
 
@@ -142,7 +150,7 @@ function ConversionEngine() {
 							/>
 							<div className="flex justify-between font-mono text-[10px] text-base-content/40 mt-1.5">
 								<span>{usd2(m.tp)} Time Pool</span>
-								<span>{m.planSeeds} Seeds</span>
+								<span>{usd2(m.planSupport)} directable</span>
 							</div>
 						</div>
 						<label className="block">
@@ -183,22 +191,24 @@ function ConversionEngine() {
 							)}
 						</label>
 						<label className="block">
-							<span className="block text-sm text-base-content/70 mb-2">Seeds directed to you</span>
+							<span className="block text-sm text-base-content/70 mb-2">
+								Directed to you ($/mo)
+							</span>
 							<div className="flex items-center gap-2">
 								<input
 									type="number"
 									min={0}
 									step={1}
-									value={seedsToYou}
-									onChange={(e) => setSeedsToYou(Math.max(0, Number(e.target.value) || 0))}
+									value={directedToYou}
+									onChange={(e) => setDirectedToYou(Math.max(0, Number(e.target.value) || 0))}
 									className="input input-bordered input-sm w-full font-mono tabular-nums text-right"
 								/>
-								<span className="text-base-content/40 text-xs w-8">× $1</span>
+								<span className="text-base-content/40 text-xs w-8">$/mo</span>
 							</div>
 							<p className="text-base-content/40 text-xs mt-1">
-								{m.planSeeds === 0
-									? "Free carries no Seeds."
-									: `They give ${m.planSeeds} Seed${m.planSeeds === 1 ? "" : "s"} — capped there (${m.directedSeeds} to you).`}
+								{m.planSupport === 0
+									? "Free directs nothing."
+									: `They direct about ${usd2(m.planSupport)} — capped there (${usd2(m.directed)} to you).`}
 							</p>
 						</label>
 					</div>
@@ -215,7 +225,7 @@ function ConversionEngine() {
 								</p>
 								<p className="mt-1.5 text-xs text-base-content/50">
 									<span className="font-semibold text-success">{badgeLabel(badge)}</span> ·{" "}
-									{m.planSeeds} Seeds
+									{usd2(m.planSupport)} directable
 								</p>
 							</div>
 							<div className="rounded-xl bg-base-200 p-4">
@@ -227,7 +237,7 @@ function ConversionEngine() {
 									<span className="ml-1 text-sm font-medium text-base-content/50">/hr</span>
 								</p>
 								<p className="mt-1.5 text-xs text-base-content/50">
-									Time Pool basis — Seeds stack on top
+									Time Pool basis — directed support stacks on top
 								</p>
 							</div>
 							<div className="rounded-xl bg-base-200 p-4">
@@ -250,7 +260,7 @@ function ConversionEngine() {
 									{usd2(m.earn)}
 								</p>
 								<p className="mt-1.5 text-xs text-base-content/50">
-									{usd2(m.tpEarn)} time + {usd2(m.seedEarn)} seeds / mo
+									{usd2(m.tpEarn)} time + {usd2(m.seedEarn)} directed / mo
 								</p>
 							</div>
 						</div>
@@ -258,7 +268,7 @@ function ConversionEngine() {
 						{/* Split bar */}
 						<div>
 							<div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-base-content/40 mb-1.5">
-								<span>where their Seeds go</span>
+								<span>where their support goes</span>
 								<span>
 									{usd2(m.price)}/mo · {usd2(m.toCreators)} to creators
 								</span>
@@ -298,7 +308,7 @@ function ConversionEngine() {
 						<div className="text-sm text-base-content/80 bg-success/10 rounded-lg p-3.5 leading-relaxed">
 							This viewer holds <b className="text-success">{badgeLabel(badge)}</b> ({usd2(m.price)}
 							/mo). Of that, <b>{usd2(m.toCreators)}</b> reaches creators ({usd2(m.tp)} Time Pool +{" "}
-							{usd2(m.seeds)} Seeds); Anthers keeps <b>$0</b>. You hold{" "}
+							{usd2(m.toCreatorsDirect)} directed); Anthers keeps <b>$0</b>. You hold{" "}
 							<b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their {+total.toFixed(2)}{" "}
 							hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
 						</div>
@@ -429,8 +439,8 @@ function ValueMatrix() {
 					</b>{" "}
 					the least (<b className="text-base-content">{loCell}</b>,{" "}
 					<span className="font-mono text-success">{rate(lo)}/hr</span>). Same content, same minute
-					— the difference is entirely who's watching and how much else they watch. Seeds stack on
-					top.
+					— the difference is entirely who's watching and how much else they watch. Directed support
+					stacks on top.
 				</div>
 			</div>
 		</div>
@@ -448,14 +458,14 @@ interface Segment {
 	badge: BadgeKey;
 	total: number;
 	you: number;
-	seedsToYou: number;
+	directedToYou: number;
 }
 
 const SEG_DEFAULTS: Omit<Segment, "id">[] = [
-	{ name: "Superfans", subs: 50, badge: "blossom", total: 15, you: 9, seedsToYou: 3 },
-	{ name: "Core fans", subs: 200, badge: "petal", total: 20, you: 8, seedsToYou: 1 },
-	{ name: "Regulars", subs: 800, badge: "sprout", total: 25, you: 4, seedsToYou: 0 },
-	{ name: "Casual", subs: 2000, badge: "root", total: 30, you: 1.5, seedsToYou: 0 },
+	{ name: "Superfans", subs: 50, badge: "blossom", total: 15, you: 9, directedToYou: 9 },
+	{ name: "Core fans", subs: 200, badge: "petal", total: 20, you: 8, directedToYou: 3 },
+	{ name: "Regulars", subs: 800, badge: "sprout", total: 25, you: 4, directedToYou: 0 },
+	{ name: "Casual", subs: 2000, badge: "root", total: 30, you: 1.5, directedToYou: 0 },
 ];
 
 let segCounter = 0;
@@ -474,10 +484,10 @@ function AudienceBuilder() {
 			const total = s.total > 0 ? s.total : 0.0001;
 			const you = Math.min(s.you, total);
 			const tp = timePoolOf(s.badge);
-			const directedSeeds = Math.min(s.seedsToYou, seedsOf(s.badge));
+			const directed = Math.min(s.directedToYou, supportOf(s.badge));
 			const share = you / total;
 			const tpPerSub = share * tp;
-			const seedPerSub = directedSeeds * PUBLIC_ACCESS_PRICE;
+			const seedPerSub = directed;
 			const perSub = tpPerSub + seedPerSub;
 			const segRev = perSub * s.subs;
 			rev += segRev;
@@ -485,7 +495,7 @@ function AudienceBuilder() {
 			seedRev += seedPerSub * s.subs;
 			subs += s.subs;
 			capHrs += you * s.subs;
-			return { ...s, tp, directedSeeds, share, perSub, segRev };
+			return { ...s, tp, directed, share, perSub, segRev };
 		});
 		return { rows, rev, tpRev, seedRev, subs, capHrs };
 	}, [segments]);
@@ -520,8 +530,8 @@ function AudienceBuilder() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					Build an audience from segments. For each, set the subscriber count, the Badge they chose,
-					total monthly time, hours spent with you, and any Seeds they direct to you. Revenue per
-					subscriber = (your share of their time × their Time Pool) + directed Seeds.
+					total monthly time, hours spent with you, and anything they direct to you. Revenue per
+					subscriber = (your share of their time × their Time Pool) + what they direct.
 				</p>
 
 				<div className="overflow-x-auto">
@@ -533,7 +543,7 @@ function AudienceBuilder() {
 								<th className="text-right p-2">Badge</th>
 								<th className="text-right p-2">Total hrs</th>
 								<th className="text-right p-2">Hrs of you</th>
-								<th className="text-right p-2">Seeds→you</th>
+								<th className="text-right p-2">$→you</th>
 								<th className="text-right p-2 border-l border-base-300 text-success">Time Pool</th>
 								<th className="text-right p-2">Your share</th>
 								<th className="text-right p-2">$ / sub</th>
@@ -599,8 +609,8 @@ function AudienceBuilder() {
 											type="number"
 											min={0}
 											step={1}
-											value={r.seedsToYou}
-											onChange={(e) => update(r.id, "seedsToYou", e.target.value)}
+											value={r.directedToYou}
+											onChange={(e) => update(r.id, "directedToYou", e.target.value)}
 											className="input input-xs w-14 text-right font-mono"
 										/>
 									</td>
@@ -653,7 +663,7 @@ function AudienceBuilder() {
 									badge: "sprout",
 									total: 20,
 									you: 3,
-									seedsToYou: 0,
+									directedToYou: 0,
 								},
 							])
 						}
@@ -670,7 +680,8 @@ function AudienceBuilder() {
 							{usd2(totals.rev)}
 						</p>
 						<p className="mt-1 text-xs text-base-content/50">
-							{usd0(totals.rev * 12)}/yr · {usd2(totals.tpRev)} time + {usd2(totals.seedRev)} seeds
+							{usd0(totals.rev * 12)}/yr · {usd2(totals.tpRev)} time + {usd2(totals.seedRev)}{" "}
+							directed
 						</p>
 					</div>
 					<div className="flex-1 min-w-[180px] rounded-xl bg-success/10 p-4">
@@ -737,7 +748,7 @@ export default function CreatorMonetizationCalculatorPage() {
 							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
-							<b className="text-base-content">slice of that viewer's Time Pool</b>, plus any Seeds
+							<b className="text-base-content">slice of that viewer's Time Pool</b>, plus anything
 							they direct your way. This tool traces that conversion, from one viewer up to a
 							creator's monthly earnings.
 						</>
@@ -758,17 +769,18 @@ export default function CreatorMonetizationCalculatorPage() {
 							</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
-									A viewer gives Anthers <b>Seeds</b> — a flat <b>$3 each</b> (their Badge, Root →
-									Blossom). Each one's $3 splits into a <b>Time Pool</b> ($
-									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)}, to creators by time) and{" "}
-									<b>Supports Anthers</b> (the remainder, which funds free access and the charitable
-									programs). Directed <b>Seeds</b> ($3 each, no platform cut) are given alongside.
+									A viewer gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
+									Blossom). It splits into a <b>Time Pool</b> (${" "}
+									{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}, to
+									creators by time) and <b>Supports Anthers</b> (the remainder, which funds free
+									access and the charitable programs). <b>Directed support</b> (any amount, no
+									platform cut) is given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
 									<b>in proportion to time spent</b>. A creator who holds <code>s</code> = (their
 									minutes ÷ the viewer's total minutes) earns <code>s × Time Pool</code> from that
-									viewer, plus any Seeds the viewer directs to them.
+									viewer, plus anything the viewer directs to them.
 								</li>
 								<li>
 									<b>Equal-time principle:</b> a minute counts the same across all media types.
@@ -784,7 +796,7 @@ export default function CreatorMonetizationCalculatorPage() {
 							<h4 className="font-semibold text-base-content/80 mb-1">What it leaves out</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
-									The audience builder counts just the Seeds each segment directs to you. One-time /
+									The audience builder counts just what each segment directs to you. One-time /
 									direct purchases and creator <b>storage</b> costs are out of scope — see the
 									companion storage calculator.
 								</li>
