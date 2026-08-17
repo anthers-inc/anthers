@@ -15,7 +15,6 @@
 		"./studio": "./src/lib/studio.ts",
 		"./nextPath": "./src/lib/next-path.ts",
 		"./upload": "./src/lib/upload.ts",
-		"./transcode": "./src/lib/transcode.ts",
 		"./fonts": "./src/styles/fonts.ts",
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
