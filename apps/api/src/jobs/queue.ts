@@ -157,7 +157,6 @@ export async function ensureQueueReady(): Promise<void> {
 
 export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
-	PACKAGE_VIDEO: "package-video", // Remux browser-encoded MP4 variants → HLS (no re-encode)
 	PROCESS_AUDIO: "process-audio",
 	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
@@ -199,11 +198,6 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 60,
 		expireInMinutes: 45, // Video transcoding can take up to 30 min
-	},
-	[QUEUES.PACKAGE_VIDEO]: {
-		retryLimit: 2,
-		retryDelay: 60,
-		expireInMinutes: 15, // Remux-only (copy codecs) — fast, but downloads variants first
 	},
 	[QUEUES.PROCESS_AUDIO]: {
 		retryLimit: 2,

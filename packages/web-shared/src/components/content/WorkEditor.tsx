@@ -2,11 +2,17 @@
 /**
  * Create / edit a **Work** in the creator's Catalog. The single authoring surface for it
  * (used by the Catalog page and the post content picker's "Upload new"): a modal that
- * picks a `UploadableWorkType`, runs the type's upload flow (client-transcode for video,
- * raw upload for audio, image upload, embed URL for game/software, details for
- * physical/service), then POSTs the Work. Media with a source is processed once,
- * server-side, on create. Games/software can then manage downloadable builds (assets),
- * which persist immediately.
+ * picks a `UploadableWorkType`, runs the type's upload flow (raw source upload for video
+ * and audio, image upload, embed URL for game/software, details for physical/service),
+ * then POSTs the Work. Media with a source is processed once, server-side, on create.
+ * Games/software can then manage downloadable builds (assets), which persist immediately.
+ *
+ * **Every upload is processed server-side, and there is no choice to offer.** This editor
+ * carried an *Encode on device / Upload & we process* toggle, plus a desktop-only native
+ * picker that encoded through the bundled ffmpeg sidecar. Both were removed on 2026-08-17
+ * because the on-device implementations did not work; on-device returns as the desktop
+ * app's separate pre-process step, which hands the creator an upload pack to upload here
+ * like any other file. Don't reintroduce an encode inside this dialog.
  *
  * Beyond the media it also carries everything that decides what a Work *is* to a reader —
  * its Created date, its delivery switches, its access table and its release. Those had no
@@ -20,7 +26,7 @@
  */
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { client, isDesktop } from "../../lib/rpc";
+import { client } from "../../lib/rpc";
 import type {
 	AuthoredPrecision,
 	CreatorGate,
@@ -28,13 +34,7 @@ import type {
 	Work,
 	WorkInput,
 } from "../../lib/types";
-import {
-	canTranscodeInBrowser,
-	type UploadedVariant,
-	uploadClientTranscodedVideo,
-	uploadMediaFile,
-	uploadNativeTranscodedVideo,
-} from "../../lib/upload";
+import { uploadMediaFile } from "../../lib/upload";
 import AccessTables, {
 	buildSeedRows,
 	type SeedRowDraft,
@@ -46,8 +46,6 @@ import FormField from "../ui/FormField";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import { authoredToIso, isoToAuthoredValue } from "./work-state";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
-
-type EncodeMode = "device" | "server";
 
 interface ContentItemEditorProps {
 	/** Present → edit an existing item; absent → create a new one. */
@@ -101,11 +99,6 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	const [videoName, setVideoName] = useState<string | null>(
 		editing?.type === "video" && editing.sourceKey ? "Existing video" : null,
 	);
-	const [videoVariants, setVideoVariants] = useState<UploadedVariant[]>([]);
-	const [videoDuration, setVideoDuration] = useState<number | null>(
-		editing?.durationSeconds ?? null,
-	);
-	const [encodeMode, setEncodeMode] = useState<EncodeMode>("device");
 
 	// Audio
 	const [audioKey, setAudioKey] = useState(
@@ -223,85 +216,13 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		}
 	};
 
-	/**
-	 * Desktop: pick a video by real path and encode it with the bundled native ffmpeg.
-	 *
-	 * A separate entry point from `handleVideo` because the native picker yields a
-	 * PATH, not a `File` — which is the point: ffmpeg reads the source off disk, so the
-	 * encode is neither capped at 300 MB nor holding the file in memory, and it uses
-	 * every core instead of one per rung.
-	 */
-	const handleVideoNative = async () => {
-		const { pickVideoFile, basename } = await import("../../lib/native-transcode");
-		const path = await pickVideoFile();
-		if (!path) return;
-
-		setUploading(true);
-		setProgress(0);
-		setStage("");
-		setEta(null);
-		setVideoVariants([]);
-		setVideoName(basename(path));
-		try {
-			const res = await uploadNativeTranscodedVideo(path, (p) => {
-				setProgress(p.percent);
-				setStage(p.stage);
-				setEta(p.etaSeconds);
-			});
-			setVideoKey(res.sourceKey);
-			setVideoVariants(res.variants);
-			setVideoDuration(res.durationSeconds);
-			if (!thumbnailUrl && res.thumbnailPreview) {
-				setThumbnailUrl(res.thumbnailPreview);
-				setThumbnailPreview(res.thumbnailPreview);
-			}
-		} catch (err) {
-			// No silent fallback here: unlike the browser encoder there is no smaller path
-			// to retry on, and swallowing an ffmpeg failure would leave the creator staring
-			// at a reset form with no idea why.
-			setVideoName(null);
-			setStage(err instanceof Error ? err.message : "Encoding failed.");
-		} finally {
-			setUploading(false);
-			setEta(null);
-		}
-	};
-
 	const handleVideo = async (file: File) => {
 		setUploading(true);
 		setProgress(0);
 		setStage("");
 		setEta(null);
-		setVideoVariants([]);
 		setVideoName(file.name);
 		try {
-			// Encode on device → upload the H.264 ladder (server just remuxes to HLS). Falls
-			// back to a raw source upload + server transcode when the browser can't encode.
-			if (encodeMode === "device" && canTranscodeInBrowser(file)) {
-				try {
-					const res = await uploadClientTranscodedVideo(file, (p) => {
-						setProgress(p.percent);
-						setStage(p.stage);
-						setEta(p.etaSeconds);
-					});
-					setVideoKey(res.sourceKey);
-					setVideoVariants(res.variants);
-					setVideoDuration(res.durationSeconds);
-					// Adopt the auto-poster only if the creator hasn't set their own thumbnail.
-					if (!thumbnailUrl && res.thumbnailPreview) {
-						setThumbnailUrl(res.thumbnailPreview);
-						setThumbnailPreview(res.thumbnailPreview);
-					}
-					return;
-				} catch {
-					setProgress(0);
-					setStage("Uploading (server will process)");
-					setVideoVariants([]);
-					const key = await uploadMediaFile(file, "video", setProgress);
-					setVideoKey(key);
-					return;
-				}
-			}
 			const key = await uploadMediaFile(file, "video", setProgress);
 			setVideoKey(key);
 		} catch {
@@ -377,12 +298,10 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		switch (type) {
 			case "video":
 				input.sourceKey = videoKey;
-				// Rounded because the API takes `z.number().int()`, and BOTH encoders produce
-				// a float — ffprobe reports 19.933333, and the browser's `video.duration` is
-				// just as fractional. Sending it raw 400s for any video that doesn't happen
-				// to be a whole number of seconds, i.e. nearly all of them.
-				if (videoDuration) input.durationSeconds = Math.round(videoDuration);
-				if (videoVariants.length > 0) input.metadata = { clientVariants: videoVariants };
+				// No `durationSeconds`: the browser never opens the file, so it has no
+				// duration to send. `transcode-video` probes the source with ffprobe and
+				// writes it. (The old on-device encoders knew it because they had just
+				// decoded the video, and sent it here.)
 				break;
 			case "audio":
 				input.sourceKey = audioKey;
@@ -576,10 +495,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 							progress={progress}
 							stage={stage}
 							etaSeconds={eta}
-							encodeMode={encodeMode}
-							onModeChange={setEncodeMode}
 							onSelect={handleVideo}
-							onPickNative={isDesktop() ? handleVideoNative : undefined}
 						/>
 					)}
 
@@ -992,14 +908,7 @@ interface MediaSlotProps {
 	progress: number;
 	stage?: string;
 	etaSeconds?: number | null;
-	encodeMode?: EncodeMode;
-	onModeChange?: (mode: EncodeMode) => void;
 	onSelect: (file: File) => void;
-	/**
-	 * Desktop only. When present, the drop zone is replaced by the native picker,
-	 * because a browser `File` has no path and the native encoder needs one.
-	 */
-	onPickNative?: () => void;
 }
 
 function MediaSlot({
@@ -1010,10 +919,7 @@ function MediaSlot({
 	progress,
 	stage,
 	etaSeconds,
-	encodeMode,
-	onModeChange,
 	onSelect,
-	onPickNative,
 }: MediaSlotProps) {
 	const maxSize = kind === "video" ? 2 * 1024 * 1024 * 1024 : 500 * 1024 * 1024;
 	return (
@@ -1044,70 +950,22 @@ function MediaSlot({
 				</div>
 			) : (
 				<div className="flex flex-col gap-3">
-					{kind === "video" && encodeMode && onModeChange && !onPickNative && (
-						<EncodeModeChooser encodeMode={encodeMode} onModeChange={onModeChange} />
-					)}
-					{onPickNative ? (
-						<div className="flex flex-col gap-2">
-							<button type="button" className="btn btn-primary btn-sm w-fit" onClick={onPickNative}>
-								Choose a video…
-							</button>
-							<p className="text-xs text-base-content/50">
-								Encoded on this computer with all your cores — no file-size limit, and you can leave
-								it running.
-							</p>
-						</div>
-					) : (
-						<FileUpload
-							accept={`${kind}/*`}
-							maxSize={maxSize}
-							onFileSelect={onSelect}
-							label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
-						/>
-					)}
+					<FileUpload
+						accept={`${kind}/*`}
+						maxSize={maxSize}
+						onFileSelect={onSelect}
+						label={`Drop ${kind === "audio" ? "an" : "a"} ${kind} file or click to browse`}
+					/>
+					{/*
+					 * Says what the old encode-mode toggle used to answer by existing: the
+					 * creator is not waiting on their own machine. Worth keeping now that
+					 * there is no choice to make — processing still happens, just not here.
+					 */}
+					<p className="text-xs text-base-content/50">
+						Leave anytime — we process it on our servers once it's uploaded.
+					</p>
 				</div>
 			)}
 		</FormField>
-	);
-}
-
-function EncodeModeChooser({
-	encodeMode,
-	onModeChange,
-}: {
-	encodeMode: EncodeMode;
-	onModeChange: (mode: EncodeMode) => void;
-}) {
-	const opts: { mode: EncodeMode; label: string; hint: string }[] = [
-		{
-			mode: "device",
-			label: "Encode on device",
-			hint: "Faster to publish · uses your CPU · stay until it finishes",
-		},
-		{
-			mode: "server",
-			label: "Upload & we process",
-			hint: "Leave anytime · we encode on our servers",
-		},
-	];
-	return (
-		<div className="flex flex-col gap-2">
-			<div className="join">
-				{opts.map((o) => (
-					<button
-						key={o.mode}
-						type="button"
-						className={`btn btn-sm join-item ${encodeMode === o.mode ? "btn-primary" : "btn-outline"}`}
-						aria-pressed={encodeMode === o.mode}
-						onClick={() => onModeChange(o.mode)}
-					>
-						{o.label}
-					</button>
-				))}
-			</div>
-			<p className="text-xs text-base-content/50">
-				{opts.find((o) => o.mode === encodeMode)?.hint}
-			</p>
-		</div>
 	);
 }

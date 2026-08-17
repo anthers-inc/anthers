@@ -504,32 +504,15 @@ type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
 
 /**
- * Client-transcode transport: a browser upload may hand us a pre-encoded MP4 variant
- * ladder in the item's metadata (see apps/web/src/lib/transcode.ts). When present, the
- * server only remuxes to HLS (`package-video`) instead of re-encoding from source.
+ * Drop internal-only keys from metadata before it reaches a client.
+ *
+ * 🚨 **`clientVariants` is retired but this must keep stripping it.** It was the
+ * client-transcode transport — a pre-encoded MP4 ladder the browser or desktop uploaded
+ * for `package-video` to remux — removed on 2026-08-17 with the on-device encoders.
+ * Nothing writes it any more, but it lives in the `metadata` jsonb of every Work uploaded
+ * that way, and the values are **storage keys**. Deleting this strip because the producer
+ * is gone would start leaking them from existing rows; the guard outlives the feature.
  */
-interface ClientVariant {
-	name: string;
-	height: number;
-	width: number;
-	bitrate: string;
-	bandwidth: number;
-	key: string;
-}
-
-function readClientVariants(metadata: unknown): ClientVariant[] {
-	const raw = (metadata as Record<string, unknown> | null)?.clientVariants;
-	if (!Array.isArray(raw)) return [];
-	return raw.filter(
-		(v): v is ClientVariant =>
-			!!v &&
-			typeof (v as ClientVariant).key === "string" &&
-			typeof (v as ClientVariant).name === "string" &&
-			typeof (v as ClientVariant).bandwidth === "number",
-	);
-}
-
-/** Drop internal-only keys (e.g. client-transcode variant storage keys) from metadata. */
 function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
 	if (!metadata || typeof metadata !== "object") return {};
 	const { clientVariants, ...rest } = metadata as Record<string, unknown>;
@@ -539,9 +522,15 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
 
 /**
  * Queue processing for a library content item that has a source needing it. Video →
- * HLS transcode (or a cheap remux when the browser pre-encoded a variant ladder); audio
- * → normalize. Fired on library upload (POST /works) and when the source changes
- * (PATCH), NEVER on post save — processing is a library concern, not a post concern.
+ * HLS transcode; audio → normalize. Fired on library upload (POST /works) and when the
+ * source changes (PATCH), NEVER on post save — processing is a library concern, not a
+ * post concern.
+ *
+ * There is one video path now. It used to branch on a browser-supplied variant ladder,
+ * remuxing instead of encoding; that transport went with the on-device encoders on
+ * 2026-08-17. When on-device returns as the desktop's pre-process pack, the branch it
+ * needs is a decision to make then, against whatever the pack format turns out to be —
+ * not this one revived.
  *
  * Returns the queued job (null when the item needs no processing) so the caller can
  * serialize it into the response. The create response previously reported
@@ -556,21 +545,11 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
-		// Browser-encoded ladder → cheap remux; otherwise the server encodes from source.
-		const variants = readClientVariants(item.metadata);
-		if (variants.length > 0) {
-			await queue.send(
-				QUEUES.PACKAGE_VIDEO,
-				{ jobId: job.id, variants, duration: item.durationSeconds ?? undefined },
-				JOB_OPTIONS[QUEUES.PACKAGE_VIDEO],
-			);
-		} else {
-			await queue.send(
-				QUEUES.TRANSCODE_VIDEO,
-				{ jobId: job.id },
-				JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
-			);
-		}
+		await queue.send(
+			QUEUES.TRANSCODE_VIDEO,
+			{ jobId: job.id },
+			JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
+		);
 		return job;
 	}
 	if (item.type === "ebook" && item.sourceKey) {
