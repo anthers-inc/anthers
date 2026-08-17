@@ -32,7 +32,7 @@ To refresh or extend them, re-run the vendoring against the same URL and rewrite
 
 **These are static assets, not bundled ones — deliberately.** `apps/web/index.html` pulls them in with an inline `<style>@import "/fonts/fonts.css";</style>` rather than a `<link rel="stylesheet">`. The bundler resolves every `<link>` href and every `url()` in CSS it reaches, and it inlines webfonts as base64: routed through it, all 83 cuts collapse into a single render-blocking 4.5 MB chunk and the `unicode-range` split stops meaning anything. An inline `@import` passes through untouched. Setting `external: ["/fonts/*"]` in `build.ts` fixes the production build **only** — the dev server reads no such config and still fails to resolve.
 
-**`public/fonts/` is committed; `public/vendor/` is not.** The sibling directory is gitignored and regenerated from `node_modules` by `vendor:ffmpeg`. Nothing regenerates this one. Deleting it doesn't fail a build — it silently drops the site to system fonts.
+**`public/fonts/` is committed, and nothing regenerates it.** Deleting it doesn't fail a build — it silently drops the site to system fonts. (It had a gitignored sibling, `public/vendor/`, regenerated from `node_modules` by a `vendor:ffmpeg` step that ran on every dev boot and every build; that went with the browser video encoder on 2026-08-17, so `public/` is committed content throughout now.)
 
 
 # Known gaps
