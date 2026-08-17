@@ -24,7 +24,8 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { Link, useNavigate } from "@anthers/web-shared/router";
+import { sanitizeNextPath } from "@anthers/web-shared/nextPath";
+import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useRef, useState } from "react";
 import FirstRun, { type Arrival, readArrival } from "../components/onboarding/FirstRun";
@@ -37,6 +38,15 @@ const HANDLE_RE = /^[a-zA-Z0-9_-]+$/;
 export default function WelcomePage() {
 	const { user, isLoading, refreshUser } = useAuth();
 	const navigate = useNavigate();
+	const location = useLocation();
+
+	/**
+	 * Where the visitor was headed before signing up interrupted them, carried here from
+	 * `/subscribe` (which got it from the gated-post unlock modal). Sanitized rather than
+	 * read raw — it is attacker-controlled and it decides where somebody lands moments
+	 * after typing a code from their inbox. See `lib/next-path.ts`.
+	 */
+	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
 	const [username, setUsername] = useState("");
 	const [wantsPassword, setWantsPassword] = useState<boolean | null>(null);
@@ -127,10 +137,28 @@ export default function WelcomePage() {
 				setBusy(false);
 				return;
 			}
-			// Deliberately no navigation: refreshing the user makes `user.username` non-null,
-			// and this component then renders the first-run state in place. Sending them to
-			// their own brand-new, empty profile is the thing this task exists to stop.
+			/*
+			 * Deliberately no navigation *by default*: refreshing the user makes
+			 * `user.username` non-null, and this component then renders the first-run state
+			 * in place. Sending them to their own brand-new, empty profile is the thing this
+			 * page exists to stop.
+			 *
+			 * 🚨 **`?next=` is the one exception, and it is not a weakening of that rule.**
+			 * First-run answers *"what now?"* for somebody who has no answer of their own. A
+			 * visitor who arrived from a gated post has one — it is the reason they made an
+			 * account ninety seconds ago — and showing them an orientation screen instead
+			 * loses it. That was the old signup form's rule too: an explicit destination
+			 * means a person trying to *do* something, and a welcome screen interrupts it.
+			 *
+			 * ⚠️ What is NOT skippable is this page's *form*. The account was created before
+			 * onboarding, so the handle and the terms are still owed and the navigation only
+			 * happens after `claim` succeeds. A `next` must never become a way around it.
+			 */
 			await refreshUser();
+			if (next) {
+				navigate(next, { replace: true });
+				return;
+			}
 		} catch {
 			setError("Something went wrong. Please try again.");
 			setBusy(false);

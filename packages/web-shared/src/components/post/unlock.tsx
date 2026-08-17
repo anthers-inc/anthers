@@ -3,11 +3,22 @@
  * Locked-post presentation. When a post is gated to the viewer, the WHOLE post locks
  * (body + media are withheld server-side) — the viewer sees the title, a blurred
  * cover, and a reason-aware "unlock" call to action, mirroring the Patreon lock UX.
+ *
+ * 🚨 **`UnlockPanel` and `UnlockModal` below have NO CALLERS anywhere in the repo**
+ * (checked 2026-08-17). The live gated surface is `apps/web/src/components/post/
+ * InlineUnlock.tsx`, rendered by `WorkPage`, and `LockedCover` + the three pure helpers
+ * here are what the app actually uses. That matters because reading this file is how you
+ * would conclude the logged-out unlock flow is handled — the two components look like the
+ * answer and are not reached. They are kept rather than deleted because the reason-aware
+ * shape is still the design; if you are changing what a locked Work offers, change
+ * `InlineUnlock` **as well as or instead of** anything here, and check with a grep rather
+ * than by reading.
  */
 import { ANTHERS_BADGES, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { LockClosedIcon } from "@heroicons/react/24/solid";
 import { useEffect } from "react";
 import { useAuth } from "../../lib/auth";
+import { withNextPath } from "../../lib/next-path";
 import { postUrl } from "../../lib/postUrl";
 import { Link } from "../../lib/router";
 import type { AccessResult, PostListItem, UnlockRoute } from "../../lib/types";
@@ -193,14 +204,14 @@ export function UnlockModal({
 				<Link to="/login" state={returnState} className="btn btn-primary btn-block">
 					Log in
 				</Link>
-				{/* ⚠️ No `state` on this one, and that is a real difference rather than an
-				    oversight. It carried `returnState` while it pointed at the old Create
-				    Account card, which honoured `location.state.from` and dropped you back on
-				    the post afterwards. /subscribe is the only signup door since 2026-08-17 and
-				    its ceremony ends at /welcome — the handle and the terms — so there is
-				    nowhere to thread a return through yet. Passing state nothing reads would
-				    only make the behaviour look supported. */}
-				<Link to="/subscribe" className="btn btn-ghost btn-block">
+				{/* A `?next=` rather than the `state` the log-in link uses, because this one
+				    survives a longer journey: /subscribe → the emailed-code ceremony → a
+				    possible payment modal → /welcome → back here. Router state does not
+				    survive that (the page is torn down and rebuilt when the auth context
+				    refreshes — see `leave()` in SubscribePage), and a query parameter also
+				    survives a reload mid-ceremony, which is a real thing to do while you go
+				    and read your email. Sanitized at every read: `sanitizeNextPath`. */}
+				<Link to={withNextPath("/subscribe", path)} className="btn btn-ghost btn-block">
 					Create an account
 				</Link>
 			</>
