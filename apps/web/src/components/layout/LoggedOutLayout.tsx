@@ -28,8 +28,13 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		],
 	},
 	{
+		// Named for the two acts, matching the header. The single link here read
+		// "Subscribe" until 2026-08-17, which named the URL rather than the thing.
 		title: "Users",
-		links: [["Subscribe", "/subscribe"]],
+		links: [
+			["Sign Up", "/subscribe"],
+			["Log In", "/login"],
+		],
 	},
 	{
 		title: "Compare",
@@ -136,13 +141,16 @@ export default function LoggedOutLayout() {
 									<Link to="/for-creators">For Creators</Link>
 								</li>
 								<li>
-									<Link to="/subscribe">Subscribe</Link>
-								</li>
-								<li>
 									<Link to="/resources">Resources</Link>
 								</li>
 								<li>
 									<Link to="/about">About Us</Link>
+								</li>
+								{/* Log In lives here as well as in the corner, because the corner button is
+								    hidden below `sm` — two buttons plus the hamburger and the wordmark do
+								    not fit a 390px navbar. Sign Up keeps the corner at every width. */}
+								<li className="sm:hidden">
+									<Link to="/login">Log In</Link>
 								</li>
 								{/* Theme toggle for mobile (the corner utilities are desktop-only) */}
 								<li className="mt-1 border-t border-base-content/10 pt-1">
@@ -160,16 +168,18 @@ export default function LoggedOutLayout() {
 						</Link>
 					</div>
 
-					{/* Center: page links */}
+					{/* Center: page links.
+					    "Subscribe" (→ /subscribe) sat between For Creators and Resources until
+					    2026-08-17 and came out with this change, not on its own merits: the
+					    corner CTA now points at the same page under a clearer name, and a nav
+					    link and a button side by side going to one destination under two labels
+					    is a question for the reader with no useful answer. */}
 					<ul className="translate-y-0.5 scale-105 menu menu-horizontal hidden gap-8 lg:flex">
 						<li>
 							<Link to="/">For Users</Link>
 						</li>
 						<li>
 							<Link to="/for-creators">For Creators</Link>
-						</li>
-						<li>
-							<Link to="/subscribe">Subscribe</Link>
 						</li>
 						<li>
 							<Link to="/resources">Resources</Link>
@@ -179,16 +189,32 @@ export default function LoggedOutLayout() {
 						</li>
 					</ul>
 
-					{/* Right: single CTA — opens the combined auth page on its signup card
-						(/signup deep-links into signup mode). A soft primary-green glow makes it
-						stand out; text-sm matches the nav links so it isn't overshadowed. flex-1
-						+ justify-end mirror the brand side so the center links stay centered. */}
-					<div className="flex flex-1 items-center justify-end">
+					{/* Right: the two doors, named for what they are. Log In is quiet (ghost) and
+						Sign Up carries the primary glow, so the pair reads as one CTA with an
+						escape hatch beside it rather than as two competing buttons. flex-1 +
+						justify-end mirror the brand side so the center links stay centered.
+
+						⚠️ This was ONE button reading "Start Exploring", pointing at /signup — the
+						four-field Create Account card — until 2026-08-17. Two things changed
+						together: that card is gone (signing up is /subscribe now, one door), and a
+						returning user had no visible way in from the marketing site at all, since
+						"Start Exploring" said nothing about logging in and the only /login links
+						lived inside gated-content modals. Naming the two acts is what makes the
+						contrast legible; "Start Exploring" named neither. */}
+					<div className="flex flex-1 items-center justify-end gap-1 sm:gap-2">
+						{/* Hidden below `sm` — it is in the mobile menu instead, because two buttons
+						    beside the hamburger and the wordmark overflow a 390px navbar. */}
 						<Link
-							to="/signup"
+							to="/login"
+							className="scale-95 btn btn-ghost hidden rounded-lg px-4 sm:inline-flex"
+						>
+							Log In
+						</Link>
+						<Link
+							to="/subscribe"
 							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
 						>
-							Start Exploring
+							Sign Up
 						</Link>
 					</div>
 				</div>

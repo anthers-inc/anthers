@@ -70,7 +70,6 @@ const AboutPage = lazy(() => import("./pages/AboutPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
 const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
-const AuthPage = lazy(() => import("./pages/AuthPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
 const CreatorBreakdownDemoPage = lazy(() => import("./pages/CreatorBreakdownDemoPage"));
@@ -88,6 +87,7 @@ const InfrastructureDemoPage = lazy(() => import("./pages/InfrastructureDemoPage
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const CopyrightPage = lazy(() => import("./pages/CopyrightPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
 const BasketPage = lazy(() => import("./pages/BasketPage"));
 const ParentsPage = lazy(() => import("./pages/ParentsPage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
@@ -154,9 +154,13 @@ export default function App() {
 						<Route path="/about" element={<AboutPage />} />
 					</Route>
 					<Route path="/wiki/*" element={<WikiPage />} />
-					{/* One combined auth page; /signup just deep-links into its signup card. */}
-					<Route path="/login" element={<AuthPage initialMode="login" />} />
-					<Route path="/signup" element={<AuthPage initialMode="signup" />} />
+					{/* Logging in to an account that already exists. Signing UP is /subscribe —
+					    one door, one ceremony (email → code → /welcome for the handle and the
+					    terms). The four-field Create Account card was deleted 2026-08-17; see
+					    pages/LoginPage.tsx. /signup is kept as a redirect because it is the URL
+					    people (and old links, and the browser's own autofill heuristics) expect. */}
+					<Route path="/login" element={<LoginPage />} />
+					<Route path="/signup" element={<Navigate to="/subscribe" replace />} />
 					<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
 				</Route>
 

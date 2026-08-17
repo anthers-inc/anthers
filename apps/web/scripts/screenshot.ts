@@ -71,6 +71,13 @@ try {
 	const ctx = await browser.newContext({
 		viewport: { width: 1280, height: 900 },
 		deviceScaleFactor: 2,
+		// 🚨 Without this a full-page shot of a marketing page is BLANK below the fold, and
+		// nothing says so. `<Reveal>` holds its children at opacity 0 until they intersect
+		// the viewport, and `fullPage` captures by resizing rather than scrolling — so every
+		// section past the first renders as empty background in a run that reports "clean".
+		// `Reveal` short-circuits to revealed under reduced motion, which is exactly the
+		// state a still image wants anyway.
+		reducedMotion: "reduce",
 	});
 	// SiteGate is a client-side wall keyed on this localStorage flag — seed it
 	// before any app script runs so we land on the real app, not the gate.

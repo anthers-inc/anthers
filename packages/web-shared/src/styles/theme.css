@@ -177,9 +177,10 @@
 	}
 }
 
-/* Auth card cross-fade — the login/signup cards fade + lift in when you toggle
-   between them (keyed remount in <AuthPage>). Motion-safe only, matching the
-   reveal easing above. */
+/* Auth card fade — the login card fades + lifts in on mount (<LoginPage>). It was a
+   cross-fade between a login and a signup card, keyed on a mode toggle, until the
+   signup card was removed on 2026-08-17; the animation is worth keeping on its own,
+   and one card still mounts. Motion-safe only, matching the reveal easing above. */
 @media (prefers-reduced-motion: no-preference) {
 	[data-auth-fade] {
 		animation: auth-fade-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);

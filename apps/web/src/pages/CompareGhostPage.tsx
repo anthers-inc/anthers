@@ -35,7 +35,8 @@ const serif = { fontFamily: FONTS.fraunces };
 
 export default function CompareGhostPage() {
 	const { isAuthenticated } = useAuth();
-	const startHref = isAuthenticated ? "/dashboard" : "/signup";
+	// /subscribe is the one signup door since 2026-08-17; /signup only redirects there.
+	const startHref = isAuthenticated ? "/dashboard" : "/subscribe";
 
 	return (
 		<div>

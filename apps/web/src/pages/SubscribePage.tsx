@@ -9,10 +9,20 @@
 //
 // The page is a guided sequence, and the order is the argument:
 //
-//   1. Anthers is free, stated on its own, shown with a reel of work anyone can open, and
-//      closing with what support is — one thing, and the destination is the difference.
-//   2. What support for Anthers does, with its breakdown, ending in a yes/no.
-//   3. What support for a creator does, with the same breakdown, ending in a creator search.
+//   1. Anthers is free — an email address and nothing else, with no card asked for at any
+//      point unless the visitor chooses to back someone — shown with a reel of work anyone
+//      can open, and closing with what support is: one thing, the destination differing.
+//   2. What support for a CREATOR does, with its breakdown, ending in a creator search.
+//   3. What support for ANTHERS does, with the same breakdown, ending in a yes/no.
+//
+// 🚨 Steps 2 and 3 were the other way round until 2026-08-17, and creator support was not
+// mentioned until the third section. That order was a relic of the model where support for
+// Anthers bought streaming bandwidth generally, so it was the thing every visitor needed.
+// It buys Public Access now and nothing else; early visitors arrive at the invitation of a
+// creator already here, and with few creators there is little Public Access to want yet.
+// So the creator ask leads and the Anthers ask follows it — and step 1 says outright that
+// an account costs an email address, because for a share of visitors the load-bearing fact
+// is that Anthers is free forever with no strings, not what a payment would buy.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -641,9 +651,13 @@ function CreatorFinder({
 					})
 				)}
 			</div>
+			{/* ⚠️ This said "how much each creator gets is a question for once your account
+			    exists — right now it's just who", which the echo below it contradicts: a
+			    pick adds a real priced line. The page still asks *whether* rather than *how
+			    much*, so name the starting amount and say where it is changed. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
-				How much each creator gets is a question for once your account exists — right now it&rsquo;s
-				just who.
+				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each. You can change the
+				amount, or add and drop creators, whenever you like once your account exists.
 			</p>
 		</div>
 	);
@@ -957,7 +971,8 @@ export default function SubscribePage() {
 		picks.seed.map(() => ({ amount: PUBLIC_ACCESS_PRICE })),
 	);
 
-	/** Step 3's answer, in the shape the echo and the summary both render. */
+	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
+	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
 	const anthersLines: PickLine[] = useMemo(
 		() =>
 			picks.anthers === true
@@ -973,7 +988,7 @@ export default function SubscribePage() {
 		[picks.anthers],
 	);
 
-	/** Step 4's answers — one line per creator, whether followed or backed. */
+	/** Step 2's answers — one line per creator, whether followed or backed. */
 	const creatorLines: PickLine[] = useMemo(
 		() =>
 			picks.follow.map((username) => {
@@ -988,7 +1003,14 @@ export default function SubscribePage() {
 		[picks.follow, picks.seed, byUsername],
 	);
 
-	/** The whole page, added up once — the only place a total appears. */
+	/**
+	 * The whole page, added up once — the only place a total appears.
+	 *
+	 * Listed in the order the page asks: the free account first, then the creators, then
+	 * Anthers. The two support lines were the other way round until 2026-08-17, and a
+	 * summary that reads in a different order from the steps above it makes a reader
+	 * re-derive which line came from which choice.
+	 */
 	const summaryLines: PickLine[] = useMemo(
 		() => [
 			{
@@ -997,8 +1019,8 @@ export default function SubscribePage() {
 				sub: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
 				amount: 0,
 			},
-			...anthersLines,
 			...creatorLines,
+			...anthersLines,
 		],
 		[anthersLines, creatorLines],
 	);
@@ -1205,7 +1227,8 @@ export default function SubscribePage() {
 								Anthers is free. Forever.
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-								Every month you get{" "}
+								<strong>An email address is the whole of it.</strong> No card, no trial, nothing to
+								cancel — and nothing to pay until you decide to back a creator. Every month you get{" "}
 								<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access</strong> — the streaming
 								work creators leave open to everyone. Follow whoever you like, keep a library, and
 								buy anything a creator sells.
@@ -1213,16 +1236,26 @@ export default function SubscribePage() {
 						</div>
 						<OpenWorksReel />
 
-						{/* What a Seed is, as the tail of "it's free" rather than as its own step: the
+						{/* What support is, as the tail of "it's free" rather than as its own step: the
 						    primitive is one sentence, and giving it a numbered step of its own made the
-						    page look like it asked three things when it asks two. */}
+						    page look like it asked three things when it asks two.
+						    ⚠️ The old copy said "a monthly amount, from $3". There is no floor of $3 —
+						    that is what unlimited Public Access costs, and a creator sets their own
+						    levels to any amount at all. Naming a floor describes a mechanism the Seed
+						    retirement removed. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								Going further is one thing: a monthly amount, from{" "}
-								<strong>{money(PUBLIC_ACCESS_PRICE)}</strong>. You choose how much, and you choose
+								Going further is one thing: a monthly amount. You choose how much, and you choose
 								where it points.
 							</p>
 							<div className="mt-6 grid gap-4 sm:grid-cols-2">
+								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
+									<h3 className="text-sm font-bold">Point it at a creator</h3>
+									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
+										It reaches them directly, as recurring support with no platform cut, and clears
+										whichever of their own levels it meets.
+									</p>
+								</div>
 								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
 									<h3 className="text-sm font-bold">Point it at Anthers</h3>
 									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
@@ -1230,21 +1263,60 @@ export default function SubscribePage() {
 										spend time with.
 									</p>
 								</div>
-								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
-									<h3 className="text-sm font-bold">Point it at a creator</h3>
-									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
-										It reaches them directly, as recurring support, and clears whichever of their
-										own levels it meets.
-									</p>
-								</div>
 							</div>
 						</div>
 					</Reveal>
 
-					{/* ── 2 · Support for Anthers ────────────────────────────── */}
+					{/* ── 2 · Support for a creator — the primary ask ─────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={2} title="Support Anthers">
-							Watch as much Public Access as you like, for as long as you hold it — and{" "}
+						<StepHeading n={2} title="Support a creator">
+							It goes to them.{" "}
+							<strong>
+								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
+							</strong>{" "}
+							reaches the creator, with card processing the only deduction — Anthers takes no cut of
+							a single cent of it.
+						</StepHeading>
+						<SeedBreakdown
+							segments={[
+								{
+									tone: "pool",
+									amount: CREATOR_NET,
+									label: "Straight to the creator",
+									desc: "recurring support, and it clears whichever of their levels it reaches",
+								},
+								{
+									tone: "pay",
+									amount: ANTHERS_PAYMENTS,
+									label: "Payments",
+									desc: "card & processing, at cost, paid to the processor",
+								},
+							]}
+							note="Shown at the worst case — this alone on the charge. Give more, or back more than one creator, and the fixed card fee spreads across it, so every creator on it receives a little more."
+						/>
+						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
+							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
+							tap a medium to meet a few. Following is free — support someone when you&rsquo;d like
+							to back them.
+						</p>
+						<CreatorFinder
+							creators={creators}
+							loading={loadingCreators}
+							picks={picks}
+							onToggle={toggleCreator}
+						/>
+						<SectionEcho
+							lines={creatorLines}
+							onDrop={dropPick}
+							empty="No creators picked yet — following is free whenever you're ready."
+						/>
+					</Reveal>
+
+					{/* ── 3 · Support for Anthers — the optional second thing ─── */}
+					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+						<StepHeading n={3} title="Support Anthers">
+							Optional, and separate from anything above. Watch as much Public Access as you like,
+							for as long as you hold it — and{" "}
 							<strong>
 								{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every {money(PUBLIC_ACCESS_PRICE)}
 							</strong>{" "}
@@ -1293,51 +1365,6 @@ export default function SubscribePage() {
 						/>
 					</Reveal>
 
-					{/* ── 3 · Support for a creator ──────────────────────────── */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={3} title="Support a creator">
-							It goes to them.{" "}
-							<strong>
-								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
-							</strong>{" "}
-							reaches the creator, with card processing the only deduction — Anthers takes no cut of
-							a single cent of it.
-						</StepHeading>
-						<SeedBreakdown
-							segments={[
-								{
-									tone: "pool",
-									amount: CREATOR_NET,
-									label: "Straight to the creator",
-									desc: "recurring support, and it clears whichever of their levels it reaches",
-								},
-								{
-									tone: "pay",
-									amount: ANTHERS_PAYMENTS,
-									label: "Payments",
-									desc: "card & processing, at cost, paid to the processor",
-								},
-							]}
-							note="Shown at the worst case — this alone on the charge. Give more, or back more than one creator, and the fixed card fee spreads across it, so every creator on it receives a little more."
-						/>
-						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
-							tap a medium to meet a few. Following is free — support someone when you&rsquo;d like
-							to back them.
-						</p>
-						<CreatorFinder
-							creators={creators}
-							loading={loadingCreators}
-							picks={picks}
-							onToggle={toggleCreator}
-						/>
-						<SectionEcho
-							lines={creatorLines}
-							onDrop={dropPick}
-							empty="No creators picked yet — following is free whenever you're ready."
-						/>
-					</Reveal>
-
 					{/* ── The one place it all adds up ───────────────────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
 						<h2 style={serif} className="text-center text-3xl font-light leading-tight sm:text-4xl">
@@ -1349,7 +1376,7 @@ export default function SubscribePage() {
 						<Summary {...summaryProps} />
 						<p className="mx-auto mt-5 max-w-xl text-center text-xs leading-relaxed text-base-content/45">
 							Anthers puts {money(FREE_TIME_POOL)} a month into the Time Pool for every free
-							account, so your watching pays creators even at $0.
+							account, so your time pays creators even at $0.
 						</p>
 					</Reveal>
 

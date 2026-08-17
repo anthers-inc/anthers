@@ -84,7 +84,7 @@ export default function CompareItchPage() {
 					<Reveal delay={300}>
 						<div className="mt-9 flex flex-wrap justify-center gap-3">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/signup"}
+								to={isAuthenticated ? "/dashboard" : "/subscribe"}
 								className="btn btn-primary rounded-full px-8"
 							>
 								Try Anthers Free
@@ -396,7 +396,7 @@ export default function CompareItchPage() {
 				<Reveal delay={120}>
 					<div className="mt-9 flex flex-wrap justify-center gap-3">
 						<Link
-							to={isAuthenticated ? "/dashboard/import" : "/signup"}
+							to={isAuthenticated ? "/dashboard/import" : "/subscribe"}
 							className="btn btn-primary rounded-full px-7"
 						>
 							Import from itch.io
@@ -429,7 +429,7 @@ export default function CompareItchPage() {
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link
-								to={isAuthenticated ? "/dashboard" : "/signup"}
+								to={isAuthenticated ? "/dashboard" : "/subscribe"}
 								className="btn btn-primary rounded-full px-7"
 							>
 								Create Your Account

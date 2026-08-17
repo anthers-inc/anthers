@@ -44,16 +44,22 @@ interface AuthContextValue {
 	isAuthenticated: boolean;
 	signIn: (login: string, password: string) => Promise<void>;
 	/**
-	 * `acceptTerms` is required rather than defaulted, deliberately. A default would
-	 * let any caller create an account that never agreed to anything, which is the
-	 * state this replaced — the 13+ floor lived in a document nobody had seen.
+	 * 🚨 **There is no `signUp` here, and putting one back would rebuild a second signup
+	 * door** (removed 2026-08-17 with the Create Account card that was its only caller).
+	 *
+	 * Signing up is a *ceremony*, not a call: `POST /auth/signup/start` mails a code,
+	 * `/signup/verify` creates the account and issues the session, and `/welcome` claims
+	 * the handle and takes terms acceptance. It lives in `pages/SubscribePage.tsx` +
+	 * `SignupCeremonyModal` because the ordering matters — see the note on `leave()`
+	 * there about refreshing the auth context last.
+	 *
+	 * ⚠️ `POST /auth/sign-up` (username + email + password + acceptTerms) is still a live,
+	 * tested API route with **no caller in the app**. It is what `signUp` wrapped. Leave
+	 * it be unless you are deliberately retiring the password-signup path server-side too;
+	 * what must not come back is a *second* place in the UI that mints accounts, since
+	 * two doors have to keep agreeing about terms, onboarding and where a new account
+	 * lands, and the last pair had already drifted.
 	 */
-	signUp: (
-		username: string,
-		email: string,
-		password: string,
-		acceptTerms: boolean,
-	) => Promise<void>;
 	signOut: () => Promise<void>;
 	signInWithBluesky: (handle: string) => Promise<void>;
 	linkBluesky: (handle: string) => Promise<void>;
@@ -129,24 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		setUser(data.user as User);
 	}, []);
 
-	const signUp = useCallback(
-		async (username: string, email: string, password: string, acceptTerms: boolean) => {
-			const res = await client.api.auth["sign-up"].$post({
-				// Cast because the API schema types this as the literal `true` — `false` is
-				// not a value it accepts, it is a request that cannot be granted. The
-				// client still sends whatever the user actually did, so an unticked box
-				// gets a 400 from the server rather than being quietly coerced here.
-				json: { username, email, password, acceptTerms: acceptTerms as true },
-			});
-			if (!res.ok) {
-				throw new Error(await errorText(res, "Sign up failed."));
-			}
-			const data = await res.json();
-			setUser(data.user as User);
-		},
-		[],
-	);
-
 	const signOut = useCallback(async () => {
 		await client.api.auth["sign-out"].$post();
 		setUser(null);
@@ -190,7 +178,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				isLoading,
 				isAuthenticated: user !== null,
 				signIn,
-				signUp,
 				signOut,
 				signInWithBluesky,
 				linkBluesky,
