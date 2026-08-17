@@ -942,8 +942,20 @@ export default function SubscribePage() {
 
 	const byUsername = useMemo(() => new Map(creators.map((c) => [c.username, c])), [creators]);
 
-	const anthersSupport = picks.anthers === true ? 1 : 0;
-	const total = (anthersSupport + picks.seed.length) * PUBLIC_ACCESS_PRICE;
+	/**
+	 * 🚨 **The displayed total and the charged total are the SAME function**, and were two
+	 * independent expressions until 2026-08-16.
+	 *
+	 * They agreed, so nothing was visibly wrong — but the page's summary said
+	 * `(anthers + creators) × price` while the charge said `1 + creators`, and only the
+	 * second one was broken by the Seed retirement. A page that computes what it shows and
+	 * what it bills by different routes is one edit away from showing a number it does not
+	 * charge, which is the exact failure the confirmation ceremony exists to prevent.
+	 */
+	const total = supportTotal(
+		picks.anthers,
+		picks.seed.map(() => ({ amount: PUBLIC_ACCESS_PRICE })),
+	);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. */
 	const anthersLines: PickLine[] = useMemo(
