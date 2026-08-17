@@ -64,12 +64,11 @@ if (match[2] !== entryUrl) {
 	console.log(`Repointed index.html: ${match[2]} → ${entryUrl} (Bun splitting bug)`);
 }
 
-// Copy static assets from public/ into dist/ — notably the vendored ffmpeg.wasm
-// runtime at /vendor/ffmpeg/* (self-hosted, same-origin) that the browser video
-// transcoder loads. `vendor:ffmpeg` (run by `bun run build`) populates
-// public/vendor from node_modules first. When build.ts is run standalone without
-// that step (e.g. the e2e / screenshot preview, which doesn't need ffmpeg),
-// public/ may not exist yet — skip the copy rather than throwing ENOENT.
+// Copy static assets from public/ into dist/ — the self-hosted webfonts at /fonts/*,
+// which must stay OUT of the bundler (see the fonts note in the Agents Hub: routed
+// through it, all 83 subset cuts inline as base64 into one 4.5 MB chunk). Guarded
+// because public/ is committed content rather than generated, so an absent directory
+// should skip the copy rather than throw ENOENT.
 if (existsSync(`${import.meta.dir}/public`)) {
 	await cp(`${import.meta.dir}/public`, `${import.meta.dir}/dist`, { recursive: true });
 }

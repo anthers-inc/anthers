@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * Web dev server. Bundles the SPA (with HMR + Tailwind) via Bun's HTML routes, and
- * ALSO serves `public/` static files — the vendored ffmpeg.wasm runtime at
- * `/vendor/ffmpeg/*` and the self-hosted webfonts at `/fonts/*` — which the plain
- * `bun ./index.html` server does not serve (it returns the SPA fallback, giving a
- * module-MIME error). Prod serves the same paths because `build.ts` copies
+ * ALSO serves `public/` static files — the self-hosted webfonts at `/fonts/*` — which
+ * the plain `bun ./index.html` server does not serve (it returns the SPA fallback,
+ * giving a module-MIME error). Prod serves the same paths because `build.ts` copies
  * `public/` into `dist/`.
  *
- * The two differ in one way worth knowing: `public/vendor/` is gitignored and
- * regenerated from node_modules by `vendor:ffmpeg`, while `public/fonts/` is
- * committed — nothing regenerates it, and losing it would silently send the site
- * back to system fonts.
+ * `public/fonts/` is **committed** and nothing regenerates it; losing it would
+ * silently send the site back to system fonts. (There was a second entry here, a
+ * gitignored `public/vendor/` holding the ffmpeg.wasm runtime the browser encoder
+ * loaded same-origin. That encoder was removed on 2026-08-17.)
  */
 import { serve } from "bun";
 import index from "./index.html";
@@ -30,7 +29,6 @@ const server = serve({
 	development: { hmr: true, console: true },
 	routes: {
 		// Static files under public/. More specific than "/*", so these win.
-		"/vendor/*": publicFile,
 		"/fonts/*": publicFile,
 		// Everything else: the bundled SPA (handles its own hashed JS/CSS chunks).
 		"/*": index,

@@ -18,9 +18,10 @@ import StudioRedirect from "./components/ui/StudioRedirect";
  * 2026-08-11 and now a SECTION of this app rather than a separate origin.
  *
  * LAZY, and that is the whole reason this is tolerable: these eight pages drag in the
- * authoring stack (TipTap, ffmpeg.wasm, recharts) which a reader browsing the site must
- * never download. `React.lazy` keeps them in their own chunks, fetched on first
- * navigation into /studio.
+ * authoring stack (TipTap, recharts) which a reader browsing the site must never
+ * download. `React.lazy` keeps them in their own chunks, fetched on first navigation
+ * into /studio. (ffmpeg.wasm was the heaviest of them until 2026-08-17, when the
+ * browser encoder was removed — see WorkEditor.)
  *
  * The origin split existed to give the Studio cross-origin isolation for multi-threaded
  * ffmpeg.wasm. That is DORMANT (`@ffmpeg/core-mt` hangs at pthread spawn in-browser, so
