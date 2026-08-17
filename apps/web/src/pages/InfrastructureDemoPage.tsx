@@ -502,9 +502,10 @@ function UnitCostCalculator() {
 							Egress is $0 at any volume on Cloudflare R2, so there is no allowance, no wallet and
 							no per-GiB line on anyone's bill. Creator earnings were always{" "}
 							<span className="font-semibold text-success">decoupled</span> from delivery: they come
-							from the Time Pool their Seeds to Anthers fund ($
-							{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} each), distributed by time (equal-time),
-							plus directed Seeds — both of which reach creators in full.
+							from the Time Pool their support for Anthers funds ($
+							{timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2)} of every ${PUBLIC_ACCESS_PRICE}),
+							distributed by time (equal-time), plus what fans direct to them — both of which reach
+							creators in full.
 						</p>
 					</div>
 				</div>
@@ -723,7 +724,7 @@ function ReferenceCreatorProfiles() {
 				These are real YouTube creators mapped onto Anthers' model. YouTube takes 45% as a platform
 				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
 				at cost with no markup. <span className="font-semibold text-base-content">Free access</span>
-				, funded by the remainder of Seeds given to Anthers, is covered across the platform.
+				, funded by the remainder of what is given to Anthers, is covered across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -833,9 +834,9 @@ function ReferenceCreatorProfiles() {
 					<p>
 						Anthers Sprout Badge: ${SPROUT.monthly}/month to Anthers → ${SPROUT.timePool} Time Pool
 						to creators and ${SPROUT.payments} of at-cost card processing, leaving $
-						{SPROUT.remainder} to fund free access and the charitable programs. Seeds given straight
-						to a creator carry no platform cut. Time Pool is distributed by time. Delivery is free
-						and appears nowhere in the split.
+						{SPROUT.remainder} to fund free access and the charitable programs. Support given
+						straight to a creator carries no platform cut. Time Pool is distributed by time.
+						Delivery is free and appears nowhere in the split.
 					</p>
 					<p>Storage: ~120 MB/min multi-quality adaptive bitrate. Delivery: ~4 MB/min blended.</p>
 					<p>
@@ -845,7 +846,7 @@ function ReferenceCreatorProfiles() {
 					</p>
 					<p>
 						Free access — unlimited streaming and downloads for every account, and 50 GiB free
-						storage per creator — is funded by the remainder of Seeds given to Anthers, from a
+						storage per creator — is funded by the remainder of what is given to Anthers, from a
 						shared subsidy pool.
 					</p>
 					<p>Anthers gross assumed equal to YouTube gross for apples-to-apples comparison.</p>

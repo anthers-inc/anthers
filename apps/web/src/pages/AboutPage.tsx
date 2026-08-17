@@ -307,11 +307,11 @@ export default function AboutPage() {
 						<div className="h-full border-l-2 border-primary/30 pl-6">
 							<h3 className="mb-3 text-sm uppercase tracking-wider text-primary">For Creators</h3>
 							<p className="leading-relaxed text-base-content/65">
-								Anthers takes no cut of any Seed or any direct purchase, and the shared Time Pool
+								Anthers takes no cut of any support or any direct purchase, and the shared Time Pool
 								pays out to creators by time in full. Every dollar a user spends is money to
-								creators, the at-cost card processing, or the remainder of each Seed given to
-								Anthers that funds free access and the charitable programs. Anthers, Inc. is a
-								Colorado nonprofit corporation—no investors, no profit-taking.
+								creators, the at-cost card processing, or the remainder of what is given to Anthers
+								that funds free access and the charitable programs. Anthers, Inc. is a Colorado
+								nonprofit corporation—no investors, no profit-taking.
 							</p>
 						</div>
 					</Reveal>
@@ -337,7 +337,7 @@ export default function AboutPage() {
 						</h3>
 						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 							The programs are the operational heart of Anthers' mission, funded by the remainder of
-							each Seed given to Anthers, plus the half-again on creator storage above the free
+							what is given to Anthers, plus the half-again on creator storage above the free
 							allowance. The great majority of it is charitable: it funds free access for everyone,
 							plus infrastructure equity, education, creation grants, and emergency assistance.
 						</p>
@@ -402,7 +402,7 @@ export default function AboutPage() {
 							{
 								num: "03",
 								title: "Funding Flows Directly",
-								text: "Money enters through Seeds (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, the at-cost card processing, or the remainder of each Seed given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
+								text: "Money enters through monthly support (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, the at-cost card processing, or the remainder of what is given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
 							},
 							{
 								num: "04",

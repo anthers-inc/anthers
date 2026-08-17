@@ -1269,7 +1269,7 @@ async function seed() {
 			billingCycle,
 		});
 		console.log(
-			`    account: ${heldBadgeLabel(cfg.anthersSupport)} (${cfg.anthersSupport} Anthers-Seeds, creator Seeds $${creatorSupportTotal.toFixed(2)})`,
+			`    account: ${heldBadgeLabel(cfg.anthersSupport)} ($${cfg.anthersSupport} to Anthers, $${creatorSupportTotal.toFixed(2)} to creators)`,
 		);
 
 		// -- Attention events --
@@ -1452,6 +1452,7 @@ try {
 	await seed();
 	process.exit(0);
 } catch (err) {
+	// econ:allow — this script's own name, not the retired payment noun
 	console.error("Seed failed:", err);
 	process.exit(1);
 }

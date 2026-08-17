@@ -184,9 +184,9 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 						},
 						{
 							id: "c-boost-income",
-							title: "Seed Income",
+							title: "Support Income",
 							description:
-								"Additional subscriber-directed Seeds—no platform cut—with manual or automatic allocation.",
+								"Additional subscriber-directed support—no platform cut—with manual or automatic allocation.",
 							status: "planned",
 							startQ: 1,
 							endQ: 3,
@@ -195,7 +195,7 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 							id: "c-gated-content",
 							title: "Gated Content",
 							description:
-								"Set Seed thresholds to unlock exclusive content. Subscribers who give enough Seeds get access.",
+								"Set monthly thresholds to unlock exclusive content. Subscribers giving enough get access.",
 							status: "planned",
 							startQ: 2,
 							endQ: 3,
@@ -342,17 +342,17 @@ const PLATFORM_ROADMAP: RoadmapDef = {
 					items: [
 						{
 							id: "u-sub-tiers",
-							title: "Seeds — to Anthers, and to creators",
-							description: `Give Seeds to Anthers ($3 each — your count is your Badge, Root to Blossom) and give Seeds straight to creators (Anthers takes no cut; a $${DIRECTED_SUPPORT_WORST_CASE.gross} Seed reaches its creator as $${DIRECTED_SUPPORT_WORST_CASE.net} at worst, the difference being card processing paid to the processor). Each Seed to Anthers funds the Time Pool (shared by time) and a remainder that funds free access and the charitable programs, and the first one lifts your monthly Public Access limit. Downloads are unlimited and cost nothing. Every dollar is money to creators, the at-cost card processing, or that remainder.`,
+							title: "Monthly support — to Anthers, and to creators",
+							description: `Give Anthers a monthly amount (the level is your Badge, Root to Blossom) and give straight to creators (Anthers takes no cut; $${DIRECTED_SUPPORT_WORST_CASE.gross} a month reaches its creator as $${DIRECTED_SUPPORT_WORST_CASE.net} at worst, the difference being card processing paid to the processor). What goes to Anthers funds the Time Pool (shared by time) and a remainder that funds free access and the charitable programs, and the Public Access price lifts your monthly limit. Downloads are unlimited and cost nothing. Every dollar is money to creators, the at-cost card processing, or that remainder.`,
 							status: "active",
 							startQ: 0,
 							endQ: 1,
 						},
 						{
 							id: "u-boost-alloc",
-							title: "Seed Allocation",
+							title: "Directing your support",
 							description:
-								"Give Seeds to your favorite creators with sliders. Unlocks gated content.",
+								"Direct your monthly support to favorite creators with sliders. Unlocks gated content.",
 							status: "planned",
 							startQ: 1,
 							endQ: 2,

@@ -809,15 +809,31 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "the Seed retired as a financial unit 2026-08-16 — amounts are dollars, at any level, with no granularity floor",
 	},
 	{
-		// The unit as a countable noun. Deliberately narrow: it matches the Seed being
-		// COUNTED, which is what retired, and not the word in any other use — a
-		// `seed_allocations` table, a database seed script, a seed round. The scan blanks
-		// comments before matching, so engineering prose is out of reach by construction.
-		pattern: new RegExp(
-			`${NOT_NEGATED}(?:\\d+ Seeds?\\b|(?:a|one|another) Seed\\b|Seed count|Seeds? you hold|holds? \\d+ Seeds?)`,
-			"g",
-		),
-		why: "a Seed is no longer a unit anything is counted in — say the amount ($3, $7.50) or say 'Badge'",
+		// 🚨 **The Seed as a noun at all, not merely as a counted one.**
+		//
+		// This matched only the COUNTED forms (`3 Seeds`, `a Seed`, `Seed count`) until
+		// 2026-08-16, on the reasoning that counting was what retired. That reasoning was
+		// wrong, and the retirement PR read green because of it: **186 lines across 32
+		// files** still said Seed in user-facing copy, and none of them counted anything.
+		// "Give Seeds to Anthers", "Your Seeds are set up", "Seed Income", "Seed gated" —
+		// every one invisible to the narrow rule, and every one on a live surface.
+		//
+		// Worse, the narrow rule made the sweep look finished. The task tracking it recorded
+		// the code half as done and ~738 wiki mentions as all that remained; the code half
+		// was not close to done, and six of those lines were rendering **wrong numbers**
+		// rather than dated words.
+		//
+		// ⚠️ **`\b` on a capital-S `Seeds?` is what makes this safe against identifiers**,
+		// and the safety is structural rather than a list of exceptions. Identifiers glue
+		// the word to other word characters, so a word boundary cannot fall on both sides:
+		// `GiveSeedsCard`, `canGiveSeeds`, `SeedListResponse`, `seedAllocations`,
+		// `setSeedAllocs` are all out of reach, and the lowercase and SCREAMING forms
+		// (`seedAccess`, `SEED_RUNGS`) miss on case. What is left is the word standing on
+		// its own, which in code means a string or JSX text — copy, which is exactly what
+		// 63.01 governs. Comments are blanked before matching, so engineering prose keeps
+		// its history notes.
+		pattern: new RegExp(`${NOT_NEGATED}\\bSeeds?\\b`, "g"),
+		why: "the Seed retired as a noun 2026-08-16 — name the amount ($3, $7.50), say 'Badge' for a level, or 'support' for the act",
 	},
 
 	{

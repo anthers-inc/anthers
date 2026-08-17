@@ -75,8 +75,7 @@ const DEMO_PLAN = {
 	anthersSupport: PETAL.monthly,
 	price: Number(PETAL.charge),
 	timePool: Number(PETAL.timePool), // to creators, distributed by time
-	seeds: 3, // directed creator-Seeds (count, $3 each)
-	seedPool: 9.0, // $ value of the directed Seeds
+	directedPool: 9.0, // $ a month directed at creators
 	// The remainder — i.e. the charge less the Time Pool and the Payments line.
 	supportsAnthers: Number(PETAL.remainder),
 	month: "February 2026",
@@ -448,21 +447,26 @@ function SubscriptionDashboardDemo() {
 
 	// Seeds are indivisible $3 units, so directing them is a whole-Seed move: give one
 	// creator another Seed and it comes off whoever currently holds the most.
-	const handleSeedChange = (idx: number, seeds: number) => {
+	// ⚠️ **Dollars, and it moved in whole $3 steps until 2026-08-16.** The slider divided
+	// the allocation by the Seed price to get a count and multiplied back on the way in, so
+	// the demo could only ever show multiples of $3 — a granularity floor the product no
+	// longer has, demonstrated on the page that exists to show people how it works.
+	const handleSeedChange = (idx: number, dollars: number) => {
 		const next = [...seedAllocs];
-		const budget = DEMO_PLAN.seedPool;
-		const wanted = Math.max(0, Math.min(budget, seeds * PUBLIC_ACCESS_PRICE));
+		const budget = DEMO_PLAN.directedPool;
+		const wanted = Math.max(0, Math.min(budget, dollars));
 		let owed = wanted - next[idx];
 		next[idx] = wanted;
-		// Take (or return) whole Seeds from the largest other allocations first.
+		// Take (or return) from the largest other allocations first, a dollar at a time.
 		while (owed > 0) {
 			let from = -1;
 			for (let i = 0; i < next.length; i++) {
 				if (i !== idx && next[i] > 0 && (from === -1 || next[i] > next[from])) from = i;
 			}
 			if (from === -1) break; // nothing left to reclaim — clamp instead
-			next[from] -= PUBLIC_ACCESS_PRICE;
-			owed -= PUBLIC_ACCESS_PRICE;
+			const take = Math.min(owed, next[from]);
+			next[from] -= take;
+			owed -= take;
 		}
 		if (owed > 0) next[idx] -= owed; // budget exhausted: don't overspend
 		setSeedAllocs(next);
@@ -476,7 +480,7 @@ function SubscriptionDashboardDemo() {
 					Your Anther—{DEMO_PLAN.month}
 				</h3>
 				<p className="text-sm text-base-content/60">
-					{DEMO_PLAN.badge} — {DEMO_PLAN.anthersSupport} Seeds to Anthers ($
+					{DEMO_PLAN.badge} — ${DEMO_PLAN.anthersSupport} a month to Anthers ($
 					{DEMO_PLAN.price.toFixed(2)}/mo)
 				</p>
 			</div>
@@ -492,10 +496,10 @@ function SubscriptionDashboardDemo() {
 				</div>
 				<div className="card bg-base-200">
 					<div className="card-body p-4">
-						<p className="text-xs text-base-content/50 uppercase tracking-wide">Seed Pool</p>
+						<p className="text-xs text-base-content/50 uppercase tracking-wide">To creators</p>
 						<p className="text-xl font-bold text-primary">${totalSeeds.toFixed(2)}</p>
 						<p className="text-xs text-base-content/40">
-							${DEMO_PLAN.anthersSupport}/month &middot; drag to adjust
+							${DEMO_PLAN.directedPool.toFixed(2)}/month &middot; drag to adjust
 						</p>
 					</div>
 				</div>
@@ -528,7 +532,7 @@ function SubscriptionDashboardDemo() {
 									Pool
 								</th>
 								<th style={serif} className="w-60 font-medium">
-									Seeds
+									Directed
 								</th>
 								<th style={serif} className="font-medium">
 									Total
@@ -557,12 +561,12 @@ function SubscriptionDashboardDemo() {
 												<input
 													type="range"
 													min={0}
-													max={DEMO_PLAN.seedPool / PUBLIC_ACCESS_PRICE}
+													max={DEMO_PLAN.directedPool}
 													step={1}
-													value={seedAllocs[idx] / PUBLIC_ACCESS_PRICE}
-													onChange={(e) => handleSeedChange(idx, parseInt(e.target.value, 10))}
+													value={seedAllocs[idx]}
+													onChange={(e) => handleSeedChange(idx, Number(e.target.value))}
 													className="range range-xs range-primary flex-1"
-													aria-label={`Seeds to @${alloc.displayName}`}
+													aria-label={`Monthly support for @${alloc.displayName}`}
 												/>
 												<span className="text-sm text-primary font-medium w-12 flex-shrink-0">
 													${seedAllocs[idx].toFixed(2)}
@@ -593,7 +597,7 @@ function SubscriptionDashboardDemo() {
 			<div className="card bg-base-200">
 				<div className="card-body p-4 space-y-1">
 					<div className="flex justify-between text-sm">
-						<span className="text-base-content/70">Seeds</span>
+						<span className="text-base-content/70">To creators</span>
 						<span className="text-primary">${totalSeeds.toFixed(2)}</span>
 					</div>
 					<div className="flex justify-between text-sm">
@@ -838,7 +842,7 @@ export default function UserDemoPage() {
 						Full transparency. No hidden fees. Every dollar accounted for.
 					</p>
 					<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
-						Set up your Seeds
+						Set up your support
 					</Link>
 				</Reveal>
 			</div>

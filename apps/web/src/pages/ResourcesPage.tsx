@@ -46,7 +46,7 @@ const EXPLAINERS: ResourceCard[] = [
 		to: "/demo-user",
 		title: "See where your money goes",
 		blurb:
-			"A viewer's-eye view of Seeds — to Anthers and to creators — the Time Pool, and where every dollar goes.",
+			"A viewer's-eye view of monthly support — to Anthers and to creators — the Time Pool, and where every dollar goes.",
 		tag: "Users",
 		icon: WalletIcon,
 	},
@@ -82,7 +82,7 @@ const CALCULATORS: ResourceCard[] = [
 		to: "/resources/creator-monetization",
 		title: "Creator Monetization Calculator",
 		blurb:
-			"How time with a creator becomes revenue under the Time Pool + Seed model — from one viewer up to a creator's monthly earnings.",
+			"How time with a creator becomes revenue under the Time Pool + support model — from one viewer up to a creator's monthly earnings.",
 		tag: "Economics",
 		icon: BanknotesIcon,
 	},

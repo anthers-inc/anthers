@@ -1168,7 +1168,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Patreon", creator: rivalSeedAllIn(0.1), platform: rivalTakes(0.1) },
 				{ name: "Buy Me a Coffee", creator: rivalSeedAllIn(0.05), platform: rivalTakes(0.05) },
 			],
-			note: `${SEED_NOTE} Seeds back you, not one thing you made — whatever you turn out next is already covered.`,
+			note: `${SEED_NOTE} Monthly support backs you, not one thing you made — whatever you turn out next is already covered.`,
 			breakdown: seedReceipt,
 		},
 	},
@@ -1337,9 +1337,9 @@ function SolutionExplorer() {
 				Anthers never profits. On a sale, the only deduction from your listed price is the at-cost
 				card processing, paid to Stripe — never a cent to Anthers (the purchase fee was removed
 				2026-08-03), and delivery costs nothing however large the work or however often it is
-				downloaded. On a stream, what's left of the fan's Seeds to Anthers after the Time Pool and
-				the at-cost card fee funds free access and the charitable programs. A Seed given to you is a
-				pure passthrough. Scenario figures are illustrative; competitor rates are rough public
+				downloaded. On a stream, what's left of the fan's support for Anthers after the Time Pool
+				and the at-cost card fee funds free access and the charitable programs. What a fan gives you
+				is a pure passthrough. Scenario figures are illustrative; competitor rates are rough public
 				estimates, all-in take-home at the same list price.
 			</p>
 		</Card>
