@@ -8,6 +8,7 @@ import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { apiFetch, client } from "../lib/rpc";
+import { studioEditProjectUrl, studioUrl } from "../lib/studio";
 import type { Project } from "../lib/types";
 
 function slugify(text: string): string {
@@ -122,6 +123,8 @@ export default function ProjectFormPage() {
 				}
 				const { project } = (await res.json()) as { project: Project };
 				navigate(`/${user?.username ?? "me"}/${project.slug}`);
+				// ^ Editing ends at the public page: the creator already had the shelf in front
+				// of them, so what they want to see is the result.
 			} else {
 				const res = await client.api.content.projects.$post({
 					json: {
@@ -139,7 +142,13 @@ export default function ProjectFormPage() {
 					return;
 				}
 				const { project } = (await res.json()) as { project: Project };
-				navigate(`/${user?.username ?? "me"}/${project.slug}`);
+				// CREATING ends on the edit page, not the public one. The Works shelf below is
+				// edit-only — every membership endpoint is keyed on the Project's slug, so
+				// there is nothing to attach a Work to until the Project exists — and this
+				// page's own lede promises "add and reorder them after creating it". Landing a
+				// creator on a public page with an empty shelf makes them go and find the way
+				// back to the one screen that can fill it.
+				navigate(studioEditProjectUrl(project.slug));
 			}
 		} catch {
 			setError("Failed to save project.");
@@ -277,7 +286,7 @@ export default function ProjectFormPage() {
 					>
 						{saving ? "Saving..." : isEdit ? "Update Project" : "Create Project"}
 					</button>
-					<button type="button" className="btn btn-ghost" onClick={() => navigate("/")}>
+					<button type="button" className="btn btn-ghost" onClick={() => navigate(studioUrl("/"))}>
 						Cancel
 					</button>
 				</div>
