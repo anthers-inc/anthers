@@ -5,23 +5,24 @@
 // Sans, wrapped in the shared <MeadowDecor> (pollen + woven side vines); the
 // shared LoggedOutLayout supplies the Meadow footer + grassy floor.
 //
-// Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one
-// primitive, a Seed at $3/month, pointed either at a creator (a directed Seed —
-// no platform cut, clearing that creator's Seed Gates in whole-Seed steps) or at Anthers
-// (a Seed given to Anthers — $1.50 into the Time Pool and a remainder funding free
-// access and the charitable programs). A fan's Badge IS their count of Seeds given to
-// Anthers (Root → Blossom = 1 → 4, "+" beyond). There is no bandwidth line: delivery
-// costs $0 at any volume, so downloads are unlimited and free on both sides.
+// Copy tracks the SUPPORT MODEL (which superseded the V4 "Badge plans"): one primitive,
+// a monthly amount, pointed either at a creator (no platform cut, clearing that creator's
+// gates at whatever amounts they set) or at Anthers (half into the Time Pool and a
+// remainder funding free access and the charitable programs). A fan's Badge IS the amount
+// they give Anthers (Root → Blossom = $3 → $12, "+" beyond). ⚠️ The **$3 Seed unit retired
+// 2026-08-16** — there is no unit and no granularity floor, so never write a level as a
+// count of anything. There is no bandwidth line either: delivery costs $0 at any volume,
+// so downloads are unlimited and free on both sides.
 //
 // 🚨 Corrected 2026-08-14 — this page sold **Anthers Gates**, retired 2026-08-12. There
-// is one gate primitive and it points only at you: your work is behind YOUR Seed Gate or
-// it is Public Access, with no Badge threshold in between, and a fan's Anthers Badge
-// opens nothing. What a Seed to Anthers does is lift that fan's monthly Public Access
-// limit (the first one) and grow their Time Pool (every one). The free tier is bounded —
+// is one gate primitive and it points only at you: your work is behind one of YOUR gates
+// or it is Public Access, with no Badge threshold in between, and a fan's Anthers Badge
+// opens nothing. What support for Anthers does is lift that fan's monthly Public Access
+// limit (at the Public Access price) and grow their Time Pool (at every level). The free tier is bounded —
 // FREE_PUBLIC_ACCESS_HOURS a month — so never write streaming as unlimited for everyone.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
-// ① direct support (Seeds given to you + direct sales) carries no platform cut — the
+// ① direct support (what fans give you + direct sales) carries no platform cut — the
 // wedge, and where the 0%-cut claim is unconditionally true; ② the commons (the
 // Time Pool, by time) pays for the work Anthers distributes for you. The
 // distributor-pays rule ties them together: whoever distributes a piece of work is
@@ -117,8 +118,8 @@ export default function ForCreatorsPage() {
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							Anthers is Patreon, Bandcamp, Steam, and itch in one place—games, videos, music, and
 							writing under one roof, one identity, one audience. Anthers takes <strong>0%</strong>{" "}
-							of every Seed given to you and every sale — no cut, no skim. The only thing that ever
-							comes out is the at-cost card processing, and that goes to the processor.
+							of every dollar given to you and every sale — no cut, no skim. The only thing that
+							ever comes out is the at-cost card processing, and that goes to the processor.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -183,16 +184,15 @@ export default function ForCreatorsPage() {
 				</div>
 			</Section>
 
-			{/* The solution — 0% cut on Seeds and sales; explore the economics live */}
+			{/* The solution — 0% cut on support and sales; explore the economics live */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The solution</Eyebrow>
 					<H2>When someone pays you, that's what you get paid.</H2>
 					<Lede>
-						Seeds a fan gives you and anything they buy from you carry no platform cut at all—no
-						fee, no skim, nothing to us. Streaming is the other side: it makes your work
-						discoverable, served at cost, and pays you from the Time Pool for the time people spend
-						with it.
+						What a fan gives you and anything they buy from you carry no platform cut at all—no fee,
+						no skim, nothing to us. Streaming is the other side: it makes your work discoverable,
+						served at cost, and pays you from the Time Pool for the time people spend with it.
 					</Lede>
 					<Lede>
 						Try out all the ways a fan can support you, and see what happens when you cut out the
@@ -447,10 +447,10 @@ export default function ForCreatorsPage() {
 					<H2>Two ways money reaches you</H2>
 					<Lede>
 						There's one thing to support on Anthers: a{" "}
-						<strong className="font-semibold text-base-content/80">Seed</strong>,{" "}
-						{fmtMoney(PUBLIC_ACCESS_PRICE)} a month. A fan points it at you—and we take no cut of
-						it—or at Anthers, where part of it becomes the Time Pool that pays for the work Anthers
-						hands out on your behalf. Both reach creators; neither is a cut of your earnings.
+						<strong className="font-semibold text-base-content/80">monthly amount</strong>, from{" "}
+						{fmtMoney(PUBLIC_ACCESS_PRICE)}. A fan points it at you—and we take no cut of it—or at
+						Anthers, where part of it becomes the Time Pool that pays for the work Anthers hands out
+						on your behalf. Both reach creators; neither is a cut of your earnings.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
@@ -459,9 +459,9 @@ export default function ForCreatorsPage() {
 							The wedge, and the part we'll state flatly: nothing is taken.
 							<ul>
 								<li>
-									<strong className="font-semibold text-base-content/85">Seeds given to you</strong>{" "}
-									— {fmtMoney(PUBLIC_ACCESS_PRICE)}/month each, recurring like a membership, with no
-									platform cut and no payout processing
+									<strong className="font-semibold text-base-content/85">Monthly support</strong> —
+									any amount they choose, recurring like a membership, with no platform cut and no
+									payout processing
 								</li>
 								<li>
 									<strong className="font-semibold text-base-content/85">Anything you sell</strong>{" "}
@@ -478,11 +478,13 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<SignpostCard step="2" title="The Anthers commons — the Time Pool" tone="anthers">
-							Fans also hold <strong className="font-semibold text-base-content/85">Seeds</strong>{" "}
-							pointed at the platform itself. Each one:
+							Fans also point a monthly amount at{" "}
+							<strong className="font-semibold text-base-content/85">the platform itself</strong>.
+							That:
 							<ul>
 								<li>
-									puts {fmtMoney(timePoolFor(PUBLIC_ACCESS_PRICE))} into that fan's{" "}
+									puts {fmtMoney(timePoolFor(PUBLIC_ACCESS_PRICE))} of every{" "}
+									{fmtMoney(PUBLIC_ACCESS_PRICE)} into that fan's{" "}
 									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
 									across the creators they spend time with, by time
 								</li>
@@ -495,10 +497,10 @@ export default function ForCreatorsPage() {
 									or anyone's
 								</li>
 							</ul>
-							Their first Seed also lifts their own monthly Public Access limit, so they can spend
-							as much time with your free work as they like. Whatever is left over funds free access
-							and the charitable programs—not Anthers' pocket. Anthers is a non-profit: no
-							investors, no profit-taking.
+							{fmtMoney(PUBLIC_ACCESS_PRICE)} a month also lifts their own Public Access limit, so
+							they can spend as much time with your free work as they like. Whatever is left over
+							funds free access and the charitable programs—not Anthers' pocket. Anthers is a
+							non-profit: no investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
 				</div>
@@ -510,8 +512,8 @@ export default function ForCreatorsPage() {
 							Whoever hands out the work is who pays you for it
 						</h3>
 						<p className="text-sm leading-relaxed text-base-content/70">
-							Work <em className="not-italic font-medium">you</em> hand out—behind your own Seed
-							Gate, or sold—is paid by direct support, and draws nothing from the Time Pool. Work{" "}
+							Work <em className="not-italic font-medium">you</em> hand out—behind one of your own
+							gates, or sold—is paid by direct support, and draws nothing from the Time Pool. Work{" "}
 							<em className="not-italic font-medium">Anthers</em> hands out—the streaming work you
 							leave ungated, free to everyone—is paid from the Time Pool, funded by everyone backing
 							the commons. Every piece of work pays you exactly once, from the side that carried it.
@@ -525,7 +527,7 @@ export default function ForCreatorsPage() {
 						<table className="table">
 							<thead>
 								<tr className="border-base-content/10">
-									{["Badge", "Seeds to Anthers", "They pay", "Their Time Pool"].map((h, i) => (
+									{["Badge", "A month to Anthers", "They pay", "Their Time Pool"].map((h, i) => (
 										<th
 											key={h}
 											style={serif}
@@ -565,42 +567,41 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
-						A fan's Badge is how many Seeds they're giving Anthers right now—a point-in-time choice,
-						not a rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is
-						split across every creator they spend time with, so what reaches you is your share of
-						their month, not the whole figure. Seeds they give you directly are separate, and carry
-						no platform cut. *A free account pays nothing; free access covers its small Time Pool,
-						so even a free viewer pays the creators they spend time with—up to{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which their first Seed to
-						Anthers lifts. Delivery costs nothing on either side—no per-GiB charge, however much
-						anyone streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
+						A fan's Badge is what they're giving Anthers right now—a point-in-time choice, not a
+						rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is split
+						across every creator they spend time with, so what reaches you is your share of their
+						month, not the whole figure. What they give you directly is separate, and carries no
+						platform cut. *A free account pays nothing; free access covers its small Time Pool, so
+						even a free viewer pays the creators they spend time with—up to{" "}
+						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
+						lifts. Delivery costs nothing on either side—no per-GiB charge, however much anyone
+						streams or downloads—and you get {FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
 
-			{/* Your ladder — Seed Gates, Public Access, and your own Badges */}
+			{/* Your ladder — your gates, Public Access, and your own Badges */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>Your ladder</Eyebrow>
 					<H2>Build your own rungs, name them, draw them</H2>
 					<Lede>
 						There is exactly one gate on Anthers and it points at{" "}
-						<em className="not-italic underline decoration-primary/40">you</em>: a threshold of
-						Seeds given to you. Every piece of work you make is either behind one of your rungs or
-						free to everyone—and nothing sits in between, because a commons with a velvet rope isn't
-						one.
+						<em className="not-italic underline decoration-primary/40">you</em>: an amount given to
+						you each month. Every piece of work you make is either behind one of your rungs or free
+						to everyone—and nothing sits in between, because a commons with a velvet rope isn't one.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-3">
 					<Reveal delay={0} className="h-full">
 						<Card className="card-lift h-full">
 							<h3 style={serif} className="mb-2 text-lg font-medium">
-								🌱&nbsp; Seed Gates
+								🌱&nbsp; Your gates
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Your own rungs, at any amount you like—{fmtMoney(PUBLIC_ACCESS_PRICE)},{" "}
 								{fmtMoney(PUBLIC_ACCESS_PRICE * 2)}, {fmtMoney(PUBLIC_ACCESS_PRICE * 3)} a month and
-								up. You write the names and pick what each one opens. Because Seeds are given
+								up. You write the names and pick what each one opens. Because support is given
 								deliberately, nobody backs into your inner circle by watching.
 							</p>
 						</Card>
@@ -623,9 +624,9 @@ export default function ForCreatorsPage() {
 								👑&nbsp; Your Badges
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Every Seed threshold of yours carries a Badge you design—a small collectible emblem
-								your supporters wear, the way Anthers' own Badges have their botanical wreaths.
-								Anthers sponsors emerging illustrators to help creators make them.
+								Every threshold of yours carries a Badge you design—a small collectible emblem your
+								supporters wear, the way Anthers' own Badges have their botanical wreaths. Anthers
+								sponsors emerging illustrators to help creators make them.
 							</p>
 						</Card>
 					</Reveal>
@@ -807,7 +808,7 @@ type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] 
 
 const ACTIONS = [
 	{ key: "purchase", label: "Purchases your work" },
-	{ key: "seed", label: "Gives you Seeds" },
+	{ key: "seed", label: "Backs you monthly" },
 	{ key: "stream", label: "Streams your work" },
 ] as const;
 type ActionKey = (typeof ACTIONS)[number]["key"];
@@ -824,7 +825,7 @@ type MediaKey = (typeof MEDIA)[number]["key"];
 // Header intro for the per-combo Anthers mini-receipt (below the comparison).
 const RECEIPT_INTRO: Record<ActionKey, string> = {
 	purchase: "the price plus delivery",
-	seed: "the Seeds a fan gives you",
+	seed: "what a fan gives you each month",
 	stream: "an hour a fan spends with your public work",
 };
 
@@ -836,38 +837,49 @@ const NO_CUT = "no cut";
 const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 
-// A representative engaged fan for the streaming comparison: the Sprout Badge — 2 Seeds
-// given to Anthers ($6/mo, $3.00 of Time Pool) — who streams ~28 hrs/month, the same
+// A representative engaged fan for the streaming comparison: the Sprout Badge — $6 a
+// month to Anthers, $3.00 of it Time Pool — who streams ~28 hrs/month, the same
 // reference streamer the economics doc uses. Everything below is derived, never
 // typed: the creator earns the fan's Time Pool ÷ their hours, per hour — the SAME for
-// every medium (equal-time), and independent of resolution (pay is by time, not bytes). The rest of that $6 is the at-cost card fee (inside the Seed
-// since 2026-08-03) and the remainder that funds free access and the charitable
-// programs. Note the per-hour figures fall as they watch more only because the same
+// every medium (equal-time), and independent of resolution (pay is by time, not bytes).
+// The rest of that $6 is the at-cost card fee (inside the price since 2026-08-03) and the
+// remainder that funds free access and the charitable programs. Note the per-hour figures fall as they watch more only because the same
 // fixed monthly money is spread over more hours — nothing costs more per hour.
-const STREAM_FAN_SEEDS = thresholdForBadge("sprout");
+const STREAM_FAN_SUPPORT = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
-const STREAM_FAN_SPEND = STREAM_FAN_SEEDS;
-const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SEEDS);
+const STREAM_FAN_SPEND = STREAM_FAN_SUPPORT;
+const STREAM_FAN_POOL = timePoolFor(STREAM_FAN_SUPPORT);
 const STREAM_FAN_CARD = cardFeeDisplay(STREAM_FAN_SPEND);
 const perHour = (total: number) => `~$${(total / STREAM_FAN_HOURS).toFixed(2)}`;
 const STREAM_HR_PAY = perHour(STREAM_FAN_POOL);
 const STREAM_HR_CARD = perHour(STREAM_FAN_CARD);
 const STREAM_HR_FOUNDATION = perHour(STREAM_FAN_SPEND - STREAM_FAN_POOL - STREAM_FAN_CARD);
 /** "a Sprout fan ($6/mo, ~28 hrs/month)" — the shared preamble for the stream notes. */
-const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo across ${STREAM_FAN_SEEDS} Seeds to Anthers, ~${STREAM_FAN_HOURS} hrs/month)`;
+const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~${STREAM_FAN_HOURS} hrs/month)`;
 
-// The Seed scenario: Seeds come in whole $3 units, so the comparison uses two of
-// them — $6/month — and the rival rows are scaled to the same $6.
-const SEED_COUNT = 2;
-const SEED_SPEND = SEED_COUNT;
+/**
+ * The monthly-support scenario, and the basis every rival row is scaled to.
+ *
+ * 🚨 **This silently became $2.** It was `PUBLIC_ACCESS_PRICE * SEED_COUNT` — two whole
+ * Seeds, $6 — and the retirement pass dropped the multiplication but left `SEED_COUNT = 2`
+ * behind, so the page computed a **$2** scenario while every sentence around it still said
+ * $6, including the note that told the reader rival figures were "all-in take-home at the
+ * same $6". A comparison table whose stated basis disagrees with its own numbers is worse
+ * than one with no basis at all.
+ *
+ * Two Public Access prices is the editorial choice, so it is written as that rather than
+ * as a bare 6 — the figure moves if the price does.
+ */
+const SUPPORT_SPEND = PUBLIC_ACCESS_PRICE * 2;
+const SEED_SPEND = SUPPORT_SPEND;
 const SEED_SPEND_STR = `$${SEED_SPEND.toFixed(2)}`;
-/** The at-cost card fee if these Seeds were the fan's ENTIRE monthly charge — the
- * worst case, and what a creator should plan against. A fan who also gives Seeds
- * elsewhere spreads the fixed $0.30 further and pays you more. */
+/** The at-cost card fee if this were the fan's ENTIRE monthly charge — the worst case,
+ * and what a creator should plan against. A fan who also backs others spreads the fixed
+ * $0.30 further and pays you more. */
 const SEED_CARD = cardFeeDisplay(SEED_SPEND);
 const SEED_CARD_STR = `$${SEED_CARD.toFixed(2)}`;
 const SEED_NET_STR = `$${(SEED_SPEND - SEED_CARD).toFixed(2)}`;
-/** Rival all-in take-home on the same $6 monthly support: list × (1 − cutRate),
+/** Rival all-in take-home on the same monthly support: list × (1 − cutRate),
  * minus the at-cost card fee unless the rival absorbs processing (as YouTube
  * Memberships and Twitch do). Competitor rates are rough public estimates. */
 const rivalSeedAllIn = (cutRate: number, absorbsProcessing = false) => {
@@ -875,8 +887,8 @@ const rivalSeedAllIn = (cutRate: number, absorbsProcessing = false) => {
 	return `$${(absorbsProcessing ? afterCut : afterCut - SEED_CARD).toFixed(2)}`;
 };
 const rivalTakes = (cutRate: number) => `$${(SEED_SPEND * cutRate).toFixed(2)}`;
-const SEED_SCENARIO = `A fan gives you ${SEED_COUNT} Seeds a month (${SEED_SPEND_STR})`;
-const SEED_NOTE = `Seeds are whole ${fmtMoney(PUBLIC_ACCESS_PRICE)} units that recur until the fan changes them, and Anthers takes no cut of them — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: these Seeds as their entire charge. Rival figures are all-in take-home at the same $6 — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
+const SEED_SCENARIO = `A fan gives you ${SEED_SPEND_STR} a month`;
+const SEED_NOTE = `Monthly support recurs until the fan changes it, and Anthers takes no cut of it — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: this as their entire charge. Rival figures are all-in take-home at the same ${SEED_SPEND_STR} — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
 
 /** Rival all-in take-home on a sale: list × (1 − cutRate), minus the at-cost card
  * fee unless the rival absorbs processing (as Steam and Apple do — they fold the
@@ -894,9 +906,9 @@ const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = 
 const rivalPurchaseCut = (price: number, cutRate: number) => `$${(price * cutRate).toFixed(2)}`;
 
 /** The Anthers row for a combo. `platform` is what Anthers itself receives — the
- * remainder of a fan's Seeds to Anthers on a stream (funds free access + the
+ * remainder of a fan's support for Anthers on a stream (funds free access + the
  * charitable programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
- * removed 2026-08-03) and on a Seed (a pure passthrough). */
+ * removed 2026-08-03) and on direct support (a pure passthrough). */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
 	creator,
@@ -909,7 +921,7 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 // always $0 — the remainder funds free access and the charitable programs, and the
 // card fee goes to the processor. Streaming isn't
 // where Anthers competes on pay; the Time Pool share is small and variable, and the
-// real support comes from Seeds and sales.
+// real support comes from monthly backing and sales.
 const streamReceipt: Line[] = [
 	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
 	{
@@ -917,7 +929,7 @@ const streamReceipt: Line[] = [
 		amount: STREAM_HR_CARD,
 	},
 	{
-		label: "Free access & programs — what's left of their Seeds to Anthers, across the month",
+		label: "Free access & programs — what's left of their support for Anthers, across the month",
 		amount: STREAM_HR_FOUNDATION,
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
@@ -943,7 +955,7 @@ const merchReceipt: Line[] = [
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
 const seedReceipt: Line[] = [
-	{ label: "To you — your Seeds, less the at-cost card share", amount: SEED_NET_STR },
+	{ label: "To you — their support, less the at-cost card share", amount: SEED_NET_STR },
 	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: SEED_CARD_STR },
 	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
 ];
@@ -978,7 +990,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "YouTube (Ads)", creator: "~$0.03", platform: "~$0.03" },
 				{ name: "YouTube (Premium)", creator: "~$0.05–0.20", platform: "~55%" },
 			],
-			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of their time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every Seed they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from Seeds and sales.`,
+			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of their time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every dollar they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from monthly backing and sales.`,
 			breakdown: streamReceipt,
 		},
 		games: {
@@ -988,7 +1000,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
 				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
 			],
-			note: `Almost nowhere pays indie devs for play-time at all — Anthers pays the same ${STREAM_HR_PAY}/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; Seeds and sales are where fans really pay you.`,
+			note: `Almost nowhere pays indie devs for play-time at all — Anthers pays the same ${STREAM_HR_PAY}/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; monthly backing and sales are where fans really pay you.`,
 			breakdown: streamReceipt,
 		},
 		music: {
@@ -998,7 +1010,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Spotify", creator: "~$0.07", platform: "~30% + labels" },
 				{ name: "Apple Music", creator: "~$0.17", platform: "~30% + labels" },
 			],
-			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through Seeds and album sales, and we take no cut of either.`,
+			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through monthly backing and album sales, and we take no cut of either.`,
 			breakdown: streamReceipt,
 		},
 		writing: {
@@ -1008,7 +1020,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Medium", creator: "~$0.02", platform: "members only" },
 				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
 			],
-			note: `Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about ${STREAM_HR_PAY.replace("~", "")} for an hour with your work — and your public writing stays free to discover, served at cost. Seeds and sales are the real support.`,
+			note: `Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about ${STREAM_HR_PAY.replace("~", "")} for an hour with your work — and your public writing stays free to discover, served at cost. Monthly backing and sales are the real support.`,
 			breakdown: streamReceipt,
 		},
 	},
