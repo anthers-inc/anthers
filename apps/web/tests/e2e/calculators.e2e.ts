@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -51,16 +52,43 @@ test.describe("Resources calculators", () => {
 		expect(errors).toEqual([]);
 	});
 
-	test("creator monetization: support model renders zero-cut", async ({ page }) => {
+	/**
+	 * 🚨 **This asserted only that the phrase was VISIBLE, and that is how the page came to
+	 * overstate creator revenue threefold for a fortnight.** When the Seed retired,
+	 * `thresholdForBadge` began returning dollars while the page still multiplied by $3, so
+	 * a Sprout viewer was modelled as directing $18 rather than $6 — and a test asking
+	 * "does the string `reaches creators` appear" passed every run.
+	 *
+	 * Every figure on this page is computed, so the typed-figure scan has nothing to look
+	 * at either. That leaves this test as the only thing standing between the model and the
+	 * page, which is why it now reads the numbers instead of the words.
+	 *
+	 * The expected values are derived from the same constants the page reads, so this pins
+	 * the *relationship* and moves with the dials rather than freezing a figure.
+	 */
+	test("creator monetization: the split is the model's, not a multiple of it", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/creator-monetization");
-		// The viewer picks a Badge (how many Seeds they give Anthers, a segmented control —
-		// not a GiB slider); creator earnings = a share of the Time Pool by watch-time plus
-		// the Seeds given straight to them.
 		await expect(page.getByText("Viewer's Badge").first()).toBeVisible();
-		// The crux line states the zero-cut split ("...reaches creators (Time Pool + Seeds)...").
-		await expect(page.getByText(/reaches creators/)).toBeVisible();
+
+		const summary = page.getByText(/reaches creators/).first();
+		await expect(summary).toBeVisible();
+		const text = (await summary.innerText()).replace(/\s+/g, " ");
+
+		// The page opens on Sprout. Both figures come from the constants, not from here.
+		const sprout = thresholdForBadge("sprout");
+		const usd = (n: number) => `$${n.toFixed(2)}`;
+
+		expect(text, "the amount given to Anthers").toContain(usd(sprout));
+		expect(text, "the Time Pool it funds").toContain(usd(timePoolFor(sprout)));
+		// The directed figure is the Badge's own amount. Under the retirement bug it was
+		// that amount × the Public Access price, which is the assertion that would have
+		// caught it — and nothing else on the page would have.
+		expect(text, "what the viewer directs, NOT a multiple of it").toContain(usd(sprout));
+		expect(text, "reaches creators = Time Pool + directed").toContain(
+			usd(timePoolFor(sprout) + sprout),
+		);
+
 		expect(errors).toEqual([]);
-		// TODO(Phase 6): restore a live Badge-pick interaction assertion once the app is run.
 	});
 });

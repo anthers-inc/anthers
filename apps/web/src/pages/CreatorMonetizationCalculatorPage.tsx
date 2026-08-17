@@ -306,11 +306,18 @@ function ConversionEngine() {
 						</div>
 
 						<div className="text-sm text-base-content/80 bg-success/10 rounded-lg p-3.5 leading-relaxed">
-							This viewer holds <b className="text-success">{badgeLabel(badge)}</b> ({usd2(m.price)}
-							/mo). Of that, <b>{usd2(m.toCreators)}</b> reaches creators ({usd2(m.tp)} Time Pool +{" "}
-							{usd2(m.toCreatorsDirect)} directed); Anthers keeps <b>$0</b>. You hold{" "}
-							<b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their {+total.toFixed(2)}{" "}
-							hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
+							{/* ⚠️ "Of that" was a lie about the arithmetic and had been one for a while.
+							    Directed support is a SEPARATE charge from the Anthers one — the model
+							    even says so — so `tp + directed` was never a slice of the Anthers
+							    amount, and the sentence read "$6.00/mo. Of that, $9.00 reaches
+							    creators". Under the pre-2026-08-16 triple it read $21 of $6, which is
+							    absurd enough that nobody can have looked at it. */}
+							This viewer gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
+							{badgeLabel(badge)}), of which <b>{usd2(m.tp)}</b> becomes Time Pool, and directs
+							about <b>{usd2(m.toCreatorsDirect)}</b> more straight to creators — so{" "}
+							<b>{usd2(m.toCreators)}</b> reaches creators in all and Anthers keeps <b>$0</b>. You
+							hold <b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their{" "}
+							{+total.toFixed(2)} hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
 						</div>
 					</div>
 				</div>
