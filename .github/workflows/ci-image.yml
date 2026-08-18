@@ -1,0 +1,73 @@
+name: ci-image
+
+# Publishes the browser suite's media image to GHCR. See `.github/ci-image/Dockerfile` for
+# what is in it and why; the short version is that this is where `apt-get` is allowed to
+# run, so that no job ever waits on an Ubuntu mirror.
+#
+# 🚨 **`:latest` is honest here, and that is a property of what the image deliberately does
+# NOT contain.** It carries no Chromium and no Bun — both are stated by the lockfile and
+# installed by the job — so a dependency bump never invalidates it. What changes it is an
+# Ubuntu release or a new system tool, which is a deliberate edit to the Dockerfile. A tag
+# keyed on content would be the instinct, and it cannot work: `jobs.<id>.container.image` is
+# resolved before any step runs, so `hashFiles()` there has no checkout to hash.
+#
+# Sequencing to know before editing the image: a PR **builds** it and does not push, so the
+# job in `ci.yml` keeps running the previous `:latest` until the change is on `main`. That
+# is the wrong way round for testing an image change, and it is the deliberate trade —
+# publishing `:latest` from a branch would let a broken image on someone's branch take
+# `main`'s CI down. To try a candidate, dispatch this workflow and watch its build, or build
+# it locally: `docker build -f .github/ci-image/Dockerfile .`
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/ci-image/**"
+      - ".github/workflows/ci-image.yml"
+  pull_request:
+    paths:
+      - ".github/ci-image/**"
+      - ".github/workflows/ci-image.yml"
+  # Monthly, so the base image's security updates land without anyone remembering to ask.
+  # The image pins no versions of its own, so an unattended rebuild cannot surprise a job
+  # with a different Chromium or a different Bun — those come from the lockfile.
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Skipped on pull requests, where the build is a check rather than a publish — a fork
+      # PR has no write token anyway, so attempting it would fail for a second reason.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/ci-image/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          # `:latest` is what `ci.yml` pulls; the SHA tag exists so a bad image can be
+          # pinned back to a known-good one by editing one line rather than by reverting
+          # and waiting for a rebuild.
+          tags: |
+            ghcr.io/anthers-inc/anthers-ci:latest
+            ghcr.io/anthers-inc/anthers-ci:${{ github.sha }}
+          cache-from: type=gha,scope=ci-image
+          cache-to: type=gha,mode=max,scope=ci-image
