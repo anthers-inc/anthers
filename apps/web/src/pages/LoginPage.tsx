@@ -2,10 +2,22 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
-import { sanitizeNextPath } from "@anthers/web-shared/nextPath";
+import { sanitizeNextPath, withNextPath } from "@anthers/web-shared/nextPath";
+import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import EmailCodeModal from "../components/auth/EmailCodeModal";
+
+/**
+ * The shape of an address, loosely — enough to tell "alice" from "alice@example.com".
+ *
+ * Deliberately not a validating regex: the server's `z.string().email()` is the ruling
+ * check and this only has to answer *"is the person trying to give us an email at all?"*,
+ * because the two branches below need different things from them. Anything that gets past
+ * this and fails at the API comes back as an ordinary refusal.
+ */
+const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Signing in to an account that already exists (route: `/login`). Nothing else.
@@ -22,12 +34,30 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/subscribe`.
  *
+ * 🚨 **The password field is optional, and leaving it empty is a second way IN — never a
+ * way to sign up** (2026-08-18). An account may hold no password at all, because the
+ * signup ceremony makes one optional, and until now this page could not admit those
+ * accounts at all: it pointed them at `/subscribe` in a footnote, which is a signup page
+ * wearing a sign-in hat. Submitting with the password box empty now mails a
+ * six-character code to the address typed above and opens the same field `/subscribe`
+ * uses.
+ * - It posts to **`/auth/signin/*`, never `/auth/signup/*`.** The difference is the whole
+ *   point: the signup pair *creates an account* for an address it doesn't know, which
+ *   would make a mistyped address at the login page mint an account that never saw the
+ *   terms. The signin pair refuses.
+ * - It needs an **email address**, and says so when given a handle. The code is keyed on
+ *   the address (`signup_codes.email`), and resolving a public username to a private
+ *   mailbox would let anyone mail anyone by guessing handles.
+ * - It is offered to **everyone**, not only to accounts without a password. Whether an
+ *   account has one is not something this page may find out, and the emailed code has
+ *   been available to every account through `/subscribe` since the ceremony shipped.
+ *
  * The card keeps its fixed height and its botanical corner flourishes — the flourishes
  * are positioned against the card box, so the height is load-bearing for the framing
  * rather than a leftover of the login/signup size-matching it was originally written for.
  */
 export default function LoginPage() {
-	const { signIn } = useAuth();
+	const { signIn, refreshUser } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
 
@@ -46,16 +76,51 @@ export default function LoginPage() {
 
 	const [login, setLogin] = useState("");
 	const [loginPassword, setLoginPassword] = useState("");
+	/** The address a code was just sent to, or null when no code is in flight. */
+	const [codeEmail, setCodeEmail] = useState<string | null>(null);
 
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
 
-	const handleLogin = async (e: React.FormEvent) => {
+	/** Ask for a code. Answers the same whatever it found, so there is nothing to branch on. */
+	const sendCode = useCallback(async (email: string) => {
+		const res = await client.api.auth.signin.start.$post({ json: { email } });
+		if (!res.ok) throw new Error("That doesn't look like an email address we can reach.");
+	}, []);
+
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setErrors({});
+		const identifier = login.trim();
+
+		// An empty password is a request for a code, not a failed password. The field is not
+		// `required` for exactly this reason — the browser would otherwise refuse to submit
+		// and this branch could never be reached.
+		if (!loginPassword) {
+			if (!LOOKS_LIKE_EMAIL.test(identifier)) {
+				setErrors({
+					general:
+						"Signing in without a password needs your email address — that's where the code goes.",
+				});
+				return;
+			}
+			setLoading(true);
+			try {
+				await sendCode(identifier);
+				setCodeEmail(identifier);
+			} catch (err) {
+				setErrors({
+					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
+				});
+			} finally {
+				setLoading(false);
+			}
+			return;
+		}
+
 		setLoading(true);
 		try {
-			await signIn(login, loginPassword);
+			await signIn(identifier, loginPassword);
 			navigate(redirectTo, { replace: true });
 		} catch (err) {
 			setErrors({
@@ -65,6 +130,48 @@ export default function LoginPage() {
 			setLoading(false);
 		}
 	};
+
+	/**
+	 * Spend the code.
+	 *
+	 * Throws on refusal — `EmailCodeModal` shows the message in the field and clears the
+	 * boxes. On success the session cookie is already set, so the only thing left is to
+	 * tell the auth context and go.
+	 *
+	 * ⚠️ **Refreshing the context is the LAST thing, because it unmounts this page.**
+	 * `/login` renders inside `PublicShell`, which returns `LoggedOutLayout` or
+	 * `LoggedInLayout` by auth state — different component types, so React tears the
+	 * subtree down the moment `refreshUser()` resolves. That cost a real bug on
+	 * `/subscribe`, where work queued after the refresh landed on an unmounted component
+	 * and simply never happened. Nothing may follow the `navigate` below.
+	 */
+	const verifyCode = useCallback(
+		async (code: string) => {
+			const res = await client.api.auth.signin.verify.$post({
+				json: { email: codeEmail ?? "", code },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
+			}
+			const body = (await res.json()) as { needsOnboarding: boolean };
+
+			setCodeEmail(null);
+			await refreshUser();
+			// An account that never finished onboarding still owes a handle and the terms,
+			// and the emailed code is the only way it can come back at all — so this is the
+			// one door that routinely lands on someone who has neither. Where they were
+			// heading rides along, exactly as it does through the signup ceremony.
+			navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
+				replace: true,
+			});
+		},
+		[codeEmail, from, navigate, nextParam, redirectTo, refreshUser],
+	);
+
+	const resendCode = useCallback(async () => {
+		if (codeEmail) await sendCode(codeEmail);
+	}, [codeEmail, sendCode]);
 
 	return (
 		// Center the card in the main content area. flex-1 fills <main> (which is a
@@ -110,48 +217,65 @@ export default function LoginPage() {
 								<span>{errors.general}</span>
 							</div>
 						)}
-						<form onSubmit={handleLogin} className="mt-2 flex flex-col gap-3">
+						<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1">
 							<FormField label="Username or Email" required>
 								<input
 									type="text"
 									className="input input-bordered w-full"
+									autoComplete="username"
 									value={login}
 									onChange={(e) => setLogin(e.target.value)}
 									required
 								/>
 							</FormField>
-							<FormField label="Password" required>
+							{/* 🚨 Not `required`, and that is the feature rather than a relaxation:
+							    the browser refusing to submit an empty box is what would make the
+							    code path unreachable. The hint is the only place this page says so,
+							    which is why it sits under the field rather than in a footnote. */}
+							<FormField
+								label="Password"
+								hint="Leave it empty and we'll email you a sign-in code instead."
+							>
 								<input
 									type="password"
 									className="input input-bordered w-full"
+									autoComplete="current-password"
 									value={loginPassword}
 									onChange={(e) => setLoginPassword(e.target.value)}
-									required
 								/>
 							</FormField>
-							<button type="submit" className="btn btn-primary w-full mt-2" disabled={loading}>
-								{loading ? <span className="loading loading-spinner loading-sm" /> : "Log In"}
+							{/* The label follows the field, because pressing "Log In" and being told
+							    to check your email is a worse surprise than a button that changes. */}
+							<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
+								{loading ? (
+									<span className="loading loading-spinner loading-sm" />
+								) : loginPassword ? (
+									"Log In"
+								) : (
+									"Email me a sign-in code"
+								)}
 							</button>
 						</form>
-						{/* An account may hold no password at all — the signup ceremony makes it
-						    optional — so an emailed code is the only way those accounts get back
-						    in, and this page offered them nothing until 2026-08-17. Saying so is
-						    what keeps "optional" from being a trap door.
-
-						    ⚠️ A `div`, not a `p`, for the same reason as the sign-up prompt above:
-						    DaisyUI's `card-body p { flex-grow: 1 }` makes any paragraph in here eat
-						    the card's slack, which pushes the form off-centre inside the fixed
-						    height. This went in as a `p` first and did exactly that. */}
-						<div className="mt-1 text-center text-xs leading-relaxed text-base-content/50">
-							No password on your account? Sign in with an emailed code from the{" "}
-							<Link to="/subscribe" className="link">
-								sign-up page
-							</Link>{" "}
-							— entering an address we already know signs you in.
-						</div>
 					</div>
 				</div>
 			</div>
+
+			{codeEmail && (
+				<EmailCodeModal
+					stepLabel="Sign in without a password"
+					lede={
+						<>
+							If there's an Anthers account for <strong className="break-all">{codeEmail}</strong>,
+							a six-character code is on its way. Enter it and you're in.
+						</>
+					}
+					cta="Sign me in"
+					busyLabel="Checking…"
+					onSubmit={verifyCode}
+					onResend={resendCode}
+					onClose={() => setCodeEmail(null)}
+				/>
+			)}
 		</div>
 	);
 }

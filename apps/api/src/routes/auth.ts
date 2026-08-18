@@ -34,7 +34,7 @@ import {
 	sendVerificationEmail,
 	sendWelcomeEmail,
 } from "../services/email.js";
-import { checkSignupCode, issueSignupCode } from "../services/signup-codes.js";
+import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -68,11 +68,16 @@ const signInSchema = z.object({
 	password: z.string(),
 });
 
-const signupStartSchema = z.object({
+/**
+ * Both emailed-code doors take the same two shapes — `/signup/*` (which may create an
+ * account) and `/signin/*` (which never can). One pair of schemas, because the *request* is
+ * genuinely the same request; what differs is what the route is willing to do with it.
+ */
+const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
 });
 
-const signupVerifySchema = z.object({
+const emailCodeVerifySchema = z.object({
 	email: z.string().email().max(254),
 	/**
 	 * Six characters from the code alphabet, case-insensitively.
@@ -96,8 +101,9 @@ const claimUsernameSchema = z.object({
 	 *
 	 * Someone who would rather sign in with an emailed code should not be made to invent
 	 * a password to get through onboarding — an unwanted password is one that gets reused
-	 * or written down. Leaving it unset is a supported end state; `POST /auth/signup/*`
-	 * is how those accounts come back.
+	 * or written down. Leaving it unset is a supported end state; `POST /auth/signin/*` —
+	 * which is what `/login` does with an empty password field — is how those accounts come
+	 * back, and `/subscribe` signs a known address in as well.
 	 */
 	password: z.string().min(8).max(128).optional(),
 	acceptTerms: z.literal(true, {
@@ -235,7 +241,7 @@ const authRoutes = new Hono()
 	// public page should ask for as little as it possibly can.
 	//
 	// Step 1 — issue a code. ALWAYS 200, whatever happened.
-	.post("/signup/start", zValidator("json", signupStartSchema, invalidBody), async (c) => {
+	.post("/signup/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
 
 		// Failures are swallowed on purpose. A mail outage, a throttled repeat and an
@@ -266,7 +272,7 @@ const authRoutes = new Hono()
 	// no half-built account waiting on a charge to become real, and nothing to reconcile
 	// if the card is declined. A declined card leaves a perfectly good free account,
 	// which is the correct outcome and takes no code to arrange.
-	.post("/signup/verify", zValidator("json", signupVerifySchema, invalidBody), async (c) => {
+	.post("/signup/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
 		const { email, code } = c.req.valid("json");
 
 		const result = await checkSignupCode(email, code);
@@ -392,6 +398,92 @@ const authRoutes = new Hono()
 		setSessionCookie(c, token);
 
 		return c.json({ user: serializeUser(user) });
+	})
+
+	// ── Sign In without a password (the emailed code, from /login) ───────────
+	//
+	// The same proof of address the signup ceremony uses, narrowed so that it can only ever
+	// sign someone in. `/login` leaves the password field empty and lands here.
+	//
+	// 🚨 **Why this is not just `/signup/start` called from a second page.** That pair
+	// *creates an account* when the address is unknown, which is the one thing the login
+	// page must never do — `/subscribe` is the single signup door precisely so that terms
+	// acceptance, onboarding and where a new account lands have one description rather than
+	// two that drift. A page that mints accounts as a side effect of a mistyped address is
+	// that second door, however little it looks like one.
+	//
+	// Step 1 — issue a code, but only to an address that already has an account. ALWAYS 200.
+	.post("/signin/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
+		const { email } = c.req.valid("json");
+
+		try {
+			// `issueSignInCode` is the half that decides — see its note for why an unknown
+			// address gets no row (and not merely no email), and for the timing question.
+			const issued = await issueSignInCode(email);
+			if (issued.code) {
+				// Off the response path on purpose: awaiting a network call here would make
+				// "this address has an account" measurable in milliseconds, which is the
+				// question the identical body exists to refuse.
+				void sendSignInCodeEmail(email, issued.code).catch((err) => {
+					console.error("[signin/start] failed to send the code:", err);
+				});
+			}
+		} catch (err) {
+			console.error("[signin/start] failed to issue a code:", err);
+		}
+
+		// Says nothing about what was sent, or whether anything was. Byte-identical to the
+		// unknown-address answer, and a test pins that.
+		return c.json({ success: true });
+	})
+
+	// Step 2 — spend the code and sign in. Creates nothing, ever.
+	.post("/signin/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
+		const { email, code } = c.req.valid("json");
+
+		const result = await checkSignupCode(email, code);
+		if (!result.ok) {
+			// The same one message `/signup/verify` gives, for the same reason: two doors
+			// onto one code table are only as quiet as the louder of them.
+			const status = result.reason === "too_many_attempts" ? 429 : 400;
+			return c.json(
+				{
+					error:
+						result.reason === "too_many_attempts"
+							? "Too many attempts. Ask for a new code."
+							: "That code didn't work. Check it, or ask for a new one.",
+					reason: result.reason,
+				},
+				status,
+			);
+		}
+
+		const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
+		if (!user) {
+			// Reachable only by someone holding a live code for an address with no account —
+			// which `/signin/start` never issues, so it means a code minted at `/subscribe`
+			// was typed in here instead. Naming that plainly costs nothing: reaching this
+			// line already requires reading the mailbox, so there is no enumeration left to
+			// protect. What it must not do is quietly create the account.
+			return c.json(
+				{ error: "There's no Anthers account for that address yet — sign up to create one." },
+				404,
+			);
+		}
+
+		const token = await createSession(
+			user.id,
+			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
+			c.req.header("User-Agent"),
+		);
+		setSessionCookie(c, token);
+
+		return c.json({
+			user: serializeUser(user),
+			// Someone who abandoned onboarding still owes a handle, and the code is the only
+			// way that account comes back at all — so this door has to be able to say so.
+			needsOnboarding: user.username === null,
+		});
 	})
 
 	// ── Sign Out ──────────────────────────────────────────────────────────────
