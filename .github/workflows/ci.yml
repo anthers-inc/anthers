@@ -328,6 +328,16 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    # 🚨 A container job's default shell is `sh -e {0}`, NOT the runner's `bash -e {0}`.
+    # Found the first time this job ran: `set -o pipefail` — which every other `run:` block
+    # in this file may use freely — died with `Illegal option -o pipefail`. Everything else
+    # about the container had worked. Setting the default once means a step written for this
+    # file behaves the same wherever it is pasted, rather than depending on which job it
+    # landed in; the alternative is discovering the difference one bashism at a time.
+    defaults:
+      run:
+        shell: bash
+
     services:
       postgres:
         image: postgres:16
