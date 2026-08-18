@@ -193,14 +193,36 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
-  playwright:
+  # ─── The browser suite, in two halves ────────────────────────────────────────
+  #
+  # 🚨 **The split is by SYSTEM DEPENDENCY, not by speed or by importance.** The suite used
+  # to be one job that `apt-get install`ed ffmpeg and poppler on every run — 30 seconds on a
+  # good day, and an unbounded tail: it blew the 15-minute job timeout twice in two days
+  # against a stalled `azure.archive.ubuntu.com`, once inside `--with-deps` (removed by #34)
+  # and once fetching 13.6 MB of `libflite1`. #34 closed the instance and left the class,
+  # which is *assembling a runner from Ubuntu mirrors on every run*.
+  #
+  # So the half that needs nothing from a mirror now runs on a bare runner and cannot fail
+  # for infrastructure reasons at all, and the half that genuinely needs media tools runs in
+  # an image that already has them (`.github/ci-image/`). Neither half lost coverage; a
+  # mirror outage can now only take out the half that actually depends on one.
+  #
+  # ⚠️ **Which project belongs to which job is NOT written here.** It is `metadata.needsMedia`
+  # in `apps/web/playwright.config.ts`, and `scripts/e2e-projects.ts` derives both command
+  # lines from it. Playwright 1.61 has no `--project` negation, so a job can only name
+  # projects — two hand-kept lists here would mean a project added later runs in NEITHER job
+  # while both stay green, which is the quiet coverage loss this repo keeps meeting in other
+  # shapes. The script fails loudly on a project that declares no flag.
+  browser:
     needs: precheck
     if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
 
-    # The User Gauntlet spec needs the real API + Postgres behind the preview SPA
-    # (see apps/web/playwright.config.ts webServer). Mirrors compose.yaml's dev database.
+    # Still needed, and worth being clear why when the point of this job is "no external
+    # dependencies": the specs drive the real API (see playwright.config.ts webServer), which
+    # does not boot without a database. A service container is pulled from GHCR and is not
+    # the fragile thing — apt was.
     services:
       postgres:
         image: postgres:16
@@ -238,25 +260,24 @@ jobs:
         run: bun install --frozen-lockfile
 
       # 🚨 NOT `--with-deps`, and the browser download was never the expensive half.
-      # Measured on the 2026-08-17 release run, which blew the 15-minute job timeout in
-      # this step alone (13m19s, against ~45-70s on a good day): the Chromium + headless
-      # shell + ffmpeg downloads took **10 seconds** end to end. The other ~12 minutes was
-      # `--with-deps` running apt-get against a stalled azure.archive.ubuntu.com mirror,
-      # in single gaps of 101s, 163s, 79s, 297s, 50s and 28s — every one of them fetching
-      # a FONT package (fonts-freefont-ttf, fonts-tlwg-loma-otf, fonts-wqy-zenhei,
-      # xfonts-encodings/utils/scalable). So the fix people reach for first — caching
-      # ~/.cache/ms-playwright while keeping --with-deps — would have saved ten seconds
-      # and left the failure exactly where it was.
+      # Measured on the 2026-08-17 release run, which blew the job timeout in this step
+      # alone (13m19s, against ~45-70s on a good day): the Chromium + headless shell + ffmpeg
+      # downloads took **10 seconds** end to end. The rest was `--with-deps` running apt-get
+      # against a stalled mirror, every gap of it fetching a FONT package. So the fix people
+      # reach for first — caching ~/.cache/ms-playwright while keeping --with-deps — would
+      # have saved ten seconds and left the failure exactly where it was.
       #
       # The runner image already ships Chromium's shared libraries (it carries Chrome and
-      # Edge), so what --with-deps actually adds here is glyph coverage for scripts this
-      # suite never renders. Our specs assert DOM text and visibility, and the site serves
-      # its OWN webfonts from public/fonts — a missing system font would change pixels,
-      # not `getByText`. Dropping it takes apt out of the critical path entirely.
+      # Edge), so what --with-deps adds here is glyph coverage for scripts this suite never
+      # renders: our specs assert DOM text and visibility, and the site serves its OWN
+      # webfonts from public/fonts. A missing system font would change pixels, not
+      # `getByText`.
       #
-      # Deliberately NOT the official Playwright container, which would fix this too: it
-      # has to be pinned to the Playwright version, and that is a second copy of a version
-      # the lockfile already states — the exact drift the setup-bun comment above refuses.
+      # Deliberately NOT the official Playwright container, which would fix this too: it has
+      # to be pinned to the Playwright version, and that is a second copy of a version the
+      # lockfile already states — the exact drift the setup-bun comment above refuses. The
+      # image the media job runs in is built on the same principle and carries no browser at
+      # all; see .github/ci-image/Dockerfile.
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -271,35 +292,115 @@ jobs:
       - name: Install Playwright Chromium
         run: bunx playwright install chromium
 
-      # The gauntlet fixture generates a short clip and runs it through the real transcode
-      # job, so the walk can assert delivered bytes rather than access reasons. Without
-      # ffmpeg that step no-ops and those assertions silently skip — which is exactly the
-      # kind of quiet coverage loss the gauntlet exists to prevent, so install it rather
-      # than trusting whatever the runner image happens to ship.
-      - name: Ensure ffmpeg
-        run: which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-
-      # poppler renders an uploaded PDF to per-page images (`rasterize-ebook`), which is
-      # how an ebook is delivered one checked page at a time instead of as one file whose
-      # URL is the whole book. Same reasoning as ffmpeg above: without it the media
-      # fixture's comic never gets pages and the reader spec asserts against an empty
-      # book — a quiet coverage loss rather than a loud failure.
-      - name: Ensure poppler
-        run: which pdftoppm || (sudo apt-get update && sudo apt-get install -y poppler-utils)
-
       - name: Apply database migrations
         run: bun run db:migrate
 
-      - name: Run e2e tests
+      - name: Run the hermetic specs
         working-directory: apps/web
         env:
           CI: "true"
-        run: bunx playwright test
+        run: bunx playwright test $(bun run scripts/e2e-projects.ts hermetic)
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-browser
+          path: apps/web/playwright-report/
+          retention-days: 7
+
+  browser-media:
+    needs: precheck
+    if: needs.precheck.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # GHCR publishes this package private by default, so the pull is authenticated below.
+      packages: read
+
+    # The image is ffmpeg + poppler + Chromium's shared libraries and nothing that states a
+    # version this repo already states — no browser, no Bun. Built by `ci-image.yml`, which
+    # is where every `apt-get` in this pipeline now lives. `:latest` is safe precisely
+    # because the image declares no dependency versions of its own; see that file's header.
+    container:
+      image: ghcr.io/anthers-inc/anthers-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # 🚨 A container job's default shell is `sh -e {0}`, NOT the runner's `bash -e {0}`.
+    # Found the first time this job ran: `set -o pipefail` — which every other `run:` block
+    # in this file may use freely — died with `Illegal option -o pipefail`. Everything else
+    # about the container had worked. Setting the default once means a step written for this
+    # file behaves the same wherever it is pasted, rather than depending on which job it
+    # landed in; the alternative is discovering the difference one bashism at a time.
+    defaults:
+      run:
+        shell: bash
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anthers
+          POSTGRES_PASSWORD: anthers
+          POSTGRES_DB: anthers
+        options: >-
+          --health-cmd "pg_isready -U anthers -d anthers"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # 🚨 `postgres`, NOT `localhost` — the one thing that genuinely changes when a job
+      # moves into a container. Service containers share a network with the job container
+      # and are addressed by service name; `localhost` here is this container, where nothing
+      # is listening on 5432. The API started by playwright's webServer runs INSIDE this
+      # container, so it reads the same variable and reaches the same place.
+      DATABASE_URL: postgres://anthers:anthers@postgres:5432/anthers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        # Same reasoning as the browser job above: the version comes from package.json.
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      # The image deliberately has no browser — this installs the one the lockfile states.
+      - name: Install Playwright Chromium
+        run: bunx playwright install chromium
+
+      # What the image is FOR. If either of these is ever missing, the fixture no-ops and
+      # the byte assertions skip **silently** — a quiet coverage loss rather than a red run,
+      # which is exactly what the gauntlet exists to prevent. So assert them rather than
+      # trusting the image to be what it was yesterday.
+      - name: Media tools are present
+        run: |
+          set -euo pipefail
+          ffmpeg -version | head -1
+          pdftoppm -v 2>&1 | head -1
+
+      - name: Apply database migrations
+        run: bun run db:migrate
+
+      - name: Run the media specs
+        working-directory: apps/web
+        env:
+          CI: "true"
+        run: bunx playwright test $(bun run scripts/e2e-projects.ts media)
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-browser-media
           path: apps/web/playwright-report/
           retention-days: 7
 
@@ -319,7 +420,7 @@ jobs:
   # `!cancelled()` rather than `success()` for the same reason: `success()` requires
   # every dependency to have succeeded, which a deliberate skip is not.
   deploy:
-    needs: [precheck, test, images, playwright]
+    needs: [precheck, test, images, browser, browser-media]
     if: >-
       github.event_name == 'push' && github.ref_name == 'release' &&
       !cancelled() && !contains(needs.*.result, 'failure') &&

@@ -23,10 +23,29 @@ export default defineConfig({
 		// Chromium needs --no-sandbox in most CI/container environments.
 		launchOptions: { args: ["--no-sandbox"] },
 	},
+	/*
+	 * 🚨 **`metadata.needsMedia` splits this suite across two CI jobs, and it is the ONLY
+	 * place that split is written down.** A project needs media if running it wants ffmpeg
+	 * or poppler — which in practice means it seeds, or depends on something that seeds, the
+	 * fixtures that produce bytes a player can actually play. Those run in a container image
+	 * carrying both tools; everything else runs on a bare runner with no system dependencies
+	 * at all, which is what makes that half of the suite unable to fail for infrastructure
+	 * reasons.
+	 *
+	 * The flag lives here rather than as two lists in `ci.yml` because Playwright 1.61 has no
+	 * `--project` negation: a job can only name projects, so a project added later would run
+	 * in NEITHER job and nothing would say so — a green suite quietly covering less than it
+	 * did. `scripts/e2e-projects.ts` derives both job's arguments from this array and **fails
+	 * on a project that declares no flag**, so the failure mode is a red run naming the
+	 * project rather than silence.
+	 *
+	 * Nothing about local running changes: `make verify` and a bare `playwright test` still
+	 * run every project, so the pre-push gate keeps meaning what it meant.
+	 */
 	projects: [
 		// Seeds the gauntlet fixture and signs its viewer in (writes the storageState the
 		// gauntlet project runs under). *.setup.ts so `bun test` never claims it either.
-		{ name: "setup", testMatch: "**/*.setup.ts" },
+		{ name: "setup", testMatch: "**/*.setup.ts", metadata: { needsMedia: true } },
 		// The static suite — pure client-side specs (calculators) that predate the API wiring.
 		// e2e specs are named *.e2e.ts so `bun test` (which claims *.test/*.spec) never tries
 		// to run them — only Playwright does.
@@ -38,6 +57,7 @@ export default defineConfig({
 			// that only `setup` produces, and signed out every route on this app renders the
 			// same marketing page — so they would pass here without asserting anything.
 			testIgnore: ["**/user-gauntlet.e2e.ts", "**/*.authed.e2e.ts"],
+			metadata: { needsMedia: false },
 		},
 		// Authenticated specs that are NOT the gauntlet: independent, parallel-safe, and
 		// signed in as the fixture viewer. Separate from `gauntlet` on purpose — that one is
@@ -51,6 +71,7 @@ export default defineConfig({
 			},
 			testMatch: "**/*.authed.e2e.ts",
 			dependencies: ["setup"],
+			metadata: { needsMedia: true },
 		},
 		// The User Gauntlet walk: authenticated (storageState from setup), strictly serial —
 		// it is one stateful staircase, not a bag of independent tests.
@@ -63,6 +84,7 @@ export default defineConfig({
 			testMatch: "**/user-gauntlet.e2e.ts",
 			dependencies: ["setup"],
 			fullyParallel: false,
+			metadata: { needsMedia: true },
 		},
 	],
 	webServer: [
