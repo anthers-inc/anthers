@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The signup ceremony: prove the address, then build the account.
+// The emailed-code ceremony: prove the address, then build the account — or sign into the
+// one that is already there.
 //
-// Two halves, tested against a real database because the interesting rules are all
-// stateful — the resend throttle, the attempt cap and the single-live-code invariant are
-// each about what a *second* request sees.
+// Two doors onto one code table, and the difference between them is the property this file
+// exists to pin. `/auth/signup/*` (from `/subscribe`) may CREATE an account; `/auth/signin/*`
+// (from the empty password field on `/login`) never can. A login page that minted accounts
+// as a side effect of a mistyped address would be the second signup door the 2026-08-17
+// consolidation removed, and nothing about it would look wrong from either page.
+//
+// Tested against a real database because the interesting rules are all stateful — the
+// resend throttle, the attempt cap and the single-live-code invariant are each about what a
+// *second* request sees.
 //
 // What is deliberately asserted here rather than through the UI: the endpoint must not
 // become an oracle for "is this address registered?". That property has no visible
@@ -19,6 +26,7 @@ import app from "../index.js";
 import {
 	checkSignupCode,
 	generateSignupCode,
+	issueSignInCode,
 	issueSignupCode,
 	normalizeEmail,
 	SIGNUP_CODE_MAX_ATTEMPTS,
@@ -308,6 +316,172 @@ describe("POST /auth/signup/verify", () => {
 		expect(res.headers.get("Set-Cookie") ?? "").not.toContain("session=");
 		const rows = await db.select().from(users).where(eq(users.email, email));
 		expect(rows).toHaveLength(0);
+	});
+});
+
+/**
+ * The login door's half: the same proof, narrowed so it can only ever sign someone in.
+ *
+ * 🚨 The assertions below are mostly about what does **not** happen — no row, no account,
+ * no session — which is the shape of every claim in this codebase that has rotted quietly.
+ * A `/signin/start` that quietly behaved like `/signup/start` would work perfectly for
+ * every person who ever used it, and would be a second signup door.
+ */
+describe("issueSignInCode", () => {
+	/** Walk the signup ceremony to a real account and return its address. */
+	async function accountFor(tag: string): Promise<string> {
+		const email = addr(tag);
+		const issued = await issueSignupCode(email);
+		await post("/api/auth/signup/verify", { email, code: issued.code });
+		return email;
+	}
+
+	test("mints a spendable code for an address that has an account", async () => {
+		const email = await accountFor("si-known");
+		const issued = await issueSignInCode(email);
+
+		expect(issued.code).not.toBeNull();
+		expect(issued.existingAccount).toBe(true);
+		// One code table, two doors — a code minted here is the same row `/subscribe`
+		// would have minted, and is spent the same way.
+		expect((await checkSignupCode(email, issued.code as string)).ok).toBe(true);
+	});
+
+	test("an unknown address gets no code AND no row", async () => {
+		const email = addr("si-unknown");
+		const issued = await issueSignInCode(email);
+
+		expect(issued.code).toBeNull();
+		expect(issued.existingAccount).toBe(false);
+
+		// 🚨 The row is the half that is easy to miss. Writing one and declining to send it
+		// would leave a live code nobody received *and* start the resend throttle — so the
+		// same person walking on to /subscribe seconds later would be told to check an
+		// inbox nothing had been sent to.
+		const rows = await db.select().from(signupCodes).where(eq(signupCodes.email, email));
+		expect(rows).toHaveLength(0);
+	});
+
+	test("it does not touch a code the signup ceremony already issued", async () => {
+		const email = addr("si-nostomp");
+		const signup = await issueSignupCode(email);
+
+		await issueSignInCode(email);
+
+		// No account, so nothing was issued — and the code the person is in the middle of
+		// typing must still work.
+		expect((await checkSignupCode(email, signup.code as string)).ok).toBe(true);
+	});
+});
+
+describe("POST /auth/signin/start tells the caller nothing", () => {
+	test("an unknown address and a registered one are indistinguishable", async () => {
+		const known = addr("sis-known");
+		const issued = await issueSignupCode(known);
+		await post("/api/auth/signup/verify", { email: known, code: issued.code });
+
+		const unknownRes = await post("/api/auth/signin/start", { email: addr("sis-unknown") });
+		const knownRes = await post("/api/auth/signin/start", { email: known });
+
+		expect(unknownRes.status).toBe(200);
+		expect(knownRes.status).toBe(200);
+		// Byte-identical. Closing the enumeration leak on /signup/start and reopening it on
+		// a second endpoint over the same table would be worse than never closing it — an
+		// attacker only needs one of the two doors.
+		expect(await unknownRes.text()).toBe(await knownRes.text());
+	});
+});
+
+describe("POST /auth/signin/verify", () => {
+	async function accountFor(tag: string): Promise<string> {
+		const email = addr(tag);
+		const issued = await issueSignupCode(email);
+		await post("/api/auth/signup/verify", { email, code: issued.code });
+		return email;
+	}
+
+	test("signs the account in and issues the session cookie", async () => {
+		const email = await accountFor("siv-in");
+		const issued = await issueSignInCode(email);
+
+		const res = await post("/api/auth/signin/verify", { email, code: issued.code });
+		expect(res.status).toBe(200);
+		expect(res.headers.get("Set-Cookie") ?? "").toContain("session=");
+
+		const body = (await res.json()) as {
+			user: { email: string };
+			needsOnboarding: boolean;
+		};
+		expect(body.user.email).toBe(email);
+		// The ceremony leaves the handle for onboarding, so an account that has only ever
+		// been through it still owes one — and the emailed code is the ONLY way such an
+		// account comes back, since it has no password either.
+		expect(body.needsOnboarding).toBe(true);
+	});
+
+	test("says onboarding is done once a handle is claimed", async () => {
+		const email = await accountFor("siv-named");
+		const first = await issueSignInCode(email);
+		const signedIn = await post("/api/auth/signin/verify", { email, code: first.code });
+		const cookie = (signedIn.headers.get("Set-Cookie") ?? "").split(";")[0];
+
+		await post(
+			"/api/auth/onboarding/claim",
+			{ username: `${RUN}named`.slice(0, 30), acceptTerms: true },
+			{ Cookie: cookie },
+		);
+
+		const again = await issueSignInCode(email);
+		const res = await post("/api/auth/signin/verify", { email, code: again.code });
+		expect(((await res.json()) as { needsOnboarding: boolean }).needsOnboarding).toBe(false);
+	});
+
+	test("🚨 a valid code for an address with no account creates NOTHING", async () => {
+		// The one way to reach this line: a code minted by /subscribe (which issues for any
+		// address) typed into the login page instead. `/signin/start` never issues one.
+		const email = addr("siv-nomint");
+		const issued = await issueSignupCode(email);
+
+		const res = await post("/api/auth/signin/verify", { email, code: issued.code });
+
+		expect(res.status).toBe(404);
+		expect(res.headers.get("Set-Cookie") ?? "").not.toContain("session=");
+		// The property, not the status code: this door does not mint accounts. If it ever
+		// does, `/login` has become a signup form that never asks for the terms.
+		const rows = await db.select().from(users).where(eq(users.email, email));
+		expect(rows).toHaveLength(0);
+	});
+
+	test("a wrong code is refused exactly as /signup/verify refuses one", async () => {
+		const email = await accountFor("siv-wrong");
+		await issueSignInCode(email);
+
+		// The comparison address needs a live code of its own, or the two refusals differ on
+		// `reason` (`wrong_code` against `no_code`) for a reason that has nothing to do with
+		// which door was used. That distinction is about the state of the CODE, not about
+		// whether the address has an account — which is the fact both doors must keep quiet.
+		const other = addr("siv-wrong-other");
+		await issueSignupCode(other);
+
+		const onSignin = await post("/api/auth/signin/verify", { email, code: "ZZZZZZ" });
+		const onSignup = await post("/api/auth/signup/verify", { email: other, code: "ZZZZZZ" });
+
+		expect(onSignin.status).toBe(400);
+		expect(onSignin.headers.get("Set-Cookie") ?? "").not.toContain("session=");
+		// Same message from both doors: one that distinguished "no code for this address"
+		// from "wrong code" would answer the question /start refuses to.
+		expect(await onSignin.text()).toBe(await onSignup.text());
+	});
+
+	test("the attempt cap answers 429 rather than 400", async () => {
+		const email = await accountFor("siv-cap");
+		await issueSignInCode(email);
+
+		for (let i = 0; i < SIGNUP_CODE_MAX_ATTEMPTS; i++) {
+			await post("/api/auth/signin/verify", { email, code: "ZZZZZZ" });
+		}
+		const res = await post("/api/auth/signin/verify", { email, code: "ZZZZZZ" });
+		expect(res.status).toBe(429);
 	});
 });
 

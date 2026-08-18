@@ -15,7 +15,9 @@
  *     would be asking twice for the same thing.
  *   • The address has an account → it is **signed in**.
  *
- * That second outcome is not a convenience bolted on. The signup ceremony makes a
+ * That second outcome is not a convenience bolted on. `/login` reaches it directly through
+ * `issueSignInCode` below, which is the same proof narrowed to addresses that already have
+ * an account. The signup ceremony makes a
  * password *optional*, and an account with no password and no emailed sign-in would be
  * one nobody could ever return to — the option would be a trap door rather than a
  * choice. It is also not a new grant of power: `POST /auth/request-password-reset` has
@@ -157,6 +159,48 @@ export async function issueSignupCode(rawEmail: string, now = new Date()): Promi
 		});
 
 	return { code, throttled: false, existingAccount };
+}
+
+/**
+ * Mint a code **only for an address that already has an account** — the `/login` door.
+ *
+ * 🚨 **The difference from `issueSignupCode` is the whole reason this exists: it can never
+ * lead to an account being created.** `/subscribe` is the one signup door, and a login page
+ * that mailed a code to a stranger's address would be a second one — the code would be
+ * spendable, and whatever spent it would have to decide what to do with an address nobody
+ * has an account for. Refusing to issue at all is what keeps that decision from arising.
+ *
+ * Two consequences that are easy to get wrong, so they live here rather than at the route:
+ *
+ *   • **No row is written for an unknown address.** Issuing one and declining to send it
+ *     would leave a live code in `signup_codes` that nobody received — and, worse, would
+ *     start the resend throttle, so the same person walking on to `/subscribe` seconds
+ *     later would be told to check an inbox nothing was ever sent to.
+ *   • **The miss branch does the same argon2 work as the hit branch**, so the two cannot be
+ *     told apart by how long the response takes. The body is identical by construction (the
+ *     route answers `{success:true}` either way); without this the timing would answer the
+ *     question the body refuses to. ⚠️ It is a *close* match, not a constant-time one —
+ *     argon2id dominates both sides and the mail send is deliberately off the response path,
+ *     but this is a mitigation rather than a proof. (`POST /auth/sign-in` and
+ *     `/request-password-reset` both carry the same asymmetry, unmitigated; closing all
+ *     three properly is its own piece of work.)
+ */
+export async function issueSignInCode(rawEmail: string, now = new Date()): Promise<IssuedCode> {
+	const email = normalizeEmail(rawEmail);
+
+	const [existing] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, email))
+		.limit(1);
+
+	if (!existing) {
+		// Burned deliberately — see the timing note above. The value is discarded.
+		await hashPassword(generateSignupCode());
+		return { code: null, throttled: false, existingAccount: false };
+	}
+
+	return issueSignupCode(email, now);
 }
 
 /** Why a code was refused, when it was. */
