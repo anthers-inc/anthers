@@ -82,7 +82,20 @@ entry reuses a running `make dev` API on :8000, or brings the dev database up
 itself (`make db-ready`, docker) and starts one. Pages served from localhost
 resolve their API base to `localhost:8000` (see `web-shared`'s `rpc.ts`), so
 there's no proxy — `origins.ts` allowlists the preview origin (:4173) outside
-production. In CI, Postgres is a service container (`.github/workflows/e2e.yml`).
+production. In CI, Postgres is a service container (`.github/workflows/ci.yml` —
+there is no `e2e.yml`; it was folded into the single workflow long ago).
+
+🚨 **CI runs this suite as TWO jobs, split by system dependency**, and the split
+lives in `playwright.config.ts` as `metadata.needsMedia` on each project — not in
+the workflow. `browser` runs the hermetic projects on a bare runner; the ones that
+need ffmpeg or poppler run in `ghcr.io/anthers-inc/anthers-ci` (built by
+`ci-image.yml`), because installing those with `apt` on every run cost 30 seconds
+on a good day and blew the job timeout twice in two days on a stalled Ubuntu
+mirror. `scripts/e2e-projects.ts` derives both jobs' `--project` arguments from
+that flag and **fails on a project that declares none** — Playwright 1.61 has no
+`--project` negation, so an undeclared project would otherwise run in neither job
+while both stayed green. Nothing changes locally: `make verify` and a bare
+`playwright test` still run every project.
 
 **Billing is hybrid in the walk.** The support model made badge/Seed billing
 real Stripe flows (503 unconfigured, webhook-synced when configured), so the
