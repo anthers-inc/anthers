@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Coverage for the support-model money functions. The central invariant is that
-// each Anthers-Seed's $3 conserves exactly into Time Pool + Payments + the
+// every dollar given to Anthers conserves exactly into Time Pool + Payments + the
 // remainder, so a stray edit to a dial that breaks the sum is caught here.
 // Payments moved INSIDE the price on 2026-08-03 — it is charged on the whole batched
 // monthly charge and split pro-rata, and only sales tax is ever added on top. A

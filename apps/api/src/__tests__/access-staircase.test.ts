@@ -58,7 +58,7 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 type PostKey = string;
 
 /**
- * A viewer context. `givenAmount` is **whole Seeds given to the gauntlet creator this
+ * A viewer context. `givenAmount` is **monthly dollars given to the gauntlet creator this
  * cycle**, and it is the only viewer fact gate resolution reads besides purchases.
  *
  * The staircase row's `anthersSeeds` is deliberately NOT passed: there is nowhere to put

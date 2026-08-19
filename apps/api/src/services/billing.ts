@@ -153,8 +153,11 @@ export function totalSupportFromSub(sub: Stripe.Subscription): number {
  * The monthly dollars pointed at **Anthers** — the Badge, and what sets the Time Pool.
  *
  * `accounts.anthersSupport` is the Badge *and* it sets the Time Pool, so reading the whole
- * charge here would make a user who gives Anthers $3 and two creators $3 each look like a
- * $9 Blossom funding $4.50 of Time Pool off a $3 gift — with no error anywhere.
+ * charge here would make a user who gives Anthers $3 and two creators $7 and $2 look like a
+ * $12 Blossom funding $6 of Time Pool off a $3 gift — with no error anywhere.
+ *
+ * The creators' amounts are deliberately unequal and deliberately not $3: a creator sets
+ * their own Badge levels to any amount, and $3 is only ever the price of Public Access.
  */
 export function anthersSupportFromSub(sub: Stripe.Subscription): number {
 	return itemsFromSub(sub)

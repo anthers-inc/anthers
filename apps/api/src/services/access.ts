@@ -10,9 +10,9 @@
  * to a Work is inert and confers nothing; see `40.08 Catalog and Posts` in the vault.
  *
  * Access is expressed by **one** per-Work table (see `packages/db/src/schema/content.ts`),
- * whose rows are `{ threshold, allow, price }` with `threshold` in **whole Seeds given to
- * this Work's creator this cycle**. `threshold: 0` is the baseline — everyone — and is not
- * a gate at all.
+ * whose rows are `{ threshold, allow, price }` with `threshold` in **monthly dollars given
+ * to this Work's creator this cycle**. `threshold: 0` is the baseline — everyone — and is
+ * not a gate at all.
  *
  * A viewer *qualifies* for a row when they meet its threshold. Among the rows they
  * qualify for AND that are allowed, the cheapest price wins. price 0 = free; a positive
@@ -29,14 +29,14 @@
  * Reasoning: `30.01 Creator Content Gates` § 4.1b. Migration `0029` folded the column in.
  *
  * ⚠️ The OR *within* this table survives and is the interesting one: a creator may gate on
- * **another creator's** Seed level, which is the seed of collabs and bundles. There is
+ * **another creator's** support level, which is the seed of collabs and bundles. There is
  * still no AND.
  *
- * Resolution reads two viewer facts — per-creator Seeds this cycle and prior purchases —
+ * Resolution reads two viewer facts — per-creator dollars this cycle and prior purchases —
  * which `buildAccessContext` loads once so a batch (a Catalog page) resolves without an N+1.
  *
- * Note a gate need not sit on a Badge. Thresholds are levels, not Badge identities, so a
- * creator may gate at 3 Seeds whether or not they have named a Badge there.
+ * Note a gate need not sit on a Badge. Thresholds are amounts, not Badge identities, so a
+ * creator may gate at $3 whether or not they have named a Badge there.
  */
 
 import { db } from "@anthers/db/client";
@@ -50,8 +50,8 @@ export interface AccessibleWork {
 	id: number;
 	/**
 	 * Null on a Work whose creator deleted their account — it was WITHDRAWN rather than
-	 * destroyed so its buyers keep it. No creator means no creator-Seed gate can be
-	 * cleared (there is nobody to have given Seeds to) and no owner bypass, both of
+	 * destroyed so its buyers keep it. No creator means no creator gate can be
+	 * cleared (there is nobody to have given to) and no owner bypass, both of
 	 * which fall out of the null comparisons below rather than needing a branch.
 	 */
 	creatorId: number | null;
@@ -176,10 +176,10 @@ export interface UnlockRoute {
  * ⚠️ This was a two-field type until 2026-08-12, with an `anthers` route beside this one.
  * Anthers Gates are retired, so there is one destination left. It stays an object rather
  * than collapsing to `UnlockRoute | null` because a creator gating on **another
- * creator's** Seed level is a live case, and that is where a second route would reappear.
+ * creator's** support level is a live case, and that is where a second route would reappear.
  */
 export interface UnlockOffer {
-	/** Climb by giving more Seeds to this creator. */
+	/** Climb by giving more to this creator. */
 	creator: UnlockRoute | null;
 }
 
@@ -199,7 +199,7 @@ export interface AccessResult {
 	requiresPurchase: boolean;
 	/** Minimum price to unlock via purchase (money string), or null when free/gated. */
 	price: string | null;
-	/** Viewer qualifies via an allowed Badge/Seed row (a gate), even if a price still applies. */
+	/** Viewer qualifies via an allowed access row (a gate), even if a price still applies. */
 	isEntitled: boolean;
 	streamEnabled: boolean;
 	downloadEnabled: boolean;
@@ -212,15 +212,15 @@ export function currentBillingCycle(): string {
 }
 
 /**
- * Anthers-Seeds a user currently holds.
+ * Monthly dollars a user currently gives Anthers.
  *
  * ⚠️ **This no longer decides access to any Work.** It compared against Anthers Gates
- * until 2026-08-12; those are retired, and what a Seed given to Anthers now governs is
+ * until 2026-08-12; those are retired, and what money given to Anthers now governs is
  * the account-level Public Access limit and the size of the user's Time Pool — neither of
  * which is a property of a Work. Kept because both of those read it, and because it is
  * the Badge.
  *
- * A raw count, not a Badge name: a Badge is the highest threshold you meet, so collapsing
+ * A raw amount, not a Badge name: a Badge is the highest threshold you meet, so collapsing
  * to it first rounds someone giving $9 down to a $6 Badge. Name the Badge only for
  * display.
  */
@@ -403,8 +403,8 @@ export async function buildAccessContext(
 	]);
 
 	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
-	// gate. Gates count Seeds, so the dollars are divided here, at the one boundary where
-	// the two meet, rather than by every caller that compares against a threshold.
+	// gate. Gates are denominated in money too now, so nothing is converted here; the map
+	// carries the ledger's own dollars straight through to every threshold comparison.
 	const supportByCreator = new Map<number, number>();
 	for (const s of seedRows) {
 		// 🚨 Dollars straight off the ledger, with NO conversion. This read
