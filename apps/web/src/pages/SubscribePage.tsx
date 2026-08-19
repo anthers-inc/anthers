@@ -273,7 +273,7 @@ function StepHeading({
 	);
 }
 
-/** One segment of the Seed breakdown. */
+/** One segment of the support breakdown. */
 interface Segment {
 	amount: number;
 	label: string;
@@ -288,7 +288,7 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
 };
 
 /**
- * Where a Seed goes — one component, used twice.
+ * Where a month's support goes — one component, used twice.
  *
  * The two destinations are the same picture with different segments, which is what makes
  * the contrast legible without inventing a second visual language for it.
@@ -945,7 +945,7 @@ export default function SubscribePage() {
 					seed.delete(username);
 				} else {
 					seed.add(username);
-					// Giving someone a Seed follows them too; the reverse isn't implied.
+					// Directing support to someone follows them too; the reverse isn't implied.
 					follow.add(username);
 				}
 			} else if (follow.has(username)) {
@@ -1045,8 +1045,8 @@ export default function SubscribePage() {
 	 * Commit what can be committed.
 	 *
 	 * Signed out, the picks are already in session storage, so the account comes first and
-	 * the page is waiting when they come back. Signed in, follows and creator-Seed
-	 * allocations are applied, and Seeds for Anthers open the same confirmation modal the
+	 * the page is waiting when they come back. Signed in, follows and creator
+	 * allocations are applied, and support for Anthers opens the same confirmation modal the
 	 * inline post unlock uses — one ceremony, so the charge is described identically
 	 * wherever a user commits.
 	 */

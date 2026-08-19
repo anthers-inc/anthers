@@ -8,11 +8,11 @@
  * access-staircase unit test proves against the pure resolver. This spec adds what neither
  * can: the real app, a real session, and the transitions between states.
  *
- * HYBRID MODE (the default). The support model made billing real: changing the
- * Anthers-Seed count and buying creator-Seed budget are Stripe charges with
+ * HYBRID MODE (the default). The support model made billing real: changing what is given
+ * to Anthers and topping up the creator budget are Stripe charges with
  * webhook-driven sync — 503 without Stripe configured, and needing a running
  * `stripe listen` forwarder with it. So this spec UI-walks every transition that
- * doesn't bill (follow, comment, the Give-Seeds stepper) and hops the billing facts
+ * doesn't bill (follow, comment, the giving stepper) and hops the billing facts
  * through `db:gauntlet:state` — the canonical script, the same columns the webhooks
  * would write. The observational pass (and an eventual GAUNTLET_STRIPE mode) covers
  * the real billing UI; the staircase itself is asserted identically either way.
@@ -106,7 +106,7 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
  * A locked post shows the unlock panel, and that panel says what it is locked BY and what
  * to do about it. The heading carries the gate's identity — "Locked · Root" when the gate
  * sits on a Badge, "Unlock this post" when it doesn't — and the CTA carries the *marginal*
- * ask, which is the thing a viewer actually needs: how many more Seeds, and to whom.
+ * ask, which is the thing a viewer actually needs: how much more, and to whom.
  */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
 	const spec = gauntletPost(key);
@@ -473,7 +473,7 @@ test("rung 4 — Blossom unlocks nothing; a Badge is standing, not access", asyn
 	expect(errors).toEqual([]);
 });
 
-// ── The Seed ladder, through the real Give-Seeds control ─────────────────────
+// ── The Badge ladder, through the real giving stepper ────────────────────────
 test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	// Enough budget for the whole ladder. Holding budget is not giving it — the staircase
@@ -501,7 +501,7 @@ test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 for (const [i, seeds] of BADGE_WALK.entries()) {
 	const rungIndex = BADGE_RUNGS.indexOf(seeds as (typeof BADGE_RUNGS)[number]);
 	const unlocked = rungIndex >= 0 ? `G${2 + rungIndex}` : null;
-	// The next rung ABOVE this Seed count, whether or not the count is itself a rung —
+	// The next rung ABOVE this amount, whether or not the amount is itself a rung —
 	// one expression covering both the on-rung and between-rung states. Null at the top
 	// of the ladder, where there is nothing left to stay locked.
 	const nextIndex = BADGE_RUNGS.findIndex((t) => t > seeds);
@@ -574,7 +574,7 @@ test("the ladders only ever climbed — no state unlocked less than the one befo
 //
 // 🚨 This lives inside the gauntlet walk rather than in an `.authed` spec of its own,
 // and the reason is `fullyParallel: true`. These assertions have to move the viewer's
-// Anthers-Seed count and rewrite their attention events — shared fixture state the
+// support for Anthers and rewrite their attention events — shared fixture state the
 // staircase above depends on — so a parallel file would race the walk and fail somewhere
 // unrelated. The serial walk already owns this viewer, so it owns this too, and it runs
 // last where disturbing the ladder costs nothing.
@@ -639,7 +639,7 @@ test("the meter — the Public Access price removes it, and nothing above it buy
 
 	await expect(page.locator("video")).toBeVisible();
 	await expect(page.getByRole("heading", { name: /that's your 10 hours/i })).toHaveCount(0);
-	// Nothing counts down for a Seed-holder either: there is no limit to count toward,
+	// Nothing counts down for an unlimited viewer either: there is no limit to count toward,
 	// and showing one would state a restriction that does not exist.
 	await expect(page.getByText(/Public Access left this month/i)).toHaveCount(0);
 

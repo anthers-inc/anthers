@@ -43,7 +43,7 @@ export interface MediaFixtureWork {
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
 	/**
-	 * Gated behind one Seed to this creator, rather than free to everyone.
+	 * Gated behind support to this creator, rather than free to everyone.
 	 *
 	 * 🚨 **The album has to contain one.** A queue that can only ever hold playable tracks
 	 * cannot demonstrate — or test — the one rule Garnet's model has no equivalent for:

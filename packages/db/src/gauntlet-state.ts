@@ -166,7 +166,7 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Seed allocation to the gauntlet creator (the fact the Give-Seeds control writes).
+	// Allocation to the gauntlet creator (the fact the giving stepper writes).
 	// The UI walk normally covers this; the hop exists for placing a state directly.
 	if (give !== undefined) {
 		const cycle = currentBillingCycle();
@@ -181,8 +181,8 @@ async function main(): Promise<void> {
 				),
 			)
 			.limit(1);
-		// `--give` counts SEEDS, like every other threshold in the model; the ledger stores
-		// the money, so the conversion happens here rather than in the flag's meaning.
+		// `--give` is DOLLARS, like every threshold in the model; the ledger stores money, so
+		// the value goes in as it was given rather than through a conversion.
 		const amount = give.toFixed(2);
 		if (existing) {
 			await db

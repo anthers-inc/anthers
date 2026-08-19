@@ -499,8 +499,8 @@ export async function finalizeNotice(input: {
 	if (!work) return null;
 	if (work.takedownStatus !== "taken_down") return { finalized: false, reason: "not_taken_down" };
 
-	// Every completed purchase of this Work. `type` is filtered because a Seed
-	// buy carries no Work and is not refundable anyway (`refundPurchase` refuses
+	// Every completed purchase of this Work. `type` is filtered because a support
+	// top-up carries no Work and is not refundable anyway (`refundPurchase` refuses
 	// it), and letting one through would count a refusal as a failure.
 	const rows = await db
 		.select()

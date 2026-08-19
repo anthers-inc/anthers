@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Coverage for the support-model money functions. The central invariant is that
-// each Anthers-Seed's $3 conserves exactly into Time Pool + Payments + the
+// every dollar given to Anthers conserves exactly into Time Pool + Payments + the
 // remainder, so a stray edit to a dial that breaks the sum is caught here.
 // Payments moved INSIDE the price on 2026-08-03 — it is charged on the whole batched
 // monthly charge and split pro-rata, and only sales tax is ever added on top. A
@@ -83,7 +83,7 @@ describe("anthersSupportBreakdown", () => {
 		expect(b.foundation.toFixed(2)).toBe("2.53");
 	});
 
-	test("free rank (0 Seeds) pays $0 and funds no charitable remainder, but has a subsidised Time Pool", () => {
+	test("the free tier ($0) pays $0 and funds no charitable remainder, but has a subsidised Time Pool", () => {
 		const b = anthersSupportBreakdown(0);
 		expect(b.given.toNumber()).toBe(0);
 		expect(b.foundation.toNumber()).toBe(0);
@@ -93,14 +93,14 @@ describe("anthersSupportBreakdown", () => {
 
 	/**
 	 * The shock absorber has no floor, and that is deliberate rather than an oversight:
-	 * the remainder is a plain subtraction, so a large enough cost against a Seed drives
+	 * the remainder is a plain subtraction, so a large enough cost against the amount drives
 	 * it negative — which is the true statement that this user cost Anthers money, and
 	 * the number the accounting wants. Clamping here would silently break the
-	 * conservation invariant asserted above (the parts would no longer sum to the seed
-	 * value).
+	 * conservation invariant asserted above (the parts would no longer sum to the amount
+	 * given).
 	 *
 	 * ⚠️ **No real input reaches it any more.** Bandwidth was the term that could, and
-	 * a card fee never exceeds the half of a Seed the Time Pool leaves — so this now
+	 * a card fee never exceeds the half the Time Pool leaves — so this now
 	 * needs a deliberately absurd `payments` to demonstrate at all. It is kept because
 	 * the *no-floor* choice is a contract of this function rather than a fact about
 	 * today's dials, and the next cost term added here will inherit it.
@@ -112,7 +112,7 @@ describe("anthersSupportBreakdown", () => {
 	 * `apps/api/src/__tests__/payments-stripe.test.ts`.
 	 */
 	test("The remainder can go negative — the remainder has no floor, by design", () => {
-		// One Seed ($3), $1.50 of Time Pool, and a $2.00 cost against it: −$0.50.
+		// $3 given, $1.50 of Time Pool, and a $2.00 cost against it: −$0.50.
 		const b = anthersSupportBreakdown(3, { payments: new Decimal("2.00") });
 		expect(b.foundation.isNegative()).toBe(true);
 		expect(b.foundation.toFixed(2)).toBe("-0.50");
@@ -131,8 +131,8 @@ describe("cardFee (Payments, inside the price)", () => {
 	});
 
 	test("the flat $0.30 is per CHARGE, so batching is what makes the rate fall", () => {
-		// The whole argument for a $3 Seed rather than a $1 one, and for one monthly
-		// charge rather than per-creator billing.
+		// The whole argument for a monthly minimum rather than tiny separate charges, and
+		// for one monthly charge rather than per-creator billing.
 		// cardFee rounds to whole cents, so these are the rates a user actually pays.
 		expect(cardFee(3).div(3).toNumber()).toBeCloseTo(0.13, 2); // ~13% borne alone
 		expect(cardFee(12).div(12).toNumber()).toBeCloseTo(0.054, 3); // ~5.4% batched
@@ -196,7 +196,7 @@ describe("supportBreakdown", () => {
 	test("batching pays creators MORE — the fixed $0.30 amortises across a bigger charge", () => {
 		const alone = supportBreakdown({ anthersDollars: 0, creatorDollars: 3 });
 		const batched = supportBreakdown({ anthersDollars: 9, creatorDollars: 3 });
-		// Same one directed Seed, but riding on a $12 charge instead of a $3 one.
+		// The same $3 directed, but riding on a $12 charge instead of a $3 one.
 		expect(batched.creatorNet.greaterThan(alone.creatorNet)).toBe(true);
 	});
 

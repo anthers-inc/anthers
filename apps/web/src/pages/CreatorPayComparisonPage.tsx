@@ -137,7 +137,7 @@ const SEED_SPEND = PUBLIC_ACCESS_PRICE * 2;
 /** What a rival keeps of the same $6 after its headline cut, and its card cost. */
 const rivalKeeps = (cutRate: number) => money(SEED_SPEND * (1 - cutRate));
 const CARD_ON_SEEDS = money(cardFeeDisplay(SEED_SPEND));
-/** What Anthers delivers on the same $6: the Seeds less the at-cost card fee, and no cut. */
+/** What Anthers delivers on the same $6: the support less the at-cost card fee, and no cut. */
 const SEED_NET = money(SEED_SPEND - cardFeeDisplay(SEED_SPEND));
 /** What Patreon delivers on the same $6: 10% platform fee, then the same card cost. */
 const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND));

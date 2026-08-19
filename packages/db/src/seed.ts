@@ -99,7 +99,8 @@ function nextPublicId(): number {
 }
 
 // A few posts exercise the non-free access paths (everything else streams free):
-// some behind the Anthers Gate (any paid badge), some behind a Seed Gate.
+// two creator-gate levels, at the higher and the lower threshold (see the note at the
+// insert: the higher set was Anthers-gated until Anthers Gates retired on 2026-08-12).
 const ANTHERS_GATED_POSTS = new Set<string>([
 	"The Myth of the Neutral Platform",
 	"Signal Return Postmortem — 72 Hours of Panic",
@@ -534,17 +535,17 @@ const TEST_USERS: SeedUser[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Accounts — the Anthers-Seed count (rank) each seed user holds
+// Accounts — the monthly amount each seed user gives Anthers
 // ---------------------------------------------------------------------------
 
 /**
- * Each seed user's Anthers-Seed count (their rank, held point-in-time) and the
- * directed creator-Seeds they hold ($3 each) — spread to exercise the ranks
- * free (0) / root (1) / sprout (2) / petal (3) / blossom (4). Creators also hold
+ * Each seed user's monthly dollars to Anthers (their Badge, held point-in-time) and
+ * the dollars they direct at creators — spread to exercise the Badges
+ * free ($0) / root ($3) / sprout ($6) / petal ($9) / blossom ($12). Creators also hold
  * an account (they consume too).
  */
 const ACCOUNT_CONFIG: Record<string, { anthersSupport: number; creatorSupport?: number }> = {
-	// Creators — spread to cover every rank.
+	// Creators — spread to cover every Badge.
 	[`${SEED_PREFIX}novapixel`]: { anthersSupport: 9, creatorSupport: 9 },
 	[`${SEED_PREFIX}sagemoreno`]: { anthersSupport: 3, creatorSupport: 3 },
 	[`${SEED_PREFIX}fluxbeats`]: { anthersSupport: 6, creatorSupport: 6 },
@@ -761,7 +762,7 @@ async function seed() {
 		console.log(`  Created ${creator.username} (id: ${inserted.id})`);
 	}
 
-	// ---- 1b. Creator accounts (creators hold Anthers-Seeds as consumers too) ----
+	// ---- 1b. Creator accounts (creators give Anthers as consumers too) ----
 	console.log("Creating creator accounts...");
 	for (const creator of CREATORS) {
 		const userId = createdUserIds[creator.username];
@@ -1366,7 +1367,7 @@ async function seed() {
 				}
 			}
 
-			// -- Seed allocations (whole $3 Seeds, as directed above) --
+			// -- Allocations to creators (monthly dollars, as directed above) --
 			let allocationCount = 0;
 			for (const [creatorUsername] of entries) {
 				const cId = createdUserIds[creatorUsername];

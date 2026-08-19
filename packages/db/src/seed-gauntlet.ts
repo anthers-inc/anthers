@@ -3,7 +3,7 @@
  * The User Gauntlet fixture — deterministic, idempotent, and self-cleaning.
  *
  * Builds `gauntlet_creator` and the nine posts defined in `gauntlet.ts`, then resets the
- * viewer to the gauntlet's floor: Free badge, no Seeds, not following, nothing purchased,
+ * viewer to the gauntlet's floor: Free badge, nothing given, not following, nothing purchased,
  * no comments. Run it before every gauntlet walk; it always produces the same starting
  * state, which is the whole point — a gauntlet that starts somewhere slightly different
  * each time can't tell you what changed.
@@ -322,7 +322,7 @@ async function resetGates(creatorId: number): Promise<void> {
  * viewer's own account, content and other relationships are left alone.
  */
 async function resetViewer(viewerId: number, creatorId: number, postIds: number[]): Promise<void> {
-	// Badge back to Free and Seeds back to zero. Upsert: the account row may not exist yet
+	// Badge back to Free and support back to zero. Upsert: the account row may not exist yet
 	// if this login has never visited /subscribe.
 	const [account] = await db
 		.select({ id: accounts.id })
@@ -345,7 +345,7 @@ async function resetViewer(viewerId: number, creatorId: number, postIds: number[
 		.where(and(eq(follows.followerId, viewerId), eq(follows.creatorId, creatorId)));
 
 	// Seed allocations ratchet within a cycle (add-only), so a re-run inside the same month
-	// CANNOT walk back down through the UI. Clearing them here is what makes the Seed rung
+	// CANNOT walk back down through the UI. Clearing them here is what makes the gate rung
 	// repeatable at all.
 	await db
 		.delete(seedAllocations)

@@ -231,7 +231,7 @@ describe("creator analytics never expose per-viewer identity", () => {
 	it("the viewer ids ARE in the table — this is a read-time property, not an absence of data", async () => {
 		// Worth pinning explicitly, because it is what makes the promise a real one and
 		// what makes it fragile. `attention_events.user_id` exists and is populated —
-		// the Time Pool cannot pay by watch-time without it, and the clamp cannot bound
+		// the Time Pool cannot pay by attention without it, and the clamp cannot bound
 		// a person's credited seconds without knowing which person. So the identity is
 		// always one `groupBy` away, and the guarantee is entirely about what the
 		// analytics queries choose to select.

@@ -102,7 +102,7 @@ async function resolvePurchase(slug: string, userId: number) {
  * What the basket buys is the **fixed $0.30**, which is per *charge* and not per item:
  * five $1 tracks pay $1.65 in card fees separately and $0.45 together, and the whole
  * $1.20 goes to the creator because Anthers keeps nothing either way. Same mechanism as
- * batching a month's Seeds onto one transaction (51.02).
+ * batching a month's support onto one transaction (51.02).
  */
 async function resolveBasket(workIds: number[], userId: number) {
 	const unique = [...new Set(workIds)];
@@ -534,7 +534,7 @@ const paymentRoutes = new Hono()
 		// rather than `works.creatorId` (`0016`). As inner joins through `works` this
 		// endpoint dropped a purchase entirely once its Work was deleted — the buyer's
 		// own receipt vanished from their history, which is the one place it has to
-		// remain. A Seed buy (no Work at all) was never listed here for the same reason.
+		// remain. A support top-up (no Work at all) was never listed here for the same reason.
 		const result = await db
 			.select({
 				purchase: purchases,
@@ -735,7 +735,7 @@ const paymentRoutes = new Hono()
 				await saveOnPurchase(completed);
 
 				if (completed.type === "seeds") {
-					// A Seed buy → credit the account (not a post purchase).
+					// A support top-up → credit the account (not a post purchase).
 					await applyCreditForPurchase(completed);
 				} else {
 					// Post purchase → record the (now always zero) purchase fee to the ledger.

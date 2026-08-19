@@ -6,7 +6,7 @@
  *
  * - **It is not hideable.** `users` carries no `moderation_status`, and hiding an
  *   account is suspension — which has to answer what becomes of their Works, their
- *   buyers' purchases, the Seeds pointed at them and any payout in flight. None of
+ *   buyers' purchases, the support pointed at them and any payout in flight. None of
  *   that is decided. So `hide` returns a legible 400 rather than a 500 from a missing
  *   column, and the queue item says `moderatable: false` so the console never offers
  *   a button that could only fail.

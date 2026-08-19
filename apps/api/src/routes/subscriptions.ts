@@ -101,7 +101,7 @@ const MIN_INVOICE_TOTAL = 0.5;
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
 
-/** The Badge view for a count of Seeds given to Anthers (capped at Blossom for display). */
+/** The Badge view for monthly dollars given to Anthers (capped at Blossom for display). */
 function badgeViewFor(anthersSupport: number) {
 	// Look the rung up by its Badge, never by array position. `thresholdForBadge` returns a
 	// THRESHOLD, and a threshold only doubles as an index while Anthers' Badges sit at
@@ -238,8 +238,8 @@ const subscriptionRoutes = new Hono()
 
 	// ── Current Account ──────────────────────────────────────────────────────
 	// ── Public Access meter ──────────────────────────────────────────────────
-	// A free account watches 10 hours of the commons a month; the first Seed given to
-	// Anthers removes the limit and nothing above it buys more. Its own endpoint because
+	// A free account watches 10 hours of the commons a month; the Public Access price
+	// given to Anthers removes the limit and nothing above it buys more. Its own endpoint because
 	// it is a property of the ACCOUNT, not of any Work — a Work never reports itself
 	// gated by the meter, or the commons would be stratified again.
 	.get("/public-access", async (c) => {
@@ -590,7 +590,7 @@ const subscriptionRoutes = new Hono()
 		const stripe = getStripe();
 		if (!stripe) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Cancel at period end — the Seeds keep working until the cycle ends, then the
+		// Cancel at period end — the support keeps working until the cycle ends, then the
 		// subscription.deleted webhook reverts to 0. An account with no Stripe subscription
 		// (nothing to cancel remotely) still cancels locally: the flag is its whole state.
 		if (acct.stripeSubscriptionId) {

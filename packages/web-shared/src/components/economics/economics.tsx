@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The two Meadow economics cards — the interactive "Where your Seeds to Anthers go"
-// rank picker and the one-time-purchase example — plus the badge ladder and the
+// The two Meadow economics cards — the interactive "Where your support for Anthers goes"
+// Badge picker and the one-time-purchase example — plus the badge ladder and the
 // hover-tooltip (i). All numbers derive from the support model (see
-// @anthers/shared/constants + fees): a Seed is a flat $3 ALL IN, pointed at a
-// creator (no platform cut) or at Anthers (an Anthers-Seed). Each Anthers-Seed
-// splits into Time Pool ($1.50) + the at-cost Payments line (card 2.9%+$0.30) +
+// @anthers/shared/constants + fees): a user gives a monthly amount, all in, pointed at
+// a creator (no platform cut) or at Anthers. What goes to Anthers
+// splits into Time Pool (half) + the at-cost Payments line (card 2.9%+$0.30) +
 // the remainder funding free access and the charitable programs. There is no
 // bandwidth term — delivery costs $0 at any volume (retired 2026-08-12). Sales tax
 // (~6.5%) is the ONLY thing added on top, because a government-imposed tax is the
@@ -37,8 +37,8 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 const TAX_TIP =
 	"An average U.S. combined sales-tax rate. Your actual rate depends on your state and may be higher or lower.";
 
-// ─── Badge presentation. Every rank shares one round botanical frame
-// (`frame-round`) — a single, consistent wreath across all ranks; the emoji inside is
+// ─── Badge presentation. Every Badge shares one round botanical frame
+// (`frame-round`) — a single, consistent wreath across all of them; the emoji inside is
 // what differs. ───
 export const BADGE_ART: Record<BadgeKey, { emoji: string; wreath: BrandIconName }> = {
 	free: { emoji: "🌰", wreath: "frame-round" },
@@ -48,7 +48,7 @@ export const BADGE_ART: Record<BadgeKey, { emoji: string; wreath: BrandIconName 
 	blossom: { emoji: "🌼", wreath: "frame-round" },
 };
 
-/** Ascending ladder (Root → Blossom) for the ranks section: wreath + emoji + $/mo. */
+/** Ascending ladder (Root → Blossom) for the Badges section: wreath + emoji + $/mo. */
 export const BADGE_LADDER: {
 	name: string;
 	emoji: string;
@@ -135,7 +135,7 @@ function SplitRow({
 
 // ─── (2) Support for Anthers — interactive Badge picker ───
 
-/** The five ranks as selectable chips: emoji + label + $/mo. */
+/** The five Badges as selectable chips: emoji + label + $/mo. */
 function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
 	return (
 		<div className="mb-6 grid grid-cols-5 gap-2">

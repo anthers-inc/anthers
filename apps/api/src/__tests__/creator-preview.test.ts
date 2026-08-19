@@ -33,7 +33,7 @@ const strangerName = `cp_s_${id}`;
 
 /** Free to everyone. */
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
-/** Locked at the baseline, open at two Seeds given to this creator. */
+/** Locked at the baseline, open at $2 given to this creator. */
 const GATED_AT_2 = [
 	{ threshold: 0, allow: false, price: "0" },
 	{ threshold: 2, allow: true, price: "0" },

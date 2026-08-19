@@ -55,7 +55,8 @@ const VIDEO_SIZE = "640x360";
 /** Ungated, free, streaming — i.e. Public Access, which is what a player spec wants. */
 const OPEN_ACCESS = [{ threshold: 0, allow: true, price: "0" }];
 /**
- * Behind one Seed given to this creator. The baseline row is present and DENIES, which is
+ * Behind $1 given to this creator — any gate will do here, the amount is not the point.
+ * The baseline row is present and DENIES, which is
  * what makes it a gate rather than an absence — a Work with no baseline row at all is
  * "free but fully locked", a different state with a different meaning.
  */

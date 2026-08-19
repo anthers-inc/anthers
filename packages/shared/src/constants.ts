@@ -172,7 +172,7 @@ export const ATTENTION_RAW_RETENTION_DAYS = 180;
 
 // ── Badge helpers ────────────────────────────────────────────────────────────
 /**
- * The Badge a holder of `seeds` currently holds in `badges`, and whether it renders
+ * The Badge a holder of `amount` currently holds in `badges`, and whether it renders
  * with a "+".
  *
  * The rule, uniformly: your Badge is the **highest-threshold Badge whose threshold
@@ -250,7 +250,7 @@ export function badgeLabel(name: string): string {
 }
 
 /**
- * Display label for what a holder of `seeds` holds — e.g. "Petal", "Blossom+",
+ * Display label for what a holder of `amount` holds — e.g. "Petal", "Blossom+",
  * "Blorp+". `emptyLabel` is what to show below the lowest Badge (default "Free").
  */
 export function heldBadgeLabel(

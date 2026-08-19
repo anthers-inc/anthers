@@ -313,8 +313,8 @@ describe("A purchase survives the Work being deleted", () => {
 		expect(row.work.visibility).toBe("withdrawn");
 	});
 
-	it("lists a Seed buy as a receipt that bought no Work, and says so in `type`", async () => {
-		// A Seed buy is a real charge with a real receipt, so it belongs in Purchases — it
+	it("lists a support top-up as a receipt that bought no Work, and says so in `type`", async () => {
+		// A support top-up is a real charge with a real receipt, so it belongs in Purchases — it
 		// only started appearing when `0016` stopped this endpoint dropping every row with
 		// no Work. But it unlocks nothing, so it does NOT belong in the Library, and the
 		// client needs something to tell the two apart. `workId` cannot: it is null here

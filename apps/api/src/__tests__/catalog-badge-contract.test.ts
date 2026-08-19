@@ -13,7 +13,7 @@
  * moves. What makes this one survivable is that the client's version rests on a single
  * property of the resolver, and this file is that property:
  *
- * 🚨 **For a viewer with no Seeds, no purchases and no ownership, freeness is decided by
+ * 🚨 **For a viewer who has given nothing, bought nothing and owns nothing, freeness is decided by
  * the baseline row alone** — allowed, at price 0. Nothing above threshold 0 can make a
  * Work free to a stranger, and nothing else can take it away.
  *

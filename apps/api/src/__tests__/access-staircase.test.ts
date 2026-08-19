@@ -58,10 +58,10 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 type PostKey = string;
 
 /**
- * A viewer context. `givenAmount` is **whole Seeds given to the gauntlet creator this
+ * A viewer context. `givenAmount` is **monthly dollars given to the gauntlet creator this
  * cycle**, and it is the only viewer fact gate resolution reads besides purchases.
  *
- * The staircase row's `anthersSeeds` is deliberately NOT passed: there is nowhere to put
+ * The staircase row's `anthersSupport` is deliberately NOT passed: there is nowhere to put
  * it. Since Anthers Gates were retired the Badge cannot reach resolution at all, which is
  * a stronger statement than any assertion — the same shape as `following`.
  */
@@ -80,9 +80,9 @@ const PAY: AccessReason = "payment_required";
  * The staircase itself lives in `@anthers/db/gauntlet` (`EXPECTED_STAIRCASE`) — ONE table
  * shared with the e2e walk, for the same reason the posts are shared: neither consumer can
  * quietly drift from what the other proved. Each row is realized as a resolver context here;
- * the `following` and `anthersSeeds` fields are untestable at this layer (see the header
- * note) and ride along as documentation. Resolution reads the viewer's Seeds given to THIS
- * creator as a raw count, never a Badge or a list position, so a sparse ladder resolves
+ * the `following` and `anthersSupport` fields are untestable at this layer (see the header
+ * note) and ride along as documentation. Resolution reads what the viewer has given THIS
+ * creator as a raw amount, never a Badge or a list position, so a sparse ladder resolves
  * correctly and a viewer is never quantised to the nearest named rung.
  */
 const STAIRCASE = EXPECTED_STAIRCASE.map((row) => ({
@@ -125,9 +125,9 @@ describe("User Gauntlet — expected-access staircase", () => {
 		}
 	});
 
-	it("each Seed rung unlocks exactly one more post than the rung below", () => {
+	it("each Badge rung unlocks exactly one more post than the rung below", () => {
 		// Derived from the fixture's rungs, never typed, so retuning BADGE_RUNGS needs no
-		// matching edit here. A viewer at 0 Seeds sees only G1; each rung adds exactly one.
+		// matching edit here. A viewer who has given nothing sees only G1; each rung adds exactly one.
 		const counts = [0, ...BADGE_RUNGS].map(
 			(s) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(s)).canAccess).length,
 		);
@@ -135,7 +135,7 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	/**
-	 * ⭐ The reason `BADGE_RUNGS` is sparse. Between two rungs, a viewer's Seed count and the
+	 * ⭐ The reason `BADGE_RUNGS` is sparse. Between two rungs, a viewer's amount and the
 	 * rung's POSITION in the ladder diverge — so an implementation that compared positions
 	 * (the retired `badgeRank = indexOf` shape) opens one post too many here, toward
 	 * over-granting. On a consecutive ladder this state does not exist to test.
@@ -212,7 +212,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		expect(before.downloadEnabled).toBe(true);
 		expect(before.streamEnabled).toBe(false);
 
-		// A purchase outranks everything, even with no Seeds given at all.
+		// A purchase outranks everything, even with nothing given at all.
 		const after = resolveAccessSync(POSTS[BUY], ctx(0, [POSTS[BUY].id]));
 		expect(after.canAccess).toBe(true);
 		expect(after.reason).toBe("purchased");

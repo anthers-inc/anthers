@@ -71,7 +71,7 @@ describe("badgeTable", () => {
 		const rows = badgeTable();
 		const root = D(rows[0].payments);
 		const blossom = D(rows[3].payments);
-		// 4× the Seeds, but nothing like 4× the fee.
+		// 4× the amount, but nothing like 4× the fee.
 		expect(blossom.lessThan(root.mul(4))).toBe(true);
 	});
 });

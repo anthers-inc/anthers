@@ -21,7 +21,7 @@
  * **A reported person can only be dismissed**, and the row says so rather than
  * offering a disabled button with no explanation. Hiding an account is suspension,
  * which has to answer what becomes of their Works, their buyers' purchases, the
- * Seeds pointed at them and any payout in flight — none of it decided. So the
+ * support pointed at them and any payout in flight — none of it decided. So the
  * operator acts out of band and the console is honest about that being the case.
  *
  * Nothing here deletes. Hiding is a state transition on the row; the content, its

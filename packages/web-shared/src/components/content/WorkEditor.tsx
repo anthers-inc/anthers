@@ -136,7 +136,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	const [streamEnabled, setStreamEnabled] = useState(editing?.streamEnabled ?? true);
 	const [downloadEnabled, setDownloadEnabled] = useState(editing?.downloadEnabled ?? false);
 
-	// Access. The creator's Seed ladder is fetched below because rungs live on the creator,
+	// Access. The creator's Badge ladder is fetched below because rungs live on the creator,
 	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
 	// exist, so the rows are the only state worth holding.
 	const [seedRows, setSeedRows] = useState<SeedRowDraft[]>(() =>
@@ -167,7 +167,7 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		editing?.visibility === "released" ? "released" : "private",
 	);
 
-	// The creator's own Seed rungs. Best-effort: without them the table still renders its
+	// The creator's own Badge rungs. Best-effort: without them the table still renders its
 	// baseline row, which is the row that decides Public Access and the only one most
 	// creators will ever touch.
 	useEffect(() => {

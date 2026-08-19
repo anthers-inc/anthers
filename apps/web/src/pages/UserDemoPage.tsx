@@ -17,7 +17,7 @@ const serif = { fontFamily: FONTS.fraunces };
 // ---------------------------------------------------------------------------
 
 interface CreatorGate {
-	/** Dollar threshold to unlock this gate — always a whole number of $3 Seeds */
+	/** Monthly dollars to unlock this gate — any amount the creator chooses */
 	threshold: number;
 	/** Creator-chosen name for this tier */
 	label: string;
@@ -52,8 +52,9 @@ interface DemoPurchase {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** All possible gate thresholds—used as the universal scale for every bar. Seed
- *  Gates are set in whole $3 Seeds, so every threshold is a multiple of $3. */
+/** All possible gate thresholds—used as the universal scale for every bar. These are
+ *  this demo's figures, not a rule: a creator may gate at any amount, and the $3 steps
+ *  below are only what this fictional set of creators happened to pick. */
 const ALL_GATE_THRESHOLDS = [3, 6, 12, 24, 30];
 const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10% headroom
 
@@ -61,11 +62,11 @@ const BAR_MAX = ALL_GATE_THRESHOLDS[ALL_GATE_THRESHOLDS.length - 1] * 1.1; // 10
 // Demo data
 // ---------------------------------------------------------------------------
 
-// A user holds Anthers-Seeds ($3 each). This demo user is at Petal rank (3
-// Anthers-Seeds, $9/mo). Each Anthers-Seed splits into a $1.50 Time Pool (to
-// creators, by time) and "Supports Anthers" (the remainder, funding free access
-// and programs). Directed Seeds ($3 each, no platform cut) sit alongside. There is no
-// bandwidth line — streaming and downloads are unlimited and free.
+// A user gives Anthers a monthly amount, which is their Badge. This demo user is at
+// Petal ($9/mo). Half of it is Time Pool (to creators, by time) and the rest is
+// "Supports Anthers" (funding free access and programs). Money directed at creators
+// (any amount, no platform cut) sits alongside. There is no bandwidth line —
+// streaming and downloads are unlimited and free.
 // Derived from the generated figures, never hand-computed. This block used to be
 // typed by hand and silently kept the pre-2026-08-03 arithmetic — `supportsAnthers`
 // was price − Time Pool, which omits the Payments line entirely.
@@ -88,7 +89,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		avatar: "BF",
 		watchHours: 8.2,
 		poolAmount: 1.48, // 8.2 hrs × $0.18/hr
-		seedAmount: 6, // 2 Seeds
+		seedAmount: 6, // $6/mo directed at this creator
 		gates: [
 			{
 				threshold: 3,
@@ -123,7 +124,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		avatar: "LR",
 		watchHours: 6.5,
 		poolAmount: 1.17,
-		seedAmount: 3, // 1 Seed
+		seedAmount: 3, // $3/mo directed at this creator
 		gates: [
 			{
 				threshold: 3,
@@ -440,13 +441,13 @@ function SubscriptionDashboardDemo() {
 
 	const totalPool = DEMO_ALLOCATIONS.reduce((s, a) => s + a.poolAmount, 0);
 	const totalSeeds = seedAllocs.reduce((s, b) => s + b, 0);
-	// Monthly total (pre tax): the Time Pool + directed Seeds + "Supports Anthers" —
-	// i.e. the Anthers-Seeds plus the directed Seeds. The at-cost Payments line is folded
-	// INSIDE the Seeds; sales tax is the only thing added on top.
+	// Monthly total (pre tax): the Time Pool + money directed at creators + "Supports
+	// Anthers" — i.e. what goes to Anthers plus what goes to creators. The at-cost Payments
+	// line is folded INSIDE that; sales tax is the only thing added on top.
 	const monthlyTotal = totalPool + totalSeeds + DEMO_PLAN.supportsAnthers;
 
-	// Seeds are indivisible $3 units, so directing them is a whole-Seed move: give one
-	// creator another Seed and it comes off whoever currently holds the most.
+	// Directing is a zero-sum move within a fixed budget: give one creator more and it
+	// comes off whoever currently holds the most.
 	// ⚠️ **Dollars, and it moved in whole $3 steps until 2026-08-16.** The slider divided
 	// the allocation by the Seed price to get a count and multiplied back on the way in, so
 	// the demo could only ever show multiples of $3 — a granularity floor the product no
@@ -541,8 +542,8 @@ function SubscriptionDashboardDemo() {
 						</thead>
 						<tbody>
 							{DEMO_ALLOCATIONS.map((alloc, idx) => {
-								// A Seed Gate opens on directed Seeds alone — time spent (the Time Pool)
-								// never unlocks one, so the access bar tracks the Seeds, not the row total.
+								// A gate opens on directed money alone — time spent (the Time Pool)
+								// never unlocks one, so the access bar tracks what was given, not the row total.
 								const rowTotal = alloc.poolAmount + seedAllocs[idx];
 								return (
 									<tr key={alloc.username} className="hover">

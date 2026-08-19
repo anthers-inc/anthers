@@ -6,8 +6,8 @@
  *
  * 🚨 **Thresholds are DOLLARS, and any amount is expressible** (migration `0041`). They
  * were whole Seeds — an indivisible $3 unit — so a rung between two of them could not be
- * written down at all, which
- * why the input steps by 1 rather than by a cent, and why the dollar figure beside it is
+ * written down at all, which is why the input steps by 1 rather than by a cent, and why
+ * the dollar figure beside it is
  * derived for display rather than typed.
  */
 import { amountLabel, supportAmount } from "@anthers/shared/constants";

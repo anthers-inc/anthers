@@ -48,7 +48,7 @@ export const purchases = pgTable(
 		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
 		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
 		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
-		// one-time charges that aren't a Work purchase (e.g. a Seed buy).
+		// one-time charges that aren't a Work purchase (e.g. a support top-up, `type: "seeds"`).
 		//
 		// SET NULL, not cascade (`0016`). It was cascade, which meant a creator deleting a
 		// Work destroyed every row here that named it — the buyer's entitlement, the
@@ -59,7 +59,7 @@ export const purchases = pgTable(
 		// Who was paid. Denormalised deliberately, because it used to be reachable ONLY by
 		// joining `works` — so a deleted Work took the seller's identity with it and the
 		// sale silently left that creator's own earnings maths (`calculate-crf` joined
-		// through `works` to get here). Null for charges with no creator side (a Seed buy).
+		// through `works` to get here). Null for charges with no creator side (a support top-up).
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		// A snapshot of what was bought, as it was at the time of sale. These are NOT a
 		// cache of the Work — they are what the row still says after the Work is gone, and
@@ -80,7 +80,7 @@ export const purchases = pgTable(
 		// collect and owe onward rather than money anyone here keeps. Recording it
 		// per-transaction is what makes remittance reportable; without the column the tax
 		// was charged inside `buyer_total` and then unrecoverable from the row. Defaults
-		// to 0.00 for the charges that carry none (a Seed buy).
+		// to 0.00 for the charges that carry none (a support top-up).
 		salesTax: numeric("sales_tax").notNull().default("0.00"),
 		creatorEarnings: numeric("creator_earnings").notNull(),
 		/**

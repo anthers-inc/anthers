@@ -238,7 +238,7 @@ describe("the ledger balances", () => {
 	});
 
 	/**
-	 * Directed Seeds and direct purchases are deliberately absent — Anthers keeps $0 of
+	 * Directed support and direct purchases are deliberately absent — Anthers keeps $0 of
 	 * either, so neither can move a line here. Stated as a test because it is 11.02's
 	 * decoupling and the reason a purchase-heavy Anthers can look successful while the
 	 * budget that funds free access stays thin.
@@ -310,8 +310,8 @@ describe("the paying-user mix", () => {
 
 	/**
 	 * 61.01's biggest named risk, and it is not an economic one: binary Public Access
-	 * removes the reason to hold more than one Seed given to Anthers, so the population
-	 * slides toward exactly one unless something above the first Seed earns it.
+	 * removes the reason to give Anthers more than its price, so the population
+	 * slides toward exactly that unless something above it earns it.
 	 */
 	test("a flattening ladder pushes inflection 1 further away, monotonically", () => {
 		const at = (avg: number) =>
@@ -322,7 +322,7 @@ describe("the paying-user mix", () => {
 			}) as number;
 		const points = [13.95, 9.12, 6.59, 5.01, 3.75].map(at);
 		expect([...points].sort((a, b) => a - b)).toEqual(points);
-		// A full collapse to ~one Seed is still worse than the pre-R2 world's ~57,500 —
+		// A full collapse to ~the Public Access price is still worse than the pre-R2 world's ~57,500 —
 		// so the R2 windfall does not quite cover it — but by 1.15x, not the 1.9x that was
 		// published while the $0.50 pot was assumed.
 		expect(at(3.75) / 57_500).toBeGreaterThan(1);

@@ -316,7 +316,7 @@ export default function SubscriptionPage() {
 			const rows = dist.value.distributions;
 			setDistributions(rows);
 
-			// Fetch each creator's gates for the Seed-gate hints.
+			// Fetch each creator's gates for the gate hints.
 			const usernames = rows.map((d) => d.creator?.username).filter(Boolean) as string[];
 			const gatesMap = new Map<string, CreatorGate[]>();
 			const gateResults = await Promise.allSettled(
@@ -647,10 +647,10 @@ export default function SubscriptionPage() {
 						<div className="text-[11px] text-base-content/40">free access &amp; programs</div>
 					</div>
 					{/*
-					 * 🚨 Reads the Seed count, because this card is rendered for the 0-Seed rung
+					 * 🚨 Reads the amount, because this card is rendered for the $0 rung
 					 * too and used to tell that user their streaming was "Unlimited" — the one
 					 * person on the page for whom it is false. Public Access is capped monthly
-					 * until the first Seed to Anthers lifts it; downloads are unlimited either
+					 * until the Public Access price to Anthers lifts it; downloads are unlimited either
 					 * way, which is why the sub-label sits under both branches.
 					 */}
 					<div>
@@ -669,7 +669,7 @@ export default function SubscriptionPage() {
 				</div>
 			</div>
 
-			{/* ── Time Pool + Seeds ── */}
+			{/* ── Time Pool + directed support ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
 					Creators You Support

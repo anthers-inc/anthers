@@ -152,7 +152,7 @@ describe("project browse filters", () => {
 		expect(await listSlugs("pricing=free")).toEqual([mine.get("game")!]);
 		expect(await listSlugs("pricing=paid")).toEqual([mine.get("audio")!]);
 		// Gated means a threshold you must HOLD, not a price you can pay — so the $5 Work
-		// is not gated and the 2-Seed one is, even though neither is free.
+		// is not gated and the $2 one is, even though neither is free.
 		expect(await listSlugs("pricing=gated")).toEqual([mine.get("text")!]);
 	});
 
@@ -237,7 +237,7 @@ describe("project browse filters", () => {
 			return (projects as { slug: string }[]).map((p) => p.slug).filter((s) => ours.has(s));
 		};
 
-		// This viewer holds no Seeds, so the 2-Seed gate is shut to them.
+		// This viewer has given nothing, so the $2 gate is shut to them.
 		expect(await asViewer("pricing=gated")).toEqual([]);
 		expect(await asViewer("pricing=gated&show_locked=true")).toEqual([mine.get("text")!]);
 	});
