@@ -3,19 +3,19 @@
  * Deterministic state hops for the User Gauntlet — the harness's way to place the viewer
  * on an exact rung of the staircase without walking a billing flow.
  *
- * Why this exists: the support model made billing real. Changing the Anthers-Seed count
- * (`POST /subscriptions/account`) and buying creator-Seed budget (`/seeds/buy`) are Stripe
+ * Why this exists: the support model made billing real. Changing what a user gives Anthers
+ * (`POST /subscriptions/account`) and topping up their creator budget (`/seeds/buy`) are Stripe
  * charges with webhook-driven sync — they 503 without Stripe configured and need a running
  * `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
- * UI-walks everything that doesn't bill — follow, comment, the Give-Seeds stepper — and
+ * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same three columns the webhooks would have written:
  * `accounts.anthersSupport`, `accounts.creatorSupportTotal`, and a completed `purchases` row.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
  *
  * Usage (flags compose; each is applied only when passed):
- *   bun run db:gauntlet:state --user gauntlet_viewer --anthers-seeds 3
- *   bun run db:gauntlet:state --user gauntlet_viewer --seed-budget 6
- *   bun run db:gauntlet:state --user gauntlet_viewer --give 2   # 2 SEEDS (= $6)
+ *   bun run db:gauntlet:state --user gauntlet_viewer --anthers-support 3   # $3/mo to Anthers
+ *   bun run db:gauntlet:state --user gauntlet_viewer --support-budget 6        # $6 of budget
+ *   bun run db:gauntlet:state --user gauntlet_viewer --give 2               # $2 to the creator
  *   bun run db:gauntlet:state --user gauntlet_viewer --purchase gauntlet-paid-download
  *   bun run db:gauntlet:state --user gauntlet_viewer --watched-minutes 570
  *
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
 	const creatorId = await userIdByUsername(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator");
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
-	const seedBudget = numFlag("--seed-budget", 0, 300);
+	const supportBudget = numFlag("--support-budget", 0, 300);
 	const give = numFlag("--give", 0, 300);
 	const purchaseSlug = flagValue("--purchase");
 	/**
@@ -117,10 +117,10 @@ async function main(): Promise<void> {
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
 	// Account row: the two billing facts the subscription/seed-buy webhooks would write.
-	if (anthersSupport !== undefined || seedBudget !== undefined) {
+	if (anthersSupport !== undefined || supportBudget !== undefined) {
 		const patch = {
 			...(anthersSupport !== undefined ? { anthersSupport: anthersSupport.toFixed(2) } : {}),
-			...(seedBudget !== undefined ? { creatorSupportTotal: seedBudget.toFixed(2) } : {}),
+			...(supportBudget !== undefined ? { creatorSupportTotal: supportBudget.toFixed(2) } : {}),
 			updatedAt: new Date(),
 		};
 		const [existing] = await db

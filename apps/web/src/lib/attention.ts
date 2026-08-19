@@ -103,7 +103,7 @@ let listenersBound = false;
  * requires a *visible* tab, so the jiggle has to happen on a foregrounded post,
  * and the server's wall-clock clamp means credited seconds can never exceed
  * elapsed ones. What a jiggler gains is therefore not more money — the Time Pool
- * is a fixed $1.50 per Anthers-Seed either way — but a different allocation of
+ * is a fixed share of what they give Anthers either way — but a different allocation of
  * their own share. That's a user pointing their own pool at a tab they left open,
  * which is a far smaller problem than fraud that mints seconds, and dropping
  * `mousemove` would under-credit the real case it exists for: someone reading a

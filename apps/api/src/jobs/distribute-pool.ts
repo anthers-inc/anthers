@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Pool distribution job: distribute the Time Pool and directed Seeds to creators.
+ * Pool distribution job: distribute the Time Pool and directed support to creators.
  *
  * For each active account:
- * 1. Sum watch-time seconds per creator during the billing cycle.
- * 2. Time Pool = $1.50 per Anthers-Seed the viewer holds, distributed
- *    proportionally by watch-time. A higher rank = a bigger pool, so all of that
- *    viewer's watch-time pays creators more — no per-item multiplier.
- * 3. Seeds: directed Seeds are credited **NET** of the creator side's pro-rata share
+ * 1. Sum time-spent seconds per creator during the billing cycle.
+ * 2. Time Pool = `TIME_POOL_RATE` (half) of what the viewer gives Anthers, distributed
+ *    proportionally by time. A higher Badge = a bigger pool, so all of that viewer's
+ *    time pays creators more — no per-item multiplier.
+ * 3. Directed support is credited **NET** of the creator side's pro-rata share
  *    of the at-cost card fee (`paymentsSplit`), which is what `fees.ts` has always
- *    said a creator actually receives. There are no undirected creator-Seeds — a Seed
- *    is either directed to a creator or held as an Anthers-Seed (which funds the Time
+ *    said a creator actually receives. There is no undirected creator money — every
+ *    dollar is either directed at a creator or given to Anthers (funding the Time
  *    Pool + the remainder, settled in settle-cycle).
  * 4. Create/update PoolDistribution ledger entries.
  *
@@ -44,7 +44,7 @@ export interface DistributePoolData {
 /** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** The Time Pool a user funds this cycle = $1.50 per Anthers-Seed (subsidised at rank 0). */
+/** The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers (subsidised at $0). */
 function computeTimePoolAmount(anthersSupport: number): Decimal {
 	return new Decimal(timePoolFor(anthersSupport));
 }

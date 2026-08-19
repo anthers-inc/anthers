@@ -46,7 +46,7 @@ export function normalizeMoney(v: string): string {
 	return (Math.round(n * 100) / 100).toString();
 }
 
-/** Seed rows = fixed $0 baseline + one row per Seed gate (sorted by threshold). */
+/** Creator rows = fixed $0 baseline + one row per creator gate (sorted by threshold). */
 export function buildSeedRows(
 	gates: CreatorGate[],
 	existing?: SeedAccessRow[] | null,

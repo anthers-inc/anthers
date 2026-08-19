@@ -3,9 +3,14 @@
  * Account & economics routes — the support model.
  *
  * A user's account holds a monthly **amount** given to Anthers (`anthersSupport`) — that
- * count is their rank and, at $3 each, their Anthers subscription (a single $3
- * Seed price × quantity in Stripe). Directed creator-Seeds are tracked in
- * `seed_allocations`; `creatorSeedTotal` is the balance the user directs.
+ * amount **is** their Badge, and is their Anthers subscription (one Stripe item per
+ * destination, each carrying its own amount). What they direct at creators is tracked in
+ * `seed_allocations`; `creatorSupportTotal` is the balance they direct from.
+ *
+ * ⚠️ This block was left **half-edited** by the retirement until 2026-08-19: the noun
+ * became "amount" while the next clause still read "that **count** is their rank … at $3
+ * each … a single $3 Seed price × quantity". It also named `creatorSeedTotal`, which does
+ * not exist.
  * There is no bandwidth line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator gates, and access.
  */
@@ -59,17 +64,22 @@ import { loadPublicAccessBudget } from "../services/public-access.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Max Anthers-Seeds a single subscription can hold (a sane upper bound; Blossom+ well within). */
 /**
- * Operational ceiling on a single subscription-quantity update — a fat-finger and abuse
- * guard, NOT a model bound.
+ * Operational ceiling, in **dollars a month**, on a single subscription update — a
+ * fat-finger and abuse guard, NOT a model bound.
  *
- * `services/billing.ts` describes rank as "unbounded, so Blossom+ works", and both are
- * true: the Badge ladder genuinely has no top rung (benefits keep scaling per Seed), while
- * this caps what one request may set. The two read as contradictory, which is why it was
- * filed as drift; the resolution is that "unbounded" is about the ladder and this is about
- * a request. Note `/seeds/buy` caps quantity at 1000 rather than 100 — a different bound
- * for a different path, left alone here, but worth one number if they should agree.
+ * `services/billing.ts` describes the Badge ladder as "unbounded, so Blossom+ works", and
+ * both are true: the ladder genuinely has no top rung (what you give keeps scaling what
+ * your time pays creators), while this caps what one request may set. The two read as
+ * contradictory, which is why it was filed as drift; the resolution is that "unbounded" is
+ * about the ladder and this is about a request. Note `/seeds/buy` uses a different bound
+ * again — left alone here, but the roadmap carries a milestone for reconciling them.
+ *
+ * ⚠️ A stranded one-line docblock sat directly above this one until 2026-08-19, reading
+ * *"Max Anthers-Seeds a single subscription can hold"* — the pre-retirement description of
+ * the same constant, left behind when the real block was written above the rename. Two
+ * docblocks on one declaration is a shape worth noticing: the compiler takes the nearest
+ * and the reader takes the first.
  */
 const MAX_ANTHERS_SUPPORT = 300;
 
@@ -87,7 +97,7 @@ const MAX_ANTHERS_SUPPORT = 300;
  */
 const MIN_INVOICE_TOTAL = 0.5;
 
-/** The Badge ladder (Free … Blossom), each with its Seed count + decomposition. Shared
+/** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
 
@@ -839,14 +849,22 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Seed Allocations ─────────────────────────────────────────────────────
-	// The budget is the creator-Seed balance the user holds this cycle, and Anthers
-	// takes no cut of it. Directing a Seed to a creator clears that creator's Seed
-	// Gates. (What actually reaches the creator is net of the Seed's pro-rata share of
-	// the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
-	// Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is
-	// any amount at all — the API no longer rejects non-multiples, because
-	// silently storing a fraction of a Seed.
+	// ── Directed allocations ─────────────────────────────────────────────────
+	// The budget is the balance the user holds this cycle to direct at creators, and
+	// Anthers takes no cut of it. Directing an amount at a creator clears that creator's
+	// Badges. (What actually reaches the creator is net of that amount's pro-rata share
+	// of the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
+	//
+	// **Amounts are dollars, at any level, to the cent.** The API does not reject
+	// non-multiples of anything, because there is no unit left to be a multiple of.
+	//
+	// ⚠️ This comment was left **half-edited** by the 2026-08-16 retirement and said:
+	// "Amounts are whole Seeds: a Seed is an indivisible $3 unit, so an allocation is any
+	// amount at all — the API no longer rejects non-multiples, because silently storing a
+	// fraction of a Seed." The premise is the old model, the conclusion is the new one,
+	// and the last clause has no predicate at all. Worth keeping as a marker: a sweep
+	// that rewrites the end of a sentence and not its beginning leaves prose that reads
+	// as considered and asserts both models at once.
 	.get("/seeds", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? getCurrentBillingCycle();
@@ -1143,7 +1161,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for creator page rank/Seed display) ─────────────────
+	// ── Creator Status (for the creator page's Badge + directed-support display) ──
 	.get("/creator-status/:username", async (c) => {
 		const { username } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -1172,7 +1190,7 @@ const subscriptionRoutes = new Hono()
 			});
 		}
 
-		// The viewer's held Anthers-Seeds (point-in-time) and their Seeds to this creator.
+		// What the viewer gives Anthers (point-in-time) and what they direct at this creator.
 		const anthersSupport = await heldAnthersSupport(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
 		const cycle = getCurrentBillingCycle();

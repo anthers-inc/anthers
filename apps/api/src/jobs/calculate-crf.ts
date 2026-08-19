@@ -4,10 +4,17 @@
  * net-never-negative guarantee).
  *
  * Runs daily (idempotent per monthly billing cycle). Iterates creators,
- * estimates their storage cost + the half again on top (a self-hosting creator pays a flat
- * fee instead), compares to earnings, and — at Anthers' discretion, within
- * its budget — may subsidize the gap for creators who earn less than that cost.
- * Storage is the creator's own opt-in cost (50 GiB free); delivery is viewer-funded.
+ * estimates their storage cost + the half again on top, compares to earnings, and — at
+ * Anthers' discretion, within its budget — may subsidize the gap for creators who earn
+ * less than that cost. Storage is the creator's own opt-in cost (50 GiB free).
+ *
+ * ⚠️ **Two clauses here described mechanisms that are gone, until 2026-08-19.** It said a
+ * self-hosting creator "pays a flat fee instead" — `SELF_HOST_FEE` has been **`0`** since
+ * 2026-08-12, so there is no fee to pay instead of anything. And it said "delivery is
+ * viewer-funded", which stopped being true when Cloudflare R2 made delivery **free at any
+ * volume**: nobody funds it, because it costs nothing. Neither left a wrong figure behind
+ * — a retired mechanism leaves prose with nothing underneath, which is exactly what the
+ * figures guard cannot see.
  */
 
 import { db } from "@anthers/db";

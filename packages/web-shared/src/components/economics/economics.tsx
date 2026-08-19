@@ -133,7 +133,7 @@ function SplitRow({
 	);
 }
 
-// ─── (2) Anthers-Seeds — interactive rank picker ───
+// ─── (2) Support for Anthers — interactive Badge picker ───
 
 /** The five ranks as selectable chips: emoji + label + $/mo. */
 function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
@@ -200,7 +200,7 @@ export function SubscriptionCalculator() {
 	const supportsAnthers = n === 0 ? 0 : price - timePool - cardFeeDisplay(price);
 	const toCreators = n === 0 ? 0 : timePool;
 
-	// The at-cost Payments line sits INSIDE the Seed price; sales tax is the only thing
+	// The at-cost Payments line sits INSIDE the price; sales tax is the only thing
 	// added on top. Free ($0) has neither.
 	const card = cardFeeDisplay(price);
 	const tax = price * TAX_PCT;

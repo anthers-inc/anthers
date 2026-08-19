@@ -2,14 +2,19 @@
 /**
  * Cycle settlement job — the money that moves at month-end, per account:
  *
- * 1. **remainder inflow.** The **remainder** of this account's Anthers-Seeds —
- *    what's left of each $3 after its Time Pool ($1.50) and its pro-rata share of
- *    the at-cost Payments line. Users who also give directed Seeds leave more for
+ * 1. **remainder inflow.** The **remainder** of what this account gives Anthers —
+ *    what's left after its Time Pool (`TIME_POOL_RATE`, half) and its pro-rata share of
+ *    the at-cost Payments line. Users who also direct support at creators leave more for
  *    the mission, because the fixed card fee is charged once on the whole batched
- *    monthly charge. Free accounts (0 Anthers-Seeds) contribute nothing — their
- *    $0.05 Time Pool is subsidised. The remainder is the shock absorber: Time Pool
- *    is a fixed target and never moves, so cost swings land here, never on creator
- *    pay.
+ *    monthly charge. Free accounts (giving $0) contribute nothing — their
+ *    `FREE_TIME_POOL` is subsidised. The remainder is the shock absorber: Time Pool
+ *    is a fixed share and never moves against it, so cost swings land here, never on
+ *    creator pay.
+ *
+ *    ⚠️ **This read "each $3 after its Time Pool ($1.50)" and "their $0.05 Time Pool"
+ *    until 2026-08-19.** The first describes the retired unit; the second was simply a
+ *    **wrong number** — `FREE_TIME_POOL` is `0.25`, and has been since 2026-08-12. Both
+ *    dials are named rather than quoted here so this cannot drift again.
  * 2. **Record** the cycle snapshot.
  *
  * A first step used to sit above these: draw the cycle's stream consumption against

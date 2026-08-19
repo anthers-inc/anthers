@@ -60,7 +60,7 @@ describe("badgeTable", () => {
 	});
 
 	test("the remainder is strictly positive at every Badge", () => {
-		// If a dial change ever drives this negative, the model is insolvent per-Seed
+		// If a dial change ever drives this negative, the model is insolvent at that Badge
 		// and the table would quietly render a negative "contribution to free access".
 		for (const r of badgeTable()) {
 			expect(D(r.remainder).greaterThan(0)).toBe(true);

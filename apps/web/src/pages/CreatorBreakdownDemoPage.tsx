@@ -28,11 +28,11 @@ interface SubscriberMilestone {
 
 interface RevenueByPlan {
 	badge: string;
-	/** Whole-dollar monthly cost of holding this many Anthers-Seeds. */
+	/** The monthly amount given to Anthers at this Badge. */
 	price: number;
 	/** Time Pool ($) — to creators, by time. */
 	timePool: number;
-	/** Money to creators at this Badge = Time Pool + Seeds. */
+	/** Money to creators at this Badge = Time Pool + directed support. */
 	toCreators: number;
 }
 
@@ -67,7 +67,7 @@ interface DemoCreatorBreakdown {
 	anthers: PlatformComparison;
 	/** Subscriber milestones to hit key revenue targets */
 	milestones: SubscriberMilestone[];
-	/** Per-supporter funding by the fan's Anthers-Seed rank */
+	/** Per-supporter funding by the fan's Badge */
 	revenueByTier: RevenueByPlan[];
 	/** Key insight text */
 	insight: string;
@@ -120,14 +120,16 @@ const VIDEO_SOURCE_MB_PER_MIN = (INFRA.videoBitrateMbps / 8) * 60;
 // ---------------------------------------------------------------------------
 
 /**
- * The Anthers-Seed rank ladder (support model). A fan holds N Anthers-Seeds at $3
- * each — Root 1 … Blossom 4, and up from there — and each Seed puts $1.50 into their
- * Time Pool (to creators, by time), covers their own streaming at cost, and
- * leaves a remainder funding free access and the charitable programs. "toCreators"
- * here is the Time Pool only,
- * shared across everyone they spend time with; a creator's actual take is their time
- * share of it plus any Seeds directed straight to them (those are separate, and
- * no platform cut). Derived from @anthers/shared/constants.
+ * The Badge ladder (support model). A fan gives Anthers a monthly amount — Root $3 …
+ * Blossom $12, and up from there — of which **half** funds their Time Pool (to creators,
+ * by time), with the rest paying its share of the at-cost Payments line and leaving a
+ * remainder funding free access and the charitable programs. "toCreators" here is the
+ * Time Pool only, shared across everyone they spend time with; a creator's actual take is
+ * their time share of it plus anything directed straight to them (separate, and no
+ * platform cut). Derived from @anthers/shared/constants.
+ *
+ * ⚠️ This described a *count* of Seeds at $3 each until 2026-08-19, and had the fan
+ * "covering their own streaming at cost" — a bandwidth line retired 2026-08-12.
  */
 const BADGE_FUNDING: RevenueByPlan[] = (["root", "sprout", "petal", "blossom"] as const).map(
 	(b) => {

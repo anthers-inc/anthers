@@ -26,19 +26,19 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
+	BADGE_RUNGS,
+	BADGE_WALK,
 	EXPECTED_STAIRCASE,
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_POSTS,
 	GAUNTLET_VIEWER_USERNAME,
 	gauntletPost,
-	SEED_RUNGS,
-	SEED_WALK,
 	type StaircaseState,
 } from "@anthers/db/gauntlet";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
 
-/** The purchase rung's key — derived, so extending SEED_RUNGS doesn't strand it. */
-const BUY = `G${2 + SEED_RUNGS.length}`;
+/** The purchase rung's key — derived, so extending BADGE_RUNGS doesn't strand it. */
+const BUY = `G${2 + BADGE_RUNGS.length}`;
 
 import { expect, type Page, test } from "@playwright/test";
 import { API_URL, trackErrorsStrict } from "./fixtures";
@@ -478,7 +478,7 @@ test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
 	const errors = trackErrorsStrict(page, ALLOWED);
 	// Enough budget for the whole ladder. Holding budget is not giving it — the staircase
 	// must still read exactly as it did before.
-	hop("--seed-budget", String(SEED_RUNGS[SEED_RUNGS.length - 1]));
+	hop("--support-budget", String(BADGE_RUNGS[BADGE_RUNGS.length - 1]));
 	await expectStaircase(page, "Blossom, nothing given");
 	expect(errors).toEqual([]);
 });
@@ -498,15 +498,15 @@ test("rung 5 — Seed budget alone unlocks nothing", async ({ page }) => {
  * a viewer's position in the ladder to the rung's position would open a post in a
  * between-state, and only a between-state can catch it.
  */
-for (const [i, seeds] of SEED_WALK.entries()) {
-	const rungIndex = SEED_RUNGS.indexOf(seeds as (typeof SEED_RUNGS)[number]);
+for (const [i, seeds] of BADGE_WALK.entries()) {
+	const rungIndex = BADGE_RUNGS.indexOf(seeds as (typeof BADGE_RUNGS)[number]);
 	const unlocked = rungIndex >= 0 ? `G${2 + rungIndex}` : null;
 	// The next rung ABOVE this Seed count, whether or not the count is itself a rung —
 	// one expression covering both the on-rung and between-rung states. Null at the top
 	// of the ladder, where there is nothing left to stay locked.
-	const nextIndex = SEED_RUNGS.findIndex((t) => t > seeds);
+	const nextIndex = BADGE_RUNGS.findIndex((t) => t > seeds);
 	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
-	const added = seeds - (SEED_WALK[i - 1] ?? 0);
+	const added = seeds - (BADGE_WALK[i - 1] ?? 0);
 
 	test(`rung 5 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,

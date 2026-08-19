@@ -36,7 +36,7 @@ function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Record this cycle's snapshot (Anthers-Seeds + their decomposition + creator-Seeds). */
+/** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
 	userId: number,
 	anthersSupport: number,
@@ -283,8 +283,9 @@ export async function savedCardFor(
 }
 
 /**
- * Create a one-time charge to buy directed creator-Seeds. A Seed is a flat $3 all-in,
- * so the buyer is charged exactly `base` and the at-cost card fee comes **out** of it —
+ * Create a one-time charge to top up the budget a user directs at creators. **The
+ * advertised amount is all-in**, so the buyer is charged exactly `base` and the at-cost
+ * card fee comes **out** of it —
  * this path charged `base + processing` until 2026-08-04, which is the posture the
  * 2026-08-03 revamp retired everywhere else and missed here (mandatory-fee disclosure
  * law requires the advertised price to contain every mandatory fee). Nothing consumed

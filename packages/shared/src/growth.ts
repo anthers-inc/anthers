@@ -196,7 +196,7 @@ export function remainderPerPayingAccount(mix: Record<number, number>): number {
  *
  * `attention` is each segment's share of viewer attention — what divides the Time Pool.
  * It is deliberately **not** hours: with unlimited Public Access a viewer's hours are a
- * free variable while their contribution is fixed by their Seed count, so a per-hour rate
+ * free variable while their contribution is fixed by what they give, so a per-hour rate
  * is an emergent ratio nobody is paid at. Attention-proportion is the real metric and the
  * one the equal-time principle applies to — a minute is a minute, whatever the medium.
  *

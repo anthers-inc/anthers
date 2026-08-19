@@ -555,7 +555,7 @@ const ACCOUNT_CONFIG: Record<string, { anthersSupport: number; creatorSupport?: 
 	[`${SEED_PREFIX}jordan`]: { anthersSupport: 0, creatorSupport: 3 },
 };
 
-/** Resolve a user's account config, defaulting to Free (0 Anthers-Seeds). */
+/** Resolve a user's account config, defaulting to Free ($0 to Anthers). */
 function accountConfig(username: string): { anthersSupport: number; creatorSupport?: number } {
 	return ACCOUNT_CONFIG[username] ?? { anthersSupport: 0 };
 }
@@ -1273,7 +1273,7 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Account (Anthers-Seeds) --
+		// -- Account (what they give Anthers) --
 		const cfg = accountConfig(tu.username);
 		const creatorSupportTotal = cfg.creatorSupport ?? 0;
 		await seedAccountAndCycle({
@@ -1304,12 +1304,12 @@ async function seed() {
 		}
 		console.log(`    ${totalEvents} attention events`);
 
-		// -- Pool distributions + directed Seeds --
-		// The Time Pool is $1.50 per Anthers-Seed, distributed to watched creators by
-		// time. Directed creator-Seeds are different in kind: they are indivisible $3
-		// units the user *points*, so the fixture hands out whole Seeds by largest remainder
-		// rather than splitting a Seed proportionally. Nothing is left undirected — a Seed a
-		// user hasn't pointed is not creator income (it would fund free access and the charitable programs), so
+		// -- Pool distributions + directed support --
+		// The Time Pool is `TIME_POOL_RATE` (half) of what a user gives Anthers, distributed
+		// to watched creators by time. Directed support is different in kind: it is an amount
+		// the user *points*, so the fixture hands it out by largest remainder rather than
+		// splitting proportionally. Nothing is left undirected — money a user hasn't pointed
+		// is not creator income (it would fund free access and the charitable programs), so
 		// attributing a fractional leftover to creators by time would seed a state the
 		// model doesn't produce.
 		const timePool = timePoolFor(cfg.anthersSupport);
@@ -1317,7 +1317,7 @@ async function seed() {
 			const entries = Object.entries(tu.attentionTargets);
 			const totalSeconds = entries.reduce((sum, [, t]) => sum + t.seconds, 0);
 
-			// Whole Seeds by time, largest-remainder for the ones that don't divide evenly.
+			// Split by time, largest-remainder for the amounts that don't divide evenly.
 			const directed = new Map<string, number>();
 			const toGive = creatorSupportTotal;
 			const shares = entries.map(([username, target]) => {
@@ -1343,8 +1343,8 @@ async function seed() {
 
 				const proportion = totalSeconds > 0 ? target.seconds / totalSeconds : 0;
 				const poolAmt = Math.round(timePool * proportion * 100) / 100;
-				// Settled Seed income is what the user directed, NET of that Seed's share of
-				// the card fee — whole Seeds in, a payout figure out.
+				// Settled directed income is what the user pointed, NET of its share of
+				// the card fee — a gross amount in, a payout figure out.
 				const gross = directed.get(creatorUsername) ?? 0;
 				const share =
 					creatorSupportTotal > 0
