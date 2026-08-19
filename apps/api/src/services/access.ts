@@ -72,7 +72,7 @@ export interface AccessibleWork {
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
 export interface AccessContext {
 	userId: number | null;
-	/** creatorId → whole Seeds the viewer has given to that creator this cycle */
+	/** creatorId → monthly dollars the viewer has directed at that creator this cycle */
 	supportByCreator: Map<number, number>;
 	/** Work ids the viewer has a completed purchase for */
 	purchasedWorkIds: Set<number>;
@@ -146,11 +146,11 @@ export type AccessReason =
  * gate that sits above it. Resolution owns the thresholds, so resolution owns this.
  */
 export interface UnlockRoute {
-	/** Whole Seeds this gate requires. */
+	/** Monthly dollars this gate requires. */
 	threshold: number;
-	/** Whole Seeds the viewer still has to add — the marginal ask. */
+	/** Dollars the viewer still has to add — the marginal ask. */
 	moreNeeded: number;
-	/** Monthly cost of holding `threshold` Seeds, as a money string. */
+	/** `threshold` rendered as a money string. */
 	price: string;
 	/**
 	 * The Badge sitting EXACTLY at this threshold, or null when the gate sits between
