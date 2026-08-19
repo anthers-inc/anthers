@@ -28,8 +28,8 @@
  * ## Scope — Anthers' own books only
  *
  * What Anthers subsidises (free accounts' Time Pool, free creators' storage, the Public
- * Access storage exemption) and what it takes in (Seeds given to Anthers, paying creators'
- * storage charge). **Directed Seeds and direct purchases are deliberately absent**: Anthers
+ * Access storage exemption) and what it takes in (support given to Anthers, paying creators'
+ * storage charge). **Directed support and direct purchases are deliberately absent**: Anthers
  * keeps $0 of either, so they cannot move any line here. That is 11.02's decoupling, and
  * it is why a creator-heavy, purchase-heavy Anthers can look successful while the budget
  * that funds free access stays thin.
@@ -149,9 +149,9 @@ export const averageSupport = (mix: Record<number, number>) =>
 	Object.entries(mix).reduce((acc, [amount, share]) => acc + Number(amount) * share, 0);
 
 /**
- * The decay that produces a given average holding.
+ * The decay that produces a given average.
  *
- * 61.01's flattening-risk table is indexed by **average Seeds per payer**, not by the
+ * 61.01's flattening-risk table is indexed by **average monthly support per payer**, not by the
  * decay underneath it — so the axis is solved for rather than dialled. Dialling it would
  * mean the published axis label and the mix it describes could disagree by a rounding,
  * which is the small version of the whole defect this file exists to close.

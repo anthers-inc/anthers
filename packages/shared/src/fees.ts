@@ -188,7 +188,7 @@ export interface BadgeView {
 /**
  * The rung ladder as view models, low → high (free … blossom). Pure and static —
  * derived from the dials, no per-user data — so the Subscribe page, the
- * `/subscriptions/ranks` route, and inline-unlock all render the same numbers and
+ * `/subscriptions/badges` route, and inline-unlock all render the same numbers and
  * can't drift. "Supports Anthers" is the remainder — what is left of the charge
  * after the Time Pool, funding free access and the charitable programs.
  */
@@ -255,7 +255,7 @@ export type PurchaseType = "digital" | "physical" | "service";
 export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {}) {
 	// `type` no longer changes the arithmetic — it did while digital sales carried
 	// the first download's bandwidth. Kept because callers pass it and `purchases.type`
-	// is a real discriminator elsewhere (a Seed buy is not owned content).
+	// is a real discriminator elsewhere (`type: "seeds"` bought no Work, so it is not owned content).
 	void opts.type;
 
 	// The list price IS the advertised price: card processing comes out of it, not

@@ -108,7 +108,7 @@ export default function AccessTables({ seedRows, onSeedChange }: AccessTablesPro
 				what makes it <strong>Public Access</strong>: free to all, with nothing to clear.
 			</p>
 
-			{/* Seed Access */}
+			{/* Access table */}
 			<div>
 				<h3 className="font-semibold text-sm mb-2">Access</h3>
 				<div className="overflow-x-auto">

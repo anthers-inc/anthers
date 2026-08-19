@@ -20,8 +20,8 @@ import type { SeedAccessRow, Work } from "../../lib/types";
  * Derived, never stored — the same property `publicAccess` has on the viewer-facing
  * serializer, and deliberately the same rule (`isFree && streamEnabled && released`) so
  * the creator's badge and the reader's experience cannot disagree. The creator's Catalog
- * response carries `seedAccess` in full, so nothing here needs the resolver: with zero
- * Seeds a viewer qualifies for the baseline row alone.
+ * response carries `seedAccess` in full, so nothing here needs the resolver: with nothing
+ * given, a viewer qualifies for the baseline row alone.
  *
  * 🚨 That last sentence is the load-bearing assumption, and it is a claim about code in
  * another package. It is pinned by `apps/api/src/__tests__/catalog-badge-contract.test.ts`

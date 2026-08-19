@@ -39,7 +39,7 @@ function ctx(givenAmount = 0): AccessContext {
 	};
 }
 
-/** A Work gated at `threshold` Seeds given to its creator, with the baseline locked. */
+/** A Work gated at `threshold` dollars given to its creator, with the baseline locked. */
 function gatedAt(threshold: number, price = "0"): AccessibleWork {
 	return {
 		id: 1,
@@ -92,7 +92,7 @@ describe("unlock offer — there is no Anthers route any more", () => {
 	/**
 	 * The behavioural half of the Anthers Gate retirement, and the reason it is asserted
 	 * rather than left to the type system: a viewer's Badge must not open a Work, and a
-	 * Work must not advertise a Badge as a way in. Holding four Seeds given to Anthers —
+	 * Work must not advertise a Badge as a way in. Giving Anthers $12 —
 	 * the top Badge — changes nothing about a creator-gated Work.
 	 */
 	it("a Badge opens nothing, and the offer names only the creator", () => {
@@ -103,8 +103,8 @@ describe("unlock offer — there is no Anthers route any more", () => {
 		expect(got.unlock?.creator?.threshold).toBe(2);
 	});
 
-	it("resolution reads Seeds given to THIS creator, and nothing else about the viewer", () => {
-		// Seeds given to a different creator do not travel. This is the property that used
+	it("resolution reads what was given to THIS creator, and nothing else about the viewer", () => {
+		// Money given to a different creator does not travel. This is the property that used
 		// to be shared with the Anthers table and is now the only one there is.
 		const other = new Map([[CREATOR + 1, 99]]);
 		const got = resolveAccessSync(gatedAt(2), { ...ctx(0), supportByCreator: other });
@@ -139,7 +139,7 @@ describe("unlock offer — naming a Badge", () => {
 		];
 
 		// A gate at 4 sits in the gap: the nearest Badge below is "blorp" at 2, which a
-		// 4-Seed gate does not accept. Naming it would be the original bug.
+		// gate at $4 does not accept. Naming it would be the original bug.
 		expect(unlockRoute(gate(4), 0, sparse)?.badge).toBeNull();
 		// Above the top Badge, likewise.
 		expect(unlockRoute(gate(9), 0, sparse)?.badge).toBeNull();

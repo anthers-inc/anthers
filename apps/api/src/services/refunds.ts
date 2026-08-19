@@ -146,7 +146,7 @@ export async function refundPurchase(
 
 	// Monthly support is a commitment, not a purchase: the Terms say you keep the
 	// cycle you have paid for and we do not pro-rate one in progress. Refunding a
-	// Seed buy here would also silently unwind an account credit that
+	// support top-up here would also silently unwind an account credit that
 	// `applyCreditForPurchase` has already spent into gates and Badges.
 	if (purchase.type === "seeds")
 		return {

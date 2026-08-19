@@ -596,8 +596,8 @@ describe("The purchase row after a refund", () => {
 		expect(fake.callsTo("refunds.create")).toHaveLength(0);
 	});
 
-	it("refuses to refund a Seed buy", async () => {
-		// Seeds are a monthly commitment, not a purchase: the Terms say a cycle in
+	it("refuses to refund a support top-up", async () => {
+		// Support is a monthly commitment, not a purchase: the Terms say a cycle in
 		// progress is not pro-rated, and unwinding one here would also strand the
 		// account credit `applyCreditForPurchase` has already spent.
 		const purchase = await completedPurchase({ type: "seeds", workId: null });

@@ -318,7 +318,7 @@ export async function createOneTimeCharge(opts: {
 	});
 	await db.insert(purchases).values({
 		buyerId: opts.userId,
-		// A Seed buy is not a Work purchase — nothing to unlock, and no creator side to
+		// A support top-up is not a Work purchase — nothing to unlock, and no creator side to
 		// record. Both stated explicitly so the nulls read as "this charge has no such
 		// thing" rather than "nobody filled these in".
 		workId: null,
@@ -327,7 +327,7 @@ export async function createOneTimeCharge(opts: {
 		amount: base.toFixed(2),
 		processingFee: processing.toFixed(2),
 		crfFee: "0.00",
-		// A Seed buy carries no sales tax today; recorded explicitly so the column
+		// A support top-up carries no sales tax today; recorded explicitly so the column
 		// means "no tax was collected" rather than "nobody filled this in".
 		salesTax: "0.00",
 		creatorEarnings: "0.00",
@@ -342,12 +342,12 @@ export async function createOneTimeCharge(opts: {
 }
 
 /**
- * Credit a completed creator-Seed purchase to the account's creator-Seed balance.
+ * Credit a completed support top-up to the account's creator-support balance.
  * Called from the webhook after the pending purchase flips to completed, so it runs
  * exactly once per PaymentIntent.
  */
 export async function applyCreditForPurchase(purchase: {
-	// Null once the buyer has deleted their account. A Seed credit is applied at
+	// Null once the buyer has deleted their account. The credit is applied at
 	// purchase time, long before any deletion could land, so in practice this is never
 	// null here — it is typed honestly and guarded rather than asserted away.
 	buyerId: number | null;

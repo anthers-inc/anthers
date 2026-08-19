@@ -14,9 +14,10 @@
  *    Pool + the remainder, settled in settle-cycle).
  * 4. Create/update PoolDistribution ledger entries.
  *
- * The Time Pool is NOT reduced by any of this. It is a fixed $1.50-per-Seed target
- * and the Anthers side's own remainder absorbs its share of the fee, so creator pay
- * from the Time Pool is exactly what the model promises.
+ * The Time Pool is NOT reduced by any of this. It is a fixed share of what the user
+ * gives Anthers (`TIME_POOL_RATE`) and the Anthers side's own remainder absorbs its
+ * share of the fee, so creator pay from the Time Pool is exactly what the model
+ * promises.
  *
  * > Until 2026-08-08 this job credited the GROSS $3.00 while `fees.ts` and
  * > `economics.test.ts` both said $2.61 for an unbatched Seed, so the ledger and the
@@ -83,7 +84,7 @@ async function distributeForAccount(acct: {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// 1. Aggregate watch-time per creator
+	// 1. Aggregate attention seconds per creator
 	const attentionRows = await db
 		.select({
 			creatorId: attentionEvents.creatorId,
@@ -119,8 +120,8 @@ async function distributeForAccount(acct: {
 		return d;
 	};
 
-	// 2. Directed Seeds → credited NET of the creator side's share of the at-cost card
-	//    fee. (Undirected Seeds are NOT distributed here — the user must direct them;
+	// 2. Directed support → credited NET of the creator side's share of the at-cost card
+	//    fee. (Undirected support is NOT distributed here — the user must direct it;
 	//    the remainder is settled to the subsidy pool in settle-cycle.ts.)
 	const directed = await db
 		.select()
@@ -137,9 +138,9 @@ async function distributeForAccount(acct: {
 	}
 
 	// The card fee is charged once on the WHOLE batched monthly charge and split
-	// pro-rata, so a user who also gives Seeds to Anthers amortises the fixed $0.30
-	// and every creator on that charge is paid more. Worst case is a single directed
-	// Seed alone: $3.00 gross → $2.61 net.
+	// pro-rata, so a user who also gives to Anthers amortises the fixed $0.30
+	// and every creator on that charge is paid more. Worst case is a lone directed
+	// $3 on its own charge: $3.00 gross → $2.61 net.
 	if (grossDirected.gt(0)) {
 		const creatorFee = paymentsSplit(
 			supportAmount(acct.anthersSupport),
@@ -164,7 +165,7 @@ async function distributeForAccount(acct: {
 		}
 	}
 
-	// 3. Distribute the Time Pool proportionally by watch-time.
+	// 3. Distribute the Time Pool proportionally by attention.
 	const timePool = computeTimePoolAmount(supportAmount(acct.anthersSupport));
 	if (totalAttention > 0 && timePool.gt(0)) {
 		for (const [creatorId, seconds] of attentionByCreator) {
@@ -187,7 +188,7 @@ async function distributeForAccount(acct: {
 		);
 	}
 
-	// Record watch-time even for creators that only received a directed Seed.
+	// Record attention even for creators that only received directed support.
 	for (const [creatorId, seconds] of attentionByCreator) {
 		ensure(creatorId).attentionSeconds = seconds;
 	}

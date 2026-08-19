@@ -10,7 +10,7 @@
  * `.env`. Nothing failed. The route answered, the config looked populated, `spec-diff` was
  * green, and the money paths simply never ran: `payments.ts` is the only writer of
  * `purchases.status = "completed"`, so buyers were charged and got nothing;
- * `syncSubscriptionToAccount` never ran, so Badge stayed Free and directed Seeds never
+ * `syncSubscriptionToAccount` never ran, so Badge stayed Free and directed support never
  * cleared a creator's gates. It surfaced only because someone probed production by hand.
  *
  * `make stripe-webhooks` runs `stripe listen`, which forwards to localhost — so every one of

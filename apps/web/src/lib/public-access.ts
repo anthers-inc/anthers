@@ -118,7 +118,7 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
  * end.
  *
  * ⚠️ **The `unlimited` clause here is redundant today, and that is recorded rather than
- * hidden.** Sabotage-testing found that removing it changes nothing: a Seed-holder's
+ * hidden.** Sabotage-testing found that removing it changes nothing: an unlimited viewer's
  * budget carries `allowed: true` and a null remainder, so `shouldWarn` suppresses the
  * countdown and the players never read `spent`. It is kept because it states the
  * *semantic* boundary — an unlimited viewer is not a metered viewer — and because the
@@ -173,7 +173,7 @@ const ANON_WATCHED_KEY = "anthers_anon_watched_seconds";
 export const ANON_PROMPT_SECONDS = 30 * 60;
 
 /**
- * Accumulate a logged-out viewer's watch time, and say whether they have passed the mark.
+ * Accumulate a logged-out viewer's time spent, and say whether they have passed the mark.
  *
  * 🚨 **This is a genuinely different measurement from the meter and must not be confused
  * with it.** A logged-out viewer is *not metered* — the server hands them the full

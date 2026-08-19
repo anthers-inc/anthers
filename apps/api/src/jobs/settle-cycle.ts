@@ -65,7 +65,7 @@ async function settleAccount(
 
 	const n = supportAmount(acct.anthersSupport);
 
-	// Directed creator-Seeds this cycle. Needed BEFORE the remainder inflow, because
+	// Directed creator support this cycle. Needed BEFORE the remainder inflow, because
 	// the at-cost card fee is charged on the whole batched monthly charge and split
 	// pro-rata — so directed support amortises the fixed $0.30 and leaves a fatter
 	// remainder. Anthers takes no cut of these; they are recorded, not an inflow.

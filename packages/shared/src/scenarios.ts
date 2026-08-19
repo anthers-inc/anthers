@@ -113,11 +113,11 @@ export interface ReceiptScenario {
 }
 
 /**
- * The sample monthly receipt in 50.01 — a Sprout who also directs two Seeds.
+ * The sample monthly receipt in 50.01 — a Sprout who also directs $6 to creators.
  *
  * Note the shape, because it is the whole point of all-in pricing: the subtotal
  * IS what the user pays, and sales tax is the only thing added. Payments appears
- * as a line inside the Seeds, never beneath the subtotal.
+ * as a line inside the amounts, never beneath the subtotal.
  */
 export function sampleReceipt(anthersDollars = 6, creatorDollars = 6): ReceiptScenario {
 	const s = supportBreakdown({ anthersDollars, creatorDollars });
@@ -284,8 +284,8 @@ export function creatorReceipt(grossEarnings = 1575, libraryGiB = 69) {
 
 /**
  * The paying-user mix behind every figure below — what share of paying users sit at each
- * Seed count. An ASSUMPTION, and the one that moves the most: the remainder a paying user
- * generates rises faster than linearly with their Seed count, because the fixed $0.30 of
+ * monthly amount. An ASSUMPTION, and the one that moves the most: the remainder a paying
+ * user generates rises faster than linearly with that amount, because the fixed $0.30 of
  * the card fee does not scale with it.
  *
  * 🚨 **It is `growth.ts`'s mix now, and that unification was the point** (2026-08-16).
@@ -580,11 +580,11 @@ export function payingShareSensitivity() {
 }
 
 /**
- * Inflection 1 against how many Seeds an average payer holds — 61.01's flattening risk.
+ * Inflection 1 against what an average payer gives — 61.01's flattening risk.
  *
  * 🚨 **This is the single biggest risk to the ladder, and it is not an economic one.**
- * Binary Public Access removes the reason to hold more than one Seed given to Anthers, so
- * the paying population slides toward exactly one unless something above the first Seed
+ * Binary Public Access removes the reason to give Anthers more than its price, so
+ * the paying population slides toward exactly that unless something above it
  * earns it. Each row is a different decay in the mix; the labelled average is what the
  * decay produces, so the axis stays a fact about the population rather than a dial name.
  */
@@ -635,7 +635,7 @@ export function freePotSensitivity() {
 		pot: money(new Decimal(pot)),
 		shipped: pot === FREE_TIME_POOL,
 		floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeTimePool: pot }) * 100).toFixed(1)}%`,
-		/** How much more a creator earns per unit of a free viewer's attention with a Seed. */
+		/** How much more a creator earns per unit of attention from a viewer paying the Public Access price. */
 		multiple: timePoolFor(PUBLIC_ACCESS_PRICE) / pot,
 	}));
 }
@@ -666,7 +666,7 @@ export function edBandSensitivity() {
  *
  * `attentionPct` is a share of viewer attention, **not** hours: with unlimited Public
  * Access a viewer's hours are a free variable while their contribution is fixed by their
- * Seed count, so a per-hour rate is an emergent ratio nobody is paid at. It is also what
+ * monthly amount, so a per-hour rate is an emergent ratio nobody is paid at. It is also what
  * the equal-time principle actually governs — a minute is a minute, whichever medium it
  * was spent on.
  */

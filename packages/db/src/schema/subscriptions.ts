@@ -234,7 +234,7 @@ export const seedAllocations = pgTable(
 	(table) => [
 		uniqueIndex("uq_seed_user_creator_cycle").on(table.userId, table.creatorId, table.billingCycle),
 		// creatorId sits in the MIDDLE of the unique index, which cannot serve a lookup
-		// by creator alone — the read behind "who gives me Seeds".
+		// by creator alone — the read behind "who gives me support".
 		index("idx_seed_allocations_creator").on(table.creatorId),
 	],
 );
@@ -260,7 +260,7 @@ export const poolDistributions = pgTable(
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
-		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-Seed share
+		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-support share
 		attentionSeconds: integer("attention_seconds").default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

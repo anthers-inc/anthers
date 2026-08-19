@@ -2,7 +2,7 @@
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
  * the boundary (E50 Phase 4): Stripe payout onboarding, external platform connections
- * (cross-publish / unified analytics), and the Seed-tier ladder. Account settings
+ * (cross-publish / unified analytics), and the Badge ladder. Account settings
  * (profile, password, email, identity, the become-a-creator toggle) stay on
  * anthers.org/settings.
  */

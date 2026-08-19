@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
  * The Public Access meter, enforced end-to-end: a free account watches 10 hours of the
- * commons a month, the first Seed given to Anthers removes the limit, and nothing above
- * it buys more.
+ * commons a month, the Public Access price given to Anthers removes the limit, and nothing
+ * above it buys more.
  *
  * The policy is pinned purely in `packages/shared/src/public-access.test.ts`. What this
  * file is for is everything that file *cannot* see:
@@ -57,7 +57,7 @@ const seededName = `pam_seeded_${run}`;
 
 /** Ungated + streaming + free to everyone. This is what Public Access *is*. */
 const PUBLIC_ACCESS = [{ threshold: 0, allow: true, price: "0" }];
-/** Gated at 1 Seed to the creator — reachable, but not part of the commons. */
+/** Gated at $1 to the creator — reachable, but not part of the commons. */
 const SEED_GATED = [
 	{ threshold: 0, allow: false, price: "0" },
 	{ threshold: 1, allow: true, price: "0" },
@@ -261,7 +261,7 @@ describe("the meter withholds bytes, not just numbers", () => {
 
 		const res = await playlist(paWorkId, viewerCookie);
 		// 402 Payment Required, deliberately: the viewer is not forbidden, they have spent
-		// a monthly allowance that a $3 Seed removes. 403 would say "you may not" where the
+		// a monthly allowance that the Public Access price removes. 403 would say "you may not" where the
 		// truth is "you may, and here is how".
 		expect(res.status).toBe(402);
 		const body = await res.json();
@@ -283,7 +283,7 @@ describe("the meter withholds bytes, not just numbers", () => {
 
 describe("what the meter must NOT charge for", () => {
 	it("gated work the viewer cleared draws no allowance", async () => {
-		// Over the limit AND holding a Seed given to this creator: the gate opens, and the
+		// Over the limit AND having given this creator money: the gate opens, and the
 		// meter must not close it. Billing a supporter's free allowance for work they paid
 		// a creator to reach charges them twice for one thing.
 		await setSupport(viewerId, 0);
@@ -315,8 +315,8 @@ describe("what the meter must NOT charge for", () => {
 	});
 
 	it("a creator's own catalogue draws no allowance", async () => {
-		// The creator is over any limit by construction — they have an account with no
-		// Seeds — and `owner` access is not free access.
+		// The creator is over any limit by construction — they have an account that gives
+		// nothing — and `owner` access is not free access.
 		await setSupport(creatorId, 0);
 		await spend(creatorId, FREE_PUBLIC_ACCESS_SECONDS * 2);
 		expect((await playlist(paWorkId, creatorCookie)).status).not.toBe(402);
@@ -384,7 +384,7 @@ describe("the stamp is taken at write time", () => {
 	it("records gated work the viewer CLEARED without stamping it Public Access", async () => {
 		const { cookie, id } = await signUp(`pam_cleared_${run}`);
 		await setSupport(id, 0);
-		// A Seed given to this creator this cycle: the gate opens for this viewer.
+		// Money given to this creator this cycle: the gate opens for this viewer.
 		await db.execute(sql`
 			INSERT INTO seed_allocations (user_id, creator_id, amount, billing_cycle)
 			VALUES (${id}, ${creatorId}, '3.00', to_char(now(), 'YYYY-MM-01'))
@@ -506,8 +506,8 @@ describe("media with no player of their own", () => {
 		/*
 		 * The don't-bill-them-twice property, for the media that have no delivery endpoint.
 		 *
-		 * By this point the viewer holds a Seed given to this creator (an earlier test in
-		 * this file gave them one), so the gate is open to them. Their allowance is also
+		 * By this point the viewer has given this creator money (an earlier test in
+		 * this file did so), so the gate is open to them. Their allowance is also
 		 * gone. Those two facts must not interact: they paid a creator to reach this, it
 		 * was never part of the commons, and it never drew an allowance — so an empty
 		 * allowance has no claim on it.

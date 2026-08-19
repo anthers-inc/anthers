@@ -23,7 +23,7 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  *
  * **What the meter does NOT count**, and each exclusion is load-bearing:
  *
- * - **Gated work the viewer cleared.** They gave that creator Seeds; charging their free
+ * - **Gated work the viewer cleared.** They gave that creator money; charging their free
  *   allowance for it would bill them twice for one thing.
  * - **Work they bought.** A purchase is permanent access, not a draw against anything.
  * - **Their own work.** A creator watching their own catalogue is not consuming a commons.
@@ -51,7 +51,7 @@ export const FREE_PUBLIC_ACCESS_SECONDS = FREE_PUBLIC_ACCESS_HOURS * 3600;
 
 /** A viewer's standing against the meter this month. */
 export interface PublicAccessBudget {
-	/** No limit applies — the viewer holds at least one Seed given to Anthers. */
+	/** No limit applies — the viewer gives Anthers at least the Public Access price. */
 	unlimited: boolean;
 	/** Public Access seconds already watched this month. */
 	usedSeconds: number;

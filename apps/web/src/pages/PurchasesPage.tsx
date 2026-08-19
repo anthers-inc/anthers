@@ -108,7 +108,7 @@ function MonthSelector({
  * One receipt.
  *
  * Not every purchase names something openable, and this list has to hold all of them:
- * a **Seed buy** bought no Work at all, and a Work that has since been removed leaves a
+ * a **support top-up** bought no Work at all, and a Work that has since been removed leaves a
  * receipt with no page behind it. `work.publicId` comes from the live row (null once the
  * Work is gone), so it — not the title, which is a snapshot and always reads — is what
  * decides whether a link is offered.
@@ -150,7 +150,7 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 								<span className="font-medium block truncate">{label}</span>
 							)}
 
-							{/* Creator → profile link. A Seed buy has no creator side. */}
+							{/* Creator → profile link. A support top-up has no creator side. */}
 							{p.creator?.username ? (
 								<Link
 									to={`/${p.creator.username}`}

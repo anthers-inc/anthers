@@ -4,8 +4,8 @@
 //
 // 🚨 The consequential one is `supporting`: greeting somebody who has just paid with the
 // free-tier message is the single worst outcome this page can produce, and it is exactly
-// what a server-truth implementation would do — the Seed count is applied by a Stripe
-// webhook, so an account that has just paid still reads `anthersSeeds: 0` for a moment.
+// what a server-truth implementation would do — the amount is applied by a Stripe
+// webhook, so an account that has just paid still reads `anthersSupport: 0` for a moment.
 // Branching on what they *chose* is what avoids it, and these assertions are what stop
 // somebody "fixing" it back to the server later.
 import { beforeEach, describe, expect, test } from "bun:test";

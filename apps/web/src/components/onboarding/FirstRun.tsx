@@ -11,8 +11,8 @@
  * 2026-08-12). Three people reach this page having been asked completely different
  * things, and one message hedged to fit all of them fits none:
  *
- *   • **supporting** — came through `/subscribe` and gave Seeds. Telling them to "set up
- *     your Seeds" is telling them to do what they just did.
+ *   • **supporting** — came through `/subscribe` and gave. Telling them to "set up
+ *     your support" is telling them to do what they just did.
  *   • **free** — came through `/subscribe` and took the free account. They have already
  *     declined once, and asking again ninety seconds later is how a funnel becomes a nag.
  *   • **cold** — came through the classic signup page and was never asked anything.

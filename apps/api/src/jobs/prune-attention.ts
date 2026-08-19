@@ -18,7 +18,7 @@
  * Three properties this has to hold, in order of how badly they break:
  *
  * 1. **It must run AFTER `distribute-pool` has consumed the rows.** Distribution pays
- *    creators by watch-time out of these events; pruning a cycle the pool has not yet
+ *    creators by attention out of these events; pruning a cycle the pool has not yet
  *    distributed would not lose privacy, it would lose *creator earnings*. The
  *    retention window is months and distribution is nightly, so the ordering is not
  *    close — but the cutoff is asserted against the window rather than assumed, and
@@ -36,7 +36,7 @@
  *
  * The thing this job deliberately does NOT touch is `pool_distributions`, which also
  * carries `(subscriber_id, creator_id, attention_seconds)` per cycle. That is a
- * *payment* record — what was paid to whom, out of whose Seeds — and 51.05 keeps
+ * *payment* record — what was paid to whom, out of whose support — and 51.05 keeps
  * payment records for as long as tax and nonprofit reporting law requires. It is
  * per-creator and per-cycle, never per-Work, so the sentence the policy actually
  * makes ("what you personally watched") is about this table and not that one. Worth

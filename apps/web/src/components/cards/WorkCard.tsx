@@ -8,7 +8,7 @@ import { MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 
-/** Who the Seeds would go to, for a card's unlock copy. */
+/** Who the support would go to, for a card's unlock copy. */
 function cardCreatorName(work: WorkCardItem): string {
 	return work.creator?.displayName || work.creator?.username || "this creator";
 }

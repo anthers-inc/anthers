@@ -183,7 +183,7 @@ export async function fileReport(input: {
  *
  * That second outcome is what a **person** report gets. Hiding an account is
  * suspension, and suspension has to answer what becomes of the person's Works, their
- * buyers' purchases, the Seeds pointed at them and any payout mid-flight — none of
+ * buyers' purchases, the support pointed at them and any payout mid-flight — none of
  * which is decided. So a person report reaches the queue and an operator dismisses it
  * or acts out of band; the account action is stated as missing rather than stubbed
  * into something that half-works.

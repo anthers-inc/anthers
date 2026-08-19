@@ -133,7 +133,7 @@ export async function saveOnPurchase(purchase: {
 	workId: number | null;
 	type: string;
 }): Promise<void> {
-	// A Seed buy bought no Work; a deleted buyer has no shelf. Both are ordinary.
+	// A support top-up bought no Work; a deleted buyer has no shelf. Both are ordinary.
 	if (purchase.type === "seeds" || purchase.buyerId == null || purchase.workId == null) return;
 	await db
 		.insert(libraryItems)

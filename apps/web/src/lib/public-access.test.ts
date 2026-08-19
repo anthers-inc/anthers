@@ -53,9 +53,9 @@ describe("when the meter speaks", () => {
 		expect(shouldWarn(limited(0))).toBe(true);
 	});
 
-	test("never speaks to someone who holds a Seed", () => {
-		// 🚨 The central claim of the model: one Seed removes the limit, and nothing
-		// above it buys more. A countdown shown to a Seed-holder would be stating a
+	test("never speaks to someone who has unlimited access", () => {
+		// 🚨 The central claim of the model: the Public Access price removes the limit, and
+		// nothing above it buys more. A countdown shown to such a viewer would be stating a
 		// limit that does not exist.
 		expect(shouldWarn(UNLIMITED)).toBe(false);
 	});

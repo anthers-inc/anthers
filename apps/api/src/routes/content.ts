@@ -298,9 +298,10 @@ const PROCESSED_WORK_TYPES = new Set(["video", "audio", "ebook"]);
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 /**
- * Both access tables are the same row: a whole-Seed threshold, an allow flag, a price.
- * The Anthers table's threshold counts Anthers-Seeds held; the Seed table's counts Seeds
- * given to this creator.
+ * One row shape for the Work's one access table: a monthly-dollar threshold, an allow
+ * flag, and a price. The threshold is what the viewer has given this Work's creator
+ * this cycle. (An Anthers table sat beside it, counting the viewer's own Badge, until
+ * migration `0029` folded it in when Anthers Gates retired on 2026-08-12.)
  *
  * 🚨 **`z.number().int()` until 2026-08-16, and the justification inverted.** It read
  * *"a gate sits at a whole Seed or nowhere, and accepting 2.5 would let a row be written
@@ -951,8 +952,8 @@ async function workAccessFor(
  * Whether this request may be served *bytes*, once access says yes.
  *
  * 🚨 **A second, account-level check that deliberately does NOT live in `resolveAccess`.**
- * A free account watches 10 hours of Public Access a month; the first Seed given to
- * Anthers removes the limit. That is a property of the **account**, not of the Work — the
+ * A free account watches 10 hours of Public Access a month; the Public Access price
+ * given to Anthers removes the limit. That is a property of the **account**, not of the Work — the
  * Work stays free to everyone either way — so encoding it as a Work-level denial is how
  * the commons quietly re-stratifies, which is exactly what retiring Anthers Gates was
  * for. `resolveAccessSync` also has to stay pure and synchronous so a Catalog page
@@ -1972,7 +1973,7 @@ const contentRoutes = new Hono()
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 		// 402, not 403: the viewer is not forbidden, they have spent a monthly allowance
-		// that a $3 Seed removes. The status code is the difference between "you may not"
+		// that the Public Access price removes. The status code is the difference between "you may not"
 		// and "you may, and here is how".
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
@@ -2011,7 +2012,7 @@ const contentRoutes = new Hono()
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 		// 402, not 403: the reader is not forbidden, they have spent a monthly allowance
-		// that a $3 Seed removes. Reading the commons draws it exactly as watching does —
+		// that the Public Access price removes. Reading the commons draws it exactly as watching does —
 		// the equal-time principle is about what a minute IS, not about which medium.
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
@@ -2354,7 +2355,7 @@ const contentRoutes = new Hono()
 	 *
 	 * The predicate is deliberately the **viewer-independent** one: a Work qualifies when
 	 * one of its access rows opens it at threshold 0 for no money, which is exactly what a
-	 * signed-out visitor holding no Seeds resolves `free` against in `resolveAccessSync`.
+	 * signed-out visitor having given nothing resolves `free` against in `resolveAccessSync`.
 	 * It asks only "is anything in the way", so it needs no opinion about *which* gate
 	 * kinds exist — which is why it stays correct across the Public Access revamp rather
 	 * than encoding a model that hasn't propagated yet.

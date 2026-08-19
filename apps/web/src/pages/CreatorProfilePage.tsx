@@ -60,7 +60,7 @@ function badgeNameFor(id: string): string {
  * Two API rules shape the control rather than being discovered as errors:
  *   - allocations RATCHET within a cycle (a decrease is rejected), so the committed amount
  *     is the stepper's floor;
- *   - the total across all creators can't exceed the Seeds you hold, so the
+ *   - the total across all creators can't exceed what you give, so the
  *     ceiling is what you've already given this creator plus what's still unallocated.
  *
  * `amount` is the creator's new TOTAL, not a delta — the endpoint upserts it.
@@ -106,8 +106,8 @@ function GiveSeedsCard({
 	// Re-sync when the committed amount changes underneath us (after a successful give).
 	useEffect(() => setPending(committed), [committed]);
 
-	// Only Free carries no Seeds, and the tab's upgrade prompt already makes that
-	// case — rendering our own "give Seeds" CTA here would just duplicate it.
+	// Only Free has nothing to direct, and the tab's upgrade prompt already makes that
+	// case — rendering our own "give" CTA here would just duplicate it.
 	if (budget === null || budget <= 0) return null;
 
 	// Not floored, for the same reason: $2.50 of remaining budget is $2.50 of headroom.
@@ -216,7 +216,7 @@ function BadgesTab({
 	userSeed: string;
 	creatorName: string;
 	creatorId: number;
-	/** Signed in, and not looking at your own profile — you can't give Seeds to yourself. */
+	/** Signed in, and not looking at your own profile — you can't give to yourself. */
 	canGiveSeeds: boolean;
 	onGiven: () => void | Promise<void>;
 }) {
@@ -382,7 +382,7 @@ export default function CreatorProfilePage() {
 	useReportVisit({ creatorId: creator?.id ?? null });
 
 	/**
-	 * Re-read the viewer's standing with this creator. Giving Seeds changes which gates are
+	 * Re-read the viewer's standing with this creator. Giving changes which gates are
 	 * unlocked, and the whole point of the control is watching a tier flip to Unlocked — so
 	 * the ladder has to reflect it without a reload.
 	 */

@@ -205,7 +205,7 @@ export interface Work {
 	 * The song's words, for `type: "audio"` — plain text, untimestamped, newline-separated.
 	 *
 	 * Gated exactly like `body`: a denied viewer gets `""`, because a gated track's words
-	 * are part of what the Seed or purchase buys. The public blurb that survives a gate is
+	 * are part of what the support or purchase buys. The public blurb that survives a gate is
 	 * `description`.
 	 */
 	lyrics?: string | null;
@@ -507,7 +507,7 @@ export interface Purchase {
 	id: number;
 	buyerId: number;
 	/**
-	 * The Work this purchase permanently unlocks. Null for a Seed buy, which unlocks
+	 * The Work this purchase permanently unlocks. Null for a support top-up, which unlocks
 	 * nothing — and ALSO null once the Work is genuinely gone, since the FK is
 	 * `ON DELETE SET NULL` (`0016`). It therefore cannot tell those two apart; `type` can.
 	 */
@@ -526,7 +526,7 @@ export interface Purchase {
 	 * What was bought. `title`/`type` are the snapshot taken at the sale and survive the
 	 * Work's removal; `slug`/`publicId`/`visibility`/`coverImage` come from the live row
 	 * and go null with it. **A link may only be built when `publicId` is present** — that
-	 * is the field that says a page still exists. All of them are null for a Seed buy.
+	 * is the field that says a page still exists. All of them are null for a support top-up.
 	 */
 	work?: {
 		title: string | null;
@@ -564,8 +564,8 @@ export interface BadgeView {
 }
 
 /**
- * A user's account: the Seeds they've given Anthers (which are their Badge) + the Seeds
- * they've directed to creators.
+ * A user's account: what they give Anthers (which is their Badge) + what they have
+ * directed to creators.
  *
  * `bandwidthUsedGiB` is a **dead column**. It metered stream consumption against a
  * per-Seed allowance until 2026-08-12; delivery is free, nothing writes it, and it

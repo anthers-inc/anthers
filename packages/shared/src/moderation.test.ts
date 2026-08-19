@@ -91,7 +91,7 @@ describe("Subject types", () => {
 		// The distinction is the whole reason `user` could be added as a value rather
 		// than as a new table: it goes through the same report path, and stops short of
 		// the same action path. Hiding an account is suspension, which has to answer what
-		// becomes of their Works, their buyers' purchases, the Seeds pointed at them and
+		// becomes of their Works, their buyers' purchases, the support pointed at them and
 		// any payout in flight — none of it decided.
 		//
 		// `work` follows the same shape for a different reason: a Work takedown is a DMCA

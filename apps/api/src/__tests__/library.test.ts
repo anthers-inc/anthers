@@ -39,7 +39,7 @@ const readerName = `lib_r_${id}`;
 
 /** Free to everyone — the commons, and the case the Library exists to be able to hold. */
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
-/** Behind two Seeds given to the creator, which the reader never gives. */
+/** Behind $2 given to the creator, which the reader never gives. */
 const GATED = [
 	{ threshold: 0, allow: false, price: "0" },
 	{ threshold: 2, allow: true, price: "0" },
@@ -161,7 +161,7 @@ describe("the Library", () => {
 	// ── The property everything else rests on ──────────────────────────────────
 
 	it("🚨 saving a Work grants NO access to it", async () => {
-		// Gated, and the reader holds no Seeds — so this is denied before and must be
+		// Gated, and the reader has given nothing — so this is denied before and must be
 		// denied after. Asked at the Work endpoint rather than of `resolveAccessSync`, so
 		// a mistake made in a route rather than in the resolver still fails here.
 		expect(await canOpen(gatedWorkId)).toBe(false);

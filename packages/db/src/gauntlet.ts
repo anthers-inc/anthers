@@ -281,11 +281,11 @@ const PAY = "payment_required" as const;
 const BOUGHT = "purchased" as const;
 
 /**
- * A staircase row's reasons, built from the Seeds the viewer has given this creator.
+ * A staircase row's reasons, built from what the viewer has given this creator.
  *
  * Generated rather than written out, because the ladder is **sparse** (`BADGE_RUNGS`) and a
  * hand-written positional table is exactly where a sparse ladder gets silently flattened
- * back into a consecutive one. A rung is entitled iff the viewer's Seeds meet its
+ * back into a consecutive one. A rung is entitled iff the viewer's given amount meets its
  * THRESHOLD — which is the property the whole fixture exists to keep honest.
  */
 function reasonsFor(givenAmount: number, purchased: boolean): Record<string, GauntletReason> {
@@ -309,7 +309,7 @@ function reasonsFor(givenAmount: number, purchased: boolean): Record<string, Gau
  * following must never grant access. The resolver can't even see a follow (no such field
  * in `AccessContext`); the e2e row exists to prove the *app* honors that too.
  *
- * 🚨 **`anthersSeeds` is the same kind of field now, and that is the Anthers Gate
+ * 🚨 **`anthersSupport` is the same kind of field now, and that is the Anthers Gate
  * retirement made visible.** Four Badge rows sat in this staircase until 2026-08-12,
  * climbing Root → Blossom and unlocking a post each. A Badge opens nothing now, and
  * `AccessContext` no longer carries the count at all — so, exactly like a follow, it is

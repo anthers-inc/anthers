@@ -58,7 +58,7 @@ export function isModerationSubjectType(value: string): value is ModerationSubje
  * Subject types that carry a `moderation_status` and can therefore be hidden and
  * restored. **A `user` cannot**, and the omission is deliberate rather than pending:
  * hiding a person is account suspension, which has to answer what becomes of their
- * Works, their buyers' purchases, the Seeds pointed at them and any payout in
+ * Works, their buyers' purchases, the support pointed at them and any payout in
  * flight. None of that is decided, so a person report routes to a human who acts out
  * of band, and the only in-app outcome is `dismiss`.
  *

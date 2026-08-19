@@ -280,7 +280,7 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 }
 
 const LOCKED = [{ threshold: 0, allow: false, price: "0" }];
-/** $5.00 to anyone, at any Anthers-Seed count — a purchasable post with no ladder route in. */
+/** $5.00 to anyone, at any Badge — a purchasable post with no ladder route in. */
 const PRICE = "5.00";
 const FOR_SALE = [{ threshold: 0, allow: true, price: PRICE }];
 /**
@@ -656,7 +656,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 			.insert(purchases)
 			.values({
 				buyerId,
-				// A Seed buy unlocks nothing, so it names no Work.
+				// A support top-up unlocks nothing, so it names no Work.
 				workId: null,
 				type: "seeds",
 				amount: "9.00",
@@ -674,7 +674,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		const [acct] = await db.select().from(accounts).where(eq(accounts.userId, buyerId));
 		expect(new Decimal(acct.creatorSupportTotal).toFixed(2)).toBe("9.00");
 
-		// A Seed buy is not a post purchase — it must not touch the charitable ledger.
+		// A support top-up is not a post purchase — it must not touch the charitable ledger.
 		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
 		expect(ledger).toHaveLength(0);
 
@@ -838,8 +838,8 @@ describe("Webhook: customer.subscription.*", () => {
 		expect(down.anthersSupport).toBe("3.00");
 	});
 
-	it("records a pending cancellation without dropping the Seeds", async () => {
-		// cancel_at_period_end means the Seeds keep working until the cycle ends.
+	it("records a pending cancellation without dropping the support", async () => {
+		// cancel_at_period_end means the support keeps working until the cycle ends.
 		await sendWebhook(
 			stripeEvent(
 				"customer.subscription.updated",
@@ -1211,12 +1211,12 @@ describe("Checkout — destination charge construction", () => {
 });
 
 /**
- * The Seed buy was the one charge the 2026-08-03 revamp missed: it still added the card
+ * The support top-up was the one charge the 2026-08-03 revamp missed: it still added the card
  * fee **on top** (`base + processing`) after every other path moved it inside the price.
  * Nothing in the UI calls the route, so no buyer was overcharged — which is exactly why
  * it survived, and why it needs a test rather than a second reading of the code.
  */
-describe("Seed buy — the price is all-in", () => {
+describe("Support top-up — the price is all-in", () => {
 	const TOPUP_AMOUNT = 6;
 	const base = new Decimal(TOPUP_AMOUNT);
 
@@ -1230,11 +1230,11 @@ describe("Seed buy — the price is all-in", () => {
 		return { res, body: await res.json() };
 	}
 
-	it("charges quantity × $3 exactly, with processing taken out of it", async () => {
+	it("charges the requested amount exactly, with processing taken out of it", async () => {
 		const { res, body } = await buySeeds();
 		expect(res.status).toBe(200);
 
-		// A Seed is a flat $3. The buyer pays the Seed value and nothing more — the at-cost
+		// The buyer pays the amount they asked for and nothing more — the at-cost
 		// card fee is a deduction from that charge, never an addition to it.
 		expect(body.buyerTotal).toBe(base.toFixed(2));
 		expect(body.processingFee).toBe(cardFee(base).toFixed(2));
@@ -1261,11 +1261,11 @@ describe("Seed buy — the price is all-in", () => {
 
 		expect(row).toBeDefined();
 		expect(row.type).toBe("seeds");
-		// `amount` is what gets credited to the creator-Seed balance, so it must stay the
-		// Seed value — the fee coming out of the charge must not shrink what the user bought.
+		// `amount` is what gets credited to the creator-support balance, so it must stay the
+		// full amount — the fee coming out of the charge must not shrink what the user bought.
 		expect(new Decimal(row.amount).toFixed(2)).toBe(base.toFixed(2));
 		expect(new Decimal(row.processingFee).toFixed(2)).toBe(cardFee(base).toFixed(2));
-		// A Seed buy collects no sales tax; recorded as zero rather than left unset.
+		// A support top-up collects no sales tax; recorded as zero rather than left unset.
 		expect(new Decimal(row.salesTax).toFixed(2)).toBe("0.00");
 	});
 });
@@ -1286,8 +1286,8 @@ describe("remainder — a heavy streamer costs the mission nothing", () => {
 	 * first, which is exactly when someone should be made to think about it.
 	 *
 	 * The 120 hours of attention are deliberately kept in the fixture. They are what
-	 * makes the assertion mean "watch-time does not move this" rather than
-	 * "watch-time was absent".
+	 * makes the assertion mean "attention does not move this" rather than
+	 * "attention was absent".
 	 */
 	const heavyName = `pay_heavy_${run}`;
 	let heavyId: number;
