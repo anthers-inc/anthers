@@ -1,13 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Support-model economics schema. A user holds an `account` with a count of
- * **Anthers-Seeds** (`anthersSeeds`) — that count IS their rank (0 = free … 4 =
- * blossom, "+" beyond) and, at $3 each, their Anthers subscription. Each
- * Anthers-Seed covers the user's streaming (at cost, folded in — no wallet),
- * funds the Time Pool, and leaves a remainder funding free access and the charitable programs. Directed
- * (creator) Seeds are tracked per-creator in `seed_allocations`. This file also
- * holds the shared economics tables: time (attention) events, pool
- * distributions, and creator gates.
+ * Support-model economics schema. A user holds an `account` carrying a **monthly amount
+ * in dollars** given to Anthers (`anthersSupport`) — that amount IS their Badge (Root $3
+ * / Sprout $6 / Petal $9 / Blossom $12, "+" beyond) and their Anthers subscription. Half
+ * of it funds the **Time Pool**; the rest pays its share of the at-cost Payments line and
+ * leaves a **remainder** funding free access and the charitable programs. What a user
+ * directs at individual creators is tracked per-creator in `seed_allocations`. This file
+ * also holds the shared economics tables: time (attention) events, pool distributions,
+ * and creator gates.
+ *
+ * ⚠️ **This header described the retired model until 2026-08-19**, naming a *count* of
+ * "Anthers-Seeds" at $3 each, a "rank", and streaming folded in at cost against no
+ * wallet. Three of those mechanisms are gone (the unit, the rank noun, the bandwidth
+ * line) — and it named **`anthersSeeds`**, a field that does not exist: the column is
+ * `anthersSupport`, renamed when a count became an amount. A docblock naming a dead
+ * identifier is worse than a dated one, because grepping the name it teaches finds
+ * nothing at all.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -25,13 +33,13 @@ import { users } from "./auth.js";
 import { works } from "./content.js";
 
 /**
- * A user's standing account (one per user). `anthersSeeds` is the count of
- * Anthers-Seeds held (rank = min(anthersSeeds, 4); count also drives billing at
- * $3/Seed). `creatorSeedTotal` is the $ of directed creator-Seeds this cycle
+ * A user's standing account (one per user). `anthersSupport` is the monthly amount in
+ * dollars given to Anthers — it sets the Badge and drives billing directly, with no
+ * count in between. `creatorSupportTotal` is the $ directed at creators this cycle
  * (denormalised sum of `seed_allocations`). `bandwidthUsedGiB` is a **dead column**:
- * it held the running stream consumption drawn against a per-Seed allowance until
- * 2026-08-12. Delivery is free at any volume, nothing writes it, and it stays only
- * because dropping it is a migration of its own.
+ * it held the running stream consumption drawn against an allowance until 2026-08-12.
+ * Delivery is free at any volume, nothing writes it, and it stays only because dropping
+ * it is a migration of its own.
  */
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
@@ -202,8 +210,10 @@ export const attentionDaily = pgTable(
 );
 
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
-// A user's DIRECTED Seeds — $3 Seeds the user has given to a creator (unlocking
-// that creator's Seed Gates). The account's `creatorSeedTotal` is the sum of these.
+// A user's DIRECTED support — the monthly amount, in dollars, they have pointed at a
+// creator, which clears that creator's Badges. The account's `creatorSupportTotal` is the
+// sum of these. (The table name `seed_allocations` stays: it is a schema identifier whose
+// meaning did not change, per the copy-rules-not-schema-rules norm.)
 export const seedAllocations = pgTable(
 	"seed_allocations",
 	{

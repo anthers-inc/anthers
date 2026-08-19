@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { useMemo, useState } from "react";
 import { CalcNotes, CalcPageHeader, NumberField, SegControl } from "../components/calculators/ui";
@@ -71,7 +72,13 @@ export default function VideoStorageCalculatorPage() {
 	const [fps, setFps] = useState(60);
 	const [master, setMaster] = useState<MasterFormat>("h264");
 	const [masterMbps, setMasterMbps] = useState(20);
-	const [price, setPrice] = useState(0.02);
+	// 🚨 Seeded from the dial, never typed. This was `useState(0.02)` until 2026-08-19 —
+	// DigitalOcean Spaces' rate, on a live public calculator, ~24% above what storage
+	// actually costs since the move to Cloudflare R2 (`STORAGE_PER_GIB_MONTH`, 2026-08-11).
+	// `econ:figures` could not see it: the guard reads *rendered* figures, and a `useState`
+	// default is an argument. A typed money default is the same hazard as a typed money
+	// string, and it is the one the scanner is structurally blind to.
+	const [price, setPrice] = useState(STORAGE_PER_GIB_MONTH);
 	const [hours, setHours] = useState(100);
 
 	const { variants, masterVar, ladderGib, sumGib, sumVideo, sumTotal, sumCost, maxCost } =
@@ -385,7 +392,7 @@ export default function VideoStorageCalculatorPage() {
 						<strong className="text-base-content/70">Units.</strong> Size = bitrate × 3600s ÷ 8, in
 						GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage only
 						— egress (see the companion bandwidth tool), requests, and any replication factor land
-						on top. DigitalOcean Spaces prices per GB (10⁹); multiply by 1.074 for $/GiB. Planning
+						on top. Object stores quote per GB (10⁹), so multiply by 1.074 for $/GiB — Cloudflare R2's $0.015/GB-month is the $0.0161/GiB-month this field starts at. Planning
 						model, not for invoicing.
 					</p>
 				</CalcNotes>
