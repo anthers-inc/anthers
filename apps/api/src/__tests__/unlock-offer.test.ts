@@ -31,10 +31,10 @@ import {
 const CREATOR = 700;
 const VIEWER = 701;
 
-function ctx(seedsGiven = 0): AccessContext {
+function ctx(givenAmount = 0): AccessContext {
 	return {
 		userId: VIEWER,
-		supportByCreator: new Map(seedsGiven > 0 ? [[CREATOR, seedsGiven]] : []),
+		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR, givenAmount]] : []),
 		purchasedWorkIds: new Set(),
 	};
 }

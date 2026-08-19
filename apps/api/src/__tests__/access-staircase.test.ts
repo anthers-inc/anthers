@@ -16,11 +16,11 @@
  */
 import { describe, expect, it } from "bun:test";
 import {
+	BADGE_RUNGS,
 	DOWNLOAD_PRICE,
 	EXPECTED_STAIRCASE,
 	GAUNTLET_POSTS,
 	gauntletPost,
-	SEED_RUNGS,
 } from "@anthers/db/gauntlet";
 import {
 	type AccessContext,
@@ -58,17 +58,17 @@ const POSTS = Object.fromEntries(GAUNTLET_POSTS.map((p) => [p.key, accessible(p.
 type PostKey = string;
 
 /**
- * A viewer context. `seedsGiven` is **whole Seeds given to the gauntlet creator this
+ * A viewer context. `givenAmount` is **whole Seeds given to the gauntlet creator this
  * cycle**, and it is the only viewer fact gate resolution reads besides purchases.
  *
  * The staircase row's `anthersSeeds` is deliberately NOT passed: there is nowhere to put
  * it. Since Anthers Gates were retired the Badge cannot reach resolution at all, which is
  * a stronger statement than any assertion — the same shape as `following`.
  */
-function ctx(seedsGiven: number, purchased: number[] = []): AccessContext {
+function ctx(givenAmount: number, purchased: number[] = []): AccessContext {
 	return {
 		userId: VIEWER_ID,
-		supportByCreator: new Map(seedsGiven > 0 ? [[CREATOR_ID, seedsGiven]] : []),
+		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR_ID, givenAmount]] : []),
 		purchasedWorkIds: new Set(purchased),
 	};
 }
@@ -88,15 +88,15 @@ const PAY: AccessReason = "payment_required";
 const STAIRCASE = EXPECTED_STAIRCASE.map((row) => ({
 	state: row.state,
 	ctx: ctx(
-		row.seedsGiven,
+		row.givenAmount,
 		row.purchased.map((key) => POSTS[key].id),
 	),
 	reasons: row.reasons as Record<PostKey, AccessReason>,
 }));
 
 const POST_KEYS = Object.keys(POSTS) as PostKey[];
-/** The purchase rung's key — derived, so extending SEED_RUNGS doesn't strand it. */
-const BUY = `G${2 + SEED_RUNGS.length}`;
+/** The purchase rung's key — derived, so extending BADGE_RUNGS doesn't strand it. */
+const BUY = `G${2 + BADGE_RUNGS.length}`;
 
 describe("User Gauntlet — expected-access staircase", () => {
 	for (const { state, ctx: viewer, reasons } of STAIRCASE) {
@@ -126,24 +126,24 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	it("each Seed rung unlocks exactly one more post than the rung below", () => {
-		// Derived from the fixture's rungs, never typed, so retuning SEED_RUNGS needs no
+		// Derived from the fixture's rungs, never typed, so retuning BADGE_RUNGS needs no
 		// matching edit here. A viewer at 0 Seeds sees only G1; each rung adds exactly one.
-		const counts = [0, ...SEED_RUNGS].map(
+		const counts = [0, ...BADGE_RUNGS].map(
 			(s) => POST_KEYS.filter((k) => resolveAccessSync(POSTS[k], ctx(s)).canAccess).length,
 		);
-		expect(counts).toEqual([1, ...SEED_RUNGS.map((_, i) => 2 + i)]);
+		expect(counts).toEqual([1, ...BADGE_RUNGS.map((_, i) => 2 + i)]);
 	});
 
 	/**
-	 * ⭐ The reason `SEED_RUNGS` is sparse. Between two rungs, a viewer's Seed count and the
+	 * ⭐ The reason `BADGE_RUNGS` is sparse. Between two rungs, a viewer's Seed count and the
 	 * rung's POSITION in the ladder diverge — so an implementation that compared positions
 	 * (the retired `badgeRank = indexOf` shape) opens one post too many here, toward
 	 * over-granting. On a consecutive ladder this state does not exist to test.
 	 */
 	it("a viewer between two rungs clears the lower and NOT the higher", () => {
-		for (let i = 0; i < SEED_RUNGS.length - 1; i++) {
-			const lower = SEED_RUNGS[i];
-			const higher = SEED_RUNGS[i + 1];
+		for (let i = 0; i < BADGE_RUNGS.length - 1; i++) {
+			const lower = BADGE_RUNGS[i];
+			const higher = BADGE_RUNGS[i + 1];
 			if (higher - lower < 2) continue; // adjacent rungs have no "between"
 			const between = lower + 1;
 			expect(resolveAccessSync(POSTS[`G${2 + i}`], ctx(between)).canAccess).toBe(true);
@@ -152,10 +152,10 @@ describe("User Gauntlet — expected-access staircase", () => {
 	});
 
 	it("the ladder is genuinely sparse — otherwise the test above proves nothing", () => {
-		// A guard against someone quietly flattening SEED_RUNGS back to 1,2,3: the case
+		// A guard against someone quietly flattening BADGE_RUNGS back to 1,2,3: the case
 		// above `continue`s on adjacent rungs, so a consecutive ladder would make it pass
 		// vacuously.
-		const gaps = SEED_RUNGS.slice(1).map((s, i) => s - SEED_RUNGS[i]);
+		const gaps = BADGE_RUNGS.slice(1).map((s, i) => s - BADGE_RUNGS[i]);
 		expect(gaps.some((g) => g > 1)).toBe(true);
 	});
 
@@ -172,8 +172,8 @@ describe("User Gauntlet — expected-access staircase", () => {
 	 * that rather than its opposite.
 	 */
 	it("the ladder carries at least one rung with cents, and every rung is payable", () => {
-		expect(SEED_RUNGS.some((r) => !Number.isInteger(r))).toBe(true);
-		for (const rung of SEED_RUNGS) {
+		expect(BADGE_RUNGS.some((r) => !Number.isInteger(r))).toBe(true);
+		for (const rung of BADGE_RUNGS) {
 			expect(rung).toBeGreaterThan(0);
 			// Payable means a whole number of cents — finer than that cannot be charged.
 			expect(Math.round(rung * 100)).toBeCloseTo(rung * 100, 6);
@@ -188,7 +188,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		expect(free.isEntitled).toBe(false);
 
 		// G2 at its rung qualifies via a non-baseline row → entitled, and NOT isFree.
-		const entitled = resolveAccessSync(POSTS.G2, ctx(SEED_RUNGS[0]));
+		const entitled = resolveAccessSync(POSTS.G2, ctx(BADGE_RUNGS[0]));
 		expect(entitled.isFree).toBe(false);
 		expect(entitled.isEntitled).toBe(true);
 	});
@@ -219,7 +219,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 	});
 
 	it("the ladder never unlocks the purchase rung — it can't be reached by climbing", () => {
-		const top = resolveAccessSync(POSTS[BUY], ctx(SEED_RUNGS[SEED_RUNGS.length - 1]));
+		const top = resolveAccessSync(POSTS[BUY], ctx(BADGE_RUNGS[BADGE_RUNGS.length - 1]));
 		expect(top.canAccess).toBe(false);
 		expect(top.reason).toBe("payment_required");
 	});

@@ -14,7 +14,7 @@
  *
  * Usage (flags compose; each is applied only when passed):
  *   bun run db:gauntlet:state --user gauntlet_viewer --anthers-support 3   # $3/mo to Anthers
- *   bun run db:gauntlet:state --user gauntlet_viewer --seed-budget 6        # $6 of budget
+ *   bun run db:gauntlet:state --user gauntlet_viewer --support-budget 6        # $6 of budget
  *   bun run db:gauntlet:state --user gauntlet_viewer --give 2               # $2 to the creator
  *   bun run db:gauntlet:state --user gauntlet_viewer --purchase gauntlet-paid-download
  *   bun run db:gauntlet:state --user gauntlet_viewer --watched-minutes 570
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
 	const creatorId = await userIdByUsername(GAUNTLET_CREATOR_USERNAME, "Gauntlet creator");
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
-	const seedBudget = numFlag("--seed-budget", 0, 300);
+	const supportBudget = numFlag("--support-budget", 0, 300);
 	const give = numFlag("--give", 0, 300);
 	const purchaseSlug = flagValue("--purchase");
 	/**
@@ -117,10 +117,10 @@ async function main(): Promise<void> {
 	const watchedMinutes = intFlag("--watched-minutes", 0, 100_000);
 
 	// Account row: the two billing facts the subscription/seed-buy webhooks would write.
-	if (anthersSupport !== undefined || seedBudget !== undefined) {
+	if (anthersSupport !== undefined || supportBudget !== undefined) {
 		const patch = {
 			...(anthersSupport !== undefined ? { anthersSupport: anthersSupport.toFixed(2) } : {}),
-			...(seedBudget !== undefined ? { creatorSupportTotal: seedBudget.toFixed(2) } : {}),
+			...(supportBudget !== undefined ? { creatorSupportTotal: supportBudget.toFixed(2) } : {}),
 			updatedAt: new Date(),
 		};
 		const [existing] = await db

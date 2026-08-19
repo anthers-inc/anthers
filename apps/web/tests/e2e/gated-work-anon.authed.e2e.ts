@@ -28,7 +28,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
  * The first gated rung — baseline denied, so an anonymous viewer resolves `login_required`.
  *
  * Taken from the fixture definition rather than typed, for the reason the gauntlet spec
- * gives: the rung slugs are generated from `SEED_RUNGS`, so a hardcoded one silently stops
+ * gives: the rung slugs are generated from `BADGE_RUNGS`, so a hardcoded one silently stops
  * existing when the ladder is retuned. It cost a cycle here already — `gauntlet-g2` is the
  * fixture's *key*, not its slug, and a 404 renders a page with no unlock card at all, which
  * reads exactly like the feature being broken.

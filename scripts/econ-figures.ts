@@ -768,7 +768,7 @@ const BLOCKS: Block[] = [
  * line, so it is the last time.
  *
  * Cheap to include because the scan blanks comments first: the schema identifiers that
- * legitimately say "seed" (`seed_allocations`, `SEED_RUNGS`, `seedGatedAccess`) are code,
+ * legitimately say "seed" (`seed_allocations`, `BADGE_RUNGS`, `seedGatedAccess`) are code,
  * and every `RETIRED_COPY` pattern matches the word as prose rather than as an
  * identifier. Adding the root found one line and no false positives.
  */
@@ -869,7 +869,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// the word to other word characters, so a word boundary cannot fall on both sides:
 		// `GiveSeedsCard`, `canGiveSeeds`, `SeedListResponse`, `seedAllocations`,
 		// `setSeedAllocs` are all out of reach, and the lowercase and SCREAMING forms
-		// (`seedAccess`, `SEED_RUNGS`) miss on case. What is left is the word standing on
+		// (`seedAccess`, `BADGE_RUNGS`) miss on case. What is left is the word standing on
 		// its own, which in code means a string or JSX text — copy, which is exactly what
 		// 63.01 governs. Comments are blanked before matching, so engineering prose keeps
 		// its history notes.
