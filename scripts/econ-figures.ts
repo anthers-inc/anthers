@@ -914,6 +914,16 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// reads the stored `access.price` and `ProjectPricing` posts `{ slug }` with no
 		// body, so the buyer has no way to send one.
 		//
+		// 🚨 **It is now a DECISION rather than a gap** (Parker, 2026-08-18): Anthers is not
+		// building pay-what-you-want. That matters for how this rule reads. An unbuilt
+		// feature invites "write it as coming" — the tense rule the cart and self-hosting
+		// both get — and this one does not get it: PWYW is written as **absent**. So the
+		// guard is permanent rather than a placeholder to delete once the feature lands,
+		// which is what a reader would otherwise reasonably assume from `why` alone.
+		// Recorded in the vault at `31.02 Direct Creator Purchases` and `63.01 § Prices`;
+		// the itch.io import consequence is in `62.01 § 5.1` (a PWYW game imports as a
+		// draft with no price set, rather than a number the creator never chose).
+		//
 		// 🚨 This one earns a guard rather than a sweep for a reason the ATProto rule does
 		// not have: a creator who prices low believing tips will follow **loses money on
 		// every sale**, and the take-home display built alongside this is the thing that
@@ -933,7 +943,7 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 			`${NOT_NEGATED}(?:pay[- ]what[- ]you[- ]want|\\bpwyw\\b|name your own price|suggested price|(?:buyers?|they) (?:may|can) pay more|price is a minimum)`,
 			"gi",
 		),
-		why: "pay-what-you-want has never existed — checkout charges the stored price and accepts no amount from the buyer",
+		why: "pay-what-you-want has never existed and is not planned (decided 2026-08-18) — checkout charges the stored price and accepts no amount from the buyer",
 	},
 	{
 		// The organization's own name for itself, and the one place a copy error becomes a
