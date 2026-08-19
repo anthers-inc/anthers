@@ -82,7 +82,7 @@ function paidAccess(price: string) {
 
 /**
  * Seed-gated: locked for everyone at the baseline, then unlocked (free) once the viewer
- * has given `threshold` whole Seeds to the creator this cycle.
+ * has given `threshold` monthly dollars to the creator this cycle.
  */
 function seedGatedAccess(threshold: number) {
 	return {
@@ -108,10 +108,20 @@ const SEED_GATED_POSTS = new Set<string>([
 	"How I Design Pixel Art Tilesets",
 	"How I Build Reactive Visuals with Three.js",
 ]);
-/** Whole Seeds a viewer must give a creator to clear a Seed-gated post. */
-const SEED_GATE_THRESHOLD = 1;
+/**
+ * Monthly dollars a viewer must give a creator to clear a gated post.
+ *
+ * 🚨 **These were `1` and `2` until 2026-08-18, and by then that meant $1 and $2.**
+ * They were written as *whole Seeds* — correct while `threshold` counted Seeds — and
+ * migration `0041` turned the column back into dollars (× 3) without touching the
+ * seeder, which writes fresh rows every run. So `db:seed` produced a demo ladder at a
+ * third of its intended rungs, with labels ("Patron", "Producer") implying otherwise.
+ * The same slip as the six `thresholdForBadge()` call sites: nothing type-errors,
+ * because a count and an amount are both `number`.
+ */
+const SEED_GATE_THRESHOLD = 3;
 /** The second rung, for posts that were Anthers-gated before 2026-08-12. */
-const SEED_GATE_THRESHOLD_HIGH = 2;
+const SEED_GATE_THRESHOLD_HIGH = 6;
 
 // ---------------------------------------------------------------------------
 // Seed data definitions
@@ -1049,12 +1059,18 @@ async function seed() {
 	console.log("Creating creator gates...");
 
 	// Gate definitions per creator — the creator's advertised ladder. `threshold` is
-	// **whole Seeds given to this creator this cycle**, per migration 0007.
+	// **monthly dollars given to this creator this cycle**.
 	//
-	// Two things changed here on 2026-08-12. The `anthers_badge` rungs are gone with
-	// Anthers Gates, and the surviving thresholds were written in DOLLARS ("3.00", "6.00")
-	// against a column that has counted Seeds since 0007 — so every rung advertised three
-	// times the support it meant. Divided by SEED_PRICE and stated in Seeds.
+	// 🚨 This column has now changed meaning twice, and the seeder followed it late both
+	// times. Migration 0007 made it whole Seeds, so on 2026-08-12 these were divided by
+	// SEED_PRICE and restated as Seeds ("1", "2"). Migration `0041` retired the unit and
+	// converted the column back to dollars (× 3) — but a migration rewrites existing
+	// ROWS, and a seeder writes new ones, so from 2026-08-16 `db:seed` built every gate
+	// at a third of its rung. Restored × 3 on 2026-08-18.
+	//
+	// ⚠️ A gate may sit at any amount, to the cent — $7.50 is as legal as $9. These are
+	// round because they are a demo ladder, not because a floor exists; the gauntlet
+	// fixture carries the deliberately-uneven $9.50 rung that guards the cents path.
 	const GATES_BY_CREATOR: Record<
 		string,
 		{ gateType: "seed"; threshold: string; label: string; description: string }[]
@@ -1062,13 +1078,13 @@ async function seed() {
 		[`${SEED_PREFIX}novapixel`]: [
 			{
 				gateType: "seed",
-				threshold: "1",
+				threshold: "3",
 				label: "Pixel Pal",
 				description: "Weekly pixel art WIP threads",
 			},
 			{
 				gateType: "seed",
-				threshold: "2",
+				threshold: "6",
 				label: "Playtester",
 				description: "Access to private playtesting branches and feedback channels",
 			},
@@ -1076,19 +1092,19 @@ async function seed() {
 		[`${SEED_PREFIX}sagemoreno`]: [
 			{
 				gateType: "seed",
-				threshold: "1",
+				threshold: "3",
 				label: "Reader",
 				description: "Extended footnotes and research notes",
 			},
 			{
 				gateType: "seed",
-				threshold: "2",
+				threshold: "6",
 				label: "Inner Circle",
 				description: "Monthly AMA threads and draft previews",
 			},
 			{
 				gateType: "seed",
-				threshold: "4",
+				threshold: "12",
 				label: "Patron",
 				description: "Annual long-form piece dedicated to patron questions",
 			},
@@ -1096,13 +1112,13 @@ async function seed() {
 		[`${SEED_PREFIX}fluxbeats`]: [
 			{
 				gateType: "seed",
-				threshold: "1",
+				threshold: "3",
 				label: "Listener",
 				description: "Early access to new releases (48-hour window)",
 			},
 			{
 				gateType: "seed",
-				threshold: "3",
+				threshold: "9",
 				label: "Collaborator",
 				description: "Unreleased demos, remix packs, and sample libraries",
 			},
@@ -1110,13 +1126,13 @@ async function seed() {
 		[`${SEED_PREFIX}marisol`]: [
 			{
 				gateType: "seed",
-				threshold: "1",
+				threshold: "3",
 				label: "Sketch Club",
 				description: "Weekly process videos and timelapse recordings",
 			},
 			{
 				gateType: "seed",
-				threshold: "2",
+				threshold: "6",
 				label: "Studio Access",
 				description: "Full PSD/Procreate files and custom brush packs",
 			},
@@ -1124,19 +1140,19 @@ async function seed() {
 		[`${SEED_PREFIX}hexbound`]: [
 			{
 				gateType: "seed",
-				threshold: "1",
+				threshold: "3",
 				label: "Insider",
 				description: "Monthly design documents and narrative outlines",
 			},
 			{
 				gateType: "seed",
-				threshold: "3",
+				threshold: "9",
 				label: "Patron",
 				description: "Playable prototypes and experimental builds",
 			},
 			{
 				gateType: "seed",
-				threshold: "5",
+				threshold: "15",
 				label: "Producer",
 				description: "Vote on next game concept, name in credits",
 			},

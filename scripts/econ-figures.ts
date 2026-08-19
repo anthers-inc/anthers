@@ -784,8 +784,30 @@ const APP_ROOTS = ["apps/web/src", "packages/web-shared/src", "packages/db/src"]
  * that gated content — for anywhere from two days to five months after each mechanism was
  * deleted. It drifted precisely because `APP_ROOTS` is a list of `.ts`/`.tsx` directories
  * and nobody noticed the repo's shop window was outside it.
+ *
+ * 🚨 **It was `["README.md"]` — one file — until 2026-08-18, and the same reasoning that
+ * added the README argued for all of it.** Fixing one file and leaving its neighbours
+ * outside is how the gap reproduces: `packages/db/TEST_ACCOUNTS.md` was a **complete
+ * description of the pre-retirement model** (a "Rank (Anthers-Seeds)" column, Anthers
+ * Gates, Seed Gates, "whole $3 Seeds"), and `apps/web/tests/README.md` said "badge/Seed
+ * billing" — both invisible for the same reason the README was, two days after a sweep
+ * that reported the code half finished.
+ *
+ * The list is now every `.md` in the repo, discovered rather than enumerated, because an
+ * enumerated list is a thing to forget to add to — which is the defect above, written as
+ * a constant. There are ten of them, so the scan costs nothing.
+ *
+ * Widening found exactly one file's worth of drift and **no false positives**, including
+ * across `LICENSE.md` and the two `THIRD-PARTY.md` files, which are verbatim third-party
+ * text: none needed an `econ:allow-file`. That is the same result adding `packages/db/src`
+ * to `APP_ROOTS` got, and for the same reason — these patterns match retired *copy*, and
+ * copy is not what a licence is made of.
  */
-const DOC_FILES = ["README.md"];
+async function docFiles(): Promise<string[]> {
+	const out: string[] = [];
+	for await (const path of markdownFiles(REPO)) out.push(relative(REPO, path));
+	return out.sort();
+}
 
 /**
  * Copy for a charge that no longer exists.
@@ -1167,6 +1189,24 @@ async function* sourceFiles(dir: string): AsyncGenerator<string> {
 }
 
 /**
+ * Every `.md` in the repo, skipping what is not ours to hold to a copy rule.
+ *
+ * ⚠️ **`node_modules` is the one that matters** — without it this walks a dependency tree
+ * of thousands of READMEs, every one of them someone else's prose, and the run turns into
+ * a wall of findings about libraries. The rest are build output and VCS internals, which
+ * contain nothing hand-written.
+ */
+async function* markdownFiles(dir: string): AsyncGenerator<string> {
+	const SKIP = new Set(["node_modules", ".git", "dist", "build", "target", ".next", "coverage"]);
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		if (SKIP.has(entry.name)) continue;
+		const path = join(dir, entry.name);
+		if (entry.isDirectory()) yield* markdownFiles(path);
+		else if (entry.name.endsWith(".md")) yield path;
+	}
+}
+
+/**
  * Blank a markdown file down to the prose a human actually wrote.
  *
  * Two exclusions, and they are excluded for the same reason rather than two: a generated
@@ -1244,7 +1284,7 @@ async function scanApp() {
 
 async function scanDocs() {
 	const index = publishedFigures();
-	for (const file of DOC_FILES) {
+	for (const file of await docFiles()) {
 		const path = join(REPO, file);
 		if (!existsSync(path)) continue;
 		const source = await readFile(path, "utf8");
