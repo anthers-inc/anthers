@@ -1341,7 +1341,7 @@ describe("remainder — a heavy streamer costs the mission nothing", () => {
 			.where(and(eq(accountCycles.userId, heavyId), eq(accountCycles.billingCycle, cycle)));
 		expect(new Decimal(snapshot.foundation).toFixed(2)).toBe("1.11");
 		// The creators this user watched are paid the same as anyone's: the Time Pool is a
-		// fixed target per Seed.
+		// fixed share of what the user gives Anthers.
 		expect(new Decimal(snapshot.timePool).toFixed(2)).toBe("1.50");
 	});
 

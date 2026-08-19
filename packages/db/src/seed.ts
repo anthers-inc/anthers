@@ -555,7 +555,7 @@ const ACCOUNT_CONFIG: Record<string, { anthersSupport: number; creatorSupport?: 
 	[`${SEED_PREFIX}jordan`]: { anthersSupport: 0, creatorSupport: 3 },
 };
 
-/** Resolve a user's account config, defaulting to Free (0 Anthers-Seeds). */
+/** Resolve a user's account config, defaulting to Free ($0 to Anthers). */
 function accountConfig(username: string): { anthersSupport: number; creatorSupport?: number } {
 	return ACCOUNT_CONFIG[username] ?? { anthersSupport: 0 };
 }
@@ -1273,7 +1273,7 @@ async function seed() {
 		}
 		console.log(`    ${tu.purchaseTitles.length} purchases`);
 
-		// -- Account (Anthers-Seeds) --
+		// -- Account (what they give Anthers) --
 		const cfg = accountConfig(tu.username);
 		const creatorSupportTotal = cfg.creatorSupport ?? 0;
 		await seedAccountAndCycle({

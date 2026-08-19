@@ -169,10 +169,10 @@ describe("cardFeeDisplay — the browser's copy of the formula", () => {
 });
 
 describe("supportBreakdown", () => {
-	test("the Seed price is all-in: Payments comes out of the charge, never on top", () => {
-		// 2 creator-Seeds + 1 Anthers-Seed.
+	test("what a user gives is all-in: Payments comes out of the charge, never on top", () => {
+		// $6 directed at creators + $3 to Anthers.
 		const s = supportBreakdown({ anthersDollars: 3, creatorDollars: 6 });
-		expect(s.creatorDirect.toFixed(2)).toBe("6.00"); // 2 × $3 gross
+		expect(s.creatorDirect.toFixed(2)).toBe("6.00"); // $6 gross
 		expect(s.supportSubtotal.toFixed(2)).toBe("9.00"); // $6 to creators + $3 to Anthers
 		expect(s.payments.toFixed(2)).toBe(cardFee(9).toFixed(2)); // one fee on the whole $9
 		// The user pays the subtotal and nothing more — sales tax is the only add-on,

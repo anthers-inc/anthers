@@ -69,7 +69,7 @@ export function paymentsSplit(
 	return { total, anthers: total.minus(creator), creator };
 }
 
-// ── Anthers-Seed decomposition ────────────────────────────────────────────────
+// ── Support decomposition ─────────────────────────────────────────────────────
 /**
  * Decompose what a user gives Anthers into where it goes:
  *

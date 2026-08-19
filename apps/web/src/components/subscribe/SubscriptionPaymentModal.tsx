@@ -36,7 +36,7 @@ interface Props {
 	directed?: { creatorId: number; amount: number }[];
 	badgeName: string;
 	preview: SubscriptionPreview;
-	/** Called after the change is confirmed — the webhook then applies the Seed count. */
+	/** Called after the change is confirmed — the webhook then applies the new amount. */
 	onComplete: () => void;
 	onClose: () => void;
 }

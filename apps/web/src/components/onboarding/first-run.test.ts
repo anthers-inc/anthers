@@ -53,7 +53,7 @@ describe("someone who gave Seeds", () => {
 
 describe("someone who took the free account", () => {
 	test("is `free`, not `cold` — they were asked and said no", () => {
-		// The distinction that matters: `cold` says "here's what a Seed is", which to
+		// The distinction that matters: `cold` says "here's what supporting is", which to
 		// somebody who declined ninety seconds ago is the second ask in two minutes.
 		setPicks({ anthers: false, follow: [], seed: [] });
 		expect(readArrival()).toEqual({ kind: "free", follows: 0 });

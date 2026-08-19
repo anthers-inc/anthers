@@ -39,7 +39,7 @@ const PICKS_KEY = "anthers_subscribe_picks";
  * How this account arrived.
  *
  * Read from the picks `/subscribe` left rather than from the server, and the reason is
- * timing: **the Seed count is applied by a Stripe webhook**, so an account that has just
+ * timing: **what a user gives is applied by a Stripe webhook**, so an account that has just
  * paid may still read `anthersSupport: 0` for a moment. Branching on server truth would
  * greet someone who just paid with the free-tier message — the single worst outcome
  * available here. What they *chose* is known immediately and is what the copy should

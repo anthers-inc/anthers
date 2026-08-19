@@ -133,7 +133,7 @@ function SplitRow({
 	);
 }
 
-// ─── (2) Anthers-Seeds — interactive rank picker ───
+// ─── (2) Support for Anthers — interactive Badge picker ───
 
 /** The five ranks as selectable chips: emoji + label + $/mo. */
 function BadgePicker({ value, onChange }: { value: BadgeKey; onChange: (b: BadgeKey) => void }) {
