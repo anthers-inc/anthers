@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
+import { STORAGE_PER_GIB_MONTH, thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -41,14 +41,32 @@ test.describe("Resources calculators", () => {
 		expect(errors).toEqual([]);
 	});
 
+	/**
+	 * ⚠️ **The money here is DERIVED, and it used to be frozen.** It asserted `$0.212` and
+	 * `$21.25`, both computed at `$0.02/GiB` — DigitalOcean Spaces' rate, which the page
+	 * defaulted to for eight days after storage moved to Cloudflare R2. The test agreed
+	 * with the page because both had the same wrong number in them, which is the failure
+	 * mode the sibling test below was written to end. The **sizes** stay frozen: they are
+	 * geometry off the bitrate ladder and owe nothing to a dial.
+	 */
 	test("video storage: default readout and library scale-out", async ({ page }) => {
 		const errors = trackErrors(page);
 		await page.goto("/resources/video-storage");
-		// Big readout: master + AV1 ladder for 1080p60 H.264 @ $0.02.
-		await expect(page.locator("p.text-5xl")).toContainText("$0.212");
+		// 1080p60, H.264 master + AV1 ladder — a fixed 10.62 GiB/hr.
+		const gibPerHour = 10.62;
+		const hourly = gibPerHour * STORAGE_PER_GIB_MONTH;
+		await expect(page.locator("p.text-5xl")).toContainText(`$${hourly.toFixed(3)}`);
 		await expect(page.getByText("10.62 GiB", { exact: false }).first()).toBeVisible();
-		// 100-hour library scale-out.
-		await expect(page.getByText("$21.25", { exact: false }).first()).toBeVisible();
+		// 100-hour library scale-out, at the same rate the page reads.
+		const library = gibPerHour * 100 * STORAGE_PER_GIB_MONTH;
+		await expect(
+			page
+				.getByText(
+					`$${library.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+					{ exact: false },
+				)
+				.first(),
+		).toBeVisible();
 		expect(errors).toEqual([]);
 	});
 

@@ -392,8 +392,9 @@ export default function VideoStorageCalculatorPage() {
 						<strong className="text-base-content/70">Units.</strong> Size = bitrate × 3600s ÷ 8, in
 						GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage only
 						— egress (see the companion bandwidth tool), requests, and any replication factor land
-						on top. Object stores quote per GB (10⁹), so multiply by 1.074 for $/GiB — Cloudflare R2's $0.015/GB-month is the $0.0161/GiB-month this field starts at. Planning
-						model, not for invoicing.
+						on top. Object stores quote per GB (10⁹), so multiply by 1.074 for $/GiB — Cloudflare
+						R2's $0.015/GB-month is the $0.0161/GiB-month this field starts at. Planning model, not
+						for invoicing.
 					</p>
 				</CalcNotes>
 			</Reveal>

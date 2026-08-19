@@ -44,7 +44,7 @@ export interface DistributePoolData {
 /** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** The Time Pool a user funds this cycle = $1.50 per Anthers-Seed (subsidised at rank 0). */
+/** The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers (subsidised at $0). */
 function computeTimePoolAmount(anthersSupport: number): Decimal {
 	return new Decimal(timePoolFor(anthersSupport));
 }

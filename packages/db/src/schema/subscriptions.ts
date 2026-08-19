@@ -60,7 +60,7 @@ export const accounts = pgTable("accounts", {
 	 * reachable. See `services/billing.ts` for why a Product is needed at all.
 	 */
 	stripeProductId: text("stripe_product_id").default(""),
-	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active Anthers-Seed subscription
+	stripeSubscriptionId: text("stripe_subscription_id").default(""), // active support subscription
 	isActive: boolean("is_active").default(true),
 	currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
@@ -71,7 +71,7 @@ export const accounts = pgTable("accounts", {
 
 /**
  * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
- * consumption history/analytics. Records the Anthers-Seeds held and what flowed:
+ * consumption history/analytics. Records the amount given to Anthers and what flowed:
  * Time Pool (to creators), the remainder, and stream consumption.
  */
 export const accountCycles = pgTable(

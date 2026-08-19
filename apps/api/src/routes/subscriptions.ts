@@ -3,9 +3,14 @@
  * Account & economics routes — the support model.
  *
  * A user's account holds a monthly **amount** given to Anthers (`anthersSupport`) — that
- * count is their rank and, at $3 each, their Anthers subscription (a single $3
- * Seed price × quantity in Stripe). Directed creator-Seeds are tracked in
- * `seed_allocations`; `creatorSeedTotal` is the balance the user directs.
+ * amount **is** their Badge, and is their Anthers subscription (one Stripe item per
+ * destination, each carrying its own amount). What they direct at creators is tracked in
+ * `seed_allocations`; `creatorSupportTotal` is the balance they direct from.
+ *
+ * ⚠️ This block was left **half-edited** by the retirement until 2026-08-19: the noun
+ * became "amount" while the next clause still read "that **count** is their rank … at $3
+ * each … a single $3 Seed price × quantity". It also named `creatorSeedTotal`, which does
+ * not exist.
  * There is no bandwidth line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator gates, and access.
  */
@@ -92,7 +97,7 @@ const MAX_ANTHERS_SUPPORT = 300;
  */
 const MIN_INVOICE_TOTAL = 0.5;
 
-/** The Badge ladder (Free … Blossom), each with its Seed count + decomposition. Shared
+/** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
  *  with the Subscribe page via `badgeViews()` so the two never drift. */
 const BADGE_VIEWS = badgeViews();
 
@@ -1156,7 +1161,7 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── Creator Status (for creator page rank/Seed display) ─────────────────
+	// ── Creator Status (for the creator page's Badge + directed-support display) ──
 	.get("/creator-status/:username", async (c) => {
 		const { username } = c.req.param();
 		const currentUserId = await getOptionalUserId(c);
@@ -1185,7 +1190,7 @@ const subscriptionRoutes = new Hono()
 			});
 		}
 
-		// The viewer's held Anthers-Seeds (point-in-time) and their Seeds to this creator.
+		// What the viewer gives Anthers (point-in-time) and what they direct at this creator.
 		const anthersSupport = await heldAnthersSupport(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
 		const cycle = getCurrentBillingCycle();

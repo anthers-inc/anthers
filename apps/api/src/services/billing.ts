@@ -36,7 +36,7 @@ function currentBillingCycle(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Record this cycle's snapshot (Anthers-Seeds + their decomposition + creator-Seeds). */
+/** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
 	userId: number,
 	anthersSupport: number,

@@ -53,8 +53,12 @@ export interface Creator {
 
 /**
  * One row of a post's access table — the SAME shape for both tables (migration `0007`).
- * `threshold` is whole Seeds: Anthers-Seeds held for the Anthers table, Seeds given to
- * this creator for the Seed table. 0 = everyone.
+ * `threshold` is **monthly dollars**: what the viewer gives Anthers for the Anthers table,
+ * what they direct at this creator for the creator table. 0 = everyone.
+ *
+ * ⚠️ It said "whole Seeds" until 2026-08-19 — the same wrong claim that had the dev seeder
+ * building every gate at a third of its value. The column is `numeric` and the resolver
+ * compares dollars to the cent.
  */
 export interface AccessRow {
 	threshold: number;
@@ -543,13 +547,13 @@ export interface OwnershipResponse {
 
 // ─── Subscription Types ───
 
-/** The Anthers Badge / plan vocabulary (per-post access rows include "free"). */
+/** The Anthers Badge vocabulary (per-post access rows include "free"). */
 export type SubscriptionTier = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A user's rank (= Anthers-Seed count), held point-in-time. */
+/** A user's Badge (= the monthly amount they give Anthers), held point-in-time. */
 export type Badge = "free" | "root" | "sprout" | "petal" | "blossom";
 
-/** A rank rung (GET /subscriptions/badges) — Anthers-Seed count + its decomposition. */
+/** A Badge rung (GET /subscriptions/badges) — its monthly amount + decomposition. */
 export interface BadgeView {
 	id: Badge;
 	name: string;

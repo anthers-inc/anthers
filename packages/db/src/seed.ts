@@ -1304,12 +1304,12 @@ async function seed() {
 		}
 		console.log(`    ${totalEvents} attention events`);
 
-		// -- Pool distributions + directed Seeds --
-		// The Time Pool is $1.50 per Anthers-Seed, distributed to watched creators by
-		// time. Directed creator-Seeds are different in kind: they are indivisible $3
-		// units the user *points*, so the fixture hands out whole Seeds by largest remainder
-		// rather than splitting a Seed proportionally. Nothing is left undirected — a Seed a
-		// user hasn't pointed is not creator income (it would fund free access and the charitable programs), so
+		// -- Pool distributions + directed support --
+		// The Time Pool is `TIME_POOL_RATE` (half) of what a user gives Anthers, distributed
+		// to watched creators by time. Directed support is different in kind: it is an amount
+		// the user *points*, so the fixture hands it out by largest remainder rather than
+		// splitting proportionally. Nothing is left undirected — money a user hasn't pointed
+		// is not creator income (it would fund free access and the charitable programs), so
 		// attributing a fractional leftover to creators by time would seed a state the
 		// model doesn't produce.
 		const timePool = timePoolFor(cfg.anthersSupport);
