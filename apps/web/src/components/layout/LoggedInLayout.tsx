@@ -71,17 +71,36 @@ function LoggedInLayoutInner() {
 				<div className="navbar-end gap-1">
 					<ThemeToggle />
 					<div className="dropdown dropdown-end">
-						<label className="btn btn-ghost btn-circle">
+						{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
+						    until the enclosing `.dropdown` matches `:focus-within`, so the trigger
+						    has to be focusable or the menu can never open at all. This was a bare
+						    `<label>` with no `tabIndex` and no control to label, which is focusable
+						    by nothing — clicking the avatar did nothing from the day it shipped.
+						    `tabIndex` carries a second job beyond making the button focusable:
+						    daisyUI suppresses pointer events on `[tabindex]:first-child` while the
+						    menu is open, and that literal attribute selector is what lets a second
+						    click land on the page and dismiss it. A `<button>` would focus without
+						    it and then never close. */}
+						<button
+							type="button"
+							tabIndex={0}
+							className="btn btn-ghost btn-circle"
+							aria-label="Your account"
+						>
 							{user?.avatar ? (
-								<img
-									src={user.avatar}
-									alt={user?.displayName || user?.username || "Your account"}
-									className="w-8 h-8 rounded-full object-cover"
-								/>
+								/* The button names itself above, so the image is decorative — an alt
+								   here would be a second name for the same control. */
+								<img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
 							) : (
 								<UserCircleIcon className="w-8 h-8" />
 							)}
-						</label>
+						</button>
+						{/* No `tabIndex` here, deliberately. The older dropdowns in this app carry one
+						    on the `<ul>`, which biome flags as `noNoninteractiveTabindex` — a list is
+						    not a control and putting it in the tab order just adds a stop that does
+						    nothing. It is unnecessary as well as unwanted: every item below is a link
+						    or a button, so tabbing off the trigger lands on one of them and the
+						    `.dropdown` keeps matching `:focus-within` on its own. */}
 						<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
 							<li className="menu-title px-4 py-1">
 								{/* An account that hasn't finished onboarding has no handle to print and
