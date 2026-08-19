@@ -97,8 +97,8 @@ that flag and **fails on a project that declares none** — Playwright 1.61 has 
 while both stayed green. Nothing changes locally: `make verify` and a bare
 `playwright test` still run every project.
 
-**Billing is hybrid in the walk.** The support model made badge/Seed billing
-real Stripe flows (503 unconfigured, webhook-synced when configured), so the
+**Billing is hybrid in the walk.** The support model made badge and support
+billing real Stripe flows (503 unconfigured, webhook-synced when configured), so the
 spec UI-walks everything that doesn't bill and hops billing state through the
 canonical `db:gauntlet:state` script. The observational pass covers the real
 billing UI; a `GAUNTLET_STRIPE` full-fidelity mode is a known follow-up.
