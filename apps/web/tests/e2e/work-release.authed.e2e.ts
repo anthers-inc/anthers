@@ -101,7 +101,13 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await modal.locator('input[type="number"][min="1900"]').fill("2015");
 
 	await page.getByRole("button", { name: /create content/i }).click();
-	await expect(modal).toBeHidden();
+	// ⚠️ A longer wait than the 5s default, and only here and at Save below, because both
+	// are a modal closing on the far side of a write. On a machine that has just run the
+	// unit suites against the same Postgres that round trip genuinely exceeds five seconds
+	// sometimes — this is the other face of the race documented at the Catalog read. It
+	// does not weaken the assertion: Playwright waits only as long as it needs to, and a
+	// modal that never closes still fails.
+	await expect(modal).toBeHidden({ timeout: 15_000 });
 
 	// Born private. Not a detail — it is why a Release control has to exist at all.
 	await expect(cardFor(page)).toContainText("Private");
@@ -115,12 +121,26 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// And the reader-facing endpoint agrees, which is the assertion that matters: the badge
 	// is derived in the browser while `publicAccess` is derived on the server, from
 	// `resolveAccessSync`. Two derivations of one idea — this is where they have to meet.
-	const publicCatalog = await fetch(
-		`${API_URL}/api/content/catalog/${GAUNTLET_CREATOR_USERNAME}`,
-	).then((r) => r.json() as Promise<{ works: PublicWork[] }>);
-	const published = publicCatalog.works.find((w) => w.title === TITLE);
-	expect(published, "the released Work is missing from the public Catalog").toBeTruthy();
-	expect(published?.publicAccess).toBe(true);
+	//
+	// 🚨 **POLLED, not read once, because those two derivations are also two CLOCKS.** The
+	// card above can show its new state before this endpoint reflects it, and a single-shot
+	// fetch then reports a Work that is a few milliseconds behind as one that was never
+	// released at all. That made this the flakiest spec in the suite — it failed three
+	// pre-push runs on 2026-08-20, on a loaded machine, under two different messages
+	// ("missing from the public Catalog" here, and the modal timeout below), and both read
+	// like a product bug rather than a race. Polling changes nothing about what is asserted:
+	// if the server never agrees this still fails, with the same message.
+	const catalogWork = () =>
+		fetch(`${API_URL}/api/content/catalog/${GAUNTLET_CREATOR_USERNAME}`)
+			.then((r) => r.json() as Promise<{ works: PublicWork[] }>)
+			.then((cat) => cat.works.find((w) => w.title === TITLE));
+
+	await expect
+		.poll(async () => (await catalogWork())?.publicAccess ?? null, {
+			message: "the released Work never became Public Access in the public Catalog",
+		})
+		.toBe(true);
+	const published = await catalogWork();
 
 	/**
 	 * The Created date survived the form.
@@ -143,14 +163,19 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(modal.getByText(/nobody can open this/i)).toBeVisible();
 
 	await page.getByRole("button", { name: /save & close/i }).click();
-	await expect(modal).toBeHidden();
+	await expect(modal).toBeHidden({ timeout: 15_000 });
 	await expect(cardFor(page)).toContainText("Nobody can open");
 
 	// Still released, and now genuinely shut: the server drops it from what a reader sees.
-	const afterLock = await fetch(`${API_URL}/api/content/catalog/${GAUNTLET_CREATOR_USERNAME}`).then(
-		(r) => r.json() as Promise<{ works: PublicWork[] }>,
-	);
-	expect(afterLock.works.find((w) => w.title === TITLE)?.publicAccess).toBeFalsy();
+	// Polled for the same reason as the read after Release — and note this direction was
+	// already tolerant of the race by accident, since `find(...)?.publicAccess` on a Work
+	// the fetch has not caught up with is `undefined`, which is falsy and passes. A read
+	// that cannot fail from being early also cannot prove the change landed.
+	await expect
+		.poll(async () => Boolean((await catalogWork())?.publicAccess), {
+			message: "the locked Work is still Public Access to a reader",
+		})
+		.toBe(false);
 
 	// ── Clean up ────────────────────────────────────────────────────────────
 	// Through the API rather than the UI: the delete dialog is another surface's business,
