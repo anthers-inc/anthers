@@ -70,16 +70,114 @@ const bucket = config.bucket;
 const host = config.publicBaseUrl;
 
 /**
- * Origins that must be able to reach the bucket from a browser, and why. A presigned
- * upload is a `PUT`, which is never a CORS-simple request; HLS playback is a `GET` via
- * XHR from hls.js. Checking only PUT would pass a config that fixed uploads and left
- * playback broken, so both are probed.
+ * Origins that must be able to reach storage from a browser, and why. A presigned upload
+ * is a `PUT`, which is never a CORS-simple request; HLS playback is a `GET` via XHR from
+ * hls.js. Checking only PUT would pass a config that fixed uploads and left playback
+ * broken, so both are probed.
  */
 const BROWSER_ORIGINS = [
 	["https://anthers.org", "the site — including /studio, which performs media uploads"],
 	["https://www.anthers.org", "www variant"],
 	["tauri://localhost", "packaged desktop Studio (raw XHR, so CORS applies)"],
 ] as const;
+
+/**
+ * An origin that must be REFUSED. Without it every line above can pass for the worst
+ * possible reason: a bucket answering `*` echoes whatever you send it, so a wide-open
+ * bucket and a correctly-configured one produce identical output on the three origins we
+ * care about. Same shape as `webhook-check`'s wrong-secret control — a check that only
+ * ever asks for the answer it wants cannot tell you the answer means anything.
+ *
+ * `.invalid` is reserved by RFC 2606, so this can never collide with a real origin.
+ */
+const CONTROL_ORIGIN = "https://storage-posture-control.invalid";
+
+/**
+ * 🚨 **The probe targets are three different hosts, and getting that wrong is how this
+ * script spent its life reporting the wrong things.**
+ *
+ * It used to preflight `publicBaseUrl` (the CDN in front of the PUBLIC bucket) for both
+ * columns, against a key under a PRIVATE prefix. Both halves were wrong and each failed in
+ * a different direction:
+ *
+ *   - **PUT never goes to the CDN.** `getPresignedUploadUrl` signs against `config.endpoint`,
+ *     so the CDN was answering about a request the app does not send there — and it would
+ *     have gone on answering `204` with the S3 endpoint locked down completely. A green
+ *     column that cannot go red is worse than no column.
+ *   - **The GET was asking the public host for a private key**, so its `403` was the public
+ *     bucket correctly refusing an object it does not hold. Read as a CORS finding it is
+ *     noise, and noise in an alarm is what teaches people to stop reading it — the same
+ *     failure `spec-diff` grew `--secrets-only` to avoid.
+ *
+ * Where each request really goes, read off the code rather than assumed:
+ *
+ *   | What            | Host                | Bucket   | Who sends it                              |
+ *   | upload          | `config.endpoint`   | private  | `getPresignedUploadUrl` → browser PUT     |
+ *   | HLS segment     | `config.endpoint`   | private  | `getUrl({signed:true})` → hls.js XHR      |
+ *   | display chrome  | `publicBaseUrl`     | public   | `<img src>` — NOT a CORS request at all   |
+ *
+ * So the two enforced probes both target the S3 endpoint, and the CDN line is reported
+ * without counting: nothing in the app fetches a public object with XHR, and no
+ * `crossOrigin` attribute is set anywhere in `apps/web`, so an absent rule there breaks
+ * nothing today. If that changes, promote it — but say so, rather than failing a build over
+ * a request nobody makes.
+ */
+const PRIVATE_PROBE_KEY = "creators/1/videos/originals/posture-probe.mp4";
+const PUBLIC_PROBE_KEY = "creators/1/covers/posture-probe.jpg";
+
+/** The URL the SDK would address an object at, honouring the addressing style in config. */
+function s3ObjectUrl(bucketName: string, key: string): string {
+	if (config.forcePathStyle) return `${config.endpoint}/${bucketName}/${key}`;
+	const url = new URL(config.endpoint);
+	return `${url.protocol}//${bucketName}.${url.host}/${key}`;
+}
+
+const PROBES = [
+	{
+		label: "upload   PUT  → S3 endpoint",
+		method: "PUT" as const,
+		url: s3ObjectUrl(bucket, PRIVATE_PROBE_KEY),
+		enforced: true,
+		breaks: "creators cannot upload media from this origin",
+	},
+	{
+		label: "playback GET  → S3 endpoint",
+		method: "GET" as const,
+		url: s3ObjectUrl(bucket, PRIVATE_PROBE_KEY),
+		enforced: true,
+		breaks: "HLS segments fail to load from this origin",
+	},
+	{
+		label: "chrome   GET  → CDN",
+		method: "GET" as const,
+		url: `${host}/${PUBLIC_PROBE_KEY}`,
+		enforced: false,
+		breaks: "nothing today — images are not CORS requests",
+	},
+] as const;
+
+/** One preflight. Returns the status and whether the origin was echoed back. */
+async function preflight(url: string, origin: string, method: string) {
+	const res = await fetch(url, {
+		method: "OPTIONS",
+		headers: {
+			Origin: origin,
+			"Access-Control-Request-Method": method,
+			// Exactly what the client sends, which depends on the bucket split: with ONE
+			// bucket the ACL header is echoed and must be allowed; with TWO it is not sent
+			// at all, and demanding it here would test a permission the app never uses —
+			// and would fail against a correctly-configured bucket.
+			"Access-Control-Request-Headers": config.sendObjectAcl
+				? "content-type,x-amz-acl"
+				: "content-type",
+		},
+	});
+	// A preflight succeeds with 200 or 204 — R2 answers 204, Spaces answered 200. Requiring
+	// 200 alone would report a working bucket as broken.
+	const allowed =
+		(res.status === 200 || res.status === 204) && !!res.headers.get("access-control-allow-origin");
+	return { status: res.status, allowed };
+}
 
 let failures = 0;
 
@@ -122,31 +220,32 @@ try {
 
 console.log("\n── Preflight (what a browser actually gets)");
 for (const [origin, label] of BROWSER_ORIGINS) {
-	const codes: string[] = [];
-	for (const method of ["PUT", "GET"]) {
-		const res = await fetch(`${host}/creators/1/videos/originals/posture-probe.mp4`, {
-			method: "OPTIONS",
-			headers: {
-				Origin: origin,
-				"Access-Control-Request-Method": method,
-				// Exactly what the client sends, which depends on the bucket split: with ONE
-				// bucket the ACL header is echoed and must be allowed; with TWO it is not sent
-				// at all, and demanding it here would test a permission the app never uses —
-				// and would fail against a correctly-configured bucket.
-				"Access-Control-Request-Headers": config.sendObjectAcl
-					? "content-type,x-amz-acl"
-					: "content-type",
-			},
-		});
-		codes.push(
-			`${method}=${res.status}${res.headers.get("access-control-allow-origin") ? "" : "!"}`,
-		);
+	console.log(`   ${origin}  — ${label}`);
+	for (const probe of PROBES) {
+		const { status, allowed } = await preflight(probe.url, origin, probe.method);
+		if (probe.enforced) {
+			if (!allowed) failures++;
+			console.log(
+				`      ${allowed ? "ok  " : "FAIL"} ${probe.label.padEnd(28)} ${status}${allowed ? "" : `  → ${probe.breaks}`}`,
+			);
+		} else {
+			// Reported, never counted. See the note on PROBES.
+			console.log(
+				`      ${allowed ? "note" : "n/a "} ${probe.label.padEnd(28)} ${status}  (${probe.breaks})`,
+			);
+		}
 	}
-	// A preflight succeeds with 200 or 204 — R2 answers 204, Spaces answered 200. Requiring
-	// 200 alone would report a working bucket as broken.
-	const ok = codes.every((c) => /=(200|204)/.test(c) && !c.endsWith("!"));
-	if (!ok) failures++;
-	console.log(`   ${ok ? "ok  " : "FAIL"} ${origin.padEnd(30)} ${codes.join(" ")}  ${label}`);
+}
+
+// The control. A bucket answering `*` echoes anything, so without this every line above
+// passes identically whether the allowlist is exact or wide open.
+console.log(`\n   control — ${CONTROL_ORIGIN} must be REFUSED`);
+for (const probe of PROBES.filter((p) => p.enforced)) {
+	const { status, allowed } = await preflight(probe.url, CONTROL_ORIGIN, probe.method);
+	if (allowed) failures++;
+	console.log(
+		`      ${allowed ? "FAIL" : "ok  "} ${probe.label.padEnd(28)} ${status}${allowed ? "  → the allowlist admits ANY origin; the checks above prove nothing" : ""}`,
+	);
 }
 
 // A wildcard would make every check above pass for the wrong reason.
