@@ -36,7 +36,9 @@ const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
-const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
+// ImportPage lazy import kept commented — the route is hidden (see below) but the
+// component remains so re-enabling is a one-line change when the lane ships.
+// const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
 const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
 
 /** Shell + creator gate + a suspense boundary, wrapped once for every /studio route. */
@@ -324,7 +326,11 @@ export default function App() {
 						<Route path="posts/:slug/edit" element={<PostFormPage />} />
 						<Route path="projects/new" element={<ProjectFormPage />} />
 						<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
-						<Route path="import" element={<ImportPage />} />
+						{/* Import route hidden — the itch.io import endpoints all return
+					    "not yet implemented", so a creator who reaches this page finds a
+					    form that always fails. Restore when the Cross-Publishing lane
+					    ships its import endpoints. */}
+						{/* <Route path="import" element={<ImportPage />} /> */}
 						<Route path="settings" element={<StudioSettingsPage />} />
 					</Route>
 

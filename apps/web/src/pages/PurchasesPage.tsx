@@ -34,68 +34,39 @@ function fmt(n: number): string {
 	return `$${n.toFixed(2)}`;
 }
 
-type ViewMode = "month" | "preorders";
+// Pre-Orders view mode removed — the pre-order system is not yet implemented
+// (milestone 8 of Direct Purchases), so the tab always rendered empty. Restore
+// the "preorders" variant and the MonthSelector button when the lane ships.
 
 /* ------------------------------------------------------------------ */
 /*  Month Selector                                                     */
 /* ------------------------------------------------------------------ */
 
-function MonthSelector({
-	month,
-	onChange,
-	onPreorders,
-	mode,
-}: {
-	month: string;
-	onChange: (m: string) => void;
-	onPreorders: () => void;
-	mode: ViewMode;
-}) {
+function MonthSelector({ month, onChange }: { month: string; onChange: (m: string) => void }) {
 	const current = getCurrentMonth();
 
 	return (
 		<div className="flex items-center gap-3">
-			{mode === "month" ? (
-				<>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs"
-						onClick={() => onChange(offsetMonth(month, -1))}
-					>
-						&larr;
-					</button>
-					<span className="text-sm font-medium min-w-[140px] text-center">
-						{monthLabel(month)}
-						{month === current && (
-							<span className="text-xs text-base-content/40 ml-1">(current)</span>
-						)}
-					</span>
-					{month < current ? (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs"
-							onClick={() => onChange(offsetMonth(month, 1))}
-						>
-							&rarr;
-						</button>
-					) : (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs text-primary"
-							onClick={onPreorders}
-						>
-							Pre-Orders &rarr;
-						</button>
-					)}
-				</>
-			) : (
-				<>
-					<button type="button" className="btn btn-ghost btn-xs" onClick={() => onChange(current)}>
-						&larr; {monthLabel(current)}
-					</button>
-					<span className="text-sm font-medium text-primary">Pre-Orders</span>
-				</>
-			)}
+			<button
+				type="button"
+				className="btn btn-ghost btn-xs"
+				onClick={() => onChange(offsetMonth(month, -1))}
+			>
+				&larr;
+			</button>
+			<span className="text-sm font-medium min-w-[140px] text-center">
+				{monthLabel(month)}
+				{month === current && <span className="text-xs text-base-content/40 ml-1">(current)</span>}
+			</span>
+			{month < current ? (
+				<button
+					type="button"
+					className="btn btn-ghost btn-xs"
+					onClick={() => onChange(offsetMonth(month, 1))}
+				>
+					&rarr;
+				</button>
+			) : null}
 		</div>
 	);
 }
@@ -186,7 +157,6 @@ export default function PurchasesPage() {
 	const [purchases, setPurchases] = useState<Purchase[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
-	const [viewMode, setViewMode] = useState<ViewMode>("month");
 
 	const fetchPurchases = useCallback(async (month?: string) => {
 		setLoading(true);
@@ -205,25 +175,11 @@ export default function PurchasesPage() {
 	}, []);
 
 	useEffect(() => {
-		if (viewMode === "month") {
-			fetchPurchases(selectedMonth);
-		} else {
-			// TODO: Pre-orders — fetch pre-ordered content across all future dates.
-			// The pre-order system is not yet implemented. When it is, this view
-			// will show all pre-ordered items regardless of their delivery date,
-			// since pre-orders can span months (some a month away, some many months).
-			setPurchases([]);
-			setLoading(false);
-		}
-	}, [selectedMonth, viewMode, fetchPurchases]);
+		fetchPurchases(selectedMonth);
+	}, [selectedMonth, fetchPurchases]);
 
 	const handleMonthChange = (month: string) => {
-		setViewMode("month");
 		setSelectedMonth(month);
-	};
-
-	const handlePreorders = () => {
-		setViewMode("preorders");
 	};
 
 	// Compute totals
@@ -239,80 +195,56 @@ export default function PurchasesPage() {
 
 			{/* Month selector */}
 			<div className="flex justify-center mb-6">
-				<MonthSelector
-					month={selectedMonth}
-					onChange={handleMonthChange}
-					onPreorders={handlePreorders}
-					mode={viewMode}
-				/>
+				<MonthSelector month={selectedMonth} onChange={handleMonthChange} />
 			</div>
 
-			{/* Pre-orders placeholder */}
-			{viewMode === "preorders" && (
+			{/* Purchase list */}
+			{loading ? (
+				<div className="flex justify-center py-8">
+					<span className="loading loading-spinner loading-md" />
+				</div>
+			) : purchases.length > 0 ? (
+				<>
+					<div className="space-y-3">
+						{purchases.map((p) => (
+							<PurchaseRow key={p.id} purchase={p} />
+						))}
+					</div>
+
+					{/* Summary */}
+					{purchases.length > 0 && (
+						<div className="border-t-2 border-base-content/20 pt-4 mt-6 space-y-2 text-sm">
+							<div className="flex justify-between">
+								<span>Purchases ({purchases.length})</span>
+								<span className="font-medium">{fmt(totalSpent)}</span>
+							</div>
+							<div className="flex justify-between text-base-content/50">
+								<span>Processing fees</span>
+								<span>{fmt(totalFees)}</span>
+							</div>
+							<div className="flex justify-between text-base-content/50">
+								<span>To creators</span>
+								<span>{fmt(totalCreator)}</span>
+							</div>
+							<p className="text-[11px] text-base-content/30 mt-1">
+								You pay the listed price plus sales tax, and nothing else. Card processing comes out
+								of that price at cost — Anthers takes no cut. Downloads are free, forever, on any
+								number of devices.
+							</p>
+						</div>
+					)}
+				</>
+			) : (
 				<div className="card bg-base-200">
 					<div className="card-body text-center text-base-content/50">
-						<p className="font-medium">Pre-Orders</p>
+						<p>No purchases in {monthLabel(selectedMonth)}.</p>
 						<p className="text-sm mt-1">
-							No pre-orders yet. When you pre-order content, it will appear here regardless of its
-							release date.
+							Direct purchases show up here — games, music downloads, digital goods, and other
+							one-time items.
 						</p>
-						{/* TODO: Implement pre-order system. Pre-orders are one-time
-						    purchases for content that hasn't been released yet. Unlike
-						    subscription billing which is monthly, pre-orders can be for
-						    content releasing at any future date, so they're shown in a
-						    single unified list rather than month-by-month. */}
 					</div>
 				</div>
 			)}
-
-			{/* Purchase list */}
-			{viewMode === "month" &&
-				(loading ? (
-					<div className="flex justify-center py-8">
-						<span className="loading loading-spinner loading-md" />
-					</div>
-				) : purchases.length > 0 ? (
-					<>
-						<div className="space-y-3">
-							{purchases.map((p) => (
-								<PurchaseRow key={p.id} purchase={p} />
-							))}
-						</div>
-
-						{/* Summary */}
-						{purchases.length > 0 && (
-							<div className="border-t-2 border-base-content/20 pt-4 mt-6 space-y-2 text-sm">
-								<div className="flex justify-between">
-									<span>Purchases ({purchases.length})</span>
-									<span className="font-medium">{fmt(totalSpent)}</span>
-								</div>
-								<div className="flex justify-between text-base-content/50">
-									<span>Processing fees</span>
-									<span>{fmt(totalFees)}</span>
-								</div>
-								<div className="flex justify-between text-base-content/50">
-									<span>To creators</span>
-									<span>{fmt(totalCreator)}</span>
-								</div>
-								<p className="text-[11px] text-base-content/30 mt-1">
-									You pay the listed price plus sales tax, and nothing else. Card processing comes
-									out of that price at cost — Anthers takes no cut. Downloads are free, forever, on
-									any number of devices.
-								</p>
-							</div>
-						)}
-					</>
-				) : (
-					<div className="card bg-base-200">
-						<div className="card-body text-center text-base-content/50">
-							<p>No purchases in {monthLabel(selectedMonth)}.</p>
-							<p className="text-sm mt-1">
-								Direct purchases show up here — games, music downloads, digital goods, and other
-								one-time items.
-							</p>
-						</div>
-					</div>
-				))}
 		</div>
 	);
 }

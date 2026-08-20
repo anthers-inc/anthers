@@ -4,7 +4,6 @@ import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
 	ArrowTopRightOnSquareIcon,
-	ArrowUpTrayIcon,
 	ChartBarIcon,
 	Cog6ToothIcon,
 	PencilSquareIcon,
@@ -29,7 +28,9 @@ const NAV: { to: string; label: string; icon: ComponentType<{ className?: string
 	{ to: `${STUDIO}/catalog`, label: "Catalog", icon: RectangleStackIcon },
 	{ to: `${STUDIO}/posts/new`, label: "New Post", icon: PencilSquareIcon },
 	{ to: `${STUDIO}/analytics`, label: "Analytics", icon: ChartBarIcon },
-	{ to: `${STUDIO}/import`, label: "Import", icon: ArrowUpTrayIcon },
+	// Import nav hidden — the itch.io import endpoints return "not yet implemented".
+	// Restore this line (and the route + lazy import in App.tsx) when the lane ships.
+	// { to: `${STUDIO}/import`, label: "Import", icon: ArrowUpTrayIcon },
 	{ to: `${STUDIO}/settings`, label: "Settings", icon: Cog6ToothIcon },
 ];
 
