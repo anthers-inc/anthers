@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Mobile horizontal-overflow detector. Boots the production preview (serve.ts
+// Mobile horizontal-overflow DIAGNOSTIC. Boots the production preview (serve.ts
 // against ./dist), seeds the SiteGate flag, then for each route loads the page at
 // a narrow mobile viewport and walks the DOM for any element whose right edge
 // extends past the viewport's right edge (i.e. contributes to horizontal
@@ -12,40 +12,26 @@
 //   MOB_WIDTH=360 bun run scripts/mobile-overflow.ts   # custom width
 //
 // Exits non-zero if any route overflows.
+//
+// ⚠️ This is the loop you reach for while FIXING an overflow, not the thing that catches
+// one. The gate is `tests/e2e/mobile-overflow.e2e.ts`, which runs in `make verify` and in
+// CI's `browser` job; this script exists for the detail it prints and the screenshots it
+// leaves in `.screenshots/`, neither of which a test report is a good home for. Both read
+// their route list from `mobile-routes.ts` so the two cannot drift about what is covered.
 
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
+import { MOBILE_ROUTES, MOBILE_WIDTH } from "./mobile-routes";
 
 const WEB_ROOT = `${import.meta.dir}/..`;
 const OUT_DIR = `${WEB_ROOT}/.screenshots`;
 const PORT = Number(process.env.SHOT_PORT ?? 4178);
 const BASE = `http://localhost:${PORT}`;
-const WIDTH = Number(process.env.MOB_WIDTH ?? 390);
-
-const DEFAULT_ROUTES = [
-	"/",
-	"/for-creators",
-	"/about",
-	"/compare/itch-io",
-	"/compare/ghost",
-	"/demo-creator-page",
-	"/demo-creator-breakdown",
-	"/demo-infrastructure",
-	"/demo-user",
-	"/resources",
-	"/resources/pay-comparison",
-	"/resources/video-storage",
-	"/resources/creator-monetization",
-	"/subscribe",
-	"/faq",
-	"/roadmap",
-	"/login",
-	"/signup",
-];
+const WIDTH = Number(process.env.MOB_WIDTH ?? MOBILE_WIDTH);
 
 const args = process.argv.slice(2);
-const routes = args.length ? args : DEFAULT_ROUTES;
+const routes = args.length ? args : MOBILE_ROUTES;
 const slug = (route: string) => route.replace(/^\/+|\/+$/g, "").replace(/\//g, "-") || "home";
 
 async function waitForServer(url: string, timeoutMs = 30_000) {
