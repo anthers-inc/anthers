@@ -49,6 +49,21 @@
 // Parker in the first person and everything around it stays plain. The rest of
 // the page keeps "we"; the personal note is visibly his section, which is what
 // makes the shift read as candour rather than as a slip.
+//
+// 🚨 **The reference for the first-person passages is Parker's own about page,
+// `parkerhdavis.com/about`** — match it rather than writing a founder's-note
+// register from scratch, which is what the first draft did and got wrong. What
+// that page actually does: it **opens declaratively** ("I'm a director,
+// developer, writer, and composer from Colorado"), never with a greeting; it
+// builds **long multi-clause sentences** rather than punchy short ones; its
+// humour is **dry and rare** ("wore more hats than I can count" is as far as it
+// goes); and it **closes a thought on a stated principle** ("It matters how we
+// do things, even more than what we aim to do"), not on a quip. ⚠️ The rejected
+// draft read *"Hi — I'm Parker … which is a long way of saying I do all of it …
+// nobody else to blame when something breaks"* — chatty, jokey and clipped, all
+// three wrong. Note also that this page's **"What We Do" / "How We Do It"
+// headings are already lifted from that site**, so the structure was his before
+// the prose was.
 
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -401,8 +416,8 @@ export default function AboutPage() {
 					<Eyebrow>The team</Eyebrow>
 					<H2>Who We Are</H2>
 					<Lede>
-						Right now, Anthers is one person. That's worth saying plainly, and saying it here rather
-						than leaving you to work it out.
+						Anthers is one person right now — which is worth stating outright, because it is the
+						sort of thing a page like this usually finds a way around.
 					</Lede>
 				</Reveal>
 
@@ -421,15 +436,22 @@ export default function AboutPage() {
 						</div>
 						<div className="space-y-4 leading-relaxed text-base-content/70">
 							<p>
-								Hi — I'm Parker. I do the architecture, the engineering, the product and the
-								operations, which is a long way of saying I do all of it. Anthers, Inc. is filed and
-								real, and I'm currently its only director. There's no board yet, no staff, and
-								nobody else to blame when something breaks.
+								I'm Parker: a director, developer, writer, and composer from Colorado, and for the
+								moment I'm also all of Anthers. The architecture, the engineering, the product, and
+								the operations are mine, as is everything that goes wrong with any of them. Anthers,
+								Inc. is filed and real, and I am currently its only director.
 							</p>
 							<p>
-								I'd rather tell you that than show you an org chart with empty chairs in it.
-								Everything on this page is either something that already exists or something I've
-								said out loud that I intend to do, and I've tried to keep the two clearly apart.
+								I would rather tell you that plainly than describe an organization that doesn't
+								exist yet. Everything on this page is either something already working or something
+								I've committed to building, and I've worked to keep the two clearly apart — because
+								a platform that asks people to trust it with their creative work and their money
+								owes them a clear view of what it actually is, long before it owes them an
+								impressive one.
+							</p>
+							<p>
+								Anthers will not stay this small, and the plan for how it grows is public. But it is
+								this small today, and you should hear that from me rather than have to infer it.
 							</p>
 						</div>
 					</Card>
@@ -444,17 +466,24 @@ export default function AboutPage() {
 							<h3 style={serif} className="mb-2 text-lg font-medium">
 								Anthers is looking for its founding board
 							</h3>
-							<p className="leading-relaxed text-base-content/65">
-								A working board of three to five people is the next real step for the organization,
-								and every seat is open. What it asks for is time and judgment rather than a name on
-								a page — someone to chair meetings, someone comfortable reading a budget, someone to
-								keep the records straight, and at least one person whose view of the creator economy
-								is nothing like mine. If that sounds like you, or like someone you know, write to{" "}
-								<a className="link link-primary" href="mailto:contact@anthers.org">
-									contact@anthers.org
-								</a>
-								.
-							</p>
+							<div className="space-y-4 leading-relaxed text-base-content/65">
+								<p>
+									A working board of three to five people is the next real step for the
+									organization, and every seat is open. What I'm looking for is not a name on a page
+									but people willing to spend real time and judgment on this: someone to chair
+									meetings, someone at ease with a budget, someone to keep the records straight, and
+									at least one person whose view of the creative world is nothing like mine.
+								</p>
+								<p>
+									That last one matters most. An organization built to serve people I am not is
+									going to need people I am not in the room where it's decided. If that sounds like
+									you, or like someone you know, I'd like to hear from you at{" "}
+									<a className="link link-primary" href="mailto:contact@anthers.org">
+										contact@anthers.org
+									</a>
+									.
+								</p>
+							</div>
 						</div>
 					</Card>
 				</Reveal>
@@ -466,9 +495,9 @@ export default function AboutPage() {
 					<Eyebrow>Non-profit by design</Eyebrow>
 					<H2>A Colorado Nonprofit Corporation</H2>
 					<Lede>
-						Anthers, Inc. was incorporated in Colorado on August 7, 2026. Being a non-profit isn't a
-						mood we're in — the Articles of Incorporation are a public record, and two of the things
-						they say are things a promise couldn't say.
+						Anthers, Inc. was incorporated in Colorado on August 7, 2026. That is not a statement of
+						intent — the Articles of Incorporation are a public record, and two of the things they
+						say are things a promise could never say.
 					</Lede>
 					{/* The one hard fact on this page, made checkable. Everything else here is either
 					    something you can see working or something we've said we intend to do; this is
@@ -505,8 +534,8 @@ export default function AboutPage() {
 							</h3>
 						</div>
 						<p className="mb-5 leading-relaxed text-base-content/65">
-							Most of what a grown-up non-profit has, Anthers doesn't have yet. Here's what we know
-							we owe you, roughly in the order we expect to get there:
+							Most of what an established non-profit has, Anthers does not have yet. Here is what we
+							owe you, roughly in the order we expect to deliver it:
 						</p>
 						<ul className="space-y-4 text-base-content/65">
 							{[
