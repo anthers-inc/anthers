@@ -29,6 +29,21 @@
     <style>
       @import "/fonts/fonts.css";
     </style>
+    <!-- The tab icon. Referenced straight out of @anthers/brand rather than copied into
+         public/: Bun's HTML bundler resolves a rel="icon" href the same way it resolves a
+         stylesheet, emitting a content-hashed file and rewriting this to a root-absolute
+         URL — so the marks package stays the single home for the marks, which is the whole
+         point of packages/brand holding them. A second copy under public/ would be the
+         byte-identical-duplicate problem the brand split was done to remove.
+
+         The FLAT-GREEN silhouette is the deliberate pick, not the full-colour mark: the
+         lily-and-bee has petal veins and gold stamens that turn to mush at 16px, and the
+         marks README names this file and the favicon PNGs as the small-size cuts. The PNG
+         is a fallback for browsers that don't take an SVG icon, and the browser picks
+         whichever it supports rather than fetching both. -->
+    <link rel="icon" type="image/svg+xml" href="../../packages/brand/marks/anthers-mark-flat-green.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="../../packages/brand/marks/export/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="../../packages/brand/marks/export/apple-touch-icon-180.png" />
     <link rel="stylesheet" href="./src/styles/globals.css" />
   </head>
   <body>
