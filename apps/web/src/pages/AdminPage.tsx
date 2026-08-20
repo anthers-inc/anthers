@@ -66,8 +66,14 @@ interface Jobs {
 	};
 }
 
-// DigitalOcean dashboard deep-links — live logs + spend live here, not in-app.
-const DO_LINKS = [
+// Operator dashboard deep-links — live logs + spend live here, not in-app.
+//
+// ⚠️ Two vendors since 2026-08-11, which is why this is no longer "the DigitalOcean
+// links". DigitalOcean runs the app and the Postgres; media storage is Cloudflare R2.
+// The R2 entry used to point at `cloud.digitalocean.com/spaces` and landed an operator
+// on an empty DigitalOcean product — a link nobody had reason to doubt, because the
+// other three still worked.
+const OPERATOR_LINKS = [
 	{
 		label: "Apps dashboard",
 		href: "https://cloud.digitalocean.com/apps",
@@ -84,9 +90,9 @@ const DO_LINKS = [
 		hint: "Postgres metrics, connections, backups",
 	},
 	{
-		label: "Spaces (media storage)",
-		href: "https://cloud.digitalocean.com/spaces",
-		hint: "Object storage bucket + CDN",
+		label: "R2 (media storage)",
+		href: "https://dash.cloudflare.com/?to=/:account/r2/overview",
+		hint: "anthers-media-public + anthers-media-private, CORS, lifecycle",
 	},
 ];
 
@@ -418,14 +424,15 @@ export default function AdminPage() {
 						</section>
 					)}
 
-					{/* ── DigitalOcean deep-links ──────────────────────────── */}
+					{/* ── Operator deep-links ──────────────────────────────── */}
 					<section>
 						<SectionHeading>Infrastructure &amp; spend</SectionHeading>
 						<p className="text-sm text-base-content/60 mb-3">
-							Live logs and billing live in the DigitalOcean dashboard.
+							Live logs and billing live in the DigitalOcean dashboard; media storage is in
+							Cloudflare R2.
 						</p>
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							{DO_LINKS.map((l) => (
+							{OPERATOR_LINKS.map((l) => (
 								<a
 									key={l.href}
 									href={l.href}

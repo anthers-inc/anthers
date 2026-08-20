@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * StorageService interface — abstracts file storage for local dev and S3/Spaces production.
+ * StorageService interface — abstracts file storage for local dev and S3-compatible
+ * production, which is **Cloudflare R2** (`anthers-media-public` + `anthers-media-private`).
  *
  * All route handlers and jobs interact with this interface only.
  * Toggled via STORAGE_BACKEND env var: "local" (default) or "s3".
@@ -46,11 +47,17 @@ export interface StorageService {
 	/**
 	 * Read a byte range out of an object. Null when the object doesn't exist.
 	 *
-	 * This is the large-object counterpart to `read`, and it exists because that method's
-	 * "small objects only" restriction is real rather than stylistic: the P2P seeder serves
-	 * 256 KiB chunks out of assets that can be gigabytes, and `read`-ing the whole file to
-	 * hand back a slice of it puts the entire asset in the API's heap. The api component is
-	 * a 512 MB instance, so that is an OOM of the whole hub, triggered by one download.
+	 * This is the large-object counterpart to `read`, and the reason that method's "small
+	 * objects only" restriction is real rather than stylistic: `read`-ing a whole file to
+	 * hand back a slice of it puts the entire asset in the API's heap, and the api component
+	 * is a 512 MB instance — so one ranged request over a multi-gigabyte asset is an OOM of
+	 * the whole hub.
+	 *
+	 * ⚠️ **Nothing calls this today.** Its consumer was the P2P seeder, which served 256 KiB
+	 * chunks and was unwound on 2026-08-11 on privacy grounds — downloads are signed URLs
+	 * again. The method is kept because a ranged read is the correct primitive the moment
+	 * anything streams a large private object through the API rather than past it, but do
+	 * not read its presence as evidence that something does.
 	 *
 	 * `offset` is the first byte to return and `length` is how many bytes are wanted; a
 	 * range running past the end of the object yields the bytes that exist rather than an
@@ -64,8 +71,8 @@ export interface StorageService {
 	 * The size of an object in bytes, without fetching it. Null when it doesn't exist.
 	 *
 	 * Storage is the authority on how big a stored object is — `assets.file_size` is a
-	 * database column that can disagree with it, and the P2P manifest's chunk boundaries
-	 * have to match the bytes a peer will actually receive or every hash check fails.
+	 * database column written at upload and can disagree with it, so anything that has to
+	 * be right about the bytes on disk (a `Content-Length`, a range bound) asks here.
 	 */
 	size(key: string): Promise<number | null>;
 
@@ -81,21 +88,24 @@ export interface StorageService {
 	 * the client MUST send with it. In local mode this returns the direct upload
 	 * endpoint URL and no headers.
 	 *
-	 * Returns headers rather than expecting the caller to know them because the ACL
-	 * only takes effect if it travels as a request *header*: the SDK also hoists it
-	 * into the presigned query string, and Spaces silently ignores it there (verified
-	 * against the live bucket — an object signed `public-read` in the query came back
-	 * owner-only). A server that sets the ACL without the client echoing it reviews as
-	 * correct and does nothing, so the header list is part of the server's answer.
+	 * Returns headers rather than expecting the caller to know them because whether the
+	 * client must echo `x-amz-acl` is a **property of the provider**, and it is fatal in
+	 * both directions. On a per-object-ACL provider the header is the only thing that
+	 * works — `getSignedUrl` hoists the ACL into the query string, where it is silently
+	 * ignored, so a server that sets it without the client echoing it reviews as correct
+	 * and does nothing. On R2 the same header makes the upload **fail**: it changes the
+	 * canonical request the signature was computed over, so a presigned PUT carrying it
+	 * gets `403 SignatureDoesNotMatch`. `S3StorageService.getPresignedUploadUrl` derives
+	 * which applies from `config.sendObjectAcl` and carries the full reasoning.
 	 *
-	 * @param acl - Same allowlist semantics as `upload`. NOTE this is *intent*, not
-	 * enforcement: a presigned URL signs only `host`, so the uploading client can send
-	 * any `x-amz-acl` it likes and Spaces honours it over the one we signed (also
-	 * verified live). A creator can therefore publish their own upload at a stable
-	 * public URL, which is a metering hole rather than a content leak — it serves bytes
-	 * outside the access-checked, bandwidth-accounted path. Closing that needs a bucket
-	 * policy denying non-private ACLs under the presigned prefixes; it is not something
-	 * this layer can do.
+	 * @param acl - Same allowlist semantics as `upload`. 🚨 On R2 — production today — this
+	 * chooses the **bucket**, and that is what makes it enforcement rather than intent.
+	 * R2 has no per-object ACLs at all, so `anthers-media-private` has no public door for
+	 * an uploading client to prop open, whatever it sends. The hazard this note used to
+	 * describe (a creator echoing `public-read` to publish their own upload at a stable
+	 * public URL, outside the access-checked path) was real against Spaces and is
+	 * structurally absent here: the object lands in whichever bucket the *signature*
+	 * names, and the client cannot re-sign.
 	 */
 	getPresignedUploadUrl(
 		key: string,
