@@ -22,12 +22,20 @@
  * on pg-boss, and the release-readiness gate (which applies only to processed types) stays
  * out of the way of the thing being tested.
  */
-import { GAUNTLET_CREATOR_PASSWORD, GAUNTLET_CREATOR_USERNAME } from "@anthers/db/gauntlet";
+import { MEDIA_FIXTURE_PASSWORD, MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import type { BrowserContext } from "@playwright/test";
 import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
 
-/** Unique per run, so a leftover row from a crashed run can never satisfy an assertion. */
+/**
+ * Unique per run, so a leftover row from a crashed run can never satisfy an assertion.
+ *
+ * The prefix is what the stale-Work sweep below keys on — a failed run leaves a `Release
+ * walk %` Work behind on the shared `media_fixture` account, and the next run would find
+ * it by title and could pass assertions it did not earn. The sweep deletes every Work
+ * whose title matches the prefix before this run creates its own.
+ */
 const TITLE = `Release walk ${Date.now()}`;
+const TITLE_PREFIX = "Release walk ";
 
 /** The fields of a Work this walk reads back off the public Catalog. */
 interface PublicWork {
@@ -37,21 +45,59 @@ interface PublicWork {
 	authoredPrecision?: string | null;
 }
 
+/** The fields of a Work as the creator's own listing returns it (used for the sweep). */
+interface OwnedWork {
+	id: number;
+	title: string;
+}
+
 test.describe.configure({ mode: "serial" });
 
 /**
- * Sign in and plant the session cookie, the way `gauntlet.setup.ts` and
+ * 🚨 **This walk borrows `media_fixture`, and not owning the creator is what it must not
+ * do.** It used to create its own account, and that could not work.
+ *
+ * `StudioAuthGate.tsx` redirects a signed-in non-creator to `/settings`, and `PATCH
+ * /api/accounts/me` refuses `isCreator: true` unless `emailVerified` (routes/accounts.ts),
+ * which a spec cannot satisfy without receiving an email. So an account the spec signs up
+ * is a user the Studio bounces to /settings — the Studio never renders, and every
+ * assertion below fails at the first `goto("/studio/catalog")`. The handoff that tried it
+ * landed on that redirect, which reads as a Studio bug and is a test-harness one.
+ *
+ * The earlier cause was the opposite mistake — borrowing `gauntlet_creator`. The
+ * `gauntlet` project's `beforeAll` runs `deleteGauntletPosts`, which removes **every Work
+ * owned by the gauntlet creator** (matched on the creator, not a slug prefix, because
+ * "everything it owns is fixture data by definition"), and locally it runs **concurrently
+ * with `authed`** (`workers` is unset outside CI). The reset deleted this walk's Work
+ * mid-test, and the failure landed wherever the walk happened to be: a Catalog read that
+ * found nothing (`Received: null`, not `false`), or a modal that never closed. Both read
+ * as product bugs. ⚠️ **CI could never see it**: `workers: 1` in CI serialises the
+ * projects, so the two never overlap there — green on every PR, red about one local
+ * `make verify` in three.
+ *
+ * `media_fixture` is the resolution: `isCreator: true` and `emailVerified: true` (seeded
+ * by `seed-media-fixture.ts`), owned by nobody else's reset, and idempotent (seeded once
+ * in the `setup` project that `authed` depends on). The one assertion that names it —
+ * `music-player.authed.e2e.ts:52`, `toHaveCount(MEDIA_FIXTURE_TRACKS.length)` — is scoped
+ * to the album Project page, and a `service` Work titled "Release walk …" is not in that
+ * Project. The shared-ownership rule still holds in the direction that matters: this spec
+ * must clean up after itself, which the sweep at the top of the test does.
+ */
+const CREATOR = MEDIA_FIXTURE_USERNAME;
+
+/**
+ * Sign in as `media_fixture` and plant the session cookie, the way `gauntlet.setup.ts` and
  * `studio-routes.authed.e2e.ts` both do it. Not `page.request.post` — that throws an
  * opaque `"/api/auth/sign-in" cannot be parsed as a URL` even given an absolute one.
+ *
+ * The account is seeded by the `setup` project (via `bun run db:media-fixture`) before
+ * this project runs, so the sign-in always has an account to reach.
  */
 async function signInAsCreator(context: BrowserContext): Promise<string> {
 	const res = await fetch(`${API_URL}/api/auth/sign-in`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({
-			login: GAUNTLET_CREATOR_USERNAME,
-			password: GAUNTLET_CREATOR_PASSWORD,
-		}),
+		body: JSON.stringify({ login: CREATOR, password: MEDIA_FIXTURE_PASSWORD }),
 	});
 	expect(res.ok, `creator sign-in failed: ${res.status}`).toBe(true);
 	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
@@ -72,14 +118,45 @@ async function signInAsCreator(context: BrowserContext): Promise<string> {
 }
 
 /** The card for our Work, found by its unique title rather than by position in the grid. */
-const cardFor = (page: import("@playwright/test").Page) =>
+const cardFor = (page: import("@playwright_test").Page) =>
 	page.locator(".card").filter({ hasText: TITLE });
+
+/**
+ * Delete every Work owned by the signed-in creator whose title starts with the Release-walk
+ * prefix. Used twice: once before the run (sweep a crashed prior run's litter) and once
+ * after (sweep this run's own Work). A failed run between two `make verify` calls would
+ * otherwise leave a `Release walk %` row on the shared `media_fixture` account, and the
+ * next run's `find(w => w.title === TITLE)` is keyed on a *different* `Date.now()`, so it
+ * would not collide — but a stale row muddies the Catalog view the walk reads, and a
+ * shared fixture must clean up after itself.
+ *
+ * Through the API rather than the UI: the delete dialog is another surface's business, and
+ * a failed assertion must not leave a row behind that outlives this run.
+ */
+async function sweepReleaseWalkWorks(session: string): Promise<void> {
+	const mine = await fetch(`${API_URL}/api/content/works`, {
+		headers: { Cookie: `session=${session}` },
+	}).then((r) => r.json() as Promise<{ works: OwnedWork[] }>);
+	for (const w of mine.works.filter((w) => w.title.startsWith(TITLE_PREFIX))) {
+		await fetch(`${API_URL}/api/content/works/${w.id}?force=1`, {
+			method: "DELETE",
+			headers: { Cookie: `session=${session}`, Origin: WEB_ORIGIN },
+		});
+	}
+}
 
 test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	page,
 	context,
 }) => {
 	const session = await signInAsCreator(context);
+
+	// ── Sweep ───────────────────────────────────────────────────────────────
+	// A previous run that crashed after Create leaves a `Release walk %` Work on the shared
+	// `media_fixture` account. Clean it up before this run creates its own, so the Catalog
+	// view the walk reads starts from a known state — and so a shared fixture does not
+	// accumulate litter across failed local runs. See `sweepReleaseWalkWorks` above.
+	await sweepReleaseWalkWorks(session);
 
 	// ── Create ──────────────────────────────────────────────────────────────
 	await page.goto("/studio/catalog");
@@ -101,12 +178,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await modal.locator('input[type="number"][min="1900"]').fill("2015");
 
 	await page.getByRole("button", { name: /create content/i }).click();
-	// ⚠️ A longer wait than the 5s default, and only here and at Save below, because both
-	// are a modal closing on the far side of a write. On a machine that has just run the
-	// unit suites against the same Postgres that round trip genuinely exceeds five seconds
-	// sometimes — this is the other face of the race documented at the Catalog read. It
-	// does not weaken the assertion: Playwright waits only as long as it needs to, and a
-	// modal that never closes still fails.
+	// ⚠️ A longer wait than the 5s default, here and at Save below — both are a modal
+	// closing on the far side of a write, and this suite shares its Postgres with the unit
+	// suites. Headroom only: it is NOT the explanation for the flakiness this spec was
+	// famous for, which was the fixture deletion described above. An earlier pass attributed
+	// the modal timeouts to a loaded machine, which was plausible, unverified and wrong.
+	// Playwright still waits only as long as it needs, and a modal that never closes fails.
 	await expect(modal).toBeHidden({ timeout: 15_000 });
 
 	// Born private. Not a detail — it is why a Release control has to exist at all.
@@ -122,16 +199,21 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// is derived in the browser while `publicAccess` is derived on the server, from
 	// `resolveAccessSync`. Two derivations of one idea — this is where they have to meet.
 	//
-	// 🚨 **POLLED, not read once, because those two derivations are also two CLOCKS.** The
-	// card above can show its new state before this endpoint reflects it, and a single-shot
-	// fetch then reports a Work that is a few milliseconds behind as one that was never
-	// released at all. That made this the flakiest spec in the suite — it failed three
-	// pre-push runs on 2026-08-20, on a loaded machine, under two different messages
-	// ("missing from the public Catalog" here, and the modal timeout below), and both read
-	// like a product bug rather than a race. Polling changes nothing about what is asserted:
-	// if the server never agrees this still fails, with the same message.
+	// **POLLED, not read once, because those two derivations are also two clocks** — the card
+	// can show its new state a moment before this endpoint reflects it. Polling changes
+	// nothing about what is asserted: if the server never agrees this still fails, with the
+	// same message.
+	//
+	// ⚠️ **On its own this was the wrong fix, and the way it failed is the useful part.**
+	// Polling was tried first against the flakiness, on the reasoning above, and the next run
+	// failed with `Received: null` — not `false`. A Work a fetch has not caught up with reads
+	// as `false`; one that has been DELETED reads as `null`, and five seconds of polling
+	// could not conjure it back. **The distinction between "not yet" and "not there" is what
+	// pointed at the gauntlet reset**, which is the actual cause and is fixed above. A less
+	// specific assertion would have retried its way to the same red with nothing to learn
+	// from it.
 	const catalogWork = () =>
-		fetch(`${API_URL}/api/content/catalog/${GAUNTLET_CREATOR_USERNAME}`)
+		fetch(`${API_URL}/api/content/catalog/${CREATOR}`)
 			.then((r) => r.json() as Promise<{ works: PublicWork[] }>)
 			.then((cat) => cat.works.find((w) => w.title === TITLE));
 
@@ -178,15 +260,8 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		.toBe(false);
 
 	// ── Clean up ────────────────────────────────────────────────────────────
-	// Through the API rather than the UI: the delete dialog is another surface's business,
-	// and a failed assertion above must not leave a row behind that outlives this run.
-	const mine = await fetch(`${API_URL}/api/content/works`, {
-		headers: { Cookie: `session=${session}` },
-	}).then((r) => r.json() as Promise<{ works: { id: number; title: string }[] }>);
-	for (const w of mine.works.filter((w) => w.title === TITLE)) {
-		await fetch(`${API_URL}/api/content/works/${w.id}?force=1`, {
-			method: "DELETE",
-			headers: { Cookie: `session=${session}`, Origin: WEB_ORIGIN },
-		});
-	}
+	// Same helper as the opening sweep: delete every Release-walk Work this creator owns,
+	// which includes the one this run just created. A failed assertion above must not leave
+	// a row behind that outlives this run — and a shared fixture must come back to empty.
+	await sweepReleaseWalkWorks(session);
 });
