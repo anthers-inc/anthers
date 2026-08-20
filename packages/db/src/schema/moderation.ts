@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
+ * Moderation — see auth.ts for the role-classification legend. Both tables are `org`
+ * by the separation 41.02 mandates ("Moderation / labeling → Org + ATProto labelers;
+ * separation of moderation from hosting, per the Bluesky model"). The *subjects* are
+ * node content (comments, ratings); the *records* are the org's operator judgments.
+ *
+ * Both tables are polymorphic over (subject_type, subject_id) with no FK on the
+ * subject, which is already the "soft cross-boundary FK" pattern 41.02's decision #2
+ * asks for — the org references node content by id without a constraint that would
+ * break if the content moved to a node.
+ */
+/**
  * Moderation — reports from users, and the append-only record of what an
  * operator did about them.
  *
@@ -39,6 +50,10 @@ import { users } from "./auth.js";
  * do stack, and the queue orders by that count — the only signal available with
  * no automated filtering behind it.
  */
+// org — a user's report is an operator-queue item; the org decides. The subject is
+// node content (comment/rating), referenced polymorphically with no FK (the soft
+// cross-boundary pattern). Both `users` FKs are set-null: the record outlives the
+// reporter and the resolver.
 export const moderationReports = pgTable(
 	"moderation_reports",
 	{
@@ -83,6 +98,10 @@ export const moderationReports = pgTable(
  * these rows; a reversal is a new `restore` row, so the history reads as the
  * sequence of decisions actually taken.
  */
+// org — the append-only log of operator decisions. Org-only by the Bluesky model:
+// the authority that moderates is separated from the host. The `actorRole` column
+// anticipates ATProto labelers ("the authority is always us" is the assumption not
+// to bake in), which is the future org-role extension.
 export const moderationActions = pgTable(
 	"moderation_actions",
 	{

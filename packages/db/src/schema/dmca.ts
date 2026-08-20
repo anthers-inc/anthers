@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
+ * DMCA schema — see auth.ts for the role-classification legend.
+ *
+ * `dmca_notices` is `org` by the Keeper model (60.02 names DMCA as non-delegable floor
+ * work with a statutory clock). The *subject* is a node Work (referenced by id with
+ * set-null, the soft cross-boundary pattern); the *notice* is a legal claim the org
+ * must screen, act on, and clock — not something a creator node processes. The
+ * complainant is a member of the public with no account; the creator is the subject of
+ * the claim. Neither end is the org, but the obligation is.
+ */
+/**
  * DMCA — notices under 17 U.S.C. § 512(c), counter-notices under § 512(g)(3),
  * and the statutory clocks that connect them.
  *
@@ -121,6 +131,10 @@ export const DMCA_NOTICE_STATUSES: readonly DmcaNoticeStatus[] = [
  * at the version they saw it — the form copy is editable, but what someone
  * agreed to is fixed at the moment they agreed.
  */
+// org — a DMCA notice is a statutory claim the org must process under § 512. The
+// Work is node content (referenced by id, set-null); the notice itself is the org's
+// legal record, with clocks and finality the org owns. Both `users` FKs are set-null:
+// the notice outlives the complainant's and operator's accounts.
 export const dmcaNotices = pgTable(
 	"dmca_notices",
 	{

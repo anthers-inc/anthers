@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Support-model economics schema. A user holds an `account` carrying a **monthly amount
- * in dollars** given to Anthers (`anthersSupport`) — that amount IS their Badge (Root $3
- * / Sprout $6 / Petal $9 / Blossom $12, "+" beyond) and their Anthers subscription. Half
- * of it funds the **Time Pool**; the rest pays its share of the at-cost Payments line and
- * leaves a **remainder** funding free access and the charitable programs. What a user
- * directs at individual creators is tracked per-creator in `seed_allocations`. This file
- * also holds the shared economics tables: time (attention) events, pool distributions,
- * and creator gates.
+ * Support-model economics schema — see auth.ts for the role-classification legend.
  *
- * ⚠️ **This header described the retired model until 2026-08-19**, naming a *count* of
- * "Anthers-Seeds" at $3 each, a "rank", and streaming folded in at cost against no
- * wallet. Three of those mechanisms are gone (the unit, the rank noun, the bandwidth
- * line) — and it named **`anthersSeeds`**, a field that does not exist: the column is
- * `anthersSupport`, renamed when a count became an amount. A docblock naming a dead
- * identifier is worse than a dated one, because grepping the name it teaches finds
- * nothing at all.
+ * 🚨 This file is where the node/org boundary is *hardest* to draw, and most of it is
+ * `org` by the treasury rule: 41.02 says "Payments, pools, payouts, KYC, charitable
+ * accounting → Org only. Money cannot federate." A creator's *gates* (what they charge
+ * for access) are the exception — those are the creator's own pricing, node-owned.
+ *
+ * `attentionEvents` is the table 41.02 predicts will be hardest to classify, and it
+ * is: org-role by volume and by being pool-accounting input, node-role by being about
+ * one creator's work. See the per-table comment and the findings in 41.02.
  */
 import { sql } from "drizzle-orm";
 import {
@@ -41,6 +35,9 @@ import { works } from "./content.js";
  * Delivery is free at any volume, nothing writes it, and it stays only because dropping
  * it is a migration of its own.
  */
+// org — a user's support account carries the billing relationship (Stripe customer,
+// subscription, period). 41.02: "Payments, pools, payouts → Org only. Money cannot
+// federate." The `isSelfHosting` flag is a creator-side claim but the org prices it.
 export const accounts = pgTable("accounts", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
@@ -74,6 +71,8 @@ export const accounts = pgTable("accounts", {
  * consumption history/analytics. Records the amount given to Anthers and what flowed:
  * Time Pool (to creators), the remainder, and stream consumption.
  */
+// org — a per-cycle economic snapshot, kept for org-side spend/consumption analytics.
+// Money record; org-only.
 export const accountCycles = pgTable(
 	"account_cycles",
 	{
@@ -97,6 +96,14 @@ export const accountCycles = pgTable(
 	(table) => [uniqueIndex("uq_account_cycles_user_cycle").on(table.userId, table.billingCycle)],
 );
 
+// both — the table 41.02 predicts will resist classification, and does. Org-role by
+// volume (the highest-write table, "Time-event ingestion → Org") and by being
+// pool-accounting input. Node-role by being about *one creator's* work (`workId`,
+// `creatorId`). The row's *subject* is node content; the row's *purpose* is org
+// accounting. Classified `both` because neither half is decorative — the node needs
+// to know a Work earned minutes, the org needs to distribute them. This is the finding
+// to carry to 41.02: the boundary runs through the middle of this table, not between
+// it and its neighbours.
 export const attentionEvents = pgTable(
 	"attention_events",
 	{
@@ -165,6 +172,10 @@ export const attentionEvents = pgTable(
  * reports unique viewers over the raw window only, and says which window that is,
  * rather than adding daily counts together and calling the total unique.
  */
+// org — the daily rollup is the org's analytics and the privacy-preserving survivor
+// of raw event deletion (51.05: "aggregated into per-Work and per-creator totals and
+// the per-person records are deleted"). No `userId` column by design — this is the org's
+// anonymized record, not a node record.
 export const attentionDaily = pgTable(
 	"attention_daily",
 	{
@@ -214,6 +225,10 @@ export const attentionDaily = pgTable(
 // creator, which clears that creator's Badges. The account's `creatorSupportTotal` is the
 // sum of these. (The table name `seed_allocations` stays: it is a schema identifier whose
 // meaning did not change, per the copy-rules-not-schema-rules norm.)
+// org — a user's directed support to a creator, this cycle. The billing contract is
+// org-side (41.02: "Subscriber relationships: Both; Billing contract org-side"). The
+// `atprotoUri` column anticipates a future where the canonical assertion moves to the
+// user's repo, but today the row is the org's billing record.
 export const seedAllocations = pgTable(
 	"seed_allocations",
 	{
@@ -239,6 +254,9 @@ export const seedAllocations = pgTable(
 	],
 );
 
+// org — a pool distribution is a *payment record* (the doc comment says so: "this row
+// is a payment record, not a viewing one"). Both FKs are set-null because financial
+// records outlive accounts. 41.02: money cannot federate; this is the org's ledger.
 export const poolDistributions = pgTable(
 	"pool_distributions",
 	{
@@ -292,6 +310,9 @@ export const poolDistributions = pgTable(
  * Naming the rungs is this table's job; deciding a Work's access is `works.seed_access`'s,
  * and a Work may gate at a threshold no rung is named for.
  */
+// node — a creator's own gate ladder is their pricing, node-owned content. The org
+// reads it to resolve access, but the creator defines it. This is the one table in
+// this file where the creator, not the org, owns the row.
 export const creatorGates = pgTable(
 	"creator_gates",
 	{
