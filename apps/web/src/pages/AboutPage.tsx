@@ -5,8 +5,50 @@
 // serif over Nunito Sans. The route wraps this page in the shared <MeadowDecor>
 // (pollen + woven side vines) and LoggedOutLayout (Meadow footer + grassy
 // floor), so this file only styles the content: alternating tinted section
-// bands, the eyebrow/heading/lede rhythm, and rounded cards. Copy is verbatim;
-// the FlipCard interaction is preserved.
+// bands, the eyebrow/heading/lede rhythm, and rounded cards.
+//
+// 🚨 **This page describes the organization AS IT IS, and as of 2026-08-20 that
+// is one person and a state filing.** `Anthers, Inc.` is a Colorado nonprofit
+// corporation (2026-08-07, SOS ID 20261969882) with Parker as sole initial
+// director. There is no board, the bylaws and the four founding policies are
+// drafted and unadopted, and the federal exemption application is not filed.
+//
+// What was removed on 2026-08-20, and the milestone that earns each back:
+//
+//   • Three "?" board flip cards (Chair / Treasurer / Secretary) with bios and
+//     a *Seeking candidates* tag ....................... the board is seated
+//   • A footnote on three-year staggered terms and ED
+//     recusal, both from bylaws nobody has adopted ..... the bylaws are adopted
+//   • An "Independent Board" governance pillar claiming
+//     "authority to override operational decisions" .... the board is seated
+//   • "No Private Inurement" resting on *board-approved*
+//     compensation (the Articles' prohibition is real
+//     and stays; the board approving pay is not) ....... the board is seated
+//   • A Reports & Compliance card promising an annual
+//     Form 990, Impact Report and independent audit .... each is first published
+//
+// None of it was a lie about the future and all of it was a claim about the
+// present — the same shape as *"where a document claims an absence, that absence
+// needs a test"*, arriving from the other side: a reader met a governed
+// organization and would have found one person. `about-claims.test.ts` beside
+// this file holds the line, one assertion per claim, each naming the milestone
+// that lets you delete it. ⚠️ **Delete an assertion in the same commit as the
+// milestone, never to make a red test green.**
+//
+// 🚨 **Federal exemption is not mentioned at all, and that is deliberate.**
+// 63.01 § Claims & honesty: don't call it a "501(c)(3)", and don't call the
+// exemption "pending" or "applied for" either, because the Form 1023 has not
+// been filed. The honest ceiling is *"a Colorado nonprofit corporation"* —
+// say nothing about federal status. That is also why "Form 990" is gone rather
+// than re-tensed: naming the form invites the phrase back, and "annual public
+// filings" says the same thing in the voice this page wants anyway.
+//
+// **Voice (Parker, 2026-08-20): this is not a court filing and it is not
+// marketing language.** It is the most direct, interpersonal page on the site,
+// and while Anthers is one person it should read that way — so § Who We Are is
+// Parker in the first person and everything around it stays plain. The rest of
+// the page keeps "we"; the personal note is visibly his section, which is what
+// makes the shift read as candour rather than as a slip.
 
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
@@ -16,16 +58,14 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import {
 	AcademicCapIcon,
-	DocumentTextIcon,
-	EyeIcon,
 	GlobeAltIcon,
 	HeartIcon,
 	LockClosedIcon,
+	MapIcon,
 	ScaleIcon,
 	ShieldCheckIcon,
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
-import { useState } from "react";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -33,12 +73,17 @@ const serif = { fontFamily: FONTS.fraunces };
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
+// The four programme pillars, in the order 60.01 funds them. `fundedNow` marks the
+// one that is paid for from the first dollar anyone gives, because free access comes
+// out of the same remainder — the other three are commitments with no budget behind
+// them yet, and a page showing four equal cards says otherwise.
 const FOUNDATION_PILLARS = [
 	{
 		icon: ShieldCheckIcon,
 		title: "Infrastructure Equity",
 		description:
 			"No creator is priced out of reaching their audience. Anthers subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
+		fundedNow: true,
 	},
 	{
 		icon: AcademicCapIcon,
@@ -60,118 +105,21 @@ const FOUNDATION_PILLARS = [
 	},
 ];
 
-const TEAM_MEMBERS = [
+// What the Articles of Incorporation already do, which is the whole of what can be
+// said about Anthers' governance today. Both are in the filing and both are public
+// record; neither needs a board or a federal exemption to be true.
+const ARTICLES_LOCKS = [
 	{
-		initials: "P",
-		name: "Parker",
-		role: "Founder & Executive Director",
-		bio: "Architecture, engineering, product, and operations. Building the platform, the organization, and the case that non-profit infrastructure can replace extractive alternatives.",
+		icon: LockClosedIcon,
+		title: "The assets are locked in",
+		text: "If Anthers ever stops operating, the Articles send whatever is left to another exempt organization. Not to Parker, and not to anyone else.",
 	},
 	{
-		initials: "?",
-		name: "Board Chair",
-		role: "Board of Directors",
-		bio: "Independent chair with non-profit board experience. Runs board meetings, manages ED evaluation, and ensures governance discipline from day one.",
-		placeholder: true,
-	},
-	{
-		initials: "?",
-		name: "Treasurer",
-		role: "Board of Directors",
-		bio: "Oversees budgets, reviews financial statements, and chairs the finance function. Leads the compensation review process and audit oversight.",
-		placeholder: true,
-	},
-	{
-		initials: "?",
-		name: "Secretary",
-		role: "Board of Directors",
-		bio: "Responsible for meeting minutes, document retention, and ensuring the organization maintains proper records and governance compliance.",
-		placeholder: true,
+		icon: ScaleIcon,
+		title: "Nobody can be paid out",
+		text: "The Articles prohibit handing Anthers' earnings to insiders. There are no owners and no shares, so there is nobody positioned to take a share.",
 	},
 ];
-
-/* ------------------------------------------------------------------ */
-/*  Flip Card Component                                                */
-/* ------------------------------------------------------------------ */
-
-function FlipCard({
-	initials,
-	name,
-	role,
-	bio,
-	placeholder,
-}: {
-	initials: string;
-	name: string;
-	role: string;
-	bio: string;
-	placeholder?: boolean;
-}) {
-	const [flipped, setFlipped] = useState(false);
-
-	return (
-		<div
-			className="perspective-[800px] h-64 w-full"
-			onMouseEnter={() => setFlipped(true)}
-			onMouseLeave={() => setFlipped(false)}
-		>
-			<div
-				className={`relative w-full h-full transition-transform duration-500 ${
-					flipped ? "[transform:rotateY(180deg)]" : ""
-				}`}
-				style={{ transformStyle: "preserve-3d" }}
-			>
-				{/* Front */}
-				<div
-					className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-base-content/10 bg-base-100 p-6 text-center shadow-sm"
-					style={{ backfaceVisibility: "hidden" }}
-				>
-					<div
-						className={`w-20 h-20 rounded-full mb-4 flex items-center justify-center ${
-							placeholder
-								? "bg-base-300 border-2 border-dashed border-base-content/20"
-								: "bg-primary/10"
-						}`}
-					>
-						<span
-							className={`text-2xl font-bold ${
-								placeholder ? "text-base-content/25" : "text-primary"
-							}`}
-						>
-							{initials}
-						</span>
-					</div>
-					<h3
-						style={serif}
-						className={`text-lg font-medium ${placeholder ? "text-base-content/40" : ""}`}
-					>
-						{name}
-					</h3>
-					<p className="text-sm text-base-content/50">{role}</p>
-				</div>
-
-				{/* Back */}
-				<div
-					className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-base-content/10 bg-base-100 p-6 text-center shadow-sm [transform:rotateY(180deg)]"
-					style={{ backfaceVisibility: "hidden" }}
-				>
-					<h3
-						style={serif}
-						className={`mb-3 text-lg font-medium ${placeholder ? "text-base-content/40" : ""}`}
-					>
-						{name}
-					</h3>
-					<p className="text-sm text-base-content/60 leading-relaxed">{bio}</p>
-					{placeholder && (
-						<span className="mt-3 text-xs text-base-content/30 uppercase tracking-wider">
-							Seeking candidates
-						</span>
-					)}
-				</div>
-			</div>
-		</div>
-	);
-}
 
 /* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
@@ -321,9 +269,9 @@ export default function AboutPage() {
 								For Audiences
 							</h3>
 							<p className="leading-relaxed text-base-content/65">
-								Consumers see what they asked to see. Feeds are chronological and subscriber-driven
-								by default. There are no ads, no data monetization, and no engagement-maximization
-								algorithms. Subscribers know exactly where every dollar goes—and can see it.
+								You see what you asked to see. Feeds are chronological and follower-driven by
+								default. There are no ads, no data monetization, and no engagement-maximization
+								algorithms. You can see exactly where every dollar you give ends up, line by line.
 							</p>
 						</div>
 					</Reveal>
@@ -338,8 +286,17 @@ export default function AboutPage() {
 						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 							The programs are the operational heart of Anthers' mission, funded by the remainder of
 							what is given to Anthers, plus the half-again on creator storage above the free
-							allowance. The great majority of it is charitable: it funds free access for everyone,
-							plus infrastructure equity, education, creation grants, and emergency assistance.
+							allowance.
+						</p>
+						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
+							Only the first of these four is paid for today. Free access comes out of that same
+							remainder from the first dollar anyone gives, so it is funded by the way the model is
+							built rather than by a budget we have to find. The other three are commitments with no
+							budget behind them yet, and the{" "}
+							<Link to="/roadmap" className="link link-primary">
+								public roadmap
+							</Link>{" "}
+							carries the order we expect to reach them in.
 						</p>
 					</Reveal>
 					<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -353,6 +310,11 @@ export default function AboutPage() {
 										<h3 style={serif} className="mb-1 text-lg font-medium">
 											{pillar.title}
 										</h3>
+										{pillar.fundedNow && (
+											<p className="mb-1 text-xs uppercase tracking-wider text-secondary">
+												Funded from day one
+											</p>
+										)}
 										<p className="text-sm leading-relaxed text-base-content/65">
 											{pillar.description}
 										</p>
@@ -364,7 +326,7 @@ export default function AboutPage() {
 					<Reveal>
 						<div className="mt-10">
 							<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
-								See Where Your Subscription Goes
+								See Where Your Money Goes
 							</Link>
 						</div>
 					</Reveal>
@@ -377,8 +339,8 @@ export default function AboutPage() {
 					<Eyebrow>By design</Eyebrow>
 					<H2>How We Do It</H2>
 					<Lede>
-						These aren't aspirations. They are structural properties of how Anthers is built,
-						incorporated, and governed.
+						Some of this is already true and some of it is a commitment we haven't delivered on yet.
+						The difference matters, so each one below tells you which it is.
 					</Lede>
 				</Reveal>
 
@@ -407,7 +369,7 @@ export default function AboutPage() {
 							{
 								num: "04",
 								title: "The Profit Motive Is Structurally Eliminated",
-								text: "Not voluntarily set aside—legally removed. A non-profit of the kind Anthers is being formed as cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Anthers dissolves, its assets go to another exempt organization.",
+								text: "Not voluntarily set aside — absent. Anthers, Inc. has no owners and no shares, so there is nobody to distribute a profit to, nothing to sell, and no investor to take on. If it ever dissolves, the Articles send its assets to another exempt organization. This one is done, and it was done the day the incorporation was filed.",
 							},
 							{
 								num: "05",
@@ -439,22 +401,62 @@ export default function AboutPage() {
 					<Eyebrow>The team</Eyebrow>
 					<H2>Who We Are</H2>
 					<Lede>
-						Anthers is in its founding phase. The team is small, building in public, and actively
-						seeking board members who believe the creative internet deserves better.
+						Right now, Anthers is one person. That's worth saying plainly, and saying it here rather
+						than leaving you to work it out.
 					</Lede>
 				</Reveal>
 
-				<div className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-					{TEAM_MEMBERS.map((member) => (
-						<FlipCard key={member.name} {...member} />
-					))}
-				</div>
+				<Reveal className="mx-auto mt-14 block max-w-3xl">
+					<Card className="text-left">
+						<div className="mb-6 flex items-center gap-4">
+							<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10">
+								<span className="text-2xl font-bold text-primary">P</span>
+							</div>
+							<div>
+								<h3 style={serif} className="text-lg font-medium">
+									Parker
+								</h3>
+								<p className="text-sm text-base-content/50">Founder</p>
+							</div>
+						</div>
+						<div className="space-y-4 leading-relaxed text-base-content/70">
+							<p>
+								Hi — I'm Parker. I do the architecture, the engineering, the product and the
+								operations, which is a long way of saying I do all of it. Anthers, Inc. is filed and
+								real, and I'm currently its only director. There's no board yet, no staff, and
+								nobody else to blame when something breaks.
+							</p>
+							<p>
+								I'd rather tell you that than show you an org chart with empty chairs in it.
+								Everything on this page is either something that already exists or something I've
+								said out loud that I intend to do, and I've tried to keep the two clearly apart.
+							</p>
+						</div>
+					</Card>
+				</Reveal>
 
-				<Reveal>
-					<p className="mx-auto mt-10 max-w-lg text-xs leading-relaxed text-base-content/45">
-						Board seats carry three-year staggered terms with regular rotation. The Executive
-						Director serves ex officio and is recused from votes on their own compensation.
-					</p>
+				<Reveal className="mx-auto mt-6 block max-w-3xl">
+					<Card className="flex flex-col gap-4 text-left sm:flex-row">
+						<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
+							<UserGroupIcon className="h-6 w-6" />
+						</div>
+						<div>
+							<h3 style={serif} className="mb-2 text-lg font-medium">
+								Anthers is looking for its founding board
+							</h3>
+							<p className="leading-relaxed text-base-content/65">
+								A working board of three to five people is the next real step for the organization,
+								and every seat is open. What it asks for is time and judgment rather than a name on
+								a page — someone to chair meetings, someone comfortable reading a budget, someone to
+								keep the records straight, and at least one person whose view of the creator economy
+								is nothing like mine. If that sounds like you, or like someone you know, write to{" "}
+								<a className="link link-primary" href="mailto:contact@anthers.org">
+									contact@anthers.org
+								</a>
+								.
+							</p>
+						</div>
+					</Card>
 				</Reveal>
 			</Section>
 
@@ -464,38 +466,21 @@ export default function AboutPage() {
 					<Eyebrow>Non-profit by design</Eyebrow>
 					<H2>A Colorado Nonprofit Corporation</H2>
 					<Lede>
-						Anthers, Inc. is a non-profit because the only way to guarantee that our platform always
-						serves creators is to make it legally impossible for it to act otherwise. Anthers cannot
-						distribute profits to insiders, cannot be acquired, and cannot have its mission diluted
-						by investors. If it ever ceases to operate, its assets go to another exempt
-						organization, not to founders or shareholders.
+						Anthers, Inc. was incorporated in Colorado on August 7, 2026. Being a non-profit isn't a
+						mood we're in — the Articles of Incorporation are a public record, and two of the things
+						they say are things a promise couldn't say.
 					</Lede>
+					{/* The one hard fact on this page, made checkable. Everything else here is either
+					    something you can see working or something we've said we intend to do; this is
+					    the one you can go and verify without taking our word for any of it. */}
+					<p className="mx-auto mt-4 max-w-2xl text-sm text-base-content/50">
+						You can look it up — Colorado Secretary of State ID 20261969882.
+					</p>
 				</Reveal>
 
-				{/* Governance — icon row */}
-				<div className="mx-auto mt-14 grid max-w-4xl grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-					{[
-						{
-							icon: LockClosedIcon,
-							title: "Asset Lock",
-							text: "Dissolution sends assets to another exempt org—never to insiders.",
-						},
-						{
-							icon: ScaleIcon,
-							title: "No Private Inurement",
-							text: "Compensation is reasonable, board-approved, and IRS-enforced.",
-						},
-						{
-							icon: EyeIcon,
-							title: "Public Accountability",
-							text: "Form 990 filings, financials, and governance are public record.",
-						},
-						{
-							icon: UserGroupIcon,
-							title: "Independent Board",
-							text: "Real oversight with the authority to override operational decisions.",
-						},
-					].map((item, i) => (
+				{/* What the Articles already do */}
+				<div className="mx-auto mt-14 grid max-w-3xl grid-cols-1 gap-8 sm:grid-cols-2">
+					{ARTICLES_LOCKS.map((item, i) => (
 						<Reveal key={item.title} delay={i * 100}>
 							<div className="text-center">
 								<div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -504,56 +489,48 @@ export default function AboutPage() {
 								<h3 style={serif} className="mb-1 text-base font-medium">
 									{item.title}
 								</h3>
-								<p className="text-xs leading-relaxed text-base-content/55">{item.text}</p>
+								<p className="text-sm leading-relaxed text-base-content/55">{item.text}</p>
 							</div>
 						</Reveal>
 					))}
 				</div>
 
-				{/* Reports & Compliance */}
+				{/* What comes next */}
 				<Reveal className="mx-auto mt-14 block max-w-3xl">
 					<Card className="text-left">
-						<div className="mb-6 flex items-center gap-2">
-							<DocumentTextIcon className="h-6 w-6 text-primary" />
+						<div className="mb-5 flex items-center gap-2">
+							<MapIcon className="h-6 w-6 text-primary" />
 							<h3 style={serif} className="text-xl font-medium">
-								Reports & Compliance
+								What comes next
 							</h3>
 						</div>
-						<div className="divide-y divide-base-content/10">
+						<p className="mb-5 leading-relaxed text-base-content/65">
+							Most of what a grown-up non-profit has, Anthers doesn't have yet. Here's what we know
+							we owe you, roughly in the order we expect to get there:
+						</p>
+						<ul className="space-y-4 text-base-content/65">
 							{[
-								{
-									title: "Form 990",
-									description:
-										"Annual IRS filing disclosing finances, compensation, activities, and governance. Searchable on Candid / GuideStar.",
-									cadence: "Annual",
-								},
-								{
-									title: "Impact Report",
-									description:
-										"Program allocations, outcomes, and grant activity across all four pillars.",
-									cadence: "Annual",
-								},
-								{
-									title: "Independent Audit",
-									description:
-										"Financial statements reviewed by an independent auditor to ensure accuracy and accountability.",
-									cadence: "Annual",
-								},
-							].map((doc) => (
-								<div
-									key={doc.title}
-									className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:gap-6"
-								>
-									<div className="shrink-0 md:w-40">
-										<h4 className="text-sm font-semibold">{doc.title}</h4>
-									</div>
-									<p className="flex-1 text-sm text-base-content/60">{doc.description}</p>
-									<span className="shrink-0 text-xs uppercase tracking-wider text-base-content/40">
-										{doc.cadence}
-									</span>
-								</div>
+								"A founding board, seated as the right people are found rather than to a date on a calendar.",
+								"Bylaws and the founding governance policies, which are drafted and which the board adopts once there is a board to adopt them.",
+								"Annual public reporting on where the money actually went, once there's a year of it worth reporting on.",
+							].map((line) => (
+								<li key={line} className="flex gap-3 leading-relaxed">
+									<span
+										aria-hidden
+										className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50"
+									/>
+									<span>{line}</span>
+								</li>
 							))}
-						</div>
+						</ul>
+						<p className="mt-5 leading-relaxed text-base-content/65">
+							The{" "}
+							<Link to="/roadmap" className="link link-primary">
+								public roadmap
+							</Link>{" "}
+							carries the rest of the sequence, for the organization and the platform both. Where it
+							gives timing, read that as our current best guess rather than a commitment.
+						</p>
 					</Card>
 				</Reveal>
 			</Section>
