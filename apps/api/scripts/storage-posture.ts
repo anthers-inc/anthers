@@ -17,9 +17,14 @@
  *
  * Read-only by default. `--write-probe` additionally round-trips a throwaway object to
  * answer the question no configuration read can: what ACL does a PUT actually produce?
+ * `--cors-only` runs the preflight matrix alone and needs **no credentials at all**, which
+ * is what lets a scheduled workflow watch the setting that broke.
  *
  *   bun run apps/api/scripts/storage-posture.ts               # inspect config + CORS
  *   bun run apps/api/scripts/storage-posture.ts --write-probe # + real PUT/read/delete
+ *   bun run apps/api/scripts/storage-posture.ts --cors-only   # preflights only, no secrets
+ *
+ * Exit codes: 0 clean, 1 a real finding, 2 the live state could not be determined.
  *
  * Reads STORAGE_* through the app's own resolveStorageConfig(), so it always inspects the
  * same place the application talks to. Point it at prod's environment to check prod.
@@ -31,17 +36,55 @@
  * regardless.
  */
 
-import {
-	DeleteObjectCommand,
-	GetBucketAclCommand,
-	GetBucketCorsCommand,
-	GetBucketPolicyCommand,
-	GetObjectAclCommand,
-	PutObjectCommand,
-	S3Client,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { resolveStorageConfig } from "../src/services/storage/config.js";
+
+const writeProbe = process.argv.includes("--write-probe");
+
+/**
+ * ⭐ **`--cors-only` needs NO CREDENTIALS, and that is what makes it automatable.**
+ *
+ * A CORS preflight is an unauthenticated `OPTIONS` — the bucket answers it before any
+ * signature is considered — so the check that would have caught the `www` outage can run
+ * anywhere, including a scheduled workflow with no vault access. Everything else in this
+ * file needs the runtime key, which is why the rest is a manual tool.
+ *
+ * The non-secret `STORAGE_*` values come from the committed spec when the environment does
+ * not supply them. 🚨 **Deliberately NOT through `loadSharedSpecEnv`**: that list feeds the
+ * API's own boot path, and its docblock explains at length why `STORAGE_*` must never join
+ * it — a machine with no `.env` would take `STORAGE_BACKEND=s3` from the spec and boot
+ * straight into a credential error. Reading them here, in a script that only ever sends an
+ * OPTIONS request, borrows none of that hazard.
+ */
+const corsOnly = process.argv.includes("--cors-only");
+
+function specValue(key: string): string {
+	if ((process.env[key] ?? "") !== "") return process.env[key] as string;
+	let dir = import.meta.dir;
+	for (let depth = 0; depth < 8; depth++) {
+		const candidate = join(dir, ".do", "app.yaml");
+		if (existsSync(candidate)) {
+			type Entry = { key?: string; value?: string; type?: string };
+			const spec = Bun.YAML.parse(readFileSync(candidate, "utf8")) as {
+				envs?: Entry[];
+				services?: { envs?: Entry[] }[];
+				workers?: { envs?: Entry[] }[];
+			};
+			const all = [
+				...(spec.envs ?? []),
+				...(spec.services ?? []).flatMap((s) => s.envs ?? []),
+				...(spec.workers ?? []).flatMap((w) => w.envs ?? []),
+			];
+			const hit = all.find((e) => e.key === key && e.type !== "SECRET");
+			return hit?.value ?? "";
+		}
+		const parent = dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	return "";
+}
 
 /**
  * Configuration comes from `resolveStorageConfig()` — the same resolver the application
@@ -51,19 +94,62 @@ import { resolveStorageConfig } from "../src/services/storage/config.js";
  * probe could disagree with the app about where storage even *is*. That is a bad property
  * in the one tool whose job is to tell you what production actually looks like, and it
  * became an outright bug when the app moved to R2 while this file still pointed at Spaces.
+ *
+ * Under `--cors-only` the same shape is assembled from non-secret values alone, because
+ * `resolveStorageConfig` requires the key and secret and would throw before the one check
+ * that does not need them could run.
  */
-const config = resolveStorageConfig();
-const writeProbe = process.argv.includes("--write-probe");
+const config = corsOnly
+	? {
+			region: specValue("STORAGE_REGION") || "auto",
+			bucket: specValue("STORAGE_BUCKET"),
+			publicBucket: specValue("STORAGE_PUBLIC_BUCKET"),
+			endpoint: specValue("STORAGE_ENDPOINT"),
+			publicBaseUrl: specValue("STORAGE_PUBLIC_BASE_URL").replace(/\/+$/, ""),
+			forcePathStyle: specValue("STORAGE_FORCE_PATH_STYLE") === "true",
+			// The bucket carries access on a two-bucket provider, so nothing echoes an ACL
+			// header — the same rule `resolveStorageConfig` derives.
+			sendObjectAcl: false,
+			accessKeyId: "",
+			secretAccessKey: "",
+		}
+	: resolveStorageConfig();
 
-const s3 = new S3Client({
-	region: config.region,
-	endpoint: config.endpoint,
-	credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
-	forcePathStyle: config.forcePathStyle,
-	// Some providers reject the SDK's default flexible-checksum trailers — same reason as s3.ts.
-	requestChecksumCalculation: "WHEN_REQUIRED",
-	responseChecksumValidation: "WHEN_REQUIRED",
-});
+if (corsOnly && (!config.endpoint || !config.bucket)) {
+	console.error(
+		"storage-posture --cors-only: no STORAGE_ENDPOINT/STORAGE_BUCKET in the environment or .do/app.yaml",
+	);
+	process.exit(2);
+}
+
+/**
+ * 🚨 **The AWS SDK is imported DYNAMICALLY, and `--cors-only` must never reach it.**
+ *
+ * `deploy-watch.yml` runs this with **no `bun install`** — a property that workflow states
+ * outright and relies on, because `deploy-status` and `spec-diff` use only Bun built-ins. A
+ * static `@aws-sdk/client-s3` import would fail to resolve there and exit non-zero, and
+ * since a red run IS that workflow's alert channel, the watchdog would be indistinguishable
+ * from the thing it watches for. That exact failure already cost this workflow its first
+ * day alive (no `setup-bun`, every run exit 127), so it is worth not repeating in a
+ * different costume.
+ */
+const sdk = corsOnly ? null : await import("@aws-sdk/client-s3");
+
+const s3 =
+	corsOnly || !sdk
+		? null
+		: new sdk.S3Client({
+				region: config.region,
+				endpoint: config.endpoint,
+				credentials: {
+					accessKeyId: config.accessKeyId,
+					secretAccessKey: config.secretAccessKey,
+				},
+				forcePathStyle: config.forcePathStyle,
+				// Some providers reject the SDK's default flexible-checksum trailers — same reason as s3.ts.
+				requestChecksumCalculation: "WHEN_REQUIRED",
+				responseChecksumValidation: "WHEN_REQUIRED",
+			});
 
 const region = config.region;
 const bucket = config.bucket;
@@ -156,27 +242,42 @@ const PROBES = [
 	},
 ] as const;
 
-/** One preflight. Returns the status and whether the origin was echoed back. */
+/**
+ * One preflight. Returns the status and whether the origin was echoed back.
+ *
+ * ⚠️ **`unreachable` is a third answer, not a failure**, and the distinction is the same one
+ * `deploy-status` draws between exit 1 and exit 2: a network error from wherever this runs
+ * is evidence about the network, not about our configuration. Counting it as a finding is
+ * how a scheduled check starts crying wolf, and a check people have learned to ignore is
+ * worth less than no check.
+ */
 async function preflight(url: string, origin: string, method: string) {
-	const res = await fetch(url, {
-		method: "OPTIONS",
-		headers: {
-			Origin: origin,
-			"Access-Control-Request-Method": method,
-			// Exactly what the client sends, which depends on the bucket split: with ONE
-			// bucket the ACL header is echoed and must be allowed; with TWO it is not sent
-			// at all, and demanding it here would test a permission the app never uses —
-			// and would fail against a correctly-configured bucket.
-			"Access-Control-Request-Headers": config.sendObjectAcl
-				? "content-type,x-amz-acl"
-				: "content-type",
-		},
-	});
+	let res: Response;
+	try {
+		res = await fetch(url, {
+			method: "OPTIONS",
+			headers: {
+				Origin: origin,
+				"Access-Control-Request-Method": method,
+				// Exactly what the client sends, which depends on the bucket split: with ONE
+				// bucket the ACL header is echoed and must be allowed; with TWO it is not sent
+				// at all, and demanding it here would test a permission the app never uses —
+				// and would fail against a correctly-configured bucket.
+				"Access-Control-Request-Headers": config.sendObjectAcl
+					? "content-type,x-amz-acl"
+					: "content-type",
+			},
+		});
+	} catch (err) {
+		return { status: 0, allowed: false, unreachable: true, why: (err as Error).message };
+	}
+	// A 5xx is the bucket's host having a bad day, not an answer about the allowlist.
+	if (res.status >= 500) return { status: res.status, allowed: false, unreachable: true, why: "" };
 	// A preflight succeeds with 200 or 204 — R2 answers 204, Spaces answered 200. Requiring
 	// 200 alone would report a working bucket as broken.
 	const allowed =
 		(res.status === 200 || res.status === 204) && !!res.headers.get("access-control-allow-origin");
-	return { status: res.status, allowed };
+	return { status: res.status, allowed, unreachable: false, why: "" };
 }
 
 let failures = 0;
@@ -184,54 +285,65 @@ let failures = 0;
 console.log(`bucket=${bucket} region=${region}\n`);
 
 // ── Bucket-level configuration ───────────────────────────────────────────────
-try {
-	const acl = await s3.send(new GetBucketAclCommand({ Bucket: bucket }));
-	const publicGrants = (acl.Grants ?? []).filter((g) => g.Grantee?.Type === "Group");
-	console.log(`bucket ACL: ${publicGrants.length === 0 ? "owner only" : "HAS GROUP GRANTS"}`);
-	for (const g of publicGrants) console.log(`   !! ${g.Grantee?.URI} = ${g.Permission}`);
-	if (publicGrants.length > 0) failures++;
-} catch (err) {
-	console.log(`bucket ACL: unreadable — ${(err as Error).message}`);
-}
-
-try {
-	const pol = await s3.send(new GetBucketPolicyCommand({ Bucket: bucket }));
-	console.log(`bucket policy: present\n${pol.Policy}`);
-} catch {
-	// Note: DO Spaces does NOT implement GetBucketPolicyStatus, so "is this bucket
-	// public?" cannot be asked directly — the write probe below is how you find out.
-	console.log("bucket policy: none (no prefix-level ACL enforcement)");
-}
-
-// ── CORS ─────────────────────────────────────────────────────────────────────
-console.log("\n── CORS rules");
 const corsOrigins: string[] = [];
-try {
-	const cors = await s3.send(new GetBucketCorsCommand({ Bucket: bucket }));
-	for (const r of cors.CORSRules ?? []) {
-		corsOrigins.push(...(r.AllowedOrigins ?? []));
-		console.log(
-			`   ${(r.AllowedOrigins ?? []).join(", ")} — methods=${(r.AllowedMethods ?? []).join("/")} headers=${(r.AllowedHeaders ?? []).join(",")}`,
-		);
+if (s3 && sdk) {
+	try {
+		const acl = await s3.send(new sdk.GetBucketAclCommand({ Bucket: bucket }));
+		const publicGrants = (acl.Grants ?? []).filter((g) => g.Grantee?.Type === "Group");
+		console.log(`bucket ACL: ${publicGrants.length === 0 ? "owner only" : "HAS GROUP GRANTS"}`);
+		for (const g of publicGrants) console.log(`   !! ${g.Grantee?.URI} = ${g.Permission}`);
+		if (publicGrants.length > 0) failures++;
+	} catch (err) {
+		console.log(`bucket ACL: unreadable — ${(err as Error).message}`);
 	}
-} catch (err) {
-	console.log(`   unreadable — ${(err as Error).message}`);
+
+	try {
+		const pol = await s3.send(new sdk.GetBucketPolicyCommand({ Bucket: bucket }));
+		console.log(`bucket policy: present\n${pol.Policy}`);
+	} catch {
+		// Note: DO Spaces does NOT implement GetBucketPolicyStatus, so "is this bucket
+		// public?" cannot be asked directly — the write probe below is how you find out.
+		console.log("bucket policy: none (no prefix-level ACL enforcement)");
+	}
+
+	// ── CORS ─────────────────────────────────────────────────────────────────────
+	console.log("\n── CORS rules");
+	try {
+		const cors = await s3.send(new sdk.GetBucketCorsCommand({ Bucket: bucket }));
+		for (const r of cors.CORSRules ?? []) {
+			corsOrigins.push(...(r.AllowedOrigins ?? []));
+			console.log(
+				`   ${(r.AllowedOrigins ?? []).join(", ")} — methods=${(r.AllowedMethods ?? []).join("/")} headers=${(r.AllowedHeaders ?? []).join(",")}`,
+			);
+		}
+	} catch (err) {
+		console.log(`   unreadable — ${(err as Error).message}`);
+	}
+} else {
+	// --cors-only. These three reads all need the runtime key, and on R2 they answer
+	// AccessDenied even with it — the preflight below is the evidence either way.
+	console.log("(--cors-only: skipping the credentialed reads)");
 }
+
+let unreachable = 0;
 
 console.log("\n── Preflight (what a browser actually gets)");
 for (const [origin, label] of BROWSER_ORIGINS) {
 	console.log(`   ${origin}  — ${label}`);
 	for (const probe of PROBES) {
-		const { status, allowed } = await preflight(probe.url, origin, probe.method);
-		if (probe.enforced) {
-			if (!allowed) failures++;
+		const r = await preflight(probe.url, origin, probe.method);
+		if (r.unreachable) {
+			unreachable++;
+			console.log(`      ??   ${probe.label.padEnd(28)} unreachable ${r.why || r.status}`);
+		} else if (probe.enforced) {
+			if (!r.allowed) failures++;
 			console.log(
-				`      ${allowed ? "ok  " : "FAIL"} ${probe.label.padEnd(28)} ${status}${allowed ? "" : `  → ${probe.breaks}`}`,
+				`      ${r.allowed ? "ok  " : "FAIL"} ${probe.label.padEnd(28)} ${r.status}${r.allowed ? "" : `  → ${probe.breaks}`}`,
 			);
 		} else {
 			// Reported, never counted. See the note on PROBES.
 			console.log(
-				`      ${allowed ? "note" : "n/a "} ${probe.label.padEnd(28)} ${status}  (${probe.breaks})`,
+				`      ${r.allowed ? "note" : "n/a "} ${probe.label.padEnd(28)} ${r.status}  (${probe.breaks})`,
 			);
 		}
 	}
@@ -241,10 +353,15 @@ for (const [origin, label] of BROWSER_ORIGINS) {
 // passes identically whether the allowlist is exact or wide open.
 console.log(`\n   control — ${CONTROL_ORIGIN} must be REFUSED`);
 for (const probe of PROBES.filter((p) => p.enforced)) {
-	const { status, allowed } = await preflight(probe.url, CONTROL_ORIGIN, probe.method);
-	if (allowed) failures++;
+	const r = await preflight(probe.url, CONTROL_ORIGIN, probe.method);
+	if (r.unreachable) {
+		unreachable++;
+		console.log(`      ??   ${probe.label.padEnd(28)} unreachable ${r.why || r.status}`);
+		continue;
+	}
+	if (r.allowed) failures++;
 	console.log(
-		`      ${allowed ? "FAIL" : "ok  "} ${probe.label.padEnd(28)} ${status}${allowed ? "  → the allowlist admits ANY origin; the checks above prove nothing" : ""}`,
+		`      ${r.allowed ? "FAIL" : "ok  "} ${probe.label.padEnd(28)} ${r.status}${r.allowed ? "  → the allowlist admits ANY origin; the checks above prove nothing" : ""}`,
 	);
 }
 
@@ -255,7 +372,8 @@ if (corsOrigins.includes("*")) {
 }
 
 // ── What a PUT actually produces ─────────────────────────────────────────────
-if (writeProbe) {
+if (writeProbe && s3 && sdk) {
+	const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
 	console.log("\n── Write probe (throwaway objects, deleted immediately)");
 	const base = `.posture-probe/${crypto.randomUUID()}`;
 
@@ -279,7 +397,7 @@ if (writeProbe) {
 		const key = `${base}.${acl ?? "none"}.txt`;
 		const url = await getSignedUrl(
 			s3,
-			new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: "text/plain", ACL: acl }),
+			new sdk.PutObjectCommand({ Bucket: bucket, Key: key, ContentType: "text/plain", ACL: acl }),
 			{ expiresIn: 120 },
 		);
 		const headers: Record<string, string> = { "content-type": "text/plain" };
@@ -290,14 +408,14 @@ if (writeProbe) {
 			failures++;
 			continue;
 		}
-		const objAcl = await s3.send(new GetObjectAclCommand({ Bucket: bucket, Key: key }));
+		const objAcl = await s3.send(new sdk.GetObjectAclCommand({ Bucket: bucket, Key: key }));
 		const worldReadable = (objAcl.Grants ?? []).some((g) => g.Grantee?.Type === "Group");
 		const anon = await fetch(`${host}/${key}`);
 		if (worldReadable || anon.status === 200) failures++;
 		console.log(
 			`   ${worldReadable || anon.status === 200 ? "FAIL" : "ok  "} ${label.padEnd(34)} anonymous GET ${anon.status} (200 = world readable)`,
 		);
-		await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+		await s3.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: key }));
 	}
 
 	// The uncomfortable one: a presigned URL signs only `host`, so the CLIENT picks the
@@ -306,7 +424,12 @@ if (writeProbe) {
 	const key = `${base}.client-override.txt`;
 	const url = await getSignedUrl(
 		s3,
-		new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: "text/plain", ACL: "private" }),
+		new sdk.PutObjectCommand({
+			Bucket: bucket,
+			Key: key,
+			ContentType: "text/plain",
+			ACL: "private",
+		}),
 		{ expiresIn: 120 },
 	);
 	const put = await fetch(url, {
@@ -319,9 +442,19 @@ if (writeProbe) {
 		console.log(
 			`   ${anon.status === 200 ? "note" : "ok  "} client overrode server ACL      anonymous GET ${anon.status} (200 = server ACL is intent, not enforcement)`,
 		);
-		await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+		await s3.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: key }));
 	}
 }
 
+/**
+ * Three exit codes, and the 2 is the load-bearing one: **0** nothing wrong, **1** a real
+ * finding, **2** the live state could not be determined. Same split `deploy-status` draws,
+ * for the same reason — a caller that cannot tell "your bucket is misconfigured" from "the
+ * network was down" will eventually treat both as noise.
+ */
+if (unreachable > 0) {
+	console.log(`\n${unreachable} probe(s) unreachable — the live state could not be determined.`);
+	process.exit(2);
+}
 console.log(`\n${failures === 0 ? "No problems found." : `${failures} problem(s) found.`}`);
 process.exit(failures === 0 ? 0 : 1);
