@@ -167,25 +167,32 @@ export default function CopyrightPage() {
 			<Section title="DMCA designated agent">
 				{agent?.registered ? (
 					<div className="alert alert-info">
-						<p>Our DMCA designated agent, registered with the U.S. Copyright Office:</p>
-						<div className="mt-2 text-sm">
-							<p className="font-semibold">{agent.agentName}</p>
-							<p>{agent.agentAddress}</p>
-							<p>{agent.agentPhone}</p>
-							<p>
+						{/* 🚨 ONE child, deliberately. daisyUI's `.alert` is a grid with
+						    `grid-auto-flow: column`, so every direct child becomes its own COLUMN —
+						    the three that used to sit here laid out side by side and pushed the last
+						    one 56px past a 390px viewport. Nothing errors and it looks fine on a
+						    desktop, which is why `mobile-overflow.e2e.ts` is what found it. */}
+						<div>
+							<p>Our DMCA designated agent, registered with the U.S. Copyright Office:</p>
+							<div className="mt-2 text-sm">
+								<p className="font-semibold">{agent.agentName}</p>
+								<p>{agent.agentAddress}</p>
+								<p>{agent.agentPhone}</p>
+								<p>
+									<a className="link link-primary" href={`mailto:${agent.agentEmail}`}>
+										{agent.agentEmail}
+									</a>
+								</p>
+							</div>
+							<p className="mt-3 text-sm">
+								You can also file a notice by email to{" "}
 								<a className="link link-primary" href={`mailto:${agent.agentEmail}`}>
 									{agent.agentEmail}
 								</a>
+								. A web form can be offered but cannot be required — email to the agent is the
+								statutory path.
 							</p>
 						</div>
-						<p className="mt-3 text-sm">
-							You can also file a notice by email to{" "}
-							<a className="link link-primary" href={`mailto:${agent.agentEmail}`}>
-								{agent.agentEmail}
-							</a>
-							. A web form can be offered but cannot be required — email to the agent is the
-							statutory path.
-						</p>
 					</div>
 				) : (
 					<div className="alert alert-warning">
@@ -743,10 +750,16 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 		);
 	}
 
+	// ⚠️ Every `.label` here carries `whitespace-normal` for the same reason `FormField`
+	// does: daisyUI sets `white-space: nowrap` on `.label`, so a statutory prompt like
+	// "Identify the copyrighted work you claim is infringed" renders as one 405px line and
+	// scrolls the page sideways on a phone. This form hand-rolls its labels rather than
+	// using `FormField`, so it does not inherit that component's fix — keep the class on
+	// any label added below.
 	return (
 		<form onSubmit={handleSubmit} className="space-y-4">
 			<div>
-				<label className="label" htmlFor="workId">
+				<label className="label whitespace-normal" htmlFor="workId">
 					<span className="label-text font-semibold">Work ID</span>
 				</label>
 				<input
@@ -766,7 +779,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 
 			<div className="grid gap-4 sm:grid-cols-2">
 				<div>
-					<label className="label" htmlFor="name">
+					<label className="label whitespace-normal" htmlFor="name">
 						<span className="label-text font-semibold">Your name</span>
 					</label>
 					<input
@@ -778,7 +791,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 					/>
 				</div>
 				<div>
-					<label className="label" htmlFor="email">
+					<label className="label whitespace-normal" htmlFor="email">
 						<span className="label-text font-semibold">Your email</span>
 					</label>
 					<input
@@ -793,7 +806,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 			</div>
 
 			<div>
-				<label className="label" htmlFor="address">
+				<label className="label whitespace-normal" htmlFor="address">
 					<span className="label-text font-semibold">Your postal address</span>
 				</label>
 				<textarea
@@ -807,7 +820,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 			</div>
 
 			<div>
-				<label className="label" htmlFor="phone">
+				<label className="label whitespace-normal" htmlFor="phone">
 					<span className="label-text font-semibold">Your telephone number</span>
 				</label>
 				<input
@@ -819,7 +832,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 			</div>
 
 			<div>
-				<label className="label" htmlFor="copyrightedWork">
+				<label className="label whitespace-normal" htmlFor="copyrightedWork">
 					<span className="label-text font-semibold">
 						Identify the copyrighted work you claim is infringed
 					</span>
@@ -836,7 +849,7 @@ function DmcaNoticeForm({ attestation }: { attestation: string | null }) {
 			</div>
 
 			<div>
-				<label className="label" htmlFor="infringingMaterial">
+				<label className="label whitespace-normal" htmlFor="infringingMaterial">
 					<span className="label-text font-semibold">
 						Identify the material you claim is infringing
 					</span>
