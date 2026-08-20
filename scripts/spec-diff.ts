@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Diff each **committed** App Platform spec against the **live** one. Both apps are
- * covered: `anthers` (the hub) and `anthers-studio`.
+ * Diff the **committed** App Platform spec against the **live** one. There is exactly one
+ * app — `anthers`, the hub — and `SPECS` holds the single entry to match.
  *
  * Pushing to `release` ships code and never the spec, so `.do/app.yaml` and what is
  * actually running drift silently and by default — only `doctl apps spec get` can tell
@@ -15,12 +15,10 @@
  * deploy can clobber live config that exists only in App Platform. It is to make the
  * drift **loud**: accept that the two diverge, and have something say so out loud.
  *
- * This file used to name `anthers-studio` as the example of config living only in App
- * Platform, and on 2026-08-11 that stopped being tolerable rather than stopping being
- * true: apps cannot be transferred between DigitalOcean accounts, so the move to an
- * Anthers-owned account recreates each app from a spec — and the Studio had none. It is
- * captured in `.do/studio.app.yaml` now, and checked here so it cannot quietly rot into
- * a second document that lies.
+ * ⚠️ **The Studio is not a second app and `.do/studio.app.yaml` does not exist.** The
+ * Studio merged into `apps/web` at `/studio` on 2026-08-11 and the `anthers-studio` app
+ * was deleted; anything here describing two covered apps is describing a shape the repo
+ * left behind. Adding a second entry to `SPECS` needs a second app to actually exist.
  *
  * WHAT IT COMPARES, and why not a raw diff: live SECRET values come back encrypted
  * (`EV[1:...]`), so a textual diff is pure noise and would be ignored within a week.

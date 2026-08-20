@@ -266,7 +266,7 @@ format: ## Format code with Biome
 # Drives Playwright's own bundled Chromium (not your installed browser). See
 # apps/web/tests/README.md — notably the SiteGate localStorage bypass.
 
-storage-check: ## Inspect the live Spaces bucket's ACL/policy/CORS posture (WRITE_PROBE=1 to round-trip a test object)
+storage-check: ## Inspect the live R2 buckets' ACL/policy/CORS posture (WRITE_PROBE=1 to round-trip a test object)
 	bun run apps/api/scripts/storage-posture.ts $(if $(WRITE_PROBE),--write-probe,)
 
 # Deliberately NOT part of `verify`: it needs doctl authenticated against DigitalOcean,
