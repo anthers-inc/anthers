@@ -266,8 +266,11 @@ format: ## Format code with Biome
 # Drives Playwright's own bundled Chromium (not your installed browser). See
 # apps/web/tests/README.md — notably the SiteGate localStorage bypass.
 
-storage-check: ## Inspect the live R2 buckets' ACL/policy/CORS posture (WRITE_PROBE=1 to round-trip a test object)
-	bun run apps/api/scripts/storage-posture.ts $(if $(WRITE_PROBE),--write-probe,)
+# CORS_ONLY=1 is the one mode that needs no credentials — a preflight is an unauthenticated
+# OPTIONS, and the non-secret STORAGE_* come from .do/app.yaml — which is why deploy-watch
+# runs it hourly. The other two modes need the runtime key and stay manual.
+storage-check: ## Inspect the live R2 buckets' ACL/policy/CORS posture (WRITE_PROBE=1 round-trips a test object; CORS_ONLY=1 preflights only, no secrets)
+	bun run apps/api/scripts/storage-posture.ts $(if $(WRITE_PROBE),--write-probe,) $(if $(CORS_ONLY),--cors-only,)
 
 # Deliberately NOT part of `verify`: it needs doctl authenticated against DigitalOcean,
 # which CI has no token for and a fresh clone has no reason to. Run it when you touch

@@ -123,3 +123,27 @@ jobs:
         env:
           DO_APP_ID: ${{ vars.DO_APP_ID }}
         run: bun run scripts/spec-diff.ts --secrets-only
+      # Storage CORS is a Cloudflare dashboard setting with no representation in this repo,
+      # so nothing here can review it and a change leaves no diff. That is exactly how
+      # `www.anthers.org` came to be missing from the bucket allowlist: every server-side
+      # path worked, and the only broken thing was a browser PUT from one of our two
+      # hostnames. It went unnoticed until someone probed it by hand.
+      #
+      # This needs NO credentials — a preflight is an unauthenticated OPTIONS, and the
+      # non-secret STORAGE_* values come from the committed spec — so unlike the two steps
+      # above it costs nothing to run and cannot leak anything. Exit 2 (unreachable) is
+      # mapped to a notice rather than a failure, for the same reason the drift check maps
+      # its own "cannot determine" case: a bad minute on the network is not a finding about
+      # our configuration, and a check that cries wolf gets muted along with everything
+      # else in this workflow.
+      - name: Storage CORS still admits the site (and refuses everything else)
+        if: '!cancelled()'
+        run: |
+          set +e
+          bun run apps/api/scripts/storage-posture.ts --cors-only
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::notice::storage CORS could not be determined (network or R2 unreachable)"
+            exit 0
+          fi
+          exit "$code"
