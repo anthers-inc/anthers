@@ -533,7 +533,10 @@ export default function AnalyticsDashboardPage() {
 					<ContentPerformanceTable content={content} />
 					<RevenueSection earnings={earnings} />
 					<FoundationSubsidySection crfStatus={crfStatus} />
-					<CrossPublishHistory />
+					{/* CrossPublishHistory hidden — the cross-publish job throws for all
+					    three targets (YouTube, itch.io, Substack), so the history is
+					    always empty. Restore when the Cross-Publishing lane ships. */}
+					{/* <CrossPublishHistory /> */}
 				</>
 			)}
 		</div>

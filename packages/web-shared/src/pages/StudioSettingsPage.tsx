@@ -353,13 +353,18 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts, platform connections, and Badges. Account settings (profile, email, identity) live
-				on your Anthers account.
+				Payouts and Badges. Account settings (profile, email, identity) live on your Anthers
+				account.
 			</p>
 
 			<div className="flex flex-col gap-6">
 				<StripeOnboardingSection />
-				<PlatformConnectionsSection />
+				{/* Platform Connections hidden — the YouTube OAuth route does not exist
+				    (404s), and the cross-publish job throws for all three targets. The
+				    panel is built but its backend is stubbed, so a creator who reaches it
+				    finds a form that always fails. Restore when the Cross-Publishing lane
+				    lands its endpoints. */}
+				{/* <PlatformConnectionsSection /> */}
 				<div>
 					<h2 className="text-lg font-semibold mb-2">Badges</h2>
 					<BadgeLadderEditor />

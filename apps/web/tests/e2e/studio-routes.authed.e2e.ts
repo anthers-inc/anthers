@@ -126,8 +126,12 @@ test("every Dashboard action button lands inside the Studio", async ({ page, con
 	// Header buttons, in the order the Dashboard renders them. Each was root-absolute until
 	// 2026-08-17 and each resolved to a real, wrong page — so the shell assertion below is
 	// doing the actual work.
+	//
+	// "Import" was removed from this list when the itch.io import UI was hidden — the
+	// three import endpoints all return "not yet implemented", so a creator who reached
+	// the page found a form that always failed. Restore this row when the Cross-Publishing
+	// lane ships its import endpoints and the route + nav link are re-enabled.
 	const actions = [
-		{ name: "Import", url: /\/studio\/import$/ },
 		{ name: "Analytics", url: /\/studio\/analytics$/ },
 		{ name: "New Project", url: /\/studio\/projects\/new$/ },
 		{ name: "New Post", url: /\/studio\/posts\/new$/ },

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
-	ArrowDownTrayIcon,
 	ChartBarIcon,
 	EyeSlashIcon,
 	PencilSquareIcon,
@@ -156,10 +155,8 @@ export default function DashboardPage() {
 				<h1 className="text-2xl font-bold">Dashboard</h1>
 				{user?.isCreator && (
 					<div className="flex gap-2">
-						<Link to={studioUrl("/import")} className="btn btn-ghost btn-sm">
-							<ArrowDownTrayIcon className="w-4 h-4" />
-							Import
-						</Link>
+						{/* Import link hidden — the itch.io import endpoints return "not yet
+						    implemented". Restore when the Cross-Publishing lane ships. */}
 						<Link to={studioUrl("/analytics")} className="btn btn-ghost btn-sm">
 							<ChartBarIcon className="w-4 h-4" />
 							Analytics
