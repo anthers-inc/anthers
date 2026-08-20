@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Content schema — see auth.ts for the role-classification legend (node/org/both).
+ * Most of this file is node: a creator's own content records, media, and the
+ * join tables that organize them. The exceptions are the polymorphic moderation
+ * state columns (org-imposed) and the cross-account tables (library, bookmarks)
+ * which are a *viewer's* records, not the creator's.
+ */
 
 import { sql } from "drizzle-orm";
 import {
@@ -80,6 +87,11 @@ export type AuthoredPrecision = "year" | "month" | "day";
  * strangest rule — prose in a post body earned nothing while the same prose as a content
  * element earned. The rule was right; the earning form just had no home of its own.
  */
+// node — a creator's own Work, and the unit of their catalog. Node-canonical per 41.02
+// ("Content records live on the creator node; org indexes"). The `takedownStatus`
+// column is an org-imposed annotation on the row (a DMCA action), which is why this is
+// `node` rather than `both`: the row's owner is the creator, and the org's flag is a
+// column on someone else's record.
 export const works = pgTable(
 	"works",
 	{
@@ -241,6 +253,8 @@ export const works = pgTable(
  * Because a Post is not a container, a Post earns no Time Pool minutes — unchanged policy,
  * but now for a structural reason rather than a rule.
  */
+// node — a creator's own announcement. Same reasoning as `works`: node-canonical
+// content, with `moderation_status` as an org-imposed annotation.
 export const posts = pgTable(
 	"posts",
 	{
@@ -307,6 +321,8 @@ export const posts = pgTable(
  * record of when the content has been posted"). Replaced `post_contents` in `0010`, which
  * carried the opposite semantics — a post OWNED its content elements and gated them.
  */
+// node — a join between two node-owned tables (posts and works). Pure content
+// relationship; the org indexes it but does not own it.
 export const postWorkRefs = pgTable(
 	"post_work_refs",
 	{
@@ -333,6 +349,7 @@ export const postWorkRefs = pgTable(
  * edited post can show a transparent "Edited {date}" history. Stores a short summary of
  * which fields changed (not full diffs). Cascades with the post.
  */
+// node — a post's edit history, owned by the post's creator. Cascades with the post.
 export const postEdits = pgTable(
 	"post_edits",
 	{
@@ -355,6 +372,7 @@ export const postEdits = pgTable(
  * A project collects **both** Works and Posts, in separate ordered lists — a game project
  * holds its builds and soundtrack alongside its devlogs and patch notes.
  */
+// node — a creator's own project grouping. Node-canonical content record.
 export const projects = pgTable(
 	"projects",
 	{
@@ -385,6 +403,7 @@ export const projects = pgTable(
  * 40.02's own worked example ("a track in both an album and a best-of") was not
  * expressible in the schema that document described.
  */
+// node — join table, two node-owned parents (project + work).
 export const projectItems = pgTable(
 	"project_items",
 	{
@@ -406,6 +425,7 @@ export const projectItems = pgTable(
 );
 
 /** Many-to-many: which posts belong to which Project, with ordering. */
+// node — join table, two node-owned parents (project + post).
 export const projectPosts = pgTable(
 	"project_posts",
 	{
@@ -426,7 +446,8 @@ export const projectPosts = pgTable(
 	],
 );
 
-/** Downloadable files/variants (builds, tracks, PDFs, installers, …) of a Work. */
+// node — a Work's downloadable files, owned by the Work's creator. Cascades with the
+// Work.
 export const assets = pgTable(
 	"assets",
 	{
@@ -468,6 +489,7 @@ export const assets = pgTable(
  * therefore needs a stable id and a stable number now, so that later work is an addition
  * rather than a migration.
  */
+// node — an ebook Work's rendered pages. Node media, cascades with the Work.
 export const workPages = pgTable(
 	"work_pages",
 	{
@@ -489,8 +511,12 @@ export const workPages = pgTable(
 	],
 );
 
-/** Media processing for a Work (video HLS transcode, audio normalize, ebook rasterize) —
- *  runs once on upload to the Catalog, before the Work is released or referenced anywhere. */
+// both — a transcoding job is node media processing (the creator's source → derived
+// renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
+// delivery layer reads it. The row is node-owned (it is about one creator's Work); the
+// org runs it. This is one of 41.02's "Media originals + renditions; transcoding →
+// Creator node" entries, classified `both` because the *compute* is org while the
+// *record* is node — the node owns the result, the org owns the execution.
 export const transcodingJobs = pgTable(
 	"transcoding_jobs",
 	{
@@ -512,7 +538,8 @@ export const transcodingJobs = pgTable(
 	(table) => [index("idx_transcoding_work").on(table.workId)],
 );
 
-/** Images embedded directly in a post body (or a text Work's prose) by the rich-text editor. */
+// node — images a creator embedded in their own post/work bodies. Cascades with the
+// creator. The org serves them but does not own them.
 export const inlineImages = pgTable(
 	"inline_images",
 	{
@@ -540,6 +567,11 @@ export const inlineImages = pgTable(
  * pays — no foreign key on the subject, so nothing cascades, and the read sites have to
  * resolve the subject themselves.
  */
+// both — comments are polymorphic over (post|work) subjects. A creator's comments on
+// their own content are node; a viewer's comments on someone else's content are the
+// viewer's node. The `moderation_status` column is org-imposed. The row's author owns
+// it, the subject's creator hosts it, and the org moderates it — three roles on one
+// row, which is the `both` case the polymorphic shape exists to handle.
 export const comments = pgTable(
 	"comments",
 	{
@@ -613,6 +645,12 @@ export const comments = pgTable(
  * albums, not four loose tracks**: a Project is how an album exists here, so saving one has
  * to save the record rather than scatter it.
  */
+// org — the Library is a *viewer's* shelf, not the creator's content. A viewer's
+// account is org-side in the current topology (there is no viewer node; viewers are
+// org accounts), so their saved items are org records. This is a disagreement with
+// 41.02's boundary table, which lists "Content records" under the creator node — a
+// library item is not a content record, it is a viewer's pointer to one, and the
+// viewer has no node. See the findings written back to 41.02.
 export const libraryItems = pgTable(
 	"library_items",
 	{
@@ -658,6 +696,10 @@ export const libraryItems = pgTable(
  * the originals — a move, not a deletion, and the reason the columns are not dropped is
  * that dropping them is a separate migration with nothing to gain from being rushed.
  */
+// org — bookmarks are a viewer's records (same reasoning as `libraryItems`: the
+// viewer has no node in the current topology). The four target columns span content
+// the viewer does not own, which is what makes this an org-side table about node
+// content rather than a node table.
 export const bookmarks = pgTable(
 	"bookmarks",
 	{
@@ -697,6 +739,10 @@ export const bookmarks = pgTable(
  * produce one — they are kept rather than deleted because destroying a user's words to fit
  * a schema change is the thing this codebase refuses to do elsewhere.
  */
+// both — a review is a viewer's verdict on a Work. The viewer is org-side (no viewer
+// node); the Work is node-owned. The `moderation_status` is org-imposed. Same
+// three-roles-on-one-row shape as `comments`: the author owns it, the subject's
+// creator hosts it, the org moderates it.
 export const ratings = pgTable(
 	"ratings",
 	{

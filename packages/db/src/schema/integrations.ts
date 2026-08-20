@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Integrations schema — see auth.ts for the role-classification legend. All three
+ * tables are `node`: a creator's own external-platform connections and cross-publish
+ * results. The org does not own a creator's YouTube/Steam/itch.io account; the creator
+ * does, and this records their credentials and the results of publishing to them.
+ */
 import {
 	bigint,
 	boolean,
@@ -13,6 +19,9 @@ import {
 import { users } from "./auth.js";
 import { posts } from "./content.js";
 
+// node — a creator's own external-platform connection (OAuth tokens / API keys). The
+// creator owns the external account; the org holds the credentials to act on their
+// behalf, same shape as `atprotoSessions`.
 export const platformConnections = pgTable(
 	"platform_connections",
 	{
@@ -41,6 +50,8 @@ export const platformConnections = pgTable(
 	(table) => [uniqueIndex("uq_platform_conn_user_platform").on(table.userId, table.platform)],
 );
 
+// node — the result of a creator's cross-publish job. References the creator's own
+// post; the external identifiers are the creator's content on another platform.
 export const crossPublishResults = pgTable(
 	"cross_publish_results",
 	{
@@ -69,8 +80,8 @@ export const crossPublishResults = pgTable(
 	],
 );
 
-// snapshotDate is stored as an ISO date string (YYYY-MM-DD).
-// External-platform metrics mirror YouTube-scale counts — bigint, not integer.
+// node — external metrics for a creator's cross-published content. The metrics are
+// about the creator's content on another platform; the creator owns the relationship.
 export const externalMetricSnapshots = pgTable(
 	"external_metric_snapshots",
 	{

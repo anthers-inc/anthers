@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Payments schema — see auth.ts for the role-classification legend. All four tables
+ * are `org` by the treasury rule (41.02: "Payments, pools, payouts, KYC → Org only.
+ * Money cannot federate"). No exceptions.
+ */
 import {
 	bigint,
 	boolean,
@@ -14,6 +19,7 @@ import {
 import { users } from "./auth.js";
 import { works } from "./content.js";
 
+// org — a creator's Stripe Connect account. Money; org-only.
 export const stripeAccounts = pgTable("stripe_accounts", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
@@ -28,7 +34,9 @@ export const stripeAccounts = pgTable("stripe_accounts", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// Decimal columns are stored as numeric to preserve decimal.js precision (app owns rounding).
+// org — a purchase is a financial record (the doc comment: "a receipt is not a detail
+// of the thing bought; it outlives it"). All three FKs are set-null because money
+// records outlive accounts. 41.02: money cannot federate.
 export const purchases = pgTable(
 	"purchases",
 	{
@@ -135,6 +143,7 @@ export const purchases = pgTable(
 	],
 );
 
+// org — the CRF (Creator Resilience Fund) ledger. Org money record.
 export const crfLedger = pgTable(
 	"crf_ledger",
 	{
@@ -147,7 +156,8 @@ export const crfLedger = pgTable(
 	(table) => [index("idx_crf_ledger_purchase").on(table.purchaseId)],
 );
 
-// billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
+// org — per-cycle CRF subsidy calculation. Org money record; the `isSelfHosting` flag
+// it reads was closed to a 503 (PR #48) because the feature it prices does not exist.
 export const crfSubsidies = pgTable(
 	"crf_subsidies",
 	{

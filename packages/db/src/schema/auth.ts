@@ -1,4 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+/**
+ * Schema role classification (41.02 Federation Topology):
+ *
+ *   node = a creator's own — identity, content records, media, personal relationships.
+ *   org  = network-wide or money — feeds, pools, payouts, moderation, telemetry.
+ *   both = genuinely split by row, where one table serves both roles.
+ *
+ * The boundary table in 41.02 is the guiding map; disagreements are called out
+ * per-table below and collected in the findings written back to 41.02.
+ */
 import {
 	boolean,
 	index,
@@ -11,6 +21,10 @@ import {
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+// node — a person's identity. Node-canonical (41.02: "Identity lives on the creator
+// node / ATProto-native"). `isAdmin` and `emailVerified` are org-imposed annotations on
+// the row, which is why this is `node` rather than `both`: the row's owner is the person,
+// not the org, and the org's flags are columns on someone else's record.
 export const users = pgTable("users", {
 	id: serial("id").primaryKey(),
 	/**
@@ -107,6 +121,10 @@ export const users = pgTable("users", {
  * outlive the account it concerned — otherwise the evidence disappears exactly when it
  * would be needed.
  */
+// org — a formal data-rights request under GDPR/CPRA. The org is who must respond
+// within 30 days (51.05); a creator node has no obligations under these regimes. The
+// row outlives the account (`userId` is set null) because the org's evidence of
+// compliance must survive erasure.
 export const rightsRequests = pgTable(
 	"rights_requests",
 	{
@@ -152,6 +170,9 @@ export const rightsRequests = pgTable(
  * failed) is a real and different state from one that was, and collapsing them would
  * make the evidence unreliable in the direction that matters.
  */
+// org — the org telling a person something, and the record that it did (51.05). A
+// creator node has no outbound notification obligation; this is the org's evidence of
+// a promise kept.
 export const notifications = pgTable(
 	"notifications",
 	{
@@ -181,6 +202,9 @@ export const notifications = pgTable(
 	],
 );
 
+// node — a live auth credential. Identity is node-canonical (41.02), and a session
+// is how that identity authenticates. The org holds a copy to verify requests, but the
+// relationship is node-owned (a creator can revoke their own sessions).
 export const sessions = pgTable(
 	"sessions",
 	{
@@ -227,6 +251,8 @@ export const sessions = pgTable(
  * Rows are single-use (`consumedAt`) and short-lived (`expiresAt`); the swept remains
  * carry no secret, since `sessionToken` is cleared on redemption.
  */
+// node — a desktop enrolment is node auth (PKCE flow for the Studio app). Same
+// reasoning as `sessions`: the credential belongs to the identity, which is node.
 export const desktopAuthRequests = pgTable(
 	"desktop_auth_requests",
 	{
@@ -248,6 +274,8 @@ export const desktopAuthRequests = pgTable(
 	(table) => [index("idx_desktop_auth_requests_user").on(table.userId)],
 );
 
+// node — email verification is node auth. The token authenticates an identity the
+// node owns; the org holds a copy to verify, as with `sessions`.
 export const verificationTokens = pgTable(
 	"verification_tokens",
 	{
@@ -281,6 +309,10 @@ export const verificationTokens = pgTable(
  * live here because the caller cannot be told which case it is without leaking whether
  * the address is registered — see `POST /auth/signup/start`.
  */
+// org — a signup code is pre-account: the ceremony asks for an address and proves
+// control of it *before any user row exists*. There is no node yet to own it, so it is
+// org-side by elimination. The address becomes node identity once the account is
+// created, but the code itself is the org's gate.
 export const signupCodes = pgTable(
 	"signup_codes",
 	{
@@ -322,6 +354,9 @@ export const signupCodes = pgTable(
 	(table) => [index("idx_signup_codes_expires").on(table.expiresAt)],
 );
 
+// node — ATProto DPoP tokens are node identity (41.02: "Identity lives on the creator
+// node / ATProto-native"). The org holds them to sign requests on the creator's behalf,
+// but they are the creator's credentials, not the org's.
 export const atprotoSessions = pgTable("atproto_sessions", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
@@ -338,6 +373,10 @@ export const atprotoSessions = pgTable("atproto_sessions", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// both — a follow is a relationship between two accounts. 41.02 names "Subscriber
+// relationships" as both: the billing contract is org-side, the canonical assertion is
+// in the user's repo. The row's *existence* is node (a creator's followers are their
+// own), but the org's feed/index reads it, so both roles touch it.
 export const follows = pgTable(
 	"follows",
 	{
@@ -381,6 +420,10 @@ export const follows = pgTable(
  * the account it concerns; a block is a *live relationship* and means nothing once
  * either end is gone.
  */
+// node — a block is a personal boundary between two accounts (the doc comment above
+// is explicit: it lives here beside `follows` and *not* in moderation, because it is a
+// relationship primitive, not an operator judgment). Both ends are node-owned; the org
+// enforces it symmetrically but does not own it.
 export const userBlocks = pgTable(
 	"user_blocks",
 	{
