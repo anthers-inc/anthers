@@ -10,9 +10,11 @@ import {
 	MagnifyingGlassIcon,
 	RectangleStackIcon,
 	RssIcon,
+	ShoppingBagIcon,
 	Squares2X2Icon,
 	UserCircleIcon,
 } from "@heroicons/react/24/outline";
+import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
 import PlayerBar from "../media/PlayerBar";
@@ -33,6 +35,7 @@ function LoggedInLayoutInner() {
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, pageContent } = useSidebar();
 	const navigate = useNavigate();
+	const { count: basketCount } = useBasket();
 
 	const handleLogout = async () => {
 		await signOut();
@@ -69,6 +72,24 @@ function LoggedInLayoutInner() {
 				</div>
 
 				<div className="navbar-end gap-1">
+					{/* Basket — only rendered when it has items, so an empty basket costs no
+					    header space. The header is tight on mobile and a permanent "0" badge
+					    would be noise; a control that appears when it has content is strictly
+					    better than one that is always there. The count is a `badge` so a
+					    buyer who navigates away from the Work page can always get back to
+					    the one surface where money changes hands. */}
+					{basketCount > 0 && (
+						<Link
+							to="/basket"
+							className="btn btn-ghost btn-sm btn-circle relative"
+							aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
+						>
+							<ShoppingBagIcon className="w-5 h-5" />
+							<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
+								{basketCount}
+							</span>
+						</Link>
+					)}
 					<ThemeToggle />
 					<div className="dropdown dropdown-end">
 						{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
@@ -157,6 +178,16 @@ function LoggedInLayoutInner() {
 									{link.label}
 								</NavLink>
 							))}
+
+							{/* Basket — the sidebar entry mirrors the header icon, for the mobile
+							    case where the header is tight. Same conditional: only when non-empty. */}
+							{basketCount > 0 && (
+								<NavLink to="/basket" className={navLinkClass}>
+									<ShoppingBagIcon className="w-5 h-5 shrink-0" />
+									Basket
+									<span className="badge badge-primary badge-sm ml-auto">{basketCount}</span>
+								</NavLink>
+							)}
 
 							{/* Creator section — the Studio is the all-in-one creator management surface.
 								It lived on a separate origin until 2026-08-11 and this linked out with an
