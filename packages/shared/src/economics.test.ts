@@ -10,9 +10,13 @@
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import {
+	AFF_INFRA_RATE,
 	BADGE_ORDER,
 	cardFeeDisplay,
+	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
+	SELF_HOST_FEE,
+	STORAGE_PER_GIB_MONTH,
 	TIME_POOL_RATE,
 	thresholdForBadge,
 	timePoolFor,
@@ -22,6 +26,7 @@ import {
 	badgeViews,
 	calculateFees,
 	cardFee,
+	estimateStorageCost,
 	paymentsSplit,
 	supportBreakdown,
 } from "./fees.js";
@@ -316,5 +321,67 @@ describe("calculateFees — direct purchase, all-in list price, zero platform cu
 	test("nothing is unaccounted for: list = creator + processing", () => {
 		const f = calculateFees(new Decimal("20.00"), { type: "digital" });
 		expect(f.creatorEarnings.plus(f.processingFee).toFixed(2)).toBe("20.00");
+	});
+});
+
+/** One GiB in bytes, the unit `estimateStorageCost` takes. */
+const GIB_BYTES = 1024 ** 3;
+
+describe("estimateStorageCost — and the self-hosting branch that inverted unnoticed", () => {
+	// **Sabotage-verified 2 / 1, both predicted.** Deleting the `isSelfHosting` early
+	// return from `estimateStorageCost` fails 2 — the size-independence case and the
+	// comparison against a hosted creator. Moving `SELF_HOST_FEE` back to 1 fails 1: only
+	// the explicit pin, which is exactly the point of pinning the number somewhere other
+	// than an assertion that reads the constant back.
+	// 🚨 This branch had NO test until 2026-08-20, and it is the one that changed meaning
+	// without anything failing. `SELF_HOST_FEE` went 1 → 0 on 2026-08-12 when a flat $1 was
+	// found to be upside-down (a hosted creator's first 50 GiB are free, so every catalogue
+	// under ~91 GiB paid MORE to store its own files). The dial moved, every test stayed
+	// green, and the consequence — that the flag now zeroes a creator's modelled hosting
+	// cost — went unrecorded anywhere a test could see it.
+	test("a self-hosting creator's storage costs Anthers nothing, whatever they store", () => {
+		const tiny = estimateStorageCost({ storageBytes: 0, isSelfHosting: true });
+		const huge = estimateStorageCost({ storageBytes: 5_000 * GIB_BYTES, isSelfHosting: true });
+		for (const r of [tiny, huge]) {
+			expect(r.storageGiB.toNumber()).toBe(0);
+			expect(r.storageCost.toNumber()).toBe(0);
+		}
+		// ⚠️ Deliberately NOT `expect(total).toBe(SELF_HOST_FEE)`. That reads the constant the
+		// function computes from, so it agrees with any value the dial takes and would have
+		// stayed green through the 1 → 0 change this test exists because of. What the branch
+		// actually claims is that **size stops mattering**, which is a fact about the shape of
+		// the function rather than about today's number; the number itself is pinned once,
+		// explicitly, below.
+		expect(huge.total.equals(tiny.total)).toBe(true);
+	});
+
+	test("SELF_HOST_FEE is 0, and that is what makes the flag cost its holder the subsidy", () => {
+		// Not a restatement of the constant — it is the premise `calculate-crf` rests on.
+		// With a zero hosting cost, its `earnings.gte(hostingCost)` test passes for every
+		// creator (earnings are never negative), so it books a zero subsidy and moves on.
+		// If this ever goes non-zero again, that inversion changes and the endpoint closed
+		// in `routes/subscriptions.ts` needs revisiting rather than silently re-opening.
+		expect(SELF_HOST_FEE).toBe(0);
+		const selfHosted = estimateStorageCost({ storageBytes: 500 * GIB_BYTES, isSelfHosting: true });
+		const hosted = estimateStorageCost({ storageBytes: 500 * GIB_BYTES });
+		expect(hosted.total.greaterThan(selfHosted.total)).toBe(true);
+	});
+
+	test("a hosted creator pays nothing up to the free allowance, then the rate plus half again", () => {
+		expect(
+			estimateStorageCost({ storageBytes: FREE_STORAGE_GIB * GIB_BYTES }).total.toNumber(),
+		).toBe(0);
+		const over = estimateStorageCost({ storageBytes: (FREE_STORAGE_GIB + 100) * GIB_BYTES });
+		expect(over.storageGiB.toNumber()).toBeCloseTo(100, 6);
+		// 100 GiB over the allowance at R2's rate, to the cent.
+		expect(over.storageCost.toFixed(2)).toBe((100 * STORAGE_PER_GIB_MONTH).toFixed(2));
+		// 🚨 The charge is half again on the ROUNDED cost, not the rounded half of the raw
+		// one — the distinction that stopped `creatorReceipt` reconciling when R2's $0.0161
+		// left exact cents behind, and the reason it must call this rather than re-derive it.
+		const half = new Decimal(over.storageCost)
+			.mul(AFF_INFRA_RATE)
+			.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+		expect(over.storageAff.equals(half)).toBe(true);
+		expect(over.total.equals(over.storageCost.plus(over.storageAff))).toBe(true);
 	});
 });

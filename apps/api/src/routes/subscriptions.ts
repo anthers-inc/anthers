@@ -555,20 +555,42 @@ const subscriptionRoutes = new Hono()
 	)
 
 	// ── Self-Hosting Toggle (creators) ───────────────────────────────────────
+	/**
+	 * 🚨 **Closed with a 503, deliberately, until an origin can back the claim.**
+	 *
+	 * This set `accounts.is_self_hosting` to whatever an authenticated caller asked for,
+	 * asserting nothing about whether they host anything — a creator-facing money input
+	 * whose precondition was *claimed rather than observed*. What makes closing it the
+	 * right move rather than a deferral is that the flag currently prices **nothing**: no
+	 * code path bills a creator for storage at all, `SELF_HOST_FEE` has been `0` since
+	 * 2026-08-12, and no UI anywhere calls this endpoint.
+	 *
+	 * ⚠️ And its one live effect is **inverted** — it costs the claimant money rather than
+	 * saving it. `calculate-crf` reads the flag, gets a zeroed hosting cost from
+	 * `estimateStorageCost`, and its `earnings.gte(hostingCost)` test then passes for
+	 * everyone (earnings are never negative), so it records a zero subsidy and moves on.
+	 * Setting this flag today makes a creator permanently ineligible for the hosting
+	 * subsidy. A 503 removes a footgun; it does not withhold a feature.
+	 *
+	 * **The eventual shape is not a better-guarded setter.** The flag should be DERIVED
+	 * from origin registration — a creator is self-hosting if and only if the hub knows a
+	 * registered origin of theirs — which is milestone 1 of Creator-Hosted Delivery. So do
+	 * not build a verification mechanism here in the meantime: there is nothing to verify
+	 * against, and anything built now is replaced by that registration. When it lands, this
+	 * stops being a setter and the column stops being a claim.
+	 */
 	.post(
 		"/self-hosting",
 		requireAuth,
 		zValidator("json", z.object({ enabled: z.boolean() })),
-		async (c) => {
-			const user = c.get("user");
-			const { enabled } = c.req.valid("json");
-			await ensureAccount(user.id);
-			await db
-				.update(accounts)
-				.set({ isSelfHosting: enabled, updatedAt: new Date() })
-				.where(eq(accounts.userId, user.id));
-			return c.json({ isSelfHosting: enabled });
-		},
+		async (c) =>
+			c.json(
+				{
+					error:
+						"Self-hosting cannot be set here. It will be derived from a registered origin once creator-hosted delivery ships.",
+				},
+				503,
+			),
 	)
 
 	// ── Cancel (revert to 0 / Free at period end) ────────────────────────────
