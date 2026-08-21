@@ -1,31 +1,120 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// The About marketing page — restyled into the Meadow design (matching
-// /for-creators and /for-users). Airy editorial forest-green, Fraunces display
-// serif over Nunito Sans. The route wraps this page in the shared <MeadowDecor>
-// (pollen + woven side vines) and LoggedOutLayout (Meadow footer + grassy
-// floor), so this file only styles the content: alternating tinted section
-// bands, the eyebrow/heading/lede rhythm, and rounded cards. Copy is verbatim;
-// the FlipCard interaction is preserved.
+// The About marketing page, in the Meadow design (matching /for-creators and
+// /for-users). The route wraps this page in the shared <MeadowDecor> and
+// LoggedOutLayout, so this file only styles the content: alternating tinted
+// bands, the eyebrow/heading/lede rhythm, cards, and plain prose columns.
+//
+// ── The order of the page is the argument ────────────────────────────────────
+//
+// Settled by Parker, 2026-08-21: **what → what that means → what we're for →
+// who's running it**. State the plainest, most fundamental fact first (Anthers,
+// Inc. is a Colorado nonprofit corporation), then what that fact actually binds,
+// then the mission, then the person. An earlier arrangement opened on the mission
+// and reached the organization in section five, which buries the one thing a
+// reader came here to establish.
+//
+// ── What this page owns, and what it must not grow back ──────────────────────
+//
+// Rebuilt 2026-08-21 from ~15,000px and six sections, because the previous
+// version argued a case where an About page describes an organization. Every
+// reference on the brief — ProPublica, Blender, Alveus, the Mozilla Foundation —
+// is a mission line and a handful of paragraphs, and none of them annotates its
+// own claims. **For a young organization the honest move is to say less, not to
+// hedge more**: the old page carried four programme pillars with a paragraph
+// explaining three had no budget, and federation as a numbered principle with a
+// disclaimer attached. Cutting them removed the hedging along with them.
+//
+// Three body sections is the whole scope:
+//
+//   1. What Anthers is ... the corporate facts, then two lists — what binds us
+//                          NOW under the Colorado Act and our own Articles, and
+//                          what federal recognition would ADD. Sourced from the
+//                          Articles' additional-information attachment (51 §
+//                          `Anthers AOI - Additional Information.docx`), not
+//                          from a summary of it.
+//   2. The mission ....... two cards, What We Do and How We Do It, lifted from
+//                          parkerhdavis.com's own structure. The three-card
+//                          indictment of commercial platforms is gone; the case
+//                          against the incumbents is the section's lede, and it
+//                          gets a whole section on /for-creators.
+//   3. Who we are ........ Parker, first person, portrait beside the prose.
+//
+// The programme pillars, the founding-board invitation and the "what comes next"
+// list are all on /roadmap already. **This page says what is true; the roadmap
+// says when.** That division is why nothing here promises a date.
+//
+// ── 🚨 Federal status: the rule CHANGED on 2026-08-21 ────────────────────────
+//
+// 63.01 § Claims & honesty used to read *"say nothing about federal status at
+// all"*, and this page said nothing. **Parker's call is that the page states the
+// intention** — the two-list structure below is what makes that safe, because it
+// partitions present from future explicitly rather than leaving a reader to guess
+// which column a sentence belongs in. 63.01 carries the narrowed rule now.
+//
+// What did NOT change, and what `about-claims.test.ts` still holds:
+//
+//   • Anthers may not be CALLED a 501(c)(3), or described as tax-exempt, or as
+//     having a pending or filed application. The Form 1023 has not been filed.
+//   • No money given to Anthers may be called deductible **today**. Where the
+//     "soon" column says donations become deductible, the sentence beside it
+//     says they are not yet — same co-presence rule as "free forever" and the
+//     monthly limit, and the guard asserts the pairing.
+//   • ⚠️ **No date.** Parker's note proposed "later this year"; 51.03 puts the
+//     Form 1023 deadline at 2028-11-30, counsel is on its critical path and none
+//     is engaged, and the organizational meeting has not happened. A date is a
+//     claim about the future the project's own sequencing does not support, so
+//     the copy states the intention without one. Add a date only when the plan
+//     has one.
+//
+// ── Voice ────────────────────────────────────────────────────────────────────
+//
+// **This is not a court filing and it is not marketing language** (Parker,
+// 2026-08-20). It is the most direct, interpersonal page on the site, and while
+// Anthers is one person it should read that way — so § Who We Are is Parker in
+// the first person and everything around it stays plain. The rest of the page
+// keeps "we". ⚠️ Keep the registers apart: an "I" that wanders into § What
+// Anthers Is is the slip.
+//
+// 🚨 **Do not make a virtue of being small** (Parker, 2026-08-21). An earlier
+// draft headed the last section *"Anthers Is One Person"* over a lede about how
+// pages like this usually find a way around saying so — which dresses an ordinary
+// fact as courage. People can count. What the section is actually for is the
+// thing every organization owes a reader: here is who we are.
+//
+// 🚨 **The reference for the first-person passages is Parker's own about page,
+// and its source is on this machine at `~/Daisy/apps/web/src/pages/about.tsx`** —
+// read it rather than writing a founder's-note register from scratch, which is
+// what an earlier draft did and got wrong. What that page does: it **opens
+// declaratively** ("I'm a director, developer, writer, and composer from
+// Colorado"), never with a greeting; it builds **long multi-clause sentences**
+// rather than punchy short ones; its humour is **dry and rare** ("wore more hats
+// than I can count" is as far as an entire page goes); and it **lands a thought
+// on a stated principle** ("It matters how we do things, even more than what we
+// aim to do"), set in bold, not on a quip. Its **What I Do / How I Do It** pair
+// is where this page's two mission cards come from, down to the lock and key.
+//
+// The hero is 63.01 § The canonical introduction, verbatim, split across the
+// headline and the lede. Quote it rather than writing a fresh introduction, so
+// the platform sounds like one thing wherever a reader meets it. ⚠️ It replaced
+// a hero reading *"Anthers is a federated, open content network…"*, which
+// asserted federation that has not shipped — `RETIRED_COPY` carries a rule for
+// the wording now, since its ATProto rule matched the claim's other phrasings
+// and sailed straight past this one.
+//
+// ⚠️ A big italic Fraunces display line was tried here as a mission pull-quote
+// and rejected on sight — at that size the face reads as a wedding invitation.
+// Fraunces stays on the section headings, upright, where the rest of the site
+// uses it.
 
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
-import {
-	AcademicCapIcon,
-	DocumentTextIcon,
-	EyeIcon,
-	GlobeAltIcon,
-	HeartIcon,
-	LockClosedIcon,
-	ScaleIcon,
-	ShieldCheckIcon,
-	UserGroupIcon,
-} from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { KeyIcon, LockOpenIcon } from "@heroicons/react/24/outline";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -33,149 +122,51 @@ const serif = { fontFamily: FONTS.fraunces };
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-const FOUNDATION_PILLARS = [
-	{
-		icon: ShieldCheckIcon,
-		title: "Infrastructure Equity",
-		description:
-			"No creator is priced out of reaching their audience. Anthers subsidizes hosting for small creators, absorbs viral traffic surges, and funds genuinely free access.",
-	},
-	{
-		icon: AcademicCapIcon,
-		title: "Education & Development",
-		description:
-			"Structured mentorship, financial literacy workshops, and free educational content—connecting people who have knowledge with people who need it.",
-	},
-	{
-		icon: HeartIcon,
-		title: "Economic Resilience & Relief",
-		description:
-			"Creation grants for emerging creators, emergency assistance for those facing hardship, and access to professional services like legal review and tax preparation.",
-	},
-	{
-		icon: GlobeAltIcon,
-		title: "Community & Public Benefit",
-		description:
-			"Open-source tools, published research on creator economics, and partnerships with schools and community organizations that extend the mission beyond the platform.",
-	},
+// What the Colorado Act and Anthers' own filed Articles already bind, quoted from
+// the additional-information attachment rather than from anyone's summary of it.
+// Each of these survives the test 63.01 § Claims & honesty sets — it still holds
+// with one director and no federal recognition — because each is in the filing.
+const BINDING_NOW = [
+	"There are no owners and no shares, and the Articles give Anthers no voting members. Nobody holds a piece of it, so there is nobody to pay a profit to and nothing for anyone to buy.",
+	"Nothing Anthers earns may be paid out to anyone inside it. The Articles bar its net earnings from benefiting a director, an officer, or any private person, and require it to serve public rather than private interests. What it may pay is ordinary compensation for work actually done.",
+	"If Anthers ever dissolves, its assets go to another charitable organization or to a government for a public purpose — not to a founder, and not to anyone who worked here.",
+	"Anthers' purposes are fixed in the Articles, and they are specific: making creative and educational work freely available to the public, releasing the platform's technology under open-source licences, publishing the formats it stores work in so that others can build on or replace it, and enabling creators to host and deliver their own work independently of Anthers.",
 ];
 
-const TEAM_MEMBERS = [
-	{
-		initials: "P",
-		name: "Parker",
-		role: "Founder & Executive Director",
-		bio: "Architecture, engineering, product, and operations. Building the platform, the organization, and the case that non-profit infrastructure can replace extractive alternatives.",
-	},
-	{
-		initials: "?",
-		name: "Board Chair",
-		role: "Board of Directors",
-		bio: "Independent chair with non-profit board experience. Runs board meetings, manages ED evaluation, and ensures governance discipline from day one.",
-		placeholder: true,
-	},
-	{
-		initials: "?",
-		name: "Treasurer",
-		role: "Board of Directors",
-		bio: "Oversees budgets, reviews financial statements, and chairs the finance function. Leads the compensation review process and audit oversight.",
-		placeholder: true,
-	},
-	{
-		initials: "?",
-		name: "Secretary",
-		role: "Board of Directors",
-		bio: "Responsible for meeting minutes, document retention, and ensuring the organization maintains proper records and governance compliance.",
-		placeholder: true,
-	},
+// What federal recognition would add, chosen for the three people who actually
+// need to know — someone deciding whether to publish here, someone deciding
+// whether to support a creator here, and someone deciding whether to fund us.
+// ⚠️ The first line carries its own present-tense correction; see the header.
+const BINDING_SOON = [
+	"Donations to Anthers become tax-deductible for the person making them. Until the determination letter arrives, they are not — and we will not say otherwise.",
+	"Anthers becomes eligible for the grants and the non-profit rates that foundations and vendors reserve for recognized charities, which is money and service going into the platform rather than out of it.",
+	"Anthers' finances become a matter of public record, published every year, so anyone can check what came in and where it went.",
+	"The prohibition on paying insiders stops resting on our own Articles alone and becomes something the federal government enforces.",
 ];
-
-/* ------------------------------------------------------------------ */
-/*  Flip Card Component                                                */
-/* ------------------------------------------------------------------ */
-
-function FlipCard({
-	initials,
-	name,
-	role,
-	bio,
-	placeholder,
-}: {
-	initials: string;
-	name: string;
-	role: string;
-	bio: string;
-	placeholder?: boolean;
-}) {
-	const [flipped, setFlipped] = useState(false);
-
-	return (
-		<div
-			className="perspective-[800px] h-64 w-full"
-			onMouseEnter={() => setFlipped(true)}
-			onMouseLeave={() => setFlipped(false)}
-		>
-			<div
-				className={`relative w-full h-full transition-transform duration-500 ${
-					flipped ? "[transform:rotateY(180deg)]" : ""
-				}`}
-				style={{ transformStyle: "preserve-3d" }}
-			>
-				{/* Front */}
-				<div
-					className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-base-content/10 bg-base-100 p-6 text-center shadow-sm"
-					style={{ backfaceVisibility: "hidden" }}
-				>
-					<div
-						className={`w-20 h-20 rounded-full mb-4 flex items-center justify-center ${
-							placeholder
-								? "bg-base-300 border-2 border-dashed border-base-content/20"
-								: "bg-primary/10"
-						}`}
-					>
-						<span
-							className={`text-2xl font-bold ${
-								placeholder ? "text-base-content/25" : "text-primary"
-							}`}
-						>
-							{initials}
-						</span>
-					</div>
-					<h3
-						style={serif}
-						className={`text-lg font-medium ${placeholder ? "text-base-content/40" : ""}`}
-					>
-						{name}
-					</h3>
-					<p className="text-sm text-base-content/50">{role}</p>
-				</div>
-
-				{/* Back */}
-				<div
-					className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-base-content/10 bg-base-100 p-6 text-center shadow-sm [transform:rotateY(180deg)]"
-					style={{ backfaceVisibility: "hidden" }}
-				>
-					<h3
-						style={serif}
-						className={`mb-3 text-lg font-medium ${placeholder ? "text-base-content/40" : ""}`}
-					>
-						{name}
-					</h3>
-					<p className="text-sm text-base-content/60 leading-relaxed">{bio}</p>
-					{placeholder && (
-						<span className="mt-3 text-xs text-base-content/30 uppercase tracking-wider">
-							Seeking candidates
-						</span>
-					)}
-				</div>
-			</div>
-		</div>
-	);
-}
 
 /* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
+
+/** One of the two fact columns in § What Anthers Is. */
+function FactCard({ title, note, items }: { title: string; note: string; items: string[] }) {
+	return (
+		<Card className="flex h-full flex-col text-left">
+			<h3 style={serif} className="text-xl font-medium">
+				{title}
+			</h3>
+			<p className="mt-1 text-sm text-base-content/50">{note}</p>
+			<ul className="mt-5 space-y-4 leading-relaxed text-base-content/70">
+				{items.map((item) => (
+					<li key={item} className="flex gap-3">
+						<span aria-hidden className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+						<span>{item}</span>
+					</li>
+				))}
+			</ul>
+		</Card>
+	);
+}
 
 export default function AboutPage() {
 	return (
@@ -192,15 +183,15 @@ export default function AboutPage() {
 							style={serif}
 							className="text-balance text-5xl font-light leading-[1.05] tracking-tight sm:text-7xl"
 						>
-							The creative internet{" "}
-							<em className="font-medium text-primary not-italic">can work differently.</em>
+							A non-profit creative garden{" "}
+							<em className="font-medium text-primary not-italic">for everyone.</em>
 						</h1>
 					</Reveal>
 					<Reveal delay={150}>
-						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
-							Anthers is a federated, open content network for video, audio, text, games, and
-							interactive experiences—built and operated as a non-profit so that it is structurally
-							incapable of prioritizing profit over people.
+						<p className="mx-auto mt-8 max-w-3xl text-lg leading-relaxed text-base-content/75">
+							A place for videos, games, music, writing, crafts, services, and more, all on an
+							open-source, ad-free platform. A harmonious ecosystem where we can all nurture a
+							creative internet worth loving again.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -212,376 +203,214 @@ export default function AboutPage() {
 				</div>
 			</header>
 
-			{/* ───────────── 1. Why We're Here ───────────── */}
+			{/* ───────────── 1. What Anthers is ───────────── */}
 			<Section>
 				<Reveal>
-					<Eyebrow>The problem</Eyebrow>
-					<H2>Why We're Here</H2>
+					<Eyebrow>The organization</Eyebrow>
+					<H2>What Anthers Is</H2>
 					<Lede>
-						The creative internet is broken—not by accident, but by design. Commercial platforms are
-						structurally incentivized to extract value from creators rather than serve them.
+						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882,
+						and we will be filing for federal 501(c)(3) recognition. Those are two different things,
+						and each of them binds us in a different way.
 					</Lede>
 				</Reveal>
 
-				<div className="mx-auto mt-14 max-w-3xl space-y-10 text-left">
-					<Reveal delay={0}>
-						<div className="flex flex-col gap-5 md:flex-row md:items-start">
-							<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-2xl text-primary">
-								%
-							</div>
-							<div>
-								<h3 style={serif} className="mb-1 text-lg font-medium">
-									Escalating Cuts
-								</h3>
-								<p className="leading-relaxed text-base-content/65">
-									Platforms take increasing percentages of creator revenue. They treat the people
-									who make the platform valuable as a cost center—and every funding round, every
-									IPO, every acquisition shifts incentives further toward extraction.
-								</p>
-							</div>
-						</div>
+				<div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
+					<Reveal className="h-full">
+						<FactCard
+							title="What that means now"
+							note="In force since incorporation"
+							items={BINDING_NOW}
+						/>
 					</Reveal>
-
-					<Reveal delay={100}>
-						<div className="flex flex-col gap-5 md:flex-row md:items-start">
-							<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-secondary/10 text-2xl text-secondary">
-								~
-							</div>
-							<div>
-								<h3 style={serif} className="mb-1 text-lg font-medium">
-									Algorithmic Manipulation
-								</h3>
-								<p className="leading-relaxed text-base-content/65">
-									What audiences see is optimized for engagement metrics that serve advertisers—not
-									for the content people actually asked for. Discovery algorithms systematically
-									privilege outrage and lowest-common-denominator content because those things
-									generate clicks and ad impressions.
-								</p>
-							</div>
-						</div>
-					</Reveal>
-
-					<Reveal delay={200}>
-						<div className="flex flex-col gap-5 md:flex-row md:items-start">
-							<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent/15 text-2xl text-accent-content">
-								&times;
-							</div>
-							<div>
-								<h3 style={serif} className="mb-1 text-lg font-medium">
-									Platform Lock-In
-								</h3>
-								<p className="leading-relaxed text-base-content/65">
-									Creator identities, audiences, and livelihoods are held hostage behind proprietary
-									walls. Leave, and you lose everything you built. No algorithm change should be
-									able to bury a creator's work overnight, and no policy shift should demonetize
-									them without recourse.
-								</p>
-							</div>
-						</div>
+					<Reveal delay={110} className="h-full">
+						<FactCard
+							title="What that means soon"
+							note="What federal recognition adds"
+							items={BINDING_SOON}
+						/>
 					</Reveal>
 				</div>
-
-				<Reveal>
-					<p className="mx-auto mt-12 max-w-xl text-sm italic leading-relaxed text-base-content/50">
-						The only way to guarantee a creator-first platform is to remove the profit motive
-						entirely—not as a promise, but as a legal and structural constraint.
-					</p>
-				</Reveal>
 			</Section>
 
-			{/* ───────────── 2. What We Do ───────────── */}
+			{/* ───────────── 2. The mission ───────────── */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The mission</Eyebrow>
-					<H2>What We Do</H2>
+					<H2>What Anthers Is For</H2>
 					<Lede>
-						Anthers advances equity in creative and educational content spaces by providing platform
-						infrastructure that is structurally incapable of prioritizing profit over the people it
-						serves.
+						Nearly every platform hosting creative work today answers to shareholders, and a
+						platform that answers to shareholders will eventually be asked to take a little more
+						from the people on it, and then a little more after that. Anthers has nobody to ask.
 					</Lede>
 				</Reveal>
 
-				{/* Mission summary — two-column prose */}
-				<div className="mx-auto mt-14 grid max-w-5xl gap-8 text-left md:grid-cols-2">
-					<Reveal delay={0} className="h-full">
-						<div className="h-full border-l-2 border-primary/30 pl-6">
-							<h3 className="mb-3 text-sm uppercase tracking-wider text-primary">For Creators</h3>
-							<p className="leading-relaxed text-base-content/65">
-								Anthers takes no cut of any support or any direct purchase, and the shared Time Pool
-								pays out to creators by time in full. Every dollar a user spends is money to
-								creators, the at-cost card processing, or the remainder of what is given to Anthers
-								that funds free access and the charitable programs. Anthers, Inc. is a Colorado
-								nonprofit corporation—no investors, no profit-taking.
-							</p>
-						</div>
+				<div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
+					<Reveal className="h-full">
+						<Card className="flex h-full flex-col text-left">
+							<h3 style={serif} className="mb-4 flex items-center gap-3 text-xl font-medium">
+								<LockOpenIcon className="h-6 w-6 shrink-0 text-primary" />
+								What We Do
+							</h3>
+							<div className="space-y-4 leading-relaxed text-base-content/70">
+								<p>
+									Anthers is a place to publish creative work of every kind — a game, an album, a
+									film, an essay, a comic, a course, a piece of software — and to be paid for it by
+									the people who come for it.
+								</p>
+								<p>
+									A creator publishes here and decides for themselves how their work is met: free
+									for anyone, behind a monthly amount they set, or for sale outright. They name
+									their own support levels and choose what each one carries.
+								</p>
+								<p>
+									Making an account takes an email address and nothing else. A free account can
+									stream {FREE_PUBLIC_ACCESS_HOURS} hours a month of everything creators have left
+									open to everyone, free forever, and supporting Anthers removes that limit.
+								</p>
+							</div>
+						</Card>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
-						<div className="h-full border-l-2 border-secondary/30 pl-6">
-							<h3 className="mb-3 text-sm uppercase tracking-wider text-secondary">
-								For Audiences
+						<Card className="flex h-full flex-col text-left">
+							<h3 style={serif} className="mb-4 flex items-center gap-3 text-xl font-medium">
+								<KeyIcon className="h-6 w-6 shrink-0 text-primary" />
+								How We Do It
 							</h3>
-							<p className="leading-relaxed text-base-content/65">
-								Consumers see what they asked to see. Feeds are chronological and subscriber-driven
-								by default. There are no ads, no data monetization, and no engagement-maximization
-								algorithms. Subscribers know exactly where every dollar goes—and can see it.
-							</p>
-						</div>
+							<div className="space-y-4 leading-relaxed text-base-content/70">
+								<p>
+									What a creator earns, they keep. Anthers takes no cut of a sale or of support
+									given to a creator, and the only deduction is card processing, which is paid to
+									the card processor rather than kept by us.
+								</p>
+								<p>
+									There is no advertising on Anthers and there never will be. Audiences see what
+									they asked to see, in the order it was published, rather than what an algorithm
+									decided would hold them longest. Support given to Anthers is the one place our own
+									money comes from — half of it pays creators for the time people spend with their
+									work, and what's left funds free access and Anthers' charitable programs.
+									{/* ⚠️ "half" is the ONE money figure typed into this page, and prose is the
+									    only place it reads well — 50% is colder and the `econ:figures` marker
+									    blocks are for tables. It is pinned instead: about-claims.test.ts asserts
+									    the word against TIME_POOL_RATE, so moving the rate turns this sentence
+									    red rather than wrong. */}
+								</p>
+								<p>
+									The whole platform is open source, and everything a creator makes is one click
+									from a file on their own machine. Hosting with us is meant to be a convenience,
+									never a requirement.
+								</p>
+							</div>
+						</Card>
 					</Reveal>
 				</div>
 
-				{/* The charitable programs — the heart of the mission */}
-				<div className="mt-16">
-					<Reveal>
-						<h3 style={serif} className="text-2xl font-medium sm:text-3xl">
-							Anthers' Charitable Programs
-						</h3>
-						<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-							The programs are the operational heart of Anthers' mission, funded by the remainder of
-							what is given to Anthers, plus the half-again on creator storage above the free
-							allowance. The great majority of it is charitable: it funds free access for everyone,
-							plus infrastructure equity, education, creation grants, and emergency assistance.
-						</p>
-					</Reveal>
-					<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
-						{FOUNDATION_PILLARS.map((pillar, i) => (
-							<Reveal key={pillar.title} delay={i * 100} className="h-full">
-								<Card className="card-lift flex h-full flex-row gap-4">
-									<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
-										<pillar.icon className="h-6 w-6" />
-									</div>
-									<div>
-										<h3 style={serif} className="mb-1 text-lg font-medium">
-											{pillar.title}
-										</h3>
-										<p className="text-sm leading-relaxed text-base-content/65">
-											{pillar.description}
-										</p>
-									</div>
-								</Card>
-							</Reveal>
-						))}
-					</div>
-					<Reveal>
-						<div className="mt-10">
-							<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
-								See Where Your Subscription Goes
-							</Link>
-						</div>
-					</Reveal>
-				</div>
-			</Section>
-
-			{/* ───────────── 3. How We Do It ───────────── */}
-			<Section>
-				<Reveal>
-					<Eyebrow>By design</Eyebrow>
-					<H2>How We Do It</H2>
-					<Lede>
-						These aren't aspirations. They are structural properties of how Anthers is built,
-						incorporated, and governed.
-					</Lede>
-				</Reveal>
-
-				{/* Numbered principles — vertical timeline layout */}
-				<div className="relative mx-auto mt-14 max-w-2xl text-left">
-					{/* Vertical line */}
-					<div className="absolute left-6 top-0 bottom-0 hidden w-px bg-primary/15 md:block" />
-
-					<div className="space-y-10">
-						{[
-							{
-								num: "01",
-								title: "Creators Own Everything",
-								text: "The platform is open source under the AGPL, and everything a creator makes is one click from a file on their own machine. The rest of the promise—federation, creators running their own nodes, a presence no single entity can revoke—is a direction we are committed to and have not built yet. It is the point of the whole track, and we would rather signpost it than imply it already works.",
-							},
-							{
-								num: "02",
-								title: "Audiences Choose What They See",
-								text: "The default feed is chronological and subscriber-driven. Algorithmic discovery is available as an opt-in mode, never the primary experience. Anthers has no ads and nothing to gain from capturing your attention—creators are funded by the time you choose to spend with their work, not by an algorithm built to keep you scrolling.",
-							},
-							{
-								num: "03",
-								title: "Funding Flows Directly",
-								text: "Money enters through monthly support (given to a creator, or to Anthers) and direct purchases. Every dollar is money to creators, the at-cost card processing, or the remainder of what is given to Anthers. As a non-profit, Anthers takes no profit—that remainder funds free access and the charitable programs.",
-							},
-							{
-								num: "04",
-								title: "The Profit Motive Is Structurally Eliminated",
-								text: "Not voluntarily set aside—legally removed. A non-profit of the kind Anthers is being formed as cannot distribute profits, cannot be acquired, cannot take corrupting investment. If Anthers dissolves, its assets go to another exempt organization.",
-							},
-							{
-								num: "05",
-								title: "No Single Entity Can Rug-Pull the Network",
-								text: "Federation is meant to make the network resilient to external pressure; non-profit incorporation already makes the organization resilient to internal corruption. Both are necessary and neither is sufficient alone — which is why the second is done and the first is a commitment rather than a claim.",
-							},
-						].map((item, i) => (
-							<Reveal key={item.num} delay={i * 100}>
-								<div className="relative flex items-start gap-6">
-									<div className="z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-										{item.num}
-									</div>
-									<div className="pt-1.5">
-										<h3 style={serif} className="mb-1 text-lg font-medium">
-											{item.title}
-										</h3>
-										<p className="text-sm leading-relaxed text-base-content/65">{item.text}</p>
-									</div>
-								</div>
-							</Reveal>
-						))}
-					</div>
-				</div>
-			</Section>
-
-			{/* ───────────── 4. Who We Are ───────────── */}
-			<Section tint>
-				<Reveal>
-					<Eyebrow>The team</Eyebrow>
-					<H2>Who We Are</H2>
-					<Lede>
-						Anthers is in its founding phase. The team is small, building in public, and actively
-						seeking board members who believe the creative internet deserves better.
-					</Lede>
-				</Reveal>
-
-				<div className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-					{TEAM_MEMBERS.map((member) => (
-						<FlipCard key={member.name} {...member} />
-					))}
-				</div>
-
-				<Reveal>
-					<p className="mx-auto mt-10 max-w-lg text-xs leading-relaxed text-base-content/45">
-						Board seats carry three-year staggered terms with regular rotation. The Executive
-						Director serves ex officio and is recused from votes on their own compensation.
+				<Reveal delay={220}>
+					<p className="mt-10 text-base-content/70">
+						<Link to="/subscribe" className="link link-primary">
+							See where every dollar goes
+						</Link>
+						, line by line.
 					</p>
 				</Reveal>
 			</Section>
 
-			{/* ───────────── 5. Non-profit by design ───────────── */}
+			{/* ───────────── 3. Who we are ───────────── */}
 			<Section>
 				<Reveal>
-					<Eyebrow>Non-profit by design</Eyebrow>
-					<H2>A Colorado Nonprofit Corporation</H2>
+					<Eyebrow>Who we are</Eyebrow>
+					<H2>Meet Parker</H2>
 					<Lede>
-						Anthers, Inc. is a non-profit because the only way to guarantee that our platform always
-						serves creators is to make it legally impossible for it to act otherwise. Anthers cannot
-						distribute profits to insiders, cannot be acquired, and cannot have its mission diluted
-						by investors. If it ever ceases to operate, its assets go to another exempt
-						organization, not to founders or shareholders.
+						Right now, Anthers is one person. That will change as the organization grows; for now,
+						here is who is running it.
 					</Lede>
 				</Reveal>
 
-				{/* Governance — icon row */}
-				<div className="mx-auto mt-14 grid max-w-4xl grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-					{[
-						{
-							icon: LockClosedIcon,
-							title: "Asset Lock",
-							text: "Dissolution sends assets to another exempt org—never to insiders.",
-						},
-						{
-							icon: ScaleIcon,
-							title: "No Private Inurement",
-							text: "Compensation is reasonable, board-approved, and IRS-enforced.",
-						},
-						{
-							icon: EyeIcon,
-							title: "Public Accountability",
-							text: "Form 990 filings, financials, and governance are public record.",
-						},
-						{
-							icon: UserGroupIcon,
-							title: "Independent Board",
-							text: "Real oversight with the authority to override operational decisions.",
-						},
-					].map((item, i) => (
-						<Reveal key={item.title} delay={i * 100}>
-							<div className="text-center">
-								<div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-									<item.icon className="h-7 w-7" />
-								</div>
-								<h3 style={serif} className="mb-1 text-base font-medium">
-									{item.title}
-								</h3>
-								<p className="text-xs leading-relaxed text-base-content/55">{item.text}</p>
-							</div>
-						</Reveal>
-					))}
-				</div>
-
-				{/* Reports & Compliance */}
-				<Reveal className="mx-auto mt-14 block max-w-3xl">
+				<Reveal delay={120} className="mx-auto mt-12 block max-w-5xl">
 					<Card className="text-left">
-						<div className="mb-6 flex items-center gap-2">
-							<DocumentTextIcon className="h-6 w-6 text-primary" />
-							<h3 style={serif} className="text-xl font-medium">
-								Reports & Compliance
-							</h3>
-						</div>
-						<div className="divide-y divide-base-content/10">
-							{[
-								{
-									title: "Form 990",
-									description:
-										"Annual IRS filing disclosing finances, compensation, activities, and governance. Searchable on Candid / GuideStar.",
-									cadence: "Annual",
-								},
-								{
-									title: "Impact Report",
-									description:
-										"Program allocations, outcomes, and grant activity across all four pillars.",
-									cadence: "Annual",
-								},
-								{
-									title: "Independent Audit",
-									description:
-										"Financial statements reviewed by an independent auditor to ensure accuracy and accountability.",
-									cadence: "Annual",
-								},
-							].map((doc) => (
-								<div
-									key={doc.title}
-									className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:gap-6"
-								>
-									<div className="shrink-0 md:w-40">
-										<h4 className="text-sm font-semibold">{doc.title}</h4>
-									</div>
-									<p className="flex-1 text-sm text-base-content/60">{doc.description}</p>
-									<span className="shrink-0 text-xs uppercase tracking-wider text-base-content/40">
-										{doc.cadence}
-									</span>
+						<div className="flex flex-col gap-8 md:flex-row md:items-start">
+							{/* 📷 PORTRAIT SLOT — drop the file at `apps/web/public/images/parker.jpg`
+							    (served from the site root as `/images/parker.jpg`, since build.ts copies
+							    public/ into dist/) and replace this block with:
+
+							      <img
+							          src="/images/parker.jpg"
+							          alt="Parker H. Davis"
+							          className="w-full shrink-0 rounded-2xl object-cover md:w-64"
+							      />
+
+							    Portrait-ish crop, roughly 4:5, ~800px on the short edge is plenty. It sits
+							    at 16rem wide beside the prose on desktop and full-width above it on a
+							    phone. The placeholder below keeps the layout honest until the file lands —
+							    a missing <img> would 404 in the screenshot harness and read as a bug. */}
+							<div className="flex aspect-4/5 w-full shrink-0 items-center justify-center rounded-2xl bg-primary/10 md:w-64">
+								<span style={serif} className="text-6xl font-light text-primary/70">
+									P
+								</span>
+							</div>
+							<div className="space-y-5 leading-relaxed text-base-content/70">
+								<div>
+									<h3 style={serif} className="text-xl font-medium text-base-content">
+										Parker H. Davis
+									</h3>
+									<p className="text-sm text-base-content/50">Founder</p>
 								</div>
-							))}
+								<p>
+									I'm Parker: a director, developer, writer, and composer from Colorado, and
+									Anthers' founder and, for now, its only director.
+								</p>
+								<p>
+									My earliest creative work was in music production, which turned into freelance
+									filmmaking, which turned into a decade in game development where I led teams,
+									shipped titles, and wore more hats than I can count. Every medium I have worked in
+									and every creative I have worked alongside has deepened my sense of what it takes
+									to do this work well — and of how much of it turns on things that have nothing to
+									do with the work itself: whether you can afford to keep going, whether the people
+									who would love what you make are ever shown it, and whether the terms you agreed
+									to last year still mean what they meant when you agreed to them.
+								</p>
+								<p>
+									I have never found anything as worth doing as helping other people feel encouraged
+									and equipped to share what they make, and Anthers is that same impulse built out
+									into something other people can use. I want a creator's relationship with their
+									audience to be the most honest one either of them has, and I want what a creator
+									earns to be theirs.
+								</p>
+								<p>
+									<strong>It matters how we do things, even more than what we aim to do.</strong>{" "}
+									That is the principle I have built every collaboration of mine on, and it is why
+									Anthers is shaped the way it is: I would rather hand you a structure you can check
+									than a promise you have to take my word for.
+								</p>
+							</div>
 						</div>
 					</Card>
 				</Reveal>
 			</Section>
 
-			{/* ───────────── Closing CTA ───────────── */}
+			{/* ───────────── Closing ───────────── */}
 			<section className="bg-base-200/70">
-				<div className="mx-auto max-w-6xl px-6 py-28 text-center">
+				<div className="mx-auto max-w-4xl px-6 py-24 text-center">
 					<Reveal>
 						<Sprig className="mx-auto mb-6 h-14 w-14 text-primary/70" />
 						<h2
 							style={serif}
 							className="text-balance text-4xl font-light leading-tight sm:text-5xl"
 						>
-							Built to serve creators. Structurally incapable of doing otherwise.
+							Have a look around
 						</h2>
-						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Whether you create games, videos, music, writing, or interactive experiences—Anthers
-							is designed so that every dollar flows to the people who make the platform valuable.
+						<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/70">
+							Whether you make things or you'd just like to find good ones, you're welcome here.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to="/subscribe" className="btn btn-primary rounded-full px-7">
-								Support Creators
+								Support a creator
 							</Link>
 							<Link
 								to="/for-creators"
 								className="btn btn-outline rounded-full border-base-content/20 px-7"
 							>
-								Start Creating
+								Start creating
 							</Link>
 						</div>
 					</Reveal>

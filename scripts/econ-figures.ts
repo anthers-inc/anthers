@@ -915,6 +915,25 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		why: "ATProto adoption is deferred — Bluesky identity linking ships, federation does not (41.01)",
 	},
 	{
+		// The same claim in a wording the rule above could not see, which is the third time
+		// 63.01's *"a guard covers a phrasing, never a claim"* has been paid for. /about's
+		// hero read **"Anthers is a federated, open content network"** for months, one band
+		// above a page whose entire subject is being honest about what does and doesn't
+		// exist yet — while the ATProto rule matched `built on the AT Protocol` and the
+		// canonical-introduction rule matched `open, distributed network`, and neither
+		// matched this.
+		//
+		// ⚠️ The adjective is the claim and the noun is not. **"federated" always describes
+		// Anthers as already federated**; "federation" is the subject a page may legitimately
+		// discuss — /compare/itch writes *"federation is a direction we're committed to, not
+		// something we've shipped"*, /roadmap lists *"federation functioning"* as a milestone,
+		// and the wiki index calls a section *"AT Protocol, federation, and community
+		// guidelines"*. All three must stay silent, and all three do, because none of them
+		// uses the adjective. Verified by sabotage against each.
+		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
+		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (63.01; 41.01)",
+	},
+	{
 		// The second mechanism the code never had, and the one that had spread furthest: a
 		// /for-creators pricing card, a ✓ in the itch comparison, the demo storefront, and
 		// the sentence the creator reads directly above the price field all promised
