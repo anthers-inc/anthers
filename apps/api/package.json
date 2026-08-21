@@ -16,6 +16,8 @@
 	"dependencies": {
 		"@anthers/db": "workspace:*",
 		"@anthers/shared": "workspace:*",
+		"@atproto/jwk-jose": "0.2.4",
+		"@atproto/oauth-client": "0.8.3",
 		"@aws-sdk/client-s3": "3.1005.0",
 		"@aws-sdk/s3-request-presigner": "3.1005.0",
 		"@hono/zod-validator": "^0.5.0",

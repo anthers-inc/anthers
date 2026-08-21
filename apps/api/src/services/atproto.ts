@@ -1,436 +1,65 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * ATProto OAuth service — handle resolution, DPoP proof creation,
- * OAuth flow (PAR, token exchange), and PDS interaction helpers.
+ * ATProto identity as it touches Anthers accounts.
  *
- * Ported from legacy Django: accounts/atproto_oauth.py
+ * The OAuth protocol machinery lives in `atproto-client.ts` and comes from the official
+ * SDK. What remains here is the part that is genuinely ours: mapping a DID to an Anthers
+ * account, and the rules about when that mapping may be created, changed or removed.
+ *
+ * This file used to be 605 lines, most of it a hand-rolled implementation of DPoP, PKCE,
+ * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
-
-import { db } from "@anthers/db/client";
+import { db } from "@anthers/db";
 import { atprotoSessions, users } from "@anthers/db/schema";
+import { extractPdsUrl } from "@atproto/oauth-client";
 import { eq } from "drizzle-orm";
-import * as jose from "jose";
+import { getAtprotoClient } from "./atproto-client.js";
 
-// ─── Handle & DID Resolution ────────────────────────────────────────────────
-
-/** Resolve an AT Protocol handle to a DID. Tries public API first, then HTTP well-known. */
-export async function resolveHandle(handle: string): Promise<string> {
-	// Primary: Bluesky public API
-	try {
-		const res = await fetch(
-			`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(handle)}`,
-		);
-		if (res.ok) {
-			const data = (await res.json()) as { did: string };
-			return data.did;
-		}
-	} catch {
-		// Fall through to HTTP well-known
-	}
-
-	// Fallback: HTTP well-known
-	const res = await fetch(`https://${handle}/.well-known/atproto-did`);
-	if (!res.ok) {
-		throw new Error(`Failed to resolve handle: ${handle}`);
-	}
-	const did = (await res.text()).trim();
-	if (!did.startsWith("did:")) {
-		throw new Error(`Invalid DID from well-known: ${did}`);
-	}
-	return did;
-}
-
-/** Resolve a DID to its DID document. */
-export async function resolveDidDocument(did: string): Promise<Record<string, any>> {
-	let url: string;
-	if (did.startsWith("did:plc:")) {
-		url = `https://plc.directory/${did}`;
-	} else if (did.startsWith("did:web:")) {
-		const domain = did.replace("did:web:", "");
-		url = `https://${domain}/.well-known/did.json`;
-	} else {
-		throw new Error(`Unsupported DID method: ${did}`);
-	}
-
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`Failed to resolve DID document for ${did}`);
-	}
-	return res.json();
-}
-
-/** Extract PDS URL from a DID document. */
-export function getPdsUrl(didDoc: Record<string, any>): string {
-	const services = didDoc.service as Array<{ type: string; serviceEndpoint: string }> | undefined;
-	const pds = services?.find((s) => s.type === "AtprotoPersonalDataServer");
-	if (!pds) {
-		throw new Error("No PDS service found in DID document");
-	}
-	return pds.serviceEndpoint;
-}
-
-/** Extract handle from a DID document's alsoKnownAs field. */
-export function getHandleFromDidDocument(didDoc: Record<string, any>): string | null {
-	const aliases = didDoc.alsoKnownAs as string[] | undefined;
-	const atUri = aliases?.find((a) => a.startsWith("at://"));
-	return atUri ? atUri.replace("at://", "") : null;
-}
-
-// ─── DPoP Key & Proof ───────────────────────────────────────────────────────
-
-export interface DPopKeyPair {
-	privatePem: string;
-	jwk: jose.JWK;
-}
-
-/** Generate an ES256 (P-256) key pair for DPoP proofs. */
-export async function generateDPopKey(): Promise<DPopKeyPair> {
-	const { publicKey, privateKey } = await crypto.subtle.generateKey(
-		{ name: "ECDSA", namedCurve: "P-256" },
-		true,
-		["sign", "verify"],
-	);
-
-	// Export private key as PEM
-	const pkcs8 = await crypto.subtle.exportKey("pkcs8", privateKey);
-	const privatePem = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(pkcs8).toString("base64")}\n-----END PRIVATE KEY-----`;
-
-	// Export public key as JWK
-	const jwk = await crypto.subtle.exportKey("jwk", publicKey);
-
-	return {
-		privatePem,
-		jwk: { kty: jwk.kty!, crv: jwk.crv!, x: jwk.x!, y: jwk.y! },
-	};
-}
-
-/** Import a PEM private key for signing. */
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-	return jose.importPKCS8(pem, "ES256");
-}
-
-interface DPopProofOptions {
-	method: string;
-	url: string;
-	privatePem: string;
-	jwk: jose.JWK;
-	nonce?: string;
-	accessToken?: string;
-}
-
-/** Create a DPoP proof JWT. */
-export async function createDPopProof(opts: DPopProofOptions): Promise<string> {
-	const privateKey = await importPrivateKey(opts.privatePem);
-
-	const payload: Record<string, unknown> = {
-		htm: opts.method,
-		htu: opts.url,
-		iat: Math.floor(Date.now() / 1000),
-		jti: crypto.randomUUID(),
-	};
-
-	if (opts.nonce) {
-		payload.nonce = opts.nonce;
-	}
-
-	if (opts.accessToken) {
-		// ath = base64url(SHA-256(access_token))
-		const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(opts.accessToken));
-		payload.ath = jose.base64url.encode(new Uint8Array(hash));
-	}
-
-	return new jose.SignJWT(payload)
-		.setProtectedHeader({ typ: "dpop+jwt", alg: "ES256", jwk: opts.jwk })
-		.sign(privateKey);
-}
-
-// ─── PKCE ────────────────────────────────────────────────────────────────────
-
-export interface PkceChallenge {
-	codeVerifier: string;
-	codeChallenge: string;
-}
-
-/** Generate a PKCE challenge pair. */
-export async function generatePkce(): Promise<PkceChallenge> {
-	const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
-	const codeVerifier = jose.base64url.encode(verifierBytes);
-
-	const challengeHash = await crypto.subtle.digest(
-		"SHA-256",
-		new TextEncoder().encode(codeVerifier),
-	);
-	const codeChallenge = jose.base64url.encode(new Uint8Array(challengeHash));
-
-	return { codeVerifier, codeChallenge };
-}
-
-// ─── Authorization Server Discovery ─────────────────────────────────────────
-
-export interface ASMetadata {
-	issuer: string;
-	authorization_endpoint: string;
-	token_endpoint: string;
-	pushed_authorization_request_endpoint?: string;
-	dpop_signing_alg_values_supported?: string[];
-	[key: string]: unknown;
-}
-
-/** Discover the Authorization Server metadata for a PDS. */
-export async function discoverAuthorizationServer(pdsUrl: string): Promise<ASMetadata> {
-	// Step 1: Get the AS URL from the PDS's protected resource metadata
-	const prRes = await fetch(`${pdsUrl}/.well-known/oauth-protected-resource`);
-	if (!prRes.ok) {
-		throw new Error(`Failed to fetch protected resource metadata from ${pdsUrl}`);
-	}
-	const prData = (await prRes.json()) as { authorization_servers?: string[] };
-	const asUrl = prData.authorization_servers?.[0];
-	if (!asUrl) {
-		throw new Error("No authorization server found in protected resource metadata");
-	}
-
-	// Step 2: Get the AS metadata
-	const asRes = await fetch(`${asUrl}/.well-known/oauth-authorization-server`);
-	if (!asRes.ok) {
-		throw new Error(`Failed to fetch AS metadata from ${asUrl}`);
-	}
-	return asRes.json() as Promise<ASMetadata>;
-}
-
-// ─── OAuth Flow ──────────────────────────────────────────────────────────────
-
-export interface OAuthInitResult {
-	authorizationUrl: string;
-	state: string;
-	codeVerifier: string;
-	dpopPrivatePem: string;
-	dpopJwk: jose.JWK;
+export interface AtprotoIdentity {
 	did: string;
 	handle: string;
 	pdsUrl: string;
-	asMetadata: ASMetadata;
-	clientId: string;
-	redirectUri: string;
-}
-
-interface OAuthInitOptions {
-	handle: string;
-	clientId?: string;
-	redirectUri: string;
-	baseUrl: string;
 }
 
 /**
- * Initiate the ATProto OAuth flow.
- * Resolves handle → DID → PDS → AS, generates PKCE + DPoP key, performs PAR.
+ * Resolve a DID (or handle) to the identity fields Anthers stores. Used after the OAuth
+ * callback, which hands back only a DID.
+ *
+ * The handle is a *claim* the DID document makes and the SDK verifies bidirectionally
+ * during resolution, so it is safe to store — but it changes over time, which is why the
+ * DID and not the handle is the identity column.
  */
-export async function initiateOAuth(opts: OAuthInitOptions): Promise<OAuthInitResult> {
-	// 1. Resolve handle → DID → DID doc → PDS URL
-	const did = await resolveHandle(opts.handle);
-	const didDoc = await resolveDidDocument(did);
-	const pdsUrl = getPdsUrl(didDoc);
-	const resolvedHandle = getHandleFromDidDocument(didDoc) ?? opts.handle;
-
-	// 2. Discover AS
-	const asMetadata = await discoverAuthorizationServer(pdsUrl);
-
-	// 3. Generate PKCE + DPoP key
-	const pkce = await generatePkce();
-	const dpopKey = await generateDPopKey();
-
-	// 4. Generate state
-	const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-	const state = Array.from(stateBytes, (b) => b.toString(16).padStart(2, "0")).join("");
-
-	// 5. Build client_id and redirect_uri
-	let clientId: string;
-	let redirectUri: string;
-
-	if (opts.clientId) {
-		// Production: client_id is the URL to the client metadata document
-		clientId = opts.clientId;
-		redirectUri = opts.redirectUri;
-	} else {
-		// Dev: loopback client per RFC 8252
-		redirectUri = opts.redirectUri.replace("localhost", "127.0.0.1");
-		clientId = `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=atproto`;
-	}
-
-	// 6. Pushed Authorization Request (PAR)
-	let authorizationUrl: string;
-
-	if (asMetadata.pushed_authorization_request_endpoint) {
-		const parUrl = asMetadata.pushed_authorization_request_endpoint;
-		const parBody = new URLSearchParams({
-			client_id: clientId,
-			redirect_uri: redirectUri,
-			response_type: "code",
-			scope: "atproto",
-			code_challenge: pkce.codeChallenge,
-			code_challenge_method: "S256",
-			state,
-			login_hint: resolvedHandle,
-		});
-
-		// First attempt (no nonce)
-		let dpopProof = await createDPopProof({
-			method: "POST",
-			url: parUrl,
-			privatePem: dpopKey.privatePem,
-			jwk: dpopKey.jwk,
-		});
-
-		let parRes = await fetch(parUrl, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
-				DPoP: dpopProof,
-			},
-			body: parBody.toString(),
-		});
-
-		// Handle DPoP nonce requirement
-		if (parRes.status === 400) {
-			const errData = (await parRes.json()) as { error?: string };
-			if (errData.error === "use_dpop_nonce") {
-				const nonce = parRes.headers.get("DPoP-Nonce");
-				if (nonce) {
-					dpopProof = await createDPopProof({
-						method: "POST",
-						url: parUrl,
-						privatePem: dpopKey.privatePem,
-						jwk: dpopKey.jwk,
-						nonce,
-					});
-					parRes = await fetch(parUrl, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/x-www-form-urlencoded",
-							DPoP: dpopProof,
-						},
-						body: parBody.toString(),
-					});
-				}
-			}
-		}
-
-		if (!parRes.ok) {
-			const errText = await parRes.text();
-			throw new Error(`PAR request failed: ${parRes.status} ${errText}`);
-		}
-
-		const parData = (await parRes.json()) as { request_uri: string };
-		authorizationUrl = `${asMetadata.authorization_endpoint}?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(parData.request_uri)}`;
-	} else {
-		// Fallback: direct authorization endpoint
-		const params = new URLSearchParams({
-			client_id: clientId,
-			redirect_uri: redirectUri,
-			response_type: "code",
-			scope: "atproto",
-			code_challenge: pkce.codeChallenge,
-			code_challenge_method: "S256",
-			state,
-			login_hint: resolvedHandle,
-		});
-		authorizationUrl = `${asMetadata.authorization_endpoint}?${params.toString()}`;
-	}
-
+export async function resolveIdentity(didOrHandle: string): Promise<AtprotoIdentity> {
+	const resolved = await getAtprotoClient().identityResolver.resolve(didOrHandle);
 	return {
-		authorizationUrl,
-		state,
-		codeVerifier: pkce.codeVerifier,
-		dpopPrivatePem: dpopKey.privatePem,
-		dpopJwk: dpopKey.jwk,
-		did,
-		handle: resolvedHandle,
-		pdsUrl,
-		asMetadata,
-		clientId,
-		redirectUri,
+		did: resolved.did,
+		// ⚠️ The resolver returns the literal `handle.invalid` when the handle does not
+		// resolve back to the same DID — an unverified claim, not a handle. Storing it would
+		// put a fake domain on the profile and in every `@mention` we ever render, so it is
+		// treated as absent. The DID is unaffected and remains the identity.
+		handle: resolved.handle === HANDLE_INVALID ? "" : resolved.handle,
+		pdsUrl: pdsUrlOf(resolved.didDoc),
 	};
 }
 
-export interface TokenResponse {
-	access_token: string;
-	token_type: string;
-	sub: string; // DID
-	refresh_token?: string;
-	dpopNonce?: string;
-	[key: string]: unknown;
+/** The resolver's sentinel for a handle that failed bidirectional verification. */
+const HANDLE_INVALID = "handle.invalid";
+
+/**
+ * ⚠️ `extractPdsUrl` THROWS on a document with no `#atproto_pds` service; it does not
+ * return undefined. A DID that resolves but hosts no repository is a real state — a
+ * deactivated or mid-migration account — and letting it throw would turn "this account has
+ * no PDS right now" into a failed sign-in.
+ */
+function pdsUrlOf(didDoc: Parameters<typeof extractPdsUrl>[0]): string {
+	try {
+		return extractPdsUrl(didDoc).toString();
+	} catch {
+		return "";
+	}
 }
 
-/** Exchange an authorization code for tokens. Handles DPoP nonce retry. */
-export async function exchangeCode(
-	tokenEndpoint: string,
-	code: string,
-	redirectUri: string,
-	codeVerifier: string,
-	clientId: string,
-	dpopPrivatePem: string,
-	dpopJwk: jose.JWK,
-): Promise<TokenResponse> {
-	const body = new URLSearchParams({
-		grant_type: "authorization_code",
-		code,
-		redirect_uri: redirectUri,
-		code_verifier: codeVerifier,
-		client_id: clientId,
-	});
-
-	let dpopProof = await createDPopProof({
-		method: "POST",
-		url: tokenEndpoint,
-		privatePem: dpopPrivatePem,
-		jwk: dpopJwk,
-	});
-
-	let res = await fetch(tokenEndpoint, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/x-www-form-urlencoded",
-			DPoP: dpopProof,
-		},
-		body: body.toString(),
-	});
-
-	// Handle DPoP nonce retry
-	if (res.status === 400) {
-		const errData = (await res.json()) as { error?: string };
-		if (errData.error === "use_dpop_nonce") {
-			const nonce = res.headers.get("DPoP-Nonce");
-			if (nonce) {
-				dpopProof = await createDPopProof({
-					method: "POST",
-					url: tokenEndpoint,
-					privatePem: dpopPrivatePem,
-					jwk: dpopJwk,
-					nonce,
-				});
-				res = await fetch(tokenEndpoint, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/x-www-form-urlencoded",
-						DPoP: dpopProof,
-					},
-					body: body.toString(),
-				});
-			}
-		}
-	}
-
-	if (!res.ok) {
-		const errText = await res.text();
-		throw new Error(`Token exchange failed: ${res.status} ${errText}`);
-	}
-
-	const tokenData = (await res.json()) as TokenResponse;
-	const dpopNonce = res.headers.get("DPoP-Nonce") ?? undefined;
-
-	return { ...tokenData, dpopNonce };
-}
-
-/** Fetch a user's Bluesky profile (public, no auth needed). */
+/** Fetch a user's Bluesky profile (public, no auth needed). Best-effort decoration only. */
 export async function getBlueskyProfile(
 	did: string,
 ): Promise<{ displayName?: string; avatar?: string }> {
@@ -443,82 +72,92 @@ export async function getBlueskyProfile(
 			return { displayName: data.displayName, avatar: data.avatar };
 		}
 	} catch {
-		// Non-fatal
+		// Non-fatal: a missing profile must never fail a sign-in.
 	}
 	return {};
 }
 
-// ─── ATProto User Management ─────────────────────────────────────────────────
+// ─── ATProto ↔ Anthers account mapping ───────────────────────────────────────
 
 /**
- * Find or create a user from ATProto OAuth.
- * If a user with the DID exists, update their handle/PDS info.
- * Otherwise, create a new user (no password, ATProto-only).
+ * Create an Anthers account from an ATProto identity.
+ *
+ * 🚨 This is a SIGNUP, and it is gated. It previously ran unconditionally from a public,
+ * unauthenticated endpoint, minting an account with a generated username and a placeholder
+ * `{did}@atproto.invalid` address — bypassing the emailed verification code, the payment
+ * step, onboarding, and the join gate. Two canonical documents stated that ATProto OAuth
+ * "cannot create an account", which was true of the user interface and false of the API:
+ * nothing in the UI called it, and that was the only thing holding the door shut.
+ *
+ * ATProto signup is wanted now rather than merely tolerated, so the resolution is a real
+ * ceremony rather than a deletion — but a ceremony is a build, and until it exists this
+ * path stays closed. `ATPROTO_SIGNUP_ENABLED` is the deliberate opener, off by default.
  */
-export async function findOrCreateAtprotoUser(
-	did: string,
-	handle: string,
-	pdsUrl: string,
+export async function createUserFromAtproto(
+	identity: AtprotoIdentity,
 	displayName?: string,
-): Promise<typeof users.$inferSelect> {
-	// Check for existing user with this DID
-	const [existing] = await db.select().from(users).where(eq(users.atprotoDid, did)).limit(1);
-
-	if (existing) {
-		// Update handle/PDS if changed
-		const updates: Record<string, string> = {};
-		if (existing.atprotoHandle !== handle) updates.atprotoHandle = handle;
-		if (existing.atprotoPdsUrl !== pdsUrl) updates.atprotoPdsUrl = pdsUrl;
-		if (displayName && !existing.displayName) updates.displayName = displayName;
-
-		if (Object.keys(updates).length > 0) {
-			await db.update(users).set(updates).where(eq(users.id, existing.id));
-		}
-
-		return { ...existing, ...updates };
+): Promise<{ user?: typeof users.$inferSelect; error?: string }> {
+	if (process.env.ATPROTO_SIGNUP_ENABLED !== "true") {
+		return { error: "signup_disabled" };
 	}
-
-	// Create new user
-	const username = await generateUniqueUsername(handle);
-	const [newUser] = await db
+	const username = await generateUniqueUsername(identity.handle);
+	const [user] = await db
 		.insert(users)
 		.values({
 			username,
-			email: `${did}@atproto.invalid`, // placeholder, no real email
-			atprotoDid: did,
-			atprotoHandle: handle,
-			atprotoPdsUrl: pdsUrl,
+			// ⚠️ A placeholder address, and the reason the ceremony is owed: this account has
+			// no reachable email, so it cannot be verified, recovered, or notified.
+			email: `${identity.did}@atproto.invalid`,
+			atprotoDid: identity.did,
+			atprotoHandle: identity.handle,
+			atprotoPdsUrl: identity.pdsUrl,
 			displayName: displayName ?? "",
 			emailVerified: false,
 		})
 		.returning();
+	return { user };
+}
 
-	return newUser;
+/** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
+export async function findUserByAtprotoDid(
+	identity: AtprotoIdentity,
+	displayName?: string,
+): Promise<typeof users.$inferSelect | undefined> {
+	const [existing] = await db
+		.select()
+		.from(users)
+		.where(eq(users.atprotoDid, identity.did))
+		.limit(1);
+	if (!existing) return undefined;
+
+	// A handle can change under a stable DID, so reconcile rather than skip — the same
+	// argument the dev-account bootstrap makes for reconciling instead of create-if-missing.
+	const updates: Record<string, string> = {};
+	if (existing.atprotoHandle !== identity.handle) updates.atprotoHandle = identity.handle;
+	if (existing.atprotoPdsUrl !== identity.pdsUrl) updates.atprotoPdsUrl = identity.pdsUrl;
+	if (displayName && !existing.displayName) updates.displayName = displayName;
+	if (Object.keys(updates).length > 0) {
+		await db.update(users).set(updates).where(eq(users.id, existing.id));
+	}
+	return { ...existing, ...updates };
 }
 
 /** Generate a unique username from an ATProto handle. */
 async function generateUniqueUsername(handle: string): Promise<string> {
-	// Strip common Bluesky suffixes
 	let base = handle
 		.replace(/\.bsky\.social$/, "")
 		.replace(/\.bsky\.network$/, "")
 		.replace(/\.bsky\.app$/, "");
-
-	// Sanitize to allowed chars, truncate
 	base = base.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 30);
-
 	if (!base) base = "user";
 
-	// Check uniqueness
 	const [exists] = await db
 		.select({ id: users.id })
 		.from(users)
 		.where(eq(users.username, base))
 		.limit(1);
-
 	if (!exists) return base;
 
-	// Try numbered suffixes
 	for (let i = 1; i <= 999; i++) {
 		const candidate = `${base.slice(0, 26)}-${i}`;
 		const [taken] = await db
@@ -528,23 +167,18 @@ async function generateUniqueUsername(handle: string): Promise<string> {
 			.limit(1);
 		if (!taken) return candidate;
 	}
-
-	// Final fallback
 	return `user-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 /** Link an ATProto DID to an existing user account. */
 export async function linkAtprotoToUser(
 	userId: number,
-	did: string,
-	handle: string,
-	pdsUrl: string,
+	identity: AtprotoIdentity,
 ): Promise<{ error?: string }> {
-	// Check if DID is already linked to another account
 	const [existing] = await db
 		.select({ id: users.id })
 		.from(users)
-		.where(eq(users.atprotoDid, did))
+		.where(eq(users.atprotoDid, identity.did))
 		.limit(1);
 
 	if (existing && existing.id !== userId) {
@@ -553,16 +187,20 @@ export async function linkAtprotoToUser(
 
 	await db
 		.update(users)
-		.set({ atprotoDid: did, atprotoHandle: handle, atprotoPdsUrl: pdsUrl })
+		.set({
+			atprotoDid: identity.did,
+			atprotoHandle: identity.handle,
+			atprotoPdsUrl: identity.pdsUrl,
+		})
 		.where(eq(users.id, userId));
 
 	return {};
 }
 
-/** Unlink ATProto from a user. Refuses if user has no password (would lock them out). */
+/** Unlink ATProto from a user. Refuses if the user has no password (would lock them out). */
 export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: string }> {
 	const [user] = await db
-		.select({ passwordHash: users.passwordHash })
+		.select({ passwordHash: users.passwordHash, atprotoDid: users.atprotoDid })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
@@ -576,30 +214,17 @@ export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: s
 		.set({ atprotoDid: null, atprotoHandle: "", atprotoPdsUrl: "" })
 		.where(eq(users.id, userId));
 
-	// Also delete the ATProto session
+	// Revoke at the authorization server as well as locally. A row deleted without a
+	// revocation leaves a live token we no longer track, which is the worse of the two.
+	if (user.atprotoDid) {
+		try {
+			await getAtprotoClient().revoke(user.atprotoDid);
+		} catch {
+			// The server may already consider it gone; the local delete below is what matters.
+		}
+		await db.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));
+	}
 	await db.delete(atprotoSessions).where(eq(atprotoSessions.userId, userId));
 
 	return {};
-}
-
-/** Save ATProto session tokens for a user. */
-export async function saveAtprotoSession(
-	userId: number,
-	tokenData: TokenResponse,
-	dpopPrivatePem: string,
-	dpopJwk: jose.JWK,
-	tokenEndpoint: string,
-): Promise<void> {
-	// Upsert: delete existing then insert
-	await db.delete(atprotoSessions).where(eq(atprotoSessions.userId, userId));
-
-	await db.insert(atprotoSessions).values({
-		userId,
-		accessToken: tokenData.access_token,
-		refreshToken: tokenData.refresh_token ?? "",
-		dpopPrivatePem,
-		dpopJwk,
-		tokenEndpoint,
-		dpopNonce: tokenData.dpopNonce ?? "",
-	});
 }

@@ -4,8 +4,9 @@ import { users } from "@anthers/db/schema";
 import { zValidator } from "@hono/zod-validator";
 import { eq, or } from "drizzle-orm";
 import { Hono } from "hono";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
+import { setSessionCookie } from "../lib/session-cookie.js";
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -174,21 +175,10 @@ function serializeUser(user: typeof users.$inferSelect) {
 	};
 }
 
-// Scope the session cookie to the parent domain (e.g. ".anthers.org") in prod so it's
-// shared across the consumer site and the Creator Studio subdomain. Unset in dev
-// (host-only cookie on localhost). Subdomains are same-site, so SameSite=Lax still sends it.
+// The cookie helper moved to `lib/session-cookie.ts` — there were two copies and the
+// other one omitted COOKIE_DOMAIN. `COOKIE_DOMAIN` is still read here for `deleteCookie`,
+// which must be given the same domain or the cookie cannot be cleared.
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN;
-
-function setSessionCookie(c: any, token: string) {
-	setCookie(c, "session", token, {
-		httpOnly: true,
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "Lax",
-		path: "/",
-		maxAge: 30 * 24 * 60 * 60, // 30 days
-		...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
-	});
-}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
