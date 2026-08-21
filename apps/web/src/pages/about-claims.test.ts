@@ -39,16 +39,24 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { TIME_POOL_RATE } from "@anthers/shared/constants";
 
 const SOURCE = readFileSync(join(import.meta.dir, "AboutPage.tsx"), "utf8");
 
 // Comments are blanked before matching, the same way `econ-figures.ts` blanks them for
 // RETIRED_COPY — and here it is load-bearing rather than a courtesy. The header
-// docblock on AboutPage.tsx **names every phrase below**, to record what was removed
-// and why, so a scan that read comments would fail on its own documentation and teach
-// the next person to delete the explanation instead of the claim.
+// docblock on AboutPage.tsx **names several of the phrases below**, to record what the
+// page may not say and why, so a scan that read comments would fail on its own
+// documentation and teach the next person to delete the explanation instead of the
+// claim.
+// 🚨 Whitespace is collapsed, and that is a fix rather than a convenience. JSX text wraps
+// wherever the formatter decides, so `board of directors` split across two lines was
+// invisible to a substring scan — the guard could be disarmed by a reflow nobody looked at,
+// which is the quietest possible way for it to stop working. Found 2026-08-21 when a new
+// assertion failed against copy that was plainly on the page.
 const COPY = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
 	.replace(/^\s*\/\/.*$/gm, " ")
+	.replace(/\s+/g, " ")
 	.toLowerCase();
 
 /**
@@ -111,8 +119,12 @@ describe("/about describes the organization as it is", () => {
 		// Guard the guard, twice. A comment-stripper that blanked the file would pass
 		// every assertion below while checking nothing, and one that blanked nothing
 		// would fail on the docblock and get itself deleted.
+		//
+		// ⚠️ The second line names a sentence that exists ONLY in AboutPage's docblock. If
+		// you rewrite that docblock, repoint this at a phrase the new one carries — dropping
+		// the assertion leaves the stripper unchecked in one direction.
 		expect(COPY).toContain("a colorado nonprofit corporation");
-		expect(COPY).not.toContain("what was removed on 2026-08-20");
+		expect(COPY).not.toContain("the honest move is to say less");
 	});
 
 	for (const { claim, phrases, sayableWhen } of PREMATURE) {
@@ -126,6 +138,16 @@ describe("/about describes the organization as it is", () => {
 			}
 		});
 	}
+
+	// The one money figure this page states in words rather than deriving. `econ:figures`
+	// cannot see it — its marker blocks generate tables and its typed-figure scan looks for
+	// numerals — so the word gets pinned to the rate it describes here instead. Change
+	// TIME_POOL_RATE and this turns red, which is the point: a prose fraction that has
+	// quietly stopped being true is exactly the failure the generator exists to prevent.
+	it("still describes the Time Pool share correctly in prose", () => {
+		expect(TIME_POOL_RATE).toBe(0.5); // the rate the word "half" below is describing
+		expect(COPY).toContain("half of it pays creators");
+	});
 
 	it("says plainly that Anthers is one person and Parker is its only director", () => {
 		// The positive half, and it needs asserting for the same reason the negatives do:
