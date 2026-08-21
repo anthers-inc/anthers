@@ -3,9 +3,8 @@
 // What /about may claim about the organization, given the organization we have.
 //
 // 🚨 **The failure this guards is subtler than a false statement, and the page had it
-// for months.** Nothing on /about ever said "501(c)(3)" — `legal.test.ts` and the
-// ForCreators header comment had that covered. What it did instead was *presuppose
-// governance we don't have*: three "?" board members with bios and a *Seeking
+// for months.** Nothing on /about claimed the exemption. What it did instead was
+// *presuppose governance we don't have*: three "?" board members with bios and a *Seeking
 // candidates* tag, a footnote on staggered terms and ED recusal drawn from bylaws
 // nobody has adopted, an "Independent Board" with "authority to override operational
 // decisions", and a Reports & Compliance card promising an annual Form 990, Impact
@@ -102,15 +101,53 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		sayableWhen: "the first audit is complete",
 	},
 	{
-		claim: "Anthers holds federal tax-exempt status, or has asked for it",
-		// 63.01 § Claims & honesty is stricter than it first reads: "pending" and "applied
-		// for" are as forbidden as the status itself, because the Form 1023 has not been
-		// filed. The honest ceiling is "a Colorado nonprofit corporation" — say nothing
-		// about federal status at all. Note "another exempt organization" is fine and
-		// appears twice on the page: it describes where the assets go, not what we are.
-		phrases: ["501(c)", "tax-exempt", "tax exempt", "tax-deductible", "tax deductible"],
+		claim: "Anthers already holds federal tax-exempt status, or has applied for it",
+		// 🚨 **This row was `["501(c)", "tax-exempt", …]` — the bare term — until 2026-08-21,
+		// when Parker's call moved 63.01 off *"say nothing about federal status at all"*.
+		// The page now states the intention to file, and the § What Anthers Is two-column
+		// split (what binds us NOW / what recognition ADDS) is what makes that safe: it
+		// partitions present from future on the page itself rather than leaving a reader to
+		// work out which column a sentence belongs in.
+		//
+		// So what is forbidden is the **present tense**, in every form that would let a
+		// reader conclude we hold the status or have asked for it. The Form 1023 has not
+		// been filed. Note "another charitable organization" is fine and describes where the
+		// assets go, not what we are; and the positive assertion below pins the future
+		// framing, so a re-tensing breaks two tests rather than none.
+		phrases: [
+			"is a 501(c)",
+			"are a 501(c)",
+			"as a 501(c)",
+			"501(c)(3) nonprofit",
+			"501(c)(3) non-profit",
+			"501(c)(3) organization",
+			"501(c)(3) charity",
+			"tax-exempt",
+			"tax exempt",
+			"exemption is pending",
+			"application is pending",
+			"pending 501(c)",
+			"applied for 501(c)",
+		],
 		sayableWhen:
 			"the IRS determination letter arrives — and 'applied for' only once the Form 1023 is actually filed",
+	},
+	{
+		claim: "money given to Anthers is deductible today",
+		// The half of the old row that did NOT relax. Deductibility is the claim with a
+		// cash consequence for the reader, so only the future form survives, and it is
+		// paired with its own correction — see the co-presence assertion below.
+		phrases: [
+			"is tax-deductible",
+			"are tax-deductible",
+			"is tax deductible",
+			"are tax deductible",
+			"tax-deductible donation",
+			"tax deductible donation",
+			"tax-deductible gift",
+			"tax deductible gift",
+		],
+		sayableWhen: "the IRS determination letter arrives",
 	},
 ];
 
@@ -138,6 +175,26 @@ describe("/about describes the organization as it is", () => {
 			}
 		});
 	}
+
+	// The positive half of the federal-status rule, and it is what lets the negative half
+	// above be narrow. Every mention of 501(c)(3) on this page has to sit inside the
+	// explicit future framing; re-tense the sentence and this fails alongside whichever
+	// present-tense phrase the reword reached for. Rewording is fine — update this line
+	// with the reword rather than dropping it.
+	it("states federal recognition as something ahead of us, never as something we hold", () => {
+		expect(COPY).toContain("will be filing for federal 501(c)(3) recognition");
+	});
+
+	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
+	// reader who meets "donations become tax-deductible" without the correction beside it
+	// will hear that theirs is, and that one has a cash consequence. Conditional on the
+	// mention, because deleting the deductibility line entirely is a legitimate edit —
+	// what is not legitimate is keeping it and dropping the sentence that dates it.
+	it("never says donations become deductible without saying they are not yet", () => {
+		if (COPY.includes("tax-deductible") || COPY.includes("tax deductible")) {
+			expect(COPY).toContain("until the determination letter arrives, they are not");
+		}
+	});
 
 	// The one money figure this page states in words rather than deriving. `econ:figures`
 	// cannot see it — its marker blocks generate tables and its typed-figure scan looks for
