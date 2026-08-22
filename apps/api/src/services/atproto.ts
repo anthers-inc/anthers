@@ -13,7 +13,7 @@ import { db } from "@anthers/db";
 import { atprotoPendingSignups, atprotoSessions, users } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
 import { eq, lt } from "drizzle-orm";
-import { getAtprotoClient } from "./atproto-client.js";
+import { EMAIL_SCOPE, getAtprotoClient } from "./atproto-client.js";
 
 export interface AtprotoIdentity {
 	did: string;
@@ -199,9 +199,6 @@ export async function readPdsEmail(session: {
 		return { confirmed: false, scopeGranted: false };
 	}
 }
-
-/** The narrow scope that grants read access to the account's address, and nothing else. */
-export const EMAIL_SCOPE = "transition:email";
 
 // ─── Signups waiting on an address ───────────────────────────────────────────
 

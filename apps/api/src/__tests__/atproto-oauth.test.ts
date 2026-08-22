@@ -156,13 +156,28 @@ describe("client construction under Bun", () => {
 		}
 	});
 
-	it("serves identity-only scope in its client metadata", () => {
-		// Writing records needs more than this, and asking for it at sign-in is the thing
-		// being guarded against — `transition:generic` is App-Password-equivalent access.
+	it("declares every scope the app can request, and no write scope", () => {
+		// 🚨 **This asserted `scope === "atproto"` and that was WRONG**, found by driving the
+		// live signup flow: the authorization server answered `invalid_scope: Scope
+		// "transition:email" is not declared in the client metadata`. Client metadata's
+		// `scope` is the SUPERSET a client may ever ask for — the registration — while the
+		// per-flow narrowing is the `scope` argument to `authorize()`.
+		//
+		// ⭐ The old assertion was protecting a real property in the wrong place. Declaring a
+		// scope here does not put it on anybody's consent screen; the screen renders what the
+		// authorization REQUEST asks for. Signing in still asks for identity alone, and
+		// `atproto-login.test.ts` is what pins that.
 		const prev = process.env.BASE_URL;
 		process.env.BASE_URL = "https://anthers.org";
 		try {
-			expect(buildClientMetadata().scope).toBe("atproto");
+			const scope = buildClientMetadata().scope;
+			expect(scope).toContain("atproto");
+			// Needed by signup, which reads the address from the PDS to save somebody typing.
+			expect(scope).toContain("transition:email");
+			// 🚨 The property worth guarding: `transition:generic` is App-Password-equivalent
+			// access to a creator's whole account. Declaring it would let any later call
+			// request it without a second thought.
+			expect(scope).not.toContain("transition:generic");
 			expect(buildClientMetadata().dpop_bound_access_tokens).toBe(true);
 		} finally {
 			if (prev === undefined) delete process.env.BASE_URL;
