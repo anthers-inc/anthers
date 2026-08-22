@@ -18,7 +18,6 @@ import {
 } from "../services/atproto-records.js";
 
 const BASE = "https://anthers.org";
-const UPLOADED = new Date("2026-06-01T00:00:00.000Z");
 const RELEASED = new Date("2026-07-01T00:00:00.000Z");
 
 /** A released Work that anyone may open: one baseline row, allowed, priced at zero. */
@@ -37,7 +36,6 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		slug: "a-short-film",
 		publicId: 90210,
 		releasedAt: RELEASED,
-		createdAt: UPLOADED,
 		...overrides,
 	};
 }
@@ -86,13 +84,16 @@ describe("the release date", () => {
 		);
 	});
 
-	it("falls back to the upload date when no release date was recorded", () => {
-		// ⚠️ A released Work can have a null `released_at` — early rows predate the column,
-		// which is why `routes/content.ts` already orders by COALESCE of the two. Withholding
-		// the Work from the network over a missing column would be the worse answer.
-		const record = workToRecord(openWork({ releasedAt: null }), { baseUrl: BASE });
-		expect(record?.releasedAt).toBe("2026-06-01T00:00:00.000Z");
-		expect(workRecord.safeParse(record).success).toBe(true);
+	it("refuses to publish a released Work with no release date", () => {
+		// 🚨 No current path produces this: the update route stamps `releasedAt` on first
+		// release and the seed script sets it too. The only rows carrying it in the dev
+		// database come from test fixtures inserting `visibility: "released"` directly.
+		// So reporting it beats approximating it — if it ever appears in production it is a
+		// bug worth seeing, and the alternative was writing a date we know is wrong into a
+		// record other people cache.
+		const work = openWork({ releasedAt: null });
+		expect(unpublishableReason(work)).toBe("missing_release_date");
+		expect(workToRecord(work, { baseUrl: BASE })).toBeNull();
 	});
 });
 

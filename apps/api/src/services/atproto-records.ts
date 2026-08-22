@@ -22,8 +22,6 @@ export interface PublishableWork extends AccessibleWork {
 	slug: string;
 	publicId: number;
 	releasedAt: Date | null;
-	/** The upload date, used only as a fallback release date — see `releaseDateOf`. */
-	createdAt: Date;
 	visibility: string;
 }
 
@@ -41,7 +39,7 @@ export interface WorkRecord {
  * Why a Work has no public record. Returned rather than thrown, because "this one is not
  * publishable" is an ordinary outcome of walking a Catalog, not an error.
  */
-export type UnpublishableReason = "not_released" | "taken_down";
+export type UnpublishableReason = "not_released" | "taken_down" | "missing_release_date";
 
 /**
  * Whether a Work may appear on the public network at all.
@@ -60,6 +58,12 @@ export type UnpublishableReason = "not_released" | "taken_down";
 export function unpublishableReason(work: PublishableWork): UnpublishableReason | null {
 	if (work.takedownStatus !== "active") return "taken_down";
 	if (work.visibility !== "released") return "not_released";
+	// A released Work with no release date is a state no current path produces — the update
+	// route stamps it on first release, and the seed script sets it too. Reporting it is
+	// therefore better than papering over it: if it ever appears in production it is a bug
+	// worth seeing, and the alternative was writing an approximate date into a record that
+	// other people cache.
+	if (!work.releasedAt) return "missing_release_date";
 	return null;
 }
 
@@ -84,29 +88,20 @@ export function workUrl(work: PublishableWork, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/works/${work.slug}-${work.publicId}`;
 }
 
-/**
- * The date the record reports as the release.
- *
- * ⚠️ `releasedAt` can be null on a released Work — early rows predate the column, and
- * `routes/content.ts` already orders by `COALESCE(released_at, created_at)` for exactly
- * that reason. This applies the same rule rather than inventing a third one, and rather
- * than withholding the Work from the network over a missing column. The upload date
- * precedes the real release, so the record is early rather than wrong.
- */
-function releaseDateOf(work: PublishableWork): Date {
-	return work.releasedAt ?? work.createdAt;
-}
-
 /** Build the public record for a Work, or `null` when it must not have one. */
 export function workToRecord(work: PublishableWork, opts: { baseUrl: string }): WorkRecord | null {
 	if (unpublishableReason(work) !== null) return null;
+	// `unpublishableReason` has already established this. Re-checking rather than asserting
+	// because a non-null assertion here would be a lie waiting to become true if the two
+	// ever drift apart, and the cost of the extra branch is nothing.
+	if (!work.releasedAt) return null;
 
 	const record: WorkRecord = {
 		$type: "org.anthers.work",
 		kind: work.type,
 		title: work.title ?? "",
 		url: workUrl(work, opts.baseUrl),
-		releasedAt: releaseDateOf(work).toISOString(),
+		releasedAt: work.releasedAt.toISOString(),
 		access: accessForStrangers(work),
 	};
 
