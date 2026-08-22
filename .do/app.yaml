@@ -222,6 +222,27 @@ envs:
     scope: RUN_TIME
     value: "(720) 404-2603"
 
+  # Whether "Sign up with Bluesky" is offered on /subscribe. A launch switch, not a
+  # quarantine: the path carries the same ceremony every other signup does (the account is
+  # created only at /auth/signup/verify, after a code Anthers sent has been read), so what
+  # this decides is whether the door is OPEN, not whether it is safe.
+  #
+  # 🚨 Read as the literal string "true" and nothing else, deliberately — an unset or
+  # misspelled value means CLOSED. It is read twice: `GET /api/atproto/config` tells the
+  # browser whether to render the button at all, because a launch switch the client cannot
+  # see makes the closed state a button that refuses when pressed.
+  #
+  # ⚠️ Turning this off does not remove accounts already created through it; they hold real
+  # verified addresses and keep signing in by code. Reversal is clean, not retroactive.
+  #
+  # ⚠️ **Committing a value here changes nothing in production on its own.** A push to
+  # `release` deploys code, not config — App Platform rebuilds from the spec it has stored.
+  # This reaches prod only via `make spec-apply APPLY=1`, and is confirmed with
+  # `doctl apps spec get <app-id> | grep ATPROTO`. See 42.05 § Managing env vars.
+  - key: ATPROTO_SIGNUP_ENABLED
+    scope: RUN_TIME
+    value: "true"
+
 ingress:
   rules:
     - match:
