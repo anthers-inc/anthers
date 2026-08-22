@@ -240,11 +240,17 @@ export default function LoginPage() {
 						{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain div, not
 						    <p>, so DaisyUI's card-body `p { flex-grow: 1 }` doesn't balloon it and
 						    shove the form down. It is a LINK now rather than a mode toggle — the
-						    card it used to flip to no longer exists. */}
+						    card it used to flip to no longer exists.
+
+						    ⚠️ **"Sign up free", matching the navbar** (2026-08-22). This is the door
+						    somebody without an account is most likely to arrive at by mistake — they
+						    came to log in and cannot — so it is the second-best place after the
+						    navbar to say that joining costs nothing. The destination page states the
+						    monthly Public Access limit in the same breath, per 63.01. */}
 						<div className="text-center text-sm text-base-content/70">
 							New to Anthers?{" "}
 							<Link to="/subscribe" className="link link-primary">
-								Sign up
+								Sign up free
 							</Link>
 						</div>
 						{errors.general && (
