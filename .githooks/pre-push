@@ -24,15 +24,27 @@ remote="$1"
 # Nothing to verify when every ref in this push is a deletion — there's no tree to
 # check, and running the suite against the current checkout would test something
 # the push isn't sending.
+#
+# 🚨 "No lines at all" is NOT the same as "only deletions", and conflating them turned
+# this gate off. The loop below used to skip verification whenever `has_content` stayed 0,
+# which is also what happens when git supplies nothing on stdin — so in any context where
+# the ref list did not arrive, the hook exited 0 in silence and the push sailed through
+# unverified. That is how a lint-red `main` accepted a push: the gate did not decline to
+# fail, it declined to run, and the two look identical from outside. A gate that can skip
+# itself quietly is worse than no gate, because it is trusted.
 zero="0000000000000000000000000000000000000000"
+refs_seen=0
 has_content=0
 while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	refs_seen=$((refs_seen + 1))
 	[ -z "$local_sha" ] && continue
 	[ "$local_sha" = "$zero" ] && continue
 	has_content=1
 done
 
-if [ "$has_content" -eq 0 ]; then
+# Skip only when git actually told us what it is pushing AND every ref was a deletion.
+# If we were told nothing, verify: assuming there is nothing to check is the failure above.
+if [ "$refs_seen" -gt 0 ] && [ "$has_content" -eq 0 ]; then
 	exit 0
 fi
 
