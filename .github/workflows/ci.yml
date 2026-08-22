@@ -139,6 +139,13 @@ jobs:
       - name: Economics figures are in sync
         run: bun run econ:figures --check
 
+      # A hand-written migration that skips drizzle's snapshot makes its view of the
+      # schema permanently stale, and the symptom is a rename prompt that reads like an
+      # ordinary question. Nothing else can see it: typecheck passes, tests pass, and the
+      # database is correct — the only artefact that disagrees is a JSON file nobody reads.
+      - name: Drizzle snapshots are in step with the journal
+        run: bun run db:snapshots
+
       - name: Apply database migrations
         run: bun run db:migrate
 

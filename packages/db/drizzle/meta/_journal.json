@@ -309,6 +309,13 @@
       "when": 1786896824065,
       "tag": "0043_atproto_oauth_sdk",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787357464735,
+      "tag": "0044_rebaseline_snapshot_after_hand_written_migrations",
+      "breakpoints": true
     }
   ]
 }

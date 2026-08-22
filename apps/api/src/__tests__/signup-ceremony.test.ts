@@ -514,7 +514,7 @@ describe("POST /auth/onboarding/claim", () => {
 	});
 
 	test("sets a password when one is given, and it signs in", async () => {
-		const { cookie, email } = await pendingAccount("claimpw");
+		const { cookie } = await pendingAccount("claimpw");
 		const username = `${RUN}pw`.slice(0, 30);
 
 		await post(

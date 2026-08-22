@@ -39,7 +39,7 @@
  *        is safe to call from a machine that cannot reach DigitalOcean — the
  *        scheduled workflow gates on doctl availability separately.
  */
-import { $ } from "bun";
+export {}; // top-level await needs this file to be a module
 
 /** Which `doctl` account to compare against, via `DOCTL_CONTEXT`. Same rule as
  * `spec-diff.ts`: production is under an Anthers-owned account, and without this

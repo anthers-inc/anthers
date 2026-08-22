@@ -235,6 +235,7 @@ verify: ## Run everything CI runs: typecheck, lint, migrate, unit tests, full Pl
 	bun run typecheck
 	bun run lint
 	bun run econ:figures --check
+	bun run db:snapshots
 	$(MAKE) db-ready
 	bun test
 	$(MAKE) free-preview-port
