@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
-import { sanitizeNextPath, withNextPath } from "@anthers/web-shared/nextPath";
 import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
 import { useCallback, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
+import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeModal from "../components/auth/EmailCodeModal";
 
 /**
@@ -52,12 +54,27 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *   account has one is not something this page may find out, and the emailed code has
  *   been available to every account through `/subscribe` since the ceremony shipped.
  *
- * The card keeps its fixed height and its botanical corner flourishes — the flourishes
- * are positioned against the card box, so the height is load-bearing for the framing
- * rather than a leftover of the login/signup size-matching it was originally written for.
+ * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
+ * It signs in an Anthers account that has already linked an ATProto identity, and a handle
+ * nobody has linked comes back from the callback as `signup_disabled` rather than minting
+ * anything. That refusal is the whole reason the affordance can live on this page at all,
+ * and it is why the button is disclosed rather than given equal billing with the form: the
+ * only people it works for are people who already have an account and went to settings to
+ * connect one. Offering it as a way to *join* would be the second signup door this page
+ * spent a deletion getting rid of.
+ *
+ * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
+ * flourishes are positioned against the card box and each spray reaches roughly seven rems
+ * in from its corner, so the empty space above and below the centred content is what keeps
+ * a leaf off the buttons. At `h-[32rem]` the old content cleared the bottom pair by a
+ * fraction of a rem — which is why adding the Bluesky row put a spray straight through it,
+ * and why the handle prompt is a modal instead of an inline field. Two rules follow: the
+ * height is a **minimum** now, because a card that cannot grow spills its content the
+ * moment a form gains an error line; and anything added to the card body has to be paid
+ * for in height, at twice its own, since the content is centred.
  */
 export default function LoginPage() {
-	const { signIn, refreshUser } = useAuth();
+	const { signIn, signInWithBluesky, refreshUser } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
 
@@ -78,6 +95,9 @@ export default function LoginPage() {
 	const [loginPassword, setLoginPassword] = useState("");
 	/** The address a code was just sent to, or null when no code is in flight. */
 	const [codeEmail, setCodeEmail] = useState<string | null>(null);
+
+	/** Whether the handle prompt is open. Closed until someone asks for it. */
+	const [blueskyOpen, setBlueskyOpen] = useState(false);
 
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
@@ -173,6 +193,18 @@ export default function LoginPage() {
 		if (codeEmail) await sendCode(codeEmail);
 	}, [codeEmail, sendCode]);
 
+	/**
+	 * Hand the browser to Bluesky, carrying wherever this sign-in interrupted.
+	 *
+	 * ⚠️ It throws rather than reporting, because the modal shows the message in its own
+	 * field — and it never resolves in any useful sense, since `signInWithBluesky` sets
+	 * `window.location` and the page is already leaving.
+	 */
+	const startBluesky = useCallback(
+		(handle: string) => signInWithBluesky(handle, redirectTo),
+		[signInWithBluesky, redirectTo],
+	);
+
 	return (
 		// Center the card in the main content area. flex-1 fills <main> (which is a
 		// flex column), so the card centers between header and footer regardless of
@@ -199,7 +231,10 @@ export default function LoginPage() {
 						style={{ transform: `rotate(${rot}deg)` }}
 					/>
 				))}
-				<div data-auth-fade className="card relative z-10 h-[32rem] w-full bg-base-200 shadow-lg">
+				<div
+					data-auth-fade
+					className="card relative z-10 min-h-[38rem] w-full bg-base-200 shadow-lg"
+				>
 					<div className="card-body justify-center">
 						<h1 className="card-title justify-center text-2xl">Log In</h1>
 						{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain div, not
@@ -256,6 +291,23 @@ export default function LoginPage() {
 								)}
 							</button>
 						</form>
+
+						{/* ── Bluesky ────────────────────────────────────────────────────
+						    Below the divider rather than beside the form, because it only
+						    works for an account that has already linked an identity — a
+						    prominent button that refuses most of the people who press it is
+						    worse than a quiet one. The divider says "or", not "or sign up
+						    with", deliberately. The handle itself is asked for in a modal;
+						    see `BlueskyHandleModal` for why it cannot be inline. */}
+						<div className="divider my-1 text-xs text-base-content/50">or</div>
+						<button
+							type="button"
+							className="btn btn-outline w-full"
+							onClick={() => setBlueskyOpen(true)}
+						>
+							<BlueskyMark className="h-4 w-4" />
+							Log in with Bluesky
+						</button>
 					</div>
 				</div>
 			</div>
@@ -275,6 +327,10 @@ export default function LoginPage() {
 					onResend={resendCode}
 					onClose={() => setCodeEmail(null)}
 				/>
+			)}
+
+			{blueskyOpen && (
+				<BlueskyHandleModal onSubmit={startBluesky} onClose={() => setBlueskyOpen(false)} />
 			)}
 		</div>
 	);

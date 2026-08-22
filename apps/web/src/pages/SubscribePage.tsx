@@ -67,11 +67,11 @@ import {
 	PUBLIC_ACCESS_PRICE,
 	timePoolFor,
 } from "@anthers/shared/constants";
+import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { sanitizeNextPath, withNextPath } from "@anthers/web-shared/nextPath";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
