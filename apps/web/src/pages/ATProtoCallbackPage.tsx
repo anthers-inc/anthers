@@ -112,9 +112,12 @@ export default function ATProtoCallbackPage() {
 						</h2>
 						<p className="text-sm text-base-content/60">{error}</p>
 						<div className="card-actions mt-4 justify-center gap-2">
+							{/* Same name as the navbar and `/login`'s prompt. This is the third place
+							    somebody without an account gets pointed at the door, and one act
+							    should have one name wherever it is offered. */}
 							{noAccount && (
 								<Link to="/subscribe" className="btn btn-primary btn-sm">
-									Sign up
+									Sign up free
 								</Link>
 							)}
 							<Link to="/login" className={`btn btn-sm ${noAccount ? "btn-ghost" : "btn-primary"}`}>

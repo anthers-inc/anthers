@@ -39,8 +39,18 @@ test.describe("logging in with Bluesky", () => {
 		await page.getByRole("button", { name: /log in with bluesky/i }).click();
 
 		await expect(page.getByText(/doesn't create one/i)).toBeVisible();
-		// And the page offers exactly one way to actually join, which is not this one.
-		await expect(page.getByRole("link", { name: /^sign up$/i }).first()).toHaveAttribute(
+
+		// And the card offers exactly one way to actually join, which is not this one.
+		//
+		// 🚨 **Scoped to the card, and `.first()` was the bug.** This read
+		// `getByRole("link", {name: /^sign up$/i}).first()` — and the first such link in the
+		// document is the one in the HEADER, so the assertion has been checking the navbar
+		// while claiming to check this page. Pointing the card's link at `/login` left it
+		// green. Two lessons, and the second is the one worth carrying: an anchored name
+		// (`/^sign up$/`) pins a call to action's *wording* while pretending to test where
+		// it goes, and `.first()` answers a question about document order that nobody asked.
+		const card = page.locator("[data-auth-fade]");
+		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute(
 			"href",
 			"/subscribe",
 		);
