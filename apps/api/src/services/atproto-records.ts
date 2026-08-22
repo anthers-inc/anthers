@@ -21,12 +21,6 @@ export interface PublishableWork extends AccessibleWork {
 	description: string | null;
 	slug: string;
 	publicId: number;
-	tags: string[] | null;
-	websiteUrl: string | null;
-	sourceUrl: string | null;
-	durationSeconds: number | null;
-	authoredAt: Date | null;
-	authoredPrecision: string | null;
 	releasedAt: Date | null;
 	visibility: string;
 }
@@ -35,24 +29,17 @@ export interface WorkRecord {
 	$type: "org.anthers.work";
 	kind: string;
 	title: string;
-	description?: string;
 	url: string;
-	access?: "open" | "gated";
-	tags?: string[];
-	authoredAt?: string;
-	authoredPrecision?: string;
-	releasedAt?: string;
-	durationSeconds?: number;
-	website?: string;
-	source?: string;
-	createdAt: string;
+	releasedAt: string;
+	description?: string;
+	access?: { state: "open" | "gated" };
 }
 
 /**
  * Why a Work has no public record. Returned rather than thrown, because "this one is not
  * publishable" is an ordinary outcome of walking a Catalog, not an error.
  */
-export type UnpublishableReason = "not_released" | "taken_down";
+export type UnpublishableReason = "not_released" | "taken_down" | "missing_release_date";
 
 /**
  * Whether a Work may appear on the public network at all.
@@ -71,6 +58,12 @@ export type UnpublishableReason = "not_released" | "taken_down";
 export function unpublishableReason(work: PublishableWork): UnpublishableReason | null {
 	if (work.takedownStatus !== "active") return "taken_down";
 	if (work.visibility !== "released") return "not_released";
+	// A released Work with no release date is a state no current path produces — the update
+	// route stamps it on first release, and the seed script sets it too. Reporting it is
+	// therefore better than papering over it: if it ever appears in production it is a bug
+	// worth seeing, and the alternative was writing an approximate date into a record that
+	// other people cache.
+	if (!work.releasedAt) return "missing_release_date";
 	return null;
 }
 
@@ -80,14 +73,14 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
  * a second implementation of a gate rule is a second implementation free to disagree with
  * the first, and this one would disagree in public.
  */
-function accessForStrangers(work: PublishableWork): "open" | "gated" {
+function accessForStrangers(work: PublishableWork): { state: "open" | "gated" } {
 	const ctx = buildPreviewContext({
 		creatorId: work.creatorId ?? -1,
 		given: 0,
 		owned: false,
 		workIds: [],
 	});
-	return resolveAccessSync(work, ctx).isFree ? "open" : "gated";
+	return { state: resolveAccessSync(work, ctx).isFree ? "open" : "gated" };
 }
 
 /** The canonical page for a Work. Mirrors the app's `/works/{slug}-{publicId}` route. */
@@ -95,44 +88,26 @@ export function workUrl(work: PublishableWork, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/works/${work.slug}-${work.publicId}`;
 }
 
-/**
- * Build the public record for a Work, or `null` when it must not have one.
- *
- * `now` is injected rather than read, so a caller re-publishing an unchanged Work can keep
- * the original `createdAt` and the function stays pure enough to test.
- */
-export function workToRecord(
-	work: PublishableWork,
-	opts: { baseUrl: string; now: Date },
-): WorkRecord | null {
+/** Build the public record for a Work, or `null` when it must not have one. */
+export function workToRecord(work: PublishableWork, opts: { baseUrl: string }): WorkRecord | null {
 	if (unpublishableReason(work) !== null) return null;
+	// `unpublishableReason` has already established this. Re-checking rather than asserting
+	// because a non-null assertion here would be a lie waiting to become true if the two
+	// ever drift apart, and the cost of the extra branch is nothing.
+	if (!work.releasedAt) return null;
 
 	const record: WorkRecord = {
 		$type: "org.anthers.work",
 		kind: work.type,
 		title: work.title ?? "",
 		url: workUrl(work, opts.baseUrl),
+		releasedAt: work.releasedAt.toISOString(),
 		access: accessForStrangers(work),
-		createdAt: opts.now.toISOString(),
 	};
 
-	// Every remaining field is optional, and an empty string is not a value — writing
-	// `description: ""` into a public record says "the creator wrote an empty description"
-	// where absence says "they wrote none".
+	// An empty string is not a value: writing `description: ""` into a public record says
+	// the creator wrote an empty description, where absence says they wrote none.
 	if (work.description) record.description = work.description;
-	if (work.tags?.length) record.tags = work.tags;
-	if (work.websiteUrl) record.website = work.websiteUrl;
-	if (work.sourceUrl) record.source = work.sourceUrl;
-	if (work.durationSeconds != null) record.durationSeconds = work.durationSeconds;
-	if (work.releasedAt) record.releasedAt = work.releasedAt.toISOString();
-
-	// ⚠️ The pair travels together. `authoredPrecision` without `authoredAt` describes
-	// nothing, and `authoredAt` without it invites a reader to render an invented day for a
-	// work the creator only dated to a year.
-	if (work.authoredAt) {
-		record.authoredAt = work.authoredAt.toISOString();
-		if (work.authoredPrecision) record.authoredPrecision = work.authoredPrecision;
-	}
 
 	return record;
 }
