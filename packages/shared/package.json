@@ -13,6 +13,7 @@
 		"./moderation": "./src/moderation.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
+		"./next-path": "./src/next-path.ts",
 		"./figures": "./src/figures.generated.ts",
 		"./lexicons": "./src/lexicons.ts"
 	},

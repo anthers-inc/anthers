@@ -10,6 +10,7 @@ import {
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
+import BlueskyMark from "../components/auth/BlueskyMark";
 import { studioUrl } from "../lib/studio";
 
 interface DeviceSession {
@@ -281,6 +282,16 @@ function BlockedSection() {
 	);
 }
 
+/**
+ * Connecting a Bluesky (ATProto) identity to this account.
+ *
+ * ⚠️ **The copy here is the whole feature, and it is easy to overclaim.** What linking does
+ * today is exactly two things: it proves the same person holds both identities, and it lets
+ * that handle sign in at `/login`. It publishes nothing, moves no content, and grants
+ * Anthers no ability to act on the account — the OAuth request asks for the `atproto` scope,
+ * which is identity and nothing else. Saying more than that would trip `RETIRED_COPY`, and
+ * the guard exists because this exact framing drifted back onto marketing pages twice.
+ */
 function BlueskySection() {
 	const { user, linkBluesky, unlinkBluesky, refreshUser } = useAuth();
 	const [searchParams] = useSearchParams();
@@ -300,14 +311,16 @@ function BlueskySection() {
 
 	const handleLink = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!handle.trim()) return;
+		// A handle is a domain name; the leading `@` is how people write it, not part of it.
+		const identifier = handle.trim().replace(/^@/, "");
+		if (!identifier) return;
 		setError(null);
 		setLinking(true);
 		try {
-			await linkBluesky(handle.trim());
+			await linkBluesky(identifier);
 			// linkBluesky redirects, so we won't reach here
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to link Bluesky account.");
+			setError(err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.");
 			setLinking(false);
 		}
 	};
@@ -328,14 +341,7 @@ function BlueskySection() {
 		<div className="card bg-base-200">
 			<div className="card-body">
 				<h3 className="card-title text-lg">
-					<svg
-						aria-hidden="true"
-						viewBox="0 0 568 501"
-						className="w-5 h-5 fill-current"
-						xmlns="http://www.w3.org/2000/svg"
-					>
-						<path d="M123.121 33.6637C188.241 82.5526 258.281 181.681 284 234.873C309.719 181.681 379.759 82.5526 444.879 33.6637C491.866 -1.61183 568 -28.9064 568 57.9464C568 75.2916 558.055 189.32 552 210.074C529.348 289.699 445.566 310.618 370.792 297.604C496.333 319.1 526.542 386.3 468.333 453.5C356.973 581.793 299.832 402.163 287.455 359.379C285.755 353.725 284.024 353.712 282.545 359.379C270.168 402.163 213.027 581.793 101.667 453.5C43.4583 386.3 73.6667 319.1 199.208 297.604C124.434 310.618 40.652 289.699 18 210.074C11.945 189.32 2 75.2916 2 57.9464C2 -28.9064 78.1345 -1.61183 123.121 33.6637Z" />
-					</svg>
+					<BlueskyMark />
 					Bluesky / ATProto
 				</h3>
 
@@ -355,23 +361,34 @@ function BlueskySection() {
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center gap-2">
 							<div className="badge badge-success">Linked</div>
-							<span className="text-sm font-medium">@{user.atprotoHandle}</span>
+							<span className="text-sm font-medium">
+								{user.atprotoHandle ? `@${user.atprotoHandle}` : "handle unavailable"}
+							</span>
 						</div>
 						<p className="text-xs text-base-content/50">DID: {user.atprotoDid}</p>
+						<p className="text-sm text-base-content/60">
+							You can log in to Anthers with this handle. Unlinking stops that and leaves everything
+							else on your account untouched.
+						</p>
 						<button
 							type="button"
 							className="btn btn-outline btn-error btn-sm w-fit"
 							onClick={handleUnlink}
 							disabled={unlinking}
 						>
-							{unlinking ? "Unlinking..." : "Unlink Bluesky"}
+							{unlinking ? "Unlinking…" : "Unlink Bluesky"}
 						</button>
 					</div>
 				) : (
 					<form onSubmit={handleLink} className="flex flex-col gap-3">
 						<p className="text-sm text-base-content/60">
-							Link your Bluesky account to connect the two identities. Federation is a future
-							direction — linking today doesn't move your content anywhere.
+							Connect a Bluesky account and you can log in to Anthers with it. Anthers asks only to
+							confirm who you are — it can't post, follow, or change anything on your Bluesky
+							account.
+						</p>
+						<p className="text-sm text-base-content/60">
+							Linking doesn't publish your Anthers work to Bluesky or move it anywhere. Federation
+							is a direction we're committed to, not something we've shipped.
 						</p>
 						<div className="flex gap-2">
 							<input
@@ -386,7 +403,7 @@ function BlueskySection() {
 								className="btn btn-primary btn-sm"
 								disabled={linking || !handle.trim()}
 							>
-								{linking ? "Linking..." : "Link Account"}
+								{linking ? "Linking…" : "Link account"}
 							</button>
 						</div>
 					</form>

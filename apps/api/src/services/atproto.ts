@@ -80,6 +80,21 @@ export async function getBlueskyProfile(
 // ─── ATProto ↔ Anthers account mapping ───────────────────────────────────────
 
 /**
+ * The domain an ATProto-created account's placeholder address sits on.
+ *
+ * `.invalid` is reserved by RFC 2606 precisely so that it can never resolve, which makes
+ * the placeholder honest: it is not a mailbox we failed to reach, it is a mailbox that
+ * cannot exist. One constant because two functions care — the one that writes it and the
+ * one that has to notice an account cannot be mailed.
+ */
+const PLACEHOLDER_EMAIL_DOMAIN = "atproto.invalid";
+
+/** Whether an account has an address a sign-in code could actually arrive at. */
+export function hasReachableEmail(email: string | null | undefined): boolean {
+	return !!email && !email.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`);
+}
+
+/**
  * Create an Anthers account from an ATProto identity.
  *
  * 🚨 This is a SIGNUP, and it is gated. It previously ran unconditionally from a public,
@@ -107,7 +122,7 @@ export async function createUserFromAtproto(
 			username,
 			// ⚠️ A placeholder address, and the reason the ceremony is owed: this account has
 			// no reachable email, so it cannot be verified, recovered, or notified.
-			email: `${identity.did}@atproto.invalid`,
+			email: `${identity.did}@${PLACEHOLDER_EMAIL_DOMAIN}`,
 			atprotoDid: identity.did,
 			atprotoHandle: identity.handle,
 			atprotoPdsUrl: identity.pdsUrl,
@@ -170,7 +185,16 @@ async function generateUniqueUsername(handle: string): Promise<string> {
 	return `user-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-/** Link an ATProto DID to an existing user account. */
+/**
+ * Link an ATProto DID to an existing user account.
+ *
+ * ⚠️ **The refusal is a code rather than a sentence, and the two are not interchangeable
+ * here.** This one is reached through the OAuth callback, so it travels back to the browser
+ * as a query parameter and is turned into words by `ATProtoCallbackPage`. It read as a
+ * sentence until 2026-08-22, which meant the page's `did_already_linked` message was dead
+ * code that could never match — the raw sentence happened to be readable, so nothing ever
+ * looked wrong. Errors that do *not* round-trip stay sentences; see `unlinkAtprotoFromUser`.
+ */
 export async function linkAtprotoToUser(
 	userId: number,
 	identity: AtprotoIdentity,
@@ -182,7 +206,7 @@ export async function linkAtprotoToUser(
 		.limit(1);
 
 	if (existing && existing.id !== userId) {
-		return { error: "This Bluesky account is already linked to another user" };
+		return { error: "did_already_linked" };
 	}
 
 	await db
@@ -197,16 +221,41 @@ export async function linkAtprotoToUser(
 	return {};
 }
 
-/** Unlink ATProto from a user. Refuses if the user has no password (would lock them out). */
+/**
+ * Unlink ATProto from a user. Refuses when doing so would leave no way back in.
+ *
+ * 🚨 **"No way back in" is not the same as "no password", and reading it that way locked
+ * out accounts that were fine** (fixed 2026-08-22). A password has been optional since the
+ * signup ceremony shipped: `/auth/signin/start` mails a six-character code to any address
+ * that has an account, whatever it holds for a password. So the check that matters is
+ * whether the account has a **reachable address**, and the only unreachable one Anthers
+ * ever writes is the `@atproto.invalid` placeholder an ATProto-created account gets. The
+ * old check refused every passwordless account, which is most of them now — a guard aimed
+ * at the ATProto-only case that had quietly grown to cover the ordinary one.
+ *
+ * The refusal is a sentence rather than a code because it is answered as JSON to a page
+ * that displays it; nothing about it survives a redirect. Contrast `linkAtprotoToUser`.
+ */
 export async function unlinkAtprotoFromUser(userId: number): Promise<{ error?: string }> {
 	const [user] = await db
-		.select({ passwordHash: users.passwordHash, atprotoDid: users.atprotoDid })
+		.select({
+			passwordHash: users.passwordHash,
+			email: users.email,
+			atprotoDid: users.atprotoDid,
+		})
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
 
-	if (!user?.passwordHash) {
-		return { error: "Cannot unlink Bluesky from an ATProto-only account (no password set)" };
+	if (!user) {
+		return { error: "Account not found" };
+	}
+
+	if (!user.passwordHash && !hasReachableEmail(user.email)) {
+		return {
+			error:
+				"Unlinking would leave no way to sign in — this account has no password and no email address we can reach.",
+		};
 	}
 
 	await db

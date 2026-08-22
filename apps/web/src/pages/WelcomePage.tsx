@@ -22,9 +22,9 @@
  * and this page should not quietly become it.
  */
 
+import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { FONTS } from "@anthers/web-shared/fonts";
-import { sanitizeNextPath } from "@anthers/web-shared/nextPath";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +44,7 @@ export default function WelcomePage() {
 	 * Where the visitor was headed before signing up interrupted them, carried here from
 	 * `/subscribe` (which got it from the gated-post unlock modal). Sanitized rather than
 	 * read raw — it is attacker-controlled and it decides where somebody lands moments
-	 * after typing a code from their inbox. See `lib/next-path.ts`.
+	 * after typing a code from their inbox. See `shared/next-path.ts`.
 	 */
 	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 

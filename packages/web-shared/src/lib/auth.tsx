@@ -61,7 +61,19 @@ interface AuthContextValue {
 	 * lands, and the last pair had already drifted.
 	 */
 	signOut: () => Promise<void>;
-	signInWithBluesky: (handle: string) => Promise<void>;
+	/**
+	 * Sign in with an ATProto identity. Leaves the site: the promise only rejects, because
+	 * resolving means the browser is already on its way to an authorization server.
+	 *
+	 * 🚨 **This signs in; it cannot sign anyone up.** A handle nobody has linked comes back
+	 * from the callback as `signup_disabled` — the account-creating path exists and is shut
+	 * until it carries the same ceremony every other signup does. Offering this as a way to
+	 * *join* would be the second signup door the `signUp` note above exists to prevent.
+	 *
+	 * `next` is where to land afterwards. It rides in the OAuth flow's server-side state and
+	 * is sanitized at both ends; see `@anthers/shared/next-path`.
+	 */
+	signInWithBluesky: (handle: string, next?: string | null) => Promise<void>;
 	linkBluesky: (handle: string) => Promise<void>;
 	unlinkBluesky: () => Promise<void>;
 	refreshUser: () => Promise<void>;
@@ -140,28 +152,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		setUser(null);
 	}, []);
 
-	const signInWithBluesky = useCallback(async (handle: string) => {
-		const res = await client.api.atproto.auth.$post({
-			json: { handle, intent: "login" },
-		});
-		if (!res.ok) {
-			throw new Error(await errorText(res, "Bluesky auth failed."));
-		}
-		const data = await res.json();
-		// Redirect to Bluesky authorization page
-		window.location.href = (data as any).authorization_url;
-	}, []);
+	/**
+	 * Start an ATProto OAuth round trip and hand the browser over to the authorization
+	 * server. Shared by both intents, because the only thing that differs is what the
+	 * callback does when it comes back.
+	 */
+	const beginAtprotoAuth = useCallback(
+		async (json: { handle: string; intent: "login" | "link"; next?: string }, fallback: string) => {
+			const res = await client.api.atproto.auth.$post({ json });
+			if (!res.ok) {
+				throw new Error(await errorText(res, fallback));
+			}
+			const { authorization_url } = (await res.json()) as { authorization_url: string };
+			window.location.href = authorization_url;
+		},
+		[],
+	);
 
-	const linkBluesky = useCallback(async (handle: string) => {
-		const res = await client.api.atproto.auth.$post({
-			json: { handle, intent: "link" },
-		});
-		if (!res.ok) {
-			throw new Error(await errorText(res, "Bluesky link failed."));
-		}
-		const data = await res.json();
-		window.location.href = (data as any).authorization_url;
-	}, []);
+	const signInWithBluesky = useCallback(
+		async (handle: string, next?: string | null) => {
+			await beginAtprotoAuth(
+				{ handle, intent: "login", ...(next ? { next } : {}) },
+				"Couldn't start Bluesky sign-in.",
+			);
+		},
+		[beginAtprotoAuth],
+	);
+
+	const linkBluesky = useCallback(
+		async (handle: string) => {
+			// No `next`: linking always ends up back in settings, where it started.
+			await beginAtprotoAuth({ handle, intent: "link" }, "Couldn't start Bluesky linking.");
+		},
+		[beginAtprotoAuth],
+	);
 
 	const unlinkBluesky = useCallback(async () => {
 		const res = await client.api.atproto.unlink.$post();

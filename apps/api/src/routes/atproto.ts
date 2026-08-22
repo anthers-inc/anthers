@@ -14,6 +14,7 @@
  * and the ceremony each of them owes.
  */
 
+import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -40,20 +41,51 @@ import { createSession, validateSession } from "../services/auth.js";
 const authInitSchema = z.object({
 	handle: z.string().min(1),
 	intent: z.enum(["login", "link"]).default("login"),
+	/**
+	 * Where to land afterwards — the thing the person was trying to do when signing in
+	 * interrupted them. Client-supplied, and therefore sanitized before it is stored rather
+	 * than trusted because it came from our own page.
+	 */
+	next: z.string().optional(),
 });
 
 /**
  * What rides in the SDK's `appState`. Stored server-side in `atproto_oauth_state` and
- * handed back by `callback()`, so neither field is ever client-supplied — which is the
- * whole reason `userId` may be trusted here.
+ * handed back by `callback()`, so nothing here is client-supplied *at the callback* —
+ * which is the whole reason `userId` may be trusted.
+ *
+ * ⚠️ `next` is the exception and is a different kind of value: it *originates* with the
+ * client, and being stored server-side in between only means an attacker has to send the
+ * victim through the flow rather than tamper with a URL mid-flight. It is passed through
+ * `sanitizeNextPath` on the way in and again on the way out, because the property that
+ * matters is what the browser is finally told to navigate to.
  */
 interface AppState {
 	intent: "login" | "link";
 	userId?: number;
+	next?: string;
 }
 
 function getFrontendUrl(): string {
 	return process.env.FRONTEND_URL ?? "http://localhost:3000";
+}
+
+/**
+ * Turn a failure to start the flow into something worth reading.
+ *
+ * ⚠️ **One case is common enough to deserve copy and the rest are not.** Almost every
+ * refusal here is a mistyped handle, and the SDK reports it as *"Failed to resolve
+ * identity: alice.bsky.socail"* — accurate, and phrased for whoever wrote the SDK. The
+ * others (a PDS that is down, an authorization server that refuses the client) are rare,
+ * are not the person's fault, and are worth passing through verbatim, because a generic
+ * apology would throw away the only clue anyone has.
+ */
+function startFailureMessage(err: unknown): string {
+	const raw = err instanceof Error ? err.message : "";
+	if (/resolve identity|resolve handle|not found/i.test(raw)) {
+		return "We couldn't find that handle. Check the spelling — it usually looks like alice.bsky.social.";
+	}
+	return raw || "Couldn't start the Bluesky flow. Please try again.";
 }
 
 const atprotoRoutes = new Hono()
@@ -64,7 +96,7 @@ const atprotoRoutes = new Hono()
 
 	// ── Auth Init ────────────────────────────────────────────────────────────
 	.post("/auth", zValidator("json", authInitSchema), async (c) => {
-		const { handle, intent } = c.req.valid("json");
+		const { handle, intent, next } = c.req.valid("json");
 
 		let userId: number | undefined;
 		if (intent === "link") {
@@ -84,7 +116,11 @@ const atprotoRoutes = new Hono()
 			// rows, so it is the only place that can be relied on to run before they pile up.
 			await sweepExpiredOauthState();
 
-			const appState: AppState = { intent, userId };
+			const appState: AppState = {
+				intent,
+				userId,
+				next: sanitizeNextPath(next) ?? undefined,
+			};
 			const url = await getAtprotoClient().authorize(handle, {
 				state: JSON.stringify(appState),
 				// Identity only. Writing records needs more, and it is asked for at the point
@@ -93,23 +129,32 @@ const atprotoRoutes = new Hono()
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {
-			const message = err instanceof Error ? err.message : "OAuth initiation failed";
-			return c.json({ error: message }, 400);
+			return c.json({ error: startFailureMessage(err) }, 400);
 		}
 	})
 
 	// ── Callback ─────────────────────────────────────────────────────────────
 	.get("/callback", async (c) => {
-		const frontendUrl = getFrontendUrl();
-		const callbackUrl = `${frontendUrl}/auth/atproto/callback`;
-		const fail = (reason: string) =>
-			c.redirect(`${callbackUrl}?error=${encodeURIComponent(reason)}`);
+		const callbackUrl = `${getFrontendUrl()}/auth/atproto/callback`;
+
+		/** Compose the one URL this route ever redirects to, so no caller hand-builds a query. */
+		const back = (params: Record<string, string | undefined>) => {
+			const query = new URLSearchParams();
+			for (const [key, value] of Object.entries(params)) {
+				if (value) query.set(key, value);
+			}
+			return c.redirect(`${callbackUrl}?${query.toString()}`);
+		};
+		const fail = (reason: string) => back({ error: reason });
 
 		try {
 			const params = new URL(c.req.url).searchParams;
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			// Sanitized on the way in as well; this is the read that actually decides where a
+			// browser goes, and it is the one that has to be right.
+			const next = sanitizeNextPath(appState.next) ?? undefined;
 			const identity = await resolveIdentity(session.did);
 			const profile = await getBlueskyProfile(session.did);
 
@@ -120,7 +165,7 @@ const atprotoRoutes = new Hono()
 				if (linkResult.error) return fail(linkResult.error);
 
 				await attachSessionToUser(identity.did, appState.userId);
-				return c.redirect(`${callbackUrl}?success=linked`);
+				return back({ success: "linked" });
 			}
 
 			// ── Login intent ─────────────────────────────────────────────────
@@ -143,7 +188,15 @@ const atprotoRoutes = new Hono()
 			);
 			setSessionCookie(c, sessionToken);
 
-			return c.redirect(`${callbackUrl}?success=login`);
+			return back({
+				success: "login",
+				next,
+				// An account can be signed in and still owe a handle — the signup ceremony
+				// creates it before asking for one, and nothing forces the question later. The
+				// emailed-code door already reports this; a second door that did not would send
+				// those accounts somewhere they cannot be linked to from.
+				onboarding: user.username === null ? "1" : undefined,
+			});
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "exchange_failed";
 			return fail(message);

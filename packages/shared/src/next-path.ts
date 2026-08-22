@@ -30,6 +30,14 @@
  * falls back to its own default. Refusing is always safe here; the cost of a bad refusal
  * is one extra click, and the cost of a bad acceptance is sending a person who just typed
  * a password somewhere we did not choose.
+ *
+ * ⚠️ **It lives in `@anthers/shared` rather than in the web package because the API reads
+ * a `next` too** (2026-08-22). Signing in with Bluesky leaves the site and comes back
+ * through `/api/atproto/callback`, so the destination has to survive a round trip through
+ * an authorization server — it rides in the OAuth flow's server-side `appState` and is
+ * spliced into the redirect the API issues. A second copy of these rules in the API would
+ * be a second thing to get right, which is the shape of defect this project has already
+ * paid for once in a duplicated session-cookie helper.
  */
 
 /**

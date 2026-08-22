@@ -6,7 +6,7 @@
  * lowest Badge rung — right where the viewer hit the gate.
  */
 import { amountLabel, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
-import { withNextPath } from "@anthers/web-shared/nextPath";
+import { withNextPath } from "@anthers/shared/next-path";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
@@ -69,7 +69,7 @@ export default function InlineUnlock({
 	 * `?next=` rather than router state, because it has to survive the whole signup detour
 	 * — `/subscribe` → an emailed code → a possible payment modal → `/welcome` — and a
 	 * reload in the middle of it, which is a normal thing to do while checking your email.
-	 * Sanitized at every read; see `web-shared/lib/next-path.ts`.
+	 * Sanitized at every read; see `shared/next-path.ts`.
 	 */
 	if (access.reason === "login_required") {
 		const back = `${location.pathname}${location.search}`;
