@@ -7,49 +7,33 @@
  *   POST /auth                 — Initiate OAuth flow (returns authorization URL)
  *   GET  /callback             — OAuth callback (exchanges code, creates session, redirects)
  *   POST /unlink               — Unlink ATProto identity from account
+ *
+ * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
+ * it is the runtime-agnostic core rather than the Node package. What is left here is the
+ * two intents — link an identity to the account you are signed into, or sign in with one —
+ * and the ceremony each of them owes.
  */
 
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { setCookie } from "hono/cookie";
 import { z } from "zod";
+import { setSessionCookie } from "../lib/session-cookie.js";
 import { requireAuth } from "../middleware/auth.js";
-import type { OAuthInitResult } from "../services/atproto.js";
 import {
-	exchangeCode,
-	findOrCreateAtprotoUser,
+	createUserFromAtproto,
+	findUserByAtprotoDid,
 	getBlueskyProfile,
-	initiateOAuth,
 	linkAtprotoToUser,
-	saveAtprotoSession,
+	resolveIdentity,
 	unlinkAtprotoFromUser,
 } from "../services/atproto.js";
+import {
+	attachSessionToUser,
+	buildClientMetadata,
+	getAtprotoClient,
+	sweepExpiredOauthState,
+} from "../services/atproto-client.js";
 import { createSession, validateSession } from "../services/auth.js";
-
-// ─── OAuth State Store ───────────────────────────────────────────────────────
-// In-memory store for OAuth state between init and callback.
-// In production, this should be backed by Redis with TTL.
-
-interface OAuthState extends OAuthInitResult {
-	intent: "login" | "link";
-	userId?: number; // set when intent === "link"
-	createdAt: number;
-}
-
-const oauthStateStore = new Map<string, OAuthState>();
-const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-function cleanExpiredStates() {
-	const now = Date.now();
-	for (const [key, value] of oauthStateStore) {
-		if (now - value.createdAt > STATE_TTL_MS) {
-			oauthStateStore.delete(key);
-		}
-	}
-}
-
-// Clean expired states every 5 minutes
-setInterval(cleanExpiredStates, 5 * 60 * 1000);
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -58,52 +42,30 @@ const authInitSchema = z.object({
 	intent: z.enum(["login", "link"]).default("login"),
 });
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
-
-function getBaseUrl(): string {
-	return process.env.BASE_URL ?? "http://localhost:8000";
+/**
+ * What rides in the SDK's `appState`. Stored server-side in `atproto_oauth_state` and
+ * handed back by `callback()`, so neither field is ever client-supplied — which is the
+ * whole reason `userId` may be trusted here.
+ */
+interface AppState {
+	intent: "login" | "link";
+	userId?: number;
 }
 
 function getFrontendUrl(): string {
 	return process.env.FRONTEND_URL ?? "http://localhost:3000";
 }
 
-function setSessionCookie(c: any, token: string) {
-	setCookie(c, "session", token, {
-		httpOnly: true,
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "Lax",
-		path: "/",
-		maxAge: 30 * 24 * 60 * 60,
-	});
-}
-
 const atprotoRoutes = new Hono()
 	// ── Client Metadata ──────────────────────────────────────────────────────
-	.get("/client-metadata.json", (c) => {
-		const baseUrl = getBaseUrl();
-		const clientId = process.env.ATPROTO_CLIENT_ID ?? `${baseUrl}/api/atproto/client-metadata.json`;
-		const redirectUri = `${baseUrl}/api/atproto/callback`;
-
-		return c.json({
-			client_id: clientId,
-			client_name: "Anthers",
-			client_uri: baseUrl,
-			redirect_uris: [redirectUri],
-			scope: "atproto",
-			grant_types: ["authorization_code", "refresh_token"],
-			response_types: ["code"],
-			token_endpoint_auth_method: "none",
-			application_type: "web",
-			dpop_bound_access_tokens: true,
-		});
-	})
+	// `client_id` must be the URL this document is served from; that is what makes the
+	// client discoverable to an authorization server without prior registration.
+	.get("/client-metadata.json", (c) => c.json(buildClientMetadata()))
 
 	// ── Auth Init ────────────────────────────────────────────────────────────
 	.post("/auth", zValidator("json", authInitSchema), async (c) => {
 		const { handle, intent } = c.req.valid("json");
 
-		// If linking, user must be authenticated
 		let userId: number | undefined;
 		if (intent === "link") {
 			const token = c.req.header("Cookie")?.match(/session=([^;]+)/)?.[1];
@@ -117,27 +79,19 @@ const atprotoRoutes = new Hono()
 			userId = result.user.id;
 		}
 
-		const baseUrl = getBaseUrl();
-		const clientId = process.env.ATPROTO_CLIENT_ID ?? undefined;
-		const redirectUri = `${baseUrl}/api/atproto/callback`;
-
 		try {
-			const oauthResult = await initiateOAuth({
-				handle,
-				clientId,
-				redirectUri,
-				baseUrl,
-			});
+			// Opportunistic rather than scheduled: this is the only route that creates state
+			// rows, so it is the only place that can be relied on to run before they pile up.
+			await sweepExpiredOauthState();
 
-			// Store state for callback
-			oauthStateStore.set(oauthResult.state, {
-				...oauthResult,
-				intent,
-				userId,
-				createdAt: Date.now(),
+			const appState: AppState = { intent, userId };
+			const url = await getAtprotoClient().authorize(handle, {
+				state: JSON.stringify(appState),
+				// Identity only. Writing records needs more, and it is asked for at the point
+				// a creator opts into publishing — never bundled into signing in.
+				scope: "atproto",
 			});
-
-			return c.json({ authorization_url: oauthResult.authorizationUrl });
+			return c.json({ authorization_url: url.toString() });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "OAuth initiation failed";
 			return c.json({ error: message }, 400);
@@ -148,97 +102,40 @@ const atprotoRoutes = new Hono()
 	.get("/callback", async (c) => {
 		const frontendUrl = getFrontendUrl();
 		const callbackUrl = `${frontendUrl}/auth/atproto/callback`;
-
-		// Check for errors from AS
-		const error = c.req.query("error");
-		if (error) {
-			const desc = c.req.query("error_description") ?? error;
-			return c.redirect(`${callbackUrl}?error=${encodeURIComponent(desc)}`);
-		}
-
-		const code = c.req.query("code");
-		const state = c.req.query("state");
-
-		if (!code || !state) {
-			return c.redirect(`${callbackUrl}?error=missing_params`);
-		}
-
-		// Look up stored state
-		const storedState = oauthStateStore.get(state);
-		if (!storedState) {
-			return c.redirect(`${callbackUrl}?error=session_expired`);
-		}
-
-		// Clean up state immediately
-		oauthStateStore.delete(state);
-
-		// Check expiry
-		if (Date.now() - storedState.createdAt > STATE_TTL_MS) {
-			return c.redirect(`${callbackUrl}?error=session_expired`);
-		}
+		const fail = (reason: string) =>
+			c.redirect(`${callbackUrl}?error=${encodeURIComponent(reason)}`);
 
 		try {
-			// Exchange code for tokens
-			const tokenData = await exchangeCode(
-				storedState.asMetadata.token_endpoint,
-				code,
-				storedState.redirectUri,
-				storedState.codeVerifier,
-				storedState.clientId,
-				storedState.dpopPrivatePem,
-				storedState.dpopJwk,
-			);
+			const params = new URL(c.req.url).searchParams;
+			const { session, state } = await getAtprotoClient().callback(params);
 
-			// Fetch Bluesky profile for display name
-			const profile = await getBlueskyProfile(tokenData.sub);
+			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			const identity = await resolveIdentity(session.did);
+			const profile = await getBlueskyProfile(session.did);
 
-			if (storedState.intent === "link") {
-				// ── Link intent ──────────────────────────────────────────
-				if (!storedState.userId) {
-					return c.redirect(`${callbackUrl}?error=not_authenticated`);
-				}
+			if (appState.intent === "link") {
+				if (!appState.userId) return fail("not_authenticated");
 
-				const linkResult = await linkAtprotoToUser(
-					storedState.userId,
-					tokenData.sub,
-					storedState.handle,
-					storedState.pdsUrl,
-				);
+				const linkResult = await linkAtprotoToUser(appState.userId, identity);
+				if (linkResult.error) return fail(linkResult.error);
 
-				if (linkResult.error) {
-					return c.redirect(`${callbackUrl}?error=${encodeURIComponent(linkResult.error)}`);
-				}
-
-				// Save ATProto session tokens
-				await saveAtprotoSession(
-					storedState.userId,
-					tokenData,
-					storedState.dpopPrivatePem,
-					storedState.dpopJwk,
-					storedState.asMetadata.token_endpoint,
-				);
-
+				await attachSessionToUser(identity.did, appState.userId);
 				return c.redirect(`${callbackUrl}?success=linked`);
 			}
 
-			// ── Login intent ─────────────────────────────────────────────
-			const user = await findOrCreateAtprotoUser(
-				tokenData.sub,
-				storedState.handle,
-				storedState.pdsUrl,
-				profile.displayName,
-			);
+			// ── Login intent ─────────────────────────────────────────────────
+			let user = await findUserByAtprotoDid(identity, profile.displayName);
+			if (!user) {
+				// 🚨 A DID nobody has linked means this is a SIGNUP, not a sign-in, and signup
+				// through this door is closed until it carries the same ceremony as every
+				// other one. See `createUserFromAtproto`.
+				const created = await createUserFromAtproto(identity, profile.displayName);
+				if (created.error || !created.user) return fail(created.error ?? "signup_failed");
+				user = created.user;
+			}
 
-			// Save ATProto session tokens
-			await saveAtprotoSession(
-				user.id,
-				tokenData,
-				storedState.dpopPrivatePem,
-				storedState.dpopJwk,
-				storedState.asMetadata.token_endpoint,
-			);
+			await attachSessionToUser(identity.did, user.id);
 
-			// Create app session
 			const sessionToken = await createSession(
 				user.id,
 				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
@@ -249,7 +146,7 @@ const atprotoRoutes = new Hono()
 			return c.redirect(`${callbackUrl}?success=login`);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "exchange_failed";
-			return c.redirect(`${callbackUrl}?error=${encodeURIComponent(message)}`);
+			return fail(message);
 		}
 	})
 

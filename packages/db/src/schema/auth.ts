@@ -357,21 +357,40 @@ export const signupCodes = pgTable(
 // node — ATProto DPoP tokens are node identity (41.02: "Identity lives on the creator
 // node / ATProto-native"). The org holds them to sign requests on the creator's behalf,
 // but they are the creator's credentials, not the org's.
+//
+// 🚨 The DID is the key, not the user id, because `@atproto/oauth-client`'s SessionStore
+// is addressed by the token subject (`sub`) and knows nothing about Anthers accounts. The
+// row is therefore written before the account exists on the login path — which is why
+// `userId` is nullable and reconciled afterwards rather than being the primary linkage.
+// `session` holds the SDK's own serialized shape (token set + DPoP JWK); do not reach
+// into it from application code, because its layout belongs to the SDK.
 export const atprotoSessions = pgTable("atproto_sessions", {
 	id: serial("id").primaryKey(),
+	did: text("did").notNull().unique(),
 	userId: integer("user_id")
-		.notNull()
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
-	accessToken: text("access_token").default(""),
-	refreshToken: text("refresh_token").default(""),
-	dpopPrivatePem: text("dpop_private_pem").default(""),
-	dpopJwk: jsonb("dpop_jwk").default({}),
-	tokenEndpoint: text("token_endpoint").default(""),
-	dpopNonce: text("dpop_nonce").default(""),
+	session: jsonb("session").notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const atprotoOauthState = pgTable("atproto_oauth_state", {
+	key: text("key").primaryKey(),
+	state: jsonb("state").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// node — a pending OAuth authorization, keyed by the `state` parameter. This replaces an
+// in-process `Map`, which lost every in-flight authorization on restart and could not
+// survive a callback landing on a different instance than the initiation.
+//
+// `appState` is the SDK's own passthrough field: `authorize()` takes it, stores it HERE
+// (server-side, never in the redirect), and `callback()` hands it back. That is where the
+// intent and the linking user id ride, so neither is ever client-supplied.
+//
+// ⚠️ Rows are swept on a TTL. Nothing else deletes them, so a store without the sweep
+// grows without bound — the SDK's own note says the cleanup is the implementation's job.
 
 // both — a follow is a relationship between two accounts. 41.02 names "Subscriber
 // relationships" as both: the billing contract is org-side, the canonical assertion is
