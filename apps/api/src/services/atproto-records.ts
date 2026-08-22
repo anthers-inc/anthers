@@ -21,13 +21,9 @@ export interface PublishableWork extends AccessibleWork {
 	description: string | null;
 	slug: string;
 	publicId: number;
-	tags: string[] | null;
-	websiteUrl: string | null;
-	sourceUrl: string | null;
-	durationSeconds: number | null;
-	authoredAt: Date | null;
-	authoredPrecision: string | null;
 	releasedAt: Date | null;
+	/** The upload date, used only as a fallback release date — see `releaseDateOf`. */
+	createdAt: Date;
 	visibility: string;
 }
 
@@ -35,17 +31,10 @@ export interface WorkRecord {
 	$type: "org.anthers.work";
 	kind: string;
 	title: string;
-	description?: string;
 	url: string;
-	access?: "open" | "gated";
-	tags?: string[];
-	authoredAt?: string;
-	authoredPrecision?: string;
-	releasedAt?: string;
-	durationSeconds?: number;
-	website?: string;
-	source?: string;
-	createdAt: string;
+	releasedAt: string;
+	description?: string;
+	access?: { state: "open" | "gated" };
 }
 
 /**
@@ -80,14 +69,14 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
  * a second implementation of a gate rule is a second implementation free to disagree with
  * the first, and this one would disagree in public.
  */
-function accessForStrangers(work: PublishableWork): "open" | "gated" {
+function accessForStrangers(work: PublishableWork): { state: "open" | "gated" } {
 	const ctx = buildPreviewContext({
 		creatorId: work.creatorId ?? -1,
 		given: 0,
 		owned: false,
 		workIds: [],
 	});
-	return resolveAccessSync(work, ctx).isFree ? "open" : "gated";
+	return { state: resolveAccessSync(work, ctx).isFree ? "open" : "gated" };
 }
 
 /** The canonical page for a Work. Mirrors the app's `/works/{slug}-{publicId}` route. */
@@ -96,15 +85,20 @@ export function workUrl(work: PublishableWork, baseUrl: string): string {
 }
 
 /**
- * Build the public record for a Work, or `null` when it must not have one.
+ * The date the record reports as the release.
  *
- * `now` is injected rather than read, so a caller re-publishing an unchanged Work can keep
- * the original `createdAt` and the function stays pure enough to test.
+ * ⚠️ `releasedAt` can be null on a released Work — early rows predate the column, and
+ * `routes/content.ts` already orders by `COALESCE(released_at, created_at)` for exactly
+ * that reason. This applies the same rule rather than inventing a third one, and rather
+ * than withholding the Work from the network over a missing column. The upload date
+ * precedes the real release, so the record is early rather than wrong.
  */
-export function workToRecord(
-	work: PublishableWork,
-	opts: { baseUrl: string; now: Date },
-): WorkRecord | null {
+function releaseDateOf(work: PublishableWork): Date {
+	return work.releasedAt ?? work.createdAt;
+}
+
+/** Build the public record for a Work, or `null` when it must not have one. */
+export function workToRecord(work: PublishableWork, opts: { baseUrl: string }): WorkRecord | null {
 	if (unpublishableReason(work) !== null) return null;
 
 	const record: WorkRecord = {
@@ -112,27 +106,13 @@ export function workToRecord(
 		kind: work.type,
 		title: work.title ?? "",
 		url: workUrl(work, opts.baseUrl),
+		releasedAt: releaseDateOf(work).toISOString(),
 		access: accessForStrangers(work),
-		createdAt: opts.now.toISOString(),
 	};
 
-	// Every remaining field is optional, and an empty string is not a value — writing
-	// `description: ""` into a public record says "the creator wrote an empty description"
-	// where absence says "they wrote none".
+	// An empty string is not a value: writing `description: ""` into a public record says
+	// the creator wrote an empty description, where absence says they wrote none.
 	if (work.description) record.description = work.description;
-	if (work.tags?.length) record.tags = work.tags;
-	if (work.websiteUrl) record.website = work.websiteUrl;
-	if (work.sourceUrl) record.source = work.sourceUrl;
-	if (work.durationSeconds != null) record.durationSeconds = work.durationSeconds;
-	if (work.releasedAt) record.releasedAt = work.releasedAt.toISOString();
-
-	// ⚠️ The pair travels together. `authoredPrecision` without `authoredAt` describes
-	// nothing, and `authoredAt` without it invites a reader to render an invented day for a
-	// work the creator only dated to a year.
-	if (work.authoredAt) {
-		record.authoredAt = work.authoredAt.toISOString();
-		if (work.authoredPrecision) record.authoredPrecision = work.authoredPrecision;
-	}
 
 	return record;
 }

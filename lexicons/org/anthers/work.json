@@ -5,19 +5,20 @@
 		"main": {
 			"type": "record",
 			"key": "tid",
-			"description": "One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it describes the work and says where to reach it, and it never carries the work itself. Whether a particular person may open the work is decided by the service hosting it, never by this record.",
+			"description": "One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record.",
 			"record": {
 				"type": "object",
-				"required": ["kind", "title", "url", "createdAt"],
+				"required": ["kind", "title", "url", "releasedAt"],
 				"properties": {
 					"kind": {
 						"type": "string",
-						"description": "What sort of work this is. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON.",
+						"description": "What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. This is an open set: consumers must accept values not listed here, because new mediums are added over time.",
 						"knownValues": [
 							"text",
 							"video",
 							"audio",
 							"image",
+							"ebook",
 							"game",
 							"software",
 							"physical",
@@ -30,86 +31,39 @@
 						"maxGraphemes": 300,
 						"maxLength": 3000
 					},
-					"description": {
-						"type": "string",
-						"description": "The creator's own summary of the work. Plain text.",
-						"maxGraphemes": 3000,
-						"maxLength": 30000
-					},
 					"url": {
 						"type": "string",
 						"format": "uri",
 						"description": "Where this work can be reached. Usually its page on the service hosting it; a creator hosting their own Catalog points at their own. Deliberately not assumed to be an anthers.org address, because a creator's work outliving any one host is the point."
 					},
-					"thumb": {
-						"type": "ref",
-						"ref": "#thumbnail"
-					},
-					"access": {
-						"type": "string",
-						"description": "Whether reaching this work costs anything. `open` — anyone may reach it at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. ⚠️ This is a display hint and NEVER an authorization: it says what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. Terms are deliberately absent — a price shown without the total a person actually pays is misleading, and this record cannot control how a consumer renders it.",
-						"knownValues": ["open", "gated"],
-						"maxLength": 32
-					},
-					"tags": {
-						"type": "array",
-						"items": { "type": "string", "maxGraphemes": 64, "maxLength": 640 },
-						"maxLength": 20
-					},
-					"authoredAt": {
-						"type": "string",
-						"format": "datetime",
-						"description": "When the work was MADE, as asserted by its creator — often long before it was released here, and sometimes before this service existed. Distinct from `releasedAt`, which the host asserts. Read it together with `authoredPrecision`: a work dated to a year alone still needs a full datetime here, and rendering it as 1 January would invent a day the creator never claimed."
-					},
-					"authoredPrecision": {
-						"type": "string",
-						"description": "How much of `authoredAt` the creator actually asserted. Absent when `authoredAt` is absent.",
-						"knownValues": ["year", "month", "day"],
-						"maxLength": 16
-					},
 					"releasedAt": {
 						"type": "string",
 						"format": "datetime",
-						"description": "When the work was released to the public by its host."
+						"description": "When the work was released to the public. This is the work's own date and the only one the record carries — record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers."
 					},
-					"durationSeconds": {
-						"type": "integer",
-						"description": "Running time, for works that have one.",
-						"minimum": 0
-					},
-					"website": {
+					"description": {
 						"type": "string",
-						"format": "uri",
-						"description": "The creator's own page for this work, away from any host."
+						"description": "The creator's own summary of the work. Plain text, so that every consumer can render it safely without a sanitizer.",
+						"maxGraphemes": 3000,
+						"maxLength": 30000
 					},
-					"source": {
-						"type": "string",
-						"format": "uri",
-						"description": "Where the work's source can be read, for works that have public source."
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "datetime",
-						"description": "When this RECORD was created. Not a fact about the work; see `authoredAt` and `releasedAt` for those."
+					"access": {
+						"type": "ref",
+						"ref": "#access"
 					}
 				}
 			}
 		},
-		"thumbnail": {
+		"access": {
 			"type": "object",
-			"description": "A cover image for the work, carried in the repository rather than linked, so the listing survives the loss of any particular host.",
-			"required": ["image", "alt"],
+			"description": "Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change.",
+			"required": ["state"],
 			"properties": {
-				"image": {
-					"type": "blob",
-					"accept": ["image/png", "image/jpeg", "image/webp"],
-					"maxSize": 1000000
-				},
-				"alt": {
+				"state": {
 					"type": "string",
-					"description": "Alt text. Required rather than optional, deliberately: an image description that is easy to skip is an image description that does not get written.",
-					"maxGraphemes": 1000,
-					"maxLength": 10000
+					"description": "`open` — anyone may reach the work at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. Terms themselves are deliberately absent: a price shown apart from the total a person actually pays is misleading, and this record cannot control how a consumer renders it.",
+					"knownValues": ["open", "gated"],
+					"maxLength": 32
 				}
 			}
 		}

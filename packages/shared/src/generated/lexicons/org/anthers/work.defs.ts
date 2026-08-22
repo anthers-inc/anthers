@@ -10,68 +10,33 @@ type $nsid = typeof $nsid;
 
 export { $nsid };
 
-/** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it describes the work and says where to reach it, and it never carries the work itself. Whether a particular person may open the work is decided by the service hosting it, never by this record. */
+/** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
 type Main = { $type: "org.anthers.work";
 
   /**
-   * What sort of work this is. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON.
+   * What sort of work this is, in the sense of how it is handled — which player or reader opens it. Named `kind` rather than `type` because a record already carries `$type`, and two differently-scoped `type` fields in one object is a needless trap for anyone reading the JSON. This is an open set: consumers must accept values not listed here, because new mediums are added over time.
    */
-  "kind":"text" | "video" | "audio" | "image" | "game" | "software" | "physical" | "service" | l.UnknownString;"title":string;
-
-  /**
-   * The creator's own summary of the work. Plain text.
-   */
-  "description"?:string;
+  "kind":"text" | "video" | "audio" | "image" | "ebook" | "game" | "software" | "physical" | "service" | l.UnknownString;"title":string;
 
   /**
    * Where this work can be reached. Usually its page on the service hosting it; a creator hosting their own Catalog points at their own. Deliberately not assumed to be an anthers.org address, because a creator's work outliving any one host is the point.
    */
-  "url":l.UriString;"thumb"?:Thumbnail;
+  "url":l.UriString;
 
   /**
-   * Whether reaching this work costs anything. `open` — anyone may reach it at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. ⚠️ This is a display hint and NEVER an authorization: it says what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. Terms are deliberately absent — a price shown without the total a person actually pays is misleading, and this record cannot control how a consumer renders it.
+   * When the work was released to the public. This is the work's own date and the only one the record carries — record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers.
    */
-  "access"?:"open" | "gated" | l.UnknownString;"tags"?:(string)[];
+  "releasedAt":l.DatetimeString;
 
   /**
-   * When the work was MADE, as asserted by its creator — often long before it was released here, and sometimes before this service existed. Distinct from `releasedAt`, which the host asserts. Read it together with `authoredPrecision`: a work dated to a year alone still needs a full datetime here, and rendering it as 1 January would invent a day the creator never claimed.
+   * The creator's own summary of the work. Plain text, so that every consumer can render it safely without a sanitizer.
    */
-  "authoredAt"?:l.DatetimeString;
-
-  /**
-   * How much of `authoredAt` the creator actually asserted. Absent when `authoredAt` is absent.
-   */
-  "authoredPrecision"?:"year" | "month" | "day" | l.UnknownString;
-
-  /**
-   * When the work was released to the public by its host.
-   */
-  "releasedAt"?:l.DatetimeString;
-
-  /**
-   * Running time, for works that have one.
-   */
-  "durationSeconds"?:number;
-
-  /**
-   * The creator's own page for this work, away from any host.
-   */
-  "website"?:l.UriString;
-
-  /**
-   * Where the work's source can be read, for works that have public source.
-   */
-  "source"?:l.UriString;
-
-  /**
-   * When this RECORD was created. Not a fact about the work; see `authoredAt` and `releasedAt` for those.
-   */
-  "createdAt":l.DatetimeString };
+  "description"?:string;"access"?:Access };
 
 export type { Main };
 
-/** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it describes the work and says where to reach it, and it never carries the work itself. Whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","audio","image","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"url":/*#__PURE__*/ l.string({"format":"uri"}),"thumb":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Thumbnail>((() => thumbnail) as any)),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})),"tags":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.string({"maxGraphemes":64,"maxLength":640}), {"maxLength":20})),"authoredAt":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"authoredPrecision":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string<{"knownValues":["year","month","day"],"maxLength":16}>({"maxLength":16})),"releasedAt":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"durationSeconds":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.integer({"minimum":0})),"website":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri"})),"source":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri"})),"createdAt":/*#__PURE__*/ l.string({"format":"datetime"})}));
+/** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","audio","image","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any))}));
 
 export { main };
 
@@ -93,17 +58,17 @@ export const $safeParse = /*#__PURE__*/ main.safeParse.bind(main);
 export const $validate = /*#__PURE__*/ main.validate.bind(main);
 export const $safeValidate = /*#__PURE__*/ main.safeValidate.bind(main);
 
-/** A cover image for the work, carried in the repository rather than linked, so the listing survives the loss of any particular host. */
-type Thumbnail = { $type?: "org.anthers.work#thumbnail";"image":l.BlobRef;
+/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
+type Access = { $type?: "org.anthers.work#access";
 
   /**
-   * Alt text. Required rather than optional, deliberately: an image description that is easy to skip is an image description that does not get written.
+   * `open` — anyone may reach the work at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. Terms themselves are deliberately absent: a price shown apart from the total a person actually pays is misleading, and this record cannot control how a consumer renders it.
    */
-  "alt":string };
+  "state":"open" | "gated" | l.UnknownString };
 
-export type { Thumbnail };
+export type { Access };
 
-/** A cover image for the work, carried in the repository rather than linked, so the listing survives the loss of any particular host. */
-const thumbnail = /*#__PURE__*/ l.typedObject<Thumbnail>($nsid, "thumbnail", /*#__PURE__*/ l.object({"image":/*#__PURE__*/ l.blob({"accept":["image/png","image/jpeg","image/webp"],"maxSize":1000000}),"alt":/*#__PURE__*/ l.string({"maxGraphemes":1000,"maxLength":10000})}));
+/** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
+const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})}));
 
-export { thumbnail };
+export { access };
