@@ -23,6 +23,8 @@
 		"db:generate": "bun run scripts/drizzle-generate.ts",
 		"db:generate:raw": "bunx drizzle-kit generate",
 		"db:snapshots": "bun run scripts/drizzle-snapshots.ts",
+		"lex:build": "bun run scripts/lexicons.ts",
+		"lex:check": "bun run scripts/lexicons.ts --check",
 		"db:migrate": "bun run packages/db/src/migrate.ts",
 		"db:push": "bunx drizzle-kit push",
 		"db:studio": "bunx drizzle-kit studio",
@@ -38,6 +40,7 @@
 		"econ:figures": "bun run scripts/econ-figures.ts"
 	},
 	"devDependencies": {
+		"@atproto/lex": "0.3.6",
 		"@biomejs/biome": "2.4.16",
 		"@playwright/test": "1.61.1",
 		"@tauri-apps/cli": "2.11.4",
