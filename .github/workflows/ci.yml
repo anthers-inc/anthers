@@ -139,6 +139,12 @@ jobs:
       - name: Economics figures are in sync
         run: bun run econ:figures --check
 
+      # A published Lexicon is a public API commitment, so the generated types drifting
+      # from the JSON that defines them is not a formatting nit — it means the schema and
+      # the code disagree about something other people may already be consuming.
+      - name: Lexicon types are in sync
+        run: bun run lex:check
+
       # A hand-written migration that skips drizzle's snapshot makes its view of the
       # schema permanently stale, and the symptom is a rename prompt that reads like an
       # ordinary question. Nothing else can see it: typecheck passes, tests pass, and the

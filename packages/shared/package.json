@@ -13,7 +13,8 @@
 		"./moderation": "./src/moderation.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
-		"./figures": "./src/figures.generated.ts"
+		"./figures": "./src/figures.generated.ts",
+		"./lexicons": "./src/lexicons.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
