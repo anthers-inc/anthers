@@ -14,7 +14,7 @@ import { db } from "@anthers/db";
 import { atprotoOauthState, atprotoSessions, users } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
 import { eq, like } from "drizzle-orm";
-import { createUserFromAtproto, resolveIdentity } from "../services/atproto.js";
+import { createAccountFromAtproto, resolveIdentity } from "../services/atproto.js";
 import {
 	attachSessionToUser,
 	buildClientMetadata,
@@ -213,13 +213,14 @@ describe("session store", () => {
 
 describe("signup gate", () => {
 	const identity = { did: `did:plc:${RUN}new`, handle: "someone.bsky.social", pdsUrl: "https://x" };
+	const create = () => createAccountFromAtproto({ identity, email: `${RUN}gate@example.test` });
 
 	it("refuses to create an account when signup is not explicitly enabled", async () => {
 		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
 		process.env.ATPROTO_SIGNUP_ENABLED = undefined as never;
 		delete process.env.ATPROTO_SIGNUP_ENABLED;
 		try {
-			const result = await createUserFromAtproto(identity);
+			const result = await create();
 			expect(result.error).toBe("signup_disabled");
 			expect(result.user).toBeUndefined();
 			const rows = await db.select().from(users).where(eq(users.atprotoDid, identity.did));
@@ -234,7 +235,7 @@ describe("signup gate", () => {
 		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
 		process.env.ATPROTO_SIGNUP_ENABLED = "1";
 		try {
-			expect((await createUserFromAtproto(identity)).error).toBe("signup_disabled");
+			expect((await create()).error).toBe("signup_disabled");
 		} finally {
 			if (prev === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
 			else process.env.ATPROTO_SIGNUP_ENABLED = prev;

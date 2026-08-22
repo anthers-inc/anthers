@@ -76,6 +76,8 @@ import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
+import BlueskyMark from "../components/auth/BlueskyMark";
 import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
@@ -752,6 +754,8 @@ function Summary({
 	onEmailChange,
 	onSubmit,
 	onDrop,
+	atprotoHandle,
+	onBluesky,
 }: {
 	lines: PickLine[];
 	total: number;
@@ -765,6 +769,17 @@ function Summary({
 	onEmailChange: (value: string) => void;
 	onSubmit: () => void;
 	onDrop: (key: string) => void;
+	/**
+	 * The Bluesky handle of a signup already in progress, or null.
+	 *
+	 * Set when someone came back from Bluesky and their PDS could not give us a usable
+	 * address. The identity is proved and parked; this page is finishing the job, and
+	 * saying whose signup it is finishing is the difference between an explanation and an
+	 * unexplained email field after a detour through another website.
+	 */
+	atprotoHandle: string | null;
+	/** Open the Bluesky signup prompt. Null when it should not be offered at all. */
+	onBluesky: (() => void) | null;
 }) {
 	return (
 		<div className="mx-auto mt-8 max-w-lg rounded-2xl border border-base-300 bg-base-200/60 p-6">
@@ -805,6 +820,20 @@ function Summary({
 			    asked for here — they cost nothing at the moment of decision and everything
 			    at the moment of doubt, so they move to onboarding, after the address is
 			    confirmed and after any charge. */}
+			{atprotoHandle && (
+				// 🚨 Why an email field is being shown to somebody who just authenticated
+				// somewhere else. Without this the page reads as a flow that forgot what it
+				// was doing — which is how a signup gets abandoned three steps in.
+				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4">
+					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0 text-base-content/60" />
+					<p className="text-sm text-base-content/70">
+						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. Bluesky didn't
+						pass along a confirmed email address, and Anthers needs one it can reach for receipts
+						and account notices — so we'll confirm one here.
+					</p>
+				</div>
+			)}
+
 			{email !== null && (
 				<form
 					className="mt-5"
@@ -836,6 +865,19 @@ function Summary({
 				</form>
 			)}
 
+			{/* Offered only to somebody who has not already started one. Coming back from
+			    Bluesky without an address is exactly the case where a second "Sign up with
+			    Bluesky" button would send them round the same loop again. */}
+			{onBluesky && !atprotoHandle && (
+				<>
+					<div className="divider my-2 text-xs text-base-content/50">or</div>
+					<button type="button" className="btn btn-outline w-full" onClick={onBluesky}>
+						<BlueskyMark className="h-4 w-4" />
+						Sign up with Bluesky
+					</button>
+				</>
+			)}
+
 			{email === null && (
 				<button
 					type="button"
@@ -856,7 +898,7 @@ function Summary({
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function SubscribePage() {
-	const { user, refreshUser } = useAuth();
+	const { user, refreshUser, signUpWithBluesky } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const signedIn = !!user;
@@ -878,6 +920,28 @@ export default function SubscribePage() {
 	const [email, setEmail] = useState("");
 	/** The address a ceremony is open for, or null when it isn't. */
 	const [ceremony, setCeremony] = useState<string | null>(null);
+
+	/** Whether the Bluesky handle prompt is open. */
+	const [blueskyOpen, setBlueskyOpen] = useState(false);
+	/**
+	 * Whether the Bluesky door is open at all.
+	 *
+	 * ⚠️ Starts false and is only ever turned on, so the page never flashes a button it is
+	 * about to take away — and a browser that cannot reach the API simply sees the page as
+	 * it was before this feature existed, which is the correct degraded state.
+	 */
+	const [blueskySignupOpen, setBlueskySignupOpen] = useState(false);
+	/**
+	 * A Bluesky signup already proved and parked, waiting on an address.
+	 *
+	 * ⚠️ Read from the API rather than from the URL. `?atproto=1` says only *"go and ask"* —
+	 * the answer comes from an httpOnly cookie the browser cannot read and cannot forge, so
+	 * a hand-typed `?atproto=1` gets `null` and this page behaves exactly as it always has.
+	 */
+	const [pendingAtproto, setPendingAtproto] = useState<{
+		handle: string;
+		email: string | null;
+	} | null>(null);
 	/**
 	 * Whether this session was minted by the ceremony just now, and still owes a handle.
 	 *
@@ -910,6 +974,51 @@ export default function SubscribePage() {
 			/* no storage, no restore — the page still works */
 		}
 	}, []);
+
+	// Is the Bluesky door open? Signed-out visitors only, because that is the only state
+	// this page offers it in.
+	useEffect(() => {
+		if (signedIn) return;
+		let live = true;
+		client.api.atproto.config
+			.$get()
+			.then((res) => res.json())
+			.then(({ signupEnabled }) => {
+				if (live) setBlueskySignupOpen(signupEnabled);
+			})
+			.catch(() => {
+				/* Unreachable API: leave the door closed. */
+			});
+		return () => {
+			live = false;
+		};
+	}, [signedIn]);
+
+	// Pick up a Bluesky signup that came back without a usable address. Asked for only when
+	// the callback said to — an unconditional fetch would put a request on every visit to
+	// answer a question almost nobody is asking.
+	useEffect(() => {
+		if (signedIn) return;
+		if (new URLSearchParams(location.search).get("atproto") !== "1") return;
+		let live = true;
+		client.api.atproto.pending
+			.$get()
+			.then((res) => res.json())
+			.then(({ pending: row }) => {
+				if (!live || !row) return;
+				setPendingAtproto(row);
+				// The PDS's address, if it gave us one. A prefill and not a claim — they may
+				// type a different one, and the code is what settles it either way.
+				if (row.email) setEmail(row.email);
+			})
+			.catch(() => {
+				/* No parked signup, or the API is unreachable. The page is a signup page
+				   regardless, and it still works without knowing this. */
+			});
+		return () => {
+			live = false;
+		};
+	}, [signedIn, location.search]);
 
 	useEffect(() => {
 		try {
@@ -1219,6 +1328,10 @@ export default function SubscribePage() {
 				: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
 		onSubmit: submit,
 		onDrop: dropPick,
+		atprotoHandle: pendingAtproto?.handle ?? null,
+		// Offered only to somebody signed out, and only while the door is actually open —
+		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
+		onBluesky: signedIn || !blueskySignupOpen ? null : () => setBlueskyOpen(true),
 	};
 
 	return (
@@ -1426,6 +1539,14 @@ export default function SubscribePage() {
 					paying={total > 0}
 					onVerified={onVerified}
 					onClose={() => setCeremony(null)}
+				/>
+			)}
+
+			{blueskyOpen && (
+				<BlueskyHandleModal
+					mode="signup"
+					onSubmit={(handle) => signUpWithBluesky(handle, next)}
+					onClose={() => setBlueskyOpen(false)}
 				/>
 			)}
 

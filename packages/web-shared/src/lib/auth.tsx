@@ -66,14 +66,31 @@ interface AuthContextValue {
 	 * resolving means the browser is already on its way to an authorization server.
 	 *
 	 * 🚨 **This signs in; it cannot sign anyone up.** A handle nobody has linked comes back
-	 * from the callback as `signup_disabled` — the account-creating path exists and is shut
-	 * until it carries the same ceremony every other signup does. Offering this as a way to
-	 * *join* would be the second signup door the `signUp` note above exists to prevent.
+	 * from the callback as `signup_disabled` — signing up is `signUpWithBluesky`, which is a
+	 * different intent asking for a different scope.
 	 *
 	 * `next` is where to land afterwards. It rides in the OAuth flow's server-side state and
 	 * is sanitized at both ends; see `@anthers/shared/next-path`.
 	 */
 	signInWithBluesky: (handle: string, next?: string | null) => Promise<void>;
+	/**
+	 * Sign up with an ATProto identity.
+	 *
+	 * ⚠️ **This is not the second signup door the `signUp` note above forbids, and the
+	 * difference is worth being precise about, because it looks like one.** It mints
+	 * nothing: it starts an OAuth round trip, and the account — if there is to be one — is
+	 * created server-side by the callback or by `/auth/signup/verify`, both of which leave
+	 * `username` null so that `/welcome` still claims the handle and still takes the terms.
+	 * It also lives on **`/subscribe`**, the one signup page, rather than adding a second
+	 * place in the UI that people can join from. What the deleted `signUp` did that this
+	 * does not is create an account straight from a form, with its own idea of onboarding.
+	 *
+	 * 🚨 The scope it asks for is wider than sign-in's — `atproto transition:email` — because
+	 * Anthers never creates an account it cannot mail. That is exactly why signing up is a
+	 * separate intent rather than a flag on sign-in: nobody signing in should be asked to
+	 * hand over read access to their email address.
+	 */
+	signUpWithBluesky: (handle: string, next?: string | null) => Promise<void>;
 	linkBluesky: (handle: string) => Promise<void>;
 	unlinkBluesky: () => Promise<void>;
 	refreshUser: () => Promise<void>;
@@ -154,11 +171,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 	/**
 	 * Start an ATProto OAuth round trip and hand the browser over to the authorization
-	 * server. Shared by both intents, because the only thing that differs is what the
-	 * callback does when it comes back.
+	 * server. Shared by all three intents, because what differs is the scope asked for and
+	 * what the callback does on the way back — neither of which is this function's business.
 	 */
 	const beginAtprotoAuth = useCallback(
-		async (json: { handle: string; intent: "login" | "link"; next?: string }, fallback: string) => {
+		async (
+			json: { handle: string; intent: "login" | "link" | "signup"; next?: string },
+			fallback: string,
+		) => {
 			const res = await client.api.atproto.auth.$post({ json });
 			if (!res.ok) {
 				throw new Error(await errorText(res, fallback));
@@ -174,6 +194,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 			await beginAtprotoAuth(
 				{ handle, intent: "login", ...(next ? { next } : {}) },
 				"Couldn't start Bluesky sign-in.",
+			);
+		},
+		[beginAtprotoAuth],
+	);
+
+	const signUpWithBluesky = useCallback(
+		async (handle: string, next?: string | null) => {
+			await beginAtprotoAuth(
+				{ handle, intent: "signup", ...(next ? { next } : {}) },
+				"Couldn't start Bluesky signup.",
 			);
 		},
 		[beginAtprotoAuth],
@@ -204,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				signIn,
 				signOut,
 				signInWithBluesky,
+				signUpWithBluesky,
 				linkBluesky,
 				unlinkBluesky,
 				refreshUser,

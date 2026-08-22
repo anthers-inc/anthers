@@ -10,9 +10,9 @@
  * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
 import { db } from "@anthers/db";
-import { atprotoSessions, users } from "@anthers/db/schema";
+import { atprotoPendingSignups, atprotoSessions, users } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { getAtprotoClient } from "./atproto-client.js";
 
 export interface AtprotoIdentity {
@@ -80,12 +80,15 @@ export async function getBlueskyProfile(
 // ─── ATProto ↔ Anthers account mapping ───────────────────────────────────────
 
 /**
- * The domain an ATProto-created account's placeholder address sits on.
+ * The domain the old ATProto placeholder address sat on.
  *
- * `.invalid` is reserved by RFC 2606 precisely so that it can never resolve, which makes
- * the placeholder honest: it is not a mailbox we failed to reach, it is a mailbox that
- * cannot exist. One constant because two functions care — the one that writes it and the
- * one that has to notice an account cannot be mailed.
+ * `.invalid` is reserved by RFC 2606 precisely so that it can never resolve, which made
+ * the placeholder honest: it was not a mailbox we failed to reach, it was a mailbox that
+ * could not exist.
+ *
+ * ⚠️ **Nothing writes one any more** — the ceremony below never creates an account without
+ * a real address. It is still read, because rows created before the ceremony existed are
+ * still rows, and the unlink guard has to keep recognising them.
  */
 const PLACEHOLDER_EMAIL_DOMAIN = "atproto.invalid";
 
@@ -94,40 +97,57 @@ export function hasReachableEmail(email: string | null | undefined): boolean {
 	return !!email && !email.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`);
 }
 
+/** Whether ATProto signup is open. Off unless explicitly and exactly enabled. */
+export function atprotoSignupEnabled(): boolean {
+	return process.env.ATPROTO_SIGNUP_ENABLED === "true";
+}
+
 /**
- * Create an Anthers account from an ATProto identity.
+ * Create an Anthers account from an ATProto identity and a **confirmed** address.
  *
- * 🚨 This is a SIGNUP, and it is gated. It previously ran unconditionally from a public,
- * unauthenticated endpoint, minting an account with a generated username and a placeholder
- * `{did}@atproto.invalid` address — bypassing the emailed verification code, the payment
- * step, onboarding, and the join gate. Two canonical documents stated that ATProto OAuth
- * "cannot create an account", which was true of the user interface and false of the API:
- * nothing in the UI called it, and that was the only thing holding the door shut.
+ * 🚨 **`username` is deliberately null, and that is the whole ceremony in one field.** An
+ * account with no handle is `needsOnboarding`, which routes to `/welcome` — the only place
+ * that presents the terms and takes the 13+ assertion. An earlier version of this function
+ * generated a username from the Bluesky handle, which silently skipped onboarding and
+ * therefore skipped the terms: the account looked complete and had agreed to nothing. The
+ * emailed-code ceremony has always left `username` null for exactly this reason.
  *
- * ATProto signup is wanted now rather than merely tolerated, so the resolution is a real
- * ceremony rather than a deletion — but a ceremony is a build, and until it exists this
- * path stays closed. `ATPROTO_SIGNUP_ENABLED` is the deliberate opener, off by default.
+ * 🚨 **The address is a parameter rather than something derived here, because there is no
+ * honest way to derive one.** Callers get it from the PDS and only get this far when it is
+ * both present and confirmed; every other case goes through `startPendingSignup` and the
+ * ordinary emailed-code ceremony instead. Anthers never creates an account it cannot mail:
+ * receipts, payout notices, tax documents, chargebacks, DMCA counter-notices and rights
+ * requests all require reaching a person rather than authenticating one.
  */
-export async function createUserFromAtproto(
-	identity: AtprotoIdentity,
-	displayName?: string,
-): Promise<{ user?: typeof users.$inferSelect; error?: string }> {
-	if (process.env.ATPROTO_SIGNUP_ENABLED !== "true") {
+export async function createAccountFromAtproto(args: {
+	identity: AtprotoIdentity;
+	email: string;
+	displayName?: string;
+}): Promise<{ user?: typeof users.$inferSelect; error?: string }> {
+	if (!atprotoSignupEnabled()) {
 		return { error: "signup_disabled" };
 	}
-	const username = await generateUniqueUsername(identity.handle);
+	const [taken] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, args.email))
+		.limit(1);
+	// Callers check this before deciding to come here, so reaching it means two requests
+	// raced. Refusing is right either way: the remedy is the emailed code, which proves the
+	// address belongs to whoever is asking rather than to whoever the PDS says.
+	if (taken) return { error: "email_has_account" };
+
 	const [user] = await db
 		.insert(users)
 		.values({
-			username,
-			// ⚠️ A placeholder address, and the reason the ceremony is owed: this account has
-			// no reachable email, so it cannot be verified, recovered, or notified.
-			email: `${identity.did}@${PLACEHOLDER_EMAIL_DOMAIN}`,
-			atprotoDid: identity.did,
-			atprotoHandle: identity.handle,
-			atprotoPdsUrl: identity.pdsUrl,
-			displayName: displayName ?? "",
-			emailVerified: false,
+			email: args.email,
+			// The PDS confirmed this address, so a second confirmation asks somebody to prove
+			// the same fact twice — which is how a flow teaches people to ignore it.
+			emailVerified: true,
+			atprotoDid: args.identity.did,
+			atprotoHandle: args.identity.handle,
+			atprotoPdsUrl: args.identity.pdsUrl,
+			displayName: args.displayName ?? "",
 		})
 		.returning();
 	return { user };
@@ -157,32 +177,146 @@ export async function findUserByAtprotoDid(
 	return { ...existing, ...updates };
 }
 
-/** Generate a unique username from an ATProto handle. */
-async function generateUniqueUsername(handle: string): Promise<string> {
-	let base = handle
-		.replace(/\.bsky\.social$/, "")
-		.replace(/\.bsky\.network$/, "")
-		.replace(/\.bsky\.app$/, "");
-	base = base.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 30);
-	if (!base) base = "user";
+// ─── Reading the address the PDS holds ───────────────────────────────────────
 
-	const [exists] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.username, base))
-		.limit(1);
-	if (!exists) return base;
+/** What the PDS says about this account's email, and whether it was willing to say. */
+export interface PdsEmail {
+	/** The address, if the scope was granted and the PDS holds one. */
+	email?: string;
+	/** Whether the **PDS** has verified it. Anthers only skips its own check when true. */
+	confirmed: boolean;
+	/** Whether `transition:email` was actually granted, as opposed to merely requested. */
+	scopeGranted: boolean;
+}
 
-	for (let i = 1; i <= 999; i++) {
-		const candidate = `${base.slice(0, 26)}-${i}`;
-		const [taken] = await db
-			.select({ id: users.id })
-			.from(users)
-			.where(eq(users.username, candidate))
-			.limit(1);
-		if (!taken) return candidate;
+/**
+ * Ask the PDS for the account's email address.
+ *
+ * ⭐ **The granted scope is read from the token rather than assumed from the request**, and
+ * that is what makes the fallback real rather than theoretical. `getTokenInfo().scope`
+ * carries what the authorization server actually issued, so an authorization screen that
+ * lets someone decline `transition:email` — which nobody has yet confirmed bsky.social
+ * does, one way or the other — produces a detectable refusal instead of a confusing 400.
+ *
+ * ⚠️ **This is a read at a moment, not a subscription.** An address changed at the PDS
+ * afterwards never reaches us, so nothing may treat the stored copy as permanently
+ * authoritative — it is a starting value that the account owns from then on.
+ *
+ * Every failure is soft. A PDS that is down, a scope that was refused and an account with
+ * no address on file all mean the same thing to the caller: ask for an address the ordinary
+ * way. There is no failure here worth turning into an error page.
+ */
+export async function readPdsEmail(session: {
+	getTokenInfo: () => Promise<{ scope?: string }>;
+	fetchHandler: (pathname: string, init?: RequestInit) => Promise<Response>;
+}): Promise<PdsEmail> {
+	try {
+		const { scope } = await session.getTokenInfo();
+		const scopeGranted = (scope ?? "").split(/\s+/).includes(EMAIL_SCOPE);
+		if (!scopeGranted) return { confirmed: false, scopeGranted: false };
+
+		const res = await session.fetchHandler("/xrpc/com.atproto.server.getSession");
+		if (!res.ok) return { confirmed: false, scopeGranted: true };
+
+		const body = (await res.json()) as { email?: string; emailConfirmed?: boolean };
+		return {
+			email: body.email?.trim() || undefined,
+			confirmed: body.emailConfirmed === true,
+			scopeGranted: true,
+		};
+	} catch {
+		return { confirmed: false, scopeGranted: false };
 	}
-	return `user-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+/** The narrow scope that grants read access to the account's address, and nothing else. */
+export const EMAIL_SCOPE = "transition:email";
+
+// ─── Signups waiting on an address ───────────────────────────────────────────
+
+/** How long a proved identity waits for its address before it has to be proved again. */
+export const PENDING_SIGNUP_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Park a proved ATProto identity until an address is confirmed for it.
+ *
+ * Returns the opaque token that binds the row to one browser; the caller puts it in an
+ * httpOnly cookie. See the schema note for why this is a token in a table rather than a
+ * signed cookie, and why the DID alone would not do.
+ */
+export async function startPendingSignup(
+	identity: AtprotoIdentity,
+	email?: string,
+): Promise<string> {
+	const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+	await db.insert(atprotoPendingSignups).values({
+		token,
+		did: identity.did,
+		handle: identity.handle,
+		pdsUrl: identity.pdsUrl,
+		// Kept only to prefill the field. It is not proof of anything — the emailed code is,
+		// and the person may type a different address, which is their right.
+		email: email ?? null,
+	});
+	return token;
+}
+
+/** Read a parked identity without spending it. Expired rows read as absent. */
+export async function readPendingSignup(
+	token: string | undefined,
+): Promise<typeof atprotoPendingSignups.$inferSelect | undefined> {
+	if (!token) return undefined;
+	const [row] = await db
+		.select()
+		.from(atprotoPendingSignups)
+		.where(eq(atprotoPendingSignups.token, token))
+		.limit(1);
+	if (!row) return undefined;
+	if (Date.now() - row.createdAt.getTime() > PENDING_SIGNUP_TTL_MS) return undefined;
+	return row;
+}
+
+/**
+ * Attach a parked identity to an account whose address has just been proved, and spend it.
+ *
+ * 🚨 **This is where the email-collision case resolves, and it resolves safely.** The
+ * account may be one that already existed — someone whose Anthers address happens to match
+ * what their PDS holds — and attaching to it is correct precisely *because* they have just
+ * typed a code sent to that mailbox. The PDS's claim about an address is somebody else's
+ * assertion; a code we sent and they read is ours.
+ *
+ * Refuses rather than steals: a DID some other account already holds is left alone.
+ */
+export async function attachPendingSignup(
+	token: string | undefined,
+	userId: number,
+): Promise<{ attached: boolean }> {
+	const row = await readPendingSignup(token);
+	if (!row) return { attached: false };
+
+	// Spend it either way. A token that has been looked at has done its job, and leaving a
+	// spent one alive is how a replay becomes possible.
+	await db.delete(atprotoPendingSignups).where(eq(atprotoPendingSignups.token, row.token));
+
+	const result = await linkAtprotoToUser(userId, {
+		did: row.did,
+		handle: row.handle,
+		pdsUrl: row.pdsUrl,
+	});
+	return { attached: !result.error };
+}
+
+/** Abandon a parked signup outright. Safe to call with no token, or a stale one. */
+export async function clearPendingSignup(token: string | undefined): Promise<void> {
+	if (!token) return;
+	await db.delete(atprotoPendingSignups).where(eq(atprotoPendingSignups.token, token));
+}
+
+/** Drop parked signups nobody came back for. Same contract as the OAuth state sweep. */
+export async function sweepExpiredPendingSignups(): Promise<void> {
+	await db
+		.delete(atprotoPendingSignups)
+		.where(lt(atprotoPendingSignups.createdAt, new Date(Date.now() - PENDING_SIGNUP_TTL_MS)));
 }
 
 /**

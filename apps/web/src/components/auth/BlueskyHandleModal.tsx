@@ -22,6 +22,16 @@ import BlueskyMark from "./BlueskyMark";
 
 interface Props {
 	/**
+	 * Which door this is.
+	 *
+	 * 🚨 **It changes only the words, and the words are the part that matters.** Both modes
+	 * ask for a handle and hand off to the same round trip; what differs is the promise
+	 * being made. Signing in cannot create an account and says so; signing up can, and owes
+	 * the reader the fact that Bluesky will be asked for their email address — which is a
+	 * thing to learn *before* a consent screen asks for it, not from the consent screen.
+	 */
+	mode?: "login" | "signup";
+	/**
 	 * Hand off to Bluesky. On success this never returns in any useful sense — the browser
 	 * is already leaving — so nothing may be queued after it.
 	 */
@@ -29,7 +39,18 @@ interface Props {
 	onClose: () => void;
 }
 
-export default function BlueskyHandleModal({ onSubmit, onClose }: Props) {
+const COPY = {
+	login: {
+		step: "Log in with Bluesky",
+		lede: "We'll send you to Bluesky to confirm it's you. This logs you in to the Anthers account that handle is linked to — it doesn't create one.",
+	},
+	signup: {
+		step: "Sign up with Bluesky",
+		lede: "We'll send you to Bluesky to confirm it's you, and ask it for your email address — Anthers needs one it can reach for receipts and account notices. You'll pick a name and agree to the terms after.",
+	},
+} as const;
+
+export default function BlueskyHandleModal({ mode = "login", onSubmit, onClose }: Props) {
 	const [handle, setHandle] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -60,20 +81,17 @@ export default function BlueskyHandleModal({ onSubmit, onClose }: Props) {
 		<div className="modal modal-open">
 			<div className="modal-box max-w-md">
 				<p className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">
-					Log in with Bluesky
+					{COPY[mode].step}
 				</p>
 				<h3 className="mt-1 flex items-center gap-2 text-xl font-bold">
 					<BlueskyMark />
 					What's your handle?
 				</h3>
-				{/* 🚨 The second sentence is the one that matters. This door signs in an account
-				    that has already linked a Bluesky identity, and saying so here is cheaper
-				    than letting someone find out at the end of a round trip through another
-				    website. */}
-				<p className="mt-2 text-sm text-base-content/70">
-					We'll send you to Bluesky to confirm it's you. This logs you in to the Anthers account
-					that handle is linked to — it doesn't create one.
-				</p>
+				{/* 🚨 The last sentence is the one that matters, in both modes. Whether this
+				    door can create an account, and what it is about to ask Bluesky for, are
+				    both cheaper to say here than to let someone discover at the end of a round
+				    trip through another website. */}
+				<p className="mt-2 text-sm text-base-content/70">{COPY[mode].lede}</p>
 
 				<form onSubmit={submit}>
 					<input

@@ -392,6 +392,35 @@ export const atprotoOauthState = pgTable("atproto_oauth_state", {
 // ⚠️ Rows are swept on a TTL. Nothing else deletes them, so a store without the sweep
 // grows without bound — the SDK's own note says the cleanup is the implementation's job.
 
+export const atprotoPendingSignups = pgTable("atproto_pending_signups", {
+	token: text("token").primaryKey(),
+	did: text("did").notNull(),
+	handle: text("handle").notNull().default(""),
+	pdsUrl: text("pds_url").notNull().default(""),
+	email: text("email"),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// node — an ATProto identity that has been PROVED but has no account yet, waiting for an
+// email address to be confirmed before one is created.
+//
+// 🚨 It exists because of a rule rather than a convenience: **Anthers never creates an
+// account with no reachable address.** Signing up through Bluesky asks the PDS for the
+// address (`transition:email`), and four things can go wrong with that answer — the scope
+// is refused, the PDS holds no address, the address is unconfirmed, or some Anthers
+// account already holds it. All four have the same remedy: send the person through the
+// ordinary emailed-code ceremony and attach this identity once the address is proved.
+//
+// ⚠️ **`token` is an opaque random string held in an httpOnly cookie, and it is what binds
+// the row to a browser.** The DID alone could not: it is public, and a row keyed only by
+// DID would let anyone who knew a handle claim a signup someone else had started. It is a
+// token in a table rather than a signed cookie because a signed cookie needs a new secret
+// in `.do/app.yaml`, and an unset required secret is exactly how production broke on
+// 2026-08-15 — this needs no boot-time configuration at all.
+//
+// ⚠️ Swept on a TTL, for the same reason `atproto_oauth_state` is: nothing else deletes
+// these, and an abandoned signup is the normal case rather than the exception.
+
 // both — a follow is a relationship between two accounts. 41.02 names "Subscriber
 // relationships" as both: the billing contract is org-side, the canonical assertion is
 // in the user's repo. The row's *existence* is node (a creator's followers are their
