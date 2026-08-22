@@ -31,7 +31,6 @@ import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoSignupEnabled,
 	clearPendingSignup,
-	EMAIL_SCOPE,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
 	linkAtprotoToUser,
@@ -46,6 +45,7 @@ import {
 import {
 	attachSessionToUser,
 	buildClientMetadata,
+	EMAIL_SCOPE,
 	getAtprotoClient,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";

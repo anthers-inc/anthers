@@ -183,15 +183,38 @@ export function getBaseUrl(): string {
 }
 
 /**
+ * The narrow scope that grants read access to the account's address, and nothing else.
+ *
+ * ⚠️ It lives here rather than in `services/atproto.ts` because the client metadata below
+ * has to declare it, and that module imports THIS one — the other direction would be a
+ * cycle.
+ */
+export const EMAIL_SCOPE = "transition:email";
+
+/**
+ * Every scope this client may EVER request, in one string.
+ *
+ * 🚨 **Client metadata's `scope` is the SUPERSET a client is allowed to ask for — not what
+ * it asks for on any given flow.** It declared `atproto` alone until 2026-08-22, so the
+ * signup intent's `atproto transition:email` was refused by the authorization server with
+ * `invalid_scope: Scope "transition:email" is not declared in the client metadata`. The
+ * per-flow scope is the `scope` argument to `authorize()`, and that is where the narrowing
+ * belongs; this is the registration.
+ *
+ * ⚠️ **Declaring a scope here does NOT put it on anybody's consent screen.** The screen
+ * renders what the *authorization request* asks for, so signing in still shows identity
+ * alone — the property the old value was trying to protect, protected in the right place.
+ *
+ * 🚨 **`transition:generic` must never appear here.** It is App-Password-equivalent access
+ * to a creator's whole account, and declaring it would let any future call request it
+ * without a second thought. A test asserts its absence.
+ */
+const DECLARED_SCOPE = `atproto ${EMAIL_SCOPE}`;
+
+/**
  * Client metadata, served at `/api/atproto/client-metadata.json` and fetched by every
  * authorization server we talk to. `client_id` MUST be the URL this document is served
  * from — that is what makes the client discoverable without registration.
- *
- * ⚠️ `scope` is identity-only on purpose. Writing records into someone's repository needs
- * more, and as of 2026-08-21 `bsky.social` advertises only the coarse `transition:*`
- * scopes — so the write scope is `transition:generic`, which is App-Password-equivalent
- * access to a creator's entire account. That is asked for progressively, at the moment a
- * creator opts into publishing, and never at sign-in.
  */
 export function buildClientMetadata() {
 	const baseUrl = getBaseUrl();
@@ -209,7 +232,7 @@ export function buildClientMetadata() {
 		const redirectUri = `http://127.0.0.1:${port}/api/atproto/callback`;
 		return {
 			...atprotoLoopbackClientMetadata(
-				buildAtprotoLoopbackClientId({ redirect_uris: [redirectUri], scope: "atproto" }),
+				buildAtprotoLoopbackClientId({ redirect_uris: [redirectUri], scope: DECLARED_SCOPE }),
 			),
 			client_name: "Anthers (dev)",
 		};
@@ -221,7 +244,7 @@ export function buildClientMetadata() {
 		client_name: "Anthers",
 		client_uri: baseUrl,
 		redirect_uris: [`${baseUrl}/api/atproto/callback`] as [string],
-		scope: "atproto",
+		scope: DECLARED_SCOPE,
 		grant_types: ["authorization_code", "refresh_token"] as ["authorization_code", "refresh_token"],
 		response_types: ["code"] as ["code"],
 		token_endpoint_auth_method: "none" as const,
