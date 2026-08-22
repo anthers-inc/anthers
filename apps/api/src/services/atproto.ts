@@ -102,56 +102,17 @@ export function atprotoSignupEnabled(): boolean {
 	return process.env.ATPROTO_SIGNUP_ENABLED === "true";
 }
 
-/**
- * Create an Anthers account from an ATProto identity and a **confirmed** address.
+/*
+ * 🚨 **There is deliberately no `createAccountFromAtproto` here, and putting one back would
+ * undo a security decision** (Parker, 2026-08-22). One existed until then: it created an
+ * account outright when the PDS reported `emailConfirmed: true`, skipping Anthers' own
+ * verification. The party being trusted was **whichever server the person's identity lives
+ * on**, so anyone self-hosting a PDS could claim an address they do not control.
  *
- * 🚨 **`username` is deliberately null, and that is the whole ceremony in one field.** An
- * account with no handle is `needsOnboarding`, which routes to `/welcome` — the only place
- * that presents the terms and takes the 13+ assertion. An earlier version of this function
- * generated a username from the Bluesky handle, which silently skipped onboarding and
- * therefore skipped the terms: the account looked complete and had agreed to nothing. The
- * emailed-code ceremony has always left `username` null for exactly this reason.
- *
- * 🚨 **The address is a parameter rather than something derived here, because there is no
- * honest way to derive one.** Callers get it from the PDS and only get this far when it is
- * both present and confirmed; every other case goes through `startPendingSignup` and the
- * ordinary emailed-code ceremony instead. Anthers never creates an account it cannot mail:
- * receipts, payout notices, tax documents, chargebacks, DMCA counter-notices and rights
- * requests all require reaching a person rather than authenticating one.
+ * An ATProto signup now ends where every other signup ends — `/auth/signup/verify`, after a
+ * code we sent has been read — and the identity is attached there by `attachPendingSignup`.
+ * That is the ONLY place an ATProto account comes into existence.
  */
-export async function createAccountFromAtproto(args: {
-	identity: AtprotoIdentity;
-	email: string;
-	displayName?: string;
-}): Promise<{ user?: typeof users.$inferSelect; error?: string }> {
-	if (!atprotoSignupEnabled()) {
-		return { error: "signup_disabled" };
-	}
-	const [taken] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.email, args.email))
-		.limit(1);
-	// Callers check this before deciding to come here, so reaching it means two requests
-	// raced. Refusing is right either way: the remedy is the emailed code, which proves the
-	// address belongs to whoever is asking rather than to whoever the PDS says.
-	if (taken) return { error: "email_has_account" };
-
-	const [user] = await db
-		.insert(users)
-		.values({
-			email: args.email,
-			// The PDS confirmed this address, so a second confirmation asks somebody to prove
-			// the same fact twice — which is how a flow teaches people to ignore it.
-			emailVerified: true,
-			atprotoDid: args.identity.did,
-			atprotoHandle: args.identity.handle,
-			atprotoPdsUrl: args.identity.pdsUrl,
-			displayName: args.displayName ?? "",
-		})
-		.returning();
-	return { user };
-}
 
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
 export async function findUserByAtprotoDid(
@@ -183,28 +144,38 @@ export async function findUserByAtprotoDid(
 export interface PdsEmail {
 	/** The address, if the scope was granted and the PDS holds one. */
 	email?: string;
-	/** Whether the **PDS** has verified it. Anthers only skips its own check when true. */
+	/**
+	 * Whether the **PDS** says it has verified the address.
+	 *
+	 * 🚨 **Reported, and deliberately not trusted.** This gated a shortcut until 2026-08-22:
+	 * `confirmed: true` created the account outright and skipped Anthers' own verification.
+	 * The server making the claim is whichever one the person's identity lives on, so a
+	 * self-hosted PDS could assert any address at all. Every signup is verified by our own
+	 * emailed code now, and **nothing may read this field to decide otherwise** — a test in
+	 * `atproto-signup.test.ts` pins that a `confirmed: true` answer still parks the signup.
+	 */
 	confirmed: boolean;
 	/** Whether `transition:email` was actually granted, as opposed to merely requested. */
 	scopeGranted: boolean;
 }
 
 /**
- * Ask the PDS for the account's email address.
+ * Ask the PDS for the account's email address, to save somebody typing it.
  *
- * ⭐ **The granted scope is read from the token rather than assumed from the request**, and
- * that is what makes the fallback real rather than theoretical. `getTokenInfo().scope`
- * carries what the authorization server actually issued, so an authorization screen that
- * lets someone decline `transition:email` — which nobody has yet confirmed bsky.social
- * does, one way or the other — produces a detectable refusal instead of a confusing 400.
+ * ⚠️ **This is a convenience and never evidence.** Whatever comes back becomes a prefill on
+ * `/subscribe`, and the emailed code is what makes it true — see `confirmed` above for the
+ * shortcut this used to have and why it is gone.
  *
- * ⚠️ **This is a read at a moment, not a subscription.** An address changed at the PDS
- * afterwards never reaches us, so nothing may treat the stored copy as permanently
- * authoritative — it is a starting value that the account owns from then on.
+ * ⭐ **The granted scope is read from the token rather than assumed from the request.**
+ * `getTokenInfo().scope` carries what the authorization server actually issued, so an
+ * authorization screen that lets someone decline `transition:email` — which nobody has yet
+ * confirmed bsky.social does, one way or the other — is detected rather than guessed at.
+ *
+ * ⚠️ It is also a read at a moment, not a subscription: an address changed at the PDS
+ * afterwards never reaches us.
  *
  * Every failure is soft. A PDS that is down, a scope that was refused and an account with
- * no address on file all mean the same thing to the caller: ask for an address the ordinary
- * way. There is no failure here worth turning into an error page.
+ * no address on file all mean the same thing — an empty field instead of a filled one.
  */
 export async function readPdsEmail(session: {
 	getTokenInfo: () => Promise<{ scope?: string }>;

@@ -46,7 +46,12 @@ const COPY = {
 	},
 	signup: {
 		step: "Sign up with Bluesky",
-		lede: "We'll send you to Bluesky to confirm it's you, and ask it for your email address — Anthers needs one it can reach for receipts and account notices. You'll pick a name and agree to the terms after.",
+		// ⚠️ "to save you typing it" is doing real work. Anthers asks Bluesky for the address
+		// as a convenience and confirms it with its own code regardless — see the note on
+		// `PdsEmail.confirmed` for why a PDS's word is not evidence. Copy that implied the
+		// Bluesky answer settled anything would be describing a shortcut we deliberately
+		// removed.
+		lede: "We'll send you to Bluesky to confirm it's you, and ask it for your email address to save you typing it. Anthers confirms that address with its own code — then you'll pick a name and agree to the terms.",
 	},
 } as const;
 

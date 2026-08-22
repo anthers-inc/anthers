@@ -827,9 +827,9 @@ function Summary({
 				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4">
 					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0 text-base-content/60" />
 					<p className="text-sm text-base-content/70">
-						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. Bluesky didn't
-						pass along a confirmed email address, and Anthers needs one it can reach for receipts
-						and account notices — so we'll confirm one here.
+						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
+						Anthers needs an email address it can reach you at, for receipts and account notices —
+						so we'll send a code to confirm it.
 					</p>
 				</div>
 			)}

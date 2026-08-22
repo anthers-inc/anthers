@@ -40,7 +40,14 @@ test.describe("signing up with Bluesky", () => {
 		// screen on somebody else's website, and meeting it unannounced is how a signup gets
 		// abandoned at the last step.
 		await expect(page.getByText(/ask it for your email address/i)).toBeVisible();
-		await expect(page.getByText(/pick a name and agree to the terms after/i)).toBeVisible();
+		// 🚨 And that Anthers confirms it regardless. A PDS calling an address confirmed is
+		// somebody else's assertion; the code is ours. Copy implying otherwise would describe
+		// a shortcut this flow deliberately does not take.
+		await expect(page.getByText(/confirms that address with its own code/i)).toBeVisible();
+		// ⚠️ Matched without the ordering word. This read `.../terms after/` and broke when
+		// the sentence was rephrased to put "then" at the front — same promise, different
+		// word order. What matters is that a name and the terms are named as still to come.
+		await expect(page.getByText(/pick a name and agree to the terms/i)).toBeVisible();
 	});
 
 	test("this door says it creates an account, where the login one says it cannot", async ({

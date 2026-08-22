@@ -31,7 +31,6 @@ import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoSignupEnabled,
 	clearPendingSignup,
-	createAccountFromAtproto,
 	EMAIL_SCOPE,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
@@ -216,7 +215,7 @@ const atprotoRoutes = new Hono()
 			// They share everything after "is there an account for this DID?", including the
 			// answer when there is one: somebody who pressed Sign Up with a handle they had
 			// already linked is signed in rather than told off.
-			let user = await findUserByAtprotoDid(identity, profile.displayName);
+			const user = await findUserByAtprotoDid(identity, profile.displayName);
 
 			if (!user && appState.intent !== "signup") {
 				// 🚨 A DID nobody has linked, reached through the sign-in door. This is a signup
@@ -230,38 +229,31 @@ const atprotoRoutes = new Hono()
 				// ── Signup ───────────────────────────────────────────────────
 				if (!atprotoSignupEnabled()) return fail("signup_disabled");
 
+				// 🚨 **A signup NEVER completes here, whatever the PDS said.** The identity is
+				// proved and parked, and the address is confirmed by our own emailed code on
+				// `/subscribe` before any account exists.
+				//
+				// This branch used to short-circuit when the PDS reported `emailConfirmed: true`,
+				// creating the account outright and skipping our verification. That trusted the
+				// wrong party (Parker's call, 2026-08-22): the PDS answering is **whichever
+				// server the person's identity lives on**, and anyone self-hosting one can
+				// answer `{email: "someone-else@example.com", emailConfirmed: true}`. The prize
+				// is an Anthers account bound to an address they do not control — receipts and
+				// account notices to an innocent third party, and a squatted handle. Recoverable
+				// (the real owner can sign in by code and unlink) but not worth having.
+				//
+				// ⚠️ **An allowlist of trusted PDS hosts was the obvious alternative and was
+				// rejected on principle**: "we trust Bluesky's server and not yours" is precisely
+				// the posture a platform arguing that it needs nobody's permission cannot adopt.
+				// Verifying everybody equally costs one email — the same step every other signup
+				// already pays — and removes the trust assumption instead of narrowing it.
+				//
+				// ⭐ What the PDS's answer is still good for is **saving somebody typing**. The
+				// address rides along as a prefill; the code is what makes it true.
 				const pds = await readPdsEmail(session);
-
-				// Usable means present AND confirmed by the PDS. An unconfirmed address is a
-				// string somebody typed into another website, which is not evidence of anything.
-				if (pds.email && pds.confirmed) {
-					const created = await createAccountFromAtproto({
-						identity,
-						email: pds.email,
-						displayName: profile.displayName,
-					});
-					user = created.user;
-					// `email_has_account` is not a failure — it is the fourth way of arriving at
-					// the emailed code, and it falls through to exactly that below.
-					if (created.error && created.error !== "email_has_account") {
-						return fail(created.error);
-					}
-				}
-
-				if (!user) {
-					// 🚨 **Anthers never creates an account it cannot mail**, so the four ways of
-					// not having a usable address — scope refused, no address on file, address
-					// unconfirmed, address already spoken for — all end here, in the ordinary
-					// emailed-code ceremony. The identity is parked, proved, and attached the
-					// moment a code confirms an address.
-					//
-					// ⭐ The collision case is the interesting one and it resolves *safely* for
-					// the same reason: the PDS's claim about an address is somebody else's
-					// assertion, and a code we sent and they read is ours.
-					const token = await startPendingSignup(identity, pds.email);
-					setPendingCookie(c, token);
-					return back({ success: "needs_email", next });
-				}
+				const token = await startPendingSignup(identity, pds.email);
+				setPendingCookie(c, token);
+				return back({ success: "needs_email", next });
 			}
 
 			await attachSessionToUser(identity.did, user.id);

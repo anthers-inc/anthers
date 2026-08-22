@@ -191,34 +191,37 @@ describe("the scope a signup asks for", () => {
 	});
 });
 
-describe("a confirmed address the PDS hands over", () => {
-	it("creates the account, skips our verification, and still owes a handle", async () => {
-		pds.body = { email: addr("ok"), emailConfirmed: true };
+describe("a PDS calling an address confirmed proves nothing", () => {
+	it("still parks the signup, and creates no account", async () => {
+		// 🚨 **The security assertion of this file.** A shortcut lived here until 2026-08-22:
+		// `emailConfirmed: true` created the account outright and skipped our verification.
+		// The server making that claim is whichever one the person's identity lives on, so
+		// anybody self-hosting a PDS could assert an address belonging to somebody else and
+		// walk away with an Anthers account bound to it. The remedy is not an allowlist of
+		// trusted hosts — that is the wrong posture for a platform arguing it needs nobody's
+		// permission — it is verifying everybody equally, which costs one email.
+		pds.body = { email: addr("claimed"), emailConfirmed: true };
 
-		const { url } = await runCallback({ did: did("ok"), next: "/works/x-1" });
-		expect(url.searchParams.get("success")).toBe("login");
+		const { url, cookies } = await runCallback({ did: did("claimed"), next: "/works/x-1" });
+		expect(url.searchParams.get("success")).toBe("needs_email");
 		expect(url.searchParams.get("next")).toBe("/works/x-1");
-		// 🚨 The whole ceremony in one assertion: onboarding is still owed, so `/welcome`
-		// still asks for a handle and still takes the terms.
-		expect(url.searchParams.get("onboarding")).toBe("1");
+		expect(pendingCookie(cookies)).toBeTruthy();
 
-		const [user] = await db
+		const rows = await db
 			.select()
 			.from(users)
-			.where(eq(users.atprotoDid, did("ok")));
-		expect(user).toBeDefined();
-		expect(user.username).toBeNull();
-		expect(user.email).toBe(addr("ok"));
-		// The PDS confirmed it; asking a second time for the same fact is how a flow teaches
-		// people to ignore it.
-		expect(user.emailVerified).toBe(true);
+			.where(eq(users.atprotoDid, did("claimed")));
+		expect(rows.length, "a PDS's word must not be enough to mint an account").toBe(0);
 	});
 
 	it("signs in rather than scolding somebody who pressed the wrong button", async () => {
-		pds.body = { email: addr("again"), emailConfirmed: true };
-		await runCallback({ did: did("again") });
+		// An identity that already has an account is a sign-in, whichever door it came
+		// through — no scolding, and no second account.
+		const [existing] = await db
+			.insert(users)
+			.values({ email: addr("again"), emailVerified: true, atprotoDid: did("again") })
+			.returning();
 
-		// Same DID, second time through the signup door: they have an account now.
 		const { url } = await runCallback({ did: did("again") });
 		expect(url.searchParams.get("success")).toBe("login");
 
@@ -227,10 +230,11 @@ describe("a confirmed address the PDS hands over", () => {
 			.from(users)
 			.where(eq(users.atprotoDid, did("again")));
 		expect(rows.length).toBe(1);
+		expect(rows[0].id).toBe(existing.id);
 	});
 });
 
-describe("every way of not getting a usable address", () => {
+describe("no answer a PDS can give creates an account", () => {
 	const cases: [string, () => void][] = [
 		["the scope was refused", () => (pds.scope = "atproto")],
 		["the PDS holds no address", () => (pds.body = {})],
