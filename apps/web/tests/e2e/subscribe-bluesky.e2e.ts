@@ -18,13 +18,26 @@
  * the terms come afterwards. All three are things to learn before a consent screen appears
  * rather than from it.
  */
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+
+/**
+ * The signup control at the top of the page.
+ *
+ * ⚠️ **`/subscribe` renders two of them** (2026-08-22): one above the optional support
+ * sections and one in the closing summary. Their buttons share a label, which is right for
+ * a reader — it is the same act — and ambiguous for a locator. Naming which one is meant
+ * beats `.first()`, whose answer changes the day somebody reorders the page.
+ */
+const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 test.describe("signing up with Bluesky", () => {
 	test("the button is wired to something", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		await page.getByRole("button", { name: /sign up with bluesky/i }).click();
+		await topSignup(page)
+			.getByRole("button", { name: /sign up with bluesky/i })
+			.click();
 
 		// A button wired to nothing looks identical to one wired to something until you
 		// press it — which is how the sign-in half of this shipped unreachable.
@@ -34,7 +47,9 @@ test.describe("signing up with Bluesky", () => {
 
 	test("it says what it will ask Bluesky for, and what comes after", async ({ page }) => {
 		await page.goto("/subscribe");
-		await page.getByRole("button", { name: /sign up with bluesky/i }).click();
+		await topSignup(page)
+			.getByRole("button", { name: /sign up with bluesky/i })
+			.click();
 
 		// 🚨 The email ask is the part worth pinning. `transition:email` is a real consent
 		// screen on somebody else's website, and meeting it unannounced is how a signup gets
@@ -54,7 +69,9 @@ test.describe("signing up with Bluesky", () => {
 		page,
 	}) => {
 		await page.goto("/subscribe");
-		await page.getByRole("button", { name: /sign up with bluesky/i }).click();
+		await topSignup(page)
+			.getByRole("button", { name: /sign up with bluesky/i })
+			.click();
 		await expect(page.getByText(/doesn't create one/i)).toHaveCount(0);
 
 		// The same component, the other mode. Two doors, two promises, and neither may
@@ -74,6 +91,8 @@ test.describe("signing up with Bluesky", () => {
 		// ⚠️ Deliberately not asserting the button here. Whether it renders depends on the
 		// launch switch, which is not this test's subject — and an assertion that drags in
 		// an unrelated condition is one that fails for unrelated reasons.
-		await expect(page.getByRole("button", { name: /create my free account/i })).toBeVisible();
+		await expect(
+			topSignup(page).getByRole("button", { name: /create my free account/i }),
+		).toBeVisible();
 	});
 });

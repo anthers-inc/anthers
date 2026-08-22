@@ -32,7 +32,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		// "Subscribe" until 2026-08-17, which named the URL rather than the thing.
 		title: "Users",
 		links: [
-			["Sign Up", "/subscribe"],
+			["Sign Up Free", "/subscribe"],
 			["Log In", "/login"],
 		],
 	},
@@ -148,7 +148,7 @@ export default function LoggedOutLayout() {
 								</li>
 								{/* Log In lives here as well as in the corner, because the corner button is
 								    hidden below `sm` — two buttons plus the hamburger and the wordmark do
-								    not fit a 390px navbar. Sign Up keeps the corner at every width. */}
+								    not fit a 390px navbar. Sign Up Free keeps the corner at every width. */}
 								<li className="sm:hidden">
 									<Link to="/login">Log In</Link>
 								</li>
@@ -190,7 +190,7 @@ export default function LoggedOutLayout() {
 					</ul>
 
 					{/* Right: the two doors, named for what they are. Log In is quiet (ghost) and
-						Sign Up carries the primary glow, so the pair reads as one CTA with an
+						Sign Up Free carries the primary glow, so the pair reads as one CTA with an
 						escape hatch beside it rather than as two competing buttons. flex-1 +
 						justify-end mirror the brand side so the center links stay centered.
 
@@ -200,8 +200,26 @@ export default function LoggedOutLayout() {
 						returning user had no visible way in from the marketing site at all, since
 						"Start Exploring" said nothing about logging in and the only /login links
 						lived inside gated-content modals. Naming the two acts is what makes the
-						contrast legible; "Start Exploring" named neither. */}
+						contrast legible; "Start Exploring" named neither.
+
+						🚨 **"Sign Up Free", and the word is doing real work** (2026-08-22). The
+						button leads to `/subscribe`, a page that also asks about supporting a
+						creator and supporting Anthers — so a bare "Sign Up" invites the reader to
+						assume the door has a price on it. It does not: an email address is the
+						whole of it. The claim is safe to make outright because the free tier is
+						free forever by charter rather than by pricing decision (63.01), and the
+						page it lands on states the monthly Public Access limit in the same breath.
+
+						⚠️ Sign Up Free now sits FIRST, with Log In to its right. Reading order and
+						visual weight agree this way — the primary act comes first — where before
+						the eye met the quiet button on its way to the loud one. */}
 					<div className="flex flex-1 items-center justify-end gap-1 sm:gap-2">
+						<Link
+							to="/subscribe"
+							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
+						>
+							Sign Up Free
+						</Link>
 						{/* Hidden below `sm` — it is in the mobile menu instead, because two buttons
 						    beside the hamburger and the wordmark overflow a 390px navbar. */}
 						<Link
@@ -209,12 +227,6 @@ export default function LoggedOutLayout() {
 							className="scale-95 btn btn-ghost hidden rounded-lg px-4 sm:inline-flex"
 						>
 							Log In
-						</Link>
-						<Link
-							to="/subscribe"
-							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
-						>
-							Sign Up
 						</Link>
 					</div>
 				</div>

@@ -24,11 +24,23 @@
  * the first, because "it redirected to /signup and the user lost their picks" is the
  * behaviour this whole change exists to remove.
  */
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 /** An address that cannot collide with a real account or another run. */
 const addr = () =>
 	`e2e-ceremony-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+
+/**
+ * The signup control at the top of the page — the one a visitor meets first.
+ *
+ * ⚠️ **`/subscribe` carries two of these**, since 2026-08-22: one above the optional
+ * support sections and one in the closing summary. They share state and their buttons
+ * share a label, which is correct for a reader and ambiguous for a locator — so every
+ * assertion here names which one it means rather than relying on `.first()`, whose answer
+ * would change the day somebody reorders the page.
+ */
+const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
  * There is exactly ONE way to mint an account from the browser, and it is `/subscribe`.
@@ -86,7 +98,11 @@ test.describe("one signup door", () => {
 			"href",
 			"/login",
 		);
-		await expect(header.getByRole("link", { name: "Sign Up", exact: true })).toHaveAttribute(
+		// "Sign Up Free" since 2026-08-22 — the word is load-bearing, because the button
+		// leads to a page that also discusses paying and a bare "Sign Up" invites the reader
+		// to assume the door has a price on it. Where it points is what this test is about;
+		// what it promises is `subscribe-free-first.e2e.ts`'s.
+		await expect(header.getByRole("link", { name: "Sign Up Free", exact: true })).toHaveAttribute(
 			"href",
 			"/subscribe",
 		);
@@ -113,8 +129,10 @@ test.describe("starting an account from /subscribe", () => {
 	test("the ceremony opens on the page, and does not send anyone to /signup", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		await page.locator("#subscribe-email").fill(addr());
-		await page.getByRole("button", { name: /create my free account/i }).click();
+		await topSignup(page).locator('input[type="email"]').fill(addr());
+		await topSignup(page)
+			.getByRole("button", { name: /create my free account/i })
+			.click();
 
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
 
@@ -133,10 +151,10 @@ test.describe("starting an account from /subscribe", () => {
 		// The page's own arithmetic, which is the only number a reader is agreeing to.
 		await expect(page.getByText("$3", { exact: true }).last()).toBeVisible();
 
-		const cta = page.getByRole("button", { name: /create my account & continue/i });
+		const cta = topSignup(page).getByRole("button", { name: /create my account & continue/i });
 		await expect(cta, "the CTA should promise more than a free account").toBeVisible();
 
-		await page.locator("#subscribe-email").fill(addr());
+		await topSignup(page).locator('input[type="email"]').fill(addr());
 		await cta.click();
 
 		// A paying start is two steps; a free one is one, and says so rather than counting
@@ -146,8 +164,10 @@ test.describe("starting an account from /subscribe", () => {
 
 	test("the free path promises one step only", async ({ page }) => {
 		await page.goto("/subscribe");
-		await page.locator("#subscribe-email").fill(addr());
-		await page.getByRole("button", { name: /create my free account/i }).click();
+		await topSignup(page).locator('input[type="email"]').fill(addr());
+		await topSignup(page)
+			.getByRole("button", { name: /create my free account/i })
+			.click();
 
 		await expect(page.getByText("Verify your email")).toBeVisible();
 		await expect(page.getByText("Step 1 of 2")).toHaveCount(0);
@@ -157,8 +177,10 @@ test.describe("starting an account from /subscribe", () => {
 test.describe("the code field", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/subscribe");
-		await page.locator("#subscribe-email").fill(addr());
-		await page.getByRole("button", { name: /create my free account/i }).click();
+		await topSignup(page).locator('input[type="email"]').fill(addr());
+		await topSignup(page)
+			.getByRole("button", { name: /create my free account/i })
+			.click();
 		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
 
 		// 🚨 Wait for the autofocus, not just for the modal. Every test below drives the

@@ -9,20 +9,39 @@
 //
 // The page is a guided sequence, and the order is the argument:
 //
-//   1. Anthers is free — an email address and nothing else, with no card asked for at any
-//      point unless the visitor chooses to back someone — shown with a reel of work anyone
-//      can open, and closing with what support is: one thing, the destination differing.
-//   2. What support for a CREATOR does, with its breakdown, ending in a creator search.
-//   3. What support for ANTHERS does, with the same breakdown, ending in a yes/no.
+//   0. **Join.** The free inclusions, then the signup control — an address or a Bluesky
+//      handle — before the page asks for anything at all.
+//   1. What support for a CREATOR does, with its breakdown, ending in a creator search.
+//   2. What support for ANTHERS does, with the same breakdown, ending in a yes/no.
+//   …then the one place it all adds up, with the same signup control again.
 //
-// 🚨 Steps 2 and 3 were the other way round until 2026-08-17, and creator support was not
+// 🚨 **Signing up moved to the TOP on 2026-08-22, and it moved for a reason about how the
+// page is read rather than about what it says.** The signup control used to live only in
+// the closing panel, below two sections of money — so a visitor arriving from a button
+// marked "Sign Up" met an argument about supporting creators and an argument about
+// supporting Anthers before finding any way in. Everything on the way down was optional
+// and nothing said so early enough. Putting the door first makes the optionality
+// structural instead of a claim: you can join from the first screen and never scroll.
+//
+// 🚨 **Support for ANTHERS must never read as the price of admission.** Parker's framing,
+// and it is a product position rather than a copy preference: somebody served entirely by
+// purchases, by backing creators directly, and by the free hours is using Anthers exactly
+// as intended, and the page must not nudge them out of it. Hence "Only if you want to" as
+// the first words of that section, and hence the free inclusions being a list at the top
+// rather than a sentence somewhere in the middle.
+//
+// ⚠️ The free hours are stated **up front and as an inclusion**, which is the other half
+// of the same instruction: a limit discovered after signing up is a surprise, and a limit
+// read as a warning turns the whole list into a trial. 63.01 already required "free
+// forever" and the cap to be co-present in the same breath; this page now does it in the
+// first thing anybody sees.
+//
+// 🚨 Steps 1 and 2 were the other way round until 2026-08-17, and creator support was not
 // mentioned until the third section. That order was a relic of the model where support for
 // Anthers bought streaming bandwidth generally, so it was the thing every visitor needed.
 // It buys Public Access now and nothing else; early visitors arrive at the invitation of a
 // creator already here, and with few creators there is little Public Access to want yet.
-// So the creator ask leads and the Anthers ask follows it — and step 1 says outright that
-// an account costs an email address, because for a share of visitors the load-bearing fact
-// is that Anthers is free forever with no strings, not what a payment would buy.
+// So the creator ask leads and the Anthers ask follows it.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -741,10 +760,63 @@ function SectionEcho({
 	);
 }
 
-/** The closing panel — the only place the whole page is added up, and the only CTA. */
-function Summary({
-	lines,
-	total,
+/**
+ * What signing up actually costs, said as a list rather than as a paragraph.
+ *
+ * 🚨 **The limit is in here, not in a footnote, and 63.01 requires it to be.** *"Free
+ * forever"* met without a bound beside it is heard as *unlimited*, so the offer has to be
+ * stated whole: permanent **and** bounded. Hiding the cap would also hollow out the only
+ * honest reason to give Anthers anything, since the cap is the thing that lifts.
+ *
+ * ⚠️ Every line is a thing you get, including the bounded one. *"10 hours a month"* is
+ * written as an inclusion rather than as a restriction, because it is one — and because a
+ * reader who meets it as a warning reads the whole list as a trial.
+ */
+function FreeInclusions() {
+	const items: [string, string][] = [
+		[
+			`${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
+			"the streaming work creators leave open to everyone — games, video, audio and writing, all on the same clock",
+		],
+		[
+			"Everything you buy is yours",
+			"purchases and creator releases don't expire and aren't metered",
+		],
+		["Follow anyone, keep a library", "no limit on either, ever"],
+		// ⭐ The fourth card said "No card, nothing to cancel — an email address is the whole
+		// of it", which is the lede repeated three inches lower. This says something the
+		// reader does not already know and could not guess: a free account is not a guest.
+		[
+			"Your time pays creators anyway",
+			`Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool for every free account, split among the creators you spent it with`,
+		],
+	];
+	return (
+		<ul className="mx-auto mt-8 grid max-w-2xl gap-3 text-left sm:grid-cols-2">
+			{items.map(([label, sub]) => (
+				<li key={label} className="rounded-xl border border-base-content/10 bg-base-200/50 p-4">
+					<p className="text-sm font-bold">{label}</p>
+					<p className="mt-1 text-sm leading-snug text-base-content/60">{sub}</p>
+				</li>
+			))}
+		</ul>
+	);
+}
+
+/**
+ * The signup control: an address, a button, and the Bluesky door beside it.
+ *
+ * 🚨 **One component, rendered twice, and that is deliberate rather than lazy.** It opens
+ * the page — because the first thing a visitor needs to know is that joining costs nothing
+ * — and it closes it, for somebody who scrolled, chose something, and is ready. Two copies
+ * of this markup would be two things to keep honest about what the button promises, and
+ * the promise is the part that matters.
+ *
+ * Both instances read the same `email` state, so typing in one fills the other; only the
+ * input's `id` differs, which is why `idPrefix` exists.
+ */
+function SignupForm({
+	idPrefix,
 	cta,
 	busy,
 	note,
@@ -753,22 +825,19 @@ function Summary({
 	email,
 	onEmailChange,
 	onSubmit,
-	onDrop,
 	atprotoHandle,
 	onBluesky,
 }: {
-	lines: PickLine[];
-	total: number;
+	idPrefix: string;
 	cta: string;
 	busy: boolean;
-	note: string;
+	note?: string;
 	error: string | null;
 	success: string | null;
 	/** Null when signed in — there is no address to ask a returning user for. */
 	email: string | null;
 	onEmailChange: (value: string) => void;
 	onSubmit: () => void;
-	onDrop: (key: string) => void;
 	/**
 	 * The Bluesky handle of a signup already in progress, or null.
 	 *
@@ -781,41 +850,13 @@ function Summary({
 	/** Open the Bluesky signup prompt. Null when it should not be offered at all. */
 	onBluesky: (() => void) | null;
 }) {
+	const fieldId = `${idPrefix}-email`;
 	return (
-		<div className="mx-auto mt-8 max-w-lg rounded-2xl border border-base-300 bg-base-200/60 p-6">
-			<ul className="space-y-2.5">
-				{lines.map((line) => (
-					<li
-						key={line.key ?? "free"}
-						className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
-					>
-						<span className="min-w-0">
-							<span className="font-semibold">{line.label}</span>
-							<span className="block text-xs text-base-content/45">{line.sub}</span>
-						</span>
-						<span className="ml-auto flex shrink-0 items-baseline gap-3">
-							<strong className="tabular-nums">{line.amount ? money(line.amount) : "Free"}</strong>
-							{line.key && (
-								<button
-									type="button"
-									className="text-xs text-base-content/40 underline"
-									onClick={() => onDrop(line.key as string)}
-								>
-									Remove
-								</button>
-							)}
-						</span>
-					</li>
-				))}
-			</ul>
-			<div className="mt-4 flex items-baseline justify-between">
-				<span className="font-bold">Monthly</span>
-				<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
-			</div>
-			{total > 0 && (
-				<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
-			)}
-
+		// 🚨 `data-signup` exists because the page deliberately carries TWO of these, with the
+		// same button label — which is right for a reader (it is the same act) and ambiguous
+		// for anything selecting by role and name. This is the seam that disambiguates them
+		// without inventing two different labels for one action.
+		<div data-signup={idPrefix}>
 			{/* The ONE field this page collects. Username and password are deliberately not
 			    asked for here — they cost nothing at the moment of decision and everything
 			    at the moment of doubt, so they move to onboarding, after the address is
@@ -824,7 +865,7 @@ function Summary({
 				// 🚨 Why an email field is being shown to somebody who just authenticated
 				// somewhere else. Without this the page reads as a flow that forgot what it
 				// was doing — which is how a signup gets abandoned three steps in.
-				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4">
+				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4 text-left">
 					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0 text-base-content/60" />
 					<p className="text-sm text-base-content/70">
 						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
@@ -836,17 +877,17 @@ function Summary({
 
 			{email !== null && (
 				<form
-					className="mt-5"
+					className="mt-5 text-left"
 					onSubmit={(e) => {
 						e.preventDefault();
 						onSubmit();
 					}}
 				>
-					<label className="label px-0 pb-1" htmlFor="subscribe-email">
+					<label className="label px-0 pb-1" htmlFor={fieldId}>
 						<span className="text-sm font-semibold">Where should we reach you?</span>
 					</label>
 					<input
-						id="subscribe-email"
+						id={fieldId}
 						type="email"
 						required
 						autoComplete="email"
@@ -890,7 +931,60 @@ function Summary({
 			)}
 			{error && <p className="mt-3 text-sm text-error">{error}</p>}
 			{success && <p className="mt-3 text-sm text-success">{success}</p>}
-			<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
+			{note && (
+				<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
+			)}
+		</div>
+	);
+}
+
+/** The closing panel — the only place the whole page is added up. */
+function Summary({
+	lines,
+	total,
+	onDrop,
+	...signup
+}: {
+	lines: PickLine[];
+	total: number;
+	onDrop: (key: string) => void;
+} & Omit<React.ComponentProps<typeof SignupForm>, "idPrefix">) {
+	return (
+		<div className="mx-auto mt-8 max-w-lg rounded-2xl border border-base-300 bg-base-200/60 p-6">
+			<ul className="space-y-2.5">
+				{lines.map((line) => (
+					<li
+						key={line.key ?? "free"}
+						className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
+					>
+						<span className="min-w-0">
+							<span className="font-semibold">{line.label}</span>
+							<span className="block text-xs text-base-content/45">{line.sub}</span>
+						</span>
+						<span className="ml-auto flex shrink-0 items-baseline gap-3">
+							<strong className="tabular-nums">{line.amount ? money(line.amount) : "Free"}</strong>
+							{line.key && (
+								<button
+									type="button"
+									className="text-xs text-base-content/40 underline"
+									onClick={() => onDrop(line.key as string)}
+								>
+									Remove
+								</button>
+							)}
+						</span>
+					</li>
+				))}
+			</ul>
+			<div className="mt-4 flex items-baseline justify-between">
+				<span className="font-bold">Monthly</span>
+				<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
+			</div>
+			{total > 0 && (
+				<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
+			)}
+
+			<SignupForm idPrefix="summary" {...signup} />
 		</div>
 	);
 }
@@ -1306,9 +1400,16 @@ export default function SubscribePage() {
 		await commit();
 	};
 
-	const summaryProps = {
-		lines: summaryLines,
-		total,
+	/**
+	 * Everything the signup control needs, shared by the copy at the top of the page and
+	 * the one at the bottom.
+	 *
+	 * ⚠️ **Both read the same state, so both stay honest about the same total.** Somebody
+	 * who scrolls down, adds support, and scrolls back up finds the top button saying
+	 * *"Create my account & continue"* rather than still promising free — which is correct:
+	 * they chose to pay. What must never happen is the two disagreeing.
+	 */
+	const signupProps = {
 		cta: signedIn
 			? total > 0
 				? "Confirm and continue"
@@ -1327,11 +1428,17 @@ export default function SubscribePage() {
 				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
 				: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
 		onSubmit: submit,
-		onDrop: dropPick,
 		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
 		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
 		onBluesky: signedIn || !blueskySignupOpen ? null : () => setBlueskyOpen(true),
+	};
+
+	const summaryProps = {
+		...signupProps,
+		lines: summaryLines,
+		total,
+		onDrop: dropPick,
 	};
 
 	return (
@@ -1348,29 +1455,31 @@ export default function SubscribePage() {
 		<div className="mx-auto min-w-0 w-full max-w-5xl px-6 py-12 sm:py-16">
 			<div className="min-w-0">
 				<div>
-					{/* ── 1 · Free ───────────────────────────────────────────── */}
+					{/* ── Join, before anything is asked for ─────────────────── */}
 					<Reveal>
 						<div className="text-center">
-							<div className="mb-4 flex items-center justify-center gap-3">
-								<StepNumber n={1} />
-								<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-									A non-profit · no ads, no shareholders, no strings
-								</p>
-							</div>
+							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
+								A non-profit · no ads, no shareholders, no strings
+							</p>
 							<h1
 								style={serif}
-								className="text-balance text-4xl font-light leading-tight sm:text-5xl"
+								className="mt-4 text-balance text-4xl font-light leading-tight sm:text-5xl"
 							>
 								Anthers is free. Forever.
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-								<strong>An email address is the whole of it.</strong> No card, no trial, nothing to
-								cancel — and nothing to pay until you decide to back a creator. Every month you get{" "}
-								<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access</strong> — the streaming
-								work creators leave open to everyone. Follow whoever you like, keep a library, and
-								buy anything a creator sells.
+								<strong>An email address is the whole of it</strong> — no card, no trial, nothing to
+								cancel. Everything below this is optional, and plenty of people will never want any
+								of it.
 							</p>
+
+							<FreeInclusions />
+
+							<div className="mx-auto mt-8 max-w-md rounded-2xl border border-base-300 bg-base-200/60 p-6">
+								<SignupForm idPrefix="top" {...signupProps} />
+							</div>
 						</div>
+
 						<OpenWorksReel />
 
 						{/* What support is, as the tail of "it's free" rather than as its own step: the
@@ -1382,8 +1491,9 @@ export default function SubscribePage() {
 						    retirement removed. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								Going further is one thing: a monthly amount. You choose how much, and you choose
-								where it points.
+								<strong>If you want to go further, it is one thing: a monthly amount.</strong> You
+								choose how much, and you choose where it points. Nothing below changes what a free
+								account can do.
 							</p>
 							<div className="mt-6 grid gap-4 sm:grid-cols-2">
 								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
@@ -1404,9 +1514,9 @@ export default function SubscribePage() {
 						</div>
 					</Reveal>
 
-					{/* ── 2 · Support for a creator — the primary ask ─────────── */}
+					{/* ── 1 · Support for a creator — the primary ask ─────────── */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={2} title="Support a creator">
+						<StepHeading n={1} title="Support a creator">
 							It goes to them.{" "}
 							<strong>
 								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
@@ -1449,15 +1559,20 @@ export default function SubscribePage() {
 						/>
 					</Reveal>
 
-					{/* ── 3 · Support for Anthers — the optional second thing ─── */}
+					{/* ── 2 · Support for Anthers — the optional second thing ───
+					    🚨 The one section this page must not let read as a requirement. Plenty of
+					    people will be served entirely by purchases, creator support and the free
+					    hours, and that is a fine way to use Anthers rather than a lapse to nudge
+					    somebody out of. The heading's first words say so before the numbers do. */}
 					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
-						<StepHeading n={3} title="Support Anthers">
-							Optional, and separate from anything above. Watch as much Public Access as you like,
-							for as long as you hold it — and{" "}
+						<StepHeading n={2} title="Support Anthers">
+							<strong>Only if you want to.</strong> Buying from creators, backing them directly and
+							the free {FREE_PUBLIC_ACCESS_HOURS} hours may be everything you ever need — this
+							changes nothing about any of it. What it does is lift the monthly limit, and put{" "}
 							<strong>
 								{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every {money(PUBLIC_ACCESS_PRICE)}
 							</strong>{" "}
-							goes into the Time Pool, split among the creators whose work you spent time with.
+							into the Time Pool, split among the creators whose work you spent time with.
 						</StepHeading>
 						<SeedBreakdown
 							segments={[
@@ -1511,9 +1626,14 @@ export default function SubscribePage() {
 							Everything you chose along the way, in one place.
 						</p>
 						<Summary {...summaryProps} />
+						{/* ⚠️ This carried the same {money(FREE_TIME_POOL)} sentence the free
+						    inclusions now open the page with. Repeating a fact at both ends of a
+						    long page reads as a copy bug; what belongs *here* is not the mechanism
+						    but the reassurance, at the one moment somebody is deciding whether
+						    they have chosen enough. They have. */}
 						<p className="mx-auto mt-5 max-w-xl text-center text-xs leading-relaxed text-base-content/45">
-							Anthers puts {money(FREE_TIME_POOL)} a month into the Time Pool for every free
-							account, so your time pays creators even at $0.
+							Choosing nothing here is a complete answer — a free account still pays creators for
+							the time you give them.
 						</p>
 					</Reveal>
 
