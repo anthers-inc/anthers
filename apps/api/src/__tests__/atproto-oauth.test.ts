@@ -64,6 +64,65 @@ describe("client construction under Bun", () => {
 		}
 	});
 
+	it("builds a discoverable identity from an https origin with NODE_ENV unset", () => {
+		// 🚨 **This is production's ACTUAL environment, and no test described it until the
+		// live metadata document was curled and found serving the loopback identity.**
+		// `.do/app.yaml` sets `FRONTEND_URL=${APP_URL}` and does not set `NODE_ENV` — it
+		// appears nowhere in the live spec. The fallback to `FRONTEND_URL` was gated behind
+		// `NODE_ENV === "production"`, so it never ran, and the fix for the localhost
+		// client_id shipped without changing what production served.
+		//
+		// ⭐ The lesson is about what a test STANDS IN FOR. The test below sets NODE_ENV
+		// itself, so it proved the code worked in an environment no deployment has — it
+		// described the fix's intent rather than production's configuration.
+		const prevBase = process.env.BASE_URL;
+		const prevFront = process.env.FRONTEND_URL;
+		const prevNode = process.env.NODE_ENV;
+		try {
+			delete process.env.BASE_URL;
+			delete process.env.NODE_ENV;
+			process.env.FRONTEND_URL = "https://anthers.org";
+
+			const meta = buildClientMetadata();
+			expect(meta.client_id).toBe("https://anthers.org/api/atproto/client-metadata.json");
+			expect(meta.redirect_uris[0]).toBe("https://anthers.org/api/atproto/callback");
+			// The tell that the loopback branch was taken. It is what production served.
+			expect(meta.client_name).not.toBe("Anthers (dev)");
+		} finally {
+			for (const [k, v] of [
+				["BASE_URL", prevBase],
+				["FRONTEND_URL", prevFront],
+				["NODE_ENV", prevNode],
+			] as const) {
+				if (v === undefined) delete process.env[k];
+				else process.env[k] = v;
+			}
+		}
+	});
+
+	it("still falls back to loopback for a local dev origin", () => {
+		// The other half of dropping the NODE_ENV gate: dev sets `FRONTEND_URL` too, to
+		// `http://localhost:3000`. It must NOT be mistaken for a public origin.
+		const prevBase = process.env.BASE_URL;
+		const prevFront = process.env.FRONTEND_URL;
+		const prevNode = process.env.NODE_ENV;
+		try {
+			delete process.env.BASE_URL;
+			delete process.env.NODE_ENV;
+			process.env.FRONTEND_URL = "http://localhost:3000";
+			expect(buildClientMetadata().client_name).toBe("Anthers (dev)");
+		} finally {
+			for (const [k, v] of [
+				["BASE_URL", prevBase],
+				["FRONTEND_URL", prevFront],
+				["NODE_ENV", prevNode],
+			] as const) {
+				if (v === undefined) delete process.env[k];
+				else process.env[k] = v;
+			}
+		}
+	});
+
 	it("refuses to build a production client identity from a non-https origin", () => {
 		// 🚨 Production has no BASE_URL, and the old code fell back to localhost — so the
 		// metadata document advertised a client_id no authorization server would accept.

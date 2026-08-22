@@ -144,23 +144,39 @@ export async function attachSessionToUser(did: string, userId: number): Promise<
  * nothing said so, because nothing in the UI called it.
  *
  * `FRONTEND_URL` is set in production and is the right answer: the SPA and the API share
- * one origin there, with `/api` ingress-routed. In development they do not share an
- * origin, so the API's own port is used instead.
+ * one origin there, with `/api` ingress-routed (`${APP_URL}`, which resolves to the PRIMARY
+ * domain — `https://anthers.org`). In development they do not share an origin, so the API's
+ * own port is used instead.
+ *
+ * 🚨 **The `FRONTEND_URL` fallback was gated on `NODE_ENV === "production"` until
+ * 2026-08-22, and `NODE_ENV` IS SET NOWHERE IN `.do/app.yaml`.** So the guard was false in
+ * production, the fallback never ran, and production went on serving the loopback identity
+ * the fix was written to remove — verified by curling the live metadata document minutes
+ * after the deploy. The fix reproduced the bug it was fixing, one level up: the first
+ * version read the wrong variable, the second read the right one behind a condition nobody
+ * had checked.
+ *
+ * ⭐ **So the shape of the answer is "detect the thing itself, never a proxy for it".** An
+ * https `FRONTEND_URL` *is* what "we are deployed somewhere public" means; `NODE_ENV` is a
+ * label somebody has to remember to set, and nobody did. The environment is now inferred
+ * from the origin rather than asserted alongside it, and there is no configuration whose
+ * absence silently downgrades a protocol identity.
  */
 export function getBaseUrl(): string {
 	const explicit = process.env.BASE_URL;
 	if (explicit) return explicit.replace(/\/+$/, "");
 
+	// Any https origin means this is deployed and reachable, whatever NODE_ENV says.
+	const frontend = process.env.FRONTEND_URL?.replace(/\/+$/, "");
+	if (frontend?.startsWith("https://")) return frontend;
+
+	// Only a declared production environment is an ERROR — that combination means somebody
+	// meant to deploy and gave us nothing usable, which must fail loudly rather than emit a
+	// client identity no authorization server will accept.
 	if (process.env.NODE_ENV === "production") {
-		const frontend = process.env.FRONTEND_URL?.replace(/\/+$/, "");
-		// Fail loudly rather than emit a client identity that cannot work. A missing value
-		// must never be the thing that quietly degrades a protocol identity into a local one.
-		if (!frontend?.startsWith("https://")) {
-			throw new Error(
-				"ATProto OAuth needs an https origin: set BASE_URL, or FRONTEND_URL to the public site.",
-			);
-		}
-		return frontend;
+		throw new Error(
+			"ATProto OAuth needs an https origin: set BASE_URL, or FRONTEND_URL to the public site.",
+		);
 	}
 
 	return "http://localhost:8000";
