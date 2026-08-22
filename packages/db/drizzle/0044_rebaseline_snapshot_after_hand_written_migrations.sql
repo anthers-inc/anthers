@@ -1,0 +1,27 @@
+-- Deliberately empty. This migration exists to carry a SNAPSHOT, not statements.
+--
+-- 0041 and 0042 were hand-written, each for a good reason recorded in its own header, but
+-- neither advanced drizzle-kit's snapshot. Its recorded state therefore stopped at
+-- `0040_snapshot.json`, and every `db:generate` since has diffed the live schema against a
+-- picture of the database from before the Seed retirement — opening with a prompt asking
+-- whether `anthers_support` is a rename of `anthers_seeds`, and, if answered, emitting a
+-- migration that re-creates columns that already exist.
+--
+-- 🚨 The hazard was that the prompt looks like an ordinary question rather than a symptom.
+-- Nothing announced that the snapshot was stale; the next person to add a column would
+-- simply meet an unexpected dialog whose most plausible reading produces a wrong migration.
+--
+-- The accompanying `meta/0044_snapshot.json` is a true description of the schema as of
+-- 0043, so future diffs are taken against reality. Every statement drizzle-kit generated
+-- alongside it was for a change 0041, 0042 or 0043 had already applied, which is why this
+-- file is empty rather than a repair: there is nothing left to do to any database.
+--
+-- Applying it is a no-op everywhere, including production, where it only stamps a row in
+-- `drizzle.__drizzle_migrations`.
+--
+-- ⚠️ `drizzle-kit generate --custom` is NOT a substitute. It copies the previous snapshot
+-- forward unchanged, which would have entrenched the stale state under a new number. The
+-- snapshot here came from a real diff, driven by `bun run db:generate` (see
+-- `scripts/drizzle-generate.ts`), with its SQL discarded.
+--
+-- The guard that stops this recurring is `scripts/drizzle-snapshots.ts`, in `make verify`.
