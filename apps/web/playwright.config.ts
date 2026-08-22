@@ -138,6 +138,19 @@ export default defineConfig({
 				: "make -C ../.. db-ready && bun --env-file=../../.env src/server.ts",
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
+			/*
+			 * 🚨 **A launch switch the suite has to pin, or the suite tests the environment
+			 * instead of the code.** `ATPROTO_SIGNUP_ENABLED` is off by default so that
+			 * production stays closed until opening it is a deliberate decision — which means
+			 * a spec covering the Bluesky signup door passes locally (where `.env` sets it)
+			 * and fails in CI (where nothing does). Declaring it here makes the e2e
+			 * environment say what it is testing, rather than inheriting an answer.
+			 *
+			 * ⚠️ It does NOT apply to a reused server. `reuseExistingServer` is on locally, so
+			 * a running `make dev` brings its own environment and this is ignored — if those
+			 * specs fail against a dev API, the flag is missing from your `.env`.
+			 */
+			env: { ATPROTO_SIGNUP_ENABLED: "true" },
 			reuseExistingServer: !process.env.CI,
 			timeout: 180_000,
 		},

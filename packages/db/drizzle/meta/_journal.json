@@ -316,6 +316,13 @@
       "when": 1787357464735,
       "tag": "0044_rebaseline_snapshot_after_hand_written_migrations",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1787413992371,
+      "tag": "0045_atproto_pending_signups",
+      "breakpoints": true
     }
   ]
 }

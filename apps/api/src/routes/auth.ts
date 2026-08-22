@@ -11,6 +11,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
 import { isReservedUsername } from "../reserved-usernames.js";
+import { attachPendingSignup } from "../services/atproto.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -302,6 +303,32 @@ const authRoutes = new Hono()
 			c.req.header("User-Agent"),
 		);
 		setSessionCookie(c, token);
+
+		// 🚨 **A Bluesky signup that could not get a usable address from its PDS finishes
+		// HERE**, and this is what makes it one ceremony rather than two. The identity was
+		// proved by a completed OAuth round trip and parked; the code just typed proves the
+		// address. Attaching now is safe precisely because of that order — the PDS's claim
+		// about an address is somebody else's assertion, and a code we sent to a mailbox
+		// they read is ours. It is also why this works for a *returning* account whose
+		// address happens to match: they proved the mailbox, so it is theirs.
+		//
+		// Deliberately not fatal. A refusal means the DID already belongs to another
+		// account, and the right outcome is a signed-in account with no link rather than a
+		// failed signup — the person can sort the link out from settings.
+		//
+		// ⚠️ **Guarded, and it emits nothing when there is no pending token.** An
+		// unconditional `deleteCookie` here added a second `Set-Cookie` to *every* signup,
+		// which broke a client that read the header and took the first cookie — the ceremony
+		// test does exactly that, and so might anything else. A route that has always
+		// answered with one cookie should keep doing so on the path that has not changed.
+		const pendingToken = getCookie(c, "atproto_pending");
+		if (pendingToken) {
+			await attachPendingSignup(pendingToken, user.id);
+			deleteCookie(c, "atproto_pending", {
+				path: "/",
+				...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
+			});
+		}
 
 		return c.json(
 			{

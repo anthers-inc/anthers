@@ -14,11 +14,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
  * outcome in the query. So this page is a *translator*: it turns one word into a sentence
  * and sends the person on.
  *
- * 🚨 **Nothing here may create an account, and the error most people will see says so.**
- * Signing in with a Bluesky handle that no Anthers account has linked comes back as
- * `signup_disabled`, and the honest answer is that there is no account rather than that
- * something broke. Pointing that person at `/subscribe` is the only route onward, because
- * `/subscribe` is the single signup door.
+ * 🚨 **Nothing here creates an account, and both of its signup-shaped outcomes go through
+ * `/subscribe`.** Coming back from the *sign-in* door with a handle nobody has linked is
+ * `signup_disabled` — the honest answer is that there is no account, not that something
+ * broke. Coming back from the *signup* door without a usable address is `needs_email`,
+ * which means the identity is proved and parked and the ordinary emailed-code ceremony
+ * has to finish the job. Different causes, one destination, because `/subscribe` is the
+ * single signup door and this page is not going to become a second one.
  */
 
 /**
@@ -33,7 +35,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
  */
 const ERROR_MESSAGES: Record<string, string> = {
 	signup_disabled:
-		"That Bluesky account isn't connected to an Anthers account yet. Signing up with Bluesky isn't open — create an account first, then link Bluesky from your settings.",
+		"That Bluesky account isn't connected to an Anthers account yet — signing in can't create one. Sign up, and the same handle will work from then on.",
 	not_authenticated: "You have to be signed in to link a Bluesky account.",
 	did_already_linked: "That Bluesky account is already linked to a different Anthers account.",
 	signup_failed: "We couldn't finish setting up that account.",
@@ -77,6 +79,20 @@ export default function ATProtoCallbackPage() {
 			refreshUser().then(() => {
 				navigate("/settings?bluesky=linked", { replace: true });
 			});
+			return;
+		}
+
+		// 🚨 A signup whose PDS could not give us a usable address. There is no account and
+		// no session yet — the identity is parked server-side against an httpOnly cookie —
+		// so this goes to `/subscribe` to finish the ordinary way, and deliberately does
+		// NOT refresh the auth context, because there is nothing new to learn.
+		if (success === "needs_email") {
+			// ⚠️ Not `withNextPath`: that appends its own `?next=`, which would produce a
+			// second `?` in a path that already carries a parameter. Composing the query is
+			// the only way that stays right when a third parameter turns up.
+			const query = new URLSearchParams({ atproto: "1" });
+			if (next) query.set("next", next);
+			navigate(`/subscribe?${query}`, { replace: true });
 			return;
 		}
 

@@ -6,26 +6,41 @@
  *   GET  /client-metadata.json — OAuth client metadata document
  *   POST /auth                 — Initiate OAuth flow (returns authorization URL)
  *   GET  /callback             — OAuth callback (exchanges code, creates session, redirects)
+ *   GET  /pending              — What a signup waiting on an address knows about itself
  *   POST /unlink               — Unlink ATProto identity from account
  *
  * The protocol work is `@atproto/oauth-client`'s; see `services/atproto-client.ts` for why
  * it is the runtime-agnostic core rather than the Node package. What is left here is the
- * two intents — link an identity to the account you are signed into, or sign in with one —
- * and the ceremony each of them owes.
+ * three intents — link an identity to the account you are signed into, sign in with one, or
+ * sign up with one — and the ceremony each of them owes.
+ *
+ * 🚨 **The intent decides the scope, and that is why there are three rather than two.**
+ * Signing up needs `transition:email`, because Anthers never creates an account it cannot
+ * mail; signing in and linking need identity and nothing else. Folding signup into the
+ * login intent would make every returning person consent to us reading their email address
+ * to do something that never needs it.
  */
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { setSessionCookie } from "../lib/session-cookie.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
-	createUserFromAtproto,
+	atprotoSignupEnabled,
+	clearPendingSignup,
+	EMAIL_SCOPE,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
 	linkAtprotoToUser,
+	PENDING_SIGNUP_TTL_MS,
+	readPdsEmail,
+	readPendingSignup,
 	resolveIdentity,
+	startPendingSignup,
+	sweepExpiredPendingSignups,
 	unlinkAtprotoFromUser,
 } from "../services/atproto.js";
 import {
@@ -40,7 +55,7 @@ import { createSession, validateSession } from "../services/auth.js";
 
 const authInitSchema = z.object({
 	handle: z.string().min(1),
-	intent: z.enum(["login", "link"]).default("login"),
+	intent: z.enum(["login", "link", "signup"]).default("login"),
 	/**
 	 * Where to land afterwards — the thing the person was trying to do when signing in
 	 * interrupted them. Client-supplied, and therefore sanitized before it is stored rather
@@ -61,13 +76,32 @@ const authInitSchema = z.object({
  * matters is what the browser is finally told to navigate to.
  */
 interface AppState {
-	intent: "login" | "link";
+	intent: "login" | "link" | "signup";
 	userId?: number;
 	next?: string;
 }
 
 function getFrontendUrl(): string {
 	return process.env.FRONTEND_URL ?? "http://localhost:3000";
+}
+
+/**
+ * The cookie that binds a parked signup to this browser.
+ *
+ * `Lax` rather than `Strict` because it has to survive the redirect back from an
+ * authorization server on another origin, which is the only moment it is ever set.
+ */
+const PENDING_COOKIE = "atproto_pending";
+
+function setPendingCookie(c: Parameters<typeof setCookie>[0], token: string): void {
+	setCookie(c, PENDING_COOKIE, token, {
+		httpOnly: true,
+		secure: process.env.NODE_ENV === "production",
+		sameSite: "Lax",
+		path: "/",
+		maxAge: Math.floor(PENDING_SIGNUP_TTL_MS / 1000),
+		...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+	});
 }
 
 /**
@@ -111,10 +145,16 @@ const atprotoRoutes = new Hono()
 			userId = result.user.id;
 		}
 
+		// Refused here rather than at the callback, so nobody is sent through an
+		// authorization screen on another website to be told no on the way back.
+		if (intent === "signup" && !atprotoSignupEnabled()) {
+			return c.json({ error: "Signing up with Bluesky isn't open yet." }, 403);
+		}
+
 		try {
-			// Opportunistic rather than scheduled: this is the only route that creates state
-			// rows, so it is the only place that can be relied on to run before they pile up.
-			await sweepExpiredOauthState();
+			// Opportunistic rather than scheduled: these are the only routes that create rows
+			// in either table, so this is the only place that can be relied on to run.
+			await Promise.all([sweepExpiredOauthState(), sweepExpiredPendingSignups()]);
 
 			const appState: AppState = {
 				intent,
@@ -123,9 +163,11 @@ const atprotoRoutes = new Hono()
 			};
 			const url = await getAtprotoClient().authorize(handle, {
 				state: JSON.stringify(appState),
-				// Identity only. Writing records needs more, and it is asked for at the point
-				// a creator opts into publishing — never bundled into signing in.
-				scope: "atproto",
+				// ⚠️ Identity only, except when signing up. Writing records needs more still,
+				// and it is asked for at the point a creator opts into publishing — never
+				// bundled into signing in. `transition:email` is narrow enough that the consent
+				// screen reads honestly ("read your email address", not "do anything").
+				scope: intent === "signup" ? `atproto ${EMAIL_SCOPE}` : "atproto",
 			});
 			return c.json({ authorization_url: url.toString() });
 		} catch (err) {
@@ -168,15 +210,50 @@ const atprotoRoutes = new Hono()
 				return back({ success: "linked" });
 			}
 
-			// ── Login intent ─────────────────────────────────────────────────
-			let user = await findUserByAtprotoDid(identity, profile.displayName);
+			// ── Login and signup ─────────────────────────────────────────────
+			//
+			// They share everything after "is there an account for this DID?", including the
+			// answer when there is one: somebody who pressed Sign Up with a handle they had
+			// already linked is signed in rather than told off.
+			const user = await findUserByAtprotoDid(identity, profile.displayName);
+
+			if (!user && appState.intent !== "signup") {
+				// 🚨 A DID nobody has linked, reached through the sign-in door. This is a signup
+				// and the sign-in door cannot perform one — it asked for identity only, so it
+				// holds no address and could not create an account it can mail. `/subscribe` is
+				// where signing up happens, exactly as it is for everyone else.
+				return fail("signup_disabled");
+			}
+
 			if (!user) {
-				// 🚨 A DID nobody has linked means this is a SIGNUP, not a sign-in, and signup
-				// through this door is closed until it carries the same ceremony as every
-				// other one. See `createUserFromAtproto`.
-				const created = await createUserFromAtproto(identity, profile.displayName);
-				if (created.error || !created.user) return fail(created.error ?? "signup_failed");
-				user = created.user;
+				// ── Signup ───────────────────────────────────────────────────
+				if (!atprotoSignupEnabled()) return fail("signup_disabled");
+
+				// 🚨 **A signup NEVER completes here, whatever the PDS said.** The identity is
+				// proved and parked, and the address is confirmed by our own emailed code on
+				// `/subscribe` before any account exists.
+				//
+				// This branch used to short-circuit when the PDS reported `emailConfirmed: true`,
+				// creating the account outright and skipping our verification. That trusted the
+				// wrong party (Parker's call, 2026-08-22): the PDS answering is **whichever
+				// server the person's identity lives on**, and anyone self-hosting one can
+				// answer `{email: "someone-else@example.com", emailConfirmed: true}`. The prize
+				// is an Anthers account bound to an address they do not control — receipts and
+				// account notices to an innocent third party, and a squatted handle. Recoverable
+				// (the real owner can sign in by code and unlink) but not worth having.
+				//
+				// ⚠️ **An allowlist of trusted PDS hosts was the obvious alternative and was
+				// rejected on principle**: "we trust Bluesky's server and not yours" is precisely
+				// the posture a platform arguing that it needs nobody's permission cannot adopt.
+				// Verifying everybody equally costs one email — the same step every other signup
+				// already pays — and removes the trust assumption instead of narrowing it.
+				//
+				// ⭐ What the PDS's answer is still good for is **saving somebody typing**. The
+				// address rides along as a prefill; the code is what makes it true.
+				const pds = await readPdsEmail(session);
+				const token = await startPendingSignup(identity, pds.email);
+				setPendingCookie(c, token);
+				return back({ success: "needs_email", next });
 			}
 
 			await attachSessionToUser(identity.did, user.id);
@@ -201,6 +278,45 @@ const atprotoRoutes = new Hono()
 			const message = err instanceof Error ? err.message : "exchange_failed";
 			return fail(message);
 		}
+	})
+
+	// ── What the browser needs to know before it offers anything ─────────────
+	//
+	// 🚨 **Without this the closed state is a button that refuses**, which is worse than no
+	// button: `ATPROTO_SIGNUP_ENABLED` is a launch switch, and while it is off `/subscribe`
+	// should look exactly as it did before this existed rather than advertising a door and
+	// then apologising. The API refuses either way — this only decides whether anyone is
+	// invited to try.
+	.get("/config", (c) => c.json({ signupEnabled: atprotoSignupEnabled() }))
+
+	// ── A signup waiting on an address ───────────────────────────────────────
+	//
+	// What `/subscribe` needs in order to say *whose* signup it is finishing, and to
+	// prefill the address the PDS gave us when it gave us one.
+	//
+	// ⚠️ It answers from the httpOnly cookie and nothing else, so it can only ever describe
+	// a signup this browser started. The address it returns is one the PDS already handed
+	// us for this identity — but it is a **prefill and not a claim**, and the person may
+	// type a different one, which is theirs to do. The code is what proves it either way.
+	.get("/pending", async (c) => {
+		const row = await readPendingSignup(getCookie(c, PENDING_COOKIE));
+		// One shape, always. Two `c.json` calls returning different objects give the RPC
+		// client a union type that every caller then has to narrow by hand.
+		const pending: { handle: string; email: string | null } | null = row
+			? { handle: row.handle, email: row.email ?? null }
+			: null;
+		return c.json({ pending });
+	})
+
+	// Abandon it — the "actually, never mind" on `/subscribe`. The row goes as well as the
+	// cookie, because a parked identity nobody is claiming is just a row waiting to expire.
+	.post("/pending/cancel", async (c) => {
+		await clearPendingSignup(getCookie(c, PENDING_COOKIE));
+		deleteCookie(c, PENDING_COOKIE, {
+			path: "/",
+			...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+		});
+		return c.json({ success: true });
 	})
 
 	// ── Unlink ───────────────────────────────────────────────────────────────

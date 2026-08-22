@@ -14,7 +14,7 @@ import { db } from "@anthers/db";
 import { atprotoOauthState, atprotoSessions, users } from "@anthers/db/schema";
 import { JoseKey } from "@atproto/jwk-jose";
 import { eq, like } from "drizzle-orm";
-import { createUserFromAtproto, resolveIdentity } from "../services/atproto.js";
+import { resolveIdentity } from "../services/atproto.js";
 import {
 	attachSessionToUser,
 	buildClientMetadata,
@@ -211,36 +211,16 @@ describe("session store", () => {
 	});
 });
 
-describe("signup gate", () => {
-	const identity = { did: `did:plc:${RUN}new`, handle: "someone.bsky.social", pdsUrl: "https://x" };
-
-	it("refuses to create an account when signup is not explicitly enabled", async () => {
-		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
-		process.env.ATPROTO_SIGNUP_ENABLED = undefined as never;
-		delete process.env.ATPROTO_SIGNUP_ENABLED;
-		try {
-			const result = await createUserFromAtproto(identity);
-			expect(result.error).toBe("signup_disabled");
-			expect(result.user).toBeUndefined();
-			const rows = await db.select().from(users).where(eq(users.atprotoDid, identity.did));
-			expect(rows.length).toBe(0);
-		} finally {
-			if (prev === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
-			else process.env.ATPROTO_SIGNUP_ENABLED = prev;
-		}
-	});
-
-	it('refuses on any value other than the literal "true"', async () => {
-		const prev = process.env.ATPROTO_SIGNUP_ENABLED;
-		process.env.ATPROTO_SIGNUP_ENABLED = "1";
-		try {
-			expect((await createUserFromAtproto(identity)).error).toBe("signup_disabled");
-		} finally {
-			if (prev === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
-			else process.env.ATPROTO_SIGNUP_ENABLED = prev;
-		}
-	});
-});
+/*
+ * 🚨 **The signup-gate tests moved to `atproto-signup.test.ts` on 2026-08-22, and the
+ * coverage got stronger rather than thinner.** They used to call a service function —
+ * `createAccountFromAtproto` — that created an account when the PDS reported the address
+ * confirmed. That function is gone: an ATProto signup now ends at `/auth/signup/verify`
+ * like every other one, after a code Anthers sent has been read. So the gate is tested
+ * where it is actually enforced, at the two routes: `/auth` refuses `intent: "signup"` with
+ * a 403 before anybody is sent to an authorization server, and the callback refuses with
+ * `signup_disabled`.
+ */
 
 describe("identity resolution", () => {
 	afterAll(() => setAtprotoClient(undefined));
