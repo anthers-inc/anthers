@@ -31,10 +31,38 @@ import { expect, test } from "./fixtures";
  */
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
+/**
+ * Open the Bluesky half of the signup card.
+ *
+ * ⚠️ **The two doors sit behind a tab switcher since 2026-08-23**, so the Bluesky button
+ * is not on the page until the tab is chosen. The tab is named "Bluesky" and the button
+ * "Sign up with Bluesky", which is what keeps `role=tab` + name from colliding with
+ * `role=button` + name — worth preserving, because a locator that matched both would be
+ * ambiguous rather than wrong, and strict mode would report it as a missing element.
+ */
+async function openBlueskyDoor(page: Page) {
+	await topSignup(page).getByRole("tab", { name: "Bluesky", exact: true }).click();
+}
+
 test.describe("signing up with Bluesky", () => {
-	test("the button is wired to something", async ({ page }) => {
+	test("the tab reveals a button, and the button is wired to something", async ({ page }) => {
 		await page.goto("/subscribe");
 
+		// 🚨 **Wait for the tab before asserting the button is absent.** The Bluesky door is
+		// only drawn once `GET /api/atproto/config` answers, so on first paint there are no
+		// tabs at all and *nothing* named "Sign up with Bluesky" — which makes a bare
+		// `toHaveCount(0)` pass instantly, for a reason that has nothing to do with which
+		// door is selected. Caught by sabotage: defaulting the state to `"bluesky"` left
+		// this test green while two others went red. The tab's presence is what proves the
+		// switcher has rendered, so the count below is then about the selection.
+		const blueskyTab = topSignup(page).getByRole("tab", { name: "Bluesky", exact: true });
+		await expect(blueskyTab).toBeVisible();
+		await expect(
+			topSignup(page).getByRole("button", { name: /sign up with bluesky/i }),
+			"email is the door a visitor meets; Bluesky is the other tab, not the default",
+		).toHaveCount(0);
+
+		await openBlueskyDoor(page);
 		await topSignup(page)
 			.getByRole("button", { name: /sign up with bluesky/i })
 			.click();
@@ -47,6 +75,7 @@ test.describe("signing up with Bluesky", () => {
 
 	test("it says what it will ask Bluesky for, and what comes after", async ({ page }) => {
 		await page.goto("/subscribe");
+		await openBlueskyDoor(page);
 		await topSignup(page)
 			.getByRole("button", { name: /sign up with bluesky/i })
 			.click();
@@ -69,6 +98,7 @@ test.describe("signing up with Bluesky", () => {
 		page,
 	}) => {
 		await page.goto("/subscribe");
+		await openBlueskyDoor(page);
 		await topSignup(page)
 			.getByRole("button", { name: /sign up with bluesky/i })
 			.click();
@@ -88,9 +118,15 @@ test.describe("signing up with Bluesky", () => {
 		await page.goto("/subscribe?atproto=1");
 
 		await expect(page.getByText(/signing up as @/i)).toHaveCount(0);
-		// ⚠️ Deliberately not asserting the button here. Whether it renders depends on the
-		// launch switch, which is not this test's subject — and an assertion that drags in
-		// an unrelated condition is one that fails for unrelated reasons.
+		// ⚠️ Deliberately not asserting the Bluesky button here. Whether it renders depends
+		// on the launch switch, which is not this test's subject — and an assertion that
+		// drags in an unrelated condition is one that fails for unrelated reasons.
+		//
+		// 🚨 But wait for the tab switcher before reading the email door, for the same
+		// reason as the test above: the card starts with no tabs and the email field
+		// showing, so this assertion would pass on the first paint whatever the tabs
+		// later decide. It is only meaningful once the switcher has rendered.
+		await expect(topSignup(page).getByRole("tab", { name: "Bluesky", exact: true })).toBeVisible();
 		await expect(
 			topSignup(page).getByRole("button", { name: /create my free account/i }),
 		).toBeVisible();

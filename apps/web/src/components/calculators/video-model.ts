@@ -13,6 +13,8 @@
 
 export type Resolution = "240p" | "480p" | "720p" | "1080p" | "1440p" | "2160p";
 
+export type MasterFormat = "h264" | "h265" | "prores";
+
 /** 1 Mbps sustained for one hour, expressed in GiB (2^30 bytes). */
 export const GIB_PER_MBPS_HR = 0.4190952;
 
@@ -77,6 +79,52 @@ export const AV1_REF30: Record<Resolution, number> = {
  */
 export function rungFps(res: Resolution, srcFps: number): number {
 	return RES_HEIGHT[res] >= 720 ? srcFps : Math.min(srcFps, 30);
+}
+
+/** Master export reference: 30fps video bitrate (Mbps) per format + fps scaling. */
+export const MASTER_EXPORT: Record<
+	MasterFormat,
+	{ label: string; ref: Partial<Record<Resolution, number>>; fps: Record<number, number> }
+> = {
+	h264: {
+		label: "H.264 master",
+		ref: { "720p": 6, "1080p": 12, "1440p": 20, "2160p": 45 },
+		fps: { 24: 0.9, 30: 1.0, 60: 1.5 },
+	},
+	h265: {
+		label: "H.265 master",
+		ref: { "720p": 4, "1080p": 8, "1440p": 13, "2160p": 28 },
+		fps: { 24: 0.9, 30: 1.0, 60: 1.5 },
+	},
+	prores: {
+		label: "ProRes 422HQ master",
+		ref: { "720p": 98, "1080p": 220, "1440p": 390, "2160p": 880 },
+		fps: { 24: 0.8, 30: 1.0, 60: 2.0 },
+	},
+};
+
+/** The master carries a higher-rate audio track than the delivery rungs. */
+export const MASTER_AUDIO_MBPS = 0.256;
+
+/**
+ * Everything Anthers stores for one hour of uploaded video, in GiB: the master kept
+ * as-is, plus the whole AV1 ladder from the master's resolution down to 240p.
+ *
+ * ⚠️ **The marketing pages read this rather than quoting a number.** "50 GiB is about
+ * six hours of 1080p video" is a derived claim, and a derived claim typed into a page
+ * goes stale the moment the free allowance or the ladder moves — the same failure the
+ * money figures have a whole guard for. `FREE_STORAGE_GIB / storedGibPerSourceHour(…)`
+ * cannot drift; a `6` in a sentence can.
+ */
+export function storedGibPerSourceHour(res: Resolution, fps: number, master: MasterFormat): number {
+	const m = MASTER_EXPORT[master];
+	const masterGib = ((m.ref[res] ?? 0) * m.fps[fps] + MASTER_AUDIO_MBPS) * GIB_PER_MBPS_HR;
+	const ladderGib = RES_LADDER_HIGH_TO_LOW.filter((r) => RES_HEIGHT[r] <= RES_HEIGHT[res]).reduce(
+		(sum, r) =>
+			sum + (AV1_REF30[r] * FPS_MULT[rungFps(r, fps)] + RUNG_AUDIO_MBPS) * GIB_PER_MBPS_HR,
+		0,
+	);
+	return masterGib + ladderGib;
 }
 
 // ---------------------------------------------------------------------------

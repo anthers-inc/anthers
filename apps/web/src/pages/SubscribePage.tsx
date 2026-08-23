@@ -9,11 +9,22 @@
 //
 // The page is a guided sequence, and the order is the argument:
 //
-//   0. **Join.** The free inclusions, then the signup control — an address or a Bluesky
-//      handle — before the page asks for anything at all.
+//   0. **Join.** The five free inclusions as an icon row, then the signup control — an
+//      address or a Bluesky handle, on a tab switcher — before the page asks for anything
+//      at all. Two doors into the optional half close the section.
 //   1. What support for a CREATOR does, with its breakdown, ending in a creator search.
 //   2. What support for ANTHERS does, with the same breakdown, ending in a yes/no.
 //   …then the one place it all adds up, with the same signup control again.
+//
+// ⭐ **The first section was rebuilt on 2026-08-23, and three of its changes are about
+// how the section is READ rather than what it claims.** The inclusions were four bordered
+// cards sitting directly above the bordered signup card, so the eye could not tell the
+// list of what you get from the thing you do about it — they are an icon row now, the
+// shape /about used for its governance facts. The Bluesky door was a divider and a second
+// button under the email field, which made it read as an afterthought rather than as the
+// other half of one choice. And the two paragraphs describing where a monthly amount can
+// point are now buttons that scroll to the section that asks for it, so a reader does not
+// have to hold a description in their head for two screens before meeting its control.
 //
 // 🚨 **Signing up moved to the TOP on 2026-08-22, and it moved for a reason about how the
 // page is read rather than about what it says.** The signup control used to live only in
@@ -82,6 +93,7 @@
 import {
 	amountLabel,
 	cardFeeDisplay,
+	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
 	timePoolFor,
@@ -94,9 +106,19 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
+import {
+	ArrowDownTrayIcon,
+	BanknotesIcon,
+	HeartIcon,
+	PlayCircleIcon,
+	ServerStackIcon,
+	ShieldCheckIcon,
+	SparklesIcon,
+} from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import { storedGibPerSourceHour } from "../components/calculators/video-model";
 import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
@@ -117,6 +139,24 @@ const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
 const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
 /** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
 const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
+
+/**
+ * What the free creator allowance holds, in hours of video — **derived, never typed.**
+ *
+ * A creator's storage carries the master they uploaded plus the whole AV1 ladder Anthers
+ * transcodes from it, so "50 GiB" means nothing to somebody deciding whether to publish
+ * here and "about six hours of video" means everything. The number is computed from the
+ * same bitrate model `/calculators/video-storage` runs on, so the page and the calculator
+ * cannot disagree, and doubling the allowance would move this sentence on its own.
+ *
+ * 🚨 **The framerate is the assumption to know about, and the copy does not state it.**
+ * An hour at 1080p60 stores nearly twice what an hour at 1080p30 does, so this reads the
+ * 30fps case: 50 GiB is about 6.7 hours at 30fps and about 4.7 at 60. The published
+ * sentence says "6+ hours", which is true of a 30fps master and generous for a 60fps one.
+ * If that ever needs to be the worst case rather than the common one, change the argument
+ * here rather than the sentence.
+ */
+const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1080p", 30, "h264"));
 
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
@@ -773,38 +813,117 @@ function SectionEcho({
  * reader who meets it as a warning reads the whole list as a trial.
  */
 function FreeInclusions() {
-	const items: [string, string][] = [
-		[
-			`${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
-			"the streaming work creators leave open to everyone — games, video, audio and writing, all on the same clock",
-		],
-		[
-			"Everything you buy is yours",
-			"purchases and creator releases don't expire and aren't metered",
-		],
-		["Follow anyone, keep a library", "no limit on either, ever"],
-		// ⭐ The fourth card said "No card, nothing to cancel — an email address is the whole
-		// of it", which is the lede repeated three inches lower. This says something the
-		// reader does not already know and could not guess: a free account is not a guest.
-		[
-			"Your time pays creators anyway",
-			`Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool for every free account, split among the creators you spent it with`,
-		],
+	const items: { icon: typeof PlayCircleIcon; label: string; sub: string }[] = [
+		{
+			icon: PlayCircleIcon,
+			// 🚨 **The period is not decoration and must not be trimmed for length.** 63.01
+			// makes "free forever" and the cap co-present in the same breath — this list is
+			// headed "free, forever", so a bare "10 hours" over it reads as a lifetime total.
+			// `subscribe-free-first.e2e.ts` pins that the bound appears above the way in.
+			label: `${FREE_PUBLIC_ACCESS_HOURS} hours/month of Public Access`,
+			sub: "Any works creators make available without a subscription — video, music, games, writing, and more — streamed for free, with creators still paid by Anthers on your behalf.",
+		},
+		{
+			icon: ShieldCheckIcon,
+			label: "No Ads or Data Harvesting",
+			sub: "No matter how you use Anthers, we never serve ads, we never sell your data, and we can never be sold.",
+		},
+		{
+			icon: BanknotesIcon,
+			label: "No Fees on Subscriptions or Purchases",
+			sub: "When you choose to support a creator with a monthly Badge subscription or a direct purchase, Anthers takes no cut. Everything except card fees goes straight to the creator.",
+		},
+		{
+			icon: ArrowDownTrayIcon,
+			label: "Purchases are yours, forever",
+			sub: "Any works you purchase are yours to own and download, even if they're unlisted later.",
+		},
+		{
+			icon: ServerStackIcon,
+			label: `${FREE_STORAGE_GIB} GiB of free Creator storage`,
+			// ⚠️ The `6+` is DERIVED — see `FREE_VIDEO_HOURS`. Parker's sentence is
+			// reproduced word for word; the only thing computed is the numeral, so that
+			// moving the allowance or the ladder moves the claim with it.
+			sub: `If you want to get started as a creator on Anthers, you can store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free, forever.`,
+		},
 	];
 	return (
-		<ul className="mx-auto mt-8 grid max-w-2xl gap-3 text-left sm:grid-cols-2">
-			{items.map(([label, sub]) => (
-				<li key={label} className="rounded-xl border border-base-content/10 bg-base-200/50 p-4">
-					<p className="text-sm font-bold">{label}</p>
-					<p className="mt-1 text-sm leading-snug text-base-content/60">{sub}</p>
-				</li>
+		// The icon row, as /about used to draw its governance facts: a mark, a short name,
+		// a sentence. ⭐ It replaced five bordered cards, which sat directly above the
+		// signup card and read as a second stack of the same object — the eye could not
+		// tell the list of what you get from the thing you do about it.
+		<ul className="mx-auto mt-12 grid max-w-7xl grid-cols-1 gap-8 text-center sm:grid-cols-2 lg:grid-cols-5 lg:gap-8">
+			{items.map((item, i) => (
+				<Reveal as="li" key={item.label} delay={i * 90}>
+					<div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+						<item.icon className="h-7 w-7" />
+					</div>
+					{/* ⚠️ `lg:min-h-12` reserves two lines for every title, because these wrap to
+					    one or two depending on the name and the breakpoint — and a row whose
+					    paragraphs start at five different heights reads as five loose blocks
+					    rather than as one row. It applies only where the items sit side by
+					    side; stacked, the reserved space is just a gap. */}
+					<h3 style={serif} className="mb-1 text-base font-medium text-balance lg:min-h-12">
+						{item.label}
+					</h3>
+					<p className="text-xs leading-relaxed text-base-content/55">{item.sub}</p>
+				</Reveal>
 			))}
 		</ul>
 	);
 }
 
 /**
- * The signup control: an address, a button, and the Bluesky door beside it.
+ * One of the two optional things, drawn as a door rather than described as a fact.
+ *
+ * ⚠️ **It scrolls rather than navigates**, because the section it names is on this page —
+ * a `<Link to="#…">` would be a router navigation to the same route and would leave the
+ * reader where they were. `scroll-mt` on the target is what keeps the heading clear of
+ * the sticky header.
+ */
+function GoFurtherCard({
+	icon: Icon,
+	title,
+	target,
+	children,
+}: {
+	icon: typeof PlayCircleIcon;
+	title: string;
+	target: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			className="group flex w-full items-start gap-4 rounded-2xl border border-base-content/10 bg-base-200/60 p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+			onClick={() =>
+				document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })
+			}
+		>
+			<span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+				<Icon className="h-6 w-6" />
+			</span>
+			<span className="min-w-0">
+				<span className="flex items-center gap-1.5 text-sm font-bold">
+					{title}
+					<span
+						aria-hidden="true"
+						className="translate-y-px text-base-content/35 transition-transform group-hover:translate-x-0.5"
+					>
+						↓
+					</span>
+				</span>
+				<span className="mt-1.5 block text-sm leading-snug text-base-content/60">{children}</span>
+			</span>
+		</button>
+	);
+}
+
+/** Which way in the signup card is currently offering. */
+type Door = "email" | "bluesky";
+
+/**
+ * The signup control: two doors on a tab switcher, an address or a Bluesky handle.
  *
  * 🚨 **One component, rendered twice, and that is deliberate rather than lazy.** It opens
  * the page — because the first thing a visitor needs to know is that joining costs nothing
@@ -813,7 +932,15 @@ function FreeInclusions() {
  * the promise is the part that matters.
  *
  * Both instances read the same `email` state, so typing in one fills the other; only the
- * input's `id` differs, which is why `idPrefix` exists.
+ * input's `id` differs, which is why `idPrefix` exists. `door` is shared for the same
+ * reason: a reader who picks Bluesky at the top and scrolls to the bottom should find the
+ * card they chose, not the one they didn't.
+ *
+ * ⚠️ **The tabs replaced a divider and a second button underneath the email field**, which
+ * made Bluesky read as the afterthought rather than as the other half of one choice. They
+ * appear only where there genuinely are two doors: a signed-in visitor has no address to
+ * give, somebody returning from Bluesky without a usable address has already used that
+ * door, and the door is closed entirely when the API says signup is off.
  */
 function SignupForm({
 	idPrefix,
@@ -827,6 +954,8 @@ function SignupForm({
 	onSubmit,
 	atprotoHandle,
 	onBluesky,
+	door,
+	onDoorChange,
 }: {
 	idPrefix: string;
 	cta: string;
@@ -849,8 +978,14 @@ function SignupForm({
 	atprotoHandle: string | null;
 	/** Open the Bluesky signup prompt. Null when it should not be offered at all. */
 	onBluesky: (() => void) | null;
+	door: Door;
+	onDoorChange: (door: Door) => void;
 }) {
 	const fieldId = `${idPrefix}-email`;
+	/** Two doors to choose between, rather than one door and a fallback. */
+	const tabbed = email !== null && !!onBluesky && !atprotoHandle;
+	/** With no tabs there is nothing to switch, so the email field is simply the card. */
+	const showEmail = email !== null && (!tabbed || door === "email");
 	return (
 		// 🚨 `data-signup` exists because the page deliberately carries TWO of these, with the
 		// same button label — which is right for a reader (it is the same act) and ambiguous
@@ -875,7 +1010,33 @@ function SignupForm({
 				</div>
 			)}
 
-			{email !== null && (
+			{/* `tabs-box`, not the retired v4 `tabs-boxed`. Both tabs are one signup — the
+			    account they make is identical, and only the thing we ask you for differs. */}
+			{tabbed && (
+				<div role="tablist" aria-label="How to sign up" className="tabs tabs-box mt-5 w-full">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={door === "email"}
+						className={`tab flex-1 ${door === "email" ? "tab-active" : ""}`}
+						onClick={() => onDoorChange("email")}
+					>
+						Email
+					</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={door === "bluesky"}
+						className={`tab flex-1 gap-1.5 ${door === "bluesky" ? "tab-active" : ""}`}
+						onClick={() => onDoorChange("bluesky")}
+					>
+						<BlueskyMark className="h-4 w-4" />
+						Bluesky
+					</button>
+				</div>
+			)}
+
+			{showEmail && (
 				<form
 					className="mt-5 text-left"
 					onSubmit={(e) => {
@@ -893,7 +1054,7 @@ function SignupForm({
 						autoComplete="email"
 						placeholder="you@example.com"
 						className="input input-bordered w-full"
-						value={email}
+						value={email ?? ""}
 						onChange={(e) => onEmailChange(e.target.value)}
 					/>
 					<button
@@ -906,17 +1067,27 @@ function SignupForm({
 				</form>
 			)}
 
-			{/* Offered only to somebody who has not already started one. Coming back from
-			    Bluesky without an address is exactly the case where a second "Sign up with
-			    Bluesky" button would send them round the same loop again. */}
-			{onBluesky && !atprotoHandle && (
-				<>
-					<div className="divider my-2 text-xs text-base-content/50">or</div>
-					<button type="button" className="btn btn-outline w-full" onClick={onBluesky}>
+			{/* ⚠️ The panel says what the button is about to do before it does it — the round
+			    trip goes to somebody else's website and asks for an email address there, and
+			    meeting that unannounced is how a signup gets abandoned at the last step. The
+			    modal repeats it; this is what a reader sees without pressing anything. */}
+			{tabbed && door === "bluesky" && onBluesky && (
+				<div className="mt-5 text-left">
+					<p className="text-sm leading-relaxed text-base-content/65">
+						We&rsquo;ll take you to Bluesky to confirm it&rsquo;s you, and ask it for an email
+						address so you don&rsquo;t have to type one. Anthers confirms that address with a code
+						of its own either way.
+					</p>
+					<button
+						type="button"
+						className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+						onClick={onBluesky}
+						disabled={busy}
+					>
 						<BlueskyMark className="h-4 w-4" />
 						Sign up with Bluesky
 					</button>
-				</>
+				</div>
 			)}
 
 			{email === null && (
@@ -1012,6 +1183,13 @@ export default function SubscribePage() {
 	const next = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
 
 	const [email, setEmail] = useState("");
+	/**
+	 * Which door the signup card is showing — shared by both copies of it, like `email`.
+	 *
+	 * Email is the default because it is the one every visitor can use; the Bluesky tab
+	 * asks for an account on another service.
+	 */
+	const [door, setDoor] = useState<Door>("email");
 	/** The address a ceremony is open for, or null when it isn't. */
 	const [ceremony, setCeremony] = useState<string | null>(null);
 
@@ -1426,12 +1604,19 @@ export default function SubscribePage() {
 			? "You'll see the exact charge before anything is confirmed. Change or stop any month."
 			: total > 0
 				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
-				: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
+				: // ⚠️ The Bluesky panel has already said Anthers sends a code of its own, and
+					// there is no address on screen for "the address" to refer to — so the note
+					// drops that half rather than repeating it about a field nobody can see.
+					door === "bluesky"
+					? "A card is only needed if you choose to support someone."
+					: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
 		onSubmit: submit,
 		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
 		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
 		onBluesky: signedIn || !blueskySignupOpen ? null : () => setBlueskyOpen(true),
+		door,
+		onDoorChange: setDoor,
 	};
 
 	const summaryProps = {
@@ -1451,8 +1636,14 @@ export default function SubscribePage() {
 		// the generated stylesheet, not by order in the attribute — `.max-w-full` is
 		// emitted last, so it won and the page ran the full width of the viewport at every
 		// size. Nothing errors; the cap is simply never applied, which reads as a scattered
-		// layout rather than as a bug. `max-w-6xl` matches the shared marketing `Section`.
-		<div className="mx-auto min-w-0 w-full max-w-5xl px-6 py-12 sm:py-16">
+		// layout rather than as a bug.
+		//
+		// ⚠️ **88rem is wider than the shared marketing `Section` (`max-w-6xl`, 72rem), and
+		// that is deliberate but temporary** (Parker, 2026-08-23): the whole site is due a
+		// size and layout pass to widen its columns and size its text up, and this page went
+		// first because it was being rebuilt anyway. When that pass lands, this number should
+		// become whatever `Section` settles on rather than staying a local exception.
+		<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 py-12 sm:py-16">
 			<div className="min-w-0">
 				<div>
 					{/* ── Join, before anything is asked for ─────────────────── */}
@@ -1468,14 +1659,23 @@ export default function SubscribePage() {
 								Anthers is free. Forever.
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-								<strong>An email address is the whole of it</strong> — no card, no trial, nothing to
-								cancel. Everything below this is optional, and plenty of people will never want any
-								of it.
+								No card required, no trial period, no ads and no sneaky charges. Here is what you
+								get on Anthers for free, forever:
 							</p>
 
 							<FreeInclusions />
 
-							<div className="mx-auto mt-8 max-w-md rounded-2xl border border-base-300 bg-base-200/60 p-6">
+							{/* The turn from the list into the act. Without it the card arrives as a
+							    form somebody has to work out the purpose of; with it, the five
+							    inclusions above are the offer and this is the answer to them. */}
+							<p
+								style={serif}
+								className="mx-auto mt-14 max-w-2xl text-balance text-2xl font-light leading-snug"
+							>
+								If that sounds good, sign up for free below and let&rsquo;s get started.
+							</p>
+
+							<div className="mx-auto mt-6 max-w-md rounded-2xl border border-base-300 bg-base-200/60 p-6">
 								<SignupForm idPrefix="top" {...signupProps} />
 							</div>
 						</div>
@@ -1488,34 +1688,40 @@ export default function SubscribePage() {
 						    ⚠️ The old copy said "a monthly amount, from $3". There is no floor of $3 —
 						    that is what unlimited Public Access costs, and a creator sets their own
 						    levels to any amount at all. Naming a floor describes a mechanism the Seed
-						    retirement removed. */}
+						    retirement removed.
+						    ⭐ Each card is now a door into the section that asks for it, rather than a
+						    description a reader has to hold in their head while scrolling past two more
+						    screens to find the control it described. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								<strong>If you want to go further, it is one thing: a monthly amount.</strong> You
-								choose how much, and you choose where it points. Nothing below changes what a free
-								account can do.
+								<strong>Everything above is free forever</strong>, but there is more to love on
+								Anthers if you want it. You can add either of these now, or at any point in the
+								future.
 							</p>
-							<div className="mt-6 grid gap-4 sm:grid-cols-2">
-								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
-									<h3 className="text-sm font-bold">Point it at a creator</h3>
-									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
-										It reaches them directly, as recurring support with no platform cut, and clears
-										whichever of their own levels it meets.
-									</p>
-								</div>
-								<div className="rounded-xl border border-base-content/10 bg-base-200/60 p-4">
-									<h3 className="text-sm font-bold">Point it at Anthers</h3>
-									<p className="mt-1.5 text-sm leading-snug text-base-content/60">
-										It keeps Public Access open to everyone, and pays the creators whose work you
-										spend time with.
-									</p>
-								</div>
+							<div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-2">
+								<GoFurtherCard icon={HeartIcon} title="Support creators" target="support-a-creator">
+									Every creator has work that is free to everyone and work they put behind a monthly
+									amount they set — their own Badges. Anthers takes no cut of either. Pick anyone
+									you&rsquo;d like to back as part of signing up.
+								</GoFurtherCard>
+								<GoFurtherCard icon={SparklesIcon} title="Support Anthers" target="support-anthers">
+									{money(PUBLIC_ACCESS_PRICE)} a month takes the monthly limit off Public Access, so
+									you can watch as much as you like, and it lifts what your time pays creators from{" "}
+									{money(FREE_TIME_POOL)} a month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}.
+									There is more on the way for supporters.
+								</GoFurtherCard>
 							</div>
 						</div>
 					</Reveal>
 
-					{/* ── 1 · Support for a creator — the primary ask ─────────── */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+					{/* ── 1 · Support for a creator — the primary ask ───────────
+					    The `id` is the target of the "Support creators" door up top, and the
+					    `scroll-mt` keeps the heading clear of the sticky header when it lands. */}
+					<Reveal
+						delay={80}
+						id="support-a-creator"
+						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
+					>
 						<StepHeading n={1} title="Support a creator">
 							It goes to them.{" "}
 							<strong>
@@ -1564,7 +1770,11 @@ export default function SubscribePage() {
 					    people will be served entirely by purchases, creator support and the free
 					    hours, and that is a fine way to use Anthers rather than a lapse to nudge
 					    somebody out of. The heading's first words say so before the numbers do. */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+					<Reveal
+						delay={80}
+						id="support-anthers"
+						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
+					>
 						<StepHeading n={2} title="Support Anthers">
 							<strong>Only if you want to.</strong> Buying from creators, backing them directly and
 							the free {FREE_PUBLIC_ACCESS_HOURS} hours may be everything you ever need — this

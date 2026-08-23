@@ -57,8 +57,16 @@ test.describe("/subscribe leads with the free door", () => {
 		// 🚨 63.01: "free forever" and the monthly cap are co-present, on the same rule as
 		// "no cut" and the take-home. A reader who meets the promise without the bound beside
 		// it hears "unlimited", and then meets the limit as a surprise after signing up.
+		//
+		// ⚠️ **Both house phrasings are matched, because what is pinned is the co-presence
+		// of a PERIOD with the hours — not one wording of it.** The page says "10 hours/month
+		// of Public Access" at the top and "10 hours of Public Access a month" in the closing
+		// summary; a regex naming only one of them would pass by finding the wrong element,
+		// which is worse than failing, since the position assertion below is the whole test.
 		const forever = page.getByRole("heading", { name: /free\. forever/i });
-		const limit = page.getByText(/hours of Public Access a month/i).first();
+		const limit = page
+			.getByText(/hours\/month of Public Access|hours of Public Access a month/i)
+			.first();
 		await expect(forever).toBeVisible();
 		await expect(limit).toBeVisible();
 
