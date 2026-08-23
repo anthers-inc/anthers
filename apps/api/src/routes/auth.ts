@@ -6,7 +6,7 @@ import { eq, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
-import { setSessionCookie } from "../lib/session-cookie.js";
+import { setSessionCookie } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -176,7 +176,7 @@ function serializeUser(user: typeof users.$inferSelect) {
 	};
 }
 
-// The cookie helper moved to `lib/session-cookie.ts` — there were two copies and the
+// The cookie helper moved to `lib/cookies.ts` — there were two copies and the
 // other one omitted COOKIE_DOMAIN. `COOKIE_DOMAIN` is still read here for `deleteCookie`,
 // which must be given the same domain or the cookie cannot be cleared.
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN;

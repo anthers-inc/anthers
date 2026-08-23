@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { isPublicDeployment } from "./lib/deployment.js";
+
 /**
  * The origins a packaged desktop Studio window serves from. Tauri uses a custom
  * scheme on Linux/macOS and a localhost-shaped one on Windows.
@@ -16,7 +18,15 @@ const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
 /**
  * Origins allowed to make credentialed requests to the API — the site (`FRONTEND_URL`)
  * plus the desktop Studio's own origins. Shared by CORS and CSRF so they never drift.
- * Localhost dev origins are added outside production.
+ * Localhost dev origins are added only when this is not a public deployment.
+ *
+ * 🚨 **That condition read `NODE_ENV === "production"` until 2026-08-23, and `NODE_ENV` is
+ * set nowhere in this app** — so production took the other branch and admitted
+ * `http://localhost:3000`, `:3001`, `:4173` and `:8000` as **credentialed** origins on
+ * `anthers.org`. Any page served from localhost on a visitor's machine could therefore make
+ * credentialed cross-origin requests to the live API, read the responses, and pass the CSRF
+ * origin check. `isPublicDeployment()` detects the deployment itself rather than a label
+ * describing it; the reasoning is in `lib/deployment.ts`.
  *
  * `STUDIO_URL` was here until 2026-08-11, for the Studio's separate subdomain. The Studio
  * is a section of the site now (`/studio`), so it is same-origin and needs no entry — and
@@ -25,8 +35,7 @@ const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
  */
 export function allowedOrigins(): string[] {
 	const configured = [process.env.FRONTEND_URL].filter((o): o is string => !!o);
-	if (process.env.NODE_ENV === "production")
-		return [...new Set([...configured, ...DESKTOP_ORIGINS])];
+	if (isPublicDeployment()) return [...new Set([...configured, ...DESKTOP_ORIGINS])];
 	return [
 		...new Set([
 			...configured,

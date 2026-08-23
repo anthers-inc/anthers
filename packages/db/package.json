@@ -12,7 +12,8 @@
 		"./schema": "./src/schema/index.ts"
 	},
 	"scripts": {
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"@anthers/shared": "workspace:*",
