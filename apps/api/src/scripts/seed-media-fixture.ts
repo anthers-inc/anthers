@@ -27,6 +27,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
+import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
 	MEDIA_FIXTURE_DISPLAY_NAME,
 	MEDIA_FIXTURE_EMAIL,
@@ -366,6 +367,8 @@ async function ensureProject(creator: number): Promise<void> {
 }
 
 async function main() {
+	assertDevCheckout();
+
 	if (!(await ffmpegAvailable())) {
 		console.warn(
 			`${TAG} ffmpeg not found — SKIPPING media seeding.\n${TAG} Specs that need playable bytes will fail; install ffmpeg to cover them.`,

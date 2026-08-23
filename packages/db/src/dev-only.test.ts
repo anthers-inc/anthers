@@ -10,10 +10,10 @@
  * that guard too.
  */
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { devCheckoutRoot, isDevCheckout } from "./dev-only.js";
+import { assertDevCheckout, devCheckoutRoot, isDevCheckout } from "./dev-only.js";
 
 const roots: string[] = [];
 
@@ -69,5 +69,73 @@ describe("devCheckoutRoot", () => {
 		// The positive case with no fixture: if this ever fails, the dev bootstrap has silently
 		// stopped ensuring anybody's login.
 		expect(devCheckoutRoot()).not.toBeNull();
+	});
+});
+
+describe("assertDevCheckout", () => {
+	it("throws outside a checkout and is silent inside one", () => {
+		const root = scratch();
+		const nested = join(root, "packages", "db", "src");
+		mkdirSync(nested, { recursive: true });
+		expect(() => assertDevCheckout(nested)).toThrow(/repository checkout/);
+
+		mkdirSync(join(root, ".do"), { recursive: true });
+		writeFileSync(join(root, ".do", "app.yaml"), "name: anthers\n");
+		writeFileSync(join(root, "compose.yaml"), "services: {}\n");
+		expect(() => assertDevCheckout(nested)).not.toThrow();
+	});
+});
+
+/**
+ * Every `db:*` script that writes rows must hold the guard, and the list is DERIVED.
+ *
+ * 🚨 **A hand-kept list of guarded scripts is a guard that covers its first case forever.**
+ * The five fixture writers had no guard at all until 2026-08-23 and nothing could see that,
+ * because nothing enumerated them; a sixth added next month would be invisible the same way.
+ * So the roster comes out of `package.json`, and a new `db:` script has to either call
+ * `assertDevCheckout` or be exempted here **with a reason** — which is a decision somebody
+ * makes on purpose rather than a step they can forget.
+ *
+ * ⚠️ This is a source scan, so it measures the text as much as the behaviour. It is the
+ * cheap half; the injected-directory cases above are the half that exercises the guard.
+ */
+const EXEMPT_DB_SCRIPTS: Record<string, string> = {
+	"db:generate": "writes migration FILES from the schema and never opens a connection",
+	"db:snapshots": "rewrites drizzle's own snapshot files; no rows involved",
+	"db:migrate": "runs IN production, as the PRE_DEPLOY job — that is its purpose",
+	"db:admin": "deliberately usable against production over DATABASE_URL (see dev-only.ts)",
+};
+
+describe("every db: script that writes fixture data holds the guard", () => {
+	it("is satisfied by each script package.json declares", () => {
+		const root = devCheckoutRoot();
+		expect(root).not.toBeNull();
+		const scripts: Record<string, string> =
+			JSON.parse(readFileSync(join(root as string, "package.json"), "utf8")).scripts ?? {};
+
+		const unguarded: string[] = [];
+		let checked = 0;
+		for (const [name, command] of Object.entries(scripts)) {
+			if (!name.startsWith("db:")) continue;
+			if (name in EXEMPT_DB_SCRIPTS) continue;
+			// `db:push` / `db:studio` / `db:generate:raw` shell out to drizzle-kit and name no
+			// source file of ours, so there is nothing here to guard.
+			const file = command.match(/(\S+\.ts)/)?.[1];
+			if (!file) continue;
+			checked++;
+			const source = readFileSync(join(root as string, file), "utf8");
+			// 🚨 **The open paren is load-bearing.** The first cut of this matched the bare name
+			// and was satisfied by `import { assertDevCheckout } from …` — so deleting the CALL
+			// from `seed-gauntlet.ts` left the suite green, which the sabotage found immediately.
+			// A guard that a mention satisfies is a guard an unused import satisfies.
+			if (!/(assertDevCheckout|devCheckoutRoot)\s*\(/.test(source)) {
+				unguarded.push(`${name} → ${file}`);
+			}
+		}
+
+		expect(unguarded).toEqual([]);
+		// A roster that silently emptied would pass the assertion above without checking
+		// anything, which is the failure this whole describe exists to prevent.
+		expect(checked).toBeGreaterThanOrEqual(6);
 	});
 });

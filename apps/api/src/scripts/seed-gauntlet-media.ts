@@ -46,6 +46,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
+import { assertDevCheckout } from "@anthers/db/dev-only";
 import {
 	GAUNTLET_CREATOR_USERNAME,
 	GAUNTLET_MEDIA_POSTS,
@@ -205,6 +206,8 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 }
 
 async function main() {
+	assertDevCheckout();
+
 	if (!(await ffmpegAvailable())) {
 		console.warn(
 			`${TAG} ffmpeg not found — SKIPPING media seeding.\n${TAG} The gauntlet will still walk, but its media posts carry no playable bytes,\n${TAG} so the delivery assertions will be skipped. Install ffmpeg to cover them.`,

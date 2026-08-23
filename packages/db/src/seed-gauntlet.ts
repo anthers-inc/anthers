@@ -34,6 +34,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { and, eq, inArray, like } from "drizzle-orm";
+import { assertDevCheckout } from "./dev-only.js";
 import {
 	GAUNTLET_CREATOR_EMAIL,
 	GAUNTLET_CREATOR_PASSWORD,
@@ -416,6 +417,8 @@ async function clean(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+	assertDevCheckout();
+
 	if (process.argv.includes("--clean")) {
 		await clean();
 		return;

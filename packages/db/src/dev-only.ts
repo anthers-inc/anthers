@@ -63,3 +63,29 @@ export function devCheckoutRoot(startDir: string = import.meta.dir): string | nu
 export function isDevCheckout(startDir?: string): boolean {
 	return devCheckoutRoot(startDir) !== null;
 }
+
+/**
+ * Refuse to continue outside a checkout. Every fixture script's first line.
+ *
+ * 🚨 **The scripts this guards had no guard of any kind**, which is a larger version of the
+ * hazard `ensure-dev-account.ts` at least gestured at: `db:gauntlet` **deletes** every Work
+ * belonging to its creator, `db:seed --reset` deletes its own rows, and `db:gauntlet:state`
+ * rewrites a person's support. Each was one `DATABASE_URL` away from doing that to production.
+ *
+ * ⚠️ **`db:admin` is deliberately NOT guarded.** It exists to promote an account *in
+ * production* over `DATABASE_URL` — running against a deployed database is its purpose, not
+ * its failure mode. The line is whether the script writes fixture data or performs an
+ * operation somebody meant to perform.
+ *
+ * It throws rather than exiting, because every one of these scripts already ends in a
+ * `catch` that prints and exits 1 — so the refusal arrives through the path the script
+ * already has for saying no.
+ */
+export function assertDevCheckout(startDir?: string): void {
+	if (isDevCheckout(startDir)) return;
+	throw new Error(
+		"refusing to run outside a repository checkout — this is a dev-only script that writes " +
+			"fixture data. A deployed container carries no .do/app.yaml and no compose.yaml, which " +
+			"is how this guard tells the two apart; see packages/db/src/dev-only.ts.",
+	);
+}
