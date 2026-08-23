@@ -29,6 +29,7 @@ import {
 	OAuthClient,
 } from "@atproto/oauth-client";
 import { eq, lt } from "drizzle-orm";
+import { publicOrigin } from "../lib/deployment.js";
 
 /** How long a half-finished authorization stays resumable. */
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -161,14 +162,19 @@ export async function attachSessionToUser(did: string, userId: number): Promise<
  * label somebody has to remember to set, and nobody did. The environment is now inferred
  * from the origin rather than asserted alongside it, and there is no configuration whose
  * absence silently downgrades a protocol identity.
+ *
+ * ⭐ **That test generalized on 2026-08-23**, when the CORS/CSRF allowlist and both cookie
+ * writers were found asking `NODE_ENV` the same question and getting the same wrong answer.
+ * `publicOrigin()` in `lib/deployment.ts` is where it lives now, so the API has one
+ * definition of "public" rather than four descriptions of it that can drift.
  */
 export function getBaseUrl(): string {
 	const explicit = process.env.BASE_URL;
 	if (explicit) return explicit.replace(/\/+$/, "");
 
 	// Any https origin means this is deployed and reachable, whatever NODE_ENV says.
-	const frontend = process.env.FRONTEND_URL?.replace(/\/+$/, "");
-	if (frontend?.startsWith("https://")) return frontend;
+	const frontend = publicOrigin();
+	if (frontend) return frontend;
 
 	// Only a declared production environment is an ERROR — that combination means somebody
 	// meant to deploy and gave us nothing usable, which must fail loudly rather than emit a

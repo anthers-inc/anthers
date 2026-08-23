@@ -27,6 +27,7 @@
 
 import { badgeLabel, heldBadgeName, supportAmount } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
+import { assertDevCheckout } from "./dev-only.js";
 import { DOWNLOAD_PRICE, GAUNTLET_CREATOR_USERNAME, GAUNTLET_SLUG_PREFIX } from "./gauntlet.js";
 import {
 	accounts,
@@ -90,6 +91,8 @@ async function userIdByUsername(username: string, role: string): Promise<number>
 }
 
 async function main(): Promise<void> {
+	assertDevCheckout();
+
 	const viewerUsername = flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim();
 	if (!viewerUsername) {
 		throw new Error("Pass --user <username> or set DEV_ACCOUNT_USERNAME in .env.");

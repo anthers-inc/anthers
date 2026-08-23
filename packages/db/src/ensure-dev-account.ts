@@ -38,11 +38,27 @@
  */
 
 import { and, eq, ne } from "drizzle-orm";
+import { devCheckoutRoot } from "./dev-only.js";
 import { db, users } from "./index.js";
 
 const TAG = "[dev-account]";
 
 async function main() {
+	// This can grant admin AND rewrite an existing row, so it must never run against a
+	// deployed database. The guard is the deployment's SHAPE — a checkout's root files, which
+	// the API image does not copy — rather than a label somebody has to remember to set.
+	//
+	// 🚨 It was `NODE_ENV === "production"` until 2026-08-23, and `NODE_ENV` is set nowhere in
+	// this app, so the refusal never fired in production. Nothing in the deploy calls this, so
+	// it was a trap rather than a live defect; the reasoning and why an `https FRONTEND_URL`
+	// check would NOT have worked here are in `dev-only.ts`.
+	if (!devCheckoutRoot()) {
+		console.warn(
+			`${TAG} no repository checkout around this file — refusing to run. This is a dev-only bootstrap.`,
+		);
+		return;
+	}
+
 	const username = process.env.DEV_ACCOUNT_USERNAME?.trim();
 	const email = process.env.DEV_ACCOUNT_EMAIL?.trim();
 	const password = process.env.DEV_ACCOUNT_PASSWORD;
@@ -56,16 +72,6 @@ async function main() {
 		console.log(
 			`${TAG} DEV_ACCOUNT_{USERNAME,EMAIL,PASSWORD} not all set — skipping (add them to .env to enable).`,
 		);
-		return;
-	}
-
-	// This can now grant admin AND rewrite an existing row, so it must never run
-	// against production. `make dev` is the only caller and prod runs migrations
-	// as a PRE_DEPLOY job, so this guard is belt-and-braces against a stray
-	// DEV_ACCOUNT_* leaking into a deployed environment — the failure it prevents
-	// is an admin account nobody meant to create.
-	if (process.env.NODE_ENV === "production") {
-		console.warn(`${TAG} NODE_ENV=production — refusing to run. This is a dev-only bootstrap.`);
 		return;
 	}
 

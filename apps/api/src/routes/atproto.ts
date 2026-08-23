@@ -24,9 +24,9 @@
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, type setCookie } from "hono/cookie";
 import { z } from "zod";
-import { setSessionCookie } from "../lib/session-cookie.js";
+import { setSecureCookie, setSessionCookie } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoSignupEnabled,
@@ -88,20 +88,17 @@ function getFrontendUrl(): string {
 /**
  * The cookie that binds a parked signup to this browser.
  *
- * `Lax` rather than `Strict` because it has to survive the redirect back from an
- * authorization server on another origin, which is the only moment it is ever set.
+ * 🚨 **It carried its own copy of the security attributes until 2026-08-23, including
+ * `secure: process.env.NODE_ENV === "production"` — and `NODE_ENV` is set nowhere in this
+ * app, so the cookie shipped without `Secure` in production.** That is the second time a
+ * cookie written here has drifted from the session cookie's policy; `lib/cookies.ts` owns the
+ * attributes now and this supplies only the name and the lifetime, which are the parts that
+ * are genuinely its own.
  */
 const PENDING_COOKIE = "atproto_pending";
 
 function setPendingCookie(c: Parameters<typeof setCookie>[0], token: string): void {
-	setCookie(c, PENDING_COOKIE, token, {
-		httpOnly: true,
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "Lax",
-		path: "/",
-		maxAge: Math.floor(PENDING_SIGNUP_TTL_MS / 1000),
-		...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
-	});
+	setSecureCookie(c, PENDING_COOKIE, token, Math.floor(PENDING_SIGNUP_TTL_MS / 1000));
 }
 
 /**

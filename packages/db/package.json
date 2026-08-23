@@ -7,12 +7,14 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./client": "./src/client.ts",
+		"./dev-only": "./src/dev-only.ts",
 		"./gauntlet": "./src/gauntlet.ts",
 		"./media-fixture": "./src/media-fixture.ts",
 		"./schema": "./src/schema/index.ts"
 	},
 	"scripts": {
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"@anthers/shared": "workspace:*",

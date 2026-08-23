@@ -13,6 +13,7 @@
 import { heldBadgeLabel, PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
 import { eq, like } from "drizzle-orm";
+import { assertDevCheckout } from "./dev-only.js";
 import {
 	accountCycles,
 	accounts,
@@ -1463,6 +1464,7 @@ const args = process.argv.slice(2);
 const isReset = args.includes("--reset");
 
 try {
+	assertDevCheckout();
 	if (isReset) {
 		await cleanSeedData();
 	}
