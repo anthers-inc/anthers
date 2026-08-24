@@ -401,16 +401,27 @@ function BadgeChooser({
 						/>
 						{/* The Badge art, drawn as `/for-users` draws it: the frame behind, the
 						    emoji centred inside. Selecting a rung brightens the frame — the emoji
-						    is full-colour artwork and is left alone in both states. */}
-						<span className="relative mx-auto mb-2 flex h-16 w-16 items-center justify-center">
-							<BrandGlyph
-								name={BADGE_ART[key].wreath}
-								className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/30"}`}
-							/>
-							<span aria-hidden="true" className="text-2xl">
-								{BADGE_ART[key].emoji}
+						    is full-colour artwork and is left alone in both states.
+
+						    🚨 **Free gets no mark, because a mark IS a Badge and Free is the
+						    absence of one** (Parker, 2026-08-24) — not a Badge worth $0. Its box
+						    is still reserved so the five cards line up, and the empty space is
+						    the point: badgeless should look badgeless. `BADGE_ART` is keyed by
+						    `Badge` rather than `BadgeKey`, so dropping this branch is now a type
+						    error rather than a quiet acorn. */}
+						{key === "free" ? (
+							<span aria-hidden="true" className="mb-2 block h-16" />
+						) : (
+							<span className="relative mx-auto mb-2 flex h-16 w-16 items-center justify-center">
+								<BrandGlyph
+									name={BADGE_ART[key].wreath}
+									className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/30"}`}
+								/>
+								<span aria-hidden="true" className="text-2xl">
+									{BADGE_ART[key].emoji}
+								</span>
 							</span>
-						</span>
+						)}
 						<span style={serif} className="block text-base font-medium">
 							{key === "free" ? "Free" : badgeLabel(key)}
 						</span>
@@ -881,8 +892,13 @@ type Door = "email" | "bluesky";
  *
  * ⚠️ **So the presentation is imported rather than restated.** A second copy of a brand
  * decision is a second thing to keep in step, and this one had already drifted before it
- * shipped. `BADGE_ART` is keyed by `BadgeKey`, so it covers Free too — which settles a
- * question this page had answered on its own: Free *does* carry a mark (🌰).
+ * shipped.
+ *
+ * 🚨 **Free carries no mark**, which is why `BADGE_ART` is keyed by `Badge` and not
+ * `BadgeKey`. A mark is a Badge, and Free is the absence of one rather than a Badge worth
+ * $0 (Parker, 2026-08-24). The map briefly held a `free: 🌰` entry that no surface was
+ * supposed to use, and this ladder used it — so the key was narrowed and the rule is the
+ * compiler's now.
  */
 
 /**

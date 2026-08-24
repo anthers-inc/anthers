@@ -14,6 +14,7 @@
 import type { BrandIconName } from "@anthers/brand";
 import {
 	BADGE_ORDER,
+	type Badge,
 	type BadgeKey,
 	badgeLabel,
 	cardFeeDisplay,
@@ -40,8 +41,19 @@ const TAX_TIP =
 // ─── Badge presentation. Every Badge shares one round botanical frame
 // (`frame-round`) — a single, consistent wreath across all of them; the emoji inside is
 // what differs. ───
-export const BADGE_ART: Record<BadgeKey, { emoji: string; wreath: BrandIconName }> = {
-	free: { emoji: "🌰", wreath: "frame-round" },
+/**
+ * 🚨 **Keyed by `Badge`, not `BadgeKey`, because Free has no mark** (Parker, 2026-08-24).
+ * A mark *is* a Badge, and Free is the absence of one rather than a Badge worth $0 — so
+ * there is no free art to draw, and a surface that wants to show Free shows its name.
+ *
+ * It carried a `free: { emoji: "🌰" }` entry until then, and nothing on this page ever
+ * used it: the picker below branches on `b === "free"` and renders a bare label. That is
+ * the shape of the hazard — a convention every caller had to remember, sitting next to an
+ * entry that rewarded forgetting. `/subscribe`'s ladder duly forgot, drew the acorn, and
+ * looked deliberate. Dropping `free` from the key makes the compiler carry the rule
+ * instead: indexing this with a possibly-free key is now a type error.
+ */
+export const BADGE_ART: Record<Badge, { emoji: string; wreath: BrandIconName }> = {
 	root: { emoji: "🫚", wreath: "frame-round" },
 	sprout: { emoji: "🌱", wreath: "frame-round" },
 	petal: { emoji: "🌷", wreath: "frame-round" },
@@ -54,7 +66,7 @@ export const BADGE_LADDER: {
 	emoji: string;
 	threshold: string;
 	wreath: BrandIconName;
-}[] = BADGE_ORDER.filter((b) => b !== "free").map((b) => ({
+}[] = BADGE_ORDER.filter((b): b is Badge => b !== "free").map((b) => ({
 	name: badgeLabel(b),
 	emoji: BADGE_ART[b].emoji,
 	threshold: `$${thresholdForBadge(b)}/mo`,

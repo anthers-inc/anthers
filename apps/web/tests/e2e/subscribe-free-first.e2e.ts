@@ -39,11 +39,11 @@ async function topOf(locator: Locator): Promise<number> {
  *
  * ⚠️ **Filtered by the RADIO's accessible name, never by the label's text.** Two traps
  * meet here. The input is `sr-only` so the card can be styled, which puts it out of reach
- * of `.check()`'s actionability wait — so the label is the thing to click. And the label's
- * *text* now begins with the Badge's emoji, which is `aria-hidden` (so it stays out of the
- * accessible name) and is still very much part of `hasText` — an earlier `hasText:
- * /^Free/` passed until the Badge art landed and then matched nothing, because the text
- * had quietly become "🌰Free$0". Naming the radio sidesteps both.
+ * of `.check()`'s actionability wait — so the label is the thing to click. And a paid
+ * rung's label *text* begins with its Badge emoji, which is `aria-hidden` (so it stays out
+ * of the accessible name) and is still very much part of `hasText`: an earlier
+ * `hasText: /^Root/` passed until the Badge art landed and then matched nothing, because
+ * the text had quietly become "🫚Root$3/mo". Naming the radio sidesteps both.
  */
 const rung = (page: Page, name: RegExp) =>
 	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
