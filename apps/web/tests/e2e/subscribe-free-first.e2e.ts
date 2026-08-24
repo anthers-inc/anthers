@@ -43,8 +43,13 @@ test.describe("/subscribe leads with the free door", () => {
 
 		// The two optional sections. Both must sit BELOW the way in, so that scrolling is
 		// what it takes to be asked for money — never what it takes to join.
-		const creatorAsk = page.getByRole("heading", { name: /^support a creator$/i });
-		const anthersAsk = page.getByRole("heading", { name: /^support anthers$/i });
+		//
+		// ⚠️ Matched on "Badges" rather than on the full heading, which was "Support a
+		// creator" / "Support Anthers" until 2026-08-24 and is free to move again. What
+		// this test is about is ORDER; anchoring the exact wording would make it fail for
+		// copy edits it has no opinion on.
+		const creatorAsk = page.getByRole("heading", { name: /creator badges/i });
+		const anthersAsk = page.getByRole("heading", { name: /anthers badges/i });
 
 		const signupTop = await topOf(signup);
 		expect(signupTop).toBeLessThan(await topOf(creatorAsk));
@@ -75,13 +80,30 @@ test.describe("/subscribe leads with the free door", () => {
 		expect(limitTop).toBeLessThan(await topOf(page.locator('[data-signup="top"]')));
 	});
 
-	test("declining Anthers is offered as an answer, not as a lapse", async ({ page }) => {
+	test("staying free is a rung on the ladder, not the absence of one", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		// The refusal has its own button and its own words. A section where the only control
-		// is "yes" is a section that has stopped asking.
-		await expect(page.getByRole("button", { name: /hours suit me/i })).toBeVisible();
-		await expect(page.getByText(/only if you want to/i)).toBeVisible();
+		// 🚨 **The property, restated for the ladder that replaced the yes/no card on
+		// 2026-08-24.** It used to be "the refusal has its own button and its own words";
+		// now it is that Free sits *inside* the same control as the paid rungs, priced like
+		// them and selectable like them. A ladder that started at Root would make declining
+		// the absence of a choice, which is the thing this file exists to prevent.
+		const free = page.getByRole("radio", { name: /^free/i });
+		await expect(free).toBeVisible();
+
+		// And choosing it is a real answer that the page acts on, rather than decoration.
+		//
+		// ⚠️ **Click the LABEL, not the input.** The radio is `sr-only` so the card can be
+		// styled, which leaves it un-clickable by Playwright's actionability rules —
+		// `.check()` waits for a 1px target the label is covering and times out. Clicking
+		// the label is also what a person does, so this is the truer gesture anyway.
+		await page.locator("#anthers-badges label").filter({ hasText: /^Free/ }).click();
+		await expect(free).toBeChecked();
+		await expect(page.getByText(/staying free/i)).toBeVisible();
+
+		// It is also first, so nobody has to scan a price list to find out they can decline.
+		const rungs = await page.getByRole("radio").all();
+		await expect(rungs[0]).toHaveAccessibleName(/^free/i);
 	});
 
 	test("the two signup controls agree, because they are one form", async ({ page }) => {

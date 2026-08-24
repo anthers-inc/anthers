@@ -142,11 +142,18 @@ test.describe("starting an account from /subscribe", () => {
 		expect(new URL(page.url()).pathname).toBe("/subscribe");
 	});
 
-	test("a chosen Seed changes the ask, and the ceremony says there is a second step", async ({
+	test("a chosen Badge changes the ask, and the ceremony says there is a second step", async ({
 		page,
 	}) => {
 		await page.goto("/subscribe");
-		await page.getByRole("button", { name: /yes — \$3 a month/i }).click();
+		// The Anthers ladder, which was a yes/no card until 2026-08-24. Root is the rung
+		// that used to be the only expressible answer, so it is the one that keeps this
+		// test comparable to what it asserted before.
+		//
+		// ⚠️ The label is the click target: the radio itself is `sr-only` so the card can be
+		// styled, which puts it out of reach of `.check()`'s actionability wait.
+		await page.locator("#anthers-badges label").filter({ hasText: /^Root/ }).click();
+		await expect(page.getByRole("radio", { name: /^root/i })).toBeChecked();
 
 		// The page's own arithmetic, which is the only number a reader is agreeing to.
 		await expect(page.getByText("$3", { exact: true }).last()).toBeVisible();
@@ -160,6 +167,35 @@ test.describe("starting an account from /subscribe", () => {
 		// A paying start is two steps; a free one is one, and says so rather than counting
 		// to a step it will never reach.
 		await expect(page.getByText("Step 1 of 2")).toBeVisible();
+	});
+
+	/**
+	 * 🚨 **A rung above the entry price, because Root cannot catch a substitution.**
+	 *
+	 * The test above picks Root, where the amount a reader chose and the amount a buggy
+	 * page would substitute are the same $3 — so it stays green through exactly the defect
+	 * the ladder made possible. Sabotage proved that twice: replacing the chosen amount
+	 * with `PUBLIC_ACCESS_PRICE` at the commit site, and then at the single unified call,
+	 * left the whole suite passing.
+	 *
+	 * Blossom is four times the entry price, so a substitution cannot hide inside it. What
+	 * is asserted is the closing summary, which is the one place the page adds itself up
+	 * and is the number `commit` then hands to `preview/:amount`.
+	 */
+	test("a rung above Root is quoted at its own amount, not at the entry price", async ({
+		page,
+	}) => {
+		await page.goto("/subscribe");
+		await page
+			.locator("#anthers-badges label")
+			.filter({ hasText: /^Blossom/ })
+			.click();
+
+		const monthly = page.getByText("Monthly", { exact: true }).locator("..");
+		await expect(monthly).toContainText("$12");
+		await expect(monthly, "the entry price is not the quote for a higher rung").not.toContainText(
+			"$3",
+		);
 	});
 
 	test("the free path promises one step only", async ({ page }) => {

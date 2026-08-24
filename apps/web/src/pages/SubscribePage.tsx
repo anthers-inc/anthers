@@ -87,17 +87,24 @@
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
 
+import type { BrandIconName } from "@anthers/brand";
+import type { Badge } from "@anthers/shared/constants";
 import {
 	amountLabel,
+	BADGE_ORDER,
+	badgeLabel,
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
 	FREE_TIME_POOL,
+	heldBadgeLabel,
 	PUBLIC_ACCESS_PRICE,
+	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
@@ -133,7 +140,6 @@ import SubscriptionPaymentModal, {
 
 /** Where support for Anthers goes, at the worst case of it alone on the charge. */
 const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
-const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
 /** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
 const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
 
@@ -173,8 +179,17 @@ const PICKS_KEY = "anthers_subscribe_picks";
 const serif = { fontFamily: FONTS.fraunces };
 
 interface Picks {
-	/** null = unanswered, which is not the same as "no" and must not render as a choice. */
-	anthers: boolean | null;
+	/**
+	 * Monthly dollars to Anthers: `null` unanswered, `0` a deliberate Free, a rung's
+	 * threshold otherwise.
+	 *
+	 * 🚨 **It was `boolean | null` until 2026-08-24, when the section became a ladder.** A
+	 * boolean could only ever express the Public Access price, so every rung above Root was
+	 * unreachable from this page — the same defect on the Anthers side that the roadmap
+	 * tracks on the creator side. Note `0` and `null` are still different answers and must
+	 * stay so: one is "I looked and I'm staying free", the other is "I haven't said".
+	 */
+	anthers: number | null;
 	follow: string[];
 	seed: string[];
 }
@@ -192,17 +207,17 @@ const EMPTY_PICKS: Picks = { anthers: null, follow: [], seed: [] };
  * **quoted $3 for a $9 charge** and then subscribed the user at **$1 a month** — under the
  * $3 that lifts the Public Access limit they had just agreed to pay for.
  *
+ * ⚠️ **The Anthers side is now an AMOUNT rather than a flag**, which removed the last
+ * place this function could invent a number: it used to substitute `PUBLIC_ACCESS_PRICE`
+ * for `true`, so a page offering Sprout would have quoted Root. There is nothing left to
+ * assume — every dollar in the total was chosen somewhere in the UI.
+ *
  * Extracted rather than inlined so the conversion has a test. Nothing else on this page
  * can be unit-tested — the ceremony's own e2e cannot complete a payment, because the
  * emailed code is argon2-hashed at rest by design.
  */
-export function supportTotal(
-	anthers: boolean | null,
-	directed: { amount: number }[],
-	anthersPrice = PUBLIC_ACCESS_PRICE,
-): number {
-	const toAnthers = anthers === true ? anthersPrice : 0;
-	return directed.reduce((sum, d) => sum + d.amount, toAnthers);
+export function supportTotal(anthers: number | null, directed: { amount: number }[]): number {
+	return directed.reduce((sum, d) => sum + d.amount, anthers ?? 0);
 }
 
 const money = amountLabel;
@@ -259,7 +274,7 @@ function StepHeading({
 				{title}
 			</h2>
 			{children && (
-				<p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-base-content/65">
+				<p className="mx-auto mt-4 max-w-3xl text-lg leading-relaxed text-base-content/65">
 					{children}
 				</p>
 			)}
@@ -288,8 +303,13 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
  * the contrast legible without inventing a second visual language for it.
  */
 function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }) {
+	// 🚨 **Summed, never assumed.** This printed `money(PUBLIC_ACCESS_PRICE)` until
+	// 2026-08-24, which was true only while the section could express one amount. With a
+	// ladder above it, a hardcoded total is a number that disagrees with the bar drawn
+	// directly above it — the exact class of defect `supportTotal` has a test for.
+	const total = segments.reduce((sum, s) => sum + s.amount, 0);
 	return (
-		<div className="mx-auto max-w-xl">
+		<div className="my-6 mx-auto max-w-4xl">
 			<div className="flex h-11 overflow-hidden rounded-xl border border-base-content/10">
 				{segments.map((s) => (
 					<div
@@ -318,7 +338,7 @@ function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }
 			</ul>
 			<div className="mt-3 flex items-baseline justify-between border-t border-base-content/10 pt-3">
 				<span className="font-bold">Total</span>
-				<span className="text-xl font-bold tabular-nums">{money(PUBLIC_ACCESS_PRICE)}/mo</span>
+				<span className="text-xl font-bold tabular-nums">{money(total)}/mo</span>
 			</div>
 			<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
 			<p className="mt-3 text-xs leading-relaxed text-base-content/50">{note}</p>
@@ -326,50 +346,145 @@ function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }
 	);
 }
 
-/** The yes/no ask. `null` renders as unanswered — neither button pressed. */
-function Ask({
-	title,
-	children,
+/* ── Step 3 · Anthers' own ladder ───────────────────────────────────────────── */
+
+/**
+ * Anthers' Badges, as five things to choose between rather than one thing to accept.
+ *
+ * 🚨 **Free is a rung on this control, and that is the whole reason it is a ladder and
+ * not a price list.** The section it lives in must never read as the price of admission —
+ * somebody served entirely by purchases, by backing creators, and by the free hours is
+ * using Anthers exactly as intended. Putting Free first, priced and selectable, makes
+ * declining a *choice you make here* rather than the absence of one.
+ *
+ * ⚠️ **Real `<input type="radio">` behind the cards, not buttons wearing `role="radio"`.**
+ * A native group gives arrow-key navigation and one tab stop for the whole set, which a
+ * pile of buttons does not — and `useSemanticElements` is right to ask for it. The cost is
+ * that a native radio cannot be un-checked by clicking it again, so once somebody has
+ * chosen there is no way back to unanswered. That is the correct trade: `null` and `0`
+ * still differ, and the state a person can no longer reach is the one meaning "hasn't
+ * looked", which stops being true the moment they press anything.
+ */
+function BadgeChooser({
 	value,
-	yesLabel,
-	noLabel,
 	onChange,
+	idPrefix,
 }: {
-	title: string;
-	children: React.ReactNode;
-	value: boolean | null;
-	yesLabel: string;
-	noLabel: string;
-	onChange: (v: boolean | null) => void;
+	value: number | null;
+	onChange: (value: number) => void;
+	/** A radio group is keyed by `name`, so two on one page must not share it. */
+	idPrefix: string;
 }) {
 	return (
-		<div
-			className={`mx-auto mt-8 max-w-xl rounded-2xl border p-5 transition-colors ${
-				value === true ? "border-primary/45 bg-primary/5" : "border-base-content/10 bg-base-200/60"
-			}`}
-		>
-			<h3 className="text-lg font-bold">{title}</h3>
-			<p className="mt-1 max-w-prose text-sm leading-relaxed text-base-content/60">{children}</p>
-			<div className="mt-4 flex flex-wrap gap-2.5">
-				<button
-					type="button"
-					className={`btn btn-sm rounded-full ${value === true ? "btn-primary" : "btn-outline"}`}
-					aria-pressed={value === true}
-					onClick={() => onChange(value === true ? null : true)}
-				>
-					{value === true ? "✓ " : ""}
-					{yesLabel}
-				</button>
-				<button
-					type="button"
-					className={`btn btn-sm rounded-full ${value === false ? "btn-neutral" : "btn-ghost"}`}
-					aria-pressed={value === false}
-					onClick={() => onChange(value === false ? null : false)}
-				>
-					{noLabel}
-				</button>
-			</div>
-		</div>
+		<fieldset className="mx-auto mt-8 grid max-w-4xl grid-cols-2 gap-2.5 sm:grid-cols-5">
+			<legend className="sr-only">What to give Anthers each month</legend>
+			{/* 🚨 Driven off `BADGE_ORDER` and `thresholdForBadge`, never a literal ladder.
+			    A Badge is identified by its threshold and never by its position — see the
+			    note on `BADGE_ORDER` about the `indexOf` that looked right for years. */}
+			{BADGE_ORDER.map((key) => {
+				const amount = thresholdForBadge(key);
+				const active = value === amount;
+				return (
+					<label
+						key={key}
+						className={`cursor-pointer rounded-2xl border px-3 pt-4 pb-4 text-center transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
+							active
+								? "border-primary/50 bg-primary/10"
+								: "border-base-content/10 bg-base-200/50 hover:border-base-content/25"
+						}`}
+					>
+						<input
+							type="radio"
+							name={`${idPrefix}-anthers-badge`}
+							className="sr-only"
+							checked={active}
+							onChange={() => onChange(amount)}
+						/>
+						{/* The Badge art — see `BADGE_WREATH`. The box is reserved even for Free,
+						    which carries no wreath, so all five cards line up. */}
+						<span className="mb-2 flex h-12 items-center justify-center">
+							{key !== "free" && (
+								<BrandGlyph
+									name={BADGE_WREATH[key]}
+									className={`h-12 w-12 ${active ? "text-primary" : "text-base-content/35"}`}
+								/>
+							)}
+						</span>
+						<span style={serif} className="block text-base font-medium">
+							{key === "free" ? "Free" : badgeLabel(key)}
+						</span>
+						<span className="mt-0.5 block text-sm tabular-nums text-base-content/60">
+							{amount === 0 ? "$0" : `${money(amount)}/mo`}
+						</span>
+					</label>
+				);
+			})}
+		</fieldset>
+	);
+}
+
+/**
+ * What the chosen rung actually changes, as three lines that move when it does.
+ *
+ * 🚨 **Access is the line that does NOT scale, and the copy has to be straight about
+ * that.** Public Access arrives whole at the first rung and nothing above it buys more —
+ * 63.01 is explicit that the ladder is written as *what your giving does*, never as *what
+ * you get to see*. So the first row reads the same at every paid rung, on purpose, and
+ * what climbs is the money reaching creators and the money keeping other people free.
+ *
+ * ⚠️ Free is not a column of dashes. A free account's watching still pays the creators it
+ * spends time with, out of the remainder — the difference is who funds it, which is the
+ * one genuinely surprising fact on this page and worth stating rather than blanking.
+ */
+function BadgeOutcome({ amount }: { amount: number }) {
+	const paying = amount > 0;
+	const pool = paying ? timePoolFor(amount) : FREE_TIME_POOL;
+	const payments = paying ? cardFeeDisplay(amount) : 0;
+	const remainder = paying ? amount - pool - payments : 0;
+
+	const rows: [string, React.ReactNode][] = [
+		[
+			"Public Access",
+			paying
+				? "No monthly limit — watch as much as you like"
+				: `${FREE_PUBLIC_ACCESS_HOURS} hours a month`,
+		],
+		[
+			"To creators, by your time",
+			paying ? (
+				<>
+					<strong className="tabular-nums">{money(pool)}</strong> a month, split among the creators
+					you spend time with
+				</>
+			) : (
+				<>
+					<strong className="tabular-nums">{money(FREE_TIME_POOL)}</strong> a month, which Anthers
+					pays on your behalf
+				</>
+			),
+		],
+		[
+			"Free access & programs",
+			paying ? (
+				<>
+					<strong className="tabular-nums">{money(remainder)}</strong> a month, keeping other
+					people's accounts free
+				</>
+			) : (
+				"Funded by the people on the rungs above"
+			),
+		],
+	];
+
+	return (
+		<ul className="mx-auto mt-6 max-w-4xl divide-y divide-base-content/10 rounded-2xl border border-base-content/10 bg-base-200/40">
+			{rows.map(([label, detail]) => (
+				<li key={label} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5">
+					<span className="text-sm font-semibold">{label}</span>
+					<span className="ml-auto text-sm text-base-content/65">{detail}</span>
+				</li>
+			))}
+		</ul>
 	);
 }
 
@@ -752,6 +867,27 @@ function GoFurtherCard({
 
 /** Which way in the signup card is currently offering. */
 type Door = "email" | "bluesky";
+
+/**
+ * The wreath drawn on each Anthers Badge, sparse to full so the ladder reads as growing
+ * support before a single number is compared.
+ *
+ * 🚨 **Written out rather than built as `` `wreath-${key}` ``, so a rename is a compile
+ * error instead of a blank card.** `BrandGlyph` takes a `BrandIconName`, and a template
+ * string only satisfies that type through a cast — which is exactly the kind of cast that
+ * survives a rung being renamed in `ANTHERS_BADGES` and then renders an empty CSS mask,
+ * silently, on the one control this section is built around. `Record<Badge, …>` makes the
+ * compiler check both directions: every rung has art, and no art names a rung that is gone.
+ *
+ * ⚠️ Free is absent on purpose and is typed as absent. It is the *absence* of a Badge
+ * rather than a Badge worth $0, so giving it a mark would be inventing a fifth one.
+ */
+const BADGE_WREATH: Record<Badge, BrandIconName> = {
+	root: "wreath-root",
+	sprout: "wreath-sprout",
+	petal: "wreath-petal",
+	blossom: "wreath-blossom",
+};
 
 /**
  * The signup control: two doors on a tab switcher, an address or a Bluesky handle.
@@ -1305,23 +1441,54 @@ export default function SubscribePage() {
 	 * second one was broken by the Seed retirement. A page that computes what it shows and
 	 * what it bills by different routes is one edit away from showing a number it does not
 	 * charge, which is the exact failure the confirmation ceremony exists to prevent.
+	 *
+	 * ⚠️ **Same function was not the same call, and that gap was real.** The page built one
+	 * argument list to display and `commit` built another to bill, from the same picks — so
+	 * a rung chosen above Root could be shown and Root charged, with both routes still
+	 * "using `supportTotal`". Sabotage confirmed it: substituting the price at the commit
+	 * site alone left every test green, because the e2e picks Root, where the substituted
+	 * value and the chosen one coincide.
+	 *
+	 * There is ONE list and ONE total now. `directed` also carries the creator ids the
+	 * charge needs, which closes a second, quieter divergence: the display used to count
+	 * `picks.seed` while the charge dropped any username missing from `byUsername`, so a
+	 * pick made before the creator list loaded was quotable and unbillable.
 	 */
-	const total = supportTotal(
-		picks.anthers,
-		picks.seed.map(() => ({ amount: PUBLIC_ACCESS_PRICE })),
+	const directed = useMemo(
+		() =>
+			picks.seed
+				.map((username) => byUsername.get(username))
+				.filter((creator): creator is PublicUser => !!creator)
+				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE })),
+		[picks.seed, byUsername],
 	);
+
+	const total = supportTotal(picks.anthers, directed);
+
+	/**
+	 * What the Anthers ladder is previewing, in dollars.
+	 *
+	 * ⚠️ **Unanswered previews the first rung; it does not bill it.** `picks.anthers` stays
+	 * `null` until somebody chooses, and only `picks.anthers` reaches `supportTotal` — this
+	 * value exists so the panels have something to describe before a choice is made. Reading
+	 * it into the total would charge people who never pressed anything.
+	 */
+	const anthersAmount = picks.anthers ?? PUBLIC_ACCESS_PRICE;
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
 	const anthersLines: PickLine[] = useMemo(
 		() =>
-			picks.anthers === true
+			picks.anthers
 				? [
 						{
 							key: "anthers",
-							label: "Support for Anthers",
+							// The Badge is what somebody chose, so name it rather than the act —
+							// `heldBadgeLabel` also carries the "+" rule if the amount ever stops
+							// landing exactly on a rung.
+							label: `${heldBadgeLabel(picks.anthers)} — support for Anthers`,
 							sub: "watch as much Public Access as you like",
-							amount: PUBLIC_ACCESS_PRICE,
+							amount: picks.anthers,
 						},
 					]
 				: [],
@@ -1414,15 +1581,16 @@ export default function SubscribePage() {
 				await client.api.accounts.users[":username"].follow.$post({ param: { username } });
 			}
 
-			// The Public Access price each, to the creators picked — on the SAME charge as
-			// the Anthers one.
-			const directed = picks.seed
-				.map((username) => byUsername.get(username))
-				.filter((creator): creator is PublicUser => !!creator)
-				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
-
-			const anthers = picks.anthers === true ? PUBLIC_ACCESS_PRICE : 0;
-			const total = supportTotal(picks.anthers, directed);
+			// 🚨 `directed` and `total` come from the component, NOT from a second
+			// computation here — see their definition. This function used to rebuild both,
+			// which is what let the displayed and charged amounts drift apart while both
+			// still went through `supportTotal`.
+			//
+			// The Public Access price each, to the creators picked, on the SAME charge as
+			// the Anthers one. The chosen rung is billed as chosen: this read
+			// `picks.anthers === true ? PUBLIC_ACCESS_PRICE : 0` while the section was a
+			// yes/no, which would have billed Root for a chosen Blossom.
+			const anthers = picks.anthers ?? 0;
 
 			if (total === 0) {
 				// Nothing to charge. A brand-new account still has somewhere to be — the
@@ -1469,7 +1637,7 @@ export default function SubscribePage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [byUsername, leave, next, picks]);
+	}, [directed, total, leave, next, picks]);
 
 	/**
 	 * Commit what can be committed.
@@ -1677,16 +1845,22 @@ export default function SubscribePage() {
 								future.
 							</p>
 							<div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-2">
-								<GoFurtherCard icon={HeartIcon} title="Support creators" target="support-a-creator">
-									Every creator has work that is free to everyone and work they put behind a monthly
-									amount they set — their own Badges. Anthers takes no cut of either. Pick anyone
-									you&rsquo;d like to back as part of signing up.
+								<GoFurtherCard icon={HeartIcon} title="Support creators" target="creator-badges">
+									Every creator has work that is free to everyone and work they gate behind a
+									monthly subscription level (called a Badge) or a direct purchase.
+									<br></br>
+									<br></br>
+									If you have any creators you want to go ahead and subscribe to, you can do that
+									now.
 								</GoFurtherCard>
-								<GoFurtherCard icon={SparklesIcon} title="Support Anthers" target="support-anthers">
-									{money(PUBLIC_ACCESS_PRICE)} a month takes the monthly limit off Public Access, so
-									you can watch as much as you like, and it lifts what your time pays creators from{" "}
-									{money(FREE_TIME_POOL)} a month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}.
-									There is more on the way for supporters.
+								<GoFurtherCard icon={SparklesIcon} title="Support Anthers" target="anthers-badges">
+									Just {money(PUBLIC_ACCESS_PRICE)}/month takes the monthly limit off Public Access
+									usage, and it lifts your automatic support for creators from{" "}
+									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(PUBLIC_ACCESS_PRICE))}/month.
+									<br></br>
+									<br></br>
+									Your Anthers Badge also funds free access for small users and creators and other
+									charitable programs.
 								</GoFurtherCard>
 							</div>
 						</div>
@@ -1697,16 +1871,13 @@ export default function SubscribePage() {
 					    `scroll-mt` keeps the heading clear of the sticky header when it lands. */}
 					<Reveal
 						delay={80}
-						id="support-a-creator"
+						id="creator-badges"
 						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
 					>
-						<StepHeading n={1} title="Support a creator">
-							It goes to them.{" "}
-							<strong>
-								{money(CREATOR_NET)} of every {money(PUBLIC_ACCESS_PRICE)}
-							</strong>{" "}
-							reaches the creator, with card processing the only deduction — Anthers takes no cut of
-							a single cent of it.
+						<StepHeading n={1} title="Creator Badges">
+							Creators each have monthly subscription tiers called Badges that unlock special
+							content, behind-the-scenes access, and more. And when you support a creator with a
+							subscription or purchase, Anthers takes no cut, no exceptions.
 						</StepHeading>
 						<SeedBreakdown
 							segments={[
@@ -1723,9 +1894,9 @@ export default function SubscribePage() {
 									desc: "card & processing, at cost, paid to the processor",
 								},
 							]}
-							note="Shown at the worst case — this alone on the charge. Give more, or back more than one creator, and the fixed card fee spreads across it, so every creator on it receives a little more."
+							note="This is the worst-case scenario (one subscription/month). The more you support the creators you love, the more of every dollar they receive."
 						/>
-						<p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
+						<p className="mx-auto mt-12 max-w-3xl text-center text-lg leading-relaxed text-base-content/65">
 							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
 							tap a medium to meet a few. Following is free — support someone when you&rsquo;d like
 							to back them.
@@ -1750,55 +1921,61 @@ export default function SubscribePage() {
 					    somebody out of. The heading's first words say so before the numbers do. */}
 					<Reveal
 						delay={80}
-						id="support-anthers"
+						id="anthers-badges"
 						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
 					>
-						<StepHeading n={2} title="Support Anthers">
-							<strong>Only if you want to.</strong> Buying from creators, backing them directly and
-							the free {FREE_PUBLIC_ACCESS_HOURS} hours may be everything you ever need — this
-							changes nothing about any of it. What it does is lift the monthly limit, and put{" "}
-							<strong>
-								{money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every {money(PUBLIC_ACCESS_PRICE)}
-							</strong>{" "}
-							into the Time Pool, split among the creators whose work you spent time with.
+						<StepHeading n={2} title="Anthers Badges">
+							Anthers' free Public Access has no strings, ever; you can stay free as long as you
+							like, supporting creators directly with subscriptions and direct purchases. But if you
+							want a little extra from Anthers, you can support us directly, as well. You'll unlock
+							new perks for yourself and support free access for small users and creators along with
+							a variety of other charitable programs.
 						</StepHeading>
-						<SeedBreakdown
-							segments={[
-								{
-									tone: "pool",
-									amount: timePoolFor(PUBLIC_ACCESS_PRICE),
-									label: "To creators, through the Time Pool",
-									desc: "split by the share of your time each one earned",
-								},
-								{
-									tone: "mission",
-									amount: ANTHERS_REMAINDER,
-									label: "Free access & programs",
-									desc: "keeps other people's accounts free and funds Anthers' charitable programs",
-								},
-								{
-									tone: "pay",
-									amount: ANTHERS_PAYMENTS,
-									label: "Payments",
-									desc: "card & processing, at cost, paid to the processor",
-								},
-							]}
-							note={`${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit. Every dollar past it adds more to the creators you spend time with, and helps keep other people's accounts free. Shown at the worst case — this alone on the charge; give more and the fixed card fee spreads across it.`}
-						/>
-						<Ask
-							title="Support Anthers too?"
+						{/* ⭐ The ladder replaced a yes/no card on 2026-08-24. A boolean could only ask
+						    about the first rung, so Sprout, Petal and Blossom existed in the model and
+						    nowhere in the UI — and "Support Anthers too?" framed the whole section as a
+						    request rather than a choice. Choosing a rung is the ask now, Free included,
+						    and the two panels below it move with the choice. */}
+						<BadgeChooser
+							idPrefix="anthers-ladder"
 							value={picks.anthers}
-							yesLabel={`Yes — ${money(PUBLIC_ACCESS_PRICE)} a month`}
-							noLabel={`The free ${FREE_PUBLIC_ACCESS_HOURS} hours suit me`}
 							onChange={(v) => setPicks((prev) => ({ ...prev, anthers: v }))}
-						>
-							You can change it any month, and your free account stays yours either way.
-						</Ask>
+						/>
+						{/* Unanswered previews the first rung rather than showing an empty frame: the
+						    section's job is to explain what giving does, and it cannot do that with
+						    nothing selected. The echo below is what stays honest about the difference. */}
+						<BadgeOutcome amount={anthersAmount} />
+						{anthersAmount > 0 && (
+							<SeedBreakdown
+								segments={[
+									{
+										tone: "pool",
+										amount: timePoolFor(anthersAmount),
+										label: "To creators, through the Time Pool",
+										desc: "split by the share of your time each one earned",
+									},
+									{
+										tone: "mission",
+										amount:
+											anthersAmount - timePoolFor(anthersAmount) - cardFeeDisplay(anthersAmount),
+										label: "Free access & programs",
+										desc: "keeps other people's accounts free and funds Anthers' charitable programs",
+									},
+									{
+										tone: "pay",
+										amount: cardFeeDisplay(anthersAmount),
+										label: "Payments",
+										desc: "card & processing, at cost, paid to the processor",
+									},
+								]}
+								note={`${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`}
+							/>
+						)}
 						<SectionEcho
 							lines={anthersLines}
 							onDrop={dropPick}
 							empty={
-								picks.anthers === false
+								picks.anthers === 0
 									? `Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`
 									: "Nothing added here yet."
 							}
