@@ -117,7 +117,6 @@ import {
 	SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
@@ -938,6 +937,8 @@ function SignupForm({
 	onSubmit,
 	atprotoHandle,
 	onBluesky,
+	handle,
+	onHandleChange,
 	door,
 	onDoorChange,
 	className,
@@ -961,14 +962,23 @@ function SignupForm({
 	 * unexplained email field after a detour through another website.
 	 */
 	atprotoHandle: string | null;
-	/** Open the Bluesky signup prompt. Null when it should not be offered at all. */
-	onBluesky: (() => void) | null;
+	/**
+	 * Hand the typed handle off to Bluesky. Null when the door should not be offered at all.
+	 *
+	 * On success this never returns in any useful sense — the browser is already leaving —
+	 * so nothing may be queued after it, and `busy` is deliberately left set.
+	 */
+	onBluesky: ((handle: string) => void) | null;
+	/** The Bluesky handle being typed, shared by both copies of this card like `email`. */
+	handle: string;
+	onHandleChange: (value: string) => void;
 	door: Door;
 	onDoorChange: (door: Door) => void;
 	/** Outer spacing only — the card's own box is this component's, not a caller's. */
 	className?: string;
 }) {
 	const fieldId = `${idPrefix}-email`;
+	const handleFieldId = `${idPrefix}-handle`;
 	/** Two doors to choose between, rather than one door and a fallback. */
 	const tabbed = email !== null && !!onBluesky && !atprotoHandle;
 	/** With no tabs there is nothing to switch, so the email field is simply the card. */
@@ -1006,34 +1016,67 @@ function SignupForm({
 	);
 
 	/**
-	 * ⚠️ The panel says what the button is about to do before it does it — the round trip
-	 * goes to somebody else's website and asks for an email address there, and meeting that
-	 * unannounced is how a signup gets abandoned at the last step. The modal repeats it;
-	 * this is what a reader sees without pressing anything.
+	 * The Bluesky door, asked for in place rather than in a modal.
+	 *
+	 * ⭐ **The handle used to be collected in a step of its own** — press the button, meet
+	 * `BlueskyHandleModal`, type the handle, press again, leave. That is two presses and a
+	 * layer for one short field, and this card has room the `/login` card genuinely does
+	 * not (its botanical flourishes reach about seven rems in from each corner, which is
+	 * why the modal exists at all and why `/login` keeps it).
+	 *
+	 * ⚠️ **The three promises moved here with the field, and they are the load-bearing part.**
+	 * The round trip goes to somebody else's website, asks it for an email address, and
+	 * comes back still owing a name and the terms. Every one of those is cheaper to learn
+	 * here than from a consent screen mid-flow — and inlining actually improves on the
+	 * modal, because a reader now meets them without pressing anything at all.
 	 */
 	const blueskyPanel = tabbed && door === "bluesky" && onBluesky && (
-		<div className="text-left">
+		<form
+			className="text-left"
+			onSubmit={(e) => {
+				e.preventDefault();
+				onBluesky(handle);
+			}}
+		>
 			<p className="text-sm leading-relaxed text-base-content/65">
-				We&rsquo;ll take you to Bluesky to confirm it&rsquo;s you, and ask it for an email address
-				so you don&rsquo;t have to type one. Anthers confirms that address with a code of its own
-				either way.
+				We&rsquo;ll send you to Bluesky to confirm it&rsquo;s you, and ask it for your email address
+				to save you typing it. Anthers confirms that address with its own code — then you&rsquo;ll
+				pick a name and agree to the terms.
 			</p>
+			<label className="label px-0 pt-4 pb-1" htmlFor={handleFieldId}>
+				<span className="text-sm font-semibold">What&rsquo;s your handle?</span>
+			</label>
+			{/* A handle is a domain name, so this is `text` with a URL keyboard rather than an
+			    `email`-shaped field. The leading `@` is how people write it and not part of
+			    it — stripped on submit, never fought with while typing. */}
+			<input
+				id={handleFieldId}
+				type="text"
+				inputMode="url"
+				autoComplete="username"
+				spellCheck={false}
+				autoCapitalize="none"
+				placeholder="alice.bsky.social"
+				aria-label="Bluesky handle"
+				className="input input-bordered w-full"
+				value={handle}
+				onChange={(e) => onHandleChange(e.target.value)}
+			/>
 			{/* 🚨 No butterfly on this button, and that is a compliance decision rather than a
 			    visual one. Bluesky's guidance allows their mark in three colours only, and the
 			    one that reads on `btn-primary` differs by theme — our primary is a deep green
 			    in light and a light amber in dark, so white works on one and is nearly
 			    invisible on the other, while their blue is listed for light backgrounds only.
-			    The rail two inches to the left already carries the mark in an approved colour
-			    on a surface we control, which is where it belongs. */}
+			    The tab an inch above already carries the mark in an approved colour on a
+			    surface we control, which is where it belongs. */}
 			<button
-				type="button"
+				type="submit"
 				className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
-				onClick={onBluesky}
-				disabled={busy}
+				disabled={busy || !handle.trim()}
 			>
-				Sign up with Bluesky
+				{busy ? "Taking you to Bluesky…" : "Sign up with Bluesky"}
 			</button>
-		</div>
+		</form>
 	);
 
 	/**
@@ -1242,11 +1285,10 @@ export default function SubscribePage() {
 	 * asks for an account on another service.
 	 */
 	const [door, setDoor] = useState<Door>("email");
+	/** The Bluesky handle being typed, shared by both copies of the signup card. */
+	const [handle, setHandle] = useState("");
 	/** The address a ceremony is open for, or null when it isn't. */
 	const [ceremony, setCeremony] = useState<string | null>(null);
-
-	/** Whether the Bluesky handle prompt is open. */
-	const [blueskyOpen, setBlueskyOpen] = useState(false);
 	/**
 	 * Whether the Bluesky door is open at all.
 	 *
@@ -1614,6 +1656,38 @@ export default function SubscribePage() {
 	};
 
 	/**
+	 * Hand off to Bluesky with the handle typed into the card.
+	 *
+	 * ⚠️ **`setBusy(false)` is deliberately missing from the success path**, because there
+	 * is no success path to return to — `signUpWithBluesky` sets `window.location` and the
+	 * browser leaves. Putting the button back would only invite a second handoff from a
+	 * page that is already going.
+	 *
+	 * The picks are in session storage before this runs, so a round trip through another
+	 * website loses nothing; see `PICKS_KEY`.
+	 */
+	const startBluesky = useCallback(
+		async (raw: string) => {
+			// A handle is a domain name; the leading `@` is how people write it, not part of
+			// it. Stripped here rather than while typing, so the field never fights anyone.
+			const value = raw.trim().replace(/^@/, "");
+			if (!value) {
+				setError("Add your Bluesky handle so we know which account to confirm.");
+				return;
+			}
+			setBusy(true);
+			setError(null);
+			try {
+				await signUpWithBluesky(value, next);
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.");
+				setBusy(false);
+			}
+		},
+		[signUpWithBluesky, next],
+	);
+
+	/**
 	 * The address is confirmed and the browser now holds a session.
 	 *
 	 * Everything from here is an ordinary authenticated call, which is the entire reason
@@ -1666,7 +1740,9 @@ export default function SubscribePage() {
 		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
 		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
-		onBluesky: signedIn || !blueskySignupOpen ? null : () => setBlueskyOpen(true),
+		onBluesky: signedIn || !blueskySignupOpen ? null : startBluesky,
+		handle,
+		onHandleChange: setHandle,
 		door,
 		onDoorChange: setDoor,
 	};
@@ -1921,14 +1997,6 @@ export default function SubscribePage() {
 					paying={total > 0}
 					onVerified={onVerified}
 					onClose={() => setCeremony(null)}
-				/>
-			)}
-
-			{blueskyOpen && (
-				<BlueskyHandleModal
-					mode="signup"
-					onSubmit={(handle) => signUpWithBluesky(handle, next)}
-					onClose={() => setBlueskyOpen(false)}
 				/>
 			)}
 

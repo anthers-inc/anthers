@@ -12,6 +12,13 @@
  * content clear of them — an inline field pushed the submit button straight under a spray
  * of leaves. A step that opens over the page costs the card nothing.
  *
+ * ⚠️ **This is `/login`'s prompt and only `/login`'s, since 2026-08-24.** It carried a
+ * `mode` prop and a second set of copy for signing up, because `/subscribe` opened it too.
+ * That card has room this one does not, so the handle is asked for inline there and the
+ * signup branch here had no caller left. The promises it used to make — that Bluesky will
+ * be asked for an email address, that Anthers confirms it regardless, and that a name and
+ * the terms still follow — moved with the field and are pinned by `subscribe-bluesky.e2e`.
+ *
  * Same contract as `EmailCodeModal`: the caller owns the outcome. `onSubmit` starts
  * whatever flow it starts and **throws an `Error` whose message is shown in the field**
  * when it doesn't. This component never navigates and never touches the auth context.
@@ -22,16 +29,6 @@ import BlueskyMark from "./BlueskyMark";
 
 interface Props {
 	/**
-	 * Which door this is.
-	 *
-	 * 🚨 **It changes only the words, and the words are the part that matters.** Both modes
-	 * ask for a handle and hand off to the same round trip; what differs is the promise
-	 * being made. Signing in cannot create an account and says so; signing up can, and owes
-	 * the reader the fact that Bluesky will be asked for their email address — which is a
-	 * thing to learn *before* a consent screen asks for it, not from the consent screen.
-	 */
-	mode?: "login" | "signup";
-	/**
 	 * Hand off to Bluesky. On success this never returns in any useful sense — the browser
 	 * is already leaving — so nothing may be queued after it.
 	 */
@@ -39,23 +36,17 @@ interface Props {
 	onClose: () => void;
 }
 
+/**
+ * 🚨 The last sentence is the one that matters: this door **cannot** create an account, and
+ * saying so is what keeps it distinct from the signup door on `/subscribe`. A reader who
+ * assumed otherwise would find out at the end of a round trip through another website.
+ */
 const COPY = {
-	login: {
-		step: "Log in with Bluesky",
-		lede: "We'll send you to Bluesky to confirm it's you. This logs you in to the Anthers account that handle is linked to — it doesn't create one.",
-	},
-	signup: {
-		step: "Sign up with Bluesky",
-		// ⚠️ "to save you typing it" is doing real work. Anthers asks Bluesky for the address
-		// as a convenience and confirms it with its own code regardless — see the note on
-		// `PdsEmail.confirmed` for why a PDS's word is not evidence. Copy that implied the
-		// Bluesky answer settled anything would be describing a shortcut we deliberately
-		// removed.
-		lede: "We'll send you to Bluesky to confirm it's you, and ask it for your email address to save you typing it. Anthers confirms that address with its own code — then you'll pick a name and agree to the terms.",
-	},
+	step: "Log in with Bluesky",
+	lede: "We'll send you to Bluesky to confirm it's you. This logs you in to the Anthers account that handle is linked to — it doesn't create one.",
 } as const;
 
-export default function BlueskyHandleModal({ mode = "login", onSubmit, onClose }: Props) {
+export default function BlueskyHandleModal({ onSubmit, onClose }: Props) {
 	const [handle, setHandle] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -86,17 +77,13 @@ export default function BlueskyHandleModal({ mode = "login", onSubmit, onClose }
 		<div className="modal modal-open">
 			<div className="modal-box max-w-md">
 				<p className="text-xs font-semibold uppercase tracking-[0.18em] text-base-content/45">
-					{COPY[mode].step}
+					{COPY.step}
 				</p>
 				<h3 className="mt-1 flex items-center gap-2 text-xl font-bold">
 					<BlueskyMark />
 					What's your handle?
 				</h3>
-				{/* 🚨 The last sentence is the one that matters, in both modes. Whether this
-				    door can create an account, and what it is about to ask Bluesky for, are
-				    both cheaper to say here than to let someone discover at the end of a round
-				    trip through another website. */}
-				<p className="mt-2 text-sm text-base-content/70">{COPY[mode].lede}</p>
+				<p className="mt-2 text-sm text-base-content/70">{COPY.lede}</p>
 
 				<form onSubmit={submit}>
 					<input
