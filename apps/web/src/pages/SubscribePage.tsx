@@ -96,8 +96,11 @@ import {
 	FREE_TIME_POOL,
 	heldBadgeLabel,
 	PUBLIC_ACCESS_PRICE,
+	stickerBudgetFor,
+	storageGibFor,
 	thresholdForBadge,
 	timePoolFor,
+	WITHDRAWN_RESCUE_DAYS,
 } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
@@ -438,64 +441,114 @@ function BadgeChooser({
 }
 
 /**
- * What the chosen rung actually changes, as three lines that move when it does.
+ * What the chosen rung carries â the confirmed perk set from 20.06, one row each.
  *
- * 🚨 **Access is the line that does NOT scale, and the copy has to be straight about
- * that.** Public Access arrives whole at the first rung and nothing above it buys more —
- * 63.01 is explicit that the ladder is written as *what your giving does*, never as *what
- * you get to see*. So the first row reads the same at every paid rung, on purpose, and
- * what climbs is the money reaching creators and the money keeping other people free.
+ * ð¨ **This replaced three rows that restated the breakdown bar below them** (Parker,
+ * 2026-08-24). Time Pool, remainder and Payments are the bar's own segments; printing them
+ * again above it as a "comparison" compared nothing. What a reader wants here is what the
+ * rung *carries*, which is a different list and lives in 20.06 Â§ Currently Confirmed Perks.
  *
- * ⚠️ Free is not a column of dashes. A free account's watching still pays the creators it
- * spends time with, out of the remainder — the difference is who funds it, which is the
- * one genuinely surprising fact on this page and worth stating rather than blanking.
+ * â ï¸ **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
+ * table are the same numbers as the sections they summarise, and neither may be edited
+ * without the other. So the Sticker budget and the storage floor got real functions in
+ * `constants.ts` rather than being read off the table â `stickerBudgetFor` and
+ * `storageGibFor` â and a rung added to `ANTHERS_BADGES` moves this panel on its own.
+ *
+ * ð¨ **Five of these seven are DESIGNED, NOT BUILT, and each one says so.** Stickers have
+ * no like primitive to attach to; per-rung storage does not exist (`estimateStorageCost`
+ * bills every creator against the flat free floor and there is no user-side storage at
+ * all); purchase preservation past the uniform `WITHDRAWN_RESCUE_DAYS` is not implemented;
+ * there is no shop and no discount; there is no supporters page. The Hub's tense rule is
+ * the whole reason the `soon` flag exists â signposted, never scheduled â and dropping it
+ * would put five false claims on the one page the model's revenue turns on.
  */
 function BadgeOutcome({ amount }: { amount: number }) {
 	const paying = amount > 0;
-	const pool = paying ? timePoolFor(amount) : FREE_TIME_POOL;
-	const payments = paying ? cardFeeDisplay(amount) : 0;
-	const remainder = paying ? amount - pool - payments : 0;
+	const dash = <span className="text-base-content/35">—</span>;
 
-	const rows: [string, React.ReactNode][] = [
-		[
-			"Public Access",
-			paying
-				? "No monthly limit — watch as much as you like"
+	const rows: { label: string; detail: React.ReactNode; soon?: boolean }[] = [
+		{
+			label: "Monthly Public Access",
+			detail: paying
+				? "Unlimited — watch as much as you like"
 				: `${FREE_PUBLIC_ACCESS_HOURS} hours a month`,
-		],
-		[
-			"To creators, by your time",
-			paying ? (
+		},
+		{
+			label: "Monthly Time Pool",
+			detail: paying ? (
 				<>
-					<strong className="tabular-nums">{money(pool)}</strong> a month, split among the creators
-					you spend time with
+					<strong className="tabular-nums">{money(timePoolFor(amount))}</strong>, split among the
+					creators you spend time with
 				</>
 			) : (
 				<>
-					<strong className="tabular-nums">{money(FREE_TIME_POOL)}</strong> a month, which Anthers
-					pays on your behalf
+					<strong className="tabular-nums">{money(FREE_TIME_POOL)}</strong>, which Anthers pays on
+					your behalf
 				</>
 			),
-		],
-		[
-			"Free access & programs",
-			paying ? (
+		},
+		{
+			label: "Monthly Sticker budget",
+			soon: true,
+			// ⚠️ "Held back from" rather than "on top of" — the Sticker budget is carved out
+			// of the Time Pool above it, and unspent budget rolls back in. Two figures that
+			// overlap have to say they overlap, or the row reads as money appearing twice.
+			detail: paying ? (
 				<>
-					<strong className="tabular-nums">{money(remainder)}</strong> a month, keeping other
-					people's accounts free
+					<strong className="tabular-nums">{money(stickerBudgetFor(amount))}</strong>, held back
+					from your Time Pool to give directly
 				</>
 			) : (
-				"Funded by the people on the rungs above"
+				dash
 			),
-		],
+		},
+		{
+			label: "Cloud storage",
+			soon: paying,
+			detail: paying ? (
+				<>
+					<strong className="tabular-nums">{storageGibFor(amount)} GiB</strong>, for your own files
+					or a catalog you publish
+				</>
+			) : (
+				<>
+					<strong className="tabular-nums">{storageGibFor(0)} GiB</strong>, for a catalog you
+					publish
+				</>
+			),
+		},
+		{
+			label: "Purchase preservation",
+			soon: paying,
+			detail: paying
+				? "Kept in your library for as long as you hold a Badge"
+				: `Kept in your library for ${WITHDRAWN_RESCUE_DAYS} days after a creator withdraws it`,
+		},
+		{
+			label: "Merch discount",
+			soon: true,
+			detail: paying ? "A discount on merch anyone can buy" : dash,
+		},
+		{
+			label: "Our appreciation",
+			soon: true,
+			detail: paying ? "Listed on the Anthers supporters page" : dash,
+		},
 	];
 
 	return (
 		<ul className="mx-auto mt-6 max-w-4xl divide-y divide-base-content/10 rounded-2xl border border-base-content/10 bg-base-200/40">
-			{rows.map(([label, detail]) => (
-				<li key={label} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5">
-					<span className="text-sm font-semibold">{label}</span>
-					<span className="ml-auto text-sm text-base-content/65">{detail}</span>
+			{rows.map((row) => (
+				<li key={row.label} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5">
+					<span className="text-sm font-semibold">
+						{row.label}
+						{row.soon && (
+							<span className="ml-2 rounded-full bg-base-content/10 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
+								Coming
+							</span>
+						)}
+					</span>
+					<span className="ml-auto text-sm text-base-content/65">{row.detail}</span>
 				</li>
 			))}
 		</ul>
