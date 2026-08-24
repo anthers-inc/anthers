@@ -384,9 +384,14 @@ function BadgeChooser({
 				const amount = thresholdForBadge(key);
 				const active = value === amount;
 				return (
+					// ⚠️ `justify-center` on a flex column is what lets Free sit centred without
+					// a spacer standing in for art it does not have. Grid items stretch to the
+					// row's height, so every card is already the same height — centring the
+					// content means the badged cards look exactly as they did and the badgeless
+					// one stops reading as a card whose picture failed to load.
 					<label
 						key={key}
-						className={`cursor-pointer rounded-2xl border px-3 pt-4 pb-4 text-center transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
+						className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border px-3 py-4 text-center transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
 							active
 								? "border-primary/50 bg-primary/10"
 								: "border-base-content/10 bg-base-200/50 hover:border-base-content/25"
@@ -404,15 +409,12 @@ function BadgeChooser({
 						    is full-colour artwork and is left alone in both states.
 
 						    🚨 **Free gets no mark, because a mark IS a Badge and Free is the
-						    absence of one** (Parker, 2026-08-24) — not a Badge worth $0. Its box
-						    is still reserved so the five cards line up, and the empty space is
-						    the point: badgeless should look badgeless. `BADGE_ART` is keyed by
-						    `Badge` rather than `BadgeKey`, so dropping this branch is now a type
-						    error rather than a quiet acorn. */}
-						{key === "free" ? (
-							<span aria-hidden="true" className="mb-2 block h-16" />
-						) : (
-							<span className="relative mx-auto mb-2 flex h-16 w-16 items-center justify-center">
+						    absence of one** (Parker, 2026-08-24) — not a Badge worth $0. It gets
+						    no reserved box either: an empty slot read as misalignment rather than
+						    as absence. `BADGE_ART` is keyed by `Badge` rather than `BadgeKey`, so
+						    dropping this branch is now a type error rather than a quiet acorn. */}
+						{key !== "free" && (
+							<span className="relative mb-2 flex h-16 w-16 items-center justify-center">
 								<BrandGlyph
 									name={BADGE_ART[key].wreath}
 									className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/30"}`}
