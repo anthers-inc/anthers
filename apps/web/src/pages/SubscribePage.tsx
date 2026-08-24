@@ -87,8 +87,6 @@
 //     balance. It is not this path — a separate charge pays the fixed $0.30 twice — and
 //     nothing in the UI calls it.)
 
-import type { BrandIconName } from "@anthers/brand";
-import type { Badge } from "@anthers/shared/constants";
 import {
 	amountLabel,
 	BADGE_ORDER,
@@ -106,6 +104,7 @@ import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
+import { BADGE_ART } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -400,15 +399,17 @@ function BadgeChooser({
 							checked={active}
 							onChange={() => onChange(amount)}
 						/>
-						{/* The Badge art — see `BADGE_WREATH`. The box is reserved even for Free,
-						    which carries no wreath, so all five cards line up. */}
-						<span className="mb-2 flex h-12 items-center justify-center">
-							{key !== "free" && (
-								<BrandGlyph
-									name={BADGE_WREATH[key]}
-									className={`h-12 w-12 ${active ? "text-primary" : "text-base-content/35"}`}
-								/>
-							)}
+						{/* The Badge art, drawn as `/for-users` draws it: the frame behind, the
+						    emoji centred inside. Selecting a rung brightens the frame — the emoji
+						    is full-colour artwork and is left alone in both states. */}
+						<span className="relative mx-auto mb-2 flex h-16 w-16 items-center justify-center">
+							<BrandGlyph
+								name={BADGE_ART[key].wreath}
+								className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/30"}`}
+							/>
+							<span aria-hidden="true" className="text-2xl">
+								{BADGE_ART[key].emoji}
+							</span>
 						</span>
 						<span style={serif} className="block text-base font-medium">
 							{key === "free" ? "Free" : badgeLabel(key)}
@@ -869,25 +870,20 @@ function GoFurtherCard({
 type Door = "email" | "bluesky";
 
 /**
- * The wreath drawn on each Anthers Badge, sparse to full so the ladder reads as growing
- * support before a single number is compared.
+ * The Badge art is `BADGE_ART` from `@anthers/web-shared/economics`, not a local map.
  *
- * 🚨 **Written out rather than built as `` `wreath-${key}` ``, so a rename is a compile
- * error instead of a blank card.** `BrandGlyph` takes a `BrandIconName`, and a template
- * string only satisfies that type through a cast — which is exactly the kind of cast that
- * survives a rung being renamed in `ANTHERS_BADGES` and then renders an empty CSS mask,
- * silently, on the one control this section is built around. `Record<Badge, …>` makes the
- * compiler check both directions: every rung has art, and no art names a rung that is gone.
+ * 🚨 **A first pass here drew the four `wreath-{name}` icons and no emoji, which is a
+ * different mark from the one every other page shows.** Anthers' Badges are drawn as one
+ * consistent round frame — `frame-round`, Parker's call, recorded beside the asset — with
+ * a per-Badge emoji inside it: 🌰 🫚 🌱 🌷 🌼. The `wreath-root`…`wreath-blossom` set in
+ * `build-icons.ts` is an unused earlier idea, and picking it up produced a ladder that
+ * matched nothing: `/for-users` renders the same rungs from `BADGE_ART` a screen away.
  *
- * ⚠️ Free is absent on purpose and is typed as absent. It is the *absence* of a Badge
- * rather than a Badge worth $0, so giving it a mark would be inventing a fifth one.
+ * ⚠️ **So the presentation is imported rather than restated.** A second copy of a brand
+ * decision is a second thing to keep in step, and this one had already drifted before it
+ * shipped. `BADGE_ART` is keyed by `BadgeKey`, so it covers Free too — which settles a
+ * question this page had answered on its own: Free *does* carry a mark (🌰).
  */
-const BADGE_WREATH: Record<Badge, BrandIconName> = {
-	root: "wreath-root",
-	sprout: "wreath-sprout",
-	petal: "wreath-petal",
-	blossom: "wreath-blossom",
-};
 
 /**
  * The signup control: two doors on a tab switcher, an address or a Bluesky handle.

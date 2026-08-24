@@ -19,7 +19,7 @@
  * *co-present* with "free forever" — that is a rule about structure, and structure is what
  * this file is for.
  */
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 /**
@@ -33,6 +33,20 @@ async function topOf(locator: Locator): Promise<number> {
 	if (!box) throw new Error("element is not visible, so it has no position to compare");
 	return box.y;
 }
+
+/**
+ * A rung on the Anthers ladder, as the clickable card rather than the input inside it.
+ *
+ * ⚠️ **Filtered by the RADIO's accessible name, never by the label's text.** Two traps
+ * meet here. The input is `sr-only` so the card can be styled, which puts it out of reach
+ * of `.check()`'s actionability wait — so the label is the thing to click. And the label's
+ * *text* now begins with the Badge's emoji, which is `aria-hidden` (so it stays out of the
+ * accessible name) and is still very much part of `hasText` — an earlier `hasText:
+ * /^Free/` passed until the Badge art landed and then matched nothing, because the text
+ * had quietly become "🌰Free$0". Naming the radio sidesteps both.
+ */
+const rung = (page: Page, name: RegExp) =>
+	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
 
 test.describe("/subscribe leads with the free door", () => {
 	test("the signup control comes before either support ask", async ({ page }) => {
@@ -92,12 +106,8 @@ test.describe("/subscribe leads with the free door", () => {
 		await expect(free).toBeVisible();
 
 		// And choosing it is a real answer that the page acts on, rather than decoration.
-		//
-		// ⚠️ **Click the LABEL, not the input.** The radio is `sr-only` so the card can be
-		// styled, which leaves it un-clickable by Playwright's actionability rules —
-		// `.check()` waits for a 1px target the label is covering and times out. Clicking
-		// the label is also what a person does, so this is the truer gesture anyway.
-		await page.locator("#anthers-badges label").filter({ hasText: /^Free/ }).click();
+		// See `rung` for why the label is the click target and why it is named by its radio.
+		await rung(page, /^free/i).click();
 		await expect(free).toBeChecked();
 		await expect(page.getByText(/staying free/i)).toBeVisible();
 

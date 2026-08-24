@@ -43,6 +43,20 @@ const addr = () =>
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
+ * A rung on the Anthers ladder, as the clickable card rather than the input inside it.
+ *
+ * ⚠️ **Filtered by the RADIO's accessible name, never by the label's text.** Two traps
+ * meet here. The input is `sr-only` so the card can be styled, which puts it out of reach
+ * of `.check()`'s actionability wait — so the label is the thing to click. And the label's
+ * *text* begins with the Badge's emoji, which is `aria-hidden` (so it stays out of the
+ * accessible name) and is still very much part of `hasText` — an earlier `hasText: /^Root/`
+ * passed until the Badge art landed and then matched nothing, because the text had quietly
+ * become "🫚Root$3/mo". Naming the radio sidesteps both.
+ */
+const rung = (page: Page, name: RegExp) =>
+	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
+
+/**
  * There is exactly ONE way to mint an account from the browser, and it is `/subscribe`.
  *
  * 🚨 These are the *absence* assertions for the 2026-08-17 consolidation, and they exist
@@ -149,10 +163,8 @@ test.describe("starting an account from /subscribe", () => {
 		// The Anthers ladder, which was a yes/no card until 2026-08-24. Root is the rung
 		// that used to be the only expressible answer, so it is the one that keeps this
 		// test comparable to what it asserted before.
-		//
-		// ⚠️ The label is the click target: the radio itself is `sr-only` so the card can be
-		// styled, which puts it out of reach of `.check()`'s actionability wait.
-		await page.locator("#anthers-badges label").filter({ hasText: /^Root/ }).click();
+		// See `rung`: the label is the click target, named by the radio it contains.
+		await rung(page, /^root/i).click();
 		await expect(page.getByRole("radio", { name: /^root/i })).toBeChecked();
 
 		// The page's own arithmetic, which is the only number a reader is agreeing to.
@@ -186,10 +198,7 @@ test.describe("starting an account from /subscribe", () => {
 		page,
 	}) => {
 		await page.goto("/subscribe");
-		await page
-			.locator("#anthers-badges label")
-			.filter({ hasText: /^Blossom/ })
-			.click();
+		await rung(page, /^blossom/i).click();
 
 		const monthly = page.getByText("Monthly", { exact: true }).locator("..");
 		await expect(monthly).toContainText("$12");
