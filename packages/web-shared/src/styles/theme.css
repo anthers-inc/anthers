@@ -39,6 +39,13 @@
 	--color-warning-content: oklch(98.6% 0.012 96);
 	--color-error: oklch(57% 0.17 28);
 	--color-error-content: oklch(98.6% 0.012 96);
+
+	/* 🚨 NOT an Anthers token — Bluesky's own brand blue, and the ONE colour their brand
+	   guidance permits for the butterfly on a light background. It is deliberately a raw
+	   hex rather than an oklch Meadow value: their guidance says "do not substitute, tint,
+	   or approximate", so this must never be expressed in terms of our palette or nudged
+	   to sit better against it. https://bsky.social/about/support/branding */
+	--bluesky-mark: #0560ff;
 }
 
 /* Dark — opt-in via data-theme=dark. Deliberately darkened + desaturated greens so the
@@ -66,6 +73,10 @@
 	--color-warning-content: oklch(17% 0.017 158);
 	--color-error: oklch(66% 0.16 28);
 	--color-error-content: oklch(17% 0.017 158);
+
+	/* White is the variant Bluesky's guidance names for a dark background. Blue is listed
+	   for white or light backgrounds only, and at 14% lightness this base is neither. */
+	--bluesky-mark: #ffffff;
 }
 
 /* Soft form-control borders — the default bordered inputs/selects read as

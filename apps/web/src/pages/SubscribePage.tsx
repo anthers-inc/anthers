@@ -109,6 +109,7 @@ import type { PublicUser } from "@anthers/web-shared/types";
 import {
 	ArrowDownTrayIcon,
 	BanknotesIcon,
+	EnvelopeIcon,
 	HeartIcon,
 	PlayCircleIcon,
 	ServerStackIcon,
@@ -118,7 +119,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
 import BlueskyMark from "../components/auth/BlueskyMark";
-import { storedGibPerSourceHour } from "../components/calculators/video-model";
 import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
@@ -139,24 +139,6 @@ const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
 const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
 /** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
 const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
-
-/**
- * What the free creator allowance holds, in hours of video — **derived, never typed.**
- *
- * A creator's storage carries the master they uploaded plus the whole AV1 ladder Anthers
- * transcodes from it, so "50 GiB" means nothing to somebody deciding whether to publish
- * here and "about six hours of video" means everything. The number is computed from the
- * same bitrate model `/calculators/video-storage` runs on, so the page and the calculator
- * cannot disagree, and doubling the allowance would move this sentence on its own.
- *
- * 🚨 **The framerate is the assumption to know about, and the copy does not state it.**
- * An hour at 1080p60 stores nearly twice what an hour at 1080p30 does, so this reads the
- * 30fps case: 50 GiB is about 6.7 hours at 30fps and about 4.7 at 60. The published
- * sentence says "6+ hours", which is true of a 30fps master and generous for a 60fps one.
- * If that ever needs to be the worst case rather than the common one, change the argument
- * here rather than the sentence.
- */
-const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1080p", 30, "h264"));
 
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
@@ -816,35 +798,37 @@ function FreeInclusions() {
 	const items: { icon: typeof PlayCircleIcon; label: string; sub: string }[] = [
 		{
 			icon: PlayCircleIcon,
-			// 🚨 **The period is not decoration and must not be trimmed for length.** 63.01
-			// makes "free forever" and the cap co-present in the same breath — this list is
-			// headed "free, forever", so a bare "10 hours" over it reads as a lifetime total.
-			// `subscribe-free-first.e2e.ts` pins that the bound appears above the way in.
 			label: `${FREE_PUBLIC_ACCESS_HOURS} hours/month of Public Access`,
-			sub: "Any works creators make available without a subscription — video, music, games, writing, and more — streamed for free, with creators still paid by Anthers on your behalf.",
+			sub: "Any works creators make available without a Badge, streamed for free, with creators still paid by Anthers for you.",
 		},
 		{
 			icon: ShieldCheckIcon,
 			label: "No Ads or Data Harvesting",
-			sub: "No matter how you use Anthers, we never serve ads, we never sell your data, and we can never be sold.",
+			sub: "Even if you use Anthers for free, we never serve ads, we never sell your data, and we can never be sold. Free means free.",
 		},
 		{
 			icon: BanknotesIcon,
-			label: "No Fees on Subscriptions or Purchases",
-			sub: "When you choose to support a creator with a monthly Badge subscription or a direct purchase, Anthers takes no cut. Everything except card fees goes straight to the creator.",
+			label: "Zero Platform Fee",
+			sub: "When you choose to support a creator with a monthly Badge subscription or a direct purchase, Anthers takes no cut.",
 		},
 		{
 			icon: ArrowDownTrayIcon,
 			label: "Purchases are yours, forever",
-			sub: "Any works you purchase are yours to own and download, even if they're unlisted later.",
+			sub: "Any works you purchase are yours to own and download from your Anthers library, even if they're unlisted later.",
 		},
 		{
 			icon: ServerStackIcon,
-			label: `${FREE_STORAGE_GIB} GiB of free Creator storage`,
-			// ⚠️ The `6+` is DERIVED — see `FREE_VIDEO_HOURS`. Parker's sentence is
-			// reproduced word for word; the only thing computed is the numeral, so that
-			// moving the allowance or the ladder moves the claim with it.
-			sub: `If you want to get started as a creator on Anthers, you can store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free, forever.`,
+			label: `${FREE_STORAGE_GIB} GiB of Anthers storage`,
+			// 🚨 **This sentence describes two things the platform does not have**, and it is
+			// flagged rather than rewritten because the copy is Parker's call. `FREE_STORAGE_GIB`
+			// is a CREATOR allowance — `estimateStorageCost` in `packages/shared/src/fees.ts` is
+			// its only consumer, and it bills a creator's catalogue against it. There is no
+			// user-side allowance, "cloud saves" appears nowhere in the codebase but this line,
+			// and a delisted purchase already survives without drawing on anybody's quota (it
+			// is one of the free-access obligations in 63.01, not something a user's 50 GiB
+			// buys). Either the copy narrows to the creator allowance, or the two user-side
+			// uses get written as coming — the Hub's tense rule — once they are real.
+			sub: `Anthers storage can be used by creators for their works, or by users to preserve delisted purchases and store cloud saves.`,
 		},
 	];
 	return (
@@ -863,7 +847,7 @@ function FreeInclusions() {
 					    paragraphs start at five different heights reads as five loose blocks
 					    rather than as one row. It applies only where the items sit side by
 					    side; stacked, the reserved space is just a gap. */}
-					<h3 style={serif} className="mb-1 text-base font-medium text-balance lg:min-h-12">
+					<h3 style={serif} className="mb-1 text-base font-medium text-balance lg:min-h-8">
 						{item.label}
 					</h3>
 					<p className="text-xs leading-relaxed text-base-content/55">{item.sub}</p>
@@ -986,6 +970,94 @@ function SignupForm({
 	const tabbed = email !== null && !!onBluesky && !atprotoHandle;
 	/** With no tabs there is nothing to switch, so the email field is simply the card. */
 	const showEmail = email !== null && (!tabbed || door === "email");
+
+	const emailPanel = showEmail && (
+		<form
+			className="text-left"
+			onSubmit={(e) => {
+				e.preventDefault();
+				onSubmit();
+			}}
+		>
+			<label className="label px-0 pb-1" htmlFor={fieldId}>
+				<span className="text-sm font-semibold">Where should we reach you?</span>
+			</label>
+			<input
+				id={fieldId}
+				type="email"
+				required
+				autoComplete="email"
+				placeholder="you@example.com"
+				className="input input-bordered w-full"
+				value={email ?? ""}
+				onChange={(e) => onEmailChange(e.target.value)}
+			/>
+			<button
+				type="submit"
+				className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+				disabled={busy}
+			>
+				{busy ? "Working…" : cta}
+			</button>
+		</form>
+	);
+
+	/**
+	 * ⚠️ The panel says what the button is about to do before it does it — the round trip
+	 * goes to somebody else's website and asks for an email address there, and meeting that
+	 * unannounced is how a signup gets abandoned at the last step. The modal repeats it;
+	 * this is what a reader sees without pressing anything.
+	 */
+	const blueskyPanel = tabbed && door === "bluesky" && onBluesky && (
+		<div className="text-left">
+			<p className="text-sm leading-relaxed text-base-content/65">
+				We&rsquo;ll take you to Bluesky to confirm it&rsquo;s you, and ask it for an email address
+				so you don&rsquo;t have to type one. Anthers confirms that address with a code of its own
+				either way.
+			</p>
+			{/* 🚨 No butterfly on this button, and that is a compliance decision rather than a
+			    visual one. Bluesky's guidance allows their mark in three colours only, and the
+			    one that reads on `btn-primary` differs by theme — our primary is a deep green
+			    in light and a light amber in dark, so white works on one and is nearly
+			    invisible on the other, while their blue is listed for light backgrounds only.
+			    The rail two inches to the left already carries the mark in an approved colour
+			    on a surface we control, which is where it belongs. */}
+			<button
+				type="button"
+				className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
+				onClick={onBluesky}
+				disabled={busy}
+			>
+				Sign up with Bluesky
+			</button>
+		</div>
+	);
+
+	/**
+	 * One tab on the vertical rail.
+	 *
+	 * ⚠️ **Icon-only, so the accessible name comes from `aria-label` and there is no visible
+	 * text to fall back on.** `title` gives a pointer user the same word on hover; the panel
+	 * beside it names the door in full, which is what carries the meaning for everyone else.
+	 */
+	const tab = (value: Door, label: string, icon: React.ReactNode) => (
+		<button
+			type="button"
+			role="tab"
+			aria-selected={door === value}
+			aria-label={label}
+			title={label}
+			className={`grid h-12 w-12 place-items-center rounded-xl border transition-colors ${
+				door === value
+					? "border-primary/45 bg-primary/10"
+					: "border-transparent bg-base-100/60 hover:bg-base-100"
+			}`}
+			onClick={() => onDoorChange(value)}
+		>
+			{icon}
+		</button>
+	);
+
 	return (
 		// 🚨 `data-signup` exists because the page deliberately carries TWO of these, with the
 		// same button label — which is right for a reader (it is the same act) and ambiguous
@@ -1001,7 +1073,7 @@ function SignupForm({
 				// somewhere else. Without this the page reads as a flow that forgot what it
 				// was doing — which is how a signup gets abandoned three steps in.
 				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4 text-left">
-					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0 text-base-content/60" />
+					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0" />
 					<p className="text-sm text-base-content/70">
 						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
 						Anthers needs an email address it can reach you at, for receipts and account notices —
@@ -1010,84 +1082,42 @@ function SignupForm({
 				</div>
 			)}
 
-			{/* `tabs-box`, not the retired v4 `tabs-boxed`. Both tabs are one signup — the
-			    account they make is identical, and only the thing we ask you for differs. */}
-			{tabbed && (
-				<div role="tablist" aria-label="How to sign up" className="tabs tabs-box mt-5 w-full">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={door === "email"}
-						className={`tab flex-1 ${door === "email" ? "tab-active" : ""}`}
-						onClick={() => onDoorChange("email")}
-					>
-						Email
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={door === "bluesky"}
-						className={`tab flex-1 gap-1.5 ${door === "bluesky" ? "tab-active" : ""}`}
-						onClick={() => onDoorChange("bluesky")}
-					>
-						<BlueskyMark className="h-4 w-4" />
-						Bluesky
-					</button>
-				</div>
-			)}
+			{/* The rail is VERTICAL and on the left, which is the shape Parker asked for and
+			    also the one that suits two doors that differ in kind rather than in degree:
+			    a horizontal pair reads as a filter over one thing, where a rail reads as a
+			    choice of route into it. Both make the same account — only what we ask you
+			    for differs — so neither tab is the "upgrade".
 
-			{showEmail && (
-				<form
-					className="mt-5 text-left"
-					onSubmit={(e) => {
-						e.preventDefault();
-						onSubmit();
-					}}
-				>
-					<label className="label px-0 pb-1" htmlFor={fieldId}>
-						<span className="text-sm font-semibold">Where should we reach you?</span>
-					</label>
-					<input
-						id={fieldId}
-						type="email"
-						required
-						autoComplete="email"
-						placeholder="you@example.com"
-						className="input input-bordered w-full"
-						value={email ?? ""}
-						onChange={(e) => onEmailChange(e.target.value)}
-					/>
-					<button
-						type="submit"
-						className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
-						disabled={busy}
+			    ⚠️ It renders only when there really are two doors. A one-tab rail beside a
+			    panel reads as a control that has lost its other half, which is worse than
+			    the plain card a closed Bluesky door falls back to. */}
+			{tabbed ? (
+				<div className="mt-5 flex items-start gap-4">
+					<div
+						role="tablist"
+						aria-label="How to sign up"
+						aria-orientation="vertical"
+						className="flex shrink-0 flex-col gap-2"
 					>
-						{busy ? "Working…" : cta}
-					</button>
-				</form>
-			)}
-
-			{/* ⚠️ The panel says what the button is about to do before it does it — the round
-			    trip goes to somebody else's website and asks for an email address there, and
-			    meeting that unannounced is how a signup gets abandoned at the last step. The
-			    modal repeats it; this is what a reader sees without pressing anything. */}
-			{tabbed && door === "bluesky" && onBluesky && (
-				<div className="mt-5 text-left">
-					<p className="text-sm leading-relaxed text-base-content/65">
-						We&rsquo;ll take you to Bluesky to confirm it&rsquo;s you, and ask it for an email
-						address so you don&rsquo;t have to type one. Anthers confirms that address with a code
-						of its own either way.
-					</p>
-					<button
-						type="button"
-						className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
-						onClick={onBluesky}
-						disabled={busy}
-					>
-						<BlueskyMark className="h-4 w-4" />
-						Sign up with Bluesky
-					</button>
+						{tab(
+							"email",
+							"Email",
+							<EnvelopeIcon
+								className={`h-5 w-5 ${door === "email" ? "text-primary" : "text-base-content/45"}`}
+							/>,
+						)}
+						{/* 🚨 The butterfly keeps its own colour in BOTH states — see `BlueskyMark`.
+						    Dimming it to signal "not selected" would be tinting somebody else's
+						    trademark, so selection is carried entirely by the tab behind it. */}
+						{tab("bluesky", "Bluesky", <BlueskyMark className="h-5 w-5" />)}
+					</div>
+					<div className="min-w-0 flex-1">
+						{emailPanel}
+						{blueskyPanel}
+					</div>
 				</div>
+			) : (
+				showEmail && <div className="mt-5">{emailPanel}</div>
 			)}
 
 			{email === null && (
@@ -1659,8 +1689,8 @@ export default function SubscribePage() {
 								Anthers is free. Forever.
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
-								No card required, no trial period, no ads and no sneaky charges. Here is what you
-								get on Anthers for free, forever:
+								No card required, no trial period, no ads or sneaky charges. We believe amazing
+								creative and educational content should be free for all, no strings attached.
 							</p>
 
 							<FreeInclusions />

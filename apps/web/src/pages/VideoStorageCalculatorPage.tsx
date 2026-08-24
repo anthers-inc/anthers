@@ -26,10 +26,9 @@ import {
 // Model — the original master is stored as-is, then a full AV1 delivery ladder
 // down to 240p30 is transcoded and stored alongside it.
 //
-// ⚠️ The reference bitrates moved to `video-model.ts` on 2026-08-23, because
-// /subscribe now derives "50 GiB is about N hours of 1080p video" from the same
-// model rather than typing the N. Two copies of the ladder would let the page and
-// the calculator disagree about the same claim.
+// ⚠️ The master reference bitrates live in `video-model.ts` beside the ladder
+// rather than here, so a page that needs to size video reads the same model this
+// calculator runs on instead of keeping a second copy of it.
 // ---------------------------------------------------------------------------
 
 type MasterFormat = NamedMasterFormat | "custom";

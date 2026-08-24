@@ -106,27 +106,6 @@ export const MASTER_EXPORT: Record<
 /** The master carries a higher-rate audio track than the delivery rungs. */
 export const MASTER_AUDIO_MBPS = 0.256;
 
-/**
- * Everything Anthers stores for one hour of uploaded video, in GiB: the master kept
- * as-is, plus the whole AV1 ladder from the master's resolution down to 240p.
- *
- * ⚠️ **The marketing pages read this rather than quoting a number.** "50 GiB is about
- * six hours of 1080p video" is a derived claim, and a derived claim typed into a page
- * goes stale the moment the free allowance or the ladder moves — the same failure the
- * money figures have a whole guard for. `FREE_STORAGE_GIB / storedGibPerSourceHour(…)`
- * cannot drift; a `6` in a sentence can.
- */
-export function storedGibPerSourceHour(res: Resolution, fps: number, master: MasterFormat): number {
-	const m = MASTER_EXPORT[master];
-	const masterGib = ((m.ref[res] ?? 0) * m.fps[fps] + MASTER_AUDIO_MBPS) * GIB_PER_MBPS_HR;
-	const ladderGib = RES_LADDER_HIGH_TO_LOW.filter((r) => RES_HEIGHT[r] <= RES_HEIGHT[res]).reduce(
-		(sum, r) =>
-			sum + (AV1_REF30[r] * FPS_MULT[rungFps(r, fps)] + RUNG_AUDIO_MBPS) * GIB_PER_MBPS_HR,
-		0,
-	);
-	return masterGib + ladderGib;
-}
-
 // ---------------------------------------------------------------------------
 // Formatters
 // ---------------------------------------------------------------------------
