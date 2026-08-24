@@ -665,15 +665,14 @@ function FreeInclusions() {
 		{
 			icon: ServerStackIcon,
 			label: `${FREE_STORAGE_GIB} GiB of Anthers storage`,
-			// 🚨 **This sentence describes two things the platform does not have**, and it is
-			// flagged rather than rewritten because the copy is Parker's call. `FREE_STORAGE_GIB`
-			// is a CREATOR allowance — `estimateStorageCost` in `packages/shared/src/fees.ts` is
-			// its only consumer, and it bills a creator's catalogue against it. There is no
-			// user-side allowance, "cloud saves" appears nowhere in the codebase but this line,
-			// and a delisted purchase already survives without drawing on anybody's quota (it
-			// is one of the free-access obligations in 63.01, not something a user's 50 GiB
-			// buys). Either the copy narrows to the creator allowance, or the two user-side
-			// uses get written as coming — the Hub's tense rule — once they are real.
+			// ⚠️ **This is a CREATOR allowance, and the sentence has to keep saying so.**
+			// `FREE_STORAGE_GIB`'s only consumer is `estimateStorageCost` in
+			// `packages/shared/src/fees.ts`, which bills a creator's catalogue against it —
+			// there is no user-side storage quota to describe. A draft of this line offered
+			// the same allowance to users for preserving delisted purchases and storing
+			// cloud saves; neither exists, and a delisted purchase already survives without
+			// drawing on anybody's quota, since that is a free-access obligation under 63.01.
+			//
 			// ⚠️ The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`. Only the numeral
 			// is computed; the sentence is Parker's, word for word.
 			sub: `If you're interested in creating on Anthers, you can store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free in your catalog.`,
