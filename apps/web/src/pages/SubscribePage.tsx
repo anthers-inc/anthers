@@ -115,6 +115,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import { storedGibPerSourceHour } from "../components/calculators/video-model";
 import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
@@ -135,6 +136,24 @@ const ANTHERS_PAYMENTS = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
 const ANTHERS_REMAINDER = PUBLIC_ACCESS_PRICE - timePoolFor(PUBLIC_ACCESS_PRICE) - ANTHERS_PAYMENTS;
 /** What a lone directed amount reaches its creator as — gross, less its share of the fee. */
 const CREATOR_NET = PUBLIC_ACCESS_PRICE - ANTHERS_PAYMENTS;
+
+/**
+ * What the free creator allowance holds, in hours of video — **derived, never typed.**
+ *
+ * A creator's storage carries the master they uploaded plus the whole AV1 ladder Anthers
+ * transcodes from it, so "50 GiB" means nothing to somebody deciding whether to publish
+ * here and "6+ hours of video" means everything. The number is computed from the same
+ * bitrate model `/calculators/video-storage` runs on, so the page and the calculator
+ * cannot disagree, and doubling the allowance would move this sentence on its own.
+ *
+ * 🚨 **The framerate is the assumption to know about, and the copy does not state it.**
+ * An hour at 1080p60 stores nearly twice what an hour at 1080p30 does, so this reads the
+ * 30fps case: 50 GiB is about 6.7 hours at 30fps and about 4.7 at 60. The published
+ * sentence says "6+ hours", which is true of a 30fps master and generous for a 60fps one.
+ * If that ever needs to be the worst case rather than the common one, change the argument
+ * here rather than the sentence.
+ */
+const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1080p", 30, "h264"));
 
 /** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
 const HANDFUL = 6;
@@ -655,7 +674,9 @@ function FreeInclusions() {
 			// is one of the free-access obligations in 63.01, not something a user's 50 GiB
 			// buys). Either the copy narrows to the creator allowance, or the two user-side
 			// uses get written as coming — the Hub's tense rule — once they are real.
-			sub: `Anthers storage can be used by creators for their works, or by users to preserve delisted purchases and store cloud saves.`,
+			// ⚠️ The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`. Only the numeral
+			// is computed; the sentence is Parker's, word for word.
+			sub: `If you're interested in creating on Anthers, you can store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free in your catalog.`,
 		},
 	];
 	return (
