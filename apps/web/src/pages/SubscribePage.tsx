@@ -940,6 +940,7 @@ function SignupForm({
 	onBluesky,
 	door,
 	onDoorChange,
+	className,
 }: {
 	idPrefix: string;
 	cta: string;
@@ -964,6 +965,8 @@ function SignupForm({
 	onBluesky: (() => void) | null;
 	door: Door;
 	onDoorChange: (door: Door) => void;
+	/** Outer spacing only — the card's own box is this component's, not a caller's. */
+	className?: string;
 }) {
 	const fieldId = `${idPrefix}-email`;
 	/** Two doors to choose between, rather than one door and a fallback. */
@@ -1040,21 +1043,30 @@ function SignupForm({
 	 * text to fall back on.** `title` gives a pointer user the same word on hover; the panel
 	 * beside it names the door in full, which is what carries the meaning for everyone else.
 	 */
+	/**
+	 * One tab in the strip across the card's top edge.
+	 *
+	 * The selected tab wears the card body's own background so the two read as one
+	 * surface, and the unselected one is recessed a shade behind it. That is the whole
+	 * of the selected state: it is the tab, not the mark on it, that changes.
+	 */
 	const tab = (value: Door, label: string, icon: React.ReactNode) => (
 		<button
 			type="button"
 			role="tab"
 			aria-selected={door === value}
-			aria-label={label}
-			title={label}
-			className={`grid h-12 w-12 place-items-center rounded-xl border transition-colors ${
+			// ⚠️ The divider between the cells is this left border rather than a spacer
+			// element, because a `tablist` should contain tabs and nothing else — an
+			// `aria-hidden` span in there is a thing assistive tech has to step over.
+			className={`flex flex-1 items-center justify-center gap-2 border-base-300 px-4 py-3 text-sm font-semibold transition-colors not-first:border-l ${
 				door === value
-					? "border-primary/45 bg-primary/10"
-					: "border-transparent bg-base-100/60 hover:bg-base-100"
+					? "bg-base-200/60 text-base-content"
+					: "bg-base-300/60 text-base-content/50 hover:text-base-content/75"
 			}`}
 			onClick={() => onDoorChange(value)}
 		>
 			{icon}
+			{label}
 		</button>
 	);
 
@@ -1063,78 +1075,81 @@ function SignupForm({
 		// same button label — which is right for a reader (it is the same act) and ambiguous
 		// for anything selecting by role and name. This is the seam that disambiguates them
 		// without inventing two different labels for one action.
-		<div data-signup={idPrefix}>
-			{/* The ONE field this page collects. Username and password are deliberately not
-			    asked for here — they cost nothing at the moment of decision and everything
-			    at the moment of doubt, so they move to onboarding, after the address is
-			    confirmed and after any charge. */}
-			{atprotoHandle && (
-				// 🚨 Why an email field is being shown to somebody who just authenticated
-				// somewhere else. Without this the page reads as a flow that forgot what it
-				// was doing — which is how a signup gets abandoned three steps in.
-				<div className="mt-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4 text-left">
-					<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0" />
-					<p className="text-sm text-base-content/70">
-						Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
-						Anthers needs an email address it can reach you at, for receipts and account notices —
-						so we'll send a code to confirm it.
-					</p>
-				</div>
-			)}
+		//
+		// ⚠️ **The card box belongs to this component rather than to its call sites**, and
+		// that is what lets the tabs sit ON the top edge instead of floating inside the
+		// padding. Both callers used to draw the border and background themselves; a tab
+		// strip cannot attach to an edge it is nested three levels inside of. `overflow-hidden`
+		// is what stops a selected tab's background squaring off the rounded top corners.
+		<div
+			data-signup={idPrefix}
+			className={`overflow-hidden rounded-2xl border border-base-300 bg-base-200/60 ${className ?? ""}`}
+		>
+			{/* Tabs across the TOP rather than down the left (Parker, 2026-08-24) — the card
+			    is a centred column and a left rail pushed its contents off that centre line,
+			    where a top strip keeps the field, the button and the note all aligned to the
+			    same axis.
 
-			{/* The rail is VERTICAL and on the left, which is the shape Parker asked for and
-			    also the one that suits two doors that differ in kind rather than in degree:
-			    a horizontal pair reads as a filter over one thing, where a rail reads as a
-			    choice of route into it. Both make the same account — only what we ask you
-			    for differs — so neither tab is the "upgrade".
-
-			    ⚠️ It renders only when there really are two doors. A one-tab rail beside a
+			    ⚠️ The strip renders only when there really are two doors. One tab above a
 			    panel reads as a control that has lost its other half, which is worse than
-			    the plain card a closed Bluesky door falls back to. */}
-			{tabbed ? (
-				<div className="mt-5 flex items-start gap-4">
-					<div
-						role="tablist"
-						aria-label="How to sign up"
-						aria-orientation="vertical"
-						className="flex shrink-0 flex-col gap-2"
-					>
-						{tab(
-							"email",
-							"Email",
-							<EnvelopeIcon
-								className={`h-5 w-5 ${door === "email" ? "text-primary" : "text-base-content/45"}`}
-							/>,
-						)}
-						{/* 🚨 The butterfly keeps its own colour in BOTH states — see `BlueskyMark`.
-						    Dimming it to signal "not selected" would be tinting somebody else's
-						    trademark, so selection is carried entirely by the tab behind it. */}
-						{tab("bluesky", "Bluesky", <BlueskyMark className="h-5 w-5" />)}
-					</div>
-					<div className="min-w-0 flex-1">
-						{emailPanel}
-						{blueskyPanel}
-					</div>
+			    the plain card a closed Bluesky door falls back to.
+
+			    🚨 The label is "Bluesky", never "Bsky" — their brand guidance rules out that
+			    abbreviation in public-facing material by name. */}
+			{tabbed && (
+				<div role="tablist" aria-label="How to sign up" className="flex border-b border-base-300">
+					{tab(
+						"email",
+						"Email",
+						<EnvelopeIcon
+							className={`h-5 w-5 ${door === "email" ? "text-primary" : "text-base-content/40"}`}
+						/>,
+					)}
+					{/* 🚨 The butterfly keeps its own colour in BOTH states — see `BlueskyMark`.
+					    Dimming it to signal "not selected" would be tinting somebody else's
+					    trademark, so the tab behind it carries the whole selected state. */}
+					{tab("bluesky", "Bluesky", <BlueskyMark className="h-5 w-5" />)}
 				</div>
-			) : (
-				showEmail && <div className="mt-5">{emailPanel}</div>
 			)}
 
-			{email === null && (
-				<button
-					type="button"
-					className={`btn btn-primary btn-lg mt-5 w-full ${busy ? "btn-disabled" : ""}`}
-					onClick={onSubmit}
-					disabled={busy}
-				>
-					{busy ? "Working…" : cta}
-				</button>
-			)}
-			{error && <p className="mt-3 text-sm text-error">{error}</p>}
-			{success && <p className="mt-3 text-sm text-success">{success}</p>}
-			{note && (
-				<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
-			)}
+			<div className="p-6">
+				{/* The ONE field this page collects. Username and password are deliberately not
+				    asked for here — they cost nothing at the moment of decision and everything
+				    at the moment of doubt, so they move to onboarding, after the address is
+				    confirmed and after any charge. */}
+				{atprotoHandle && (
+					// 🚨 Why an email field is being shown to somebody who just authenticated
+					// somewhere else. Without this the page reads as a flow that forgot what it
+					// was doing — which is how a signup gets abandoned three steps in.
+					<div className="mb-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4 text-left">
+						<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0" />
+						<p className="text-sm text-base-content/70">
+							Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
+							Anthers needs an email address it can reach you at, for receipts and account notices —
+							so we'll send a code to confirm it.
+						</p>
+					</div>
+				)}
+
+				{emailPanel}
+				{blueskyPanel}
+
+				{email === null && (
+					<button
+						type="button"
+						className={`btn btn-primary btn-lg w-full ${busy ? "btn-disabled" : ""}`}
+						onClick={onSubmit}
+						disabled={busy}
+					>
+						{busy ? "Working…" : cta}
+					</button>
+				)}
+				{error && <p className="mt-3 text-sm text-error">{error}</p>}
+				{success && <p className="mt-3 text-sm text-success">{success}</p>}
+				{note && (
+					<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -1151,41 +1166,48 @@ function Summary({
 	onDrop: (key: string) => void;
 } & Omit<React.ComponentProps<typeof SignupForm>, "idPrefix">) {
 	return (
-		<div className="mx-auto mt-8 max-w-lg rounded-2xl border border-base-300 bg-base-200/60 p-6">
-			<ul className="space-y-2.5">
-				{lines.map((line) => (
-					<li
-						key={line.key ?? "free"}
-						className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
-					>
-						<span className="min-w-0">
-							<span className="font-semibold">{line.label}</span>
-							<span className="block text-xs text-base-content/45">{line.sub}</span>
-						</span>
-						<span className="ml-auto flex shrink-0 items-baseline gap-3">
-							<strong className="tabular-nums">{line.amount ? money(line.amount) : "Free"}</strong>
-							{line.key && (
-								<button
-									type="button"
-									className="text-xs text-base-content/40 underline"
-									onClick={() => onDrop(line.key as string)}
-								>
-									Remove
-								</button>
-							)}
-						</span>
-					</li>
-				))}
-			</ul>
-			<div className="mt-4 flex items-baseline justify-between">
-				<span className="font-bold">Monthly</span>
-				<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
+		// ⚠️ Two stacked cards rather than one panel, since `SignupForm` now draws its own
+		// box so its tabs have a top edge to sit on. It reads better than the single panel
+		// did anyway: what you chose is one object, and the way in is another.
+		<div className="mx-auto mt-8 max-w-lg">
+			<div className="rounded-2xl border border-base-300 bg-base-200/60 p-6">
+				<ul className="space-y-2.5">
+					{lines.map((line) => (
+						<li
+							key={line.key ?? "free"}
+							className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
+						>
+							<span className="min-w-0">
+								<span className="font-semibold">{line.label}</span>
+								<span className="block text-xs text-base-content/45">{line.sub}</span>
+							</span>
+							<span className="ml-auto flex shrink-0 items-baseline gap-3">
+								<strong className="tabular-nums">
+									{line.amount ? money(line.amount) : "Free"}
+								</strong>
+								{line.key && (
+									<button
+										type="button"
+										className="text-xs text-base-content/40 underline"
+										onClick={() => onDrop(line.key as string)}
+									>
+										Remove
+									</button>
+								)}
+							</span>
+						</li>
+					))}
+				</ul>
+				<div className="mt-4 flex items-baseline justify-between">
+					<span className="font-bold">Monthly</span>
+					<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
+				</div>
+				{total > 0 && (
+					<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
+				)}
 			</div>
-			{total > 0 && (
-				<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
-			)}
 
-			<SignupForm idPrefix="summary" {...signup} />
+			<SignupForm idPrefix="summary" className="mt-4" {...signup} />
 		</div>
 	);
 }
@@ -1705,7 +1727,7 @@ export default function SubscribePage() {
 								If that sounds good, sign up for free below and let&rsquo;s get started.
 							</p>
 
-							<div className="mx-auto mt-6 max-w-md rounded-2xl border border-base-300 bg-base-200/60 p-6">
+							<div className="mx-auto mt-6 max-w-md">
 								<SignupForm idPrefix="top" {...signupProps} />
 							</div>
 						</div>
