@@ -308,9 +308,21 @@ function SeedBreakdown({
 	segments,
 	note,
 	total: totalOverride,
+	sizers,
 }: {
 	segments: Segment[];
 	note: string;
+	/**
+	 * The other shapes this breakdown can take, rendered invisibly so its legend and its
+	 * closing note are always as tall as the tallest of them.
+	 *
+	 * 🚨 **Same reason as the echo's `sizers` and the perk cards' stacked bodies**: the
+	 * Anthers ladder switches this panel between a paid reading and a free one, and copy of
+	 * different lengths moved the page under the control that changed it. At 1440px the two
+	 * notes happened to wrap to the same number of lines and the defect was invisible; at
+	 * 390px it was 19px. Anything that swaps this component's copy in place belongs here.
+	 */
+	sizers?: { segments: Segment[]; note: string }[];
 	/**
 	 * What the reader PAYS, when that is not the sum of the segments.
 	 *
@@ -351,28 +363,128 @@ function SeedBreakdown({
 						</div>
 					))}
 			</div>
-			<ul className="mt-4 space-y-2.5">
-				{segments.map((s) => (
-					<li key={s.label} className="flex items-baseline gap-2.5 text-sm">
-						<span
-							aria-hidden="true"
-							className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm ${SEGMENT_BG[s.tone]}`}
-						/>
-						<span className="leading-snug">
-							<span className="text-base-content/80">{s.label}</span>
-							<span className="block text-xs text-base-content/45">{s.desc}</span>
-						</span>
-						<strong className="ml-auto shrink-0 tabular-nums">{money(s.amount)}</strong>
-					</li>
+			{/* The legend and the note are the two things that change with the reading, so each
+			    is stacked over invisible copies of every other reading it could have. */}
+			<div className="mt-4 grid">
+				{sizers?.map((alt) => (
+					<ul
+						key={alt.note}
+						aria-hidden="true"
+						className="invisible col-start-1 row-start-1 space-y-2.5"
+					>
+						{alt.segments.map((s) => (
+							<SegmentLegendRow key={s.label} segment={s} />
+						))}
+					</ul>
 				))}
-			</ul>
+				<ul className="col-start-1 row-start-1 space-y-2.5">
+					{segments.map((s) => (
+						<SegmentLegendRow key={s.label} segment={s} />
+					))}
+				</ul>
+			</div>
 			<div className="mt-3 flex items-baseline justify-between border-t border-base-content/10 pt-3">
 				<span className="font-bold">Total</span>
 				<span className="text-xl font-bold tabular-nums">{money(total)}/mo</span>
 			</div>
 			<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
-			<p className="mt-3 text-xs leading-relaxed text-base-content/50">{note}</p>
+			<div className="mt-3 grid">
+				{sizers?.map((alt) => (
+					<p
+						key={alt.note}
+						aria-hidden="true"
+						className="invisible col-start-1 row-start-1 text-xs leading-relaxed text-base-content/50"
+					>
+						{alt.note}
+					</p>
+				))}
+				<p className="col-start-1 row-start-1 text-xs leading-relaxed text-base-content/50">
+					{note}
+				</p>
+			</div>
 		</div>
+	);
+}
+
+/**
+ * How the Anthers breakdown reads at a given rung — its segments and its closing note.
+ *
+ * 🚨 **One function for both readings, not two literals at the call site**, because the
+ * panel renders the reading you chose *and* the other one invisibly to size itself. Kept
+ * inline, the sizer would have been a third copy of copy that already existed twice, and
+ * the sizer is the copy nobody proofreads.
+ *
+ * ⚠️ Free's segments describe money that is real but is not the reader's: Anthers funds a
+ * Time Pool pot on a free account's behalf, so creators are genuinely paid for that
+ * account's time. They are the SAME three lines a paid rung draws, so the two readings are
+ * directly comparable — and the zeroes are true, since a free account contributes nothing
+ * to the remainder and has no card to process.
+ */
+function anthersReading(amount: number): { segments: Segment[]; note: string } {
+	if (amount > 0) {
+		return {
+			segments: [
+				{
+					tone: "pool",
+					amount: timePoolFor(amount),
+					label: "To creators, through the Time Pool",
+					desc: "split by the share of your time each one earned",
+				},
+				{
+					tone: "mission",
+					amount: amount - timePoolFor(amount) - cardFeeDisplay(amount),
+					label: "Free access & programs",
+					desc: "keeps other people's accounts free and funds Anthers' charitable programs",
+				},
+				{
+					tone: "pay",
+					amount: cardFeeDisplay(amount),
+					label: "Payments",
+					desc: "card & processing, at cost, paid to the processor",
+				},
+			],
+			note: `${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
+		};
+	}
+	return {
+		segments: [
+			{
+				tone: "pool",
+				amount: FREE_TIME_POOL,
+				label: "To creators, through the Time Pool",
+				desc: "split by the share of your time each one earned — funded by Anthers, not by you",
+			},
+			{
+				tone: "mission",
+				amount: 0,
+				label: "Free access & programs",
+				desc: "funded by the rungs above, which is what pays for your account",
+			},
+			{
+				tone: "pay",
+				amount: 0,
+				label: "Payments",
+				desc: "no card, so nothing to process",
+			},
+		],
+		note: `A free account is charged nothing, and the creators you spend time with are still paid: Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool on your behalf, out of what the rungs above pay in.`,
+	};
+}
+
+/** One legend row, shared by the real reading and the invisible ones sizing it. */
+function SegmentLegendRow({ segment }: { segment: Segment }) {
+	return (
+		<li className="flex items-baseline gap-2.5 text-sm">
+			<span
+				aria-hidden="true"
+				className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm ${SEGMENT_BG[segment.tone]}`}
+			/>
+			<span className="leading-snug">
+				<span className="text-base-content/80">{segment.label}</span>
+				<span className="block text-xs text-base-content/45">{segment.desc}</span>
+			</span>
+			<strong className="ml-auto shrink-0 tabular-nums">{money(segment.amount)}</strong>
+		</li>
 	);
 }
 
@@ -469,47 +581,60 @@ function BadgeChooser({
 }
 
 /**
- * What the chosen rung carries â the confirmed perk set from 20.06, in four groups.
+ * What the chosen rung carries — the confirmed perk set from 20.06, in four groups.
  *
- * ð¨ **This replaced three rows that restated the breakdown bar below them** (Parker,
+ * 🚨 **This replaced three rows that restated the breakdown bar below them** (Parker,
  * 2026-08-24). Time Pool, remainder and Payments are the bar's own segments; printing them
  * again above it as a "comparison" compared nothing. What a reader wants here is what the
- * rung *carries*, which is a different list and lives in 20.06 Â§ Currently Confirmed Perks.
+ * rung *carries*, which is a different list and lives in 20.06 § Currently Confirmed Perks.
  *
- * â ï¸ **Seven rows became four cards on a two-column grid**, because seven full-width rows
+ * ⚠️ **Seven rows became four cards on a two-column grid**, because seven full-width rows
  * put a short label on the left and a short value on the right with a hand's width of
  * nothing between them, and cost more vertical space than the section it introduces. The
  * groupings are Parker's: money-to-creators together, storage-and-what-it-keeps together,
  * and the two recognition perks together.
  *
- * â ï¸ **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
+ * ⚠️ **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
  * table are the same numbers as the sections they summarise, and neither may be edited
  * without the other. So the Sticker budget and the storage floor got real functions in
- * `constants.ts` rather than being read off the table â `stickerBudgetFor` and
- * `storageGibFor` â and a rung added to `ANTHERS_BADGES` moves this panel on its own.
+ * `constants.ts` rather than being read off the table — `stickerBudgetFor` and
+ * `storageGibFor` — and a rung added to `ANTHERS_BADGES` moves this panel on its own.
  *
- * ð¨ **Most of this is DESIGNED, NOT BUILT, and the marker sits on the CLAUSE rather than
- * the card.** Grouping put built and unbuilt things side by side â the Time Pool ships and
+ * 🚨 **Most of this is DESIGNED, NOT BUILT, and the marker sits on the CLAUSE rather than
+ * the card.** Grouping put built and unbuilt things side by side — the Time Pool ships and
  * Stickers have no like primitive to attach to; the free storage floor ships and its
  * per-rung scaling does not; the uniform `WITHDRAWN_RESCUE_DAYS` window ships and holding a
  * purchase for as long as you hold a Badge does not. A card-level marker would either
  * overclaim or underclaim, so each unbuilt phrase carries its own.
+ *
+ * 🚨 **Each body is a function of the amount, and every rung's is rendered — one visible,
+ * the rest as invisible sizers stacked in the same grid cell** (Parker, 2026-08-24). The
+ * cards said different things at different lengths, so Free's second row was one line
+ * where a paid rung's was two, and choosing a rung grew the page by 19px underneath the
+ * control you had just pressed. The background art is positioned against page height, so
+ * the whole backdrop moved with it — the same defect that kept the breakdown on screen at
+ * Free, one component further up.
+ *
+ * ⚠️ **Sized by the browser rather than by a `min-h-*` guess.** A reserved height picked
+ * off a screenshot is right at one viewport and one font size and silently wrong at every
+ * other; laying all five bodies in one cell makes the tallest of them the height, wherever
+ * the copy happens to wrap. The cost is that the hidden copies are still in the DOM, so a
+ * test matching perk text must scope to the visible one.
  */
-function Soon() {
-	return (
-		<span className="ml-1 whitespace-nowrap rounded-full bg-base-content/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
-			Coming
-		</span>
-	);
-}
 
-function BadgeOutcome({ amount }: { amount: number }) {
-	const paying = amount > 0;
+/**
+ * Every rung's amount, in ladder order — Free's $0 included, since it is a rung here.
+ *
+ * 🚨 Derived from `BADGE_ORDER`, never written out, for the same reason the chooser is: a
+ * rung added to `ANTHERS_BADGES` has to start sizing these cards without being told twice.
+ */
+const PERK_AMOUNTS = BADGE_ORDER.map(thresholdForBadge);
 
-	const cards: { title: string; body: React.ReactNode }[] = [
-		{
-			title: "Public Access",
-			body: paying ? (
+const PERK_CARDS: { title: string; body: (amount: number) => React.ReactNode }[] = [
+	{
+		title: "Public Access",
+		body: (amount) =>
+			amount > 0 ? (
 				<>
 					<strong>Unlimited.</strong> Every streaming Work a creator left open to everyone, with no
 					monthly limit.
@@ -520,13 +645,14 @@ function BadgeOutcome({ amount }: { amount: number }) {
 					creator left open to everyone.
 				</>
 			),
-		},
-		{
-			title: "Time Pool & Stickers",
-			// â ï¸ "Held back from" rather than "on top of" â the Sticker budget is carved out
-			// of the Time Pool beside it, and unspent budget rolls back in. Two figures that
-			// overlap have to say they overlap, or this reads as money appearing twice.
-			body: paying ? (
+	},
+	{
+		title: "Time Pool & Stickers",
+		// ⚠️ "Held back from" rather than "on top of" — the Sticker budget is carved out
+		// of the Time Pool beside it, and unspent budget rolls back in. Two figures that
+		// overlap have to say they overlap, or this reads as money appearing twice.
+		body: (amount) =>
+			amount > 0 ? (
 				<>
 					<strong className="tabular-nums">{money(timePoolFor(amount))} a month</strong> to the
 					creators you spend time with, of which{" "}
@@ -540,10 +666,11 @@ function BadgeOutcome({ amount }: { amount: number }) {
 					you spend time with, which Anthers pays on your behalf.
 				</>
 			),
-		},
-		{
-			title: "Cloud Storage & Preservation",
-			body: paying ? (
+	},
+	{
+		title: "Cloud Storage & Preservation",
+		body: (amount) =>
+			amount > 0 ? (
 				<>
 					<strong className="tabular-nums">{storageGibFor(amount)} GiB</strong>
 					<Soon /> for your own files or a catalog you publish, and purchases stay in your library
@@ -557,10 +684,11 @@ function BadgeOutcome({ amount }: { amount: number }) {
 					<strong className="tabular-nums">{WITHDRAWN_RESCUE_DAYS} days</strong>.
 				</>
 			),
-		},
-		{
-			title: "Merch & Recognition",
-			body: paying ? (
+	},
+	{
+		title: "Merch & Recognition",
+		body: (amount) =>
+			amount > 0 ? (
 				<>
 					A discount on merch anyone can buy
 					<Soon />, and a place on the Anthers supporters page
@@ -569,18 +697,44 @@ function BadgeOutcome({ amount }: { amount: number }) {
 			) : (
 				<span className="text-base-content/45">Both of these start at Root, the first rung.</span>
 			),
-		},
-	];
+	},
+];
 
+function Soon() {
+	return (
+		<span className="ml-1 whitespace-nowrap rounded-full bg-base-content/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
+			Coming
+		</span>
+	);
+}
+
+function BadgeOutcome({ amount }: { amount: number }) {
 	return (
 		<ul className="mx-auto mt-6 grid max-w-4xl gap-3 sm:grid-cols-2">
-			{cards.map((card) => (
+			{PERK_CARDS.map((card) => (
 				<li
 					key={card.title}
 					className="rounded-2xl border border-base-content/10 bg-base-200/40 px-4 py-3.5"
 				>
 					<p className="text-sm font-semibold">{card.title}</p>
-					<p className="mt-1 text-sm leading-snug text-base-content/65">{card.body}</p>
+					{/* One cell, every rung's copy in it: the chosen rung's is the one you can
+					    see, and the others hold the card open to the tallest of them. `invisible`
+					    rather than `hidden`, because a card sized by content that isn't laid out
+					    isn't sized at all. */}
+					<div className="mt-1 grid">
+						<p className="col-start-1 row-start-1 text-sm leading-snug text-base-content/65">
+							{card.body(amount)}
+						</p>
+						{PERK_AMOUNTS.filter((sizer) => sizer !== amount).map((sizer) => (
+							<p
+								key={sizer}
+								aria-hidden="true"
+								className="invisible col-start-1 row-start-1 text-sm leading-snug text-base-content/65"
+							>
+								{card.body(sizer)}
+							</p>
+						))}
+					</div>
 				</li>
 			))}
 		</ul>
@@ -777,6 +931,67 @@ interface PickLine {
 }
 
 /**
+ * The line the Anthers step produces at a given rung.
+ *
+ * 🚨 **A factory rather than an inline literal, because the echo below renders every rung's
+ * line as an invisible sizer and a second copy of this copy would drift from it.** A sizer
+ * that says something shorter than the answer it is reserving room for is worse than no
+ * sizer at all: it reserves *almost* the right height, so the page still moves, only by
+ * less and only at some widths.
+ */
+function anthersLineFor(amount: number): PickLine {
+	return {
+		key: "anthers",
+		// The Badge is what somebody chose, so name it rather than the act — `heldBadgeLabel`
+		// also carries the "+" rule if the amount ever stops landing exactly on a rung.
+		label: `${heldBadgeLabel(amount)} — support for Anthers`,
+		sub: "watch as much Public Access as you like",
+		amount,
+	};
+}
+
+/** Every answer the Anthers step can give, for the echo to hold room for. Free is not here:
+ *  it produces no line, and the empty sentence it shows instead is what the room is for. */
+const ANTHERS_ECHO_SIZERS = PERK_AMOUNTS.filter((amount) => amount > 0).map(anthersLineFor);
+
+const DROP_LABEL = "Remove";
+const DROP_CLASS = "text-xs text-base-content/45 underline";
+
+/**
+ * One row of an echo — the real answer, or an invisible copy of it holding the box open.
+ *
+ * 🚨 **A sizer draws the drop control as a `<span>` rather than leaving it out**, because
+ * the right-hand group is `shrink-0` and the label beside it is `min-w-0`: whatever width
+ * that group takes is width the label does not get. Omitting the word gave the sizer's
+ * label a button's worth of extra room, so it wrapped one line later than the answer it was
+ * reserving for and under-reserved by 32px at 390px. A `<span>` holds the same width and
+ * stays out of the tab order without leaning on `visibility: hidden` to do it.
+ */
+function EchoRow({ line, onDrop }: { line: PickLine; onDrop?: (key: string) => void }) {
+	return (
+		<li className="flex items-baseline gap-3 text-sm">
+			<span className="min-w-0">
+				<span className="font-semibold">{line.label}</span>
+				<span className="block text-xs text-base-content/50">{line.sub}</span>
+			</span>
+			<span className="ml-auto flex shrink-0 items-baseline gap-3">
+				<strong className="tabular-nums">
+					{line.amount ? `${money(line.amount)}/mo` : "Free"}
+				</strong>
+				{line.key &&
+					(onDrop ? (
+						<button type="button" className={DROP_CLASS} onClick={() => onDrop(line.key as string)}>
+							{DROP_LABEL}
+						</button>
+					) : (
+						<span className={DROP_CLASS}>{DROP_LABEL}</span>
+					))}
+			</span>
+		</li>
+	);
+}
+
+/**
  * What this section currently amounts to, stated under the section itself.
  *
  * Every step that asks something answers it in place rather than reporting into a rail
@@ -789,10 +1004,26 @@ function SectionEcho({
 	empty,
 	lines,
 	onDrop,
+	sizers,
 }: {
 	empty: string;
 	lines: PickLine[];
 	onDrop: (key: string) => void;
+	/**
+	 * Every answer this section can produce, rendered invisibly so the box is always as tall
+	 * as its tallest one.
+	 *
+	 * 🚨 **For a step whose control is a set of options rather than a growing list** — the
+	 * Anthers ladder, where the echo goes from a sentence to exactly one line and back.
+	 * Without it, pressing a rung grew this box by the height of a `sub`, and the page moved
+	 * under the control being pressed. The creator step leaves this off: its echo grows with
+	 * however many creators somebody picks, so there is no tallest answer to hold it at.
+	 *
+	 * ⚠️ **The rows, not a `min-h-*` measured off a screenshot.** A reserved height in
+	 * pixels is right at one viewport and one font size; it was wrong at 390px within
+	 * minutes of being written, because the label wraps there and the reservation did not.
+	 */
+	sizers?: PickLine[];
 }) {
 	const total = lines.reduce((sum, l) => sum + l.amount, 0);
 	return (
@@ -803,41 +1034,37 @@ function SectionEcho({
 					: "border-dashed border-base-content/15 bg-base-200/40"
 			}`}
 		>
-			{lines.length === 0 ? (
-				<p className="text-center text-sm text-base-content/50">{empty}</p>
-			) : (
-				<>
-					<ul className="space-y-2">
-						{lines.map((line) => (
-							<li key={line.key ?? line.label} className="flex items-baseline gap-3 text-sm">
-								<span className="min-w-0">
-									<span className="font-semibold">{line.label}</span>
-									<span className="block text-xs text-base-content/50">{line.sub}</span>
-								</span>
-								<span className="ml-auto flex shrink-0 items-baseline gap-3">
-									<strong className="tabular-nums">
-										{line.amount ? `${money(line.amount)}/mo` : "Free"}
-									</strong>
-									{line.key && (
-										<button
-											type="button"
-											className="text-xs text-base-content/45 underline"
-											onClick={() => onDrop(line.key as string)}
-										>
-											Remove
-										</button>
-									)}
-								</span>
-							</li>
-						))}
+			<div className="grid">
+				{sizers?.map((line) => (
+					<ul
+						key={line.amount}
+						aria-hidden="true"
+						className="invisible col-start-1 row-start-1 space-y-2"
+					>
+						<EchoRow line={line} />
 					</ul>
-					{lines.length > 1 && (
-						<p className="mt-3 border-t border-base-content/10 pt-2 text-right text-sm font-semibold tabular-nums">
-							{money(total)}/mo from this step
-						</p>
+				))}
+				{/* `self-center` so the empty sentence sits in the middle of whatever room the
+				    sizers reserved, rather than against the top of it. */}
+				<div className="col-start-1 row-start-1 self-center">
+					{lines.length === 0 ? (
+						<p className="text-center text-sm text-base-content/50">{empty}</p>
+					) : (
+						<>
+							<ul className="space-y-2">
+								{lines.map((line) => (
+									<EchoRow key={line.key ?? line.label} line={line} onDrop={onDrop} />
+								))}
+							</ul>
+							{lines.length > 1 && (
+								<p className="mt-3 border-t border-base-content/10 pt-2 text-right text-sm font-semibold tabular-nums">
+									{money(total)}/mo from this step
+								</p>
+							)}
+						</>
 					)}
-				</>
-			)}
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -1574,23 +1801,13 @@ export default function SubscribePage() {
 	 */
 	const anthersAmount = picks.anthers ?? PUBLIC_ACCESS_PRICE;
 
+	/** The breakdown the chosen rung reads as — see `anthersReading` for the other one. */
+	const anthersBreakdown = anthersReading(anthersAmount);
+
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
 	const anthersLines: PickLine[] = useMemo(
-		() =>
-			picks.anthers
-				? [
-						{
-							key: "anthers",
-							// The Badge is what somebody chose, so name it rather than the act —
-							// `heldBadgeLabel` also carries the "+" rule if the amount ever stops
-							// landing exactly on a rung.
-							label: `${heldBadgeLabel(picks.anthers)} — support for Anthers`,
-							sub: "watch as much Public Access as you like",
-							amount: picks.anthers,
-						},
-					]
-				: [],
+		() => (picks.anthers ? [anthersLineFor(picks.anthers)] : []),
 		[picks.anthers],
 	);
 
@@ -2048,74 +2265,19 @@ export default function SubscribePage() {
 						    be hidden at $0, which made choosing Free shrink the page — and the
 						    background art is positioned against page height, so the whole backdrop
 						    jumped. A control whose job is comparison must not resize the thing it
-						    sits in when you use it.
-
-						    ⚠️ Free's segments describe money that is real but is not the reader's:
-						    Anthers funds a Time Pool pot on a free account's behalf, so creators are
-						    genuinely paid for that account's time. The bar draws that, and `total`
-						    is overridden to the $0 actually charged — see `SeedBreakdown`. */}
+						    sits in when you use it. Both readings are in `anthersReading`; `total` is
+						    overridden to the $0 Free is actually charged. */}
 						<SeedBreakdown
 							total={anthersAmount > 0 ? undefined : 0}
-							segments={
-								anthersAmount > 0
-									? [
-											{
-												tone: "pool",
-												amount: timePoolFor(anthersAmount),
-												label: "To creators, through the Time Pool",
-												desc: "split by the share of your time each one earned",
-											},
-											{
-												tone: "mission",
-												amount:
-													anthersAmount -
-													timePoolFor(anthersAmount) -
-													cardFeeDisplay(anthersAmount),
-												label: "Free access & programs",
-												desc: "keeps other people's accounts free and funds Anthers' charitable programs",
-											},
-											{
-												tone: "pay",
-												amount: cardFeeDisplay(anthersAmount),
-												label: "Payments",
-												desc: "card & processing, at cost, paid to the processor",
-											},
-										]
-									: [
-											// ⚠️ The SAME three lines as a paid rung, so the two states are
-											// directly comparable and the section keeps one height. The zeroes
-											// are true — a free account contributes nothing to the remainder and
-											// there is no card to process — and only the Time Pool is nonzero,
-											// because Anthers funds that pot rather than the account.
-											{
-												tone: "pool",
-												amount: FREE_TIME_POOL,
-												label: "To creators, through the Time Pool",
-												desc: "split by the share of your time each one earned — funded by Anthers, not by you",
-											},
-											{
-												tone: "mission",
-												amount: 0,
-												label: "Free access & programs",
-												desc: "funded by the rungs above, which is what pays for your account",
-											},
-											{
-												tone: "pay",
-												amount: 0,
-												label: "Payments",
-												desc: "no card, so nothing to process",
-											},
-										]
-							}
-							note={
-								anthersAmount > 0
-									? `${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`
-									: `A free account is charged nothing, and the creators you spend time with are still paid: Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool on your behalf, out of what the rungs above pay in.`
-							}
+							segments={anthersBreakdown.segments}
+							note={anthersBreakdown.note}
+							// The reading it is NOT showing, so the panel is as tall as either one.
+							sizers={[anthersReading(anthersAmount > 0 ? 0 : PUBLIC_ACCESS_PRICE)]}
 						/>
 						<SectionEcho
 							lines={anthersLines}
 							onDrop={dropPick}
+							sizers={ANTHERS_ECHO_SIZERS}
 							empty={
 								picks.anthers === 0
 									? `Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`

@@ -116,6 +116,42 @@ test.describe("/subscribe leads with the free door", () => {
 		await expect(rungs[0]).toHaveAccessibleName(/^free/i);
 	});
 
+	test("the ladder is the same height at every rung, so choosing does not move the page", async ({
+		page,
+	}) => {
+		// 🚨 **Parker reported this twice, so it gets pinned.** The section's panels change
+		// with the rung — the perk cards, the breakdown's legend and note, the echo — and
+		// copy of different lengths made the section grow and shrink under the control that
+		// changed it. The page's background art is positioned against page height, so the
+		// whole backdrop shifts with it. A control whose job is comparison must not resize
+		// the thing it sits in when you use it.
+		//
+		// ⚠️ **Two widths, because the first fix passed at 1440 and was wrong at 390.** The
+		// copy for two rungs can wrap to the same number of lines at one width and to
+		// different numbers at another, so a single-viewport assertion here proves almost
+		// nothing. 390 is the narrow case where the labels wrap hardest.
+		for (const width of [390, 1280]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.goto("/subscribe");
+
+			const section = page.locator("#anthers-badges");
+			await expect(section).toBeVisible();
+
+			const heights: number[] = [];
+			for (const name of [/^free/i, /^root/i, /^sprout/i, /^petal/i, /^blossom/i]) {
+				await rung(page, name).click();
+				await expect(page.getByRole("radio", { name })).toBeChecked();
+				const box = await section.boundingBox();
+				if (!box) throw new Error("the ladder section has no box to measure");
+				heights.push(Math.round(box.height));
+			}
+
+			// Rounded to the pixel rather than compared with a tolerance: a tolerance is a
+			// budget for the next 19px of drift, and there is no honest reason for any.
+			expect(new Set(heights).size, `heights at ${width}px: ${heights.join(", ")}`).toBe(1);
+		}
+	});
+
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
 		await page.goto("/subscribe");
 
