@@ -304,24 +304,52 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
  * The two destinations are the same picture with different segments, which is what makes
  * the contrast legible without inventing a second visual language for it.
  */
-function SeedBreakdown({ segments, note }: { segments: Segment[]; note: string }) {
+function SeedBreakdown({
+	segments,
+	note,
+	total: totalOverride,
+}: {
+	segments: Segment[];
+	note: string;
+	/**
+	 * What the reader PAYS, when that is not the sum of the segments.
+	 *
+	 * 🚨 **Only Free needs this, and only because its segments describe money that is not
+	 * the reader's.** A free account still pays creators through the Time Pool — Anthers
+	 * funds the pot on its behalf — so the bar has something true to draw while the amount
+	 * charged is $0. Everywhere else the sum IS the total and this stays unset.
+	 *
+	 * ⚠️ Do not reach for this to "fix" a paying breakdown that does not add up. The
+	 * derivation below exists because a hardcoded total silently disagreed with the bar
+	 * above it; an override used anywhere the reader is actually being charged reopens
+	 * exactly that hole.
+	 */
+	total?: number;
+}) {
 	// 🚨 **Summed, never assumed.** This printed `money(PUBLIC_ACCESS_PRICE)` until
 	// 2026-08-24, which was true only while the section could express one amount. With a
 	// ladder above it, a hardcoded total is a number that disagrees with the bar drawn
 	// directly above it — the exact class of defect `supportTotal` has a test for.
-	const total = segments.reduce((sum, s) => sum + s.amount, 0);
+	const total = totalOverride ?? segments.reduce((sum, s) => sum + s.amount, 0);
 	return (
 		<div className="my-6 mx-auto max-w-4xl">
+			{/* ⚠️ Zero-value segments are dropped from the BAR but kept in the legend below.
+			    `flexGrow: 0` does not make a slice disappear — its `$0` label still claims
+			    min-content width — so Free's two empty lines rendered as a squashed "$0$0"
+			    jammed against the right edge. The legend still lists them, which is where a
+			    reader learns those lines exist and are zero. */}
 			<div className="flex h-11 overflow-hidden rounded-xl border border-base-content/10">
-				{segments.map((s) => (
-					<div
-						key={s.label}
-						className={`grid min-w-0 place-items-center text-sm font-bold tabular-nums ${SEGMENT_BG[s.tone]}`}
-						style={{ flexGrow: Math.round(s.amount * 100) }}
-					>
-						{money(s.amount)}
-					</div>
-				))}
+				{segments
+					.filter((s) => s.amount > 0)
+					.map((s) => (
+						<div
+							key={s.label}
+							className={`grid min-w-0 place-items-center text-sm font-bold tabular-nums ${SEGMENT_BG[s.tone]}`}
+							style={{ flexGrow: Math.round(s.amount * 100) }}
+						>
+							{money(s.amount)}
+						</div>
+					))}
 			</div>
 			<ul className="mt-4 space-y-2.5">
 				{segments.map((s) => (
@@ -441,12 +469,18 @@ function BadgeChooser({
 }
 
 /**
- * What the chosen rung carries â the confirmed perk set from 20.06, one row each.
+ * What the chosen rung carries â the confirmed perk set from 20.06, in four groups.
  *
  * ð¨ **This replaced three rows that restated the breakdown bar below them** (Parker,
  * 2026-08-24). Time Pool, remainder and Payments are the bar's own segments; printing them
  * again above it as a "comparison" compared nothing. What a reader wants here is what the
  * rung *carries*, which is a different list and lives in 20.06 Â§ Currently Confirmed Perks.
+ *
+ * â ï¸ **Seven rows became four cards on a two-column grid**, because seven full-width rows
+ * put a short label on the left and a short value on the right with a hand's width of
+ * nothing between them, and cost more vertical space than the section it introduces. The
+ * groupings are Parker's: money-to-creators together, storage-and-what-it-keeps together,
+ * and the two recognition perks together.
  *
  * â ï¸ **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
  * table are the same numbers as the sections they summarise, and neither may be edited
@@ -454,101 +488,99 @@ function BadgeChooser({
  * `constants.ts` rather than being read off the table â `stickerBudgetFor` and
  * `storageGibFor` â and a rung added to `ANTHERS_BADGES` moves this panel on its own.
  *
- * ð¨ **Five of these seven are DESIGNED, NOT BUILT, and each one says so.** Stickers have
- * no like primitive to attach to; per-rung storage does not exist (`estimateStorageCost`
- * bills every creator against the flat free floor and there is no user-side storage at
- * all); purchase preservation past the uniform `WITHDRAWN_RESCUE_DAYS` is not implemented;
- * there is no shop and no discount; there is no supporters page. The Hub's tense rule is
- * the whole reason the `soon` flag exists â signposted, never scheduled â and dropping it
- * would put five false claims on the one page the model's revenue turns on.
+ * ð¨ **Most of this is DESIGNED, NOT BUILT, and the marker sits on the CLAUSE rather than
+ * the card.** Grouping put built and unbuilt things side by side â the Time Pool ships and
+ * Stickers have no like primitive to attach to; the free storage floor ships and its
+ * per-rung scaling does not; the uniform `WITHDRAWN_RESCUE_DAYS` window ships and holding a
+ * purchase for as long as you hold a Badge does not. A card-level marker would either
+ * overclaim or underclaim, so each unbuilt phrase carries its own.
  */
+function Soon() {
+	return (
+		<span className="ml-1 whitespace-nowrap rounded-full bg-base-content/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
+			Coming
+		</span>
+	);
+}
+
 function BadgeOutcome({ amount }: { amount: number }) {
 	const paying = amount > 0;
-	const dash = <span className="text-base-content/35">—</span>;
 
-	const rows: { label: string; detail: React.ReactNode; soon?: boolean }[] = [
+	const cards: { title: string; body: React.ReactNode }[] = [
 		{
-			label: "Monthly Public Access",
-			detail: paying
-				? "Unlimited — watch as much as you like"
-				: `${FREE_PUBLIC_ACCESS_HOURS} hours a month`,
-		},
-		{
-			label: "Monthly Time Pool",
-			detail: paying ? (
+			title: "Public Access",
+			body: paying ? (
 				<>
-					<strong className="tabular-nums">{money(timePoolFor(amount))}</strong>, split among the
-					creators you spend time with
+					<strong>Unlimited.</strong> Every streaming Work a creator left open to everyone, with no
+					monthly limit.
 				</>
 			) : (
 				<>
-					<strong className="tabular-nums">{money(FREE_TIME_POOL)}</strong>, which Anthers pays on
-					your behalf
+					<strong>{FREE_PUBLIC_ACCESS_HOURS} hours a month</strong> of every streaming Work a
+					creator left open to everyone.
 				</>
 			),
 		},
 		{
-			label: "Monthly Sticker budget",
-			soon: true,
-			// ⚠️ "Held back from" rather than "on top of" — the Sticker budget is carved out
-			// of the Time Pool above it, and unspent budget rolls back in. Two figures that
-			// overlap have to say they overlap, or the row reads as money appearing twice.
-			detail: paying ? (
+			title: "Time Pool & Stickers",
+			// â ï¸ "Held back from" rather than "on top of" â the Sticker budget is carved out
+			// of the Time Pool beside it, and unspent budget rolls back in. Two figures that
+			// overlap have to say they overlap, or this reads as money appearing twice.
+			body: paying ? (
 				<>
-					<strong className="tabular-nums">{money(stickerBudgetFor(amount))}</strong>, held back
-					from your Time Pool to give directly
-				</>
-			) : (
-				dash
-			),
-		},
-		{
-			label: "Cloud storage",
-			soon: paying,
-			detail: paying ? (
-				<>
-					<strong className="tabular-nums">{storageGibFor(amount)} GiB</strong>, for your own files
-					or a catalog you publish
+					<strong className="tabular-nums">{money(timePoolFor(amount))} a month</strong> to the
+					creators you spend time with, of which{" "}
+					<strong className="tabular-nums">{money(stickerBudgetFor(amount))}</strong> is held back
+					for you to give as Stickers
+					<Soon />
 				</>
 			) : (
 				<>
-					<strong className="tabular-nums">{storageGibFor(0)} GiB</strong>, for a catalog you
-					publish
+					<strong className="tabular-nums">{money(FREE_TIME_POOL)} a month</strong> to the creators
+					you spend time with, which Anthers pays on your behalf.
 				</>
 			),
 		},
 		{
-			label: "Purchase preservation",
-			soon: paying,
-			detail: paying
-				? "Kept in your library for as long as you hold a Badge"
-				: `Kept in your library for ${WITHDRAWN_RESCUE_DAYS} days after a creator withdraws it`,
+			title: "Cloud Storage & Preservation",
+			body: paying ? (
+				<>
+					<strong className="tabular-nums">{storageGibFor(amount)} GiB</strong>
+					<Soon /> for your own files or a catalog you publish, and purchases stay in your library
+					for as long as you hold a Badge
+					<Soon />
+				</>
+			) : (
+				<>
+					<strong className="tabular-nums">{storageGibFor(0)} GiB</strong> for a catalog you
+					publish, and a withdrawn purchase stays in your library for{" "}
+					<strong className="tabular-nums">{WITHDRAWN_RESCUE_DAYS} days</strong>.
+				</>
+			),
 		},
 		{
-			label: "Merch discount",
-			soon: true,
-			detail: paying ? "A discount on merch anyone can buy" : dash,
-		},
-		{
-			label: "Our appreciation",
-			soon: true,
-			detail: paying ? "Listed on the Anthers supporters page" : dash,
+			title: "Merch & Recognition",
+			body: paying ? (
+				<>
+					A discount on merch anyone can buy
+					<Soon />, and a place on the Anthers supporters page
+					<Soon />.
+				</>
+			) : (
+				<span className="text-base-content/45">Both of these start at Root, the first rung.</span>
+			),
 		},
 	];
 
 	return (
-		<ul className="mx-auto mt-6 max-w-4xl divide-y divide-base-content/10 rounded-2xl border border-base-content/10 bg-base-200/40">
-			{rows.map((row) => (
-				<li key={row.label} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5">
-					<span className="text-sm font-semibold">
-						{row.label}
-						{row.soon && (
-							<span className="ml-2 rounded-full bg-base-content/10 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
-								Coming
-							</span>
-						)}
-					</span>
-					<span className="ml-auto text-sm text-base-content/65">{row.detail}</span>
+		<ul className="mx-auto mt-6 grid max-w-4xl gap-3 sm:grid-cols-2">
+			{cards.map((card) => (
+				<li
+					key={card.title}
+					className="rounded-2xl border border-base-content/10 bg-base-200/40 px-4 py-3.5"
+				>
+					<p className="text-sm font-semibold">{card.title}</p>
+					<p className="mt-1 text-sm leading-snug text-base-content/65">{card.body}</p>
 				</li>
 			))}
 		</ul>
@@ -2012,32 +2044,75 @@ export default function SubscribePage() {
 						    section's job is to explain what giving does, and it cannot do that with
 						    nothing selected. The echo below is what stays honest about the difference. */}
 						<BadgeOutcome amount={anthersAmount} />
-						{anthersAmount > 0 && (
-							<SeedBreakdown
-								segments={[
-									{
-										tone: "pool",
-										amount: timePoolFor(anthersAmount),
-										label: "To creators, through the Time Pool",
-										desc: "split by the share of your time each one earned",
-									},
-									{
-										tone: "mission",
-										amount:
-											anthersAmount - timePoolFor(anthersAmount) - cardFeeDisplay(anthersAmount),
-										label: "Free access & programs",
-										desc: "keeps other people's accounts free and funds Anthers' charitable programs",
-									},
-									{
-										tone: "pay",
-										amount: cardFeeDisplay(anthersAmount),
-										label: "Payments",
-										desc: "card & processing, at cost, paid to the processor",
-									},
-								]}
-								note={`${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`}
-							/>
-						)}
+						{/* 🚨 **Always rendered, including for Free** (Parker, 2026-08-24). It used to
+						    be hidden at $0, which made choosing Free shrink the page — and the
+						    background art is positioned against page height, so the whole backdrop
+						    jumped. A control whose job is comparison must not resize the thing it
+						    sits in when you use it.
+
+						    ⚠️ Free's segments describe money that is real but is not the reader's:
+						    Anthers funds a Time Pool pot on a free account's behalf, so creators are
+						    genuinely paid for that account's time. The bar draws that, and `total`
+						    is overridden to the $0 actually charged — see `SeedBreakdown`. */}
+						<SeedBreakdown
+							total={anthersAmount > 0 ? undefined : 0}
+							segments={
+								anthersAmount > 0
+									? [
+											{
+												tone: "pool",
+												amount: timePoolFor(anthersAmount),
+												label: "To creators, through the Time Pool",
+												desc: "split by the share of your time each one earned",
+											},
+											{
+												tone: "mission",
+												amount:
+													anthersAmount -
+													timePoolFor(anthersAmount) -
+													cardFeeDisplay(anthersAmount),
+												label: "Free access & programs",
+												desc: "keeps other people's accounts free and funds Anthers' charitable programs",
+											},
+											{
+												tone: "pay",
+												amount: cardFeeDisplay(anthersAmount),
+												label: "Payments",
+												desc: "card & processing, at cost, paid to the processor",
+											},
+										]
+									: [
+											// ⚠️ The SAME three lines as a paid rung, so the two states are
+											// directly comparable and the section keeps one height. The zeroes
+											// are true — a free account contributes nothing to the remainder and
+											// there is no card to process — and only the Time Pool is nonzero,
+											// because Anthers funds that pot rather than the account.
+											{
+												tone: "pool",
+												amount: FREE_TIME_POOL,
+												label: "To creators, through the Time Pool",
+												desc: "split by the share of your time each one earned — funded by Anthers, not by you",
+											},
+											{
+												tone: "mission",
+												amount: 0,
+												label: "Free access & programs",
+												desc: "funded by the rungs above, which is what pays for your account",
+											},
+											{
+												tone: "pay",
+												amount: 0,
+												label: "Payments",
+												desc: "no card, so nothing to process",
+											},
+										]
+							}
+							note={
+								anthersAmount > 0
+									? `${money(PUBLIC_ACCESS_PRICE)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`
+									: `A free account is charged nothing, and the creators you spend time with are still paid: Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool on your behalf, out of what the rungs above pay in.`
+							}
+						/>
 						<SectionEcho
 							lines={anthersLines}
 							onDrop={dropPick}
