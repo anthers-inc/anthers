@@ -72,9 +72,6 @@
 // as of 2026-08-12 and are now read rather than typed.
 //
 // What is wired to real data, and what is not:
-//   • The reel is REAL — `GET /api/content/open-works` returns released, streamable Works
-//     that are free to everyone. That predicate holds under both the current model and the
-//     proposal, so the endpoint needed no opinion about which gate kinds exist.
 //   • The creator finder is REAL — `GET /api/accounts/creators`, whose `mediums` come from
 //     what each creator has actually released rather than anything they declare.
 //   • Support for ANTHERS commits for real, through the same preview + modal ceremony the
@@ -156,17 +153,6 @@ const PICKS_KEY = "anthers_subscribe_picks";
 /** The marketing display face, as the other marketing pages set it. */
 const serif = { fontFamily: FONTS.fraunces };
 
-interface OpenWork {
-	publicId: number;
-	slug: string;
-	title: string | null;
-	type: string;
-	thumbnail: string | null;
-	durationSeconds: number | null;
-	estimatedReadMinutes: number | null;
-	creator: { username: string; displayName: string | null };
-}
-
 interface Picks {
 	/** null = unanswered, which is not the same as "no" and must not render as a choice. */
 	anthers: boolean | null;
@@ -217,59 +203,6 @@ function initialsOf(name: string): string {
 /** A creator's display name, falling back to the handle that always exists. */
 function nameOf(creator: PublicUser): string {
 	return creator.displayName || creator.username;
-}
-
-/** How long a Work takes, in the unit its own medium is measured in. */
-function runtimeOf(work: OpenWork): string {
-	if (work.estimatedReadMinutes) return `${work.estimatedReadMinutes} min read`;
-	if (work.durationSeconds) {
-		const mins = Math.round(work.durationSeconds / 60);
-		if (mins < 60) return `${mins} min`;
-		return `${Math.floor(mins / 60)} hr ${String(mins % 60).padStart(2, "0")}`;
-	}
-	if (work.type === "game" || work.type === "software") return "Play in your browser";
-	return "Free to everyone";
-}
-
-/* ── Small pieces ───────────────────────────────────────────────────────────── */
-
-/** A drawn medium mark — the reel's fallback when a Work carries no thumbnail. */
-function MediumGlyph({ type, className }: { type: string; className?: string }) {
-	const paths: Record<string, React.ReactNode> = {
-		game: (
-			<>
-				<rect x="6" y="16" width="36" height="20" rx="8" />
-				<path d="M15 26h6M18 23v6M30 25h.01M34 29h.01" />
-			</>
-		),
-		video: (
-			<>
-				<rect x="7" y="13" width="24" height="22" rx="4" />
-				<path d="M31 22l10-6v16l-10-6z" />
-			</>
-		),
-		audio: <path d="M11 24v4M18 18v16M25 12v24M32 19v14M39 23v6" />,
-		text: (
-			<>
-				<path d="M13 12h22v24H13z" />
-				<path d="M18 20h12M18 26h12M18 32h7" />
-			</>
-		),
-	};
-	return (
-		<svg
-			viewBox="0 0 48 48"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2.4"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			className={className}
-			aria-hidden="true"
-		>
-			{paths[type] ?? paths.text}
-		</svg>
-	);
 }
 
 /** The step marker — numbered because the page really is a sequence. */
@@ -416,111 +349,6 @@ function Ask({
 				>
 					{noLabel}
 				</button>
-			</div>
-		</div>
-	);
-}
-
-/* ── Step 1 · the reel ──────────────────────────────────────────────────────── */
-
-/**
- * A thin row of work anyone can open.
- *
- * One row rather than a grid, deliberately: it is proof that the commons exists, not a
- * browsing surface, and a handful of cards on a scrollable row reads as a selection at
- * any catalog size — which matters most at launch, when there won't be many.
- */
-function OpenWorksReel() {
-	const [works, setWorks] = useState<OpenWork[] | null>(null);
-	const scroller = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		let live = true;
-		client.api.content["open-works"]
-			.$get({ query: { limit: "12" } })
-			.then((res) => (res.ok ? res.json() : { works: [] }))
-			.then((data) => {
-				if (live) setWorks((data as { works: OpenWork[] }).works);
-			})
-			.catch(() => {
-				if (live) setWorks([]);
-			});
-		return () => {
-			live = false;
-		};
-	}, []);
-
-	// Nothing to prove the commons with yet — say nothing rather than show an empty shelf.
-	if (works !== null && works.length === 0) return null;
-
-	const nudge = (dir: number) =>
-		scroller.current?.scrollBy({ left: dir * 210, behavior: "smooth" });
-
-	return (
-		<div className="mt-8">
-			<div className="mb-3 flex items-center justify-between gap-4">
-				<p className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
-					Open to everyone right now
-				</p>
-				{works && works.length > 2 && (
-					<div className="flex gap-2">
-						<button
-							type="button"
-							className="btn btn-circle btn-outline btn-xs"
-							onClick={() => nudge(-1)}
-							aria-label="Scroll back"
-						>
-							←
-						</button>
-						<button
-							type="button"
-							className="btn btn-circle btn-outline btn-xs"
-							onClick={() => nudge(1)}
-							aria-label="Scroll forward"
-						>
-							→
-						</button>
-					</div>
-				)}
-			</div>
-			<div ref={scroller} className="flex snap-x gap-3 overflow-x-auto pb-2">
-				{works === null
-					? // Placeholders hold the row's height while it loads, so nothing jumps.
-						Array.from({ length: 4 }, (_, i) => (
-							<div
-								key={`skeleton-${i}`}
-								className="h-[10.5rem] w-[11.5rem] shrink-0 animate-pulse rounded-xl bg-base-200"
-							/>
-						))
-					: works.map((work) => (
-							<Link
-								key={work.publicId}
-								to={`/works/${work.slug}-${work.publicId}`}
-								className="w-[11.5rem] shrink-0 snap-start overflow-hidden rounded-xl border border-base-content/10 bg-base-100 transition-shadow hover:shadow-md"
-							>
-								<div className="grid aspect-video place-items-center bg-base-200 text-primary">
-									{work.thumbnail ? (
-										<img
-											src={work.thumbnail}
-											alt=""
-											className="h-full w-full object-cover"
-											loading="lazy"
-										/>
-									) : (
-										<MediumGlyph type={work.type} className="h-9 w-9 opacity-80" />
-									)}
-								</div>
-								<div className="p-2.5">
-									<p className="line-clamp-2 text-sm font-semibold leading-snug">
-										{work.title || "Untitled"}
-									</p>
-									<p className="mt-0.5 truncate text-xs text-base-content/45">
-										{work.creator.displayName || work.creator.username}
-									</p>
-									<p className="mt-1.5 text-[11px] text-base-content/55">{runtimeOf(work)}</p>
-								</div>
-							</Link>
-						))}
 			</div>
 		</div>
 	);
@@ -1024,11 +852,17 @@ function SignupForm({
 	 * not (its botanical flourishes reach about seven rems in from each corner, which is
 	 * why the modal exists at all and why `/login` keeps it).
 	 *
-	 * ⚠️ **The three promises moved here with the field, and they are the load-bearing part.**
-	 * The round trip goes to somebody else's website, asks it for an email address, and
-	 * comes back still owing a name and the terms. Every one of those is cheaper to learn
-	 * here than from a consent screen mid-flow — and inlining actually improves on the
-	 * modal, because a reader now meets them without pressing anything at all.
+	 * ⚠️ **The panel is a field and a button, and nothing else** (Parker, 2026-08-24). It
+	 * carried a paragraph explaining the round trip, which made the Bluesky tab twice the
+	 * height of the email one — so switching tabs resized the card under the reader. What
+	 * survives of that explanation is the one-line `note` below the button.
+	 *
+	 * 🚨 **One of the three promises survives, and it is in the `note` under the button.**
+	 * `transition:email` is a real consent screen on somebody else's website, so the warning
+	 * that Bluesky will be asked for an email address had to land somewhere — folding it
+	 * into a line that already existed keeps it without giving the panel back its height.
+	 * The other two are covered a moment later: `/welcome` takes the name and the terms, and
+	 * the emailed code speaks for itself when it arrives.
 	 */
 	const blueskyPanel = tabbed && door === "bluesky" && onBluesky && (
 		<form
@@ -1038,12 +872,7 @@ function SignupForm({
 				onBluesky(handle);
 			}}
 		>
-			<p className="text-sm leading-relaxed text-base-content/65">
-				We&rsquo;ll send you to Bluesky to confirm it&rsquo;s you, and ask it for your email address
-				to save you typing it. Anthers confirms that address with its own code — then you&rsquo;ll
-				pick a name and agree to the terms.
-			</p>
-			<label className="label px-0 pt-4 pb-1" htmlFor={handleFieldId}>
+			<label className="label px-0 pb-1" htmlFor={handleFieldId}>
 				<span className="text-sm font-semibold">What&rsquo;s your handle?</span>
 			</label>
 			{/* A handle is a domain name, so this is `text` with a URL keyboard rather than an
@@ -1730,12 +1559,15 @@ export default function SubscribePage() {
 			? "You'll see the exact charge before anything is confirmed. Change or stop any month."
 			: total > 0
 				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
-				: // ⚠️ The Bluesky panel has already said Anthers sends a code of its own, and
-					// there is no address on screen for "the address" to refer to — so the note
-					// drops that half rather than repeating it about a field nobody can see.
+				: // 🚨 **The Bluesky note is the ONLY warning that the round trip asks for an email
+					// address**, since the panel above it became a field and a button and nothing
+					// else. `transition:email` is a real consent screen on somebody else's website,
+					// and meeting it unannounced is how a signup gets abandoned at the last step —
+					// so the note carries that rather than narrating the redirect, which the button
+					// it sits under already names. `subscribe-bluesky.e2e.ts` pins the sentence.
 					door === "bluesky"
-					? "A card is only needed if you choose to support someone."
-					: "We'll email you a code to confirm the address. A card is only needed if you choose to support someone.",
+					? "Bluesky will ask to share your email address."
+					: "We'll email you a code to confirm your address.",
 		onSubmit: submit,
 		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
@@ -1807,8 +1639,6 @@ export default function SubscribePage() {
 								<SignupForm idPrefix="top" {...signupProps} />
 							</div>
 						</div>
-
-						<OpenWorksReel />
 
 						{/* What support is, as the tail of "it's free" rather than as its own step: the
 						    primitive is one sentence, and giving it a numbered step of its own made the

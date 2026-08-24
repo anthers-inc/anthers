@@ -14,15 +14,19 @@
  * `atproto-signup.test.ts`, where the PDS can be made to answer four different ways.
  *
  * What is pinned here is the promise made *before* anyone leaves: that this door creates
- * an account, that it is about to ask Bluesky for an email address, and that a name and
- * the terms come afterwards. All three are things to learn before a consent screen appears
- * rather than from it.
+ * an account, and that it is about to ask Bluesky for an email address. Both are things to
+ * learn before a consent screen appears rather than from it.
  *
  * ⭐ **The handle is collected on the card itself since 2026-08-24**, where it used to open
  * `BlueskyHandleModal` — two presses and a layer for one short field. `/login` still uses
- * the modal, because its card has flourishes an inline field cannot clear. The promises
- * above moved onto the panel with the field, so they are now visible without pressing
- * anything, and the tests below read them there.
+ * the modal, because its card has flourishes an inline field cannot clear.
+ *
+ * ⚠️ **The panel then lost its explanatory paragraph the same day**, because it made the
+ * Bluesky tab twice the height of the email one and switching tabs resized the card under
+ * the reader. Two of the three promises it carried are said again by the flow itself
+ * (`/welcome` takes the name and the terms; the emailed code arrives and explains itself),
+ * so only the email-scope warning needed rehoming — it is in the note under the button now,
+ * and it is the one assertion below that is about wording rather than structure.
  */
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
@@ -116,31 +120,28 @@ test.describe("signing up with Bluesky", () => {
 		expect(payload).toMatchObject({ handle: "alice.bsky.social", intent: "signup" });
 	});
 
-	test("it says what it will ask Bluesky for, and what comes after", async ({ page }) => {
+	test("it warns that Bluesky will be asked for an email address", async ({ page }) => {
 		await page.goto("/subscribe");
 		await openBlueskyDoor(page);
 
-		// ⭐ No press needed any more. These moved out of the modal and onto the panel with
-		// the field, so a reader meets all three before touching anything — which is the
-		// point of saying them at all.
+		// ⭐ No press needed. This lives on the panel rather than behind the button, so a
+		// reader meets it before touching anything — which is the point of saying it at all.
 		//
 		// ⚠️ **Scoped to the top card, where the modal made scoping unnecessary.** The page
 		// renders two signup cards sharing one `door`, so choosing Bluesky renders this copy
 		// TWICE and an unscoped `getByText` is a strict-mode violation. Naming the card is
 		// the fix rather than `.first()`, whose answer changes if the page is reordered.
-		const panel = topSignup(page);
-		// 🚨 The email ask is the part worth pinning. `transition:email` is a real consent
-		// screen on somebody else's website, and meeting it unannounced is how a signup gets
-		// abandoned at the last step.
-		await expect(panel.getByText(/ask it for your email address/i)).toBeVisible();
-		// 🚨 And that Anthers confirms it regardless. A PDS calling an address confirmed is
-		// somebody else's assertion; the code is ours. Copy implying otherwise would describe
-		// a shortcut this flow deliberately does not take.
-		await expect(panel.getByText(/confirms that address with its own code/i)).toBeVisible();
-		// ⚠️ Matched without the ordering word. This read `.../terms after/` and broke when
-		// the sentence was rephrased to put "then" at the front — same promise, different
-		// word order. What matters is that a name and the terms are named as still to come.
-		await expect(panel.getByText(/pick a name and agree to the terms/i)).toBeVisible();
+		//
+		// 🚨 **This is the LAST of three promises the panel used to carry, and the only one
+		// that has nowhere else to be said** (2026-08-24). The panel was cut to a field and
+		// a button, because a paragraph made the Bluesky tab twice the height of the email
+		// one and switching tabs resized the card. The other two survived the cut because
+		// the flow says them anyway a moment later: `/welcome` takes the name and the terms,
+		// and the emailed code speaks for itself on arrival. This one does not — the next
+		// thing that mentions the email scope is `transition:email`'s own consent screen, on
+		// somebody else's website, mid-flow. That is the moment this sentence exists to
+		// pre-empt, so it is pinned even though the copy around it is free to move.
+		await expect(topSignup(page).getByText(/ask to share your email address/i)).toBeVisible();
 	});
 
 	test("this door says it creates an account, where the login one says it cannot", async ({
