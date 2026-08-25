@@ -413,7 +413,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		.join(", ")
 		.concat(", trailing off beyond that");
 	return [
-		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidised Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
+		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidized Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
 		"",
 		table(
 			["Paying share", "Net per paying user", "Self-funding at", "Full-time at"],
@@ -461,7 +461,7 @@ function renderTakeHomeMarkdown(): string {
 			]),
 		),
 		"",
-		`Every column is **all-in take-home at the same list price** — each rival's figure includes the same ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} card cost we itemise, because every platform pays it. Comparing our all-in against a competitor's headline cut would flatter us exactly where a creator would check.`,
+		`Every column is **all-in take-home at the same list price** — each rival's figure includes the same ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)} card cost we itemize, because every platform pays it. Comparing our all-in against a competitor's headline cut would flatter us exactly where a creator would check.`,
 		"",
 		`**The bold cell is the best row, and it is computed rather than chosen.** Steam returns more than us at $${rows[0].price}: their ${(RIVAL_STOREFRONTS[0].share * 100).toFixed(0)}% of a small sale is less than the flat card fee they absorb, so a percentage model beats a flat-fee model at the very bottom. Conceding that is what makes the rest of the table believable, and generating it means we cannot quietly stop conceding it when a dial moves.`,
 		"",
@@ -589,13 +589,13 @@ function renderEdBandMarkdown(): string {
 function renderCreatorSegmentsMarkdown(): string {
 	const s = creatorSegments();
 	return [
-		`The modelled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by what they give, so a per-hour rate is an emergent ratio nobody is paid at.`,
+		`The modeled creator population at rung 10's ceiling — ${s.accounts.toLocaleString("en-US")} accounts, ${s.creators.toLocaleString("en-US")} creators. **Attention share** is what divides the Time Pool: not hours, because with unlimited Public Access a viewer's hours are a free variable while their contribution is fixed by what they give, so a per-hour rate is an emergent ratio nobody is paid at.`,
 		"",
 		table(
-			["Segment", "Creators", "Attention", "Catalogue", "Time Pool /mo", "Storage /mo", "Net /mo"],
+			["Segment", "Creators", "Attention", "Catalog", "Time Pool /mo", "Storage /mo", "Net /mo"],
 			[":--", "--:", "--:", "--:", "--:", "--:", "--:"],
 			s.rows.map((r) => [
-				r.free ? `${r.name} *(subsidised)*` : r.name,
+				r.free ? `${r.name} *(subsidized)*` : r.name,
 				r.count.toLocaleString("en-US"),
 				r.attentionPct,
 				`${r.storageGiB} GiB`,
@@ -614,7 +614,7 @@ function renderPaCeilingMarkdown(): string {
 	return [
 		`Public Access content never counts against a creator's storage, so Anthers carries it — the first creator incentive. Incentives are held under **one aggregate budget line, ${c.ceilingPct} of charitable revenue**, because individually healthy incentives can still sum to a cost problem.`,
 		"",
-		`Priced at the **worst case** — every creator giving their whole catalogue to the commons — the exemption costs **${c.atScalePct}** of charitable revenue at scale, and ${c.allFit ? "fits inside the ceiling at every rung" : "**exceeds the ceiling at some rung**"}.`,
+		`Priced at the **worst case** — every creator giving their whole catalog to the commons — the exemption costs **${c.atScalePct}** of charitable revenue at scale, and ${c.allFit ? "fits inside the ceiling at every rung" : "**exceeds the ceiling at some rung**"}.`,
 		"",
 		`⚠️ **The worst case is rung ${c.worstPhase}, at ${c.worstPct}, and that is the opposite of the intuition.** The cost is driven by creators *per account*, and the flat ${CREATOR_FLOOR}-creator floor makes the smallest rung the most creator-dense the platform will ever be — ${CREATOR_FLOOR} creators against ${PHASE_ACCOUNTS[0]} accounts, where the ratio alone would allow one. So the exemption very nearly touches its ceiling at rung ${c.worstPhase} and is negligible everywhere above. **Raising the flat creator floor raises this**, which is a live constraint on that open call.`,
 	].join("\n");
@@ -644,7 +644,7 @@ function renderFreePotMarkdown(): string {
 			]),
 		),
 		"",
-		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioural guess underneath it. Raising it sends more money to the creators a free viewer spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
+		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioral guess underneath it. Raising it sends more money to the creators a free viewer spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
 	].join("\n");
 }
 

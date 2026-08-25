@@ -545,7 +545,7 @@ export function salaryLandmarks(): Landmark[] {
 		{
 			label: "Full-time salary — solvent",
 			accounts: crossover((m) => m.solvent, { payingShare: share, staffing: full }),
-			note: "affordable, but at an Admin ratio no 990 should carry — not a licence to draw it",
+			note: "affordable, but at an Admin ratio no 990 should carry — not a license to draw it",
 		},
 		{
 			label: "🚩 Inflection 1 — full-time, charity-healthy",
@@ -555,7 +555,7 @@ export function salaryLandmarks(): Landmark[] {
 		{
 			label: "🚩 Inflection 2 — a first hire, charity-healthy",
 			accounts: crossover(affordable, { payingShare: share, staffing: hire }),
-			note: "a full-time ED plus one hire; the organisation exists",
+			note: "a full-time ED plus one hire; the organization exists",
 		},
 	];
 }
