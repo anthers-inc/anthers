@@ -152,6 +152,38 @@ test.describe("/subscribe leads with the free door", () => {
 		}
 	});
 
+	test("the perk matrix scrolls itself sideways, and never the page", async ({ page }) => {
+		// 🚨 **A comparison of five rungs cannot fit a phone, so the matrix has a `min-w` and
+		// scrolls inside its own box.** The failure mode is that the min-width escapes the
+		// box and pushes the DOCUMENT wide instead — every section on the page then slides
+		// under a horizontal scrollbar, which is far worse than the thing being fixed.
+		//
+		// ⚠️ It escaped exactly that way on the first build, and for a reason no amount of
+		// staring at the flex chain would have found: the matrix is wrapped in a `<fieldset>`
+		// so the radio group keeps its legend, and the UA stylesheet gives a fieldset
+		// `min-inline-size: min-content` — so it refused to shrink and the scroll container
+		// inside it was never narrower than the table.
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto("/subscribe");
+
+		const scroller = page.locator("#anthers-badges .overflow-x-auto");
+		await expect(scroller).toBeVisible();
+
+		// The table really is wider than the phone — otherwise this test proves nothing,
+		// because a matrix that happens to fit would pass it without any of the above.
+		const [scrollWidth, clientWidth] = await scroller.evaluate((el) => [
+			el.scrollWidth,
+			el.clientWidth,
+		]);
+		expect(scrollWidth).toBeGreaterThan(clientWidth);
+
+		// And the document is not the thing scrolling.
+		const documentOverflows = await page.evaluate(
+			() => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+		);
+		expect(documentOverflows).toBe(false);
+	});
+
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
 		await page.goto("/subscribe");
 

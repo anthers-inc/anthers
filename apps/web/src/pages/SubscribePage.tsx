@@ -491,23 +491,151 @@ function SegmentLegendRow({ segment }: { segment: Segment }) {
 /* ── Step 3 · Anthers' own ladder ───────────────────────────────────────────── */
 
 /**
- * Anthers' Badges, as five things to choose between rather than one thing to accept.
+ * Every rung's amount, in ladder order — Free's $0 included, since it is a rung here.
  *
- * 🚨 **Free is a rung on this control, and that is the whole reason it is a ladder and
- * not a price list.** The section it lives in must never read as the price of admission —
- * somebody served entirely by purchases, by backing creators, and by the free hours is
- * using Anthers exactly as intended. Putting Free first, priced and selectable, makes
- * declining a *choice you make here* rather than the absence of one.
- *
- * ⚠️ **Real `<input type="radio">` behind the cards, not buttons wearing `role="radio"`.**
- * A native group gives arrow-key navigation and one tab stop for the whole set, which a
- * pile of buttons does not — and `useSemanticElements` is right to ask for it. The cost is
- * that a native radio cannot be un-checked by clicking it again, so once somebody has
- * chosen there is no way back to unanswered. That is the correct trade: `null` and `0`
- * still differ, and the state a person can no longer reach is the one meaning "hasn't
- * looked", which stops being true the moment they press anything.
+ * 🚨 Derived from `BADGE_ORDER`, never written out. A rung added to `ANTHERS_BADGES` has to
+ * grow the matrix a column and the echo a sizer without being told twice.
  */
-function BadgeChooser({
+const RUNG_AMOUNTS = BADGE_ORDER.map(thresholdForBadge);
+
+/** What a cell says when the rung does not carry the perk at all. */
+const NOT_CARRIED = "—";
+
+/**
+ * A money figure for a matrix COLUMN, where `amountLabel`'s dropped `.00` is wrong.
+ *
+ * ⚠️ `amountLabel` is right in prose — *"just $3"* — and wrong stacked in a column: a Time
+ * Pool row reading `$0.25 · $1.50 · $3 · $4.50 · $6` does not scan as one series, and
+ * `tabular-nums` cannot align figures that are not the same shape. 20.06's own table writes
+ * `$3.00`. Prices in the header still use `amountLabel`, because those are prose.
+ */
+const columnMoney = (amount: number) => `$${amount.toFixed(2)}`;
+
+/**
+ * The confirmed perk set from 20.06 § Currently Confirmed Perks, one row per perk.
+ *
+ * 🚨 **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
+ * table are the same numbers as the sections they summarise, and neither may be edited
+ * without the other. So the Sticker budget and the storage floor have real functions in
+ * `constants.ts` — `stickerBudgetFor` and `storageGibFor` — rather than being read off the
+ * table, and `econ:figures` fails the build on a figure typed into a page.
+ *
+ * ⚠️ **The Sticker denominations are deliberately not here.** 20.06 sets them at three
+ * values and no constant carries them, so writing them into this copy would be the typed
+ * figure the scan exists to catch. The budget is shown; what it buys can be said once
+ * Stickers have a primitive to attach to.
+ */
+const PERK_ROWS: { title: string; desc: string; cell: (amount: number) => string }[] = [
+	{
+		title: "Monthly Public Access",
+		desc: "Streaming Works a creator has left open to everyone, rather than gated behind their own Badges or sold directly.",
+		cell: (amount) => (amount > 0 ? "Unlimited" : `${FREE_PUBLIC_ACCESS_HOURS} hours`),
+	},
+	{
+		title: "Monthly Time Pool",
+		// ⚠️ The second sentence is not decoration. A free account's pot is real money that
+		// creators are really paid, and it is Anthers that pays it — a column reading "$0.25"
+		// with no more said implies the free account is being charged a quarter.
+		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. Anthers funds a free account's pot rather than the account paying for it.",
+		cell: (amount) => columnMoney(timePoolFor(amount)),
+	},
+	{
+		title: "Monthly Sticker Budget",
+		// ⚠️ "Held back from" rather than "on top of" — the budget is carved out of the Time
+		// Pool in the row above, and what goes unspent returns to it. Two figures that
+		// overlap have to say they overlap, or the matrix reads as money appearing twice.
+		desc: "Held back from the Time Pool for you to attach to a like or a comment. Anything you don't spend goes back into the pool at the end of the month.",
+		cell: (amount) =>
+			stickerBudgetFor(amount) > 0 ? columnMoney(stickerBudgetFor(amount)) : NOT_CARRIED,
+	},
+	{
+		title: "Cloud Content Storage",
+		// ⚠️ Free's 50 GiB and Root's 50 GiB are the same number and not the same perk: at
+		// Free it holds a published catalog and nothing else, so an account that has never
+		// published has no storage at all until Root. A column of figures cannot say that,
+		// which is why the row says it.
+		desc: "Free storage for a catalog you publish. From Root the same space also holds your own files — cloud saves, and purchases you have kept.",
+		cell: (amount) => `${storageGibFor(amount)} GiB`,
+	},
+	{
+		title: "Purchase Preservation",
+		desc: "A Work you bought that its creator later withdrew stays in your library to download. After that, keeping a copy is yours to do.",
+		cell: (amount) => (amount > 0 ? "While Badged" : `${WITHDRAWN_RESCUE_DAYS} days`),
+	},
+	{
+		title: "Merch Discount",
+		// 20.06 leaves the size of the discount undecided, so the cell says that it exists
+		// and no more. A percentage invented here would be a figure with no source.
+		desc: "A discount on merch anyone can buy from the Anthers shop, where the net revenue funds Anthers' charitable programs.",
+		cell: (amount) => (amount > 0 ? "Yes" : NOT_CARRIED),
+	},
+	{
+		title: "Our Appreciation",
+		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers.",
+		cell: (amount) => (amount > 0 ? "Yes" : NOT_CARRIED),
+	},
+];
+
+/**
+ * Every rung's column border, drawn in `transparent` when the column is not the chosen one.
+ *
+ * 🚨 **The border exists in both states and only changes colour.** A border that appears on
+ * selection adds 2px to a cell and re-lays the table out, which is the page-moves-under-the
+ * -control defect this section has already been fixed for twice. Same reason the header
+ * carries its top border unlit.
+ */
+const COLUMN_EDGE = "border-x border-transparent";
+
+/**
+ * The row-label column, pinned while the matrix is scrolling sideways.
+ *
+ * 🚨 **Without this, a phone scrolls the labels off and the values mean nothing.** At 390px
+ * the second column is already past the right edge, so reaching Sprout takes the row labels
+ * with it and leaves a grid of figures cut off mid-word — *"pen"*, *"me each"*. The whole
+ * point of a matrix is reading a value against its row.
+ *
+ * ⚠️ **The opaque background and the pin both stop at 784px, which is where the table stops
+ * scrolling** — `min-w-[46rem]` (736px) plus the page's `px-6` on both sides (48px). Above
+ * that the table fits, nothing slides under this column, and a solid `bg-base-100` panel
+ * would only sit on top of the decor drifting behind the page for no reason. 🚨 Change the
+ * table's `min-w` or the page's padding and this number is wrong.
+ */
+const STUCK_LABEL =
+	"sticky left-0 z-10 bg-base-100 border-r border-base-content/10 min-[784px]:static min-[784px]:z-auto min-[784px]:bg-transparent min-[784px]:border-r-0";
+
+/**
+ * What every rung carries, all of it visible at once, chosen by its own column header.
+ *
+ * 🚨 **A matrix rather than a panel that swaps** (Parker, 2026-08-24). Showing one rung's
+ * perks at a time made the section a thing you operate in order to learn what you are
+ * choosing between; a reader deciding between Sprout and Petal had to press each one and
+ * hold the difference in their head. It also made the page grow and shrink under the
+ * control being pressed, which took three sets of invisible sizers to hold still. A matrix
+ * has one height because it always says everything, which is the better fix for both.
+ *
+ * 🚨 **The header IS the chooser** (Parker, 2026-08-24). A separate row of Badge cards
+ * above the table put the five names, prices and marks on the screen twice, a hundred
+ * pixels apart, and the second copy was not a control. Now the card sits on top of the
+ * column it describes, and choosing it lights everything underneath.
+ *
+ * ⚠️ **Real `<input type="radio">` inside the header cells, not `<th>`s wearing
+ * `role="radio"`.** A native group gives arrow-key navigation and one tab stop for the
+ * whole set, which a pile of buttons does not. The `<fieldset>` and its `<legend>` come
+ * with the control rather than with the old card row: a radio group is grouped by `name`,
+ * but it is *named* by the legend, and a table caption does not do that job. The cost is
+ * that a native radio cannot be un-checked, so once somebody has chosen there is no way
+ * back to unanswered — the correct trade, since the state they can no longer reach is the
+ * one meaning "hasn't looked", which stops being true the moment they press anything.
+ *
+ * ⚠️ **Nothing is lit until a rung is actually chosen.** The breakdown below previews the
+ * first rung when nobody has answered, because a bar cannot draw "no answer" — this can,
+ * and a lit column is a claim about what somebody has picked.
+ *
+ * ⚠️ **The COMING pills are gone** (Parker, 2026-08-24): most of this is designed rather
+ * than built today, and all of it is meant to be built before the page is public. The
+ * ledger of what exists is `constants.ts` and 20.06, not a badge on a marketing table.
+ */
+function BadgeMatrix({
 	value,
 	onChange,
 	idPrefix,
@@ -518,226 +646,146 @@ function BadgeChooser({
 	idPrefix: string;
 }) {
 	return (
-		<fieldset className="mx-auto mt-8 grid max-w-4xl grid-cols-2 gap-2.5 sm:grid-cols-5">
+		// 🚨 `min-w-0` is load-bearing, and it is a `<fieldset>` quirk rather than a flex one.
+		// The UA stylesheet gives a fieldset `min-inline-size: min-content`, so it refuses to
+		// shrink below the widest thing inside it — and the widest thing inside this one is a
+		// table with a `min-w` on it. Without this, the `overflow-x-auto` below never gets
+		// narrow enough to scroll, and **the whole page** scrolls sideways at 390px instead.
+		<fieldset className="mx-auto mt-8 min-w-0 max-w-7xl">
 			<legend className="sr-only">What to give Anthers each month</legend>
-			{/* 🚨 Driven off `BADGE_ORDER` and `thresholdForBadge`, never a literal ladder.
-			    A Badge is identified by its threshold and never by its position — see the
-			    note on `BADGE_ORDER` about the `indexOf` that looked right for years. */}
-			{BADGE_ORDER.map((key) => {
-				const amount = thresholdForBadge(key);
-				const active = value === amount;
-				return (
-					// ⚠️ `justify-center` on a flex column is what lets Free sit centred without
-					// a spacer standing in for art it does not have. Grid items stretch to the
-					// row's height, so every card is already the same height — centring the
-					// content means the badged cards look exactly as they did and the badgeless
-					// one stops reading as a card whose picture failed to load.
-					<label
-						key={key}
-						className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border px-3 py-4 text-center transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
-							active
-								? "border-primary/50 bg-primary/10"
-								: "border-base-content/10 bg-base-200/50 hover:border-base-content/25"
-						}`}
-					>
-						<input
-							type="radio"
-							name={`${idPrefix}-anthers-badge`}
-							className="sr-only"
-							checked={active}
-							onChange={() => onChange(amount)}
-						/>
-						{/* The Badge art, drawn as `/for-users` draws it: the frame behind, the
-						    emoji centred inside. Selecting a rung brightens the frame — the emoji
-						    is full-colour artwork and is left alone in both states.
+			{/* `min-w` rather than a mobile-only stacked layout: a comparison that cannot be
+			    compared at once is not a comparison, so on a narrow screen this scrolls
+			    sideways instead of becoming five lists.
 
-						    🚨 **Free gets no mark, because a mark IS a Badge and Free is the
-						    absence of one** (Parker, 2026-08-24) — not a Badge worth $0. It gets
-						    no reserved box either: an empty slot read as misalignment rather than
-						    as absence. `BADGE_ART` is keyed by `Badge` rather than `BadgeKey`, so
-						    dropping this branch is now a type error rather than a quiet acorn. */}
-						{key !== "free" && (
-							<span className="relative mb-2 flex h-16 w-16 items-center justify-center">
-								<BrandGlyph
-									name={BADGE_ART[key].wreath}
-									className={`absolute inset-0 h-full w-full ${active ? "text-primary/70" : "text-primary/30"}`}
-								/>
-								<span aria-hidden="true" className="text-2xl">
-									{BADGE_ART[key].emoji}
-								</span>
-							</span>
-						)}
-						<span style={serif} className="block text-base font-medium">
-							{key === "free" ? "Free" : badgeLabel(key)}
-						</span>
-						<span className="mt-0.5 block text-sm tabular-nums text-base-content/60">
-							{amount === 0 ? "$0" : `${money(amount)}/mo`}
-						</span>
-					</label>
-				);
-			})}
-		</fieldset>
-	);
-}
-
-/**
- * What the chosen rung carries — the confirmed perk set from 20.06, in four groups.
- *
- * 🚨 **This replaced three rows that restated the breakdown bar below them** (Parker,
- * 2026-08-24). Time Pool, remainder and Payments are the bar's own segments; printing them
- * again above it as a "comparison" compared nothing. What a reader wants here is what the
- * rung *carries*, which is a different list and lives in 20.06 § Currently Confirmed Perks.
- *
- * ⚠️ **Seven rows became four cards on a two-column grid**, because seven full-width rows
- * put a short label on the left and a short value on the right with a hand's width of
- * nothing between them, and cost more vertical space than the section it introduces. The
- * groupings are Parker's: money-to-creators together, storage-and-what-it-keeps together,
- * and the two recognition perks together.
- *
- * ⚠️ **Every figure is derived, and 20.06 says so in as many words**: the numbers in that
- * table are the same numbers as the sections they summarise, and neither may be edited
- * without the other. So the Sticker budget and the storage floor got real functions in
- * `constants.ts` rather than being read off the table — `stickerBudgetFor` and
- * `storageGibFor` — and a rung added to `ANTHERS_BADGES` moves this panel on its own.
- *
- * 🚨 **Most of this is DESIGNED, NOT BUILT, and the marker sits on the CLAUSE rather than
- * the card.** Grouping put built and unbuilt things side by side — the Time Pool ships and
- * Stickers have no like primitive to attach to; the free storage floor ships and its
- * per-rung scaling does not; the uniform `WITHDRAWN_RESCUE_DAYS` window ships and holding a
- * purchase for as long as you hold a Badge does not. A card-level marker would either
- * overclaim or underclaim, so each unbuilt phrase carries its own.
- *
- * 🚨 **Each body is a function of the amount, and every rung's is rendered — one visible,
- * the rest as invisible sizers stacked in the same grid cell** (Parker, 2026-08-24). The
- * cards said different things at different lengths, so Free's second row was one line
- * where a paid rung's was two, and choosing a rung grew the page by 19px underneath the
- * control you had just pressed. The background art is positioned against page height, so
- * the whole backdrop moved with it — the same defect that kept the breakdown on screen at
- * Free, one component further up.
- *
- * ⚠️ **Sized by the browser rather than by a `min-h-*` guess.** A reserved height picked
- * off a screenshot is right at one viewport and one font size and silently wrong at every
- * other; laying all five bodies in one cell makes the tallest of them the height, wherever
- * the copy happens to wrap. The cost is that the hidden copies are still in the DOM, so a
- * test matching perk text must scope to the visible one.
- */
-
-/**
- * Every rung's amount, in ladder order — Free's $0 included, since it is a rung here.
- *
- * 🚨 Derived from `BADGE_ORDER`, never written out, for the same reason the chooser is: a
- * rung added to `ANTHERS_BADGES` has to start sizing these cards without being told twice.
- */
-const PERK_AMOUNTS = BADGE_ORDER.map(thresholdForBadge);
-
-const PERK_CARDS: { title: string; body: (amount: number) => React.ReactNode }[] = [
-	{
-		title: "Public Access",
-		body: (amount) =>
-			amount > 0 ? (
-				<>
-					<strong>Unlimited.</strong> Every streaming Work a creator left open to everyone, with no
-					monthly limit.
-				</>
-			) : (
-				<>
-					<strong>{FREE_PUBLIC_ACCESS_HOURS} hours a month</strong> of every streaming Work a
-					creator left open to everyone.
-				</>
-			),
-	},
-	{
-		title: "Time Pool & Stickers",
-		// ⚠️ "Held back from" rather than "on top of" — the Sticker budget is carved out
-		// of the Time Pool beside it, and unspent budget rolls back in. Two figures that
-		// overlap have to say they overlap, or this reads as money appearing twice.
-		body: (amount) =>
-			amount > 0 ? (
-				<>
-					<strong className="tabular-nums">{money(timePoolFor(amount))} a month</strong> to the
-					creators you spend time with, of which{" "}
-					<strong className="tabular-nums">{money(stickerBudgetFor(amount))}</strong> is held back
-					for you to give as Stickers
-					<Soon />
-				</>
-			) : (
-				<>
-					<strong className="tabular-nums">{money(FREE_TIME_POOL)} a month</strong> to the creators
-					you spend time with, which Anthers pays on your behalf.
-				</>
-			),
-	},
-	{
-		title: "Cloud Storage & Preservation",
-		body: (amount) =>
-			amount > 0 ? (
-				<>
-					<strong className="tabular-nums">{storageGibFor(amount)} GiB</strong>
-					<Soon /> for your own files or a catalog you publish, and purchases stay in your library
-					for as long as you hold a Badge
-					<Soon />
-				</>
-			) : (
-				<>
-					<strong className="tabular-nums">{storageGibFor(0)} GiB</strong> for a catalog you
-					publish, and a withdrawn purchase stays in your library for{" "}
-					<strong className="tabular-nums">{WITHDRAWN_RESCUE_DAYS} days</strong>.
-				</>
-			),
-	},
-	{
-		title: "Merch & Recognition",
-		body: (amount) =>
-			amount > 0 ? (
-				<>
-					A discount on merch anyone can buy
-					<Soon />, and a place on the Anthers supporters page
-					<Soon />.
-				</>
-			) : (
-				<span className="text-base-content/45">Both of these start at Root, the first rung.</span>
-			),
-	},
-];
-
-function Soon() {
-	return (
-		<span className="ml-1 whitespace-nowrap rounded-full bg-base-content/10 px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-base-content/50">
-			Coming
-		</span>
-	);
-}
-
-function BadgeOutcome({ amount }: { amount: number }) {
-	return (
-		<ul className="mx-auto mt-6 grid max-w-4xl gap-3 sm:grid-cols-2">
-			{PERK_CARDS.map((card) => (
-				<li
-					key={card.title}
-					className="rounded-2xl border border-base-content/10 bg-base-200/40 px-4 py-3.5"
-				>
-					<p className="text-sm font-semibold">{card.title}</p>
-					{/* One cell, every rung's copy in it: the chosen rung's is the one you can
-					    see, and the others hold the card open to the tallest of them. `invisible`
-					    rather than `hidden`, because a card sized by content that isn't laid out
-					    isn't sized at all. */}
-					<div className="mt-1 grid">
-						<p className="col-start-1 row-start-1 text-sm leading-snug text-base-content/65">
-							{card.body(amount)}
-						</p>
-						{PERK_AMOUNTS.filter((sizer) => sizer !== amount).map((sizer) => (
-							<p
-								key={sizer}
-								aria-hidden="true"
-								className="invisible col-start-1 row-start-1 text-sm leading-snug text-base-content/65"
+			    🚨 **`relative` is what keeps that scroll INSIDE this box.** Every rung's radio
+			    is `sr-only`, which is `position: absolute` — and an absolutely positioned
+			    element is clipped by an ancestor's `overflow` only when its containing block is
+			    inside that ancestor. Without a positioned box here, the five radios resolved
+			    against the section instead, escaped the clip, and pushed the DOCUMENT to 710px
+			    at a 390px viewport: the whole page scrolled sideways, every section of it, on
+			    account of five 1px inputs nobody can see. */}
+			<div className="relative overflow-x-auto">
+				<table className="w-full min-w-[46rem] border-separate border-spacing-0 text-left">
+					<caption className="sr-only">
+						What each Anthers Badge carries, by the amount given each month. Choose one to see it
+						priced below.
+					</caption>
+					<thead>
+						<tr>
+							{/* The corner names the column of row labels for a screen reader and stays
+							    visually empty, which is what a matrix corner should be. */}
+							{/* ⚠️ A fixed width while it is pinned, a share of the table once it is not.
+							    `36%` is 36% of the TABLE (736px at its `min-w`), not of the screen — so
+							    on a 390px phone the pinned column was 265px of it and left 85px for the
+							    figures it exists to label. Two value columns beside a readable label
+							    beats one and a half beside a roomy one. */}
+							<th
+								scope="col"
+								className={`w-[9.5rem] px-4 align-bottom min-[784px]:w-[36%] ${STUCK_LABEL}`}
 							>
-								{card.body(sizer)}
-							</p>
-						))}
-					</div>
-				</li>
-			))}
-		</ul>
+								<span className="sr-only">Feature or perk</span>
+							</th>
+							{BADGE_ORDER.map((key) => {
+								const amount = thresholdForBadge(key);
+								const lit = value === amount;
+								return (
+									<th
+										key={key}
+										scope="col"
+										// `align-middle` rather than a `h-full` flex child: the cell stretches
+										// to the row and centres its own content, which is what lets Free sit
+										// level with the others without a spacer standing in for the art it
+										// does not have.
+										//
+										// ⚠️ **Every header carries a visible edge, not only the chosen one.**
+										// Drawn on selection alone, the four rungs nobody has picked are
+										// borderless text in a table header and read as labels rather than as
+										// the control they are. Unpicked, the edge stops at the header like a
+										// tab; picked, the same edge carries on down the column.
+										className={`rounded-t-2xl border-x border-t p-0 text-center align-middle transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
+											lit
+												? "border-primary/50 bg-primary/10"
+												: "border-base-content/10 bg-base-200/40 hover:border-base-content/30 hover:bg-base-200/70"
+										}`}
+									>
+										<label className="flex cursor-pointer flex-col items-center px-3 pb-3 pt-4">
+											<input
+												type="radio"
+												name={`${idPrefix}-anthers-badge`}
+												className="sr-only"
+												checked={lit}
+												onChange={() => onChange(amount)}
+											/>
+											{/* The Badge art, drawn as `/for-users` draws it: the frame behind,
+											    the emoji centred inside. Choosing a rung brightens the frame —
+											    the emoji is full-colour artwork and is left alone.
+
+											    🚨 **Free gets no mark, because a mark IS a Badge and Free is
+											    the absence of one** (Parker, 2026-08-24) — not a Badge worth
+											    $0. `BADGE_ART` is keyed by `Badge` rather than `BadgeKey`, so
+											    dropping this branch is a type error rather than a quiet
+											    acorn. */}
+											{key !== "free" && (
+												<span className="relative mb-1 flex h-14 w-14 items-center justify-center">
+													<BrandGlyph
+														name={BADGE_ART[key].wreath}
+														className={`absolute inset-0 h-full w-full ${lit ? "text-primary/70" : "text-primary/30"}`}
+													/>
+													<span aria-hidden="true" className="text-xl">
+														{BADGE_ART[key].emoji}
+													</span>
+												</span>
+											)}
+											<span style={serif} className="block text-base font-medium">
+												{key === "free" ? "Free" : badgeLabel(key)}
+											</span>
+											<span className="mt-0.5 block text-sm tabular-nums text-base-content/60">
+												{amount === 0 ? "$0" : `${money(amount)}/mo`}
+											</span>
+										</label>
+									</th>
+								);
+							})}
+						</tr>
+					</thead>
+					<tbody>
+						{PERK_ROWS.map((row, rowIndex) => {
+							const last = rowIndex === PERK_ROWS.length - 1;
+							return (
+								<tr key={row.title}>
+									<th
+										scope="row"
+										className={`border-t border-base-content/10 px-4 py-3 font-normal ${STUCK_LABEL}`}
+									>
+										<span className="block text-sm font-semibold">{row.title}</span>
+										<span className="mt-0.5 block text-xs leading-snug text-base-content/55">
+											{row.desc}
+										</span>
+									</th>
+									{RUNG_AMOUNTS.map((amount) => {
+										const lit = value === amount;
+										const cell = row.cell(amount);
+										return (
+											<td
+												key={amount}
+												className={`border-t border-base-content/10 px-3 py-3 text-center text-sm tabular-nums transition-colors ${COLUMN_EDGE} ${last ? "rounded-b-2xl border-b border-b-transparent" : ""} ${
+													lit
+														? `border-x-primary/50 bg-primary/10 font-semibold ${last ? "border-b-primary/50" : ""}`
+														: ""
+												} ${cell === NOT_CARRIED ? "text-base-content/30" : "text-base-content/80"}`}
+											>
+												{cell}
+												{cell === NOT_CARRIED && <span className="sr-only">not carried</span>}
+											</td>
+										);
+									})}
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			</div>
+		</fieldset>
 	);
 }
 
@@ -952,7 +1000,7 @@ function anthersLineFor(amount: number): PickLine {
 
 /** Every answer the Anthers step can give, for the echo to hold room for. Free is not here:
  *  it produces no line, and the empty sentence it shows instead is what the room is for. */
-const ANTHERS_ECHO_SIZERS = PERK_AMOUNTS.filter((amount) => amount > 0).map(anthersLineFor);
+const ANTHERS_ECHO_SIZERS = RUNG_AMOUNTS.filter((amount) => amount > 0).map(anthersLineFor);
 
 const DROP_LABEL = "Remove";
 const DROP_CLASS = "text-xs text-base-content/45 underline";
@@ -2251,16 +2299,16 @@ export default function SubscribePage() {
 						    about the first rung, so Sprout, Petal and Blossom existed in the model and
 						    nowhere in the UI — and "Support Anthers too?" framed the whole section as a
 						    request rather than a choice. Choosing a rung is the ask now, Free included,
-						    and the two panels below it move with the choice. */}
-						<BadgeChooser
+						    and the breakdown below moves with the choice.
+
+						    ⚠️ `picks.anthers`, NOT the previewed `anthersAmount`. The breakdown below
+						    previews the first rung because a bar cannot draw "no answer"; the matrix
+						    can, and lighting a column nobody picked would claim a choice for them. */}
+						<BadgeMatrix
 							idPrefix="anthers-ladder"
 							value={picks.anthers}
 							onChange={(v) => setPicks((prev) => ({ ...prev, anthers: v }))}
 						/>
-						{/* Unanswered previews the first rung rather than showing an empty frame: the
-						    section's job is to explain what giving does, and it cannot do that with
-						    nothing selected. The echo below is what stays honest about the difference. */}
-						<BadgeOutcome amount={anthersAmount} />
 						{/* 🚨 **Always rendered, including for Free** (Parker, 2026-08-24). It used to
 						    be hidden at $0, which made choosing Free shrink the page — and the
 						    background art is positioned against page height, so the whole backdrop
