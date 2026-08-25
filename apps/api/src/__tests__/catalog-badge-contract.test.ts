@@ -54,6 +54,7 @@ function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork
 		downloadEnabled: !streamEnabled,
 		seedAccess,
 		takedownStatus: "active",
+		quarantineStatus: "none",
 	};
 }
 

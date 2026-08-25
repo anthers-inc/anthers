@@ -21,6 +21,7 @@ import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
+import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { matchesInviteKey, matchesSitePassword } from "./site-gate.js";
 
@@ -37,6 +38,14 @@ const app = new Hono()
 	// Serve uploaded content files from local filesystem in dev mode
 	.use("/content/*", async (c, next) => {
 		if (!isLocalStorage) return next();
+		// 🚨 Quarantined material sits under CONTENT_ROOT like everything else, and this
+		// middleware serves that directory unsigned and unauthenticated. In S3 mode the
+		// private bucket has no public door, so refusing to sign the key is enough; here
+		// the directory IS the door and a guessed path would open it. Refused before
+		// serveStatic looks at the filesystem at all.
+		if (isQuarantinedKey(decodeURIComponent(c.req.path).slice("/content/".length))) {
+			return c.json({ error: "Not found" }, 404);
+		}
 		return serveStatic({ root: "../../" })(c, next);
 	})
 	.get("/health", (c) => c.json({ status: "ok" }))

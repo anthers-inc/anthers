@@ -21,7 +21,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, moderationReports, users } from "@anthers/db/schema";
 import { FLOOR_MODERATION_REASONS, isFloorReason } from "@anthers/shared/moderation";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { pendingEscalations } from "../services/moderation.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -102,6 +102,32 @@ async function report(cookie: string, commentId: number, reason: string) {
 	return (await res.json()).reportId as number;
 }
 
+/**
+ * This fixture's own report on a given comment.
+ *
+ * 🚨 **Scoped to the subject, not just the reason.** The two cases below used to select
+ * `WHERE reason = 'sexual'` with a bare `LIMIT 1` over the whole table, which is a query
+ * about the database rather than about this fixture — it happened to be right only while
+ * nothing else in the suite filed a report with the same reason. `quarantine.test.ts`
+ * seeds one (already escalated, deliberately), and the case then failed in a full run and
+ * passed in isolation, which is the worst shape a test failure comes in.
+ */
+async function fixtureReport(reason: string, commentId: number): Promise<{ id: number }> {
+	const [row] = await db
+		.select({ id: moderationReports.id })
+		.from(moderationReports)
+		.where(
+			and(
+				eq(moderationReports.reason, reason),
+				eq(moderationReports.subjectType, "comment"),
+				eq(moderationReports.subjectId, commentId),
+			),
+		)
+		.limit(1);
+	expect(row).toBeDefined();
+	return row;
+}
+
 async function escalatedAt(reportId: number): Promise<Date | null> {
 	const [row] = await db
 		.select({ escalatedAt: moderationReports.escalatedAt })
@@ -154,12 +180,7 @@ describe("Filing a floor report", () => {
 		// The hole the floor exists to close: somebody clears it inside the console
 		// before anyone outside was told. Status is deliberately not part of the
 		// selection, so a resolved report is still owed its alert.
-		const [row] = await db
-			.select({ id: moderationReports.id })
-			.from(moderationReports)
-			.where(eq(moderationReports.reason, "sexual"))
-			.limit(1);
-		expect(row).toBeDefined();
+		const row = await fixtureReport("sexual", commentIds[1]);
 		await db
 			.update(moderationReports)
 			.set({ status: "dismissed", resolvedAt: new Date() })
@@ -169,12 +190,7 @@ describe("Filing a floor report", () => {
 	});
 
 	it("stops selecting a report once somebody has actually been told", async () => {
-		const [row] = await db
-			.select({ id: moderationReports.id })
-			.from(moderationReports)
-			.where(eq(moderationReports.reason, "violence"))
-			.limit(1);
-		expect(row).toBeDefined();
+		const row = await fixtureReport("violence", commentIds[2]);
 		await db
 			.update(moderationReports)
 			.set({ escalatedAt: new Date() })

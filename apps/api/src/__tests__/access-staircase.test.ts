@@ -47,6 +47,7 @@ function accessible(key: string): AccessibleWork {
 		downloadEnabled: spec.downloadEnabled,
 		seedAccess: spec.seedAccess,
 		takedownStatus: "active",
+		quarantineStatus: "none",
 	};
 }
 

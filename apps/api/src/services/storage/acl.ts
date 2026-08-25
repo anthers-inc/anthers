@@ -75,3 +75,52 @@ export function isPublicKey(key: string): boolean {
 	if (!match) return false;
 	return PUBLIC_KEY_PREFIXES.some((prefix) => match[1].startsWith(prefix));
 }
+
+/**
+ * Where quarantined material is parked, in the private bucket, with no way back out.
+ *
+ * 🚨 **This prefix is the second of two independent denials, and it exists because the
+ * first one can be forgotten.** `resolveAccessSync` refuses a quarantined Work to
+ * everybody including its buyers, which every delivery route inherits — but a route
+ * added later that signs a key without resolving a Work would hand the bytes over, and
+ * that is the one failure in this codebase with no acceptable version. So the key
+ * itself is unservable: {@link assertServableKey} throws in `getUrl` and in the
+ * presigner, which is every door bytes leave through.
+ *
+ * It is deliberately NOT under `creators/{id}/`, so `isPublicKey` returns false for it
+ * on the existing fail-closed path rather than on a new rule that could disagree.
+ */
+export const QUARANTINE_PREFIX = "quarantine/";
+
+/** Whether a storage key names quarantined material. */
+export function isQuarantinedKey(key: string): boolean {
+	return key.startsWith(QUARANTINE_PREFIX);
+}
+
+/**
+ * The key a quarantined object is parked at. Reversible on purpose — a quarantine is a
+ * state and never a delete, so a cleared finding has to be able to put the object back
+ * exactly where the database still says it is.
+ */
+export function quarantineKeyFor(key: string): string {
+	return isQuarantinedKey(key) ? key : `${QUARANTINE_PREFIX}${key}`;
+}
+
+/** The key a quarantined object came from. Inverse of {@link quarantineKeyFor}. */
+export function originalKeyFor(key: string): string {
+	return isQuarantinedKey(key) ? key.slice(QUARANTINE_PREFIX.length) : key;
+}
+
+/**
+ * Refuse to produce any URL for quarantined material. Called by both storage backends.
+ *
+ * Throwing rather than returning null is the whole point: a null would be handed to a
+ * caller expecting a string and would surface as an odd 404 somewhere downstream, which
+ * is indistinguishable from an ordinary missing object. A throw stops the request, and a
+ * 500 on a quarantined key is the correct outcome — nothing should be asking.
+ */
+export function assertServableKey(key: string): void {
+	if (isQuarantinedKey(key)) {
+		throw new Error(`Refusing to serve quarantined object: ${key}`);
+	}
+}

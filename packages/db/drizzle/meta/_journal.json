@@ -337,6 +337,13 @@
       "when": 1787683488359,
       "tag": "0047_legal_holds",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787692262625,
+      "tag": "0048_media_quarantine",
+      "breakpoints": true
     }
   ]
 }
