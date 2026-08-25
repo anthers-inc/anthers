@@ -17,6 +17,7 @@ import {
 	noticesReadyForRestore,
 	restoreWork,
 } from "../services/dmca.js";
+import { runEscalationSweep } from "../services/moderation.js";
 import { runRetentionSweep } from "../services/retention.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
@@ -202,6 +203,18 @@ async function start() {
 				console.log(
 					`[redact-records] job ${job.id}: redacted ${result.dmcaNotices} DMCA notice(s), ${result.moderationReports} moderation report(s)`,
 				);
+			}
+		}
+	});
+
+	// Retry floor-report alerts that never went out. Logs only when it actually sent
+	// something — a five-minute "0 pending" line would bury everything else in the
+	// worker log within a day, and this is a log somebody has to be able to read.
+	await queue.work(QUEUES.ESCALATE_REPORTS, async (jobs) => {
+		for (const job of jobs) {
+			const sent = await runEscalationSweep();
+			if (sent > 0) {
+				console.log(`[escalate-reports] job ${job.id}: escalated ${sent} floor report(s)`);
 			}
 		}
 	});

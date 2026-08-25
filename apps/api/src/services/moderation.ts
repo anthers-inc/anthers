@@ -33,15 +33,20 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import {
+	FLOOR_MODERATION_REASONS,
+	isFloorReason,
 	isModeratableContent,
 	MODERATION_NOTE_MAX,
 	type ModerationActionType,
 	type ModerationActorRole,
 	type ModerationSubjectType,
+	moderationReasonLabel,
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
-import { and, count, desc, eq, exists, inArray, max, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
+import { sendEmail } from "./email.js";
 import { notify } from "./notifications.js";
 
 /**
@@ -174,7 +179,111 @@ export async function fileReport(input: {
 			set: { reason: input.reason, details, status: "open", resolvedAt: null, resolvedBy: null },
 		})
 		.returning({ id: moderationReports.id });
+
+	// The row is committed before anything is sent, and that ordering is the design.
+	// A floor report that reaches the database and fails to reach a person is late;
+	// one that fails to reach the database because an email provider was down is
+	// gone. `escalateReport` swallows its own failure for the same reason — the
+	// sweep below re-selects anything still unescalated.
+	if (isFloorReason(input.reason)) await escalateReport(row.id);
+
 	return { reportId: row.id };
+}
+
+/**
+ * Tell a human, out of band, that a floor-level report exists.
+ *
+ * 🚨 **What this deliberately does not carry.** The reported content never appears in
+ * the message — not the comment text, not the reporter's quotation of it, not a
+ * thumbnail. What goes out is a *locator*: which subject, which reason, when, and
+ * where to look. § 2258B conditions the provider's immunity on minimizing who has
+ * access to reported depictions, and an alert that reproduces the material into an
+ * inbox is the easiest way to widen that population without deciding to. The
+ * reporter's own words are included because they are what makes the alert
+ * actionable, and because they are text a reporter wrote rather than the material.
+ *
+ * Returns true when the alert went out and the row was stamped. Never throws: the
+ * caller has already committed the report, and a failure here is the sweep's problem
+ * rather than the reporter's.
+ */
+export async function escalateReport(reportId: number): Promise<boolean> {
+	const [report] = await db
+		.select({
+			id: moderationReports.id,
+			subjectType: moderationReports.subjectType,
+			subjectId: moderationReports.subjectId,
+			reason: moderationReports.reason,
+			details: moderationReports.details,
+			createdAt: moderationReports.createdAt,
+			escalatedAt: moderationReports.escalatedAt,
+		})
+		.from(moderationReports)
+		.where(eq(moderationReports.id, reportId))
+		.limit(1);
+
+	if (!report) return false;
+	if (report.escalatedAt) return true; // Already told somebody; don't tell them twice.
+	if (!isFloorReason(report.reason)) return false;
+
+	const label = moderationReasonLabel(report.reason);
+	const subject = `[Anthers] Floor report: ${label} on ${report.subjectType} ${report.subjectId}`;
+	const html = [
+		`<p><strong>${label}</strong> reported on <strong>${report.subjectType} ${report.subjectId}</strong>.</p>`,
+		`<p>Report ID ${report.id}, filed ${report.createdAt.toISOString()}.</p>`,
+		report.details
+			? `<p>What the reporter said:</p><blockquote>${escapeHtml(report.details)}</blockquote>`
+			: "<p>The reporter left no description.</p>",
+		"<p>Open the moderation queue in the admin console to act on it.</p>",
+		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
+	].join("\n");
+
+	const sent = await sendEmail({ to: ABUSE_EMAIL, subject, html });
+	if (!sent) return false;
+
+	await db
+		.update(moderationReports)
+		.set({ escalatedAt: new Date() })
+		.where(eq(moderationReports.id, reportId));
+	return true;
+}
+
+/**
+ * Floor reports nobody has been told about. The sweep's selection, exported so a test
+ * can assert on it without sending anything.
+ *
+ * ⚠️ It deliberately ignores `status`. A report an operator has already resolved still
+ * gets its alert, because "somebody dismissed it before anyone outside the console was
+ * told" is precisely the hole the floor exists to close.
+ */
+export async function pendingEscalations(): Promise<number[]> {
+	const rows = await db
+		.select({ id: moderationReports.id })
+		.from(moderationReports)
+		.where(
+			and(
+				isNull(moderationReports.escalatedAt),
+				inArray(moderationReports.reason, [...FLOOR_MODERATION_REASONS]),
+			),
+		)
+		.orderBy(moderationReports.createdAt);
+	return rows.map((r) => r.id);
+}
+
+/** Retry every floor report that has not reached a person yet. Returns how many did. */
+export async function runEscalationSweep(): Promise<number> {
+	const ids = await pendingEscalations();
+	let sent = 0;
+	for (const id of ids) if (await escalateReport(id)) sent++;
+	return sent;
+}
+
+/** Minimal entity escaping — the reporter's text is untrusted and goes into an email. */
+function escapeHtml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
 }
 
 /**

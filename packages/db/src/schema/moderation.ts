@@ -75,9 +75,28 @@ export const moderationReports = pgTable(
 		 * Also what keeps the sweep from rescanning settled rows forever.
 		 */
 		redactedAt: timestamp("redacted_at", { withTimezone: true }),
+		/**
+		 * When somebody was actually told, out of band, that this report exists.
+		 *
+		 * Only floor-level reasons (`FLOOR_MODERATION_REASONS`) ever get a value here;
+		 * everything else stays null forever and is answered by an operator opening the
+		 * console. **Null on a floor report means the alert has not gone out yet**, which
+		 * is what the retry sweep selects on.
+		 *
+		 * 🚨 The column exists because the alert has to be *durable*, and an email is not.
+		 * Sending inline and hoping is how "a queue nobody watches" becomes "an email
+		 * nobody sent" one layer down — the same class of defect as a retention promise
+		 * with no sweep behind it. The report row is written first and committed, so the
+		 * worst case is a late alert rather than a lost one.
+		 */
+		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
+		// The retry sweep's index: floor reports still waiting to be escalated. Partial
+		// would be tighter, but the table is small and the predicate is on two columns
+		// the sweep already filters by.
+		index("idx_moderation_reports_escalation").on(table.escalatedAt, table.reason),
 		// One standing report per person per item — re-reporting is a no-op, so a
 		// single user can't inflate the count the queue sorts by.
 		uniqueIndex("uq_moderation_report_reporter_subject").on(

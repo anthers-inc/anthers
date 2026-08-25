@@ -191,6 +191,18 @@ export const QUEUES = {
 	// because § 512(i) needs the pattern and an appeal needs the decision. See
 	// `services/retention.ts`.
 	REDACT_RECORDS: "redact-records",
+	// Retry floor-level reports (`illegal`, `sexual`, `violence`) that were filed but
+	// whose out-of-band alert never went out — a Resend outage, a transient error, a
+	// deploy mid-request. `fileReport` sends inline and stamps `escalated_at` on
+	// success; this re-selects whatever is still null.
+	//
+	// 🚨 It runs every FIVE MINUTES rather than nightly, and that is the whole point of
+	// having it. The others in this list age data or settle money, where a day's
+	// latency is invisible; this one is the path by which Anthers learns it is hosting
+	// something illegal, and 18 U.S.C. § 2258A asks for a report "as soon as reasonably
+	// possible" after actual knowledge. A retry that waits until 3 AM is a retry that
+	// has already spent most of the tolerance.
+	ESCALATE_REPORTS: "escalate-reports",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -292,4 +304,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// threshold is three YEARS, so a day either way is noise — but running last
 	// means a record is never redacted in the same pass that settles it.
 	[QUEUES.REDACT_RECORDS, "0 6 * * *"],
+	// Every five minutes, and deliberately unlike everything above it. See the note on
+	// QUEUES.ESCALATE_REPORTS: this is the only entry here whose latency is measured
+	// against a statutory "as soon as reasonably possible" rather than against a
+	// retention window or a billing cycle.
+	[QUEUES.ESCALATE_REPORTS, "*/5 * * * *"],
 ] as const;

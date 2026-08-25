@@ -144,6 +144,30 @@ export function moderationReasonLabel(value: string): string {
 	return MODERATION_REASONS.find((r) => r.value === value)?.label ?? value;
 }
 
+/**
+ * The reasons that reach Anthers no matter who else holds the scope, and that a
+ * scoped Keeper will never be able to dismiss away — 40.06's floor.
+ *
+ * 🚨 `sexual` is in this list for a reason that is easy to miss and expensive to get
+ * wrong. Its own hint reads "Explicit sexual material, or **any sexual content
+ * involving minors**", so a person reporting child sexual abuse material will most
+ * often pick `sexual` rather than `illegal` — the form steers them there. An
+ * escalation wired only to `illegal` would miss the reason code the interface points
+ * the most serious report at. `violence` is here on the same logic: a report of a
+ * credible threat is not something an operator should meet a day late.
+ *
+ * This is the taxonomy half of the split. The routing half — who a non-floor report
+ * goes to instead — waits on the Keeper appointment model, and does not gate this:
+ * with no scopes yet, every report already reaches Anthers, and what was missing was
+ * anybody being *told*.
+ */
+export const FLOOR_MODERATION_REASONS: readonly string[] = ["illegal", "sexual", "violence"];
+
+/** Does this reason demand escalation out of the queue, rather than a queue entry alone? */
+export function isFloorReason(value: string): boolean {
+	return FLOOR_MODERATION_REASONS.includes(value);
+}
+
 /** What an operator did. Append-only vocabulary — every entry is a recorded decision. */
 export type ModerationActionType = "hide" | "restore";
 
