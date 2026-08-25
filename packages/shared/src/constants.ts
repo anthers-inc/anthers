@@ -608,3 +608,37 @@ export const PAYOUT_THRESHOLD = 20;
  * capacity talk, never for billing.
  */
 export const DELIVERY_GIB_PER_HOUR = 1.7;
+
+// ── Child safety ─────────────────────────────────────────────────────────────
+/**
+ * Where a floor-level report escalates to, and where a notice from NCMEC, another
+ * provider or a member of the public arrives.
+ *
+ * 🚨 **This is a constant rather than an env var on purpose, and the purpose is that
+ * it cannot be changed casually.** The address is on Anthers' NCMEC ESP registration,
+ * which 18 U.S.C. § 2258A(a) makes a statutory element of the reporting duty — so
+ * moving it is a re-notification to NCMEC, not a mail rule, exactly as the DMCA
+ * agent's address cannot move without re-filing with the Copyright Office. An env
+ * var would invite a deploy to change it silently and leave the federal registration
+ * pointing somewhere nobody reads.
+ *
+ * 🚨 **It is a single-recipient alias and must stay one.** § 2258B conditions the
+ * provider's immunity on minimizing the number of employees with access to reported
+ * depictions, so who receives this is a compliance decision. Never widen it to a team
+ * inbox. See 60.13 § 5, and 60.11 for the rest of the NCMEC contact set.
+ */
+export const ABUSE_EMAIL = "abuse@anthers.org";
+
+/**
+ * How long a filed CyberTipline report preserves what it names, in years.
+ *
+ * **One, because of 18 U.S.C. § 2258A(h) as amended by the REPORT Act (2024)**, which
+ * struck "90 days" and inserted "1 year". A completed report *is* the preservation
+ * request — there is no separate step, and no way to report without incurring the
+ * hold — so this clock starts at filing rather than at any decision of ours.
+ *
+ * Sits beside `RECORD_REDACTION_YEARS` deliberately: they are the two statutory
+ * clocks over the same records, they run in opposite directions, and a reader
+ * comparing them should not have to find them in two files.
+ */
+export const PRESERVATION_HOLD_YEARS = 1;

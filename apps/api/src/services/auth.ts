@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { db } from "@anthers/db/client";
 import { desktopAuthRequests, sessions, users, verificationTokens } from "@anthers/db/schema";
-import { and, desc, eq, gt, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt, notInArray } from "drizzle-orm";
+import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EMAIL_VERIFY_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -262,9 +263,19 @@ export async function cleanupDesktopAuthRequests(): Promise<void> {
  * is supposed to delete, so the test would pass identically against a no-op.
  */
 export async function deleteExpiredSessions(): Promise<number> {
+	// 🚨 A session row is the only place Anthers holds an IP address, so this sweep is
+	// the one that destroys the network evidence a child-safety report is most likely
+	// to be asked for. Sessions of a held user survive their expiry — they are already
+	// dead to every reader, which filters on `expiresAt`, so keeping the row costs a
+	// row and preserves the address.
+	const held = await allHeldSubjectIds("user");
 	const gone = await db
 		.delete(sessions)
-		.where(lt(sessions.expiresAt, new Date()))
+		.where(
+			held.length > 0
+				? and(lt(sessions.expiresAt, new Date()), notInArray(sessions.userId, held))
+				: lt(sessions.expiresAt, new Date()),
+		)
 		.returning({ id: sessions.id });
 	return gone.length;
 }

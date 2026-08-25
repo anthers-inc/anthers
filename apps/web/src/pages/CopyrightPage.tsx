@@ -39,6 +39,7 @@
  * address in.
  */
 
+import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
@@ -163,6 +164,28 @@ export default function CopyrightPage() {
 			<p className="mt-3 text-lg text-base-content/70">
 				How to report copyright infringement on Anthers, and what happens next.
 			</p>
+
+			{/* 🚨 This points AWAY on purpose, and it is the first thing on the page for a
+			    reason. Copyright notice-and-action and illegal-content notice-and-action are
+			    separate duties under separate statutes, and somebody scanning a copyright
+			    page for where to report child sexual abuse material is a bad two minutes to
+			    design. The in-product report flow needs an account, so until the safety page
+			    and its no-account form ship, this address is the ONLY route a signed-out
+			    person has — which is also what a DSA Art. 16 mechanism has to be. The
+			    mailbox is filtered and alerting; see 60.11. */}
+			<div className="alert alert-warning mt-6" role="note">
+				<div>
+					<p className="font-semibold">Reporting something other than copyright?</p>
+					<p className="mt-1 text-sm">
+						This page is only for copyright. To report illegal content — including child sexual
+						abuse material — email{" "}
+						<a className="link" href={`mailto:${ABUSE_EMAIL}`}>
+							{ABUSE_EMAIL}
+						</a>
+						. You do not need an account, and that mailbox is monitored.
+					</p>
+				</div>
+			</div>
 
 			<Section title="DMCA designated agent">
 				{agent?.registered ? (

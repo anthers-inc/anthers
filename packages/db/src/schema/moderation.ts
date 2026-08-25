@@ -75,9 +75,28 @@ export const moderationReports = pgTable(
 		 * Also what keeps the sweep from rescanning settled rows forever.
 		 */
 		redactedAt: timestamp("redacted_at", { withTimezone: true }),
+		/**
+		 * When somebody was actually told, out of band, that this report exists.
+		 *
+		 * Only floor-level reasons (`FLOOR_MODERATION_REASONS`) ever get a value here;
+		 * everything else stays null forever and is answered by an operator opening the
+		 * console. **Null on a floor report means the alert has not gone out yet**, which
+		 * is what the retry sweep selects on.
+		 *
+		 * 🚨 The column exists because the alert has to be *durable*, and an email is not.
+		 * Sending inline and hoping is how "a queue nobody watches" becomes "an email
+		 * nobody sent" one layer down — the same class of defect as a retention promise
+		 * with no sweep behind it. The report row is written first and committed, so the
+		 * worst case is a late alert rather than a lost one.
+		 */
+		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
+		// The retry sweep's index: floor reports still waiting to be escalated. Partial
+		// would be tighter, but the table is small and the predicate is on two columns
+		// the sweep already filters by.
+		index("idx_moderation_reports_escalation").on(table.escalatedAt, table.reason),
 		// One standing report per person per item — re-reporting is a no-op, so a
 		// single user can't inflate the count the queue sorts by.
 		uniqueIndex("uq_moderation_report_reporter_subject").on(
@@ -125,6 +144,61 @@ export const moderationActions = pgTable(
 		index("idx_moderation_actions_actor").on(table.actorId),
 	],
 );
+
+/**
+ * A suspension of automated destruction — the general legal hold, of which a
+ * CyberTipline preservation is the first caller.
+ *
+ * 🚨 **Why this is general rather than a CSAM-specific flag.** § 4.4 of the Document
+ * Retention and Destruction Policy calls itself "a build requirement disguised as a
+ * policy clause": every scheduled deletion Anthers operates has to be capable of
+ * being switched off, because "a retention rule that cannot be switched off is a
+ * defect to be fixed, not a defense." A hold placed for one obligation is the same
+ * mechanism a subpoena, an audit or a live suit needs, so a CSAM-only version would
+ * be built twice and the two would disagree about whether the work was done.
+ *
+ * **A hold is a state, never a delete, in both directions.** Lifting one stamps
+ * `lifted_at` and leaves the row, so the record of what was preserved and why
+ * outlives the preservation — the same reasoning as `moderation_actions`.
+ *
+ * `expires_at` exists because the statutory holds have their own clocks: 18 U.S.C.
+ * § 2258A(h) preserves for **one year** from the report. Null means indefinite,
+ * which is what a live suit gets.
+ *
+ * ⚠️ The subject is polymorphic and carries no FK, like the tables above — and here
+ * that is load-bearing rather than stylistic: a hold on a user has to survive
+ * everything that would otherwise cascade from that user's row, which is precisely
+ * what it exists to prevent.
+ */
+export const legalHolds = pgTable(
+	"legal_holds",
+	{
+		id: serial("id").primaryKey(),
+		/** "user" | "work" | "report" — what is being preserved. */
+		subjectType: text("subject_type").notNull(),
+		subjectId: integer("subject_id").notNull(),
+		/** Why, in the operator's words. Never blank: a hold nobody can explain is a bug. */
+		reason: text("reason").notNull(),
+		/** Null for a hold placed by a job rather than a person. */
+		placedBy: integer("placed_by").references(() => users.id, { onDelete: "set null" }),
+		placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
+		/** When the hold stops applying on its own. Null = indefinite, lifted by hand. */
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		/** Set when a human lifts it. The row stays; this is what makes it inactive. */
+		liftedAt: timestamp("lifted_at", { withTimezone: true }),
+		note: text("note").notNull().default(""),
+	},
+	(table) => [
+		// Every sweep asks the same question — "is this subject held right now?" — so
+		// the index is on the lookup, with lifted_at included to keep the active check
+		// off the heap.
+		index("idx_legal_holds_subject").on(table.subjectType, table.subjectId, table.liftedAt),
+	],
+);
+
+export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
+	placer: one(users, { fields: [legalHolds.placedBy], references: [users.id] }),
+}));
 
 // Only the `one` sides are declared. There is no `many()` counterpart on `users`
 // on purpose: a user relating to "reports about them" isn't expressible here

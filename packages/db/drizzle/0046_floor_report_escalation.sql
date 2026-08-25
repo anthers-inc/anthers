@@ -1,0 +1,2 @@
+ALTER TABLE "moderation_reports" ADD COLUMN "escalated_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "idx_moderation_reports_escalation" ON "moderation_reports" USING btree ("escalated_at","reason");

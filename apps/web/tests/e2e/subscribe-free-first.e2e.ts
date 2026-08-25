@@ -19,6 +19,8 @@
  * *co-present* with "free forever" — that is a rule about structure, and structure is what
  * this file is for.
  */
+
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -77,18 +79,39 @@ test.describe("/subscribe leads with the free door", () => {
 	test("what free includes is stated above the signup control, limit and all", async ({ page }) => {
 		await page.goto("/subscribe");
 
-		// 🚨 63.01: "free forever" and the monthly cap are co-present, on the same rule as
-		// "no cut" and the take-home. A reader who meets the promise without the bound beside
-		// it hears "unlimited", and then meets the limit as a surprise after signing up.
+		// 🚨 63.01: "free forever" and the cap are co-present, on the same rule as "no cut"
+		// and the take-home. A reader who meets the promise without the bound beside it
+		// hears "unlimited", and then meets the limit as a surprise after signing up.
 		//
-		// ⚠️ **Both house phrasings are matched, because what is pinned is the co-presence
-		// of a PERIOD with the hours — not one wording of it.** The page says "10 hours/month
-		// of Public Access" at the top and "10 hours of Public Access a month" in the closing
-		// summary; a regex naming only one of them would pass by finding the wrong element,
-		// which is worse than failing, since the position assertion below is the whole test.
+		// ⚠️ **What is pinned is that a BOUND is stated before the reader signs up — not the
+		// wording of it, and not the period.** 63.01's requirement is a co-present limit;
+		// what "forever" denies is an expiry, not that the free tier has edges. Naming the
+		// period is preferred where it fits, and the top label does name it ("hrs/mo"), but
+		// a spec that demanded the period would be enforcing the guide's example sentence
+		// rather than its rule.
+		//
+		// 🚨 Matching the bound however it is spelled makes **the position assertions below
+		// the whole test.** A looser regex on its own would find the closing summary and
+		// pass while the top of the page said nothing about a limit at all — `.first()`
+		// plus the ordering is what closes that, so neither may be dropped.
+		//
+		// ⚠️ **The unit alternation has to grow when a new abbreviation lands, and it will
+		// fail loudly rather than quietly when it doesn't.** The page has said "hours/month
+		// of Public Access", "hours of Public Access", and now "hrs/mo of Public Access" in
+		// the space of a week; each time, a regex naming only the old form stopped matching
+		// the top of the page, fell through to the closing summary, and failed on position —
+		// which reads as a layout regression rather than a copy edit. If this churns again,
+		// the fix is a `data-` hook on the element rather than a longer alternation.
+		//
+		// The NUMBER is never typed: it comes from the constant the page renders.
 		const forever = page.getByRole("heading", { name: /free\. forever/i });
 		const limit = page
-			.getByText(/hours\/month of Public Access|hours of Public Access a month/i)
+			.getByText(
+				new RegExp(
+					`${FREE_PUBLIC_ACCESS_HOURS}\\s*(hours?|hrs)(/(month|mo))? of Public Access`,
+					"i",
+				),
+			)
 			.first();
 		await expect(forever).toBeVisible();
 		await expect(limit).toBeVisible();
@@ -130,20 +153,28 @@ test.describe("/subscribe leads with the free door", () => {
 		await expect(rungs[0]).toHaveAccessibleName(/^free/i);
 	});
 
-	test("the ladder is the same height at every rung, so choosing does not move the page", async ({
-		page,
-	}) => {
-		// 🚨 **Parker reported this twice, so it gets pinned.** The section's panels change
-		// with the rung — the perk cards, the breakdown's legend and note, the echo — and
-		// copy of different lengths made the section grow and shrink under the control that
-		// changed it. The page's background art is positioned against page height, so the
-		// whole backdrop shifts with it. A control whose job is comparison must not resize
-		// the thing it sits in when you use it.
+	test("choosing a rung moves nothing on the page, above it or below it", async ({ page }) => {
+		// 🚨 **Parker has reported this three times, so what is pinned is the whole page and
+		// not one section of it.** The panels that change with the rung — the perk cards, the
+		// breakdown's legend and note, the echo — are held open by invisible sizers, and the
+		// section's own height is the assertion that used to stand here alone. It passed
+		// through the third report: the section really was holding, while the hero's note
+		// above it wrapped to a second line at any paid rung and the closing summary below it
+		// grew a whole row, so the matrix slid 19px under the pointer that had just pressed
+		// it and the document grew 93px. The bees in `MeadowVines` are placed at a percentage
+		// of page height, which is why a change anywhere on the page moves the backdrop
+		// everywhere on it.
+		//
+		// ⚠️ **So measure the three things a reader can actually see move**, and keep the
+		// section height among them — it is the one that says *where* a regression is rather
+		// than only that there is one.
 		//
 		// ⚠️ **Two widths, because the first fix passed at 1440 and was wrong at 390.** The
 		// copy for two rungs can wrap to the same number of lines at one width and to
 		// different numbers at another, so a single-viewport assertion here proves almost
-		// nothing. 390 is the narrow case where the labels wrap hardest.
+		// nothing. 390 is the narrow case where the labels wrap hardest, and it is also where
+		// two *paid* rungs diverged from each other: "Sprout" wraps the summary's row a line
+		// further than "Root" does.
 		for (const width of [390, 1280]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.goto("/subscribe");
@@ -151,18 +182,50 @@ test.describe("/subscribe leads with the free door", () => {
 			const section = page.locator("#anthers-badges");
 			await expect(section).toBeVisible();
 
-			const heights: number[] = [];
+			// 🚨 **Wait for the page to finish arriving before measuring any of it.** Two
+			// surfaces here fill in from the API after first paint: the signup card grows its
+			// Bluesky tab once `GET /api/atproto/config` answers, and the creator finder swaps
+			// its skeletons for real cards. Either one landing between two readings is ~300px
+			// of movement that has nothing to do with the rung — which is how this test first
+			// failed, on its own warm-up rather than on the thing it is about. Both are above
+			// the ladder, so both move it.
+			await expect(
+				page.locator('[data-signup="top"]').getByRole("tab", { name: "Bluesky", exact: true }),
+			).toBeVisible();
+			await expect(page.locator("#creator-badges .animate-pulse")).toHaveCount(0);
+
+			const readings: string[] = [];
 			for (const name of [/^free/i, /^root/i, /^sprout/i, /^petal/i, /^blossom/i]) {
 				await rung(page, name).click();
 				await expect(page.getByRole("radio", { name })).toBeChecked();
-				const box = await section.boundingBox();
-				if (!box) throw new Error("the ladder section has no box to measure");
-				heights.push(Math.round(box.height));
+				// 🚨 **`offsetTop`/`offsetHeight`, never `boundingBox()` or a rect.** Both of
+				// the obvious measurements are wrong here for different reasons. A rect is
+				// viewport-relative, and clicking a rung scrolls it into view, so two readings
+				// are taken from two scroll positions. And a rect includes TRANSFORMS: every
+				// section on this page is a `Reveal`, which holds it at `translateY(1rem)`
+				// until it has scrolled into view — so a section that had not yet animated
+				// measured exactly 16px lower than the same section a moment later, and the
+				// test reported layout movement that was really the fade-up finishing. The
+				// offset chain is layout, which is the thing being asserted.
+				readings.push(
+					await section.evaluate((el) => {
+						let top = 0;
+						for (
+							let node = el as HTMLElement | null;
+							node;
+							node = node.offsetParent as HTMLElement | null
+						)
+							top += node.offsetTop;
+						// Its top, not only its height: a section that keeps its size and slides
+						// down the page has still moved out from under the reader's finger.
+						return `page ${document.documentElement.scrollHeight} · ladder top ${top} · ladder height ${(el as HTMLElement).offsetHeight}`;
+					}),
+				);
 			}
 
 			// Rounded to the pixel rather than compared with a tolerance: a tolerance is a
 			// budget for the next 19px of drift, and there is no honest reason for any.
-			expect(new Set(heights).size, `heights at ${width}px: ${heights.join(", ")}`).toBe(1);
+			expect(new Set(readings).size, `at ${width}px:\n  ${readings.join("\n  ")}`).toBe(1);
 		}
 	});
 
