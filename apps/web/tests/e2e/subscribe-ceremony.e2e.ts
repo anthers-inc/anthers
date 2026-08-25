@@ -43,6 +43,20 @@ const addr = () =>
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 /**
+ * A rung on the Anthers ladder, as the clickable card rather than the input inside it.
+ *
+ * ⚠️ **Filtered by the RADIO's accessible name, never by the label's text.** Two traps
+ * meet here. The input is `sr-only` so the card can be styled, which puts it out of reach
+ * of `.check()`'s actionability wait — so the label is the thing to click. And the label's
+ * *text* begins with the Badge's emoji, which is `aria-hidden` (so it stays out of the
+ * accessible name) and is still very much part of `hasText` — an earlier `hasText: /^Root/`
+ * passed until the Badge art landed and then matched nothing, because the text had quietly
+ * become "🫚Root$3/mo". Naming the radio sidesteps both.
+ */
+const rung = (page: Page, name: RegExp) =>
+	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
+
+/**
  * There is exactly ONE way to mint an account from the browser, and it is `/subscribe`.
  *
  * 🚨 These are the *absence* assertions for the 2026-08-17 consolidation, and they exist
@@ -142,11 +156,16 @@ test.describe("starting an account from /subscribe", () => {
 		expect(new URL(page.url()).pathname).toBe("/subscribe");
 	});
 
-	test("a chosen Seed changes the ask, and the ceremony says there is a second step", async ({
+	test("a chosen Badge changes the ask, and the ceremony says there is a second step", async ({
 		page,
 	}) => {
 		await page.goto("/subscribe");
-		await page.getByRole("button", { name: /yes — \$3 a month/i }).click();
+		// The Anthers ladder, which was a yes/no card until 2026-08-24. Root is the rung
+		// that used to be the only expressible answer, so it is the one that keeps this
+		// test comparable to what it asserted before.
+		// See `rung`: the label is the click target, named by the radio it contains.
+		await rung(page, /^root/i).click();
+		await expect(page.getByRole("radio", { name: /^root/i })).toBeChecked();
 
 		// The page's own arithmetic, which is the only number a reader is agreeing to.
 		await expect(page.getByText("$3", { exact: true }).last()).toBeVisible();
@@ -160,6 +179,32 @@ test.describe("starting an account from /subscribe", () => {
 		// A paying start is two steps; a free one is one, and says so rather than counting
 		// to a step it will never reach.
 		await expect(page.getByText("Step 1 of 2")).toBeVisible();
+	});
+
+	/**
+	 * 🚨 **A rung above the entry price, because Root cannot catch a substitution.**
+	 *
+	 * The test above picks Root, where the amount a reader chose and the amount a buggy
+	 * page would substitute are the same $3 — so it stays green through exactly the defect
+	 * the ladder made possible. Sabotage proved that twice: replacing the chosen amount
+	 * with `PUBLIC_ACCESS_PRICE` at the commit site, and then at the single unified call,
+	 * left the whole suite passing.
+	 *
+	 * Blossom is four times the entry price, so a substitution cannot hide inside it. What
+	 * is asserted is the closing summary, which is the one place the page adds itself up
+	 * and is the number `commit` then hands to `preview/:amount`.
+	 */
+	test("a rung above Root is quoted at its own amount, not at the entry price", async ({
+		page,
+	}) => {
+		await page.goto("/subscribe");
+		await rung(page, /^blossom/i).click();
+
+		const monthly = page.getByText("Monthly", { exact: true }).locator("..");
+		await expect(monthly).toContainText("$12");
+		await expect(monthly, "the entry price is not the quote for a higher rung").not.toContainText(
+			"$3",
+		);
 	});
 
 	test("the free path promises one step only", async ({ page }) => {

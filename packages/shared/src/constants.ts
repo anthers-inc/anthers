@@ -340,6 +340,58 @@ export function timePoolFor(anthersDollars: number): number {
 }
 
 /**
+ * Share of a Badge's Time Pool held back to be given as Stickers.
+ *
+ * 🚨 **A dial, not a fact.** A third was chosen because it makes the Root budget reach two
+ * $0.25 Stickers rather than one — the difference between a feature a person uses and one
+ * they spend. Nothing depends on the specific value. 20.06 § Stickers.
+ */
+export const STICKER_SHARE_OF_POOL = 1 / 3;
+
+/**
+ * A Badge's monthly Sticker budget, in dollars.
+ *
+ * ⚠️ **Carved OUT of the Time Pool rather than added beside it**, which is what makes
+ * Stickers cost Anthers nothing and take nothing from creators in aggregate: the money was
+ * already on its way to creators, and unspent budget rolls back into the pool at the end of
+ * the cycle. So a rung's Time Pool figure and its Sticker figure overlap by design — the
+ * second is part of the first — and any surface showing both has to say so.
+ *
+ * A free account has none: a third of the subsidised pot buys no Sticker at any
+ * denomination, so the arithmetic settles this before policy has to.
+ *
+ * 🚨 **Stickers are DESIGNED, NOT BUILT.** There is no like primitive to attach one to.
+ * This exists so the figure a marketing page quotes is derived rather than typed; it is not
+ * evidence the feature ships. See 20.06 before writing copy that implies otherwise.
+ */
+export function stickerBudgetFor(anthersDollars: number): number {
+	return anthersDollars <= 0 ? 0 : timePoolFor(anthersDollars) * STICKER_SHARE_OF_POOL;
+}
+
+/**
+ * A Badge's cloud storage floor, in GiB.
+ *
+ * Free gets `FREE_STORAGE_GIB` and it holds a **creator's catalog only**, so an account
+ * that has never published has no storage at all. From the first rung the same floor
+ * becomes spendable on the account's own kept files too, and each further rung adds
+ * another `FREE_STORAGE_GIB`.
+ *
+ * 🚨 **Counted by rungs CLEARED, never by position in a list.** `BADGE_ORDER`'s own note
+ * records why: a Badge is identified by its threshold, and the retired
+ * `indexOf(BADGE_ORDER)` looked correct for as long as Anthers' set happened to be evenly
+ * spaced. `amountMeets` is the only comparison that survives a ladder with gaps.
+ *
+ * 🚨 **The per-rung scaling is DESIGNED, NOT BUILT** — `estimateStorageCost` bills every
+ * creator against `FREE_STORAGE_GIB` flat, and there is no user-side storage at all. 20.06
+ * also records that 50 GiB a rung is what the rung budget affords rather than a settled
+ * increment.
+ */
+export function storageGibFor(anthersDollars: number): number {
+	const rungs = ANTHERS_BADGES.filter((b) => amountMeets(anthersDollars, b.threshold)).length;
+	return rungs === 0 ? FREE_STORAGE_GIB : FREE_STORAGE_GIB * rungs;
+}
+
+/**
  * How much more a creator earns from an hour of your attention once you give Anthers
  * `dollars` a month, against giving nothing.
  *

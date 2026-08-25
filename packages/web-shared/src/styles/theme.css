@@ -39,6 +39,13 @@
 	--color-warning-content: oklch(98.6% 0.012 96);
 	--color-error: oklch(57% 0.17 28);
 	--color-error-content: oklch(98.6% 0.012 96);
+
+	/* 🚨 NOT an Anthers token — Bluesky's own brand blue, and the ONE colour their brand
+	   guidance permits for the butterfly on a light background. It is deliberately a raw
+	   hex rather than an oklch Meadow value: their guidance says "do not substitute, tint,
+	   or approximate", so this must never be expressed in terms of our palette or nudged
+	   to sit better against it. https://bsky.social/about/support/branding */
+	--bluesky-mark: #0560ff;
 }
 
 /* Dark — opt-in via data-theme=dark. Deliberately darkened + desaturated greens so the
@@ -66,6 +73,10 @@
 	--color-warning-content: oklch(17% 0.017 158);
 	--color-error: oklch(66% 0.16 28);
 	--color-error-content: oklch(17% 0.017 158);
+
+	/* White is the variant Bluesky's guidance names for a dark background. Blue is listed
+	   for white or light backgrounds only, and at 14% lightness this base is neither. */
+	--bluesky-mark: #ffffff;
 }
 
 /* Soft form-control borders — the default bordered inputs/selects read as
@@ -77,6 +88,29 @@
 .textarea,
 .file-input {
 	border-color: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
+/* 🚨 Placeholders, which rendered at FULL text colour without this — so every empty
+   field on the site read as a field somebody had already filled in.
+
+   Nothing was styling them. DaisyUI gives `.input` a placeholder colour only in the
+   DISABLED state, so an enabled field fell through to Tailwind's preflight default,
+   and whatever preflight was contributing did not survive to the screen. Rather than
+   chase which layer swallowed it, this states the colour we want at a specificity
+   nothing here competes with.
+
+   ⚠️ `:where()` keeps it at zero specificity on purpose, so DaisyUI's disabled rule
+   (20%, dimmer still) keeps winning where it applies.
+
+   ⭐ **Verify a change here against pixels, not against the DOM.** `getComputedStyle(el,
+   "::placeholder")` returns the *element's* colour rather than the pseudo-element's, and
+   reading `rule.style.cssText` back through the CSSOM serialises a `color-mix()` down to
+   its bare base — the `.input` border rule above reads back as a flat
+   `var(--color-base-content)` while genuinely computing to `… / 0.1`. Both readbacks will
+   tell you this rule is not working when it is. Screenshot an empty field beside a filled
+   one instead. */
+:where(.input, .select, .textarea, .file-input)::placeholder {
+	color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
 }
 
 /* The CSS-mask primitive behind <BrandGlyph>. Sized/recolored by utilities

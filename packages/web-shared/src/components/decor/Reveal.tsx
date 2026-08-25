@@ -16,6 +16,7 @@ export function Reveal({
 	delay = 0,
 	as: Tag = "div",
 	style,
+	id,
 }: {
 	children: React.ReactNode;
 	className?: string;
@@ -23,6 +24,14 @@ export function Reveal({
 	delay?: number;
 	as?: ElementType;
 	style?: React.CSSProperties;
+	/**
+	 * An anchor on the wrapper, for in-page links.
+	 *
+	 * A section that is a scroll target usually *is* a Reveal, and wrapping one in a bare
+	 * `<div id>` just to carry the anchor puts a box between the grid and its child. Pair
+	 * it with `scroll-mt-*` so the heading clears any sticky header.
+	 */
+	id?: string;
 }) {
 	const ref = useRef<HTMLElement>(null);
 	const [revealed, setRevealed] = useState(false);
@@ -60,6 +69,7 @@ export function Reveal({
 	return (
 		<Tag
 			ref={ref}
+			id={id}
 			data-reveal=""
 			data-revealed={revealed ? "" : undefined}
 			className={className}

@@ -9,8 +9,11 @@ import {
 	FPS_MULT,
 	fixed,
 	GIB_PER_MBPS_HR,
+	MASTER_AUDIO_MBPS,
+	MASTER_EXPORT,
 	money,
 	moneyBig,
+	type MasterFormat as NamedMasterFormat,
 	RES_COLOR,
 	RES_HEIGHT,
 	RES_LADDER_HIGH_TO_LOW,
@@ -22,34 +25,13 @@ import {
 // ---------------------------------------------------------------------------
 // Model — the original master is stored as-is, then a full AV1 delivery ladder
 // down to 240p30 is transcoded and stored alongside it.
+//
+// ⚠️ The master reference bitrates live in `video-model.ts` beside the ladder
+// rather than here, so a page that needs to size video reads the same model this
+// calculator runs on instead of keeping a second copy of it.
 // ---------------------------------------------------------------------------
 
-type MasterFormat = "h264" | "h265" | "prores" | "custom";
-
-/** Master export reference: 30fps video bitrate (Mbps) per format + fps scaling. */
-const MASTER_EXPORT: Record<
-	Exclude<MasterFormat, "custom">,
-	{ label: string; ref: Partial<Record<Resolution, number>>; fps: Record<number, number> }
-> = {
-	h264: {
-		label: "H.264 master",
-		ref: { "720p": 6, "1080p": 12, "1440p": 20, "2160p": 45 },
-		fps: { 24: 0.9, 30: 1.0, 60: 1.5 },
-	},
-	h265: {
-		label: "H.265 master",
-		ref: { "720p": 4, "1080p": 8, "1440p": 13, "2160p": 28 },
-		fps: { 24: 0.9, 30: 1.0, 60: 1.5 },
-	},
-	prores: {
-		label: "ProRes 422HQ master",
-		ref: { "720p": 98, "1080p": 220, "1440p": 390, "2160p": 880 },
-		fps: { 24: 0.8, 30: 1.0, 60: 2.0 },
-	},
-};
-
-/** The master carries a higher-rate audio track than the delivery rungs. */
-const MASTER_AUDIO_MBPS = 0.256;
+type MasterFormat = NamedMasterFormat | "custom";
 
 const MASTER_COLOR = "#94a3b8";
 
