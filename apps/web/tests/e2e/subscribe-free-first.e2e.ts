@@ -109,8 +109,18 @@ test.describe("/subscribe leads with the free door", () => {
 		const free = page.getByRole("radio", { name: /^free/i });
 		await expect(free).toBeVisible();
 
-		// And choosing it is a real answer that the page acts on, rather than decoration.
+		// 🚨 **Checked before anything is pressed** (Parker, 2026-08-25). The ladder opened
+		// with nothing selected until then, which left its default state showing none of its
+		// five options — and made the assertion below meaningless, since clicking Free first
+		// and then checking it passes whatever the default was. Free is where an account with
+		// no support for Anthers already sits, so it is what the control should show.
+		await expect(free).toBeChecked();
+		await expect(page.getByText(/staying free/i)).toBeVisible();
+
+		// And choosing it is still a real answer the page acts on, rather than decoration.
 		// See `rung` for why the label is the click target and why it is named by its radio.
+		await rung(page, /^root/i).click();
+		await expect(free).not.toBeChecked();
 		await rung(page, /^free/i).click();
 		await expect(free).toBeChecked();
 		await expect(page.getByText(/staying free/i)).toBeVisible();
@@ -195,6 +205,71 @@ test.describe("/subscribe leads with the free door", () => {
 			el.clientWidth,
 		]);
 		expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+	});
+
+	test("the matrix actually draws its grid, rather than declaring it and painting it away", async ({
+		page,
+	}) => {
+		// 🚨 **The rules were declared and then painted transparent, and it shipped.** The
+		// value cells carried `border-t border-base-content/10` for the row rule and
+		// `border-x border-transparent` to reserve the column edge — and `border-transparent`
+		// sets `border-color` on ALL FOUR sides, so the later class wiped the colour the row
+		// rule depended on. The label column had no such class, which is why the lines
+		// appeared under the descriptions and stopped dead where the figures began.
+		//
+		// ⚠️ **Nothing else could have caught this.** The markup was right, the classes were
+		// all present, every layout assertion passed, and the DOM says `border-top-width: 1px`
+		// either way. The only thing that knows is the computed colour.
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto("/subscribe");
+
+		const cell = page.locator("#anthers-badges tbody td").first();
+		await expect(cell).toBeVisible();
+
+		const paint = await cell.evaluate((el) => {
+			const style = getComputedStyle(el);
+			return {
+				top: style.borderTopColor,
+				right: style.borderRightColor,
+				background: style.backgroundColor,
+			};
+		});
+
+		// `rgba(…, 0)` is the tell — a border that is there, sized, and invisible.
+		const invisible = (colour: string) => /,\s*0\s*\)$/.test(colour) || colour === "transparent";
+		expect(invisible(paint.top), `row rule is invisible: ${paint.top}`).toBe(false);
+		expect(invisible(paint.right), `column rule is invisible: ${paint.right}`).toBe(false);
+		// And the card has a surface of its own, so the figures do not sit on the page.
+		expect(invisible(paint.background), `matrix has no surface: ${paint.background}`).toBe(false);
+
+		// 🚨 **The outer edge is heavier than the rules inside it, and the table is raised.**
+		// The cells were lightened to separate them from the chrome, which also moved them
+		// closer to the page — and a card whose fill nearly matches its surroundings is held
+		// together by its edge alone (Parker, 2026-08-25). Both halves are asserted because
+		// either one alone leaves the table reading as loose text on the background.
+		const edge = await page
+			.locator("#anthers-badges tbody tr:last-child td:last-child")
+			.evaluate((el) => ({
+				right: Number.parseFloat(getComputedStyle(el).borderRightWidth),
+				bottom: Number.parseFloat(getComputedStyle(el).borderBottomWidth),
+			}));
+		const interior = Number.parseFloat(
+			await cell.evaluate((el) => getComputedStyle(el).borderRightWidth),
+		);
+		expect(edge.right, "the card's right edge is no heavier than an interior rule").toBeGreaterThan(
+			interior,
+		);
+		expect(
+			edge.bottom,
+			"the card's bottom edge is no heavier than an interior rule",
+		).toBeGreaterThan(interior);
+
+		// A `drop-shadow` filter, not a `box-shadow`: the tabs stand proud of the body with
+		// gaps between them, so a rectangle would not trace this control.
+		const filter = await page
+			.locator("#anthers-badges table")
+			.evaluate((el) => getComputedStyle(el).filter);
+		expect(filter, `the matrix casts no shadow: ${filter}`).toContain("drop-shadow");
 	});
 
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
