@@ -1,45 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-/**
- * Compare the commit App Platform is actually serving against what `release`
- * points at, and fail if they disagree.
- *
- * `deploy_on_push` is false on every component, so the CI `deploy` job is the
- * only path to production — and if that job does not run for any reason, the
- * push to `release` succeeds and nothing deploys. Git reports success, the
- * branch moves, the site keeps serving the old build. A successful push is
- * indistinguishable from a successful deploy, and nothing local or in CI could
- * tell the difference: `make verify` does not build images, and `apps
- * list-deployments` returns the *previous* deployment as `ACTIVE`, which reads
- * as success. The verification that actually works, used on 2026-08-14 to
- * recover from a silent stale-deploy: assert the **commit hash** the live
- * deployment was built from, against what `release` points at. See the task:
- * 00-09 Meta/Tasks/Active/A push to release can succeed while nothing deploys.md
- *
- * Two modes:
- *
- *   make deploy-status               Compare live vs local `release` (default).
- *   make deploy-status REF=origin/release   Compare live vs an arbitrary ref.
- *
- * It also reports how far `release` trails `main` (override with `PROMOTE_FROM`),
- * because "`release` deployed" and "the work shipped" are different claims and
- * only the first was ever checked — see the note above that comparison.
- *
- * Exit codes, and each split is deliberate:
- *   0  live, `release` and `main` all agree.
- *   1  live and `release` disagree — a finding worth a human.
- *   2  the live state cannot be determined (doctl missing/unauthenticated, or no
- *      deployment carrying a `source_commit_hash`). A tooling gap is not a
- *      finding and must not read as "drift detected".
- *   3  live matches `release`, but `release` is behind `main`. Production is
- *      missing merged work — yet promoting is a deliberate act and being behind
- *      mid-development is normal, so this is reported, not failed. A scheduled
- *      caller can tolerate 3 while still alarming on 1.
- *
- * Needs: doctl, authenticated. Exits 0 with a notice when it is absent, so this
- *        is safe to call from a machine that cannot reach DigitalOcean — the
- *        scheduled workflow gates on doctl availability separately.
- */
-export {}; // top-level await needs this file to be a module
+import { type Deployment, readDeployments } from "./deploy-state.js";
 
 /** Which `doctl` account to compare against, via `DOCTL_CONTEXT`. Same rule as
  * `spec-diff.ts`: production is under an Anthers-owned account, and without this
@@ -51,17 +10,6 @@ const ctxArgs = CONTEXT ? ["--context", CONTEXT] : [];
  * (local), exactly as `spec-diff.ts` resolves it — the id is assigned at
  * creation and is not in the committed spec. */
 const APP_NAME = "anthers";
-
-type Deployment = {
-	id: string;
-	cause: string;
-	phase: string;
-	created_at: string;
-	services?: { name?: string; source_commit_hash?: string }[];
-	static_sites?: { name?: string; source_commit_hash?: string }[];
-	workers?: { name?: string; source_commit_hash?: string }[];
-	jobs?: { name?: string; source_commit_hash?: string }[];
-};
 
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
 	const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
@@ -114,18 +62,64 @@ if (!deploys.ok) {
 
 const deployments = JSON.parse(deploys.stdout) as Deployment[];
 
-// The live deployment is the one with phase ACTIVE. There is at most one; if a
-// rebuild is in flight there may be zero, which is a state worth surfacing too.
-const active = deployments.find((d) => d.phase === "ACTIVE");
+// The ref to compare against: `release` locally by default, overridable via REF.
+// CI passes `REF=origin/release` because the scheduled check has no local branch
+// state worth trusting — only the remote ref is what App Platform builds from.
+//
+// ⚠️ Resolved BEFORE the ACTIVE lookup, because the no-ACTIVE branch below has to be
+// able to say whether the thing currently deploying is the thing we asked for.
+const REF = process.env.REF ?? "release";
+const refResult = await run(["git", "rev-parse", `--short=7`, REF]);
+if (!refResult.ok) {
+	console.error(`deploy-status: could not resolve ref "${REF}".\n${refResult.stderr.trim()}`);
+	process.exit(2);
+}
+const refCommit = refResult.stdout.trim();
+// Short hashes for display; full hashes for the comparison, so a 7-char collision
+// can never read as agreement. App Platform returns 40-char SHAs.
+const refFull = (await run(["git", "rev-parse", REF])).stdout.trim();
+
+/**
+ * Is a deployment already on its way up, and is it the one this ref asks for?
+ *
+ * Computed before anything is decided, because **both** failure branches need it: the
+ * no-ACTIVE case immediately below, and the drift case much further down.
+ */
+const situation = readDeployments(deployments, refFull);
+const { inFlight, inFlightCommits, inFlightIsRef } = situation;
+const inFlightShort = inFlightCommits.map((c) => c.slice(0, 7)).join(", ") || "no readable commit";
+
+// The live deployment is the one with phase ACTIVE. There is at most one — and during a
+// rebuild there is briefly NONE, which is the state this branch exists for.
+const active = situation.active;
 if (!active) {
+	// 🚨 There being no ACTIVE deployment is the NORMAL state for part of every deploy,
+	// not evidence of a problem. This branch used to exit 1 unconditionally, which made it
+	// the earlier of two ways the drift watch cried wolf during a deploy window — and the
+	// one that fires first, so fixing only the later one changes nothing.
+	if (inFlight && inFlightIsRef) {
+		console.log(`deploy-status: deploy in flight ✓`);
+		console.log(`  ${REF.padEnd(8)} ${refCommit}`);
+		console.log(`  live:    none yet  (no ACTIVE deployment during a rebuild)`);
+		console.log(`  in flight: ${refCommit}  (${inFlight.phase.toLowerCase()})`);
+		console.log("");
+		console.log(`  ${REF} is deploying now. Re-run when it reaches ACTIVE.`);
+		console.log("  (Exit 4, distinct from drift, so a scheduled check can tolerate it.)");
+		process.exit(4);
+	}
+	if (inFlight) {
+		console.error(
+			`deploy-status: no ACTIVE deployment, and the one ${inFlight.phase.toLowerCase()} is ${inFlightShort}, not ${refCommit}.`,
+		);
+		console.error("  An older push may still be landing, or a deploy was created from the wrong");
+		console.error("  SHA. Wait for it to settle, then re-run before acting.");
+		process.exit(1);
+	}
 	console.error(
-		`deploy-status: no ACTIVE deployment for ${APP_NAME}. A rebuild may be in flight, or the app is unhealthy.`,
+		`deploy-status: no ACTIVE deployment for ${APP_NAME}, and nothing is in flight. The app is unhealthy.`,
 	);
 	process.exit(1);
 }
-
-/** Every component kind that can carry a `source_commit_hash`. */
-const COMPONENT_KINDS = ["services", "static_sites", "workers", "jobs"] as const;
 
 /** Collect the distinct commit hashes the live deployment was built from.
  *
@@ -134,14 +128,7 @@ const COMPONENT_KINDS = ["services", "static_sites", "workers", "jobs"] as const
  * in the normal case. Collecting the set rather than reading one means a
  * partial-failure state — some components built, some not — surfaces as a
  * disagreement with itself before it can disagree with `release`. */
-const liveCommits = new Set<string>();
-for (const kind of COMPONENT_KINDS) {
-	for (const c of active[kind] ?? []) {
-		if (c.source_commit_hash && c.source_commit_hash.length >= 7) {
-			liveCommits.add(c.source_commit_hash);
-		}
-	}
-}
+const liveCommits = new Set(situation.liveCommits);
 
 if (liveCommits.size === 0) {
 	console.error(
@@ -159,20 +146,6 @@ if (liveCommits.size > 1) {
 
 const liveCommit = [...liveCommits][0];
 
-// The ref to compare against: `release` locally by default, overridable via REF.
-// CI passes `REF=origin/release` because the scheduled check has no local branch
-// state worth trusting — only the remote ref is what App Platform builds from.
-const REF = process.env.REF ?? "release";
-const refResult = await run(["git", "rev-parse", `--short=7`, REF]);
-if (!refResult.ok) {
-	console.error(`deploy-status: could not resolve ref "${REF}".\n${refResult.stderr.trim()}`);
-	process.exit(2);
-}
-const refCommit = refResult.stdout.trim();
-
-// Short hashes for display; full hashes for the comparison, so a 7-char collision
-// can never read as agreement. App Platform returns 40-char SHAs.
-const refFull = (await run(["git", "rev-parse", REF])).stdout.trim();
 const agree = refFull === liveCommit || refCommit === liveCommit.slice(0, 7);
 
 const ageMs = Date.now() - new Date(active.created_at).getTime();
@@ -246,6 +219,23 @@ if (agree) {
  */
 const liveIsDescendant = (await run(["git", "merge-base", "--is-ancestor", REF, liveCommit])).ok;
 
+// 🚨 The in-flight facts are only CONSULTED here, after live and the ref are known to
+// disagree — so a deploy in progress can soften a mismatch and can never hide one. It is
+// an explanation only when the thing being deployed is precisely the commit we asked for.
+if (inFlightIsRef) {
+	console.log(`deploy-status: deploy in flight ✓`);
+	console.log(`  ${REF.padEnd(8)} ${refCommit}`);
+	console.log(
+		`  live:    ${liveCommit.slice(0, 7)}  (deployed ${ageHours}h ago, cause: ${active.cause})`,
+	);
+	console.log(`  in flight: ${refCommit}  (${inFlight?.phase.toLowerCase()})`);
+	console.log("");
+	console.log(`  Production has not caught up to ${REF} YET, and is on its way. Nothing to do`);
+	console.log("  but wait — re-run when the deployment reaches ACTIVE.");
+	console.log("  (Exit 4, distinct from drift, so a scheduled check can tolerate it.)");
+	process.exit(4);
+}
+
 console.error(`deploy-status: DRIFT — live and ${REF} disagree.`);
 console.error(`  ${REF.padEnd(8)} ${refCommit}`);
 console.error(
@@ -263,6 +253,14 @@ if (liveIsDescendant) {
 		console.error(`    git fetch origin && git branch -f ${REF} origin/${REF}`);
 		console.error(`  or re-run against the remote: REF=origin/${REF} make deploy-status`);
 	}
+} else if (inFlight) {
+	// Something IS deploying — just not this. Saying "nothing deployed" here would be the
+	// same class of confidently-wrong the live-is-ahead branch above exists to prevent.
+	console.error(
+		`  A deployment is ${inFlight.phase.toLowerCase()}, but from ${inFlightShort} rather than ${refCommit}.`,
+	);
+	console.error("  Either an older push is still landing, or a deploy was created by hand from");
+	console.error(`  the wrong SHA. Wait for it to settle, then re-run before acting.`);
 } else {
 	console.error("  Production is serving a stale build: the push succeeded, nothing deployed.");
 	console.error("  Likely causes:");
@@ -270,5 +268,6 @@ if (liveIsDescendant) {
 	console.error("    - the deploy was created manually but from a different SHA");
 	console.error("  Recover: doctl apps create-deployment <app-id>  (CI's escape hatch, by hand)");
 	console.error("          or merge the missing work into release and push again.");
+	console.error("  (Nothing is in flight — this is a real stale build, not a deploy in progress.)");
 }
 process.exit(1);
