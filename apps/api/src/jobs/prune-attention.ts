@@ -34,6 +34,21 @@
  *    does not exist. A rollup that kept identities would make the policy sentence
  *    false while looking like it implemented it.
  *
+ * 4. **A legal hold suspends it, and it suspends the whole DAY.** § 4.4 of the Document
+ *    Retention and Destruction Policy requires every scheduled deletion Anthers operates
+ *    to have an off switch — *"a retention rule that cannot be switched off is a defect
+ *    to be fixed, not a defense"* — and a subpoena asking what an account watched is an
+ *    ordinary legal request rather than an exotic one. This was the last sweep in the
+ *    codebase without one. Why the whole day rather than the held person's rows is
+ *    property 2 read carefully: the rollup upsert writes `excluded` rather than adding,
+ *    so a day aggregated from part of its rows and then re-aggregated from the rest
+ *    **overwrites** the first total with the second. Skipping a held person's rows and
+ *    deleting the rest would therefore destroy the creator's earnings history for that
+ *    day the next time the job ran — failure 1, arrived at from the other direction. The
+ *    cost is that one held account delays pruning of every day it was active in, which
+ *    is a bounded retention delay rather than a silently wrong figure, and that is the
+ *    trade this file already makes everywhere else.
+ *
  * The thing this job deliberately does NOT touch is `pool_distributions`, which also
  * carries `(subscriber_id, creator_id, attention_seconds)` per cycle. That is a
  * *payment* record — what was paid to whom, out of whose support — and 51.05 keeps
@@ -46,7 +61,8 @@
 import { db } from "@anthers/db";
 import { attentionEvents } from "@anthers/db/schema";
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
-import { lt, sql } from "drizzle-orm";
+import { inArray, lt, type SQL, sql } from "drizzle-orm";
+import { allHeldSubjectIds } from "../services/legal-hold.js";
 
 export interface PruneAttentionData {
 	/** Override the retention window, in days. Tests use it; nothing else should. */
@@ -60,6 +76,8 @@ export interface PruneAttentionResult {
 	daysProcessed: number;
 	rowsAggregated: number;
 	rowsDeleted: number;
+	/** UTC days left alone because someone active in them is under a legal hold. */
+	daysHeld: number;
 }
 
 /** Midnight UTC, `retentionDays` ago. Everything strictly before this is prunable. */
@@ -78,10 +96,21 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 	// the loop below are raw by necessity — aggregate-and-upsert has no builder form.
 	const cutoffIso = cutoff.toISOString();
 
+	// Everyone whose viewing history is under a legal hold right now. One query, not one
+	// per row — and in the ordinary case it comes back empty and costs nothing further.
+	const heldUserIds = await allHeldSubjectIds("user");
+	const rowIsHeld = heldUserIds.length > 0 ? inArray(attentionEvents.userId, heldUserIds) : null;
+
 	// Whole UTC days only. Pruning a partial day would roll up half of it, delete those
 	// rows, and later roll up the rest into a total that looks complete and isn't — the
 	// upsert writes `excluded` rather than adding, so the second pass would overwrite
 	// the first with a smaller figure.
+	//
+	// A day containing ANY held person's rows is excluded here rather than filtered in the
+	// loop below, which is the same rule seen from the other side: a partially-pruned day
+	// is exactly the corruption the paragraph above describes, and a hold is a reason to
+	// prune part of a day. Excluding in the HAVING also means a held day does not consume
+	// a slot against `maxDays`, so a long-running hold cannot starve the backlog.
 	const dayRows = await db
 		.select({
 			day: sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
@@ -89,8 +118,13 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 		.from(attentionEvents)
 		.where(lt(attentionEvents.createdAt, cutoff))
 		.groupBy(sql`1`)
+		.having(rowIsHeld ? sql`bool_or(${rowIsHeld}) = false` : undefined)
 		.orderBy(sql`1`)
 		.limit(maxDays);
+
+	// Reported so a held backlog is visible in the logs rather than looking like an idle
+	// job. Skipped entirely when nothing is held, which is every ordinary run.
+	const daysHeld = rowIsHeld ? await countHeldDays(cutoff, rowIsHeld) : 0;
 
 	let rowsAggregated = 0;
 	let rowsDeleted = 0;
@@ -139,13 +173,32 @@ export async function pruneAttention(data: PruneAttentionData = {}): Promise<Pru
 			`prune-attention: rolled up ${rowsAggregated} daily totals from ${rowsDeleted} raw events across ${dayRows.length} day(s) before ${cutoff.toISOString().slice(0, 10)}`,
 		);
 	}
+	if (daysHeld > 0) {
+		console.log(
+			`prune-attention: left ${daysHeld} day(s) unpruned — someone active in them is under a legal hold`,
+		);
+	}
 
 	return {
 		cutoff: cutoff.toISOString().slice(0, 10),
 		daysProcessed: dayRows.length,
 		rowsAggregated,
 		rowsDeleted,
+		daysHeld,
 	};
+}
+
+/** How many prunable UTC days are being left alone for a hold. */
+async function countHeldDays(cutoff: Date, rowIsHeld: SQL): Promise<number> {
+	const rows = await db
+		.select({
+			day: sql<string>`to_char(${attentionEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+		})
+		.from(attentionEvents)
+		.where(lt(attentionEvents.createdAt, cutoff))
+		.groupBy(sql`1`)
+		.having(sql`bool_or(${rowIsHeld}) = true`);
+	return rows.length;
 }
 
 /** postgres-js returns the rows array directly; other drivers wrap them in `{ rows }`. */

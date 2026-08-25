@@ -17,10 +17,18 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { legalHolds, moderationReports, sessions, users } from "@anthers/db/schema";
+import {
+	attentionDaily,
+	attentionEvents,
+	legalHolds,
+	moderationReports,
+	sessions,
+	users,
+} from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
+import { pruneAttention } from "../jobs/prune-attention.js";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions } from "../services/auth.js";
 import { isUnderHold, liftHold, placeHold, preservationExpiry } from "../services/legal-hold.js";
@@ -55,8 +63,41 @@ async function signUp(username: string): Promise<number> {
 }
 
 const id = crypto.randomUUID().slice(0, 8);
-const names = ["held", "free", "sess", "rep"].map((s) => `hold_${s}_${id}`);
+const names = ["held", "free", "sess", "rep", "attc", "attfree", "attheld"].map(
+	(s) => `hold_${s}_${id}`,
+);
 const userIds: number[] = [];
+
+/**
+ * Two UTC days well outside the window any other suite seeds into.
+ *
+ * The attention prune is global — it sweeps every day older than its cutoff, not just
+ * this fixture's — so a day shared with `attention-retention.test.ts` would let a hold
+ * placed here decide whether that suite's rows survive. Distinct days keep the two
+ * suites from arguing about the same rollup.
+ */
+function daysAgo(n: number): string {
+	return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+const FREE_DAY = daysAgo(200);
+const HELD_DAY = daysAgo(201);
+
+/** A back-dated viewing record. The endpoint always stamps `now()`, so this goes in raw. */
+async function seedAttention(userId: number, day: string) {
+	await db.execute(sql`
+		INSERT INTO attention_events (user_id, creator_id, work_id, event_type, duration_seconds, created_at)
+		VALUES (${userId}, ${userIds[4]}, NULL, 'watch', 60, ${`${day}T12:00:00Z`})
+	`);
+}
+
+/** Raw rows for one person, counted directly rather than through any reader. */
+async function countAttention(userId: number): Promise<number> {
+	const [row] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(attentionEvents)
+		.where(eq(attentionEvents.userId, userId));
+	return row.n;
+}
 
 /** A timestamp comfortably past the redaction cutoff, so a report is sweepable now. */
 function longAgo(): Date {
@@ -247,6 +288,44 @@ describe("The redaction sweep", () => {
 	});
 });
 
+describe("The attention prune", () => {
+	it("destroys a viewing history when nothing holds the account", async () => {
+		const target = userIds[5];
+		await seedAttention(target, FREE_DAY);
+		expect(await countAttention(target)).toBe(1);
+
+		await pruneAttention({ retentionDays: 30 });
+		expect(await countAttention(target)).toBe(0);
+	});
+
+	it("keeps a held account's viewing history, and the whole day with it", async () => {
+		const held = userIds[6];
+		const bystander = userIds[5];
+		// A second person active on the SAME day, to pin down which unit the sweep skips.
+		await seedAttention(held, HELD_DAY);
+		await seedAttention(bystander, HELD_DAY);
+		await placeHold({ subjectType: "user", subjectId: held, reason: "attention fixture" });
+
+		const result = await pruneAttention({ retentionDays: 30 });
+
+		expect(await countAttention(held)).toBe(1);
+		// 🚨 The bystander's row survives too, and that is correct rather than sloppy. The
+		// rollup upsert writes `excluded` rather than adding, so aggregating a day from
+		// part of its rows and later re-aggregating from the rest overwrites the creator's
+		// total with the smaller figure — the same overwrite `attention-retention.test.ts`
+		// pins in its idempotence case. A day is pruned whole or not at all.
+		expect(await countAttention(bystander)).toBe(1);
+		expect(result.daysHeld).toBeGreaterThanOrEqual(1);
+
+		// And the day was never rolled up, so no partial total was written for it.
+		const daily = await db
+			.select({ n: sql<number>`count(*)::int` })
+			.from(attentionDaily)
+			.where(and(eq(attentionDaily.creatorId, userIds[4]), eq(attentionDaily.day, HELD_DAY)));
+		expect(daily[0].n).toBe(0);
+	});
+});
+
 describe("Cleanup", () => {
 	it("removes the fixture", async () => {
 		await db
@@ -257,7 +336,12 @@ describe("Cleanup", () => {
 					sql`${moderationReports.subjectId} IN (555001, 555002)`,
 				),
 			);
+		// Holds are keyed by a bare integer with no foreign key, so deleting the users
+		// below leaves them behind — and a stale active hold on a recycled subject id
+		// would silently suspend a sweep in some later run.
+		await db.delete(legalHolds).where(inArray(legalHolds.subjectId, userIds));
 		await db.execute(sql`DELETE FROM legal_holds WHERE reason LIKE '%fixture%'`);
+		await db.delete(attentionDaily).where(eq(attentionDaily.creatorId, userIds[4]));
 		await db.execute(sql`DELETE FROM users WHERE username LIKE ${`hold_%_${id}`}`);
 		expect(true).toBe(true);
 	});
