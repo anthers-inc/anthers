@@ -39,7 +39,11 @@ export interface WorkRecord {
  * Why a Work has no public record. Returned rather than thrown, because "this one is not
  * publishable" is an ordinary outcome of walking a Catalog, not an error.
  */
-export type UnpublishableReason = "not_released" | "taken_down" | "missing_release_date";
+export type UnpublishableReason =
+	| "not_released"
+	| "taken_down"
+	| "quarantined"
+	| "missing_release_date";
 
 /**
  * Whether a Work may appear on the public network at all.
@@ -56,6 +60,12 @@ export type UnpublishableReason = "not_released" | "taken_down" | "missing_relea
  * visibility value it does not recognise.
  */
 export function unpublishableReason(work: PublishableWork): UnpublishableReason | null {
+	// 🚨 First, and stated separately from the visibility check below even though a
+	// quarantine also flips `visibility` to `private`. The two must not be one test: a
+	// record is public and cached by strangers, so the thing that stops this material
+	// reaching the network has to be the material's own state rather than a side effect of
+	// it, which some later change to how quarantine delists could quietly remove.
+	if (work.quarantineStatus === "quarantined") return "quarantined";
 	if (work.takedownStatus !== "active") return "taken_down";
 	if (work.visibility !== "released") return "not_released";
 	// A released Work with no release date is a state no current path produces — the update

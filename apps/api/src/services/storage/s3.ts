@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	CopyObjectCommand,
 	DeleteObjectCommand,
 	DeleteObjectsCommand,
 	GetObjectCommand,
@@ -25,7 +26,7 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { isPublicKey } from "./acl.js";
+import { assertServableKey, isPublicKey } from "./acl.js";
 import { publicUrlFor, resolveStorageConfig, type StorageConfig } from "./config.js";
 import type { StorageService } from "./types.js";
 
@@ -187,6 +188,9 @@ export class S3StorageService implements StorageService {
 	}
 
 	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
+		// The second denial. See `assertServableKey` — this is one of the two doors bytes
+		// leave through, and it refuses regardless of what any caller resolved.
+		assertServableKey(key);
 		if (opts?.signed) {
 			return getSignedUrl(
 				this.s3,
@@ -207,6 +211,9 @@ export class S3StorageService implements StorageService {
 		acl: "public" | "private",
 		expiresIn = 3600,
 	): Promise<{ url: string; headers: Record<string, string> }> {
+		// The other door. A presigned PUT into the quarantine prefix would let an uploader
+		// write material into the one place nothing is ever checked again.
+		assertServableKey(key);
 		const value = acl === "public" ? "public-read" : "private";
 		const url = await getSignedUrl(
 			this.s3,
@@ -229,6 +236,33 @@ export class S3StorageService implements StorageService {
 		// Verified against a live R2 bucket on 2026-08-11 — with the header 403, without it
 		// 200. `this.config.sendObjectAcl` is the derivation and carries the full reasoning.
 		return { url, headers: this.config.sendObjectAcl ? { "x-amz-acl": value } : {} };
+	}
+
+	/**
+	 * Copy then delete. `CopyObject` takes the source as `{bucket}/{key}`, so a move that
+	 * crosses buckets — the thumbnail case — is the same call with a different source.
+	 */
+	async move(fromKey: string, toKey: string): Promise<boolean> {
+		if (fromKey === toKey) return true;
+		const sourceBucket = this.bucketForKey(fromKey);
+		const targetBucket = this.bucketForKey(toKey);
+		try {
+			await this.s3.send(
+				new CopyObjectCommand({
+					Bucket: targetBucket,
+					Key: toKey,
+					CopySource: `${sourceBucket}/${fromKey}`,
+				}),
+			);
+		} catch {
+			// A missing source is the ordinary case for a Work whose media never uploaded,
+			// and it must not abort a quarantine part-way through its other objects.
+			return false;
+		}
+		// Only after the copy has landed. The reverse order loses the bytes on a crash, and
+		// the bytes are the evidence this whole path exists to preserve.
+		await this.s3.send(new DeleteObjectCommand({ Bucket: sourceBucket, Key: fromKey }));
+		return true;
 	}
 
 	async delete(key: string): Promise<void> {

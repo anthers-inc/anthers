@@ -2506,6 +2506,17 @@ const contentRoutes = new Hono()
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 
+		// 🚨 A quarantined Work is not editable by its creator at all, and a 404 rather than
+		// a 403 is deliberate. Delivery is already denied and the media already moved, so
+		// nothing here could put it back — but a creator who could still rename it, re-gate
+		// it or flip it back to `released` would be operating on material under a
+		// preservation hold, and telling them *why* the Work has become untouchable hands a
+		// signal to exactly the account we would least like to have one. `requireAdmin`
+		// 404s rather than 403s for the same reason.
+		if (work.quarantineStatus === "quarantined") {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
 		const releasing = data.visibility === "released" && work.visibility !== "released";
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
 			const unready = await unreadyWorks([work.id]);
@@ -2615,6 +2626,16 @@ const contentRoutes = new Hono()
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
 		if (!item || item.creatorId !== user.id) {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		// 🚨 A quarantined Work cannot be deleted by anybody, and this is the sharpest
+		// version of that rule: deletion here calls `purgeWorkMedia`, which destroys the
+		// objects. Everything quarantined is under a § 2258A(h) preservation hold, so
+		// running this path would be destroying evidence under a statutory hold — a
+		// federal offense under 18 U.S.C. § 1519, committed by a cron job on a creator's
+		// button press. 404 rather than 403, on the same reasoning as the PATCH above.
+		if (item.quarantineStatus === "quarantined") {
 			return c.json({ error: "Work not found" }, 404);
 		}
 

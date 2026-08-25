@@ -28,6 +28,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		streamEnabled: true,
 		downloadEnabled: false,
 		takedownStatus: "active",
+		quarantineStatus: "none",
 		visibility: "released",
 		seedAccess: [{ threshold: 0, allow: true, price: "0" }] as never,
 		type: "video",

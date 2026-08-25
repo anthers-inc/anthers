@@ -114,6 +114,23 @@ export interface StorageService {
 		expiresIn?: number,
 	): Promise<{ url: string; headers: Record<string, string> }>;
 
+	/**
+	 * Move an object from one key to another, across buckets where the two keys belong to
+	 * different ones. Returns false when the source does not exist.
+	 *
+	 * Copy-then-delete rather than a rename, because that is the only thing S3 offers and
+	 * the order matters: a crash after the copy strands a duplicate, while a crash after a
+	 * delete-then-copy loses the object. The one caller is `services/quarantine.ts`, whose
+	 * whole purpose is that the bytes must not be destroyed.
+	 *
+	 * 🚨 **A thumbnail moved out of the public bucket is the reason this crosses buckets.**
+	 * Display chrome lives in `anthers-media-public` behind `cdn.anthers.org`, which serves
+	 * it by key with no access check at all — so for a quarantine, leaving it there would
+	 * leave the material world-readable at a stable URL while every gated object was safely
+	 * out of reach.
+	 */
+	move(fromKey: string, toKey: string): Promise<boolean>;
+
 	/** Delete a file. */
 	delete(key: string): Promise<void>;
 

@@ -41,6 +41,7 @@
 import { relations } from "drizzle-orm";
 import { index, integer, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
+import { works } from "./content.js";
 
 /**
  * A user's report of a comment or rating.
@@ -198,6 +199,100 @@ export const legalHolds = pgTable(
 
 export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
 	placer: one(users, { fields: [legalHolds.placedBy], references: [users.id] }),
+}));
+
+/**
+ * One object moved into the quarantine prefix, and why.
+ *
+ * 🚨 **A record, never a rendering.** § 5.2 of 60.13 makes it a policy commitment that
+ * the operator surface shows the finding — the key, the Work, the uploader, the match
+ * classification and the timestamps — and **never the material**. That is why there is
+ * no thumbnail column, no excerpt, and no preview key here: building a viewer over this
+ * table would take a policy amendment, not a migration. § 2258B conditions the
+ * provider's immunity on minimizing how many people can see such depictions, and a
+ * console that renders one widens that population every time somebody opens it.
+ *
+ * **A row per object rather than per Work**, because the finding names a key: a Work
+ * carries a source, a thumbnail, any number of assets and a transcode output, and a
+ * restore has to put each one back exactly where the database still says it is. The
+ * incident is reconstructed by grouping on `work_id` and `placed_at`, which is what the
+ * operator list does.
+ *
+ * `original_key` is what the rest of the database still points at — `works.source_key`,
+ * `assets.file`, a transcode's output URL — and is deliberately NOT rewritten when the
+ * object moves. Rewriting them would scatter the knowledge that something is quarantined
+ * across four tables, where `quarantine_status` and this row now hold it in two.
+ */
+export const mediaQuarantine = pgTable(
+	"media_quarantine",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * The Work the object belonged to. `set null` rather than `cascade`, on the same
+		 * reasoning as `works.creator_id`: the record of a quarantine has to outlive
+		 * whatever it named, and a cascade here would erase the evidence that something
+		 * was preserved at the moment the thing it was about went away.
+		 */
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
+		/** Who uploaded it, captured at quarantine time so the record survives their deletion. */
+		uploaderId: integer("uploader_id").references(() => users.id, { onDelete: "set null" }),
+		/** Where the object lives in the rest of the database. */
+		originalKey: text("original_key").notNull(),
+		/** Where it actually is now — `quarantine/` + the original key. */
+		quarantineKey: text("quarantine_key").notNull(),
+		/** source | thumbnail | asset | audio | hls — which of a Work's objects this is. */
+		objectKind: text("object_kind").notNull(),
+		/**
+		 * How this arrived: `report` (a person filed one), `scan` (a detection vendor), or
+		 * `operator` (somebody acted directly). It decides what the finding is worth.
+		 *
+		 * 🚨 A `scan` finding is a **hash match** and is a reporting trigger; a classifier's
+		 * output is triage only. *Lawshe v. Verizon* (2025) read § 2258B immunity as
+		 * covering reasonable reliance on a hash match tagged as apparent CSAM but not on
+		 * merely uncertain indications, which is why the two may never collapse into one
+		 * value here. § 7.3 of 60.13 states it as a rule.
+		 */
+		source: text("source").notNull(),
+		/**
+		 * What the finding was called by whoever made it — a vendor's classification
+		 * (`csam`, `harmful-abusive-material`), or the moderation reason a report carried.
+		 * Free text because the vendor is not chosen yet and its vocabulary is its own.
+		 */
+		classification: text("classification").notNull().default(""),
+		/** The report that triggered this, when one did. */
+		reportId: integer("report_id").references(() => moderationReports.id, {
+			onDelete: "set null",
+		}),
+		/**
+		 * The Work's `visibility` before the quarantine delisted it.
+		 *
+		 * Recorded rather than assumed, so clearing a finding restores what the creator
+		 * actually chose. `services/dmca.ts` avoids the problem entirely by never touching
+		 * `visibility` — quarantine cannot, because a listed Work still shows its thumbnail,
+		 * and for this material the thumbnail may BE the finding.
+		 */
+		priorVisibility: text("prior_visibility").notNull().default(""),
+		placedBy: integer("placed_by").references(() => users.id, { onDelete: "set null" }),
+		placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
+		/**
+		 * When the object was put back. Set on a cleared finding; the row stays either way,
+		 * so "why did this come back?" has an answer years later.
+		 */
+		clearedAt: timestamp("cleared_at", { withTimezone: true }),
+		clearedBy: integer("cleared_by").references(() => users.id, { onDelete: "set null" }),
+		note: text("note").notNull().default(""),
+	},
+	(table) => [
+		// The operator list, and the per-Work lookup a clear does.
+		index("idx_media_quarantine_work").on(table.workId, table.clearedAt),
+		index("idx_media_quarantine_placed").on(table.placedAt),
+	],
+);
+
+export const mediaQuarantineRelations = relations(mediaQuarantine, ({ one }) => ({
+	work: one(works, { fields: [mediaQuarantine.workId], references: [works.id] }),
+	uploader: one(users, { fields: [mediaQuarantine.uploaderId], references: [users.id] }),
+	placer: one(users, { fields: [mediaQuarantine.placedBy], references: [users.id] }),
 }));
 
 // Only the `one` sides are declared. There is no `many()` counterpart on `users`

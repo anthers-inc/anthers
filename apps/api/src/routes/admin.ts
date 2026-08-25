@@ -47,6 +47,12 @@ import {
 	routeToCopyright,
 } from "../services/moderation.js";
 import { notify } from "../services/notifications.js";
+import {
+	clearQuarantine,
+	loadQuarantineFindings,
+	quarantineSummary,
+	quarantineWork,
+} from "../services/quarantine.js";
 
 const QUEUE_FILTERS: readonly QueueFilter[] = [
 	"reported",
@@ -64,6 +70,30 @@ const subjectSchema = z.object({
 
 const hideSchema = subjectSchema.extend({
 	reason: z.string().refine(isModerationReason, "Unknown reason"),
+});
+
+/**
+ * A quarantine names a Work, never a subject type.
+ *
+ * Deliberately NOT built on `subjectSchema`: quarantine applies to stored media, and a
+ * comment or a rating has none. Reusing the polymorphic shape would invite a caller to
+ * send `subjectType: "comment"` and get a route that either silently does nothing or
+ * grows a branch for a case that cannot exist.
+ *
+ * `classification` is free text because the detection vendor is not chosen yet and each
+ * one has its own vocabulary — Arachnid answers `csam` / `harmful-abusive-material`,
+ * PhotoDNA does not. Constraining it now would mean renaming values later.
+ */
+const quarantineSchema = z.object({
+	workId: z.number().int().positive(),
+	classification: z.string().min(1).max(120),
+	reportId: z.number().int().positive().optional(),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+});
+
+const clearQuarantineSchema = z.object({
+	workId: z.number().int().positive(),
+	note: z.string().max(MODERATION_NOTE_MAX).optional(),
 });
 
 // pg-boss job states (v12). We surface the live ones that signal health;
@@ -362,6 +392,67 @@ const adminRoutes = new Hono()
 		const user = c.get("user");
 		const { subjectType, subjectId } = c.req.valid("json");
 		const result = await routeToCopyright({ subjectType, subjectId, actorId: user.id });
+		return c.json(result);
+	})
+
+	// ── Quarantine ──────────────────────────────────────────────────────────────
+	// Child-safety quarantine: material taken out of reach of everybody, purchasers
+	// included. Separate from both queues above because it is not a moderation
+	// judgment about ordinary content — it is a detection-and-preservation path with
+	// a different destination, and running it through the ordinary queue would lose
+	// it (40.12, "Why the reporting path is not a moderation feature").
+	//
+	// 🚨 **Everything here is metadata, and there is no endpoint that renders the
+	// material.** § 5.2 of 60.13 makes that a policy commitment: the operator sees the
+	// finding — key, Work, uploader, classification, timestamps — and never the image.
+	// Adding a preview route would require amending a policy, not just this file.
+	.get("/quarantine", async (c) => {
+		const includeCleared = c.req.query("cleared") === "1";
+		const [findings, summary] = await Promise.all([
+			loadQuarantineFindings({ includeCleared }),
+			quarantineSummary(),
+		]);
+		return c.json({ findings, summary });
+	})
+
+	// Quarantine a Work. The realistic caller is an operator acting on a floor-level
+	// report; `reportId` links the two so the finding cites what triggered it.
+	//
+	// ⚠️ **This does not file a CyberTipline report and must not.** Reporting stays
+	// manual, by the Designated Child Safety Contact, following 60.14 — a hash match
+	// is a reporting trigger and a report filed by a route is one nobody decided to
+	// make. What this does is take the material out of reach and preserve it, which is
+	// what has to be true *before* that person starts.
+	.post("/quarantine", zValidator("json", quarantineSchema), async (c) => {
+		const user = c.get("user");
+		const { workId, classification, reportId, note } = c.req.valid("json");
+		try {
+			const result = await quarantineWork({
+				workId,
+				source: "operator",
+				classification,
+				actorId: user.id,
+				reportId: reportId ?? null,
+				note,
+			});
+			return c.json(result);
+		} catch {
+			return c.json({ error: "Work not found" }, 404);
+		}
+	})
+
+	// Put it back, for a finding that turned out to be wrong.
+	//
+	// 🚨 The preservation hold is deliberately NOT lifted by this. A quarantine is
+	// cleared because somebody looked and the finding was mistaken; a preservation
+	// obligation ends on a statutory clock, decided separately. See `clearQuarantine`.
+	.post("/quarantine/clear", zValidator("json", clearQuarantineSchema), async (c) => {
+		const user = c.get("user");
+		const { workId, note } = c.req.valid("json");
+		const result = await clearQuarantine({ workId, actorId: user.id, note });
+		if (result.objectsRestored === 0 && !result.visibility) {
+			return c.json({ error: "No open quarantine for that Work" }, 404);
+		}
 		return c.json(result);
 	})
 

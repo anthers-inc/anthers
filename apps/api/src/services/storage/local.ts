@@ -7,9 +7,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { access, copyFile, mkdir, rm, unlink } from "node:fs/promises";
+import { access, copyFile, mkdir, rename, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { assertServableKey } from "./acl.js";
 import type { StorageService } from "./types.js";
 
 /** Root directory for local content files (repo root /content/) */
@@ -67,16 +68,38 @@ export class LocalStorageService implements StorageService {
 	}
 
 	async getUrl(key: string, _opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
+		// 🚨 Refused here as well as in S3, and it matters MORE here: `/content` is served
+		// unsigned by the static middleware, so in local mode a quarantined object under
+		// CONTENT_ROOT is reachable by anyone who can guess the path. The middleware itself
+		// refuses the prefix too (`index.ts`) — this is the half that stops us handing the
+		// address out in the first place.
+		assertServableKey(key);
 		// Local dev — no signing, just return a URL the static middleware serves
 		return `${getBaseUrl()}/content/${key}`;
 	}
 
+	/** Rename on disk, creating the destination directory. False when the source is absent. */
+	async move(fromKey: string, toKey: string): Promise<boolean> {
+		if (fromKey === toKey) return true;
+		const from = join(CONTENT_ROOT, fromKey);
+		const to = join(CONTENT_ROOT, toKey);
+		try {
+			await access(from);
+		} catch {
+			return false;
+		}
+		await mkdir(dirname(to), { recursive: true });
+		await rename(from, to);
+		return true;
+	}
+
 	async getPresignedUploadUrl(
-		_key: string,
+		key: string,
 		_contentType: string,
 		_acl: "public" | "private",
 		_expiresIn?: number,
 	): Promise<{ url: string; headers: Record<string, string> }> {
+		assertServableKey(key);
 		// In local mode, there's no S3 to presign against.
 		// Return the direct-upload endpoint URL so the client can POST the file.
 		// No headers: the ACL is meaningless here — `/content` serves everything

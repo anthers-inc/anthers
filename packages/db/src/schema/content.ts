@@ -217,6 +217,22 @@ export const works = pgTable(
 		// one predicate, not seven routes remembering.
 		takedownStatus: text("takedown_status").notNull().default("active"), // active | taken_down
 
+		// ── Quarantine (child safety) ──
+		// Set when reported or detected material is taken out of reach entirely. A third
+		// state column beside the two above rather than a value inside either, because it
+		// answers a different question and has to be able to be true at the same time as
+		// both: a Work can be withdrawn by its creator, taken down on a DMCA notice, and
+		// quarantined, and clearing any one of those must not clear the others.
+		//
+		// 🚨 **This is the one denial that reaches PURCHASERS.** `withdrawn` deliberately
+		// keeps serving buyers, because a purchase outlives the Work. A takedown stops
+		// serving them because continuing to deliver infringing bytes is continuing to
+		// infringe. This stops serving them for the same shape of reason and a much
+		// shorter one: the material may not be delivered to anybody, and a receipt is not
+		// an exception to that. `resolveAccessSync` checks it before every other rule,
+		// including the takedown — see `services/quarantine.ts`, its only writer.
+		quarantineStatus: text("quarantine_status").notNull().default("none"), // none | quarantined
+
 		// ── ATProto ──
 		// A Work wants its own lexicon rather than riding a post record; deferred with
 		// ATProto adoption itself, and unpopulated meanwhile.

@@ -67,6 +67,21 @@ export interface AccessibleWork {
 	 * not seven routes remembering. See `services/dmca.ts`.
 	 */
 	takedownStatus: string;
+	/**
+	 * The Work's child-safety quarantine state — `none` or `quarantined`.
+	 *
+	 * 🚨 **The only denial in this resolver that reaches everybody without exception**, the
+	 * creator included. A takedown already stops serving buyers; this also stops serving
+	 * the person who uploaded it, because the material may not be delivered to anyone at
+	 * all. Checked before the takedown for no reason other than reading order — the two
+	 * cannot disagree about whether to serve, only about why.
+	 *
+	 * ⚠️ **This is the second of two independent denials and neither is redundant.**
+	 * Reading it here means every delivery route that resolves a Work inherits the refusal;
+	 * `assertServableKey` in the storage layer catches a route that signs a key without
+	 * resolving one. See `services/quarantine.ts`.
+	 */
+	quarantineStatus: string;
 }
 
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
@@ -134,7 +149,8 @@ export type AccessReason =
 	| "payment_required"
 	| "gated"
 	| "login_required"
-	| "takedown";
+	| "takedown"
+	| "quarantined";
 
 /**
  * One way a denied viewer could open this Work, stated in the gate's own terms.
@@ -303,6 +319,17 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		streamEnabled: work.streamEnabled,
 		downloadEnabled: work.downloadEnabled,
 	};
+
+	// 🚨 A quarantine stops delivery to EVERYONE, and unlike every other rule here it has
+	// no exception for the person who uploaded it. Reported or detected child-safety
+	// material may not be delivered to anybody — a purchase does not survive it, the
+	// creator's own ownership does not survive it, and there is no route in. Checked
+	// first so that no rule below can be read as an escape from it, and so every delivery
+	// route that resolves a Work inherits the denial without remembering to. The object
+	// itself has also been moved somewhere no signer will touch; see `services/quarantine.ts`.
+	if (work.quarantineStatus === "quarantined") {
+		return { ...base, canAccess: false, reason: "quarantined" };
+	}
 
 	// A DMCA takedown stops delivery to EVERYONE — the creator, buyers, and entitled
 	// viewers — before any other rule is considered. Continuing to serve infringing
