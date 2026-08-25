@@ -141,7 +141,19 @@ test.describe("signing up with Bluesky", () => {
 		// thing that mentions the email scope is `transition:email`'s own consent screen, on
 		// somebody else's website, mid-flow. That is the moment this sentence exists to
 		// pre-empt, so it is pinned even though the copy around it is free to move.
-		await expect(topSignup(page).getByText(/ask to share your email address/i)).toBeVisible();
+		//
+		// ⚠️ **Filtered to the visible copy, because the card sizes itself by stacking every
+		// note it can show and hiding all but one** (2026-08-25). This sentence is one of the
+		// three, so it is in the DOM at every reading of the page — and an unfiltered
+		// `getByText` therefore matches the sizer as well and reports a strict-mode violation
+		// where it means to report a missing warning. `visible` is the right filter rather
+		// than `.first()`: what is being asserted is that a READER meets this, which is
+		// exactly the property that separates the real note from the copy holding room for it.
+		await expect(
+			topSignup(page)
+				.getByText(/ask to share your email address/i)
+				.filter({ visible: true }),
+		).toBeVisible();
 	});
 
 	test("this door says it creates an account, where the login one says it cannot", async ({

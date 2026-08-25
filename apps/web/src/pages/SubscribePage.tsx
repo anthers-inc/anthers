@@ -1261,7 +1261,7 @@ function anthersLineFor(amount: number): PickLine {
 		// The Badge is what somebody chose, so name it rather than the act — `heldBadgeLabel`
 		// also carries the "+" rule if the amount ever stops landing exactly on a rung.
 		label: `${heldBadgeLabel(amount)} — support for Anthers`,
-		sub: "watch as much Public Access as you like",
+		sub: "Thanks for helping to grow an internet worth loving again",
 		amount,
 	};
 }
@@ -1269,6 +1269,37 @@ function anthersLineFor(amount: number): PickLine {
 /** Every answer the Anthers step can give, for the echo to hold room for. Free is not here:
  *  it produces no line, and the empty sentence it shows instead is what the room is for. */
 const ANTHERS_ECHO_SIZERS = RUNG_AMOUNTS.filter((amount) => amount > 0).map(anthersLineFor);
+
+/**
+ * The account's own row in the closing summary, at whichever rung is chosen.
+ *
+ * 🚨 **One row rather than two, because the free account and the Anthers rung are the same
+ * fact** (Parker, 2026-08-25). The summary listed a permanent *"Free account · 10 hours of
+ * Public Access a month"* and then grew a second row when somebody chose a Badge, which cost
+ * two things. The card got 73px taller under a control most of a page above it, sliding every
+ * bee in `MeadowVines` — they sit at a percentage of page height — and the permanent row went
+ * on promising ten hours a month at rungs where the matrix directly upstream says Public
+ * Access is unlimited. Saying it once, in the reading the chosen rung actually has, fixes
+ * both: the list is the same length at every rung, and the sentence is true at each of them.
+ *
+ * ⚠️ **It stays FIRST, ahead of the creators, even though the page asks about creators
+ * first.** The two support lines were deliberately ordered to match the steps above them on
+ * 2026-08-17, and this row is the exception because it is not only the Anthers answer — it is
+ * the account, which exists before either step is asked. Free carries no `key`, since the one
+ * thing a reader cannot remove is having an account.
+ */
+function accountLineFor(amount: number): PickLine {
+	if (amount > 0) return anthersLineFor(amount);
+	return {
+		key: null,
+		label: "Free account",
+		sub: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
+		amount: 0,
+	};
+}
+
+/** Every reading that row can have, so its height is the tallest of them at every rung. */
+const SUMMARY_ACCOUNT_SIZERS = RUNG_AMOUNTS.map(accountLineFor);
 
 const DROP_LABEL = "Remove";
 const DROP_CLASS = "text-xs text-base-content/45 underline";
@@ -1401,7 +1432,7 @@ function FreeInclusions() {
 	const items: { icon: typeof PlayCircleIcon; label: string; sub: string }[] = [
 		{
 			icon: PlayCircleIcon,
-			label: `${FREE_PUBLIC_ACCESS_HOURS} hours/month of Public Access`,
+			label: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access`,
 			sub: "Any works creators make available without a Badge, streamed for free, with creators still paid by Anthers for you.",
 		},
 		{
@@ -1421,7 +1452,7 @@ function FreeInclusions() {
 		},
 		{
 			icon: ServerStackIcon,
-			label: `${FREE_STORAGE_GIB} GiB of Anthers storage`,
+			label: `${FREE_STORAGE_GIB} GiB of Creator storage`,
 			// ⚠️ **This is a CREATOR allowance, and the sentence has to keep saying so.**
 			// `FREE_STORAGE_GIB`'s only consumer is `estimateStorageCost` in
 			// `packages/shared/src/fees.ts`, which bills a creator's catalogue against it —
@@ -1511,6 +1542,51 @@ function GoFurtherCard({
 type Door = "email" | "bluesky";
 
 /**
+ * The line under the signup button, for one reading of the page.
+ *
+ * 🚨 **A function rather than three literals at the call site, because the card renders the
+ * note it is showing *and* every other note it could show, invisibly, to size itself** — the
+ * same arrangement `anthersReading` exists for. Choosing a rung swaps a one-line note for a
+ * two-line one, and this card sits ABOVE the ladder, so the 19px it gained pushed the matrix
+ * down under the pointer that had just pressed it. It moved the decor with it too: the bees
+ * in `MeadowVines` are placed at a percentage of page height, so anything that changes how
+ * tall this page is slides the whole backdrop.
+ *
+ * 🚨 **The Bluesky note is the ONLY warning that the round trip asks for an email address**,
+ * since the panel above it became a field and a button and nothing else. `transition:email`
+ * is a real consent screen on somebody else's website, and meeting it unannounced is how a
+ * signup gets abandoned at the last step — so the note carries that rather than narrating the
+ * redirect, which the button it sits under already names. `subscribe-bluesky.e2e.ts` pins the
+ * sentence.
+ */
+function signupNote(signedIn: boolean, paying: boolean, door: Door): string {
+	if (signedIn)
+		return "You'll see the exact charge before anything is confirmed. Change or stop any month.";
+	if (paying)
+		return "We'll confirm your email first. You'll see the exact charge before anything is taken.";
+	return door === "bluesky"
+		? "Bluesky will ask to share your email address."
+		: "We'll email you a code to confirm your address.";
+}
+
+/**
+ * Every note this visitor can meet without leaving the page — the card's own sizers.
+ *
+ * ⚠️ Both of the things that swap the note are reachable from where the reader is standing:
+ * the Anthers ladder is most of a page below and the door tabs are an inch above, and neither
+ * may resize the card. `signedIn` is the one input that cannot change while the page is up,
+ * so it narrows the set rather than joining it.
+ */
+function signupNoteSizers(signedIn: boolean): string[] {
+	if (signedIn) return [signupNote(true, false, "email")];
+	return [
+		signupNote(false, true, "email"),
+		signupNote(false, false, "email"),
+		signupNote(false, false, "bluesky"),
+	];
+}
+
+/**
  * The Badge art is `BADGE_ART` from `@anthers/web-shared/economics`, not a local map.
  *
  * 🚨 **A first pass here drew the four `wreath-{name}` icons and no emoji, which is a
@@ -1556,6 +1632,7 @@ function SignupForm({
 	cta,
 	busy,
 	note,
+	noteSizers,
 	error,
 	success,
 	email,
@@ -1573,6 +1650,11 @@ function SignupForm({
 	cta: string;
 	busy: boolean;
 	note?: string;
+	/**
+	 * The other notes this card can show, rendered invisibly so the line under the button is
+	 * always as tall as the tallest of them. Built by `signupNoteSizers`, never by hand.
+	 */
+	noteSizers?: string[];
 	error: string | null;
 	success: string | null;
 	/** Null when signed in — there is no address to ask a returning user for. */
@@ -1817,10 +1899,58 @@ function SignupForm({
 				{error && <p className="mt-3 text-sm text-error">{error}</p>}
 				{success && <p className="mt-3 text-sm text-success">{success}</p>}
 				{note && (
-					<p className="mt-3 text-center text-xs leading-relaxed text-base-content/45">{note}</p>
+					// Stacked over an invisible copy of every other note this card can show, so
+					// nothing the reader does elsewhere on the page resizes it. See `signupNote`.
+					<div className="mt-3 grid">
+						{noteSizers?.map((alt) => (
+							<p
+								key={alt}
+								aria-hidden="true"
+								className="invisible col-start-1 row-start-1 text-center text-xs leading-relaxed text-base-content/45"
+							>
+								{alt}
+							</p>
+						))}
+						<p className="col-start-1 row-start-1 text-center text-xs leading-relaxed text-base-content/45">
+							{note}
+						</p>
+					</div>
 				)}
 			</div>
 		</div>
+	);
+}
+
+/**
+ * One row's contents, shared by the real row and by the invisible copies sizing it.
+ *
+ * 🚨 **A sizer draws the drop control as a `<span>` rather than leaving it out**, exactly as
+ * `EchoRow` does and for the same reason: the right-hand group is `shrink-0`, so a sizer with
+ * no button hands its label width the real answer will never get, and under-reserves.
+ */
+function SummaryRowBody({ line, onDrop }: { line: PickLine; onDrop?: (key: string) => void }) {
+	return (
+		<>
+			<span className="min-w-0">
+				<span className="font-semibold">{line.label}</span>
+				<span className="block text-xs text-base-content/45">{line.sub}</span>
+			</span>
+			<span className="ml-auto flex shrink-0 items-baseline gap-3">
+				<strong className="tabular-nums">{line.amount ? money(line.amount) : "Free"}</strong>
+				{line.key &&
+					(onDrop ? (
+						<button
+							type="button"
+							className="text-xs text-base-content/40 underline"
+							onClick={() => onDrop(line.key as string)}
+						>
+							{DROP_LABEL}
+						</button>
+					) : (
+						<span className="text-xs text-base-content/40 underline">{DROP_LABEL}</span>
+					))}
+			</span>
+		</>
 	);
 }
 
@@ -1829,12 +1959,27 @@ function Summary({
 	lines,
 	total,
 	onDrop,
+	accountSizers,
 	...signup
 }: {
 	lines: PickLine[];
 	total: number;
 	onDrop: (key: string) => void;
+	/**
+	 * Every reading the FIRST line can have, rendered invisibly so that row is always as tall
+	 * as the tallest of them.
+	 *
+	 * 🚨 **The first line only, because it is the only one whose height the ladder moves.**
+	 * It is the account row from `accountLineFor`, and both halves of it vary: at 390px
+	 * *"Sprout — support for Anthers"* wraps a line further than *"Root — …"* does, so the
+	 * card changed height between two paid rungs as well as between Free and any of them. The
+	 * creator rows below deliberately go without, for the same reason the creator step's echo
+	 * does — that list grows with however many people somebody picks, so it has no tallest
+	 * reading to hold.
+	 */
+	accountSizers?: PickLine[];
 } & Omit<React.ComponentProps<typeof SignupForm>, "idPrefix">) {
+	const [account, ...rest] = lines;
 	return (
 		// ⚠️ Two stacked cards rather than one panel, since `SignupForm` now draws its own
 		// box so its tabs have a top edge to sit on. It reads better than the single panel
@@ -1842,29 +1987,26 @@ function Summary({
 		<div className="mx-auto mt-8 max-w-lg">
 			<div className="rounded-2xl border border-base-300 bg-base-200/60 p-6">
 				<ul className="space-y-2.5">
-					{lines.map((line) => (
+					<li className="grid border-b border-base-content/5 pb-2.5">
+						{accountSizers?.map((alt) => (
+							<span
+								key={alt.label}
+								aria-hidden="true"
+								className="invisible col-start-1 row-start-1 flex items-baseline gap-3 text-sm"
+							>
+								<SummaryRowBody line={alt} />
+							</span>
+						))}
+						<span className="col-start-1 row-start-1 flex items-baseline gap-3 text-sm">
+							<SummaryRowBody line={account} onDrop={onDrop} />
+						</span>
+					</li>
+					{rest.map((line) => (
 						<li
-							key={line.key ?? "free"}
+							key={line.key ?? line.label}
 							className="flex items-baseline gap-3 border-b border-base-content/5 pb-2.5 text-sm"
 						>
-							<span className="min-w-0">
-								<span className="font-semibold">{line.label}</span>
-								<span className="block text-xs text-base-content/45">{line.sub}</span>
-							</span>
-							<span className="ml-auto flex shrink-0 items-baseline gap-3">
-								<strong className="tabular-nums">
-									{line.amount ? money(line.amount) : "Free"}
-								</strong>
-								{line.key && (
-									<button
-										type="button"
-										className="text-xs text-base-content/40 underline"
-										onClick={() => onDrop(line.key as string)}
-									>
-										Remove
-									</button>
-								)}
-							</span>
+							<SummaryRowBody line={line} onDrop={onDrop} />
 						</li>
 					))}
 				</ul>
@@ -1872,9 +2014,16 @@ function Summary({
 					<span className="font-bold">Monthly</span>
 					<span className="text-3xl font-bold tabular-nums">{money(total)}</span>
 				</div>
-				{total > 0 && (
-					<p className="text-right text-xs text-base-content/45">plus any applicable tax</p>
-				)}
+				{/* ⚠️ Held in place at $0 rather than dropped, so the rung above cannot resize this
+				    card by sixteen pixels — but held *silently*. `SeedBreakdown` prints the same
+				    line at $0 and is right to, because it is describing where a charge goes; a
+				    panel whose total reads $0 must not print a charge-shaped sentence under it. */}
+				<p
+					aria-hidden={total === 0}
+					className={`text-right text-xs text-base-content/45 ${total > 0 ? "" : "invisible"}`}
+				>
+					plus any applicable tax
+				</p>
 			</div>
 
 			<SignupForm idPrefix="summary" className="mt-4" {...signup} />
@@ -2162,23 +2311,16 @@ export default function SubscribePage() {
 	/**
 	 * The whole page, added up once — the only place a total appears.
 	 *
-	 * Listed in the order the page asks: the free account first, then the creators, then
-	 * Anthers. The two support lines were the other way round until 2026-08-17, and a
-	 * summary that reads in a different order from the steps above it makes a reader
-	 * re-derive which line came from which choice.
+	 * The account comes first and the creators follow it. That account row is the Anthers
+	 * step's answer as well as the account itself — see `accountLineFor` for why the two are
+	 * one row — which is the single exception to the rule that this list reads in the order
+	 * the page asks. The rule itself stands: the two support lines were the other way round
+	 * until 2026-08-17, and a summary ordered differently from the steps above it makes a
+	 * reader re-derive which line came from which choice.
 	 */
 	const summaryLines: PickLine[] = useMemo(
-		() => [
-			{
-				key: null,
-				label: "Free account",
-				sub: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
-				amount: 0,
-			},
-			...creatorLines,
-			...anthersLines,
-		],
-		[anthersLines, creatorLines],
+		() => [accountLineFor(picks.anthers), ...creatorLines],
+		[picks.anthers, creatorLines],
 	);
 
 	/**
@@ -2392,19 +2534,8 @@ export default function SubscribePage() {
 		success,
 		email: signedIn ? null : email,
 		onEmailChange: setEmail,
-		note: signedIn
-			? "You'll see the exact charge before anything is confirmed. Change or stop any month."
-			: total > 0
-				? "We'll confirm your email first. You'll see the exact charge before anything is taken."
-				: // 🚨 **The Bluesky note is the ONLY warning that the round trip asks for an email
-					// address**, since the panel above it became a field and a button and nothing
-					// else. `transition:email` is a real consent screen on somebody else's website,
-					// and meeting it unannounced is how a signup gets abandoned at the last step —
-					// so the note carries that rather than narrating the redirect, which the button
-					// it sits under already names. `subscribe-bluesky.e2e.ts` pins the sentence.
-					door === "bluesky"
-					? "Bluesky will ask to share your email address."
-					: "We'll email you a code to confirm your address.",
+		note: signupNote(signedIn, total > 0, door),
+		noteSizers: signupNoteSizers(signedIn),
 		onSubmit: submit,
 		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
@@ -2419,6 +2550,7 @@ export default function SubscribePage() {
 	const summaryProps = {
 		...signupProps,
 		lines: summaryLines,
+		accountSizers: SUMMARY_ACCOUNT_SIZERS,
 		total,
 		onDrop: dropPick,
 	};
