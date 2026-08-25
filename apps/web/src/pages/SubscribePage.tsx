@@ -773,15 +773,32 @@ function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: str
 	);
 }
 
-/** Every rung's column border, drawn in `transparent` when the column is not the chosen one.
+/**
+ * The matrix's own surface and grid.
  *
- *  🚨 **The border exists in both states and only changes colour.** A border that appears on
- *  selection adds 2px to a cell and re-lays the table out, which is the page-moves-under-the
- *  -control defect this section has already been fixed for twice. */
-const COLUMN_EDGE = "border-x border-transparent";
+ * 🚨 **The body needs a card of its own, and it needs the lines drawn** (Parker,
+ * 2026-08-25). Without them the figures sat straight on the page background with nothing
+ * tying a value to its row, which is the one thing a matrix has to do.
+ *
+ * ⚠️ **Every vertical rule is a `border-r`, never a `border-l` on the cell to its right.**
+ * `border-separate` does not collapse adjacent borders — it stacks them — so a column
+ * drawing its left edge beside a neighbour drawing its right edge is a 2px line where
+ * every other rule is 1px. One side owns the line; the first column adds the card's left
+ * edge because nothing sits to its left to own it.
+ *
+ * 🚨 **The chosen column recolours the rule on EACH side of it, which means touching its
+ * left neighbour's cell.** The alternative — giving the lit column its own `border-l` — is
+ * what stacks two borders, and the highlight would visibly fatten on one side only.
+ */
+const GRID = "border-base-content/10";
+const SURFACE = "bg-base-200/40";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
 function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
+	// ⚠️ The chosen rung as a COLUMN INDEX rather than an amount, because the grid rules are
+	// drawn by neighbour: a cell needs to know it sits immediately left of the lit column.
+	// `-1` when nothing is chosen, which no `column` and no `column - 1` can equal.
+	const litColumn = RUNG_AMOUNTS.indexOf(value ?? -1);
 	return (
 		// ⚠️ `overflow-x-auto` is a backstop rather than the plan — `MATRIX_QUERY` is what
 		// keeps this layout to windows it fits in. It stays because "fits" is computed from a
@@ -851,17 +868,28 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 				</thead>
 				<tbody>
 					{PERK_ROWS.map((row, rowIndex) => {
+						const first = rowIndex === 0;
 						const last = rowIndex === PERK_ROWS.length - 1;
+						// The label column owns the rule to ITS right, so it is the cell that turns
+						// primary when Free — the first rung — is the one chosen.
+						const labelEdgeLit = litColumn === 0;
 						return (
 							<tr key={row.title}>
-								<th scope="row" className="border-t border-base-content/10 px-4 py-3 font-normal">
+								<th
+									scope="row"
+									className={`border-l border-r border-t ${GRID} ${SURFACE} px-4 py-3 text-left font-normal ${first ? "rounded-tl-2xl" : ""} ${last ? "rounded-bl-2xl border-b" : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
+								>
 									<span className="block text-sm font-semibold">{row.title}</span>
 									<span className="mt-0.5 block text-xs leading-snug text-base-content/55">
 										{row.desc}
 									</span>
 								</th>
 								{RUNG_AMOUNTS.map((amount, column) => {
-									const lit = value === amount;
+									const lit = column === litColumn;
+									// This cell owns the rule between itself and the column to its right, so
+									// it draws that rule in primary when EITHER of the two is the chosen one.
+									const rightEdgeLit = lit || column === litColumn - 1;
+									const lastColumn = column === RUNG_AMOUNTS.length - 1;
 									const cell = row.cell(amount);
 									const carried = cell.value !== NOT_CARRIED;
 									const shownNote = changedNote(
@@ -872,11 +900,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									return (
 										<td
 											key={amount}
-											className={`border-t border-base-content/10 px-2 py-3 text-center text-sm tabular-nums transition-colors ${COLUMN_EDGE} ${last ? "rounded-b-2xl border-b border-b-transparent" : ""} ${
-												lit
-													? `border-x-primary/50 bg-primary/10 font-semibold ${last ? "border-b-primary/50" : ""}`
-													: ""
-											} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
+											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE} ${last ? "border-b" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
 										>
 											{cell.value}
 											{!carried && <span className="sr-only">not carried</span>}

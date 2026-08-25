@@ -197,6 +197,42 @@ test.describe("/subscribe leads with the free door", () => {
 		expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 	});
 
+	test("the matrix actually draws its grid, rather than declaring it and painting it away", async ({
+		page,
+	}) => {
+		// 🚨 **The rules were declared and then painted transparent, and it shipped.** The
+		// value cells carried `border-t border-base-content/10` for the row rule and
+		// `border-x border-transparent` to reserve the column edge — and `border-transparent`
+		// sets `border-color` on ALL FOUR sides, so the later class wiped the colour the row
+		// rule depended on. The label column had no such class, which is why the lines
+		// appeared under the descriptions and stopped dead where the figures began.
+		//
+		// ⚠️ **Nothing else could have caught this.** The markup was right, the classes were
+		// all present, every layout assertion passed, and the DOM says `border-top-width: 1px`
+		// either way. The only thing that knows is the computed colour.
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto("/subscribe");
+
+		const cell = page.locator("#anthers-badges tbody td").first();
+		await expect(cell).toBeVisible();
+
+		const paint = await cell.evaluate((el) => {
+			const style = getComputedStyle(el);
+			return {
+				top: style.borderTopColor,
+				right: style.borderRightColor,
+				background: style.backgroundColor,
+			};
+		});
+
+		// `rgba(…, 0)` is the tell — a border that is there, sized, and invisible.
+		const invisible = (colour: string) => /,\s*0\s*\)$/.test(colour) || colour === "transparent";
+		expect(invisible(paint.top), `row rule is invisible: ${paint.top}`).toBe(false);
+		expect(invisible(paint.right), `column rule is invisible: ${paint.right}`).toBe(false);
+		// And the card has a surface of its own, so the figures do not sit on the page.
+		expect(invisible(paint.background), `matrix has no surface: ${paint.background}`).toBe(false);
+	});
+
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
 		await page.goto("/subscribe");
 
