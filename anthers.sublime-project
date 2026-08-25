@@ -1,0 +1,232 @@
+{
+	// Sublime reads this as JSON-with-comments, so the comments below are safe to
+	// keep. They do NOT survive Sublime rewriting the file for you, though — using
+	// Project → Add Folder to Project, or Project → Save Project As, reserializes
+	// the JSON and drops every comment. Edit this file by hand instead.
+
+	// ─── Folders ───
+	// One entry for the repository root. Exclude patterns here are ADDED to the
+	// global ones in Preferences (`.git`, `*.sublime-workspace`, images, and the
+	// rest), so this list only needs what is specific to Anthers.
+	//
+	// A pattern with no `/` is matched against the leaf name at any depth; a `//`
+	// prefix anchors it to the project root, and a trailing `/` makes it match the
+	// directory and everything inside it. That distinction is load-bearing here:
+	// `apps/web/src/content` and `packages/web-shared/src/components/content` are
+	// real source folders, so the 581 MB dev media store has to be excluded as
+	// `//content/` rather than as a bare `content`.
+	"folders": [
+		{
+			"path": ".",
+			"name": "Anthers",
+
+			"folder_exclude_patterns": [
+				// Dependencies and build output, at any depth.
+				"node_modules",
+				"dist",
+				"coverage",
+
+				// Gitignored local dev storage — roughly 875 MB between them, and
+				// the single biggest reason to configure this at all: left in, the
+				// indexer crawls all of it on every project open.
+				"//content/",
+				"//data/",
+
+				// Playwright and screenshot artifacts. The report folders appear
+				// under `apps/web` as well as at the root, so those stay unanchored.
+				"//test-results/",
+				"//.screenshots/",
+				"//.auth/",
+				"//.playwright/",
+				"//.playwright-mcp/",
+				"playwright-report",
+				"blob-report",
+
+				// Other editors' state, mirroring the IDE block in .gitignore.
+				".idea",
+				".vscode",
+
+				// Legacy Python.
+				"__pycache__",
+				".venv",
+				"venv"
+			],
+
+			"file_exclude_patterns": ["//.dev*.pid", "//.deployment-state"],
+
+			// Still visible and openable in the sidebar, but skipped by Goto
+			// Anything, Find in Files and the symbol index. These are generated
+			// or vendored files that would otherwise dominate every search — the
+			// same set biome.json already declines to check.
+			//
+			// Note that HLS segments are `.ts` files, which must NEVER be listed
+			// here; the ones this repo produces live under `//content/` and are
+			// excluded by folder above.
+			"binary_file_patterns": [
+				"//bun.lock",
+				"//packages/db/drizzle/meta/",
+				"//packages/brand/src/generated/",
+				"//apps/web/public/fonts/",
+				"*.woff",
+				"*.woff2",
+				"*.mp4",
+				"*.webm",
+				"*.m4a",
+				"*.mp3",
+				"*.wav"
+			]
+		}
+	],
+
+	// ─── Settings ───
+	// These apply to every file opened through this project and override the
+	// global Preferences.
+	//
+	// Deliberately absent: `trim_trailing_white_space_on_save` and
+	// `ensure_newline_at_eof_on_save`. Biome is the formatter of record here
+	// (`make format`), and an editor that reformats on save disagrees with it
+	// eventually — which shows up as unrelated line noise in an otherwise small
+	// diff. Reach for the Format build variant instead.
+	"settings": {
+		// Tabs, matching biome.json's `"indentStyle": "tab"`.
+		"translate_tabs_to_spaces": false,
+		"tab_size": 4,
+
+		// Biome wraps at 100 columns. It measures a tab as 2 columns while this
+		// displays it as 4, so deeply nested JSX can look like it crosses the
+		// ruler when biome considers it fine. Set `tab_size` to 2 if you would
+		// rather the ruler be exact than the indentation be readable.
+		"rulers": [100],
+
+		"default_line_ending": "unix",
+
+		// ─── Language server ───
+		// Requires the `LSP` and `LSP-typescript` packages from Package Control.
+		// Without them this block is inert, so it is harmless to leave in place.
+		//
+		// LSP-typescript runs the TypeScript language server on Node, and Node is
+		// not on PATH here — it exists only inside nvm, and `bun` does not provide
+		// it. That resolves itself: lsp_utils tries `nodejs_runtime` in the order
+		// `["system", "local", "local-test"]`, fails to find a system Node, and
+		// offers a "Download Node.js" button that fetches a private copy used only
+		// by LSP. Take it. To skip the prompt, set `"nodejs_runtime": ["local"]`
+		// in Preferences → Package Settings → LSP → lsp_utils Settings.
+		"LSP": {
+			"LSP-typescript": {
+				"enabled": true
+			}
+		},
+
+		// Biome remains the formatter of record, for the same reason the
+		// trim-on-save settings are absent above: two formatters that disagree
+		// produce line noise in unrelated diffs. The language server is here for
+		// navigation and diagnostics, not for rewriting files.
+		//
+		// `LSP-biome` also exists and would surface this repo's own pinned Biome
+		// as inline diagnostics. It is deliberately not configured here — its
+		// recommended entry point, `node_modules/.bin/biome`, is a
+		// `#!/usr/bin/env node` shim that cannot run on this machine.
+		"lsp_format_on_save": false,
+		"lsp_code_actions_on_save": {}
+	},
+
+	// ─── Build systems ───
+	// Ctrl+B runs the default (`make verify`); Ctrl+Shift+B picks a variant.
+	//
+	// Every command re-exports PATH first, and that is not decorative. Bun lives
+	// in `~/.bun/bin`, which is added to PATH by `.zshrc` — an interactive-shell
+	// file. Sublime's builds run under `/bin/sh -c` and inherit Sublime's own
+	// environment, so launching Sublime from the applications menu (whose PATH
+	// comes from the systemd user session, which has no `~/.bun/bin`) gives you
+	// `bun: command not found` on every target, while launching it from a
+	// terminal works. The prefix makes both cases behave the same.
+	"build_systems": [
+		{
+			"name": "Anthers",
+			"working_dir": "$project_path",
+			"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make verify",
+
+			"variants": [
+				// `make verify` is the pre-push gate and runs what CI runs, in
+				// CI's order. Prefer it over assembling a subset by hand.
+				{
+					"name": "Verify (Full Gate)",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make verify"
+				},
+
+				// Typechecks every workspace at once. No file_regex: this runs
+				// through `bun run --filter '*'`, which prefixes each line with the
+				// package name and reports paths relative to that package's own
+				// directory, so Sublime cannot resolve them against the root. Use
+				// the per-app variants below when you want click-to-jump.
+				{
+					"name": "Typecheck (All Workspaces)",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make typecheck"
+				},
+				{
+					"name": "Typecheck: apps/web",
+					"working_dir": "$project_path/apps/web",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; bun run typecheck",
+					"file_regex": "^([^\\s(].*?)\\((\\d+),(\\d+)\\): (?:error|warning) TS\\d+: (.*)$"
+				},
+				{
+					"name": "Typecheck: apps/api",
+					"working_dir": "$project_path/apps/api",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; bun run typecheck",
+					"file_regex": "^([^\\s(].*?)\\((\\d+),(\\d+)\\): (?:error|warning) TS\\d+: (.*)$"
+				},
+
+				// Biome reports as `path:line:col rule`, relative to the root.
+				{
+					"name": "Lint",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make lint",
+					"file_regex": "^(\\S.*?):(\\d+):(\\d+) "
+				},
+				{
+					"name": "Lint and Apply Safe Fixes",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make lint-fix",
+					"file_regex": "^(\\S.*?):(\\d+):(\\d+) "
+				},
+				{
+					"name": "Format",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make format"
+				},
+
+				{
+					"name": "Unit Tests",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make test"
+				},
+				{
+					"name": "End-to-End Tests",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make test-e2e"
+				},
+				{
+					"name": "End-to-End Tests (UI Mode)",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make test-e2e-ui"
+				},
+				{
+					"name": "Screenshots",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make screenshots"
+				},
+
+				// The guard that keeps published money figures generated rather
+				// than typed. It also runs inside `make verify`.
+				{
+					"name": "Check Economic Figures",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; bun run econ:figures --check"
+				},
+
+				// Long-running. Ctrl+Break cancels the build and stops the servers;
+				// use the Stop variant if one survives.
+				{
+					"name": "Dev Servers",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make dev"
+				},
+				{
+					"name": "Dev Servers: Stop",
+					"shell_cmd": "export PATH=\"$HOME/.bun/bin:$PATH\"; make down"
+				}
+			]
+		}
+	]
+}
