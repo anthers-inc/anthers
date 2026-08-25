@@ -93,6 +93,7 @@ const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const BasketPage = lazy(() => import("./pages/BasketPage"));
 const ParentsPage = lazy(() => import("./pages/ParentsPage"));
+const SafetyPage = lazy(() => import("./pages/SafetyPage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
 const ProjectPage = lazy(() => import("./pages/ProjectPage"));
 const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
@@ -294,6 +295,11 @@ export default function App() {
 					<Route path="/creator-terms" element={<LegalPage slug="creator-terms" />} />
 					<Route path="/copyright" element={<CopyrightPage />} />
 					<Route path="/parents" element={<ParentsPage />} />
+					<Route path="/safety" element={<SafetyPage />} />
+					{/* The subject-named route is canonical; `/abuse` is the RFC 2142 name a
+					    provider or researcher guesses, kept reachable so a guess lands somewhere
+					    rather than on a 404. Parker, 2026-08-25. */}
+					<Route path="/abuse" element={<Navigate to="/safety" replace />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 
 					{/* Resource tools / calculators — public, work logged-in or out.

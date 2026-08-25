@@ -147,6 +147,84 @@ export const moderationActions = pgTable(
 );
 
 /**
+ * An illegal-content report from anybody at all, including somebody with no account.
+ *
+ * 🚨 **A separate table from `moderation_reports`, and 40.12 says why in as many words:**
+ * *"This is not a moderation decision — it is a detection-and-report pipeline with a
+ * different destination, and running it through the ordinary queue would lose it."* The
+ * ordinary queue is polymorphic over `(subject_type, subject_id)` and assumes a row in one
+ * of our own tables; a member of the public has a **URL**, which is what DSA Art. 16
+ * actually asks them for — *"a clear indication of the exact electronic location of that
+ * information, such as the exact URL"*. Shoehorning that into a subject id would mean
+ * inventing one for everything that failed to resolve.
+ *
+ * The shape copied here is `dmca_notices`: a public, no-auth, statutory intake with its
+ * own required elements and its own queue. It is the closest existing thing and it works.
+ *
+ * ⚠️ **`reporter_id` is null for most rows and that is the ordinary case, not a redaction.**
+ * DSA Art. 16 requires the mechanism be open to anyone, so an account is never asked for.
+ * `redacted_at` is what distinguishes "we dropped their details on schedule" from "they
+ * never gave us any" — the same ambiguity `moderation_reports.redacted_at` exists to
+ * resolve, arrived at from the opposite direction.
+ */
+export const abuseReports = pgTable(
+	"abuse_reports",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * The location, exactly as the reporter typed it. Never normalized and never
+		 * replaced by the id below: what they told us is the record, and our reading of it
+		 * is a derivation that can be wrong.
+		 */
+		url: text("url").notNull(),
+		/**
+		 * The Work that URL resolved to, when it resolved to one. Null is ordinary — the
+		 * link may name a post, a profile, something already gone, or nothing we host.
+		 * `set null` for the same reason `dmca_notices.work_id` is: otherwise the subject
+		 * of a report could erase the record of it by deleting the Work.
+		 */
+		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
+		/** A `MODERATION_REASONS` value. The floor reasons are what escalate. */
+		reason: text("reason").notNull(),
+		/** DSA Art. 16's "sufficiently substantiated explanation". Required, never blank. */
+		details: text("details").notNull(),
+		/**
+		 * Where to write back, if they want an answer. **Optional on purpose**: Art. 16
+		 * requires a confirmation of receipt only *where* an address is given, and
+		 * requiring one would turn an anonymous reporting route into an identified one.
+		 */
+		reporterEmail: text("reporter_email").notNull().default(""),
+		/** Set only when the reporter happened to be signed in. Usually null. */
+		reporterId: integer("reporter_id").references(() => users.id, { onDelete: "set null" }),
+		status: text("status").notNull().default("open"), // open | resolved | dismissed
+		/**
+		 * When a human was actually told, out of band. Null means the alert is still owed,
+		 * which is what the retry sweep selects on — the same durability design as
+		 * `moderation_reports.escalated_at`, and for the same reason: an email is not a
+		 * record, so the row commits first and the send follows.
+		 */
+		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		/** When the reporter's own words and contact address were dropped. See above. */
+		redactedAt: timestamp("redacted_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The retry sweep's selection: reports nobody has been told about yet.
+		index("idx_abuse_reports_escalation").on(table.escalatedAt, table.reason),
+		index("idx_abuse_reports_status").on(table.status, table.createdAt),
+		index("idx_abuse_reports_work").on(table.workId),
+		index("idx_abuse_reports_resolved_by").on(table.resolvedBy),
+	],
+);
+
+export const abuseReportsRelations = relations(abuseReports, ({ one }) => ({
+	work: one(works, { fields: [abuseReports.workId], references: [works.id] }),
+	reporter: one(users, { fields: [abuseReports.reporterId], references: [users.id] }),
+}));
+
+/**
  * A suspension of automated destruction — the general legal hold, of which a
  * CyberTipline preservation is the first caller.
  *
@@ -175,7 +253,7 @@ export const legalHolds = pgTable(
 	"legal_holds",
 	{
 		id: serial("id").primaryKey(),
-		/** "user" | "work" | "report" — what is being preserved. */
+		/** "user" | "work" | "report" | "abuse_report" — what is being preserved. */
 		subjectType: text("subject_type").notNull(),
 		subjectId: integer("subject_id").notNull(),
 		/** Why, in the operator's words. Never blank: a hold nobody can explain is a bug. */

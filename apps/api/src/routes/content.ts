@@ -71,7 +71,7 @@ import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
-import { requireAuth } from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -159,13 +159,6 @@ async function listComments(
 		// would have us telling readers a user deleted something they didn't.
 		deletedByAuthor: r.comment.userId === null,
 	}));
-}
-
-async function getOptionalUserId(c: any): Promise<number | null> {
-	const token = getCookie(c, "session");
-	if (!token) return null;
-	const result = await validateSession(token);
-	return result?.user.id ?? null;
 }
 
 function estimateReadMinutes(text: string): number {

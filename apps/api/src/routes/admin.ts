@@ -28,6 +28,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { loadAbuseQueue } from "../services/abuse-reports.js";
 import {
 	dmcaSummary,
 	loadDmcaQueue,
@@ -454,6 +455,17 @@ const adminRoutes = new Hono()
 			return c.json({ error: "No open quarantine for that Work" }, 404);
 		}
 		return c.json(result);
+	})
+
+	// ── Public illegal-content reports ──────────────────────────────────────────
+	// The no-account intake's queue. Separate from `/moderation` above because the
+	// tables are separate and for the reason 40.12 gives — this is a report pipeline
+	// with a different destination rather than a judgment about ordinary content.
+	// Every one of these has already been emailed to `abuse@` if its reason is on the
+	// floor; the queue is where the ones that are not get answered.
+	.get("/abuse-reports", async (c) => {
+		const includeClosed = c.req.query("closed") === "1";
+		return c.json({ reports: await loadAbuseQueue({ includeClosed }) });
 	})
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────
