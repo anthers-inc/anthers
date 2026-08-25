@@ -19,6 +19,8 @@
  * *co-present* with "free forever" — that is a rule about structure, and structure is what
  * this file is for.
  */
+
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -81,19 +83,36 @@ test.describe("/subscribe leads with the free door", () => {
 		// and the take-home. A reader who meets the promise without the bound beside it
 		// hears "unlimited", and then meets the limit as a surprise after signing up.
 		//
-		// ⚠️ **What is pinned is that the bound is stated before the reader signs up — not
-		// the wording, and since 2026-08-25 not the period either.** Parker's call: at the
-		// top of the page "10 hours of Public Access" reads as a limit to an ordinary
-		// reader, and spelling the period out there wraps the label onto a second line for
-		// no gain. The number carries the bound above the fold; the closing summary states
-		// the period in full.
+		// ⚠️ **What is pinned is that a BOUND is stated before the reader signs up — not the
+		// wording of it, and not the period.** 63.01's requirement is a co-present limit;
+		// what "forever" denies is an expiry, not that the free tier has edges. Naming the
+		// period is preferred where it fits, and the top label does name it ("hrs/mo"), but
+		// a spec that demanded the period would be enforcing the guide's example sentence
+		// rather than its rule.
 		//
-		// 🚨 Matching the hours with or without a period makes **the position assertions
-		// below the whole test.** A looser regex on its own would find the closing summary
-		// and pass while the top of the page said nothing about a limit at all — `.first()`
+		// 🚨 Matching the bound however it is spelled makes **the position assertions below
+		// the whole test.** A looser regex on its own would find the closing summary and
+		// pass while the top of the page said nothing about a limit at all — `.first()`
 		// plus the ordering is what closes that, so neither may be dropped.
+		//
+		// ⚠️ **The unit alternation has to grow when a new abbreviation lands, and it will
+		// fail loudly rather than quietly when it doesn't.** The page has said "hours/month
+		// of Public Access", "hours of Public Access", and now "hrs/mo of Public Access" in
+		// the space of a week; each time, a regex naming only the old form stopped matching
+		// the top of the page, fell through to the closing summary, and failed on position —
+		// which reads as a layout regression rather than a copy edit. If this churns again,
+		// the fix is a `data-` hook on the element rather than a longer alternation.
+		//
+		// The NUMBER is never typed: it comes from the constant the page renders.
 		const forever = page.getByRole("heading", { name: /free\. forever/i });
-		const limit = page.getByText(/\d+ hours(\/month)? of Public Access/i).first();
+		const limit = page
+			.getByText(
+				new RegExp(
+					`${FREE_PUBLIC_ACCESS_HOURS}\\s*(hours?|hrs)(/(month|mo))? of Public Access`,
+					"i",
+				),
+			)
+			.first();
 		await expect(forever).toBeVisible();
 		await expect(limit).toBeVisible();
 

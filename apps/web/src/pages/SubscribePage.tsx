@@ -1432,7 +1432,7 @@ function FreeInclusions() {
 	const items: { icon: typeof PlayCircleIcon; label: string; sub: string }[] = [
 		{
 			icon: PlayCircleIcon,
-			label: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access`,
+			label: `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo of Public Access`,
 			sub: "Any works creators make available without a Badge, streamed for free, with creators still paid by Anthers for you.",
 		},
 		{
