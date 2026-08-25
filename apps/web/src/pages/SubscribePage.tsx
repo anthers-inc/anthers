@@ -183,21 +183,32 @@ const serif = { fontFamily: FONTS.fraunces };
 
 interface Picks {
 	/**
-	 * Monthly dollars to Anthers: `null` unanswered, `0` a deliberate Free, a rung's
-	 * threshold otherwise.
+	 * Monthly dollars to Anthers: `0` for Free, a rung's threshold otherwise.
 	 *
 	 * 🚨 **It was `boolean | null` until 2026-08-24, when the section became a ladder.** A
 	 * boolean could only ever express the Public Access price, so every rung above Root was
 	 * unreachable from this page — the same defect on the Anthers side that the roadmap
-	 * tracks on the creator side. Note `0` and `null` are still different answers and must
-	 * stay so: one is "I looked and I'm staying free", the other is "I haven't said".
+	 * tracks on the creator side.
+	 *
+	 * 🚨 **And it stopped being nullable on 2026-08-25, when Free became the default**
+	 * (Parker). `null` meant "hasn't said", which the ladder distinguished from "looked and
+	 * staying free" — a distinction worth keeping while the section opened with nothing
+	 * selected, and meaningless once it opens on Free. Everything downstream is simpler for
+	 * it: the ladder always lights a rung, the breakdown always describes a real answer
+	 * rather than previewing one, and dropping the Anthers line returns to Free rather than
+	 * to a state the control cannot show.
+	 *
+	 * ⚠️ `supportTotal` still ACCEPTS `null`, deliberately. Its signature is the boundary
+	 * with the ceremony rather than with this state, and its test pins that `null` and `0`
+	 * both charge nothing — the defect it exists for was a nullish amount becoming a count.
 	 */
-	anthers: number | null;
+	anthers: number;
 	follow: string[];
 	seed: string[];
 }
 
-const EMPTY_PICKS: Picks = { anthers: null, follow: [], seed: [] };
+/** Free is a rung, and it is the one a visitor starts on — see `Picks.anthers`. */
+const EMPTY_PICKS: Picks = { anthers: 0, follow: [], seed: [] };
 
 /**
  * What the whole charge comes to, in **dollars a month**.
@@ -702,7 +713,8 @@ function useMatrixFits(): boolean {
 }
 
 interface LadderProps {
-	value: number | null;
+	/** The chosen rung's amount. Always one of `RUNG_AMOUNTS` — see `Picks.anthers`. */
+	value: number;
 	onChange: (value: number) => void;
 	/** A radio group is keyed by `name`, so two on one page must not share it. */
 	idPrefix: string;
@@ -731,9 +743,12 @@ interface LadderProps {
  * unanswered — the correct trade, since the state they can no longer reach is the one
  * meaning "hasn't looked", which stops being true the moment they press anything.
  *
- * ⚠️ **Nothing is lit until a rung is actually chosen.** The breakdown below previews the
- * first rung when nobody has answered, because a bar cannot draw "no answer" — this can,
- * and a lit rung is a claim about what somebody has picked.
+ * ⚠️ **Free is lit from the first paint** (Parker, 2026-08-25). This opened with nothing
+ * selected, on the reasoning that a lit rung is a claim about what somebody has picked —
+ * but that left a control whose default state showed none of its five options, beside a
+ * breakdown quietly previewing one of them. Free is not a claim about a choice; it is what
+ * an account with no support for Anthers already is, and the section's own thesis is that
+ * this is a complete answer rather than the absence of one.
  *
  * ⚠️ **No COMING pills** (Parker, 2026-08-24): most of this is designed rather than built
  * today, and all of it is meant to be built before the page is public. The ledger of what
@@ -789,16 +804,25 @@ function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: str
  * 🚨 **The chosen column recolours the rule on EACH side of it, which means touching its
  * left neighbour's cell.** The alternative — giving the lit column its own `border-l` — is
  * what stacks two borders, and the highlight would visibly fatten on one side only.
+ *
+ * ⚠️ **Two shades, not one** (Parker, 2026-08-25). The chrome — the rung tabs along the top
+ * and the perk names down the side — is the frame you read *from*; the cells are the
+ * figures you read. Drawn in one tone the whole thing was a flat field with lines on it,
+ * and the eye had nothing telling it which way the table runs. The tabs and the row names
+ * take the heavier tone because they are the axes; the cells sit lighter so a figure reads
+ * against its own row rather than against the page.
  */
 const GRID = "border-base-content/10";
-const SURFACE = "bg-base-200/40";
+const SURFACE_CHROME = "bg-base-200/70";
+const SURFACE_CELL = "bg-base-100/70";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
 function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 	// ⚠️ The chosen rung as a COLUMN INDEX rather than an amount, because the grid rules are
 	// drawn by neighbour: a cell needs to know it sits immediately left of the lit column.
-	// `-1` when nothing is chosen, which no `column` and no `column - 1` can equal.
-	const litColumn = RUNG_AMOUNTS.indexOf(value ?? -1);
+	// An amount off the ladder gives `-1`, which no `column` and no `column - 1` can equal,
+	// so an unrecognised value lights nothing rather than lighting the wrong thing.
+	const litColumn = RUNG_AMOUNTS.indexOf(value);
 	return (
 		// ⚠️ `overflow-x-auto` is a backstop rather than the plan — `MATRIX_QUERY` is what
 		// keeps this layout to windows it fits in. It stays because "fits" is computed from a
@@ -842,7 +866,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									className={`rounded-t-2xl border-x border-t p-0 text-center align-middle transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary ${
 										lit
 											? "border-primary/50 bg-primary/10"
-											: "border-base-content/10 bg-base-200/40 hover:border-base-content/30 hover:bg-base-200/70"
+											: `border-base-content/10 ${SURFACE_CHROME} hover:border-base-content/30 hover:bg-base-200/90`
 									}`}
 								>
 									<label className="flex cursor-pointer flex-col items-center px-3 pb-3 pt-4">
@@ -877,7 +901,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 							<tr key={row.title}>
 								<th
 									scope="row"
-									className={`border-l border-r border-t ${GRID} ${SURFACE} px-4 py-3 text-left font-normal ${first ? "rounded-tl-2xl" : ""} ${last ? "rounded-bl-2xl border-b" : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
+									className={`border-l border-r border-t ${GRID} ${SURFACE_CHROME} px-4 py-3 text-left font-normal ${first ? "rounded-tl-2xl" : ""} ${last ? "rounded-bl-2xl border-b" : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
 								>
 									<span className="block text-sm font-semibold">{row.title}</span>
 									<span className="mt-0.5 block text-xs leading-snug text-base-content/55">
@@ -900,7 +924,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									return (
 										<td
 											key={amount}
-											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE} ${last ? "border-b" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
+											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE_CELL} ${last ? "border-b" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
 										>
 											{cell.value}
 											{!carried && <span className="sr-only">not carried</span>}
@@ -1918,10 +1942,23 @@ export default function SubscribePage() {
 
 	// Restore anything chosen before a trip through signup. Guarded because a browser with
 	// storage disabled must not take the page down with it.
+	//
+	// 🚨 **`anthers` is coerced rather than spread through.** Session storage holds whatever
+	// a previous visit wrote, and until 2026-08-25 that could be `null` for "hasn't said" —
+	// a value the ladder can no longer display, since every rung including Free is now a
+	// real answer. Spreading it back would leave the matrix with nothing lit and the
+	// breakdown describing a rung nobody had chosen. Anything that is not a number reads as
+	// Free, which is what an account with no support for Anthers actually is.
 	useEffect(() => {
 		try {
 			const raw = sessionStorage.getItem(PICKS_KEY);
-			if (raw) setPicks({ ...EMPTY_PICKS, ...(JSON.parse(raw) as Partial<Picks>) });
+			if (!raw) return;
+			const stored = JSON.parse(raw) as Partial<Picks>;
+			setPicks({
+				...EMPTY_PICKS,
+				...stored,
+				anthers: typeof stored.anthers === "number" ? stored.anthers : EMPTY_PICKS.anthers,
+			});
 		} catch {
 			/* no storage, no restore — the page still works */
 		}
@@ -2022,7 +2059,9 @@ export default function SubscribePage() {
 	const dropPick = useCallback((key: string) => {
 		setPicks((prev) =>
 			key === "anthers"
-				? { ...prev, anthers: null }
+				? // Back to Free, not to "unanswered" — dropping support for Anthers IS choosing
+					// Free, and it is the only one of the two the ladder can show.
+					{ ...prev, anthers: 0 }
 				: {
 						...prev,
 						follow: prev.follow.filter((u) => u !== key),
@@ -2067,14 +2106,16 @@ export default function SubscribePage() {
 	const total = supportTotal(picks.anthers, directed);
 
 	/**
-	 * What the Anthers ladder is previewing, in dollars.
+	 * What the Anthers ladder currently reads as, in dollars.
 	 *
-	 * ⚠️ **Unanswered previews the first rung; it does not bill it.** `picks.anthers` stays
-	 * `null` until somebody chooses, and only `picks.anthers` reaches `supportTotal` — this
-	 * value exists so the panels have something to describe before a choice is made. Reading
-	 * it into the total would charge people who never pressed anything.
+	 * ⚠️ **This was `picks.anthers ?? PUBLIC_ACCESS_PRICE` until 2026-08-25**, so that the
+	 * panels had a rung to describe while nobody had chosen one — a preview that was
+	 * carefully kept out of `supportTotal`, since billing it would have charged people who
+	 * never pressed anything. Free being the default retires the whole arrangement: there is
+	 * no unanswered state left to preview, so the panels describe the real answer and this
+	 * is the same number the total is built from.
 	 */
-	const anthersAmount = picks.anthers ?? PUBLIC_ACCESS_PRICE;
+	const anthersAmount = picks.anthers;
 
 	/** The breakdown the chosen rung reads as — see `anthersReading` for the other one. */
 	const anthersBreakdown = anthersReading(anthersAmount);
@@ -2526,11 +2567,8 @@ export default function SubscribePage() {
 						    about the first rung, so Sprout, Petal and Blossom existed in the model and
 						    nowhere in the UI — and "Support Anthers too?" framed the whole section as a
 						    request rather than a choice. Choosing a rung is the ask now, Free included,
-						    and the breakdown below moves with the choice.
-
-						    ⚠️ `picks.anthers`, NOT the previewed `anthersAmount`. The breakdown below
-						    previews the first rung because a bar cannot draw "no answer"; the matrix
-						    can, and lighting a column nobody picked would claim a choice for them. */}
+						    and the breakdown below moves with the choice — starting on Free, which is
+						    where an account with no support for Anthers already sits. */}
 						<BadgeLadder
 							idPrefix="anthers-ladder"
 							value={picks.anthers}
@@ -2549,15 +2587,14 @@ export default function SubscribePage() {
 							// The reading it is NOT showing, so the panel is as tall as either one.
 							sizers={[anthersReading(anthersAmount > 0 ? 0 : PUBLIC_ACCESS_PRICE)]}
 						/>
+						{/* ⚠️ One empty state now, because there is one way to be empty: Free. This
+						    carried a second line for "hasn't chosen yet", which stopped being
+						    reachable when Free became the rung a visitor starts on. */}
 						<SectionEcho
 							lines={anthersLines}
 							onDrop={dropPick}
 							sizers={ANTHERS_ECHO_SIZERS}
-							empty={
-								picks.anthers === 0
-									? `Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`
-									: "Nothing added here yet."
-							}
+							empty={`Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
 						/>
 					</Reveal>
 

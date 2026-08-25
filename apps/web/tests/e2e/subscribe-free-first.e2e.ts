@@ -109,8 +109,18 @@ test.describe("/subscribe leads with the free door", () => {
 		const free = page.getByRole("radio", { name: /^free/i });
 		await expect(free).toBeVisible();
 
-		// And choosing it is a real answer that the page acts on, rather than decoration.
+		// 🚨 **Checked before anything is pressed** (Parker, 2026-08-25). The ladder opened
+		// with nothing selected until then, which left its default state showing none of its
+		// five options — and made the assertion below meaningless, since clicking Free first
+		// and then checking it passes whatever the default was. Free is where an account with
+		// no support for Anthers already sits, so it is what the control should show.
+		await expect(free).toBeChecked();
+		await expect(page.getByText(/staying free/i)).toBeVisible();
+
+		// And choosing it is still a real answer the page acts on, rather than decoration.
 		// See `rung` for why the label is the click target and why it is named by its radio.
+		await rung(page, /^root/i).click();
+		await expect(free).not.toBeChecked();
 		await rung(page, /^free/i).click();
 		await expect(free).toBeChecked();
 		await expect(page.getByText(/staying free/i)).toBeVisible();
