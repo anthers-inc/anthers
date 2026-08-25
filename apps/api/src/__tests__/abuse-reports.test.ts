@@ -23,6 +23,7 @@ import { abuseReports, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import {
+	closeAbuseReport,
 	pendingAbuseEscalations,
 	redactClosedAbuseReports,
 	resolveReportedWork,
@@ -292,6 +293,49 @@ describe("Too many from one caller", () => {
 		// The message has to hand them another route rather than just refusing — this
 		// endpoint's whole reason for existing is that somebody has something to report.
 		expect((await sixth.json()).error).toContain("abuse@anthers.org");
+	});
+});
+
+describe("Closing one", () => {
+	it("closes an open report once, and not twice", async () => {
+		const res = await report({
+			url: `https://anthers.org/works/x-${workPublicId}`,
+			reason: "spam",
+			details: "A report that an operator will read and decide needs nothing.",
+		});
+		expect(res.status).toBe(201);
+		const reportId = (await res.json()).reportId;
+
+		expect(await closeAbuseReport({ reportId, actorId: creatorId, outcome: "dismissed" })).toBe(
+			true,
+		);
+		const [row] = await db.select().from(abuseReports).where(eq(abuseReports.id, reportId));
+		expect(row.status).toBe("dismissed");
+		expect(row.resolvedBy).toBe(creatorId);
+
+		// A second close would rewrite `resolved_at` and lose when the decision was
+		// actually taken — the same reason `liftHold` refuses a double lift.
+		expect(await closeAbuseReport({ reportId, actorId: creatorId, outcome: "resolved" })).toBe(
+			false,
+		);
+	});
+
+	it("still owes a dismissed floor report its alert", async () => {
+		// 🚨 The hole the floor exists to close, one table over. Somebody clearing it in
+		// the console before anyone outside was told must not un-owe the alert, so
+		// `pendingAbuseEscalations` ignores `status` — and this is what pins that.
+		const res = await report({
+			url: `https://anthers.org/works/x-${workPublicId}`,
+			reason: "illegal",
+			details: "A floor report that gets dismissed before anybody outside was told.",
+		});
+		expect(res.status).toBe(201);
+		const reportId = (await res.json()).reportId;
+		expect(await pendingAbuseEscalations()).toContain(reportId);
+
+		await closeAbuseReport({ reportId, actorId: creatorId, outcome: "dismissed" });
+
+		expect(await pendingAbuseEscalations()).toContain(reportId);
 	});
 });
 

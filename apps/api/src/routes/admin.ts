@@ -28,7 +28,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
-import { loadAbuseQueue } from "../services/abuse-reports.js";
+import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
 import {
 	dmcaSummary,
 	loadDmcaQueue,
@@ -90,6 +90,12 @@ const quarantineSchema = z.object({
 	classification: z.string().min(1).max(120),
 	reportId: z.number().int().positive().optional(),
 	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+});
+
+/** Closing a public report says which of the two outcomes it got — never just "done". */
+const closeAbuseSchema = z.object({
+	reportId: z.number().int().positive(),
+	outcome: z.enum(["resolved", "dismissed"]),
 });
 
 const clearQuarantineSchema = z.object({
@@ -466,6 +472,16 @@ const adminRoutes = new Hono()
 	.get("/abuse-reports", async (c) => {
 		const includeClosed = c.req.query("closed") === "1";
 		return c.json({ reports: await loadAbuseQueue({ includeClosed }) });
+	})
+
+	// Close one. `resolved` means something was done about what it named; `dismissed`
+	// means it was read and needed nothing. Without this the list could only ever grow.
+	.post("/abuse-reports/close", zValidator("json", closeAbuseSchema), async (c) => {
+		const user = c.get("user");
+		const { reportId, outcome } = c.req.valid("json");
+		const closed = await closeAbuseReport({ reportId, actorId: user.id, outcome });
+		if (!closed) return c.json({ error: "No open report with that id" }, 404);
+		return c.json({ closed: true, outcome });
 	})
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────
