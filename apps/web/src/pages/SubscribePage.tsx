@@ -811,10 +811,23 @@ function BadgeMark({ badge, lit, size }: { badge: Badge; lit: boolean; size: str
  * and the eye had nothing telling it which way the table runs. The tabs and the row names
  * take the heavier tone because they are the axes; the cells sit lighter so a figure reads
  * against its own row rather than against the page.
+ *
+ * ⚠️ **Which is exactly why the outer edge had to get heavier with them** (Parker,
+ * 2026-08-25). Lightening the cells to separate them from the chrome also moved them
+ * closer to the page, and a card whose fill nearly matches its surroundings is held
+ * together by its edge alone. So the edge is 2px against the grid's 1px, in a stronger
+ * tone, and the table casts a shadow.
+ *
+ * 🚨 **`drop-shadow` on the TABLE, not `shadow` on anything.** A box-shadow would trace a
+ * rectangle, and this control is not one: the rung tabs stand proud of the body with gaps
+ * between them, and the corner above the row names is empty. `drop-shadow` follows what is
+ * actually painted, so the tabs cast their own shadow and the empty corner casts none —
+ * the whole ladder reads as one raised object instead of a box with bites out of it.
  */
 const GRID = "border-base-content/10";
 const SURFACE_CHROME = "bg-base-200/70";
 const SURFACE_CELL = "bg-base-100/70";
+const RAISED = "drop-shadow-[0_5px_16px_rgba(0,0,0,0.15)]";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
 function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
@@ -835,7 +848,9 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 		// against the section instead, escaped the clip, and pushed the DOCUMENT to 710px at
 		// a 390px viewport: the whole page scrolled sideways, on account of five 1px inputs.
 		<div className="relative overflow-x-auto">
-			<table className="w-full min-w-[40rem] table-fixed border-separate border-spacing-0 text-left">
+			<table
+				className={`w-full min-w-[40rem] table-fixed border-separate border-spacing-0 text-left ${RAISED}`}
+			>
 				<caption className="sr-only">
 					What each Anthers Badge carries, by the amount given each month. Choose one to see it
 					priced below.
@@ -901,7 +916,9 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 							<tr key={row.title}>
 								<th
 									scope="row"
-									className={`border-l border-r border-t ${GRID} ${SURFACE_CHROME} px-4 py-3 text-left font-normal ${first ? "rounded-tl-2xl" : ""} ${last ? "rounded-bl-2xl border-b" : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
+									// The card's left edge, and its top and bottom on the first and last rows:
+									// 2px in a stronger tone, against the 1px `GRID` of every rule inside it.
+									className={`border-l-2 border-r border-t ${GRID} border-l-base-content/30 ${SURFACE_CHROME} px-4 py-3 text-left font-normal ${first ? `rounded-tl-2xl border-t-2 border-t-base-content/30` : ""} ${last ? `rounded-bl-2xl border-b-2 border-b-base-content/30` : ""} ${labelEdgeLit ? "border-r-primary/50" : ""}`}
 								>
 									<span className="block text-sm font-semibold">{row.title}</span>
 									<span className="mt-0.5 block text-xs leading-snug text-base-content/55">
@@ -924,7 +941,7 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									return (
 										<td
 											key={amount}
-											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE_CELL} ${last ? "border-b" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
+											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE_CELL} ${first ? "border-t-2 border-t-base-content/30" : ""} ${last ? "border-b-2 border-b-base-content/30" : ""} ${lastColumn ? "border-r-2 border-r-base-content/30" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
 										>
 											{cell.value}
 											{!carried && <span className="sr-only">not carried</span>}

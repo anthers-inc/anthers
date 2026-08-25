@@ -241,6 +241,35 @@ test.describe("/subscribe leads with the free door", () => {
 		expect(invisible(paint.right), `column rule is invisible: ${paint.right}`).toBe(false);
 		// And the card has a surface of its own, so the figures do not sit on the page.
 		expect(invisible(paint.background), `matrix has no surface: ${paint.background}`).toBe(false);
+
+		// 🚨 **The outer edge is heavier than the rules inside it, and the table is raised.**
+		// The cells were lightened to separate them from the chrome, which also moved them
+		// closer to the page — and a card whose fill nearly matches its surroundings is held
+		// together by its edge alone (Parker, 2026-08-25). Both halves are asserted because
+		// either one alone leaves the table reading as loose text on the background.
+		const edge = await page
+			.locator("#anthers-badges tbody tr:last-child td:last-child")
+			.evaluate((el) => ({
+				right: Number.parseFloat(getComputedStyle(el).borderRightWidth),
+				bottom: Number.parseFloat(getComputedStyle(el).borderBottomWidth),
+			}));
+		const interior = Number.parseFloat(
+			await cell.evaluate((el) => getComputedStyle(el).borderRightWidth),
+		);
+		expect(edge.right, "the card's right edge is no heavier than an interior rule").toBeGreaterThan(
+			interior,
+		);
+		expect(
+			edge.bottom,
+			"the card's bottom edge is no heavier than an interior rule",
+		).toBeGreaterThan(interior);
+
+		// A `drop-shadow` filter, not a `box-shadow`: the tabs stand proud of the body with
+		// gaps between them, so a rectangle would not trace this control.
+		const filter = await page
+			.locator("#anthers-badges table")
+			.evaluate((el) => getComputedStyle(el).filter);
+		expect(filter, `the matrix casts no shadow: ${filter}`).toContain("drop-shadow");
 	});
 
 	test("the two signup controls agree, because they are one form", async ({ page }) => {
