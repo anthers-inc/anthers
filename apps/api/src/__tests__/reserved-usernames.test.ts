@@ -69,6 +69,44 @@ describe("isReservedUsername", () => {
 	});
 });
 
+describe("the official-account prefix", () => {
+	/**
+	 * 🚨 `anthers-{person}` marks an account as the organization speaking rather than a
+	 * person who helps out. A signal anybody can mint is worse than no signal, because it
+	 * borrows the credibility of the real ones — so the names that imitate the convention
+	 * are held, one separator at a time rather than as a set.
+	 */
+	it("holds every name that imitates an official handle", () => {
+		expect(isReservedUsername("anthers-support")).toBe(true);
+		expect(isReservedUsername("anthers-security")).toBe(true);
+		expect(isReservedUsername("anthers-billing")).toBe(true);
+		// The underscore reads exactly as official as the hyphen, and the username
+		// charset allows both — so holding only one would be holding neither.
+		expect(isReservedUsername("anthers_support")).toBe(true);
+		// Case-insensitively, like every other rule here.
+		expect(isReservedUsername("Anthers-Support")).toBe(true);
+		expect(isReservedUsername("  anthers-help  ")).toBe(true);
+	});
+
+	it("still lets an issued handle through, or the prefix would block its own accounts", () => {
+		// The list is checked before the prefix rule for exactly this reason. If this
+		// ever fails, the person it names cannot re-create their own account.
+		expect(isReservedUsername("anthers-parker")).toBe(false);
+		expect(isReservedUsername("ANTHERS-PARKER")).toBe(false);
+	});
+
+	it("leaves a community name alone, which is the deliberate limit of the rule", () => {
+		// The run-on form is NOT held. Blocking every name beginning with the word would
+		// cost real people real handles to close a gap that does not match the shape it
+		// is imitating — see the note on STAFF_PREFIXES. `antherssupport` is the known
+		// residue, asserted here so widening the rule is a deliberate edit to a test
+		// rather than a silent change of mind.
+		expect(isReservedUsername("anthersfan")).toBe(false);
+		expect(isReservedUsername("anthersenjoyer")).toBe(false);
+		expect(isReservedUsername("antherssupport")).toBe(false);
+	});
+});
+
 describe("drift guard against the web router", () => {
 	// reserved-usernames.ts carries a "KEEP IN SYNC with App.tsx" comment, which is
 	// only a hope. This makes it a check: add a root-level route without reserving
