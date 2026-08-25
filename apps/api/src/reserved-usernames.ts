@@ -139,11 +139,48 @@ const LOCALE_NAMES = [
 	"zh-TW",
 ];
 
+/**
+ * The shape an official Anthers account takes: `anthers-{person}`, on an
+ * `@anthers.org` address (Parker, 2026-08-25).
+ *
+ * 🚨 **The convention is the reason this has to be enforced, not a reason it does not.**
+ * The point of the prefix is that an account carrying it is the organization speaking
+ * rather than a person who helps out — so the moment it means something to a reader, an
+ * unreserved `@anthers-support` becomes a way to be believed. A signal anyone can mint is
+ * worse than no signal, because it borrows the credibility of the real ones.
+ *
+ * Both separators are held, because `anthers_support` reads exactly as official as
+ * `anthers-support` and the username charset allows either. ⚠️ **What is deliberately
+ * NOT held is the run-on form** — `anthersfan` and `anthersenjoyer` stay available,
+ * because this is a platform for creators and a community name is a legitimate thing to
+ * want. The residue is that `antherssupport` is still claimable; the trade is that
+ * blocking every name beginning with the word would cost real people real handles to
+ * close a gap that does not match the convention it is imitating. Widen this if that
+ * turns out to be the wrong call — it is one string.
+ */
+const STAFF_PREFIXES = ["anthers-", "anthers_"];
+
+/**
+ * Official handles we have deliberately issued, which the prefix rule must not block.
+ *
+ * ⚠️ **A name on this list is claimable through ordinary signup**, which is exactly how
+ * it is meant to be used: we add the line, the person signs up, and uniqueness protects
+ * the name from then on. The hazard is the other end — **leaving a name here after its
+ * holder is gone re-opens it to anybody**, so removing the line is part of offboarding
+ * rather than tidying afterwards.
+ */
+const ISSUED_STAFF_USERNAMES = ["anthers-parker"];
+
 /** Lower-cased for case-insensitive comparison — see the note on `/About` above. */
 export const RESERVED_USERNAMES: ReadonlySet<string> = new Set(
 	[...ROUTE_NAMES, ...INFRASTRUCTURE_NAMES, ...LOCALE_NAMES].map((name) => name.toLowerCase()),
 );
 
 export function isReservedUsername(candidate: string): boolean {
-	return RESERVED_USERNAMES.has(candidate.trim().toLowerCase());
+	const name = candidate.trim().toLowerCase();
+	// An issued handle is checked FIRST, so the prefix rule cannot block the very
+	// accounts the prefix exists to mark.
+	if (ISSUED_STAFF_USERNAMES.includes(name)) return false;
+	if (RESERVED_USERNAMES.has(name)) return true;
+	return STAFF_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
