@@ -107,6 +107,16 @@ jobs:
             echo "::notice::release is behind main — merged work is not in production (not a deploy fault)"
             exit 0
           fi
+          # A deployment of `release` already on its way up. This is the NORMAL state for
+          # the few minutes after every push, and treating it as drift is what made this
+          # watch fail and send mail on 2026-08-25 — three minutes after a push, while the
+          # deploy job for that very commit was still running. Tolerated on exactly the
+          # reasoning in the comment above: a watcher that cries wolf gets muted, and this
+          # one would have cried wolf on a share of every deploy from then on.
+          if [ "$code" -eq 4 ]; then
+            echo "::notice::a deployment of release is in flight — production is catching up, not stale"
+            exit 0
+          fi
           exit "$code"
 
       # Separate step, and it runs even when the drift check above failed: the two answer
