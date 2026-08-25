@@ -48,6 +48,10 @@ async function topOf(locator: Locator): Promise<number> {
 const rung = (page: Page, name: RegExp) =>
 	page.locator("#anthers-badges label").filter({ has: page.getByRole("radio", { name }) });
 
+/** Whether the DOCUMENT scrolls sideways — never acceptable, at any width. */
+const scrollsSideways = (page: Page) =>
+	page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+
 test.describe("/subscribe leads with the free door", () => {
 	test("the signup control comes before either support ask", async ({ page }) => {
 		await page.goto("/subscribe");
@@ -152,36 +156,45 @@ test.describe("/subscribe leads with the free door", () => {
 		}
 	});
 
-	test("the perk matrix scrolls itself sideways, and never the page", async ({ page }) => {
-		// 🚨 **A comparison of five rungs cannot fit a phone, so the matrix has a `min-w` and
-		// scrolls inside its own box.** The failure mode is that the min-width escapes the
-		// box and pushes the DOCUMENT wide instead — every section on the page then slides
-		// under a horizontal scrollbar, which is far worse than the thing being fixed.
+	test("the matrix gives way to cards rather than to a sideways scroll", async ({ page }) => {
+		// 🚨 **The rule (Parker, 2026-08-24): keep the matrix as long as it works, and swap
+		// when it stops.** Below `MATRIX_QUERY` five columns do not fit, and a matrix you have
+		// to scroll to compare two rungs is a worse list than a list. What is pinned here is
+		// that the swap happens *instead of* a scroll, in both directions — a matrix that
+		// silently started scrolling again, or a phone that got the table anyway, is the same
+		// defect wearing either face.
 		//
-		// ⚠️ It escaped exactly that way on the first build, and for a reason no amount of
-		// staring at the flex chain would have found: the matrix is wrapped in a `<fieldset>`
-		// so the radio group keeps its legend, and the UA stylesheet gives a fieldset
-		// `min-inline-size: min-content` — so it refused to shrink and the scroll container
-		// inside it was never narrower than the table.
-		await page.setViewportSize({ width: 390, height: 844 });
+		// ⚠️ **The page must never be the thing that scrolls, at any width.** It was, at
+		// first, for a reason no amount of staring at the flex chain would have found: each
+		// rung's radio is `sr-only`, so `position: absolute`, and an absolutely positioned box
+		// is clipped by an ancestor's `overflow` only when its containing block sits inside
+		// that ancestor. Five 1px inputs pushed the document to 710px on a 390px screen.
+		const phone = { width: 390, height: 844 };
+		const desk = { width: 1280, height: 900 };
+
+		await page.setViewportSize(phone);
 		await page.goto("/subscribe");
+		const section = page.locator("#anthers-badges");
+		await expect(section).toBeVisible();
+		await expect(section.locator("table")).toHaveCount(0);
+		// The cards are a real list of every rung, not a truncation of one.
+		await expect(section.getByRole("radio")).toHaveCount(5);
+		expect(await scrollsSideways(page)).toBe(false);
 
-		const scroller = page.locator("#anthers-badges .overflow-x-auto");
-		await expect(scroller).toBeVisible();
+		await page.setViewportSize(desk);
+		await page.goto("/subscribe");
+		await expect(section.locator("table")).toHaveCount(1);
+		await expect(section.getByRole("radio")).toHaveCount(5);
+		expect(await scrollsSideways(page)).toBe(false);
 
-		// The table really is wider than the phone — otherwise this test proves nothing,
-		// because a matrix that happens to fit would pass it without any of the above.
+		// And the matrix is not quietly scrolling inside its own box either, which is the
+		// state the breakpoint exists to prevent rather than to tidy up after.
+		const scroller = section.locator(".overflow-x-auto");
 		const [scrollWidth, clientWidth] = await scroller.evaluate((el) => [
 			el.scrollWidth,
 			el.clientWidth,
 		]);
-		expect(scrollWidth).toBeGreaterThan(clientWidth);
-
-		// And the document is not the thing scrolling.
-		const documentOverflows = await page.evaluate(
-			() => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-		);
-		expect(documentOverflows).toBe(false);
+		expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 	});
 
 	test("the two signup controls agree, because they are one form", async ({ page }) => {

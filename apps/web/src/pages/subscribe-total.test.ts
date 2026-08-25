@@ -26,7 +26,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { ANTHERS_BADGES, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
-import { supportTotal } from "./SubscribePage";
+import { marginalRows, RUNG_AMOUNTS, supportTotal } from "./SubscribePage";
 
 const creator = (amount: number) => ({ amount });
 
@@ -93,5 +93,58 @@ describe("what the ceremony quotes", () => {
 		);
 		// A creator-set rung need not land on a dollar either; nothing rounds it away.
 		expect(supportTotal(7.5, [])).toBe(7.5);
+	});
+});
+
+/**
+ * What each Badge card says it adds, on the narrow layout.
+ *
+ * 🚨 **The card list is derived from the same `cell` functions the matrix reads, and this
+ * is the test that keeps the derivation honest.** A hand-kept list per Badge would drift
+ * from 20.06 silently — a card that has quietly stopped mentioning an upgrade still renders
+ * and still reads fine — so the cards diff rung against rung instead. That moves the risk
+ * from "somebody forgot to edit the list" to "the diff cannot see the change", which is a
+ * smaller risk but a much quieter one, and the storage row is exactly where it bites.
+ */
+describe("what a rung adds over the one below it", () => {
+	const titles = (amount: number, previous: number | null) =>
+		marginalRows(amount, previous).map((row) => row.title);
+
+	const [free, root, sprout] = RUNG_AMOUNTS;
+
+	test("Free lists what it carries, and not the perks it does not", () => {
+		const shown = titles(free, null);
+		expect(shown).toContain("Monthly Public Access");
+		expect(shown).toContain("Monthly Time Pool");
+		// A row of "—" on the free card is noise: the perk is introduced where it starts.
+		expect(shown).not.toContain("Monthly Sticker Budget");
+		expect(shown).not.toContain("Merch Discount");
+	});
+
+	test("Root's card keeps the storage upgrade, even though the FIGURE is unchanged", () => {
+		// 🚨 The regression this exists for. Free and Root both carry the same number of
+		// gibibytes and it is not the same perk — at Free the space holds a published catalog
+		// and nothing else. Compared on the figure alone, `50 === 50`, and the upgrade
+		// disappears from the one card whose whole job is to say what Root adds. The cell's
+		// qualifier is what the diff sees; drop it from the comparison and this fails.
+		expect(titles(root, free)).toContain("Cloud Content Storage");
+	});
+
+	test("a middle rung adds only what actually moves", () => {
+		// Public Access, preservation, merch and recognition are all identical at Root and
+		// Sprout, so a Sprout card that listed them would be padding a comparison.
+		expect(titles(sprout, root).sort()).toEqual(
+			["Cloud Content Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
+		);
+	});
+
+	test("every rung above Free adds something, so no card is ever empty", () => {
+		for (let i = 1; i < RUNG_AMOUNTS.length; i++) {
+			const added = titles(RUNG_AMOUNTS[i], RUNG_AMOUNTS[i - 1]);
+			expect(
+				added.length,
+				`rung ${RUNG_AMOUNTS[i]} adds nothing over ${RUNG_AMOUNTS[i - 1]}`,
+			).toBeGreaterThan(0);
+		}
 	});
 });
