@@ -53,6 +53,7 @@
 import { db } from "@anthers/db/client";
 import { comments, posts, purchases, ratings, sessions, users, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
 
@@ -202,6 +203,22 @@ export async function cancelDeletion(userId: number): Promise<{ cancelled: boole
  * ask which of this creator's Works somebody bought.
  */
 export async function eraseAccount(userId: number): Promise<{ erased: boolean }> {
+	// 🚨 The hold check is FIRST, before anything is read or swept, because every line
+	// below this destroys something. A filed CyberTipline report is itself a one-year
+	// preservation request under 18 U.S.C. § 2258A(h), and destroying records under a
+	// hold is a federal crime under § 1519 — so the collision between this function and
+	// that obligation is not a policy question, it is this `if`.
+	//
+	// **Deferred rather than cancelled.** `deletionRequestedAt` is deliberately left
+	// alone, so the daily sweep re-selects this account and erases it the day the hold
+	// lifts. A user who asked to be forgotten is still owed that; what they are not
+	// owed is destruction of evidence in the meantime, and the privacy policy has to
+	// say so rather than promise a deletion this can silently refuse.
+	if (await isUnderHold("user", userId)) {
+		console.warn(`account-deletion: user ${userId} is under a legal hold — deletion deferred`);
+		return { erased: false };
+	}
+
 	const [user] = await db
 		.select({ id: users.id, avatar: users.avatar, headerImage: users.headerImage })
 		.from(users)

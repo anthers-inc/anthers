@@ -628,3 +628,17 @@ export const DELIVERY_GIB_PER_HOUR = 1.7;
  * inbox. See 60.13 § 5, and 60.11 for the rest of the NCMEC contact set.
  */
 export const ABUSE_EMAIL = "abuse@anthers.org";
+
+/**
+ * How long a filed CyberTipline report preserves what it names, in years.
+ *
+ * **One, because of 18 U.S.C. § 2258A(h) as amended by the REPORT Act (2024)**, which
+ * struck "90 days" and inserted "1 year". A completed report *is* the preservation
+ * request — there is no separate step, and no way to report without incurring the
+ * hold — so this clock starts at filing rather than at any decision of ours.
+ *
+ * Sits beside `RECORD_REDACTION_YEARS` deliberately: they are the two statutory
+ * clocks over the same records, they run in opposite directions, and a reader
+ * comparing them should not have to find them in two files.
+ */
+export const PRESERVATION_HOLD_YEARS = 1;

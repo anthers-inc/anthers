@@ -48,7 +48,8 @@
 import { db } from "@anthers/db/client";
 import { type CounterNotice, dmcaNotices, moderationReports } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { allHeldSubjectIds } from "./legal-hold.js";
 
 /** The cutoff: records whose last activity is older than this lose their personal detail. */
 export function redactionCutoff(now = new Date()): Date {
@@ -166,10 +167,26 @@ export async function redactClosedModerationReports(
 	// why a bare Date cannot be compared against a computed expression.
 	const settled = sql`coalesce(${moderationReports.resolvedAt}, ${moderationReports.createdAt}) <= ${cutoff.toISOString()}::timestamptz`;
 
+	// 🚨 A redaction is a destruction for legal-hold purposes, and it is easy to miss
+	// that because nothing here says DELETE. Blanking `details` and nulling `reporterId`
+	// removes the reporter's own words and the link to who they were — which is exactly
+	// what a preservation order covers. A held report keeps both until the hold lifts,
+	// and then ages out on the ordinary schedule.
+	const heldReports = await allHeldSubjectIds("report", now);
+	const notHeld =
+		heldReports.length > 0 ? notInArray(moderationReports.id, heldReports) : undefined;
+
 	const rows = await db
 		.update(moderationReports)
 		.set({ details: "", reporterId: null, redactedAt: now })
-		.where(and(isNull(moderationReports.redactedAt), ne(moderationReports.status, "open"), settled))
+		.where(
+			and(
+				isNull(moderationReports.redactedAt),
+				ne(moderationReports.status, "open"),
+				settled,
+				notHeld,
+			),
+		)
 		.returning({ id: moderationReports.id });
 
 	return { redacted: rows.length };
