@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { touchSession, validateSession } from "../services/auth.js";
@@ -75,6 +76,22 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 
 	await next();
 });
+
+/**
+ * Who is calling, or null — for routes that serve a signed-out caller and serve a
+ * signed-in one slightly differently.
+ *
+ * Not middleware, because there is nothing to gate: it answers a question rather than
+ * refusing a request. It lives here anyway so that "how do we read an optional session?"
+ * has one answer beside `requireAuth`'s. Two identical private copies had grown in
+ * `routes/accounts.ts` and `routes/content.ts` before this existed.
+ */
+export async function getOptionalUserId(c: Context): Promise<number | null> {
+	const token = getCookie(c, "session");
+	if (!token) return null;
+	const result = await validateSession(token);
+	return result?.user.id ?? null;
+}
 
 /**
  * Middleware that requires the authenticated user to have a verified email.

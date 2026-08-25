@@ -35,7 +35,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
 import { type ClaimedUser, embedCreator, hasHandle } from "../lib/handles.js";
-import { requireAuth } from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
 	cancelDeletion,
@@ -127,14 +127,6 @@ function serializePrivateUser(user: typeof users.$inferSelect) {
  * (Jams were retired outright on 2026-08-14, taking its half of that file with it.)
  */
 const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
-
-/** Get current user ID from cookie if authenticated, null otherwise */
-async function getOptionalUserId(c: any): Promise<number | null> {
-	const token = getCookie(c, "session");
-	if (!token) return null;
-	const result = await validateSession(token);
-	return result?.user.id ?? null;
-}
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

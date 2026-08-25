@@ -169,20 +169,24 @@ export default function CopyrightPage() {
 			    reason. Copyright notice-and-action and illegal-content notice-and-action are
 			    separate duties under separate statutes, and somebody scanning a copyright
 			    page for where to report child sexual abuse material is a bad two minutes to
-			    design. The in-product report flow needs an account, so until the safety page
-			    and its no-account form ship, this address is the ONLY route a signed-out
-			    person has — which is also what a DSA Art. 16 mechanism has to be. The
-			    mailbox is filtered and alerting; see 60.11. */}
+			    design. It leads with the page rather than the address now that `/safety`
+			    carries a no-account form — the address stays beside it because an email is
+			    the thing that still works when a form does not, and because it is the address
+			    on the NCMEC registration. The mailbox is filtered and alerting; see 60.11. */}
 			<div className="alert alert-warning mt-6" role="note">
 				<div>
 					<p className="font-semibold">Reporting something other than copyright?</p>
 					<p className="mt-1 text-sm">
 						This page is only for copyright. To report illegal content — including child sexual
-						abuse material — email{" "}
+						abuse material — use{" "}
+						<Link className="link" to="/safety">
+							Reporting Illegal Content
+						</Link>
+						, or email{" "}
 						<a className="link" href={`mailto:${ABUSE_EMAIL}`}>
 							{ABUSE_EMAIL}
 						</a>
-						. You do not need an account, and that mailbox is monitored.
+						. You do not need an account either way, and that mailbox is monitored.
 					</p>
 				</div>
 			</div>

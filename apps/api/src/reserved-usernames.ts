@@ -27,6 +27,7 @@
  */
 const ROUTE_NAMES = [
 	"about",
+	"abuse",
 	"auth",
 	"compare",
 	"copyright",
@@ -52,6 +53,7 @@ const ROUTE_NAMES = [
 	"purchases",
 	"resources",
 	"roadmap",
+	"safety",
 	"settings",
 	"signup",
 	"site-gate",

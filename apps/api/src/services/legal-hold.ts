@@ -29,8 +29,14 @@ import { legalHolds } from "@anthers/db/schema";
 import { PRESERVATION_HOLD_YEARS } from "@anthers/shared/constants";
 import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 
-/** What a hold can name. Deliberately small — add a kind when a sweep needs it. */
-export type HoldSubjectType = "user" | "work" | "report";
+/**
+ * What a hold can name. Deliberately small — add a kind when a sweep needs it.
+ *
+ * `report` is a `moderation_reports` row and `abuse_report` is an `abuse_reports` row.
+ * They are separate because the tables are: ids collide across them, so one value
+ * covering both would hold the wrong row half the time.
+ */
+export type HoldSubjectType = "user" | "work" | "report" | "abuse_report";
 
 /**
  * The date a § 2258A(h) preservation hold placed now would expire.

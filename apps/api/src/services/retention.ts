@@ -49,6 +49,7 @@ import { db } from "@anthers/db/client";
 import { type CounterNotice, dmcaNotices, moderationReports } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
 import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { redactClosedAbuseReports } from "./abuse-reports.js";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 /** The cutoff: records whose last activity is older than this lose their personal detail. */
@@ -192,12 +193,25 @@ export async function redactClosedModerationReports(
 	return { redacted: rows.length };
 }
 
-/** Both sweeps, for the scheduled job. */
+/**
+ * Every sweep, for the scheduled job.
+ *
+ * The public illegal-content intake is redacted by `services/abuse-reports.ts`, which
+ * owns that table, and is *called* from here so there is one nightly sweep rather than
+ * two things to notice had stopped running. The cutoff is computed once and passed in, so
+ * the three sweeps cannot end up disagreeing about where the line is.
+ */
 export async function runRetentionSweep(now = new Date()): Promise<{
 	dmcaNotices: number;
 	moderationReports: number;
+	abuseReports: number;
 }> {
 	const notices = await redactSettledDmcaNotices(now);
 	const reports = await redactClosedModerationReports(now);
-	return { dmcaNotices: notices.redacted, moderationReports: reports.redacted };
+	const publicReports = await redactClosedAbuseReports(redactionCutoff(now), now);
+	return {
+		dmcaNotices: notices.redacted,
+		moderationReports: reports.redacted,
+		abuseReports: publicReports.redacted,
+	};
 }

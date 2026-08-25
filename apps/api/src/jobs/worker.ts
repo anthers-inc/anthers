@@ -9,6 +9,7 @@
 // Must precede any import that reads process.env — see api/src/dev-spec-env.ts.
 import "../dev-spec-env.js";
 
+import { runAbuseEscalationSweep } from "../services/abuse-reports.js";
 import { runDueDeletions } from "../services/account-deletion.js";
 import { deleteExpiredSessions, deleteExpiredTokens } from "../services/auth.js";
 import {
@@ -198,10 +199,10 @@ async function start() {
 	await queue.work(QUEUES.REDACT_RECORDS, async (jobs) => {
 		for (const job of jobs) {
 			const result = await runRetentionSweep();
-			const total = result.dmcaNotices + result.moderationReports;
+			const total = result.dmcaNotices + result.moderationReports + result.abuseReports;
 			if (total > 0) {
 				console.log(
-					`[redact-records] job ${job.id}: redacted ${result.dmcaNotices} DMCA notice(s), ${result.moderationReports} moderation report(s)`,
+					`[redact-records] job ${job.id}: redacted ${result.dmcaNotices} DMCA notice(s), ${result.moderationReports} moderation report(s), ${result.abuseReports} public report(s)`,
 				);
 			}
 		}
@@ -212,9 +213,16 @@ async function start() {
 	// worker log within a day, and this is a log somebody has to be able to read.
 	await queue.work(QUEUES.ESCALATE_REPORTS, async (jobs) => {
 		for (const job of jobs) {
+			// Both intakes, one sweep. In-app reports and public no-account reports live in
+			// separate tables for the reasons 40.12 gives, but they owe the same alert to
+			// the same mailbox against the same statutory "as soon as reasonably possible"
+			// — so a second cron would be a second thing to notice had stopped running.
 			const sent = await runEscalationSweep();
-			if (sent > 0) {
-				console.log(`[escalate-reports] job ${job.id}: escalated ${sent} floor report(s)`);
+			const sentPublic = await runAbuseEscalationSweep();
+			if (sent > 0 || sentPublic > 0) {
+				console.log(
+					`[escalate-reports] job ${job.id}: escalated ${sent} floor report(s) and ${sentPublic} public report(s)`,
+				);
 			}
 		}
 	});
