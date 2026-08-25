@@ -217,6 +217,37 @@ export async function redactClosedAbuseReports(
 	return { redacted: rows.length };
 }
 
+/**
+ * Close a public report, with or without having acted on what it named.
+ *
+ * 🚨 **A queue with no way to act on it is not a queue**, and this table shipped without
+ * one — every row stayed `open` forever, so the list could only grow and an operator had
+ * no way to say *"I looked."* The two outcomes mirror `services/moderation.ts`:
+ * `resolved` means something was done about the content, `dismissed` means it was read and
+ * needed nothing.
+ *
+ * ⚠️ **Closing a report does not un-owe its alert**, and that asymmetry is deliberate.
+ * `pendingAbuseEscalations` ignores `status` on purpose, because *"somebody dismissed it
+ * before anyone outside the console was told"* is precisely the hole the floor exists to
+ * close. So a dismissed floor report still gets its email.
+ */
+export async function closeAbuseReport(input: {
+	reportId: number;
+	actorId: number;
+	outcome: "resolved" | "dismissed";
+}): Promise<boolean> {
+	const rows = await db
+		.update(abuseReports)
+		.set({
+			status: input.outcome,
+			resolvedAt: new Date(),
+			resolvedBy: input.actorId,
+		})
+		.where(and(eq(abuseReports.id, input.reportId), eq(abuseReports.status, "open")))
+		.returning({ id: abuseReports.id });
+	return rows.length > 0;
+}
+
 /** What the operator's list carries. Metadata and the reporter's words — never a rendering. */
 export interface AbuseQueueItem {
 	id: number;

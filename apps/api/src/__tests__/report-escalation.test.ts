@@ -23,7 +23,7 @@ import { comments, moderationReports, users } from "@anthers/db/schema";
 import { FLOOR_MODERATION_REASONS, isFloorReason } from "@anthers/shared/moderation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
-import { pendingEscalations } from "../services/moderation.js";
+import { loadQueue, pendingEscalations } from "../services/moderation.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -197,6 +197,54 @@ describe("Filing a floor report", () => {
 			.where(eq(moderationReports.id, row.id));
 
 		expect(await pendingEscalations()).not.toContain(row.id);
+	});
+});
+
+describe("What the console can see", () => {
+	/**
+	 * 🚨 The operator queue is the one place a floor report is looked at, and until
+	 * `floorAlerted` existed it could not say whether anybody outside the console had been
+	 * told. Both failure modes the `escalated_at` stamp exists to separate were therefore
+	 * invisible from the surface that most needed them.
+	 *
+	 * Each case sets the state it asserts on rather than inheriting it from the cases
+	 * above, so neither depends on the order this file happens to run in.
+	 */
+	async function itemFor(commentId: number) {
+		const queue = await loadQueue("reported");
+		return queue.find((i) => i.subjectType === "comment" && i.subjectId === commentId);
+	}
+
+	it("says a floor report has not reached a human, and then that it has", async () => {
+		const target = commentIds[0]; // the `illegal` report
+		await db
+			.update(moderationReports)
+			.set({ escalatedAt: null })
+			.where(
+				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
+			);
+		expect((await itemFor(target))?.floorAlerted).toBe(false);
+
+		const when = new Date();
+		await db
+			.update(moderationReports)
+			.set({ escalatedAt: when })
+			.where(
+				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
+			);
+		const after = await itemFor(target);
+		expect(after?.floorAlerted).toBe(true);
+		expect(after?.lastEscalatedAt).toBe(when.toISOString());
+	});
+
+	it("stays silent about a subject nobody filed a floor report against", async () => {
+		// The `spam` report. Null rather than false, because "no alert was owed" and "an
+		// alert was owed and never went" are different facts, and collapsing them would
+		// make every ordinary report read as a failure.
+		const item = await itemFor(commentIds[3]);
+		expect(item).toBeDefined();
+		expect(item?.floorAlerted).toBeNull();
+		expect(item?.lastEscalatedAt).toBeNull();
 	});
 });
 

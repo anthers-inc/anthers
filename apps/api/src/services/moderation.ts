@@ -503,6 +503,22 @@ export interface QueueItem {
 	totalReports: number;
 	reasons: string[];
 	details: string[];
+	/**
+	 * Whether every floor-level report on this subject has actually reached a human, and
+	 * when the last one did.
+	 *
+	 * 🚨 **An operator could not tell before this existed.** `escalated_at` is the only
+	 * record that somebody outside the console was told, and the console — the one place a
+	 * floor report is looked at — did not read it. So the two failure modes the stamp
+	 * exists to separate were both invisible from here: an alert that never sent, and an
+	 * alert that sent to a mailbox nobody was watching.
+	 *
+	 * `null` on a subject with no floor-level reports at all, which is the ordinary case
+	 * and is deliberately distinct from `false`.
+	 */
+	floorAlerted: boolean | null;
+	/** When the most recent floor report on this subject was escalated, or null. */
+	lastEscalatedAt: string | null;
 	lastAction: {
 		action: string;
 		reason: string;
@@ -680,6 +696,8 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			totalReports: 0,
 			reasons: [],
 			details: [],
+			floorAlerted: null,
+			lastEscalatedAt: null,
 			lastAction: null,
 		};
 	}
@@ -807,6 +825,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 			status: moderationReports.status,
 			reason: moderationReports.reason,
 			details: moderationReports.details,
+			escalatedAt: moderationReports.escalatedAt,
 		})
 		.from(moderationReports)
 		.where(
@@ -823,6 +842,19 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		if (r.status === "open") item.openReports += 1;
 		if (!item.reasons.includes(r.reason)) item.reasons.push(r.reason);
 		if (r.details) item.details.push(r.details);
+
+		// Only floor reasons are ever owed an alert, so only they may answer this. An
+		// ordinary report has a permanently null `escalated_at`, and folding those in would
+		// make every spam report read as "nobody was told" — which is true and is not a
+		// problem, and would bury the case where it IS a problem.
+		if (!isFloorReason(r.reason)) continue;
+		if (r.escalatedAt) {
+			const stamp = r.escalatedAt.toISOString();
+			if (!item.lastEscalatedAt || stamp > item.lastEscalatedAt) item.lastEscalatedAt = stamp;
+		}
+		// False wins over true: one un-alerted floor report is the thing worth surfacing,
+		// however many of its neighbours went out.
+		item.floorAlerted = item.floorAlerted === false ? false : Boolean(r.escalatedAt);
 	}
 
 	// 4. Attach the most recent decision, so a hidden item shows who hid it and why.
