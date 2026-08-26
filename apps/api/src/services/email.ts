@@ -34,8 +34,33 @@ interface SendArgs {
 	html: string;
 }
 
-/** Dispatch an email. Returns true if actually sent, false if skipped or errored. */
-export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolean> {
+/**
+ * What became of a send.
+ *
+ * 🚨 **An object rather than a boolean, deliberately, and every call site was updated
+ * rather than given a compatible shim.** A `{ sent }` object is always truthy, so an
+ * un-updated `if (!sent)` would have silently started treating every failure as a
+ * success — on the escalation path, where a failure is an alert nobody got. Changing the
+ * type so the compiler names all three call sites is the point; a shim that kept them
+ * compiling is the version of this change that ships a bug.
+ */
+export interface SendResult {
+	/** Whether the provider accepted the message. NOT whether it arrived. */
+	sent: boolean;
+	/**
+	 * The provider's id for the message, when there is one.
+	 *
+	 * ⭐ **This is what makes delivery checkable at all.** Without it, "the alert was
+	 * sent" can only ever mean *we handed it to Resend and it did not complain*, which is
+	 * a claim about our side of a network call. With it, {@link emailDeliveryStatus} can
+	 * ask what actually happened to the message — which is the difference between a test
+	 * that ends at our boundary and one that ends at the mailbox.
+	 */
+	messageId: string | null;
+}
+
+/** Dispatch an email. `sent` is provider acceptance, never delivery — see {@link SendResult}. */
+export async function sendEmail({ to, subject, html }: SendArgs): Promise<SendResult> {
 	// Never send from the test runner, even with a key present.
 	//
 	// Sign-up sends a verification email inline, so with a local `RESEND_API_KEY` every
@@ -50,23 +75,90 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolea
 	// suite whose outcome depends on a third party's latency is not testing our code.
 	if (process.env.NODE_ENV === "test") {
 		console.warn(`[email] test run — not sending "${subject}" to ${to}`);
-		return false;
+		return { sent: false, messageId: null };
 	}
 	const client = resendClient();
 	if (!client) {
 		console.warn(`[email] RESEND_API_KEY unset — skipped "${subject}" to ${to}`);
-		return false;
+		return { sent: false, messageId: null };
 	}
 	try {
-		const { error } = await client.emails.send({ from: FROM, to, subject, html });
+		const { data, error } = await client.emails.send({ from: FROM, to, subject, html });
 		if (error) {
 			console.error(`[email] send to ${to} failed:`, error);
-			return false;
+			return { sent: false, messageId: null };
 		}
-		return true;
+		return { sent: true, messageId: data?.id ?? null };
 	} catch (err) {
 		console.error(`[email] send to ${to} threw:`, err);
-		return false;
+		return { sent: false, messageId: null };
+	}
+}
+
+/**
+ * How a message actually fared, asked of the provider rather than inferred from our own
+ * send call.
+ *
+ * ⭐ **This is the rung above "we sent it".** `sendEmail` can only report that Resend
+ * accepted the message; this reports what Resend then did with it — which is the
+ * difference between an alert we believe went out and one that reached the mailbox. It
+ * exists for the escalation probe, where the whole question is whether a floor report
+ * reaches a human, and "we handed it to a provider" is not an answer to that.
+ *
+ * ⚠️ **`delivered` is a claim about the receiving server accepting it, not about a human
+ * seeing it.** A message delivered into a spam folder, or into a filter that files it
+ * somewhere nobody looks, is `delivered` here and is still a failure of the thing we
+ * actually care about. That last step is genuinely a person's to check.
+ *
+ * Returns null when there is nothing to ask — no key, no id, or the test runner.
+ */
+export interface DeliveryStatus {
+	/** Resend's own last-known event for the message. */
+	event: string;
+	/** The receiving server accepted it. `opened` and `clicked` imply this too. */
+	delivered: boolean;
+	/** Nothing further will happen — either it landed or it definitively did not. */
+	terminal: boolean;
+}
+
+const DELIVERED_EVENTS = new Set(["delivered", "opened", "clicked"]);
+const FAILED_EVENTS = new Set(["bounced", "complained", "failed", "canceled"]);
+
+/**
+ * Read one of Resend's event names. Pure, and exported so it can be tested without a
+ * network call — the lookup around it early-returns under the test runner, so leaving
+ * this inline would have made the interesting half of the logic untestable.
+ *
+ * ⚠️ **`opened` and `clicked` count as delivered.** They are *later* events than
+ * delivery, so a message that reaches one of them has necessarily been delivered — and
+ * because `last_event` reports only the most recent, treating them as anything else
+ * would read a successfully-read message as an unresolved one.
+ *
+ * **An unrecognized event is neither delivered nor terminal**, which fails in the
+ * direction of "keep asking" rather than "declare success" — the safe direction when the
+ * provider adds a name we have not seen.
+ */
+export function classifyDeliveryEvent(event: string): DeliveryStatus {
+	return {
+		event,
+		delivered: DELIVERED_EVENTS.has(event),
+		terminal: DELIVERED_EVENTS.has(event) || FAILED_EVENTS.has(event),
+	};
+}
+
+export async function emailDeliveryStatus(messageId: string): Promise<DeliveryStatus | null> {
+	// Never call out from the test runner, for the same reason `sendEmail` does not: a
+	// suite whose outcome depends on a third party's latency is not testing our code.
+	if (process.env.NODE_ENV === "test") return null;
+	const client = resendClient();
+	if (!client || !messageId) return null;
+	try {
+		const { data, error } = await client.emails.get(messageId);
+		if (error || !data) return null;
+		return classifyDeliveryEvent(data.last_event);
+	} catch (err) {
+		console.error(`[email] delivery lookup for ${messageId} threw:`, err);
+		return null;
 	}
 }
 

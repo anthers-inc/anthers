@@ -196,6 +196,15 @@ interface Probe {
 	reportId: number;
 	/** Whether the alert had gone out by the time the run finished. */
 	escalated?: boolean | null;
+	/**
+	 * What the provider says became of the message.
+	 *
+	 * ⭐ **This is the rung above `escalated`.** `escalated` means Resend accepted the
+	 * message, which is a fact about our side of a network call; this is Resend's own
+	 * account of what happened to it afterwards. `delivered` here means the receiving
+	 * server took it — which is as far as any machine can honestly get.
+	 */
+	delivery?: { event: string; delivered: boolean; terminal: boolean } | null;
 }
 
 async function main() {
@@ -277,10 +286,17 @@ async function main() {
 		const deadline = Date.now() + args.waitSeconds * 1000;
 		while (Date.now() < deadline) {
 			for (const probe of probes) {
-				if (probe.escalated) continue;
-				probe.escalated = await readEscalated(probe, adminCookie, fixture?.commentId);
+				if (!probe.escalated) {
+					probe.escalated = await readEscalated(probe, adminCookie, fixture?.commentId);
+				}
+				// Only ask about delivery once there is a message to ask about, and keep
+				// asking until the provider stops changing its mind — `queued` and `sent`
+				// are both way-stations rather than answers.
+				if (probe.escalated && !probe.delivery?.terminal) {
+					probe.delivery = await readDelivery(probe, adminCookie);
+				}
 			}
-			if (probes.every((p) => p.escalated)) break;
+			if (probes.every((p) => p.escalated && p.delivery?.terminal)) break;
 			await new Promise((r) => setTimeout(r, 15_000));
 		}
 	}
@@ -291,26 +307,51 @@ async function main() {
 		const label = probe.kind === "public" ? "public form " : "in-app report";
 		if (probe.escalated === undefined) {
 			log(`  ${label}  #${probe.reportId}  filed — not read back (no admin session)`);
-		} else if (probe.escalated) {
-			log(`  ${label}  #${probe.reportId}  ESCALATED — Resend accepted the message`);
-		} else {
+		} else if (!probe.escalated) {
 			log(`  ${label}  #${probe.reportId}  NOT ESCALATED — the send failed`);
+		} else if (probe.delivery?.delivered) {
+			log(
+				`  ${label}  #${probe.reportId}  DELIVERED — the mailbox accepted it (${probe.delivery.event})`,
+			);
+		} else if (probe.delivery?.terminal) {
+			log(
+				`  ${label}  #${probe.reportId}  NOT DELIVERED — the provider reports "${probe.delivery.event}"`,
+			);
+		} else if (probe.delivery) {
+			log(`  ${label}  #${probe.reportId}  IN FLIGHT — accepted, still "${probe.delivery.event}"`);
+		} else {
+			log(`  ${label}  #${probe.reportId}  ESCALATED — accepted, delivery unknown`);
 		}
 	}
 	log("─────────────────────────────────────────────────────────────");
-	log("\nWhat is left, and only a person can answer it:");
-	log("  • Did the mail arrive at abuse@anthers.org?");
+	log("\nWhat a machine cannot answer, and so is left to a person:");
+	// DELIVERED is as far as this can honestly go. The receiving server accepting a
+	// message says nothing about whether it was filed somewhere a human looks, and the
+	// phone alert is a rule inside the mailbox that nothing here can see.
+	log("  • Is it in the inbox rather than spam or a folder nobody opens?");
 	log("  • Did the phone alert fire?");
-	log("\nReading the two together:");
-	log("  ESCALATED + mail arrived      → it works, end to end.");
-	log("  ESCALATED + no mail           → Resend accepted it; the mail rule or filter ate");
-	log("                                  it. The fault is in the mailbox, not the code.");
-	log("  NOT ESCALATED + no mail       → the send failed. Check the worker is running,");
-	log("                                  then RESEND_API_KEY, then whether");
-	log("                                  noreply@anthers.org is still a verified sender.");
+	log("\nReading the verdict:");
+	log("  DELIVERED + you see it        → it works, end to end.");
+	log("  DELIVERED + you do not        → the mailbox took it and filed it out of sight.");
+	log("                                  The fault is a mail rule, not the code.");
+	log("  NOT DELIVERED                 → the provider rejected or bounced it. Check that");
+	log("                                  noreply@anthers.org is still a verified sender");
+	log("                                  and that abuse@anthers.org actually accepts mail.");
+	log("  NOT ESCALATED                 → the send never happened. Check the worker is");
+	log("                                  running, then RESEND_API_KEY.");
 
 	if (args.cleanup) await cleanup(adminCookie, fixture, probes);
 	else if (fixture) log(`\nFixture left in place. Re-run with --cleanup to remove it.`);
+}
+
+/** What the provider says became of this report's alert. Null while unknown. */
+async function readDelivery(probe: Probe, adminCookie: string): Promise<Probe["delivery"]> {
+	const kind = probe.kind === "public" ? "abuse" : "report";
+	const res = await call(`/api/admin/escalation-delivery?kind=${kind}&id=${probe.reportId}`, {
+		cookie: adminCookie,
+	});
+	if (res.status !== 200) return null;
+	return res.body?.status ?? null;
 }
 
 /** Whether this report's alert has gone out, read over the admin API. */
