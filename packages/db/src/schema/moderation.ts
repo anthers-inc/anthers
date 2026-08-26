@@ -91,6 +91,18 @@ export const moderationReports = pgTable(
 		 * worst case is a late alert rather than a lost one.
 		 */
 		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+		/**
+		 * Resend's own id for the alert, stored so delivery is checkable rather than assumed.
+		 *
+		 * ⭐ **`escalated_at` says the provider ACCEPTED the message; this is what lets
+		 * anybody find out what happened next.** Without it the strongest claim available is
+		 * *"we handed it to Resend and it did not complain"*, which is a fact about our side
+		 * of a network call rather than about a human being told. With it,
+		 * `emailDeliveryStatus` can ask whether the receiving server took it.
+		 *
+		 * Null on an alert that never went, and null on one sent before this column existed.
+		 */
+		escalationMessageId: text("escalation_message_id"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
@@ -204,6 +216,18 @@ export const abuseReports = pgTable(
 		 * record, so the row commits first and the send follows.
 		 */
 		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+		/**
+		 * Resend's own id for the alert, stored so delivery is checkable rather than assumed.
+		 *
+		 * ⭐ **`escalated_at` says the provider ACCEPTED the message; this is what lets
+		 * anybody find out what happened next.** Without it the strongest claim available is
+		 * *"we handed it to Resend and it did not complain"*, which is a fact about our side
+		 * of a network call rather than about a human being told. With it,
+		 * `emailDeliveryStatus` can ask whether the receiving server took it.
+		 *
+		 * Null on an alert that never went, and null on one sent before this column existed.
+		 */
+		escalationMessageId: text("escalation_message_id"),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
 		/** When the reporter's own words and contact address were dropped. See above. */

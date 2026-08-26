@@ -28,7 +28,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
-import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
+import {
+	abuseEscalationMessageId,
+	closeAbuseReport,
+	loadAbuseQueue,
+} from "../services/abuse-reports.js";
 import {
 	dmcaSummary,
 	loadDmcaQueue,
@@ -38,12 +42,14 @@ import {
 	restoreWork,
 	takeDownWork,
 } from "../services/dmca.js";
+import { emailDeliveryStatus } from "../services/email.js";
 import {
 	dismissReports,
 	hideSubject,
 	loadQueue,
 	moderationSummary,
 	type QueueFilter,
+	reportEscalationMessageId,
 	restoreSubject,
 	routeToCopyright,
 } from "../services/moderation.js";
@@ -96,6 +102,12 @@ const quarantineSchema = z.object({
 const closeAbuseSchema = z.object({
 	reportId: z.number().int().positive(),
 	outcome: z.enum(["resolved", "dismissed"]),
+});
+
+/** Which report to ask about. The two intakes are separate tables, so ids collide. */
+const deliveryQuerySchema = z.object({
+	kind: z.enum(["abuse", "report"]),
+	id: z.coerce.number().int().positive(),
 });
 
 const clearQuarantineSchema = z.object({
@@ -482,6 +494,30 @@ const adminRoutes = new Hono()
 		const closed = await closeAbuseReport({ reportId, actorId: user.id, outcome });
 		if (!closed) return c.json({ error: "No open report with that id" }, 404);
 		return c.json({ closed: true, outcome });
+	})
+
+	// ── Did the alert actually arrive? ──────────────────────────────────────────
+	// 🚨 `escalated_at` only ever meant "Resend accepted the message", which is a fact
+	// about our side of a network call. This asks the provider what became of it, which
+	// is the question the floor is actually about — an alert nobody received is the same
+	// failure as an alert never sent, and until now the two were indistinguishable from
+	// inside the app.
+	//
+	// ⚠️ `delivered` means the receiving server took it, NOT that a person saw it. A
+	// message filed into spam is `delivered` here and is still a failure of the thing we
+	// care about, which is why the probe stops short of claiming success on this alone.
+	.get("/escalation-delivery", zValidator("query", deliveryQuerySchema), async (c) => {
+		const { kind, id } = c.req.valid("query");
+		const messageId =
+			kind === "abuse"
+				? await abuseEscalationMessageId(Number(id))
+				: await reportEscalationMessageId(Number(id));
+		if (!messageId) {
+			// Distinguishable on purpose: nothing was ever sent for this report, versus
+			// something was sent and the provider has an opinion about it.
+			return c.json({ messageId: null, status: null, reason: "not_escalated" });
+		}
+		return c.json({ messageId, status: await emailDeliveryStatus(messageId) });
 	})
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────

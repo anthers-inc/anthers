@@ -146,12 +146,14 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
 	].join("\n");
 
-	const sent = await sendEmail({ to: ABUSE_EMAIL, subject, html });
+	const { sent, messageId } = await sendEmail({ to: ABUSE_EMAIL, subject, html });
 	if (!sent) return false;
 
+	// See the note on the same write in `services/moderation.ts` — the id is what makes
+	// delivery checkable rather than merely assumed.
 	await db
 		.update(abuseReports)
-		.set({ escalatedAt: new Date() })
+		.set({ escalatedAt: new Date(), escalationMessageId: messageId })
 		.where(eq(abuseReports.id, reportId));
 	return true;
 }
@@ -292,4 +294,14 @@ function escapeHtml(value: string): string {
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;");
+}
+
+/** The provider id for this report's alert, or null if none was ever sent. */
+export async function abuseEscalationMessageId(reportId: number): Promise<string | null> {
+	const [row] = await db
+		.select({ messageId: abuseReports.escalationMessageId })
+		.from(abuseReports)
+		.where(eq(abuseReports.id, reportId))
+		.limit(1);
+	return row?.messageId ?? null;
 }

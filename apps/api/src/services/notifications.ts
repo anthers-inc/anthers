@@ -130,7 +130,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	if (!wantsEmail)
 		return { created: true, notificationId: row.id, emailIntended: false, emailed: false };
 
-	const sent = await sendEmail({
+	const { sent } = await sendEmail({
 		to: user.email,
 		subject: input.title,
 		html: renderEmail(input),

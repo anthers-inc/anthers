@@ -237,12 +237,15 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
 	].join("\n");
 
-	const sent = await sendEmail({ to: ABUSE_EMAIL, subject, html });
+	const { sent, messageId } = await sendEmail({ to: ABUSE_EMAIL, subject, html });
 	if (!sent) return false;
 
+	// The provider's id is stored beside the stamp, because the stamp alone can only ever
+	// say "Resend accepted it". With the id, `GET /api/admin/escalation-delivery` can ask
+	// what actually became of the message — which is the question the floor is about.
 	await db
 		.update(moderationReports)
-		.set({ escalatedAt: new Date() })
+		.set({ escalatedAt: new Date(), escalationMessageId: messageId })
 		.where(eq(moderationReports.id, reportId));
 	return true;
 }
@@ -987,4 +990,14 @@ export async function moderationSummary(): Promise<{
 		hiddenComments: Number(hiddenC?.n ?? 0),
 		hiddenRatings: Number(hiddenR?.n ?? 0),
 	};
+}
+
+/** The provider id for this report's alert, or null if none was ever sent. */
+export async function reportEscalationMessageId(reportId: number): Promise<string | null> {
+	const [row] = await db
+		.select({ messageId: moderationReports.escalationMessageId })
+		.from(moderationReports)
+		.where(eq(moderationReports.id, reportId))
+		.limit(1);
+	return row?.messageId ?? null;
 }
