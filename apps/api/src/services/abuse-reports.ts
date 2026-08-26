@@ -143,6 +143,7 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 		report.reporterEmail
 			? `<p>They left <code>${escapeHtml(report.reporterEmail)}</code> to be reached at.</p>`
 			: "<p>They left no address, so there is nobody to reply to.</p>",
+		"<p>Open the public reports queue in the admin console to act on it.</p>",
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
 	].join("\n");
 
@@ -294,14 +295,4 @@ function escapeHtml(value: string): string {
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;");
-}
-
-/** The provider id for this report's alert, or null if none was ever sent. */
-export async function abuseEscalationMessageId(reportId: number): Promise<string | null> {
-	const [row] = await db
-		.select({ messageId: abuseReports.escalationMessageId })
-		.from(abuseReports)
-		.where(eq(abuseReports.id, reportId))
-		.limit(1);
-	return row?.messageId ?? null;
 }

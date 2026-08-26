@@ -5,38 +5,41 @@
  *
  * 🚨 **The distinction this file exists for.** `escalated_at` has only ever meant *Resend
  * accepted the message* — a fact about our side of a network call. An alert the provider
- * accepted and then bounced is, from the point of view of the person who needed telling,
- * identical to one that was never sent; and until the message id was stored, nothing in
- * the app could tell those apart. These cases pin the reading of the provider's answer.
+ * accepted and then bounced is, to the person who needed telling, identical to one never
+ * sent, and until the delivery event was stored nothing in the app could tell them apart.
  *
- * The network call itself is deliberately NOT exercised — `emailDeliveryStatus`
- * early-returns under the test runner, on the same rule `sendEmail` follows, because a
- * suite whose outcome depends on a third party's latency is not testing our code. What is
- * worth pinning is the part with judgment in it: which events mean delivered, which mean
- * finished, and what happens to a name we have not seen before.
+ * ⭐ **The answer is pushed to us, not polled.** Asking Resend directly needs an API key
+ * that can read mail, and production's is send-only — confirmed on 2026-08-26, when a
+ * status lookup answered `401 — "This API key is restricted to only send emails"`.
+ * Broadening it would have given the credential most exposed in production the power to
+ * read every message we have ever sent, to answer a question the provider will simply
+ * tell us. So these cases are about what happens when the webhook arrives.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { abuseReports, moderationReports } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { abuseEscalationMessageId } from "../services/abuse-reports.js";
-import { classifyDeliveryEvent, sendEmail } from "../services/email.js";
-import { reportEscalationMessageId } from "../services/moderation.js";
+import {
+	classifyStoredEvent,
+	deliveryForReport,
+	normalizeEventName,
+	recordDeliveryEvent,
+} from "../services/delivery-events.js";
+import { sendEmail } from "../services/email.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-describe("Reading the provider's answer", () => {
+describe("Reading a stored event", () => {
 	it("treats a delivered message as delivered and finished", () => {
-		const s = classifyDeliveryEvent("delivered");
+		const s = classifyStoredEvent("delivered", null);
 		expect(s.delivered).toBe(true);
 		expect(s.terminal).toBe(true);
 	});
 
 	it("counts opened and clicked as delivered, because they come after delivery", () => {
-		// `last_event` reports only the most recent event, so a message somebody has read
-		// no longer says "delivered". Reading that as undelivered would turn the best
-		// possible outcome into an unresolved one.
+		// A message somebody has read has necessarily been delivered. Reading these as
+		// anything else turns the best possible outcome into an unresolved one.
 		for (const event of ["opened", "clicked"]) {
-			const s = classifyDeliveryEvent(event);
+			const s = classifyStoredEvent(event, null);
 			expect(s.delivered).toBe(true);
 			expect(s.terminal).toBe(true);
 		}
@@ -44,9 +47,9 @@ describe("Reading the provider's answer", () => {
 
 	it("treats a bounce or a complaint as finished and NOT delivered", () => {
 		// 🚨 The case the whole feature exists for: the provider accepted it, so
-		// `escalated_at` is stamped and the old reading would have called this a success.
+		// `escalated_at` is stamped and the old reading called this a success.
 		for (const event of ["bounced", "complained", "failed", "canceled"]) {
-			const s = classifyDeliveryEvent(event);
+			const s = classifyStoredEvent(event, null);
 			expect(s.delivered).toBe(false);
 			expect(s.terminal).toBe(true);
 		}
@@ -54,36 +57,40 @@ describe("Reading the provider's answer", () => {
 
 	it("leaves an in-flight message unfinished, so a caller keeps asking", () => {
 		for (const event of ["queued", "sent", "scheduled", "delivery_delayed"]) {
-			const s = classifyDeliveryEvent(event);
+			const s = classifyStoredEvent(event, null);
 			expect(s.delivered).toBe(false);
 			expect(s.terminal).toBe(false);
 		}
 	});
 
 	it("fails toward keep-asking on an event nobody has seen before", () => {
-		// Resend can add a name at any time. Unknown must not read as success, and must
-		// not read as finished either — the safe direction is to keep asking.
-		const s = classifyDeliveryEvent("teleported");
+		const s = classifyStoredEvent("teleported", null);
 		expect(s.delivered).toBe(false);
 		expect(s.terminal).toBe(false);
+	});
+
+	it("strips the provider's prefix", () => {
+		expect(normalizeEventName("email.delivered")).toBe("delivered");
+		expect(normalizeEventName("delivered")).toBe("delivered");
 	});
 });
 
 describe("The send result", () => {
 	it("reports failure as an object rather than a bare false", async () => {
 		// The test runner never sends, so this is the skip path — and the shape is the
-		// point. A caller destructuring `{ sent }` gets false; a caller that forgot to
-		// update would have seen a truthy object, which is the bug the type change forces
-		// the compiler to prevent.
+		// point. A caller that forgot to update would have seen a truthy object, which is
+		// the bug the type change forces the compiler to prevent.
 		const result = await sendEmail({ to: "nobody@example.com", subject: "x", html: "<p>x</p>" });
 		expect(result.sent).toBe(false);
 		expect(result.messageId).toBeNull();
 	});
 });
 
-describe("Looking up a stored message id", () => {
+describe("Recording what the provider tells us", () => {
 	let abuseId: number;
 	let reportId: number;
+	const ABUSE_MSG = `resend-fixture-abuse-${crypto.randomUUID().slice(0, 8)}`;
+	const REPORT_MSG = `resend-fixture-report-${crypto.randomUUID().slice(0, 8)}`;
 
 	beforeAll(async () => {
 		const [a] = await db
@@ -93,7 +100,7 @@ describe("Looking up a stored message id", () => {
 				reason: "illegal",
 				details: "delivery lookup fixture",
 				escalatedAt: new Date(),
-				escalationMessageId: "resend-fixture-abuse",
+				escalationMessageId: ABUSE_MSG,
 			})
 			.returning({ id: abuseReports.id });
 		abuseId = a.id;
@@ -106,20 +113,65 @@ describe("Looking up a stored message id", () => {
 				reason: "sexual",
 				details: "delivery lookup fixture",
 				escalatedAt: new Date(),
-				escalationMessageId: "resend-fixture-report",
+				escalationMessageId: REPORT_MSG,
 			})
 			.returning({ id: moderationReports.id });
 		reportId = r.id;
 	}, DB_SETUP_TIMEOUT);
 
-	it("finds the id for each intake, which are separate tables with colliding ids", async () => {
-		expect(await abuseEscalationMessageId(abuseId)).toBe("resend-fixture-abuse");
-		expect(await reportEscalationMessageId(reportId)).toBe("resend-fixture-report");
+	it("records a delivery against the right intake, which are separate tables", async () => {
+		const at = new Date("2026-08-26T01:05:00.000Z");
+		expect(
+			await recordDeliveryEvent({ messageId: ABUSE_MSG, event: "delivered", occurredAt: at }),
+		).toEqual({ matched: 1 });
+
+		const got = await deliveryForReport("abuse", abuseId);
+		expect(got.messageId).toBe(ABUSE_MSG);
+		expect(got.status?.delivered).toBe(true);
+		expect(got.status?.occurredAt).toBe(at.toISOString());
+
+		// The in-app report has its own message and must be untouched by the other's event.
+		expect((await deliveryForReport("report", reportId)).status).toBeNull();
 	});
 
-	it("returns null for a report whose alert never went", async () => {
-		// Distinguishable on purpose from "sent, and the provider has an opinion" — the
-		// route answers `not_escalated` for this case rather than an empty status.
+	it("does not let a late non-terminal event overwrite a terminal one", async () => {
+		// 🚨 Webhook deliveries are not ordered. A `sent` arriving after a `delivered`
+		// must not downgrade a known-good outcome to an unknown one — which is what a
+		// naive last-write-wins would do, intermittently and unreproducibly.
+		await recordDeliveryEvent({
+			messageId: ABUSE_MSG,
+			event: "sent",
+			occurredAt: new Date("2026-08-26T01:06:00.000Z"),
+		});
+		expect((await deliveryForReport("abuse", abuseId)).status?.event).toBe("delivered");
+	});
+
+	it("lets a terminal event replace a non-terminal one", async () => {
+		const at = new Date("2026-08-26T01:07:00.000Z");
+		await recordDeliveryEvent({ messageId: REPORT_MSG, event: "queued", occurredAt: at });
+		expect((await deliveryForReport("report", reportId)).status?.event).toBe("queued");
+
+		await recordDeliveryEvent({ messageId: REPORT_MSG, event: "bounced", occurredAt: at });
+		const got = await deliveryForReport("report", reportId);
+		expect(got.status?.event).toBe("bounced");
+		expect(got.status?.delivered).toBe(false);
+		expect(got.status?.terminal).toBe(true);
+	});
+
+	it("matches nothing for an email no report names, which is the ordinary case", async () => {
+		// ⚠️ Resend sends an event for EVERY email, and most are signup verifications. A
+		// handler that treated an unmatched event as a failure would spend its life
+		// reporting failures.
+		expect(
+			await recordDeliveryEvent({
+				messageId: "an-id-belonging-to-a-signup-email",
+				event: "delivered",
+				occurredAt: new Date(),
+			}),
+		).toEqual({ matched: 0 });
+	});
+
+	it("reports a report whose alert never went as having no message at all", async () => {
 		const [row] = await db
 			.insert(abuseReports)
 			.values({
@@ -128,7 +180,9 @@ describe("Looking up a stored message id", () => {
 				details: "never escalated",
 			})
 			.returning({ id: abuseReports.id });
-		expect(await abuseEscalationMessageId(row.id)).toBeNull();
+		const got = await deliveryForReport("abuse", row.id);
+		expect(got.messageId).toBeNull();
+		expect(got.status).toBeNull();
 		await db.delete(abuseReports).where(eq(abuseReports.id, row.id));
 	});
 

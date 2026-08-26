@@ -991,13 +991,3 @@ export async function moderationSummary(): Promise<{
 		hiddenRatings: Number(hiddenR?.n ?? 0),
 	};
 }
-
-/** The provider id for this report's alert, or null if none was ever sent. */
-export async function reportEscalationMessageId(reportId: number): Promise<string | null> {
-	const [row] = await db
-		.select({ messageId: moderationReports.escalationMessageId })
-		.from(moderationReports)
-		.where(eq(moderationReports.id, reportId))
-		.limit(1);
-	return row?.messageId ?? null;
-}

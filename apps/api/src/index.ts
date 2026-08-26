@@ -21,6 +21,7 @@ import { moderationRoutes } from "./routes/moderation.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { matchesInviteKey, matchesSitePassword } from "./site-gate.js";
@@ -73,7 +74,8 @@ const app = new Hono()
 	.route("/api/moderation", moderationRoutes)
 	.route("/api/dmca", dmcaRoutes)
 	.route("/api/waitlist", waitlistRoutes)
-	.route("/api/admin", adminRoutes);
+	.route("/api/admin", adminRoutes)
+	.route("/api/webhooks", webhookRoutes);
 
 // This module is the Hono app and nothing else. It is never a process entry point —
 // `server.ts` is, and it owns the Bun.serve object (port, fetch, websocket).

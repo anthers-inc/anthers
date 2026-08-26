@@ -103,6 +103,23 @@ export const moderationReports = pgTable(
 		 * Null on an alert that never went, and null on one sent before this column existed.
 		 */
 		escalationMessageId: text("escalation_message_id"),
+		/**
+		 * What the provider last told us became of that message — `delivered`, `bounced`,
+		 * `complained`, and so on.
+		 *
+		 * ⭐ **Pushed to us by a webhook rather than polled.** Asking Resend directly would
+		 * need an API key that can READ mail, and the production key is send-only by
+		 * design; broadening it would widen the blast radius of the credential most exposed
+		 * in production, to answer a question the provider is willing to simply tell us.
+		 * So `POST /api/webhooks/resend` records the answer as it arrives.
+		 *
+		 * ⚠️ **Delivered is not read.** This says the receiving server accepted the message,
+		 * never that a person saw it — mail filed into spam is `delivered` here and is still
+		 * a failure of the thing the alert is for.
+		 */
+		escalationDeliveryEvent: text("escalation_delivery_event"),
+		/** When that event happened, per the provider. Null until one arrives. */
+		escalationDeliveryAt: timestamp("escalation_delivery_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
@@ -228,6 +245,23 @@ export const abuseReports = pgTable(
 		 * Null on an alert that never went, and null on one sent before this column existed.
 		 */
 		escalationMessageId: text("escalation_message_id"),
+		/**
+		 * What the provider last told us became of that message — `delivered`, `bounced`,
+		 * `complained`, and so on.
+		 *
+		 * ⭐ **Pushed to us by a webhook rather than polled.** Asking Resend directly would
+		 * need an API key that can READ mail, and the production key is send-only by
+		 * design; broadening it would widen the blast radius of the credential most exposed
+		 * in production, to answer a question the provider is willing to simply tell us.
+		 * So `POST /api/webhooks/resend` records the answer as it arrives.
+		 *
+		 * ⚠️ **Delivered is not read.** This says the receiving server accepted the message,
+		 * never that a person saw it — mail filed into spam is `delivered` here and is still
+		 * a failure of the thing the alert is for.
+		 */
+		escalationDeliveryEvent: text("escalation_delivery_event"),
+		/** When that event happened, per the provider. Null until one arrives. */
+		escalationDeliveryAt: timestamp("escalation_delivery_at", { withTimezone: true }),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
 		/** When the reporter's own words and contact address were dropped. See above. */

@@ -157,6 +157,13 @@ envs:
   - key: RESEND_API_KEY
     scope: RUN_TIME
     type: SECRET
+  # Signs Resend's delivery webhook (POST /api/webhooks/resend). Distinct from the
+  # API key on purpose: the key SENDS and this only VERIFIES what Resend pushes back,
+  # so nothing here ever needs a credential that can read mail. Unset means the
+  # endpoint refuses every request — it fails closed, never open.
+  - key: RESEND_WEBHOOK_SECRET
+    scope: RUN_TIME
+    type: SECRET
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
