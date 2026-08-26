@@ -11,6 +11,11 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * Each route below verifies its own proof instead.
  *
  * - The Stripe webhook authenticates by request signature.
+ * - The Resend delivery webhook does the same, by Standard Webhooks HMAC over the raw
+ *   body (`lib/standard-webhooks.ts`). 🚨 It fails CLOSED without its secret, so the
+ *   exemption removes the Origin check and puts nothing in its place that could be
+ *   absent: an unsigned request is rejected by the handler's first act rather than
+ *   waved through.
  * - The two desktop-enrolment endpoints are called by the packaged app itself, which
  *   has no allowed Origin (`tauri://localhost`) and no session yet — obtaining one is
  *   the entire point of the exchange. Neither is CSRF-forgeable to any effect:
@@ -21,6 +26,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  */
 const CSRF_EXEMPT_PATHS = new Set([
 	"/api/payments/stripe/webhook",
+	"/api/webhooks/resend",
 	"/api/auth/desktop/start",
 	"/api/auth/desktop/exchange",
 ]);

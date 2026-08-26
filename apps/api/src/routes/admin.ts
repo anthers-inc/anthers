@@ -28,11 +28,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
-import {
-	abuseEscalationMessageId,
-	closeAbuseReport,
-	loadAbuseQueue,
-} from "../services/abuse-reports.js";
+import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
+import { deliveryForReport } from "../services/delivery-events.js";
 import {
 	dmcaSummary,
 	loadDmcaQueue,
@@ -42,14 +39,12 @@ import {
 	restoreWork,
 	takeDownWork,
 } from "../services/dmca.js";
-import { emailDeliveryStatus } from "../services/email.js";
 import {
 	dismissReports,
 	hideSubject,
 	loadQueue,
 	moderationSummary,
 	type QueueFilter,
-	reportEscalationMessageId,
 	restoreSubject,
 	routeToCopyright,
 } from "../services/moderation.js";
@@ -508,16 +503,16 @@ const adminRoutes = new Hono()
 	// care about, which is why the probe stops short of claiming success on this alone.
 	.get("/escalation-delivery", zValidator("query", deliveryQuerySchema), async (c) => {
 		const { kind, id } = c.req.valid("query");
-		const messageId =
-			kind === "abuse"
-				? await abuseEscalationMessageId(Number(id))
-				: await reportEscalationMessageId(Number(id));
+		// Read from what the provider PUSHED to us, never by asking it. The production
+		// Resend key is send-only and broadening it to answer this would widen the blast
+		// radius of the credential most exposed in production — see routes/webhooks.ts.
+		const { messageId, status } = await deliveryForReport(kind, Number(id));
 		if (!messageId) {
 			// Distinguishable on purpose: nothing was ever sent for this report, versus
-			// something was sent and the provider has an opinion about it.
+			// something was sent and the provider has not told us anything yet.
 			return c.json({ messageId: null, status: null, reason: "not_escalated" });
 		}
-		return c.json({ messageId, status: await emailDeliveryStatus(messageId) });
+		return c.json({ messageId, status, reason: status ? null : "awaiting_provider_event" });
 	})
 
 	// ── DMCA ────────────────────────────────────────────────────────────────────
