@@ -39,6 +39,7 @@
  */
 
 import { db } from "@anthers/db/client";
+import type { VendorMatch } from "@anthers/db/schema";
 import {
 	assets,
 	mediaQuarantine,
@@ -63,8 +64,18 @@ export type QuarantineObjectKind = "source" | "thumbnail" | "asset" | "audio" | 
 export interface QuarantineInput {
 	workId: number;
 	source: QuarantineSource;
-	/** The vendor's classification, or the moderation reason a report carried. */
+	/**
+	 * **Our own determination** — what Anthers concluded this is, in our vocabulary.
+	 *
+	 * 🚨 Never a vendor's answer. § 7.6 of 60.13: a detection vendor's data is an input to
+	 * our determination and never a substitute for it, and Shield says outright that its
+	 * classifications are not final determinations of legality. Pass the vendor's answer as
+	 * `vendorMatch` instead, which is kept apart for retention and for the rule that it
+	 * must never reach an agent.
+	 */
 	classification: string;
+	/** What a detection vendor returned, when one did. See the schema note before reading it. */
+	vendorMatch?: VendorMatch | null;
 	/** The operator who acted, or null when a job did. */
 	actorId?: number | null;
 	/** The report that triggered this, when one did. */
@@ -250,6 +261,7 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 					objectKind: object.kind,
 					source: input.source,
 					classification: input.classification,
+					vendorMatch: input.vendorMatch ?? null,
 					reportId: input.reportId ?? null,
 					priorVisibility,
 					placedBy: input.actorId ?? null,
@@ -274,6 +286,8 @@ export async function quarantineWork(input: QuarantineInput): Promise<Quarantine
 			actorId: input.actorId ?? null,
 			actorRole: input.actorId == null ? "automated" : "operator",
 			reason: "quarantine",
+			// Our determination only. A vendor's classification is Match Data and must not be
+			// copied into the append-only log, which is permanent and read by agents.
 			note: [input.source, input.classification, input.note].filter(Boolean).join(": "),
 		});
 
@@ -425,6 +439,13 @@ export interface QuarantineFinding {
 
 /**
  * The operator's list.
+ *
+ * 🚨 **`vendorMatch` is deliberately not selected here**, and that is a second omission on
+ * top of the one below. A vendor's Match Data is license-restricted — Shield's terms forbid
+ * using it as input to generative AI — and this list is the surface most likely to be read
+ * by, screenshotted into, or pasted at an agent. Our own determination is enough to work
+ * the queue; reading the vendor's answer should take a deliberate second step rather than
+ * arriving in every listing.
  *
  * 🚨 There is no `thumbnail`, no `url` and no `preview` on the row this returns, and there
  * must not be. § 5.2 of 60.13 commits Anthers to an operator surface that shows the

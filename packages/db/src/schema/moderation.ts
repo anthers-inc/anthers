@@ -39,7 +39,16 @@
  */
 
 import { relations } from "drizzle-orm";
-import { index, integer, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	serial,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 import { works } from "./content.js";
 
@@ -359,6 +368,28 @@ export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
  * object moves. Rewriting them would scatter the knowledge that something is quarantined
  * across four tables, where `quarantine_status` and this row now hold it in two.
  */
+/**
+ * What a detection vendor said, verbatim in its own terms.
+ *
+ * 🚨 **`matchType` is separated from `classification` because they answer different legal
+ * questions.** *Lawshe v. Verizon* read § 2258B immunity as covering reasonable reliance
+ * on a **hash match** tagged as apparent CSAM; whether a *perceptual near* match sits
+ * inside that reading is genuinely open, and a vendor may decline to warrant the accuracy
+ * of its own similarity calculation while warranting a cryptographic one. Recording only
+ * "it matched" would make the two indistinguishable after the fact, which is precisely
+ * when the distinction would be needed.
+ */
+export interface VendorMatch {
+	/** Which service answered — `arachnid-shield`, and whatever follows it. */
+	vendor: string;
+	/** Their word for it, never ours. `csam`, `harmful-abusive-material`, … */
+	classification: string;
+	/** `exact` is a cryptographic hash match; `near` is perceptual and weaker. */
+	matchType: "exact" | "near" | "none";
+	/** When they told us, so a retention sweep can age this out on its own clock. */
+	receivedAt: string;
+}
+
 export const mediaQuarantine = pgTable(
 	"media_quarantine",
 	{
@@ -382,19 +413,54 @@ export const mediaQuarantine = pgTable(
 		 * How this arrived: `report` (a person filed one), `scan` (a detection vendor), or
 		 * `operator` (somebody acted directly). It decides what the finding is worth.
 		 *
-		 * 🚨 A `scan` finding is a **hash match** and is a reporting trigger; a classifier's
-		 * output is triage only. *Lawshe v. Verizon* (2025) read § 2258B immunity as
-		 * covering reasonable reliance on a hash match tagged as apparent CSAM but not on
-		 * merely uncertain indications, which is why the two may never collapse into one
-		 * value here. § 7.3 of 60.13 states it as a rule.
+		 * 🚨 A `scan` finding is a **hash match** and a classifier's output is triage only.
+		 * *Lawshe v. Verizon* (2025) read § 2258B immunity as covering reasonable reliance
+		 * on a hash match tagged as apparent CSAM but not on merely uncertain indications,
+		 * which is why the two may never collapse into one value here. § 7.3 of 60.13
+		 * states it as a rule — and note that a match alone is not the trigger; **the
+		 * classification the match carries is**.
 		 */
 		source: text("source").notNull(),
 		/**
-		 * What the finding was called by whoever made it — a vendor's classification
-		 * (`csam`, `harmful-abusive-material`), or the moderation reason a report carried.
-		 * Free text because the vendor is not chosen yet and its vocabulary is its own.
+		 * **The Corporation's own determination**, in its own vocabulary — what *we*
+		 * concluded this material is.
+		 *
+		 * 🚨 **This is deliberately NOT a vendor's answer, and the separation is the whole
+		 * point of the two columns.** § 7.6 of 60.13: a detection vendor's data is an input
+		 * to our determination and never a substitute for it. Shield by Project Arachnid
+		 * says outright that its classifications "are not classifications made by law
+		 * enforcement and are not intended to be presented, construed, or interpreted as
+		 * final determinations on legality" — so a record resting on one would rest on
+		 * something its author disclaims.
+		 *
+		 * ⭐ Two practical consequences follow, and both are why the split exists. This
+		 * column is **permanent**, because it is what answers an appeal years later and what
+		 * a CyberTipline report states; a vendor's terms may require its data to be
+		 * time-limited, and ours must not age out with theirs. And this column is **safe for
+		 * an agent to read**, where `vendor_match` is not — see the note there.
 		 */
 		classification: text("classification").notNull().default(""),
+		/**
+		 * What a detection vendor returned, kept apart from our own determination above.
+		 *
+		 * 🚨 **NEVER let this reach an agent.** Shield's terms (§ 6(b) and § 6(c)) forbid
+		 * using Match Data to train artificial intelligence *or as input data for generative
+		 * artificial intelligence*. Pasting a value from here into an agent session — or an
+		 * agent running a query that returns it — is a prohibited use, not a stylistic
+		 * preference. Anthers is built with agents reading this repository, so the rule has
+		 * to live where the column does. The Agents Hub carries it too.
+		 *
+		 * ⚠️ **Time-limited, unlike `classification`.** A vendor may require that its data
+		 * not be retained beyond the purpose it was provided for, with carve-outs for legal
+		 * compliance — which covers the § 2258A(h) preservation year and does not cover
+		 * keeping it forever because our appeal story wants it. Null once aged out, while
+		 * our own determination stays.
+		 *
+		 * jsonb rather than columns because each vendor's vocabulary is its own and we have
+		 * not chosen one: expect a classification, a match type, and whatever else the
+		 * particular service returns.
+		 */
+		vendorMatch: jsonb("vendor_match").$type<VendorMatch | null>(),
 		/** The report that triggered this, when one did. */
 		reportId: integer("report_id").references(() => moderationReports.id, {
 			onDelete: "set null",

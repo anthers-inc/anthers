@@ -1,0 +1,1 @@
+ALTER TABLE "media_quarantine" ADD COLUMN "vendor_match" jsonb;
