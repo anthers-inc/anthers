@@ -383,7 +383,7 @@ function renderCreatorReceiptMarkdown(): string {
 		`${label}${" ".repeat(Math.max(1, 62 - label.length - amount.length))}${amount}`;
 	return [
 		"```",
-		"Your Earnings — February 2026                                  @LifeOfRiza",
+		"Your Earnings — February 2026                              @saltandcompass",
 		"",
 		"━".repeat(66),
 		pad("Time Pool (by time spent) + directed support (net of card)", `$${r.gross}`),

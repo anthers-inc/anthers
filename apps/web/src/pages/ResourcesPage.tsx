@@ -54,7 +54,7 @@ const EXPLAINERS: ResourceCard[] = [
 		to: "/demo-creator-breakdown",
 		title: "Creator economics breakdown",
 		blurb:
-			"Real creators mapped onto the Anthers model — where every dollar of a subscriber's spend lands.",
+			"Composite creator profiles mapped onto the Anthers model — where every dollar of a subscriber's spend lands.",
 		tag: "Creators",
 		icon: UserGroupIcon,
 	},

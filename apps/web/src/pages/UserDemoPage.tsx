@@ -84,9 +84,9 @@ const DEMO_PLAN = {
 
 const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 	{
-		username: "bugfishhhh",
-		displayName: "bugfishhhh",
-		avatar: "BF",
+		username: "deepcurrents",
+		displayName: "Deep Currents",
+		avatar: "DC",
 		watchHours: 8.2,
 		poolAmount: 1.48, // 8.2 hrs × $0.18/hr
 		seedAmount: 6, // $6/mo directed at this creator
@@ -119,9 +119,9 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		],
 	},
 	{
-		username: "LifeOfRiza",
-		displayName: "LifeOfRiza",
-		avatar: "LR",
+		username: "saltandcompass",
+		displayName: "Salt & Compass",
+		avatar: "SC",
 		watchHours: 6.5,
 		poolAmount: 1.17,
 		seedAmount: 3, // $3/mo directed at this creator
@@ -139,9 +139,9 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		],
 	},
 	{
-		username: "RaceDayCafe",
-		displayName: "RaceDayCafe",
-		avatar: "RC",
+		username: "secondgear",
+		displayName: "Second Gear",
+		avatar: "SG",
 		watchHours: 5.1,
 		poolAmount: 0.91,
 		seedAmount: 0,
@@ -164,9 +164,9 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		],
 	},
 	{
-		username: "Amaiguri",
-		displayName: "Amaiguri",
-		avatar: "AM",
+		username: "paperlantern",
+		displayName: "Paper Lantern",
+		avatar: "PL",
 		watchHours: 3.0,
 		poolAmount: 0.54,
 		seedAmount: 0,
@@ -189,9 +189,9 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 		],
 	},
 	{
-		username: "MAPHRA",
-		displayName: "MAPHRA",
-		avatar: "MA",
+		username: "nocturneatlas",
+		displayName: "Nocturne Atlas",
+		avatar: "NA",
 		watchHours: 1.5,
 		poolAmount: 0.27,
 		seedAmount: 0,
@@ -226,7 +226,7 @@ const DEMO_ALLOCATIONS: DemoCreatorAllocation[] = [
 
 const DEMO_PURCHASES: DemoPurchase[] = [
 	{
-		creator: "bugfishhhh",
+		creator: "Deep Currents",
 		item: "Moonvale OST (FLAC)",
 		type: "download",
 		price: 8.0,
@@ -234,7 +234,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		date: "Feb 4",
 	},
 	{
-		creator: "MAPHRA",
+		creator: "Nocturne Atlas",
 		item: '"Cascade" Stems + Session Files',
 		type: "download",
 		price: 15.0,
@@ -242,7 +242,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		date: "Feb 11",
 	},
 	{
-		creator: "LifeOfRiza",
+		creator: "Salt & Compass",
 		item: "Portfolio Review (30 min)",
 		type: "experience",
 		price: 25.0,
@@ -250,7 +250,7 @@ const DEMO_PURCHASES: DemoPurchase[] = [
 		date: "Feb 18",
 	},
 	{
-		creator: "Amaiguri",
+		creator: "Paper Lantern",
 		item: "Seasonal Recipe Zine—Spring 2026",
 		type: "physical",
 		price: 12.0,
