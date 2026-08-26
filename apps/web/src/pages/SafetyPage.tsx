@@ -3,9 +3,10 @@
  * Reporting illegal content, and what Anthers actually does about it.
  *
  * 🚨 **Every sentence here has to be true in the present tense, and the temptation is
- * the other direction.** Nothing on Anthers is scanned today — the detection-vendor
- * applications are in somebody else's review queue — so this page may not imply a
- * capability that does not exist. The honest version is also the more distinctive one,
+ * the other direction.** Detection went live on 2026-08-26 and this page had to change the
+ * same day, because it had said plainly that nothing was scanned — a sentence that was
+ * true that morning and false by the evening. That is the failure mode to watch for here:
+ * not a lie anybody wrote, but a true sentence left alone while the system moved. The honest version is also the more distinctive one,
  * on exactly the reasoning that made the privacy policy say plainly that we do not
  * verify anyone's age. If a sentence below stops being true, this page is wrong before
  * the marketing is.
@@ -143,11 +144,19 @@ export default function SafetyPage() {
 				</p>
 				<p>
 					<strong>
-						Nothing uploaded here is currently scanned against known-material databases.
+						Uploaded images are checked against databases of known child sexual abuse material.
 					</strong>{" "}
-					We have applied to the free detection services that make that possible — they vet
-					organizations before granting access, and we are waiting. Until then, what we act on is
-					what people report to us and what we find ourselves.
+					We are still extending that to other kinds of media, and alongside it we act on what
+					people report to us and what we find ourselves.
+				</p>
+				<p>
+					{/* The privacy half, stated here as well as in the privacy policy, because the
+					    person reading THIS page is the one wondering what we do with their files. */}
+					<strong>Your files do not leave Anthers to be checked.</strong> We calculate a short
+					mathematical fingerprint of an image — not the picture, and nothing anyone could turn back
+					into it — and ask whether that fingerprint is known. A fingerprint that matches nothing,
+					which is very nearly all of them, tells the other side nothing whatsoever about you or
+					what you uploaded.
 				</p>
 				<p>
 					<strong>We do not monitor what you read, watch, or say.</strong> There is no automated
