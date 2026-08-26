@@ -31,6 +31,7 @@ import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
+import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 
@@ -51,6 +52,13 @@ async function start() {
 			}
 		},
 	);
+
+	// Detection runs off the request path — see the job's header for why it has to.
+	await queue.work<ScanMediaData>(QUEUES.SCAN_MEDIA, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			await scanMedia(job.data);
+		}
+	});
 
 	await queue.work<ProcessAudioData>(
 		QUEUES.PROCESS_AUDIO,
