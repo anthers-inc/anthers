@@ -27,6 +27,7 @@ import { db } from "@anthers/db/client";
 import {
 	assets,
 	mediaQuarantine,
+	moderationActions,
 	moderationReports,
 	purchases,
 	users,
@@ -35,7 +36,7 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 import app from "../index";
 import { isUnderHold } from "../services/legal-hold.js";
-import { clearQuarantine, quarantineWork } from "../services/quarantine.js";
+import { clearQuarantine, loadQuarantineFindings, quarantineWork } from "../services/quarantine.js";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -236,6 +237,95 @@ describe("The object itself", () => {
 		// is a no-op and the assertion holds trivially, which is correct in both.
 		const res = await req(`/content/${QUARANTINE_PREFIX}${key}`);
 		expect(res.status).toBe(404);
+	});
+});
+
+describe("Our determination and the vendor's are kept apart", () => {
+	/**
+	 * 🚨 Two different obligations pull these columns apart, and collapsing them breaks
+	 * both. `classification` is the Corporation's own conclusion — permanent, because it
+	 * answers an appeal years later and is what a CyberTipline report states. `vendorMatch`
+	 * is a detection service's answer, which its own terms may require us to time-limit and
+	 * which Shield's terms forbid us feeding to generative AI. 60.13 § 7.6.
+	 */
+	it("stores the vendor's answer without letting it become our determination", async () => {
+		const { work } = await seedSoldWork("Vendor match kept apart");
+		await quarantineWork({
+			workId: work.id,
+			source: "scan",
+			classification: "confirmed by operator review",
+			vendorMatch: {
+				vendor: "arachnid-shield",
+				classification: "harmful-abusive-material",
+				matchType: "near",
+				receivedAt: new Date("2026-08-26T03:00:00.000Z").toISOString(),
+			},
+			actorId: creatorId,
+		});
+
+		const [row] = await db
+			.select()
+			.from(mediaQuarantine)
+			.where(and(eq(mediaQuarantine.workId, work.id), isNull(mediaQuarantine.clearedAt)))
+			.limit(1);
+
+		// Ours is ours, and the vendor's word is nowhere in it.
+		expect(row.classification).toBe("confirmed by operator review");
+		expect(row.classification).not.toContain("harmful-abusive-material");
+		expect(row.classification).not.toBe(row.vendorMatch?.classification);
+		// Theirs is recorded, whole, including the match type — because whether reasonable
+		// reliance extends to a *perceptual* match is open, and after the fact an exact and
+		// a near match would otherwise be indistinguishable.
+		expect(row.vendorMatch?.vendor).toBe("arachnid-shield");
+		expect(row.vendorMatch?.classification).toBe("harmful-abusive-material");
+		expect(row.vendorMatch?.matchType).toBe("near");
+	});
+
+	it("keeps the vendor's answer out of the operator queue", async () => {
+		// 🚨 The queue is the surface most likely to be screenshotted or pasted at an agent,
+		// and Shield's § 6(c) forbids Match Data as input to generative AI. Reading the
+		// vendor's answer has to be a deliberate second step, not something every listing
+		// hands over.
+		const findings = await loadQuarantineFindings({ includeCleared: true });
+		expect(findings.length).toBeGreaterThan(0);
+		for (const f of findings) {
+			expect(Object.keys(f)).not.toContain("vendorMatch");
+			expect(JSON.stringify(f)).not.toContain("arachnid-shield");
+		}
+	});
+
+	it("keeps the vendor's answer out of the append-only moderation log", async () => {
+		// `moderation_actions` is permanent and agent-read. A vendor's classification copied
+		// into a note would defeat both the retention limit and the AI prohibition at once.
+		const { work } = await seedSoldWork("Log stays clean");
+		await quarantineWork({
+			workId: work.id,
+			source: "scan",
+			classification: "operator confirmed",
+			vendorMatch: {
+				vendor: "arachnid-shield",
+				classification: "csam",
+				matchType: "exact",
+				receivedAt: new Date().toISOString(),
+			},
+			actorId: creatorId,
+		});
+		const actions = await db
+			.select({ note: moderationActions.note, reason: moderationActions.reason })
+			.from(moderationActions)
+			.where(
+				and(eq(moderationActions.subjectType, "work"), eq(moderationActions.subjectId, work.id)),
+			);
+		expect(actions.length).toBeGreaterThan(0);
+		for (const a of actions) {
+			expect(a.note).not.toContain("arachnid-shield");
+			// 🚨 The vendor's CLASSIFICATION, not just its name — that is the value a naive
+			// implementation copies, and checking only for the vendor name watched the wrong
+			// marker entirely. Our determination is "operator confirmed"; theirs is "csam",
+			// so finding "csam" here means the two collapsed.
+			expect(a.note).not.toContain("csam");
+			expect(a.note).toContain("operator confirmed");
+		}
 	});
 });
 
