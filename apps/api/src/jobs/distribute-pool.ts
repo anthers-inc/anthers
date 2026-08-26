@@ -3,7 +3,7 @@
  * Pool distribution job: distribute the Time Pool and directed support to creators.
  *
  * For each active account:
- * 1. Sum time-spent seconds per creator during the billing cycle.
+ * 1. Sum **Public Access** time-spent seconds per creator during the billing cycle.
  * 2. Time Pool = `TIME_POOL_RATE` (half) of what the viewer gives Anthers, distributed
  *    proportionally by time. A higher Badge = a bigger pool, so all of that viewer's
  *    time pays creators more — no per-item multiplier.
@@ -18,6 +18,14 @@
  * gives Anthers (`TIME_POOL_RATE`) and the Anthers side's own remainder absorbs its
  * share of the fee, so creator pay from the Time Pool is exactly what the model
  * promises.
+ *
+ * > Until 2026-08-26 step 1 summed EVERY attention row, with no `public_access`
+ * > predicate, which contradicted distributor-pays in the direction that costs the
+ * > creators the pool exists for: a creator the viewer had already paid in full — by
+ * > clearing a Badge gate or by buying the Work — was paid a second time out of the
+ * > pool, and every Public Access creator on the same cycle was diluted by exactly
+ * > that much. The money always summed correctly, which is why nothing caught it;
+ * > only its destination was wrong.
  *
  * > Until 2026-08-08 this job credited the GROSS $3.00 while `fees.ts` and
  * > `economics.test.ts` both said $2.61 for an unbatched Seed, so the ledger and the
@@ -84,7 +92,18 @@ async function distributeForAccount(acct: {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
-	// 1. Aggregate attention seconds per creator
+	// 1. Aggregate **Public Access** attention seconds per creator.
+	//
+	// The pool pays for the commons and only for the commons. Gated work the viewer
+	// cleared, work they bought, and their own catalogue were all paid for by whoever
+	// cleared the gate or made the purchase — distributor-pays refuses to pay twice, so
+	// those seconds draw nothing here.
+	//
+	// 🚨 This reads the flag `attention_events.public_access` STORED when the seconds
+	// were watched; it never re-resolves access against `works`. A creator can gate
+	// something they had left open, or open something they had gated, and re-deriving
+	// today's answer would pay out against a state that did not hold at the time. See
+	// the column's own note — the point-in-time stamp is the whole reason it exists.
 	const attentionRows = await db
 		.select({
 			creatorId: attentionEvents.creatorId,
@@ -94,6 +113,7 @@ async function distributeForAccount(acct: {
 		.where(
 			and(
 				eq(attentionEvents.userId, acct.userId),
+				eq(attentionEvents.publicAccess, true),
 				gte(attentionEvents.createdAt, start),
 				lt(attentionEvents.createdAt, end),
 			),
@@ -189,6 +209,12 @@ async function distributeForAccount(acct: {
 	}
 
 	// Record attention even for creators that only received directed support.
+	//
+	// `poolDistributions.attentionSeconds` is therefore Public Access seconds, not all
+	// time spent with that creator, and it has to be: it is the denominator the
+	// subscriber's Time Pool pie draws its percentages from, so seconds that earned no
+	// pool dollars would render a slice with no money beside it. Total time with a
+	// creator is a different question, answered by `GET /attention/summary`.
 	for (const [creatorId, seconds] of attentionByCreator) {
 		ensure(creatorId).attentionSeconds = seconds;
 	}
