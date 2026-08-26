@@ -533,6 +533,38 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * poll-while-processing loop switched off, so a freshly uploaded item sat unlabelled
  * until a manual refresh.
  */
+/**
+ * Queue a detection scan for whatever of a Work's objects can be fingerprinted today.
+ *
+ * ⭐ **Enqueued at the same point as transcoding, deliberately** — the moment a source key
+ * or asset key is first attached to a Work is when the object is known to exist and known
+ * to belong to somebody, and having one trigger point rather than two is what keeps a new
+ * upload route from acquiring transcoding while quietly skipping detection.
+ *
+ * ⚠️ **Only images are scanned in this pass, and a video's frames are not yet.** PDQ is an
+ * image hash, so video coverage means extracting keyframes inside `transcode-video.ts`,
+ * which already decodes every frame — the correct method and the correct place, but a
+ * separate integration. **A video's thumbnail IS scanned here**, since it is an extracted
+ * frame and therefore new image bytes. Audio has no coverage under a perceptual image hash
+ * at all. The current coverage map stays in wiki 40.12 and off the public safety page.
+ */
+async function queueScanForWork(item: WorkRow): Promise<void> {
+	const keys = new Set<string>();
+	if (item.type === "image" && item.sourceKey) keys.add(item.sourceKey);
+	// Thumbnails may be stored as a full URL on older rows; `urlToKey` normalizes both.
+	if (item.thumbnail) {
+		const key = urlToKey(item.thumbnail);
+		if (key) keys.add(key);
+	}
+	for (const storageKey of keys) {
+		await queue.send(
+			QUEUES.SCAN_MEDIA,
+			{ storageKey, workId: item.id },
+			JOB_OPTIONS[QUEUES.SCAN_MEDIA],
+		);
+	}
+}
+
 async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow | null> {
 	if (item.type === "video" && item.sourceKey) {
 		const [job] = await db
@@ -2164,6 +2196,7 @@ const contentRoutes = new Hono()
 			.returning();
 
 		const job = await queueTranscodeForWork(work);
+		await queueScanForWork(work);
 		await resolveWorkThumbnail(work);
 		return c.json({ work: serializeWork(work, [], job) }, 201);
 	})
@@ -2569,12 +2602,15 @@ const contentRoutes = new Hono()
 		}
 
 		const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== work.sourceKey;
+		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
+		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
 		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 
 		// A new source means the old transcode is stale — re-process.
 		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
+		if (sourceChanged || thumbnailChanged) await queueScanForWork(updated);
 
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, id)),

@@ -165,6 +165,11 @@ export const QUEUES = {
 	FETCH_METRICS: "fetch-metrics",
 	CROSS_PUBLISH: "cross-publish",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
+	// Hash a stored object and ask a detection vendor about the hash. Keyed on the storage
+	// key rather than the Work, because that is the only identifier both upload paths share:
+	// the presigned PUT never passes the bytes through the API, so the object exists in R2
+	// before anything here knows about it. See wiki 40.12.
+	SCAN_MEDIA: "scan-media",
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
 	// Delete expired sessions and verification tokens. 51.05 promises "Sessions: deleted
@@ -222,6 +227,14 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		// A long graphic novel is one poppler pass plus an upload per page; generous for
 		// the same reason video is, and bounded by MAX_PAGES in the job itself.
 		expireInMinutes: 30,
+	},
+	[QUEUES.SCAN_MEDIA]: {
+		// Retried generously and slowly on purpose. A vendor outage must leave the object
+		// UNSCANNED and owed rather than recorded as clean, so the job failing and coming
+		// back later is the correct behaviour rather than a nuisance to be tuned away.
+		retryLimit: 5,
+		retryDelay: 300,
+		expireInMinutes: 10,
 	},
 	[QUEUES.CROSS_PUBLISH]: {
 		retryLimit: 2,

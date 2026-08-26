@@ -164,6 +164,24 @@ envs:
   - key: RESEND_WEBHOOK_SECRET
     scope: RUN_TIME
     type: SECRET
+  # Shield by Project Arachnid — the child-safety detection vendor. Basic auth, so a
+  # username and a password rather than a key. At APP level because the scan runs in the
+  # worker, which declares no envs of its own and inherits these.
+  #
+  # Unset means no detection vendor is configured, and the scan records `unscannable`
+  # rather than `clean` — a deployment state, not a failure, and deliberately not
+  # something that reads as "we looked and found nothing".
+  #
+  # 🚨 The key NAMES must match the Bitwarden entries exactly: `scripts/spec-apply.ts`
+  # resolves secret values from the vault BY NAME, so that there is no third list to
+  # drift. Introduce them with `make spec-apply FROM_BWS=1` after they exist in the
+  # `Anthers` project.
+  - key: ARACHNID_SHIELD_USERNAME
+    scope: RUN_TIME
+    type: SECRET
+  - key: ARACHNID_SHIELD_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to

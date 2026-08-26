@@ -390,6 +390,70 @@ export interface VendorMatch {
 	receivedAt: string;
 }
 
+/**
+ * One detection scan of one stored object.
+ *
+ * ⭐ **Keyed on the storage key rather than on the Work**, because that is the only
+ * identifier both upload paths share. `POST /api/content/media-upload/direct` buffers
+ * bytes in the handler, but `POST /api/content/media-upload/presign` hands the browser a
+ * presigned PUT and the API never sees them — so the object exists in R2 before anything
+ * here knows about it, and the key is what arrives first. Wiki 40.12 § *The ingest
+ * inventory* has the full asymmetry.
+ *
+ * ⚠️ **A row means the question was asked, not that the content is safe.** `determination`
+ * carries `unscannable` for an object no usable fingerprint could be computed for, which
+ * is different from `clean` in the way that matters: one is an answer and the other is the
+ * absence of one. Nothing may read the presence of a row as a clean bill of health.
+ */
+export const mediaScans = pgTable(
+	"media_scans",
+	{
+		id: serial("id").primaryKey(),
+		/** The stored object this is about. One scan per key; a re-scan replaces the row. */
+		storageKey: text("storage_key").notNull().unique(),
+		/**
+		 * The Work it belongs to, when it belongs to one. **Nullable on purpose**: avatars,
+		 * covers and other profile images are scanned too and have no Work behind them.
+		 */
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		/**
+		 * The PDQ perceptual hash we computed, hex, in the reference byte order.
+		 *
+		 * ⭐ **This is ours, not the vendor's, and it is safe to keep.** It is a fingerprint
+		 * of our own user's file computed on our own hardware — no part of it is Match Data,
+		 * so none of the retention or agent-access limits on `vendor_match` apply. Keeping
+		 * it is what lets a corpus update be re-checked later without re-reading the object.
+		 */
+		pdqHash: text("pdq_hash"),
+		/** PDQ's own 0-100 confidence. Below the service's floor the hash is not matched on. */
+		pdqQuality: integer("pdq_quality"),
+		/**
+		 * **The Corporation's own determination** — `clean`, `apparent-csam`,
+		 * `harmful-abusive`, or `unscannable`. Our vocabulary, never a vendor's.
+		 *
+		 * 🚨 `harmful-abusive` is **not** a reporting trigger. § 7.3 of 60.13, and the
+		 * reasoning is in `services/safety-scan.ts` — the vendor defines that classification
+		 * as material that may not be illegal, so reporting on it would report material the
+		 * vendor itself says may be lawful.
+		 */
+		determination: text("determination").notNull(),
+		/**
+		 * What the vendor said, when one answered.
+		 *
+		 * 🚨 **NEVER let this reach an agent**, on the same terms as the identically-named
+		 * column on `media_quarantine` — Shield § 6(b)/(c) forbid generative-AI use of Match
+		 * Data, and § 13(e) forbids retaining it past its purpose. Our determination above
+		 * is the permanent, agent-readable half.
+		 */
+		vendorMatch: jsonb("vendor_match").$type<VendorMatch | null>(),
+		scannedAt: timestamp("scanned_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("media_scans_work_idx").on(table.workId),
+		index("media_scans_determination_idx").on(table.determination),
+	],
+);
+
 export const mediaQuarantine = pgTable(
 	"media_quarantine",
 	{
