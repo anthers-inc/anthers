@@ -103,124 +103,124 @@ interface ReferenceCreator {
 
 const REFERENCE_CREATORS: ReferenceCreator[] = [
 	{
-		name: "Amaiguri",
-		subs: "3.85K",
-		videos: "270",
-		storageLabel: "2.6 TB",
-		storageCost: 52.65,
-		deliveryCost: 12.8,
-		totalInfra: 65,
-		viewMinutes: "155K",
-		infraPerViewMin: 0.000419,
+		name: "Paper Lantern",
+		subs: "4.2K",
+		videos: "251",
+		storageLabel: "2.4 TB",
+		storageCost: 48.95,
+		deliveryCost: 13.54,
+		totalInfra: 62,
+		viewMinutes: "164K",
+		infraPerViewMin: 0.00038,
 		infraPctGross: "Subsidized",
-		ytGross: 11,
-		ytNet: 6,
-		anthersNet: 11,
+		ytGross: 12,
+		ytNet: 7,
+		anthersNet: 12,
 	},
 	{
-		name: "LittleDuck",
-		subs: "17.2K",
-		videos: "1.1K",
-		storageLabel: "9.4 TB",
-		storageCost: 188.76,
-		deliveryCost: 10.92,
-		totalInfra: 200,
-		viewMinutes: "440K",
-		infraPerViewMin: 0.000455,
+		name: "Kettle Creek",
+		subs: "15.7K",
+		videos: "1.19K",
+		storageLabel: "10.2 TB",
+		storageCost: 203.86,
+		deliveryCost: 10.27,
+		totalInfra: 214,
+		viewMinutes: "414K",
+		infraPerViewMin: 0.00052,
 		infraPctGross: "Subsidized",
-		ytGross: 30,
-		ytNet: 16,
-		anthersNet: 30,
+		ytGross: 32,
+		ytNet: 18,
+		anthersNet: 32,
 	},
 	{
-		name: "Race Day Cafe",
-		subs: "35.1K",
-		videos: "58",
-		storageLabel: "396 GB",
-		storageCost: 7.92,
-		deliveryCost: 66.56,
-		totalInfra: 75,
-		viewMinutes: "4.7M",
+		name: "Second Gear",
+		subs: "39.7K",
+		videos: "51",
+		storageLabel: "348 GB",
+		storageCost: 6.96,
+		deliveryCost: 73.92,
+		totalInfra: 81,
+		viewMinutes: "5.22M",
 		infraPerViewMin: 0.000016,
-		infraPctGross: "11.1%",
-		ytGross: 678,
-		ytNet: 373,
-		anthersNet: 603,
+		infraPctGross: "13.0%",
+		ytGross: 624,
+		ytNet: 343,
+		anthersNet: 543,
 	},
 	{
-		name: "Life Of Riza",
-		subs: "991K",
-		videos: "77",
-		storageLabel: "225 GB",
-		storageCost: 4.5,
-		deliveryCost: 67.62,
-		totalInfra: 72,
-		viewMinutes: "5.3M",
+		name: "Salt & Compass",
+		subs: "882K",
+		videos: "88",
+		storageLabel: "257 GB",
+		storageCost: 5.14,
+		deliveryCost: 62.26,
+		totalInfra: 67,
+		viewMinutes: "4.88M",
 		infraPerViewMin: 0.000014,
-		infraPctGross: "4.6%",
-		ytGross: 1575,
-		ytNet: 866,
-		anthersNet: 1503,
+		infraPctGross: "3.9%",
+		ytGross: 1717,
+		ytNet: 944,
+		anthersNet: 1650,
 	},
 	{
-		name: "bugfishhhh",
-		subs: "147K",
-		videos: "22",
-		storageLabel: "558 GB",
-		storageCost: 11.16,
-		deliveryCost: 1396.56,
-		totalInfra: 1408,
-		viewMinutes: "62M",
+		name: "Deep Currents",
+		subs: "157K",
+		videos: "26",
+		storageLabel: "659 GB",
+		storageCost: 13.19,
+		deliveryCost: 1243.39,
+		totalInfra: 1257,
+		viewMinutes: "55.2M",
 		infraPerViewMin: 0.000023,
-		infraPctGross: "49.2%",
-		ytGross: 2859,
-		ytNet: 1572,
-		anthersNet: 1451,
+		infraPctGross: "38.9%",
+		ytGross: 3231,
+		ytNet: 1777,
+		anthersNet: 1974,
 	},
 	{
-		name: "MAPHRA",
-		subs: "166K",
-		videos: "6",
-		storageLabel: "8.2 GB",
-		storageCost: 0.16,
-		deliveryCost: 399.95,
-		totalInfra: 400,
-		viewMinutes: "16.5M",
+		name: "Nocturne Atlas",
+		subs: "154K",
+		videos: "9",
+		storageLabel: "12 GB",
+		storageCost: 0.24,
+		deliveryCost: 431.46,
+		totalInfra: 432,
+		viewMinutes: "17.8M",
 		infraPerViewMin: 0.000024,
-		infraPctGross: "6.8%",
-		ytGross: 5875,
-		ytNet: 3231,
-		anthersNet: 5475,
+		infraPctGross: "8.1%",
+		ytGross: 5346,
+		ytNet: 2940,
+		anthersNet: 4914,
 	},
 	{
-		name: "Memoria",
-		subs: "281K",
-		videos: "288",
-		storageLabel: "5.1 TB",
-		storageCost: 101.09,
-		deliveryCost: 1168.9,
-		totalInfra: 1270,
-		viewMinutes: "49M",
+		name: "The Long Room",
+		subs: "312K",
+		videos: "265",
+		storageLabel: "4.7 TB",
+		storageCost: 93.02,
+		deliveryCost: 1099.72,
+		totalInfra: 1193,
+		viewMinutes: "46.1M",
 		infraPerViewMin: 0.000026,
-		infraPctGross: "36.3%",
-		ytGross: 3500,
-		ytNet: 1925,
-		anthersNet: 2230,
+		infraPctGross: "31.6%",
+		ytGross: 3780,
+		ytNet: 2079,
+		anthersNet: 2587,
 	},
 	{
-		name: "gabi belle",
-		subs: "1.42M",
-		videos: "179",
-		storageLabel: "2.1 TB",
-		storageCost: 41.88,
-		deliveryCost: 1187.12,
-		totalInfra: 1229,
-		viewMinutes: "51M",
+		name: "Marigold Static",
+		subs: "1.25M",
+		videos: "195",
+		storageLabel: "2.3 TB",
+		storageCost: 45.62,
+		deliveryCost: 1270.92,
+		totalInfra: 1317,
+		viewMinutes: "54.6M",
 		infraPerViewMin: 0.000024,
-		infraPctGross: "28.9%",
-		ytGross: 4250,
-		ytNet: 2338,
-		anthersNet: 3021,
+		infraPctGross: "33.3%",
+		ytGross: 3953,
+		ytNet: 2174,
+		anthersNet: 2636,
 	},
 ];
 
@@ -721,10 +721,11 @@ function ReferenceCreatorProfiles() {
 	return (
 		<div className="space-y-6">
 			<p className="text-sm text-base-content/60 leading-relaxed">
-				These are real YouTube creators mapped onto Anthers' model. YouTube takes 45% as a platform
-				fee. Anthers takes no such fee — only real infrastructure costs (shown below) are deducted,
-				at cost with no markup. <span className="font-semibold text-base-content">Free access</span>
-				, funded by the remainder of what is given to Anthers, is covered across the platform.
+				These are composite creator profiles, mapped onto Anthers' model. YouTube takes 45% as a
+				platform fee. Anthers takes no such fee — only real infrastructure costs (shown below) are
+				deducted, at cost with no markup.{" "}
+				<span className="font-semibold text-base-content">Free access</span>, funded by the
+				remainder of what is given to Anthers, is covered across the platform.
 			</p>
 
 			{/* Net income comparison chart */}
@@ -870,9 +871,10 @@ interface OptimizationToggle {
 }
 
 function OptimizationVisualizer() {
-	const [baseDelivery, setBaseDelivery] = useState(1060);
-	const [baseStorage, setBaseStorage] = useState(2.66);
-	const [baseCompute, setBaseCompute] = useState(42);
+	// Deep Currents' figures, the hardest case in the model — see the profiles tab.
+	const [baseDelivery, setBaseDelivery] = useState(943);
+	const [baseStorage, setBaseStorage] = useState(3.34);
+	const [baseCompute, setBaseCompute] = useState(53);
 
 	const [optimizations, setOptimizations] = useState<OptimizationToggle[]>([
 		{
@@ -965,7 +967,7 @@ function OptimizationVisualizer() {
 			<p className="text-sm text-base-content/60 leading-relaxed">
 				Toggle optimization techniques to see their cascading impact on infrastructure costs. Each
 				optimization applies to the remaining delivery cost after previous optimizations. Default
-				baseline uses <span className="font-semibold text-base-content">bugfishhhh</span> — the
+				baseline uses <span className="font-semibold text-base-content">Deep Currents</span> — the
 				hardest case in our model (high-bandwidth long-form video essays).
 			</p>
 
@@ -1090,12 +1092,12 @@ function OptimizationVisualizer() {
 			<div className="card bg-base-200/50 border border-base-300">
 				<div className="card-body p-4 text-sm text-base-content/60">
 					<p>
-						At $2,859 gross with ${Math.round(result.total)} infrastructure, the creator keeps{" "}
+						At $3,231 gross with ${Math.round(result.total)} infrastructure, the creator keeps{" "}
 						<span className="font-bold text-success">
-							${Math.round(2859 - result.total).toLocaleString()}
+							${Math.round(3231 - result.total).toLocaleString()}
 						</span>{" "}
-						({(((2859 - result.total) / 2859) * 100).toFixed(1)}% of gross). Compare to YouTube:{" "}
-						<span className="font-bold text-base-content">$1,572</span> (55% of gross).
+						({(((3231 - result.total) / 3231) * 100).toFixed(1)}% of gross). Compare to YouTube:{" "}
+						<span className="font-bold text-base-content">$1,777</span> (55% of gross).
 					</p>
 				</div>
 			</div>
@@ -1233,7 +1235,7 @@ const TABS: { id: Tab; label: string; description: string }[] = [
 	{
 		id: "profiles",
 		label: "Creator Profiles",
-		description: "Real YouTube creators mapped onto Anthers' infrastructure model",
+		description: "Composite creator profiles mapped onto Anthers' infrastructure model",
 	},
 	{
 		id: "optimizations",

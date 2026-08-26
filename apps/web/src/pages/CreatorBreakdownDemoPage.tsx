@@ -155,79 +155,81 @@ const DEMO_CREATORS: DemoCreatorBreakdown[] = [
 			"High-bandwidth video essayist with a back-catalog of long-form content. This was the hardest case in our model — heavy streaming, large file sizes, high concurrent viewership. If the economics work here, they work everywhere.",
 		currentPlatform: "YouTube",
 		audienceStats: [
-			{ label: "Subscribers", value: "147,000" },
-			{ label: "Monthly views", value: "953,000" },
+			{ label: "Subscribers", value: "157,000" },
+			{ label: "Monthly views", value: "848,000" },
 			// econ:allow — this persona's stats are their YOUTUBE numbers (see currentPlatform
 			// above), and "watch time" is YouTube's own metric name. Ours is "time".
-			{ label: "Watch time/mo", value: "26.5M min" },
-			{ label: "Avg. video length", value: "~50 min" },
+			{ label: "Watch time/mo", value: "23.6M min" },
+			{ label: "Avg. video length", value: "~53 min" },
 		],
 		contentLibrary: [
-			// 22 videos total, ~1,112 min runtime, 953K monthly views
+			// 26 videos total, ~1,393 min runtime, 848K monthly views
 			{
 				label: "Long essays (40-90 min)",
 				mediaType: "video",
-				count: 8,
+				count: 9,
 				avgDurationMin: 65,
-				monthlyPlays: 420_000,
+				monthlyPlays: 374_000,
 				avgPlayMin: 38,
 			},
 			{
 				label: "Mid-length essays (15-40 min)",
 				mediaType: "video",
-				count: 7,
+				count: 8,
 				avgDurationMin: 25,
-				monthlyPlays: 350_000,
+				monthlyPlays: 312_000,
 				avgPlayMin: 18,
 			},
 			{
 				label: "Short commentaries (<15 min)",
 				mediaType: "video",
-				count: 5,
+				count: 6,
 				avgDurationMin: 10,
-				monthlyPlays: 160_000,
+				monthlyPlays: 142_000,
 				avgPlayMin: 8,
 			},
 			{
 				label: "Livestream archives (2-4 hrs)",
 				mediaType: "video",
-				count: 2,
+				count: 3,
 				avgDurationMin: 180,
-				monthlyPlays: 23_000,
+				monthlyPlays: 20_000,
 				avgPlayMin: 45,
 			},
 		],
 		current: {
-			gross: 2859,
-			platformFee: 1287,
+			gross: 3231,
+			platformFee: 1454,
 			infraCost: 0,
-			net: 1572,
+			net: 1777,
 		},
 		anthers: {
-			gross: 2859,
+			gross: 3231,
 			platformFee: 0,
-			infraCost: 1105,
-			net: 1754,
+			// Storage + transcoding only. R2 charges $0 egress at any volume, so the
+			// CDN line in infraBreakdown is genuinely zero and this is the other two.
+			infraCost: 56,
+			net: 3175,
 		},
 		milestones: [
-			{ label: "Cover infrastructure", subscribers: 1339, pctOfAudience: 0.9 },
-			{ label: "Match YouTube net", subscribers: 1905, pctOfAudience: 1.3 },
-			{ label: "Match YouTube gross", subscribers: 3466, pctOfAudience: 2.4 },
-			{ label: "Double YouTube net", subscribers: 3810, pctOfAudience: 2.6 },
+			{ label: "Cover infrastructure", subscribers: 68, pctOfAudience: 0.04 },
+			{ label: "Match YouTube net", subscribers: 2154, pctOfAudience: 1.4 },
+			{ label: "Match YouTube gross", subscribers: 3917, pctOfAudience: 2.5 },
+			{ label: "Double YouTube net", subscribers: 4308, pctOfAudience: 2.7 },
 		],
 		revenueByTier: BADGE_FUNDING,
 		insight:
-			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.3% subscriber conversion. Direct support is load-bearing — it accounts for over half of revenue at Sprout and above. Serving ~106 TB a month used to cost ~$1,060 and now costs nothing at all, which is why the hardest case in the model is no longer a hard case.",
+			"Even as the highest-bandwidth creator in our model, Deep Currents comes out ahead of YouTube at just 1.4% subscriber conversion. Direct support is load-bearing — it accounts for over half of revenue at Sprout and above. Serving ~94 TB a month used to cost ~$943 and now costs nothing at all, which is why the hardest case in the model is no longer a hard case.",
 		infraBreakdown: [
-			{ label: "CDN delivery (~106 TB)", cost: 0 },
-			{ label: "Object storage (~133 GB)", cost: 2 },
-			{ label: "Compute (transcoding)", cost: 42 },
+			{ label: "CDN delivery (~94 TB)", cost: 0 },
+			{ label: "Object storage (~167 GB)", cost: 3 },
+			{ label: "Compute (transcoding)", cost: 53 },
 		],
 		contentStats: [
-			{ label: "Library size", value: "22 pieces" },
-			{ label: "Total runtime", value: "~1,112 min" },
-			{ label: "Storage", value: "~133 GB" },
-			{ label: "Monthly bandwidth", value: "~106 TB" },
+			{ label: "Library size", value: "26 pieces" },
+			{ label: "Total runtime", value: "~1,393 min" },
+			{ label: "Storage", value: "~167 GB" },
+			{ label: "Monthly bandwidth", value: "~94 TB" },
 		],
 	},
 	{
@@ -963,7 +965,7 @@ export default function CreatorBreakdownDemoPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
 							Anthers takes zero percentage cut. Infrastructure is passed through at cost. Below are
-							three real-world creator profiles showing exactly how audience size, content type, and
+							three composite creator profiles showing exactly how audience size, content type, and
 							spend levels determine income on Anthers — and how it compares to the platforms you're
 							on today.
 						</p>
