@@ -584,6 +584,16 @@ function billingCycleEnd(): Date {
 /**
  * Generate a batch of attention events that sum to approximately `targetSeconds`.
  * Events are spread across days in the current billing cycle with realistic durations.
+ *
+ * Every event is stamped **Public Access**, and it has to be for the fixture to be
+ * self-consistent: `distribute-pool` pays the Time Pool only for seconds carrying that
+ * flag, so events left at the column default of `false` would make the pool
+ * distributions written below earnings the real job would never produce — the same
+ * failure the card-fee deduction there exists to avoid. It also gives the Public Access
+ * meter something to read in dev, where it otherwise reports every account as having
+ * spent nothing. The seeded totals are chosen to stay inside a free account's ten-hour
+ * allowance where the account is free (jordan, ~7 hrs); casey gives $12 and is
+ * unlimited.
  */
 function buildAttentionEvents(
 	userId: number,
@@ -595,6 +605,7 @@ function buildAttentionEvents(
 	creatorId: number;
 	eventType: string;
 	durationSeconds: number;
+	publicAccess: boolean;
 	createdAt: Date;
 }[] {
 	const events: ReturnType<typeof buildAttentionEvents> = [];
@@ -618,6 +629,7 @@ function buildAttentionEvents(
 			creatorId,
 			eventType: pick(eventTypes),
 			durationSeconds: duration,
+			publicAccess: true,
 			createdAt: date,
 		});
 		remaining -= duration;
@@ -1234,7 +1246,7 @@ async function seed() {
 		for (const title of tu.purchaseTitles) {
 			const slug = slugify(title);
 			const [p] = await db
-				.select({ id: posts.id })
+				.select({ id: works.id })
 				.from(works)
 				.where(eq(works.slug, slug))
 				.limit(1);

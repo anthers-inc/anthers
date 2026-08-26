@@ -134,8 +134,22 @@ export const attentionEvents = pgTable(
 		 * reach.
 		 *
 		 * Same discipline as attention eligibility itself: decided once, where the fact is
-		 * known, so no later reader can apply a different rule. `distribute-pool`
-		 * deliberately applies no filter of its own for the same reason.
+		 * known, so no later reader can apply a different rule.
+		 *
+		 * 🚨 **Two readers depend on this flag and they must not diverge.** The Public
+		 * Access meter (`services/public-access.ts`) spends a viewer's monthly allowance
+		 * against it, and `distribute-pool` pays the Time Pool against it — because
+		 * distributor-pays says the pool buys the commons and nothing else. Gated work the
+		 * viewer cleared, work they bought, and their own catalogue are all `false` here
+		 * and earn nothing from the pool; whoever cleared the gate or made the purchase
+		 * already paid that creator in full, and paying again would dilute exactly the
+		 * Public Access creators the pool exists for.
+		 *
+		 * ⚠️ **"Never re-derived" is not "never filtered", and reading it the second way is
+		 * what caused the bug.** `distribute-pool` summed every row until 2026-08-26,
+		 * having taken this note as licence to ignore the stamp rather than as an
+		 * instruction not to recompute it. Filtering on the recorded value is the discipline
+		 * working; joining back to `works` at distribution time is the thing forbidden.
 		 */
 		publicAccess: boolean("public_access").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -279,6 +293,13 @@ export const poolDistributions = pgTable(
 		billingCycle: text("billing_cycle").notNull(),
 		poolAmount: numeric("pool_amount").notNull().default("0.00"), // Time Pool share
 		seedAmount: numeric("seed_amount").notNull().default("0.00"), // directed-support share
+		// The **Public Access** seconds that earned `poolAmount`, not all the time this
+		// viewer spent with this creator. It is the numerator of the pool split, so it has
+		// to be the same set of seconds the money was divided by — a row whose seconds and
+		// dollars came from different populations could not be audited against each other,
+		// and the subscriber's Time Pool pie would draw a slice with no payout beside it.
+		// Total time with a creator is a different question, answered by
+		// `GET /api/subscriptions/attention/summary`.
 		attentionSeconds: integer("attention_seconds").default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

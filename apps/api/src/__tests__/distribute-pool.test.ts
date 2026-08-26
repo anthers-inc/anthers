@@ -12,8 +12,14 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accounts, poolDistributions, seedAllocations, users } from "@anthers/db/schema";
-import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	accounts,
+	attentionEvents,
+	poolDistributions,
+	seedAllocations,
+	users,
+} from "@anthers/db/schema";
+import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
@@ -63,14 +69,42 @@ async function seedCycle(
 	return { userId, accountId: acct.id };
 }
 
-async function payouts(userId: number) {
+/** Seconds this viewer spent with this creator, inside the cycle, flagged or not. */
+async function watch(
+	userId: number,
+	creatorId: number,
+	seconds: number,
+	publicAccess: boolean,
+): Promise<void> {
+	await db.insert(attentionEvents).values({
+		userId,
+		creatorId,
+		eventType: "watch",
+		durationSeconds: seconds,
+		publicAccess,
+		// Inside the cycle under test — the column defaults to now(), which is not.
+		createdAt: new Date("2031-03-15T12:00:00Z"),
+	});
+}
+
+async function ledger(userId: number) {
 	const rows = await db
 		.select()
 		.from(poolDistributions)
 		.where(
 			and(eq(poolDistributions.subscriberId, userId), eq(poolDistributions.billingCycle, CYCLE)),
 		);
-	return new Map(rows.map((r) => [r.creatorId, new Decimal(r.seedAmount)]));
+	return new Map(rows.map((r) => [r.creatorId, r]));
+}
+
+async function payouts(userId: number) {
+	const rows = await ledger(userId);
+	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.seedAmount)]));
+}
+
+async function poolPaid(userId: number) {
+	const rows = await ledger(userId);
+	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.poolAmount)]));
 }
 
 describe("distributePool — directed Seeds are paid NET of the card fee", () => {
@@ -173,5 +207,133 @@ describe("distributePool — directed Seeds are paid NET of the card fee", () =>
 		// row it wrote last time — so a second run must land on the same number.
 		expect(second).toBe(first);
 		expect(second).toBe("2.61");
+	});
+});
+
+/**
+ * The Time Pool buys the commons and nothing else.
+ *
+ * Distributor-pays: gated or sold work is paid in full by whoever cleared the gate or
+ * bought it, and only ungated streaming — Public Access — draws the pool. Until
+ * 2026-08-26 this job summed every attention row, so a creator the viewer had already
+ * paid was paid a second time and every Public Access creator on that cycle was diluted
+ * by exactly that much.
+ *
+ * ⚠️ **Assert on where the money went, never only on whether it summed.** The bug
+ * conserved the pot perfectly — the pool was distributed in full, to the wrong people —
+ * so a totals check passes against both versions of the job. Every test here that can
+ * fail names a creator and a figure. The conservation case is kept for the property it
+ * does cover (excluding rows must not strand cents) and is labelled as not being the
+ * guard.
+ */
+describe("distributePool — the Time Pool pays for Public Access only", () => {
+	beforeAll(async () => {
+		await db.execute("SELECT 1");
+	}, DB_SETUP_TIMEOUT);
+
+	it("pays nothing from the pool for a creator the viewer already paid to reach", async () => {
+		const commons = await makeUser("creator");
+		const alreadyPaid = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+
+		// An hour with each. One Work was ungated streaming; the other was gated or
+		// bought, so its seconds were stamped `public_access = false` when they happened.
+		await watch(userId, commons, 3600, true);
+		await watch(userId, alreadyPaid, 3600, false);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const wholePool = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
+		expect(pool.get(commons)?.toFixed(2)).toBe(wholePool.toFixed(2));
+		// Not a smaller share — no ledger row at all, because nothing was owed.
+		expect(pool.has(alreadyPaid)).toBe(false);
+	});
+
+	it("does not let paid-for seconds move the split between Public Access creators", async () => {
+		const a = await makeUser("creator");
+		const b = await makeUser("creator");
+		const gated = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(6, []);
+
+		await watch(userId, a, 3000, true);
+		await watch(userId, b, 1000, true);
+		// More time than both of them together, and it must not change either figure.
+		await watch(userId, gated, 8000, false);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const wholePool = new Decimal(timePoolFor(6));
+		expect(pool.get(a)?.toFixed(2)).toBe(wholePool.mul("0.75").toFixed(2));
+		expect(pool.get(b)?.toFixed(2)).toBe(wholePool.mul("0.25").toFixed(2));
+		expect(pool.has(gated)).toBe(false);
+	});
+
+	it("records the seconds that earned the money, so the ledger row can be audited", async () => {
+		const creatorId = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+
+		await watch(userId, creatorId, 600, true);
+		await watch(userId, creatorId, 5400, false); // same creator, gated Work
+
+		await distributePool({ accountId });
+
+		// `attention_seconds` is the numerator of the split, so it holds the 600 that
+		// earned the pool and not the 6000 the viewer spent with this creator overall.
+		expect((await ledger(userId)).get(creatorId)?.attentionSeconds).toBe(600);
+	});
+
+	it("still pays directed support to a creator whose only time was gated", async () => {
+		const creatorId = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(0, [{ creatorId, amount: "3.00" }]);
+
+		await watch(userId, creatorId, 3600, false);
+
+		await distributePool({ accountId });
+
+		const row = (await ledger(userId)).get(creatorId);
+		// Directed support is the other half of distributor-pays and is untouched by this:
+		// the viewer paid this creator on purpose, and gets no pool draw on top of it.
+		expect(new Decimal(row?.seedAmount ?? 0).toFixed(2)).toBe("2.61");
+		expect(new Decimal(row?.poolAmount ?? 0).toFixed(2)).toBe("0.00");
+		expect(row?.attentionSeconds).toBe(0);
+	});
+
+	it("holds the whole pool undistributed when the viewer watched no Public Access", async () => {
+		const gated = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(9, []);
+
+		await watch(userId, gated, 7200, false);
+
+		await distributePool({ accountId });
+
+		// Nobody is paid, rather than the gated creator being paid twice. What happens to
+		// a Time Pool with nowhere to go is a model question this job does not answer —
+		// `account_cycles.time_pool` still records the budget either way.
+		expect((await poolPaid(userId)).size).toBe(0);
+	});
+
+	it("strands no cents when excluded seconds shrink the population", async () => {
+		// ⚠️ NOT the guard against the double-pay bug — the bug conserved the pot too.
+		// This covers the neighbouring failure: dropping rows from the aggregate must not
+		// leave the drift correction with a target it can no longer reach.
+		const a = await makeUser("creator");
+		const b = await makeUser("creator");
+		const gated = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(9, []);
+
+		// Uneven enough that the pro-rata split does not divide evenly into cents.
+		await watch(userId, a, 1111, true);
+		await watch(userId, b, 2222, true);
+		await watch(userId, gated, 9999, false);
+
+		await distributePool({ accountId });
+
+		const total = [...(await poolPaid(userId)).values()].reduce(
+			(s, v) => s.plus(v),
+			new Decimal(0),
+		);
+		expect(total.toFixed(2)).toBe(new Decimal(timePoolFor(9)).toFixed(2));
 	});
 });
