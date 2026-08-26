@@ -24,13 +24,11 @@
 
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
-import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useRef, useState } from "react";
 import FirstRun, { type Arrival, readArrival } from "../components/onboarding/FirstRun";
-
-const serif = { fontFamily: FONTS.fraunces };
+import SignupSteps, { signupSteps } from "../components/onboarding/SignupSteps";
 
 /** Mirrors the API's rule, so the message arrives before the round trip rather than after. */
 const HANDLE_RE = /^[a-zA-Z0-9_-]+$/;
@@ -176,13 +174,26 @@ export default function WelcomePage() {
 	}
 
 	return (
-		<div className="mx-auto min-w-0 w-full max-w-lg px-6 py-12 sm:py-20">
-			<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-				One last thing
-			</p>
-			<h1 style={serif} className="mt-2 text-3xl font-light leading-tight sm:text-4xl">
-				Pick your username
-			</h1>
+		// ⚠️ **The rail is the same one `/finish` wears** (Parker, 2026-08-26). These stay two
+		// routes because this one has a job that has nothing to do with signing up — it is
+		// where any signed-in account still owing a handle is sent, from anywhere — and folding
+		// it into the finishing page would make that page reachable as a second door. Sharing
+		// the chrome is what makes them read as one flow anyway.
+		//
+		// 🚨 The earlier steps are drawn as **done** rather than omitted. Somebody arriving
+		// here has confirmed an address and possibly paid; a rail that started at this step
+		// would say the flow began where they are standing, which is the opposite of the
+		// reassurance it exists to give.
+		<SignupSteps
+			steps={signupSteps({
+				bluesky: null,
+				address: "done",
+				payment: null,
+				username: "current",
+			})}
+			eyebrow="One Last Thing"
+			title="Pick your username"
+		>
 			<p className="mt-3 text-base leading-relaxed text-base-content/65">
 				It's how people find you, and it's the address of your profile. Choose carefully — this one
 				can't be changed later.
@@ -298,6 +309,6 @@ export default function WelcomePage() {
 					{busy ? "Saving…" : "Finish setting up"}
 				</button>
 			</form>
-		</div>
+		</SignupSteps>
 	);
 }

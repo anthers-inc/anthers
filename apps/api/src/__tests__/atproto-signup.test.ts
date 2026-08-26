@@ -21,18 +21,18 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { atprotoPendingSignups, atprotoSessions, signupCodes, users } from "@anthers/db/schema";
+import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
+import { readPdsEmail } from "../services/atproto.js";
+import { setAtprotoClient } from "../services/atproto-client.js";
 import {
-	attachPendingSignup,
-	PENDING_SIGNUP_TTL_MS,
-	readPdsEmail,
+	consumePendingSignup,
+	picksOf,
 	readPendingSignup,
 	startPendingSignup,
 	sweepExpiredPendingSignups,
-} from "../services/atproto.js";
-import { setAtprotoClient } from "../services/atproto-client.js";
+} from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
 
 const RUN = `su${Date.now().toString(36)}`;
@@ -106,7 +106,8 @@ afterAll(async () => {
 	globalThis.fetch = realFetch;
 	if (prevFlag === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
 	else process.env.ATPROTO_SIGNUP_ENABLED = prevFlag;
-	await db.delete(atprotoPendingSignups).where(like(atprotoPendingSignups.did, `did:plc:${RUN}%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.atprotoDid, `did:plc:${RUN}%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.email, `${RUN}%`));
 	await db.delete(atprotoSessions).where(like(atprotoSessions.did, `did:plc:${RUN}%`));
 	await db.delete(signupCodes).where(like(signupCodes.email, `${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
@@ -131,7 +132,7 @@ async function runCallback(staged: {
 }
 
 function pendingCookie(setCookie: string): string | undefined {
-	return setCookie.match(/atproto_pending=([^;]+)/)?.[1];
+	return setCookie.match(/signup_pending=([^;]+)/)?.[1];
 }
 
 describe("the scope a signup asks for", () => {
@@ -284,16 +285,18 @@ describe("no answer a PDS can give creates an account", () => {
 		pds.body = { email: addr("prefill"), emailConfirmed: false };
 		const { cookies } = await runCallback({ did: did("prefill") });
 
-		const res = await app.request("/api/atproto/pending", {
-			headers: { Cookie: `atproto_pending=${pendingCookie(cookies)}` },
+		const res = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${pendingCookie(cookies)}` },
 		});
-		const body = (await res.json()) as { pending: { handle: string; email: string | null } };
+		const body = (await res.json()) as {
+			pending: { atprotoHandle: string | null; email: string | null };
+		};
 		expect(body.pending.email).toBe(addr("prefill"));
-		expect(body.pending.handle).toBe(`${RUN}.bsky.social`);
+		expect(body.pending.atprotoHandle).toBe(`${RUN}.bsky.social`);
 	});
 
 	it("tells a browser holding no token nothing at all", async () => {
-		const res = await app.request("/api/atproto/pending");
+		const res = await app.request("/api/auth/signup/pending");
 		expect(((await res.json()) as { pending: unknown }).pending).toBeNull();
 	});
 });
@@ -314,7 +317,7 @@ describe("the sign-in door still cannot sign anyone up", () => {
 	});
 });
 
-describe("the parked identity itself", () => {
+describe("the proved identity on a pending signup", () => {
 	const identity = (tag: string) => ({
 		did: did(tag),
 		handle: "someone.bsky.social",
@@ -322,19 +325,19 @@ describe("the parked identity itself", () => {
 	});
 
 	it("attaches to the account whose address was just proved", async () => {
-		const token = await startPendingSignup(identity("attach"));
+		const token = await startPendingSignup({ identity: identity("attach") });
 		const [user] = await db
 			.insert(users)
 			.values({ email: addr("attach") })
 			.returning();
 
-		expect(await attachPendingSignup(token, user.id)).toEqual({ attached: true });
+		expect((await consumePendingSignup(token, user.id))?.atprotoLinked).toBe(true);
 		const [after] = await db.select().from(users).where(eq(users.id, user.id));
 		expect(after.atprotoDid).toBe(did("attach"));
 	});
 
 	it("is spent on use, so it cannot be replayed onto a second account", async () => {
-		const token = await startPendingSignup(identity("once"));
+		const token = await startPendingSignup({ identity: identity("once") });
 		const [first] = await db
 			.insert(users)
 			.values({ email: addr("once1") })
@@ -344,8 +347,8 @@ describe("the parked identity itself", () => {
 			.values({ email: addr("once2") })
 			.returning();
 
-		await attachPendingSignup(token, first.id);
-		expect(await attachPendingSignup(token, second.id)).toEqual({ attached: false });
+		await consumePendingSignup(token, first.id);
+		expect(await consumePendingSignup(token, second.id)).toBeNull();
 
 		const [after] = await db.select().from(users).where(eq(users.id, second.id));
 		expect(after.atprotoDid).toBeNull();
@@ -361,28 +364,27 @@ describe("the parked identity itself", () => {
 			.values({ email: addr("other") })
 			.returning();
 
-		const token = await startPendingSignup(identity("contested"));
-		expect(await attachPendingSignup(token, other.id)).toEqual({ attached: false });
+		const token = await startPendingSignup({ identity: identity("contested") });
+		// ⚠️ Not fatal, deliberately: the signup still finishes, and the right outcome is a
+		// signed-in account with no link rather than a refusal at the last step.
+		expect((await consumePendingSignup(token, other.id))?.atprotoLinked).toBe(false);
 
 		const [stillOwner] = await db.select().from(users).where(eq(users.id, owner.id));
 		expect(stillOwner.atprotoDid).toBe(did("contested"));
 	});
 
 	it("expires, and reads as absent before the sweep gets to it", async () => {
-		const token = await startPendingSignup(identity("stale"));
+		const token = await startPendingSignup({ identity: identity("stale") });
 		await db
-			.update(atprotoPendingSignups)
-			.set({ createdAt: new Date(Date.now() - PENDING_SIGNUP_TTL_MS - 1000) })
-			.where(eq(atprotoPendingSignups.token, token));
+			.update(pendingSignups)
+			.set({ expiresAt: new Date(Date.now() - 1000) })
+			.where(eq(pendingSignups.token, token));
 
 		// Absent to a reader immediately — the sweep is housekeeping, never the gate.
 		expect(await readPendingSignup(token)).toBeUndefined();
 
 		await sweepExpiredPendingSignups();
-		const rows = await db
-			.select()
-			.from(atprotoPendingSignups)
-			.where(eq(atprotoPendingSignups.token, token));
+		const rows = await db.select().from(pendingSignups).where(eq(pendingSignups.token, token));
 		expect(rows.length).toBe(0);
 	});
 
@@ -391,7 +393,33 @@ describe("the parked identity itself", () => {
 			.insert(users)
 			.values({ email: addr("notoken") })
 			.returning();
-		expect(await attachPendingSignup(undefined, user.id)).toEqual({ attached: false });
+		expect(await consumePendingSignup(undefined, user.id)).toBeNull();
+	});
+
+	it("lands on the pending signup this browser already started, picks and all", async () => {
+		// 🚨 **The whole point of writing the row before the round trip.** The identity must
+		// join the choices somebody already made rather than replacing them — arriving back
+		// from bsky.social at an empty signup is the defect this flow was rebuilt to fix.
+		const begin = await app.request("/api/auth/signup/begin", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+			body: JSON.stringify({ picks: { anthers: 6, follow: ["alice"], seed: ["alice"] } }),
+		});
+		const started = pendingCookie(begin.headers.get("set-cookie") ?? "") as string;
+		expect(started).toBeTruthy();
+
+		nextCallback = {
+			did: did("carries"),
+			state: JSON.stringify({ intent: "signup" }),
+		};
+		const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social", {
+			headers: { Cookie: `signup_pending=${started}` },
+		});
+		expect(res.status).toBe(302);
+
+		const row = await readPendingSignup(started);
+		expect(row?.atprotoDid, "the same row, not a new one").toBe(did("carries"));
+		expect(picksOf(row as NonNullable<typeof row>).anthers).toBe(6);
 	});
 });
 
@@ -416,7 +444,7 @@ describe("finishing a parked signup through the emailed code", () => {
 		const { cookies } = await runCallback({ did: did("finish") });
 		const token = pendingCookie(cookies);
 
-		const res = await verify(addr("finish"), `atproto_pending=${token}`);
+		const res = await verify(addr("finish"), `signup_pending=${token}`);
 		expect(res.status).toBe(201);
 		const body = (await res.json()) as { created: boolean; needsOnboarding: boolean };
 		expect(body.created).toBe(true);
@@ -432,7 +460,7 @@ describe("finishing a parked signup through the emailed code", () => {
 
 		// The token is spent and the cookie cleared, so a back button cannot replay it.
 		expect(await readPendingSignup(token)).toBeUndefined();
-		expect(res.headers.get("set-cookie")).toMatch(/atproto_pending=;|atproto_pending=""/);
+		expect(res.headers.get("set-cookie")).toMatch(/signup_pending=;|signup_pending=""/);
 	});
 
 	it("links a RETURNING account whose address matches, because they proved the mailbox", async () => {
@@ -443,7 +471,7 @@ describe("finishing a parked signup through the emailed code", () => {
 		pds.body = { email: addr("returning"), emailConfirmed: true };
 		const { cookies } = await runCallback({ did: did("returning") });
 
-		const res = await verify(addr("returning"), `atproto_pending=${pendingCookie(cookies)}`);
+		const res = await verify(addr("returning"), `signup_pending=${pendingCookie(cookies)}`);
 		expect(res.status).toBe(200);
 
 		const [user] = await db

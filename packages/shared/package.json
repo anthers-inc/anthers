@@ -14,6 +14,7 @@
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
 		"./next-path": "./src/next-path.ts",
+		"./signup": "./src/signup.ts",
 		"./figures": "./src/figures.generated.ts",
 		"./lexicons": "./src/lexicons.ts"
 	},

@@ -105,6 +105,12 @@ import {
 } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import {
+	EMPTY_PICKS,
+	normalizePicks,
+	type SignupPicks,
+	supportTotal,
+} from "@anthers/shared/signup";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -126,7 +132,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import { storedGibPerSourceHour } from "../components/calculators/video-model";
-import SignupCeremonyModal from "../components/subscribe/SignupCeremonyModal";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../components/subscribe/SubscriptionPaymentModal";
@@ -181,58 +186,22 @@ const PICKS_KEY = "anthers_subscribe_picks";
 /** The marketing display face, as the other marketing pages set it. */
 const serif = { fontFamily: FONTS.fraunces };
 
-interface Picks {
-	/**
-	 * Monthly dollars to Anthers: `0` for Free, a rung's threshold otherwise.
-	 *
-	 * 🚨 **It was `boolean | null` until 2026-08-24, when the section became a ladder.** A
-	 * boolean could only ever express the Public Access price, so every rung above Root was
-	 * unreachable from this page — the same defect on the Anthers side that the roadmap
-	 * tracks on the creator side.
-	 *
-	 * 🚨 **And it stopped being nullable on 2026-08-25, when Free became the default**
-	 * (Parker). `null` meant "hasn't said", which the ladder distinguished from "looked and
-	 * staying free" — a distinction worth keeping while the section opened with nothing
-	 * selected, and meaningless once it opens on Free. Everything downstream is simpler for
-	 * it: the ladder always lights a rung, the breakdown always describes a real answer
-	 * rather than previewing one, and dropping the Anthers line returns to Free rather than
-	 * to a state the control cannot show.
-	 *
-	 * ⚠️ `supportTotal` still ACCEPTS `null`, deliberately. Its signature is the boundary
-	 * with the ceremony rather than with this state, and its test pins that `null` and `0`
-	 * both charge nothing — the defect it exists for was a nullish amount becoming a count.
-	 */
-	anthers: number;
-	follow: string[];
-	seed: string[];
-}
-
-/** Free is a rung, and it is the one a visitor starts on — see `Picks.anthers`. */
-const EMPTY_PICKS: Picks = { anthers: 0, follow: [], seed: [] };
-
 /**
- * What the whole charge comes to, in **dollars a month**.
+ * What a visitor chose, before any of it was committed.
  *
- * 🚨 **This was a COUNT until 2026-08-16, and both of its consumers take an amount.**
- * `anthers` was `1` for "ticked" and the total was `1 + directed.length`, which the page
- * then handed to `preview/:amount` and to the subscribe body's `anthersSupport`. That was
- * correct while a Seed was an indivisible $3 and the server multiplied by it; the
- * retirement made the server take dollars and multiply by nothing, so the ceremony
- * **quoted $3 for a $9 charge** and then subscribed the user at **$1 a month** — under the
- * $3 that lifts the Public Access limit they had just agreed to pay for.
+ * ⚠️ **The shape moved to `@anthers/shared/signup` on 2026-08-26**, because it stopped
+ * being this page's private state: pressing *Create My Account* writes it to a pending
+ * signup, and the page that finishes the job reads it back. Three boundaries, one shape —
+ * the alias below is kept only so the rest of this file still reads in its own vocabulary.
  *
- * ⚠️ **The Anthers side is now an AMOUNT rather than a flag**, which removed the last
- * place this function could invent a number: it used to substitute `PUBLIC_ACCESS_PRICE`
- * for `true`, so a page offering Sprout would have quoted Root. There is nothing left to
- * assume — every dollar in the total was chosen somewhere in the UI.
- *
- * Extracted rather than inlined so the conversion has a test. Nothing else on this page
- * can be unit-tested — the ceremony's own e2e cannot complete a payment, because the
- * emailed code is argon2-hashed at rest by design.
+ * 🚨 **`anthers` is dollars, not a flag, and not nullable.** It was `boolean | null` until
+ * 2026-08-24, when the section became a ladder: a boolean could only ever express the
+ * Public Access price, so every rung above Root was unreachable from this page. It stopped
+ * being nullable on 2026-08-25, when Free became the default (Parker) — `null` meant
+ * "hasn't said", a distinction worth keeping while the section opened with nothing selected
+ * and meaningless once it opens on Free.
  */
-export function supportTotal(anthers: number | null, directed: { amount: number }[]): number {
-	return directed.reduce((sum, d) => sum + d.amount, anthers ?? 0);
-}
+type Picks = SignupPicks;
 
 const money = amountLabel;
 
@@ -1638,7 +1607,6 @@ function SignupForm({
 	email,
 	onEmailChange,
 	onSubmit,
-	atprotoHandle,
 	onBluesky,
 	handle,
 	onHandleChange,
@@ -1662,15 +1630,6 @@ function SignupForm({
 	onEmailChange: (value: string) => void;
 	onSubmit: () => void;
 	/**
-	 * The Bluesky handle of a signup already in progress, or null.
-	 *
-	 * Set when someone came back from Bluesky and their PDS could not give us a usable
-	 * address. The identity is proved and parked; this page is finishing the job, and
-	 * saying whose signup it is finishing is the difference between an explanation and an
-	 * unexplained email field after a detour through another website.
-	 */
-	atprotoHandle: string | null;
-	/**
 	 * Hand the typed handle off to Bluesky. Null when the door should not be offered at all.
 	 *
 	 * On success this never returns in any useful sense — the browser is already leaving —
@@ -1688,7 +1647,7 @@ function SignupForm({
 	const fieldId = `${idPrefix}-email`;
 	const handleFieldId = `${idPrefix}-handle`;
 	/** Two doors to choose between, rather than one door and a fallback. */
-	const tabbed = email !== null && !!onBluesky && !atprotoHandle;
+	const tabbed = email !== null && !!onBluesky;
 	/** With no tabs there is nothing to switch, so the email field is simply the card. */
 	const showEmail = email !== null && (!tabbed || door === "email");
 
@@ -1869,20 +1828,12 @@ function SignupForm({
 				    asked for here — they cost nothing at the moment of decision and everything
 				    at the moment of doubt, so they move to onboarding, after the address is
 				    confirmed and after any charge. */}
-				{atprotoHandle && (
-					// 🚨 Why an email field is being shown to somebody who just authenticated
-					// somewhere else. Without this the page reads as a flow that forgot what it
-					// was doing — which is how a signup gets abandoned three steps in.
-					<div className="mb-5 flex items-start gap-3 rounded-xl bg-base-300/50 p-4 text-left">
-						<BlueskyMark className="mt-0.5 h-5 w-5 shrink-0" />
-						<p className="text-sm text-base-content/70">
-							Signing up as <strong className="break-all">@{atprotoHandle}</strong>. One more thing:
-							Anthers needs an email address it can reach you at, for receipts and account notices —
-							so we'll send a code to confirm it.
-						</p>
-					</div>
-				)}
-
+				{/* ⚠️ **This card no longer has a "finishing a Bluesky signup" state**, because
+				    nobody comes back to this page to finish one. Coming back from bsky.social to
+				    a marketing page with a prefilled email box is exactly what Parker's
+				    walkthrough could not tell apart from having accomplished nothing; the
+				    callback lands on `/finish` now, where saying whose signup it is finishing is
+				    the page's whole subject rather than a banner over a form. */}
 				{emailPanel}
 				{blueskyPanel}
 
@@ -2063,8 +2014,6 @@ export default function SubscribePage() {
 	const [door, setDoor] = useState<Door>("email");
 	/** The Bluesky handle being typed, shared by both copies of the signup card. */
 	const [handle, setHandle] = useState("");
-	/** The address a ceremony is open for, or null when it isn't. */
-	const [ceremony, setCeremony] = useState<string | null>(null);
 	/**
 	 * Whether the Bluesky door is open at all.
 	 *
@@ -2073,25 +2022,6 @@ export default function SubscribePage() {
 	 * it was before this feature existed, which is the correct degraded state.
 	 */
 	const [blueskySignupOpen, setBlueskySignupOpen] = useState(false);
-	/**
-	 * A Bluesky signup already proved and parked, waiting on an address.
-	 *
-	 * ⚠️ Read from the API rather than from the URL. `?atproto=1` says only *"go and ask"* —
-	 * the answer comes from an httpOnly cookie the browser cannot read and cannot forge, so
-	 * a hand-typed `?atproto=1` gets `null` and this page behaves exactly as it always has.
-	 */
-	const [pendingAtproto, setPendingAtproto] = useState<{
-		handle: string;
-		email: string | null;
-	} | null>(null);
-	/**
-	 * Whether this session was minted by the ceremony just now, and still owes a handle.
-	 *
-	 * A ref rather than state because it is read inside `commit` immediately after being
-	 * set, in the same turn — a state update would not have landed yet, and the account
-	 * would be left on the marketing page instead of being sent to onboarding.
-	 */
-	const justSignedUp = useRef(false);
 
 	const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
@@ -2106,25 +2036,21 @@ export default function SubscribePage() {
 		preview: SubscriptionPreview;
 	} | null>(null);
 
-	// Restore anything chosen before a trip through signup. Guarded because a browser with
-	// storage disabled must not take the page down with it.
+	// Restore anything chosen on an earlier visit. Guarded because a browser with storage
+	// disabled must not take the page down with it.
 	//
-	// 🚨 **`anthers` is coerced rather than spread through.** Session storage holds whatever
-	// a previous visit wrote, and until 2026-08-25 that could be `null` for "hasn't said" —
-	// a value the ladder can no longer display, since every rung including Free is now a
-	// real answer. Spreading it back would leave the matrix with nothing lit and the
-	// breakdown describing a rung nobody had chosen. Anything that is not a number reads as
-	// Free, which is what an account with no support for Anthers actually is.
+	// ⚠️ **Session storage is a convenience now rather than the mechanism.** It mattered when
+	// signing up round-tripped through another website and came back here; the choices ride
+	// on the pending signup since 2026-08-26, so this only spares somebody who wandered off
+	// and came back before pressing anything.
+	//
+	// 🚨 `normalizePicks` rather than a spread, because storage holds whatever a previous
+	// visit wrote — including an `anthers` of `null`, which meant "hasn't said" until
+	// 2026-08-25 and is a value the ladder can no longer display.
 	useEffect(() => {
 		try {
 			const raw = sessionStorage.getItem(PICKS_KEY);
-			if (!raw) return;
-			const stored = JSON.parse(raw) as Partial<Picks>;
-			setPicks({
-				...EMPTY_PICKS,
-				...stored,
-				anthers: typeof stored.anthers === "number" ? stored.anthers : EMPTY_PICKS.anthers,
-			});
+			if (raw) setPicks(normalizePicks(JSON.parse(raw)));
 		} catch {
 			/* no storage, no restore — the page still works */
 		}
@@ -2148,32 +2074,6 @@ export default function SubscribePage() {
 			live = false;
 		};
 	}, [signedIn]);
-
-	// Pick up a Bluesky signup that came back without a usable address. Asked for only when
-	// the callback said to — an unconditional fetch would put a request on every visit to
-	// answer a question almost nobody is asking.
-	useEffect(() => {
-		if (signedIn) return;
-		if (new URLSearchParams(location.search).get("atproto") !== "1") return;
-		let live = true;
-		client.api.atproto.pending
-			.$get()
-			.then((res) => res.json())
-			.then(({ pending: row }) => {
-				if (!live || !row) return;
-				setPendingAtproto(row);
-				// The PDS's address, if it gave us one. A prefill and not a claim — they may
-				// type a different one, and the code is what settles it either way.
-				if (row.email) setEmail(row.email);
-			})
-			.catch(() => {
-				/* No parked signup, or the API is unreachable. The page is a signup page
-				   regardless, and it still works without knowing this. */
-			});
-		return () => {
-			live = false;
-		};
-	}, [signedIn, location.search]);
 
 	useEffect(() => {
 		try {
@@ -2384,17 +2284,9 @@ export default function SubscribePage() {
 			const anthers = picks.anthers ?? 0;
 
 			if (total === 0) {
-				// Nothing to charge. A brand-new account still has somewhere to be — the
-				// handle it hasn't claimed — and sending it there is the difference between
-				// finishing the ceremony and abandoning someone on a marketing page.
-				if (justSignedUp.current) {
-					await leave(withNextPath("/welcome", next));
-					return;
-				}
-				// A RETURNING account, signed in by the ceremony rather than created by it.
-				// It owes no handle, so there is no onboarding to pass through — but if it
-				// came from somewhere, that somewhere is still the point of the visit, and
-				// a success message on a marketing page is not it.
+				// A signed-in account owes no handle, so there is no onboarding to pass
+				// through — but if it came from somewhere, that somewhere is still the point
+				// of the visit, and a success message on a marketing page is not it.
 				if (next) {
 					await leave(next);
 					return;
@@ -2431,14 +2323,26 @@ export default function SubscribePage() {
 	}, [directed, total, leave, next, picks]);
 
 	/**
-	 * Commit what can be committed.
+	 * Ask for the account — the pending one — and hand the visitor to the page that
+	 * finishes it.
 	 *
-	 * Signed in, this goes straight to `commit`. Signed out, it opens the ceremony —
-	 * which is a code box rather than a payment box, and which stays on this page. The
-	 * old flow redirected to `/signup`, and the picks only survived because they were
-	 * being written to session storage on every change; keeping the user here means the
-	 * choices they just made are simply still in front of them.
+	 * 🚨 **Signing up stopped finishing here on 2026-08-26, and the reason is what the old
+	 * arrangement read like.** The ceremony was a modal over this page, so the last thing
+	 * asked of somebody sat on top of a page still inviting them to add and drop picks — and
+	 * through the Bluesky door it was worse, because coming back from bsky.social landed on
+	 * `/subscribe` with a prefilled email box, which is indistinguishable from having
+	 * accomplished nothing. `/finish` is a page with one job, and the picks travel with the
+	 * pending signup rather than being left behind on a page nobody is looking at.
 	 */
+	const beginSignup = useCallback(
+		async (address?: string) => {
+			await client.api.auth.signup.begin.$post({
+				json: { ...(address ? { email: address } : {}), picks, ...(next ? { next } : {}) },
+			});
+		},
+		[picks, next],
+	);
+
 	const submit = async () => {
 		if (!signedIn) {
 			const address = email.trim();
@@ -2450,14 +2354,15 @@ export default function SubscribePage() {
 			setError(null);
 			try {
 				// Answers 200 whatever happened, deliberately — see the route. So there is
-				// nothing to branch on here, and the modal opens either way.
-				await client.api.auth.signup.start.$post({ json: { email: address } });
-				setCeremony(address);
+				// nothing to branch on here, and the next page opens either way.
+				await beginSignup(address);
+				navigate("/finish");
 			} catch {
-				setError("Couldn't send the code. Please try again.");
-			} finally {
+				setError("Couldn't start your signup. Please try again.");
 				setBusy(false);
 			}
+			// ⚠️ No `setBusy(false)` on the success path: this page is unmounting, and putting
+			// the button back only invites a second press from a page that is already going.
 			return;
 		}
 		await commit();
@@ -2471,8 +2376,11 @@ export default function SubscribePage() {
 	 * browser leaves. Putting the button back would only invite a second handoff from a
 	 * page that is already going.
 	 *
-	 * The picks are in session storage before this runs, so a round trip through another
-	 * website loses nothing; see `PICKS_KEY`.
+	 * 🚨 **The pending signup is written BEFORE the handoff**, and the order is the point.
+	 * The row is what the callback attaches the proved identity to, so the picks somebody
+	 * made are still theirs when they come back — writing it afterwards would mean the
+	 * detour through another website arrived at an empty signup, which is the defect this
+	 * whole flow exists to fix.
 	 */
 	const startBluesky = useCallback(
 		async (raw: string) => {
@@ -2486,31 +2394,15 @@ export default function SubscribePage() {
 			setBusy(true);
 			setError(null);
 			try {
+				await beginSignup();
 				await signUpWithBluesky(value, next);
 			} catch (err) {
 				setError(err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.");
 				setBusy(false);
 			}
 		},
-		[signUpWithBluesky, next],
+		[beginSignup, signUpWithBluesky, next],
 	);
-
-	/**
-	 * The address is confirmed and the browser now holds a session.
-	 *
-	 * Everything from here is an ordinary authenticated call, which is the entire reason
-	 * the session is issued at verification rather than after payment — and note there is
-	 * deliberately no `refreshUser()` here. See `leave`: telling the auth context is what
-	 * unmounts this page, so it waits until the page is finished with.
-	 */
-	const onVerified = async (result: { created: boolean; needsOnboarding: boolean }) => {
-		setCeremony(null);
-		justSignedUp.current = result.needsOnboarding;
-
-		// A returning user who already has a handle just gets signed in, and their picks
-		// commit exactly as if they had been signed in all along.
-		await commit();
-	};
 
 	/**
 	 * Everything the signup control needs, shared by the copy at the top of the page and
@@ -2537,7 +2429,6 @@ export default function SubscribePage() {
 		note: signupNote(signedIn, total > 0, door),
 		noteSizers: signupNoteSizers(signedIn),
 		onSubmit: submit,
-		atprotoHandle: pendingAtproto?.handle ?? null,
 		// Offered only to somebody signed out, and only while the door is actually open —
 		// see `blueskySignupOpen` for why a button that refuses is worse than no button.
 		onBluesky: signedIn || !blueskySignupOpen ? null : startBluesky,
@@ -2783,15 +2674,11 @@ export default function SubscribePage() {
 				</div>
 			</div>
 
-			{ceremony && (
-				<SignupCeremonyModal
-					email={ceremony}
-					paying={total > 0}
-					onVerified={onVerified}
-					onClose={() => setCeremony(null)}
-				/>
-			)}
-
+			{/* ⚠️ **The only modal left on this page, and it belongs to somebody already signed
+			    in.** A visitor signing up meets no layer here at all — they are handed to
+			    `/finish`, where the same confirmation ceremony runs on a page whose whole job
+			    is finishing. One ceremony, so a charge is described identically wherever it is
+			    agreed to. */}
 			{pending && (
 				<SubscriptionPaymentModal
 					anthersSupport={pending.anthersSupport}
@@ -2800,23 +2687,14 @@ export default function SubscribePage() {
 					preview={pending.preview}
 					onComplete={() => {
 						setPending(null);
-						// A brand-new account owes a handle before anything else — including
-						// before the page that would show off the support it just bought, which
-						// is a poor place to discover you have no profile. `next` rides along so
-						// onboarding can hand them back to whatever they came here to read. An
-						// existing user goes straight there, or to where the webhook's work
-						// becomes visible.
-						void leave(
-							justSignedUp.current ? withNextPath("/welcome", next) : (next ?? "/subscription"),
-						);
+						// `next` rides along so somebody who came from a gated Work is handed back
+						// to it; otherwise, to where the webhook's work becomes visible.
+						void leave(next ?? "/subscription");
 					}}
 					onClose={() => {
+						// The card was declined or dismissed. The account was already signed in
+						// when this opened, so there is nothing to unwind and nowhere to send them.
 						setPending(null);
-						// The card was declined or dismissed — but the account exists and is
-						// signed in, because verification made it. That is the correct
-						// outcome and takes no unwinding: they have a free account, and the
-						// only thing still owed is the handle.
-						if (justSignedUp.current) void leave(withNextPath("/welcome", next));
 					}}
 				/>
 			)}

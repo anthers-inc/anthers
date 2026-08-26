@@ -392,34 +392,78 @@ export const atprotoOauthState = pgTable("atproto_oauth_state", {
 // ⚠️ Rows are swept on a TTL. Nothing else deletes them, so a store without the sweep
 // grows without bound — the SDK's own note says the cleanup is the implementation's job.
 
-export const atprotoPendingSignups = pgTable("atproto_pending_signups", {
-	token: text("token").primaryKey(),
-	did: text("did").notNull(),
-	handle: text("handle").notNull().default(""),
-	pdsUrl: text("pds_url").notNull().default(""),
-	email: text("email"),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-// node — an ATProto identity that has been PROVED but has no account yet, waiting for an
-// email address to be confirmed before one is created.
-//
-// 🚨 It exists because of a rule rather than a convenience: **Anthers never creates an
-// account with no reachable address.** Signing up through Bluesky asks the PDS for the
-// address (`transition:email`), and four things can go wrong with that answer — the scope
-// is refused, the PDS holds no address, the address is unconfirmed, or some Anthers
-// account already holds it. All four have the same remedy: send the person through the
-// ordinary emailed-code ceremony and attach this identity once the address is proved.
-//
-// ⚠️ **`token` is an opaque random string held in an httpOnly cookie, and it is what binds
-// the row to a browser.** The DID alone could not: it is public, and a row keyed only by
-// DID would let anyone who knew a handle claim a signup someone else had started. It is a
-// token in a table rather than a signed cookie because a signed cookie needs a new secret
-// in `.do/app.yaml`, and an unset required secret is exactly how production broke on
-// 2026-08-15 — this needs no boot-time configuration at all.
-//
-// ⚠️ Swept on a TTL, for the same reason `atproto_oauth_state` is: nothing else deletes
-// these, and an abandoned signup is the normal case rather than the exception.
+/**
+ * A signup somebody has asked for and not yet finished — the **pending account**.
+ *
+ * 🚨 **It is a table of its own rather than a row in `users`, and the hazard decides
+ * that.** `users.email` is `NOT NULL UNIQUE`, so writing a pending account there would
+ * claim an address before anybody had proved they could read it: type a stranger's address
+ * into `/subscribe` and its real owner cannot sign up until the row expires. Keeping the
+ * pre-account state in its own table is the same shape `signup_codes` already uses, and for
+ * the same reason — the row expires on its own and mints nothing.
+ *
+ * It holds what `/subscribe` was told, so that the page which finishes the job can say what
+ * is about to be committed, and so that somebody who walks away can come back to it. Both
+ * doors write one: the emailed one and the Bluesky one.
+ *
+ * ⚠️ **`token` is an opaque random string held in an httpOnly cookie, and it is what binds
+ * the row to a browser.** Neither the DID nor the address could do that job: both are
+ * public or guessable, and a row claimable by naming one would let anybody take over a
+ * signup somebody else had started. It is a token in a table rather than a signed cookie
+ * because a signed cookie needs a new secret in `.do/app.yaml`, and an unset required
+ * secret is exactly how production broke on 2026-08-15 — this needs no boot-time
+ * configuration at all.
+ *
+ * 🚨 **Resumption in a DIFFERENT browser is gated on the emailed code and on nothing else.**
+ * `emailProvedAt` is what records that gate being passed, and it is stamped only where a
+ * code sent to `email` has actually been completed. Being able to *name* an address is not
+ * proof; reading mail sent to it is. The one thing an address-resumed row may not carry
+ * across is `atprotoDid` — see `services/pending-signups.ts` for why, and for the takeover
+ * it prevents.
+ *
+ * ⚠️ Swept on a TTL, for the same reason `atproto_oauth_state` is: nothing else deletes
+ * these, an abandoned signup is the normal case rather than the exception, and an abandoned
+ * one is personal data belonging to somebody who never became a user (51.05).
+ */
+// org — a signup that has been asked for and not yet finished. Pre-account by
+// construction: there is no node yet to own it, exactly as with `signup_codes`. The
+// identity fields become node identity once the account is created.
+export const pendingSignups = pgTable(
+	"pending_signups",
+	{
+		token: text("token").primaryKey(),
+		/**
+		 * Where the code goes. **Nullable**, because a Bluesky signup whose PDS refused the
+		 * email scope reaches the finishing page with no address at all and is asked for one
+		 * there. Lowercased at the boundary, like every other address in this file.
+		 */
+		email: text("email"),
+		/**
+		 * When a code sent to `email` was completed. Null until it was.
+		 *
+		 * 🚨 The account is minted from this stamp plus a cookie, so nothing may set it that
+		 * has not just watched somebody read a code out of that mailbox.
+		 */
+		emailProvedAt: timestamp("email_proved_at", { withTimezone: true }),
+		/** The proved ATProto identity, when the person came through that door. */
+		atprotoDid: text("atproto_did"),
+		atprotoHandle: text("atproto_handle").notNull().default(""),
+		atprotoPdsUrl: text("atproto_pds_url").notNull().default(""),
+		/** `SignupPicks` from `@anthers/shared/signup` — validated at the route, never trusted raw. */
+		picks: jsonb("picks").notNull().default({}),
+		/** Where the visitor was headed before signing up interrupted them. Sanitized on write. */
+		next: text("next").notNull().default(""),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// Resuming by address, which is what a completed sign-in code unlocks.
+		index("idx_pending_signups_email").on(table.email),
+		// Resuming by identity, which is what a second OAuth round trip unlocks.
+		index("idx_pending_signups_did").on(table.atprotoDid),
+		index("idx_pending_signups_expires").on(table.expiresAt),
+	],
+);
 
 // both — a follow is a relationship between two accounts. 41.02 names "Subscriber
 // relationships" as both: the billing contract is org-side, the canonical assertion is

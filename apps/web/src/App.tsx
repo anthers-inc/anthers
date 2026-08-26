@@ -100,6 +100,7 @@ const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const UserDemoPage = lazy(() => import("./pages/UserDemoPage"));
@@ -181,6 +182,12 @@ export default function App() {
 					page does the equivalent check itself, and bounces anyone who has no
 					business here (signed out, or already named).
 				*/}
+					{/* Finishing a signup. Deliberately NOT wrapped in `ProtectedRoute`: nobody
+				    holding a session belongs here at all, and what admits somebody is a pending
+				    signup rather than an account. 🚨 The page's own guard is what stops this
+				    becoming a second signup door — with no pending record it sends you to
+				    `/subscribe`, and there is no way to start one from here. */}
+					<Route path="/finish" element={<FinishSignupPage />} />
 					<Route path="/welcome" element={<WelcomePage />} />
 					<Route
 						path="/feed"

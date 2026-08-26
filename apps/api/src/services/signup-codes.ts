@@ -38,8 +38,8 @@
  */
 
 import { db } from "@anthers/db/client";
-import { signupCodes, users } from "@anthers/db/schema";
-import { eq, lt, sql } from "drizzle-orm";
+import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth.js";
 
 /** How long an issued code stays good. */
@@ -162,13 +162,25 @@ export async function issueSignupCode(rawEmail: string, now = new Date()): Promi
 }
 
 /**
- * Mint a code **only for an address that already has an account** — the `/login` door.
+ * Mint a code **only for an address somebody has already asked us for** — the `/login` door.
  *
  * 🚨 **The difference from `issueSignupCode` is the whole reason this exists: it can never
- * lead to an account being created.** `/subscribe` is the one signup door, and a login page
- * that mailed a code to a stranger's address would be a second one — the code would be
- * spendable, and whatever spent it would have to decide what to do with an address nobody
- * has an account for. Refusing to issue at all is what keeps that decision from arising.
+ * lead to an account being created out of nothing.** `/subscribe` is the one signup door,
+ * and a login page that mailed a code to a stranger's address would be a second one — the
+ * code would be spendable, and whatever spent it would have to decide what to do with an
+ * address nobody has an account for. Refusing to issue at all is what keeps that decision
+ * from arising.
+ *
+ * ⭐ **"Already asked us for" is two things rather than one**, and the second is what makes a
+ * signup resumable in a different browser: an address with an account, and an address with
+ * an **unfinished signup** somebody started at `/subscribe`. Both are addresses Anthers is
+ * already in a relationship with, so mailing a code to either tells an outsider nothing they
+ * did not already have to know. What the second one may lead to is `POST /signup/complete`,
+ * on the signup pair, where minting belongs — never a `users` row written from here.
+ *
+ * ⚠️ **A mistyped address at `/login` still cannot mint anything**, which is the property
+ * this function exists to hold. There is no pending signup for an address nobody has typed
+ * into `/subscribe`, so the miss branch below is exactly as unreachable as it ever was.
  *
  * Two consequences that are easy to get wrong, so they live here rather than at the route:
  *
@@ -194,7 +206,18 @@ export async function issueSignInCode(rawEmail: string, now = new Date()): Promi
 		.where(eq(users.email, email))
 		.limit(1);
 
-	if (!existing) {
+	// An unfinished signup counts, and only an unexpired one does. Read here rather than
+	// through `services/pending-signups.ts` to keep this module free of a cycle; it is a
+	// membership test, not a write.
+	const [unfinished] = existing
+		? []
+		: await db
+				.select({ token: pendingSignups.token })
+				.from(pendingSignups)
+				.where(and(eq(pendingSignups.email, email), gt(pendingSignups.expiresAt, now)))
+				.limit(1);
+
+	if (!existing && !unfinished) {
 		// Burned deliberately — see the timing note above. The value is discarded.
 		await hashPassword(generateSignupCode());
 		return { code: null, throttled: false, existingAccount: false };

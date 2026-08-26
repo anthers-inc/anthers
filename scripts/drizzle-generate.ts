@@ -32,7 +32,19 @@ const proc = Bun.spawn(["script", "-qec", inner, "/dev/null"], {
 	stderr: "pipe",
 });
 
-const QUESTION = "created or renamed from another column?";
+/**
+ * Every prompt drizzle-kit can stop on.
+ *
+ * ⚠️ **There are two, and knowing only about columns is the same hang with a different
+ * cause.** A change that renames a *table* asks "is X table created or renamed from another
+ * table?" before it asks anything about columns, so a script watching only for the column
+ * question waits forever on a question it is not looking for — which is exactly what
+ * happened when `atproto_pending_signups` became `pending_signups` on 2026-08-26.
+ */
+const QUESTIONS = [
+	"created or renamed from another column?",
+	"created or renamed from another table?",
+];
 const DONE = ["Your SQL migration file", "No schema changes"];
 
 let seen = "";
@@ -57,7 +69,7 @@ while (true) {
 
 	// One Enter per question asked so far. Counting rather than reacting to the latest
 	// chunk matters because the prompt library redraws itself constantly.
-	const asked = seen.split(QUESTION).length - 1;
+	const asked = QUESTIONS.reduce((total, q) => total + seen.split(q).length - 1, 0);
 	while (answered < asked) {
 		await Bun.sleep(250);
 		writer.write("\r");
