@@ -4,18 +4,23 @@
  *
  * Pure (no clock, no DOM, no I/O), like `moderation.ts` and `attention.ts`, so the API, the
  * web app and any future creator-side or labeler tool read the same vocabulary rather than
- * each hard-coding its own. Wiki 40.09 is the authority on what any of it means; this file
- * is the transcription and the place a value is added.
+ * each hard-coding its own. This file is the transcription and the place a value is added.
+ *
+ * **Two wiki documents own this between them and they do not overlap.** Wiki 40.13, The
+ * Rating Standard, is the authority on what the values *mean* — the row-by-row table, where
+ * each line falls, what may never be a factor, and worked examples. Wiki 40.09 is the
+ * authority on what a rating *costs* and how that is enforced. Read 40.13 before rating
+ * anything or adding a value; read 40.09 before building a surface that acts on one.
  *
  * Three decisions are frozen here.
  *
  * 1. **The rating decides access and the notes describe the work.** A Work carries exactly
  *    one `MaturityRating`, and that single value is what a viewer filter reads and what the
- *    adults-only category will attach to when it opens. The notes beside it carry no access
- *    consequence and never will. 40.09 left open whether "mature themes" is one rating or
- *    several; the answer is one, with the expressiveness moved off the axis that carries
- *    consequences — which is what makes it safe to have, because a creator adding a note is
- *    warning a reader rather than moving their work behind anything.
+ *    Adult rung will attach to when it opens. The notes beside it carry no access consequence
+ *    from the platform and never will — 🚨 **a note may be read by a reader's own filter and
+ *    may never drive a platform default**, so the most one can cost a creator is a blur shown
+ *    to somebody who asked to be warned about exactly that. The expressiveness lives off the
+ *    axis that carries consequences, which is what makes it safe to have.
  *
  * 2. **`unrated` is a real state and not a missing value.** Defaulting a Work to `general`
  *    would assert a rating on a creator's behalf that nobody asked them for, and would make
@@ -29,7 +34,8 @@
  *    pressure to classify these as adult content is the pressure the category exists to
  *    resist. And subject matter is not the same as treatment: work *about* addiction,
  *    violence or sexuality is not rated for its subject, because depiction, explicitness and
- *    intent are what a rating reads. 40.09 carries the reasoning for both.
+ *    intent are what a rating reads. 40.13 § What Is Never a Factor carries both, together
+ *    with the full list of what may never move a Work along the scale.
  */
 
 /**
@@ -40,9 +46,13 @@
  * - `general` — its creator says anyone can meet it.
  * - `mature` — its creator (or an operator) says it is made for adults.
  *
- * ⚠️ **`mature` gates nothing today.** Mature work is allowed on Anthers and is currently
- * simply unlabeled; the adults-only category that will payment-gate it is closed on
- * moderation-capacity grounds (40.09). What the rating does now is give the viewer filters
+ * ⚠️ **This scale is one value short of the one 40.13 defines, and `mature` gates nothing
+ * today.** The standard runs `unrated` · `general` · `mature` · `adult`, so there is nothing
+ * an operator can set on a Work belonging at the top of it; adding `adult` and refusing
+ * release at a rung Anthers does not currently accept is its own task. Nothing above `adult`
+ * is a rating at all — work that functions as pornography is disallowed outright, enforced
+ * through `moderation.ts`'s taxonomy rather than by a value here. Mature work meanwhile is
+ * ordinary work on Anthers, and what the rating does now is give the viewer filters
  * something to read.
  */
 export type MaturityRating = "unrated" | "general" | "mature";

@@ -3,7 +3,7 @@
  * Rating appeals — the operator's half of the content-rating surface.
  *
  * 🚨 **This queue exists because the correction can do harm, and it is not the optional
- * half of the feature.** Anthers' adults-only category is payment-gated, so an
+ * half of the feature.** Anthers' Adult rung is payment-gated, so an
  * over-cautious call does not merely add a warning to a work — it puts it behind a
  * paywall. For a queer coming-of-age story wrongly flagged, that is exactly the harm the
  * category exists to prevent, produced by the mechanism meant to prevent it (wiki 40.09).

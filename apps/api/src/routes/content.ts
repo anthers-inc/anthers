@@ -2757,7 +2757,7 @@ const contentRoutes = new Hono()
 	 * Appealing an operator's correction of a Work's rating.
 	 *
 	 * 🚨 **This is part of the rating feature rather than a later refinement**, on 40.09's
-	 * reasoning: because the adults-only category is payment-gated, an over-cautious call
+	 * reasoning: because the Adult rung is payment-gated, an over-cautious call
 	 * does not merely add a warning to a work, it puts it behind a paywall — and for a queer
 	 * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
 	 * prevent, produced by the mechanism meant to prevent it. Shipping the correction

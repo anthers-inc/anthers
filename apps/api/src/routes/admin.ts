@@ -495,7 +495,7 @@ const adminRoutes = new Hono()
 
 	// ── Content ratings ─────────────────────────────────────────────────────────
 	// 🚨 **The correction and the appeal ship together, and the appeal is not the
-	// optional half.** 40.09: because the adults-only category is payment-gated, an
+	// optional half.** 40.09: because the Adult rung is payment-gated, an
 	// over-cautious call does not merely add a warning to a work — it puts it behind a
 	// paywall, and for a queer coming-of-age story wrongly flagged that is exactly the
 	// harm the category exists to prevent, produced by the mechanism meant to prevent it.
