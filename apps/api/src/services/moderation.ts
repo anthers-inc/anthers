@@ -46,7 +46,7 @@ import {
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
 import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
-import { sendAbuseAlert } from "./email.js";
+import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { notify } from "./notifications.js";
 
 /**
@@ -274,6 +274,10 @@ export async function pendingEscalations(): Promise<number[]> {
 
 /** Retry every floor report that has not reached a person yet. Returns how many did. */
 export async function runEscalationSweep(): Promise<number> {
+	// Nothing this process can do about them — see `abuseAlertsEnabled`. Refusing here rather
+	// than once per row is the difference between one log line and hundreds, every five
+	// minutes, for as long as a backlog sits in a developer's database.
+	if (!abuseAlertsEnabled()) return 0;
 	const ids = await pendingEscalations();
 	let sent = 0;
 	for (const id of ids) if (await escalateReport(id)) sent++;

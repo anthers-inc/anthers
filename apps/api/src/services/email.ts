@@ -272,9 +272,19 @@ export async function sendVerificationEmail(
  *
  * Set `ABUSE_ALERTS_ENABLED=true` to send anyway — for deliberately exercising the delivery
  * loop against a real mailbox, which is the only reason to want this off a public deployment.
+ *
+ * ⚠️ **`abuseAlertsEnabled()` is exported so the SWEEPS can ask before they start**, rather
+ * than discovering it once per row. A withheld alert leaves `escalated_at` null, which is
+ * correct — nobody was told — so the every-five-minutes cron retried the whole backlog
+ * forever, printing a line per report each time. Refusing at the top is one decision instead
+ * of hundreds, and it does no database work it cannot use.
  */
+export function abuseAlertsEnabled(): boolean {
+	return isPublicDeployment() || process.env.ABUSE_ALERTS_ENABLED === "true";
+}
+
 export async function sendAbuseAlert(args: { subject: string; html: string }): Promise<SendResult> {
-	if (!isPublicDeployment() && process.env.ABUSE_ALERTS_ENABLED !== "true") {
+	if (!abuseAlertsEnabled()) {
 		console.warn(
 			`[email] withheld abuse alert "${args.subject}" — not a public deployment. ` +
 				"Set ABUSE_ALERTS_ENABLED=true to send from here.",

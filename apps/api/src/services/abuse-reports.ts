@@ -33,7 +33,7 @@ import {
 	moderationReasonLabel,
 } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import { sendAbuseAlert } from "./email.js";
+import { abuseAlertsEnabled, sendAbuseAlert } from "./email.js";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 /** DSA Art. 16 asks for a substantiated explanation; this is what "substantiated" costs. */
@@ -183,6 +183,8 @@ export async function pendingAbuseEscalations(): Promise<number[]> {
 
 /** Retry every public report that has not reached a person yet. Returns how many did. */
 export async function runAbuseEscalationSweep(): Promise<number> {
+	// Same refusal as the floor sweep — see `abuseAlertsEnabled`.
+	if (!abuseAlertsEnabled()) return 0;
 	const ids = await pendingAbuseEscalations();
 	let sent = 0;
 	for (const id of ids) if (await escalateAbuseReport(id)) sent++;
