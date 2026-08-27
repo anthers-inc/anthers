@@ -233,6 +233,20 @@ export const works = pgTable(
 		// including the takedown — see `services/quarantine.ts`, its only writer.
 		quarantineStatus: text("quarantine_status").notNull().default("none"), // none | quarantined
 
+		// ── Safety scan (child safety) ──
+		// When this Work last had detection scans enqueued for its objects. Null means it
+		// has never owed one — a text Work with no thumbnail has nothing a perceptual image
+		// hash can read, and gating its release on a scan that will never run would block it
+		// forever.
+		//
+		// It is a clock rather than a status, and the distinction is the whole reason the
+		// column exists. Whether a given object HAS been scanned is answered by
+		// `media_scans`, keyed on the storage key; what that table cannot answer is how long
+		// an unanswered key has been waiting, because a row appears only once a scan
+		// completes. Release is gated on a completed scan for a bounded window measured from
+		// here, and gives way afterwards — see `services/safety-scan.ts`, its only writer.
+		scanQueuedAt: timestamp("scan_queued_at", { withTimezone: true }),
+
 		// ── ATProto ──
 		// A Work wants its own lexicon rather than riding a post record; deferred with
 		// ATProto adoption itself, and unpopulated meanwhile.

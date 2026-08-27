@@ -170,6 +170,11 @@ export const QUEUES = {
 	// the presigned PUT never passes the bytes through the API, so the object exists in R2
 	// before anything here knows about it. See wiki 40.12.
 	SCAN_MEDIA: "scan-media",
+	// Re-ask for the objects whose scan never came back. `SCAN_MEDIA` gives up after its
+	// retry budget, and release gives way after two minutes, so between them an object
+	// caught by a vendor outage would otherwise never be scanned again — which would make
+	// the release gate a formality rather than a gate. See `worksOwedScans`.
+	RESCAN_OWED: "rescan-owed",
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
 	// Delete expired sessions and verification tokens. 51.05 promises "Sessions: deleted
@@ -322,4 +327,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// against a statutory "as soon as reasonably possible" rather than against a
 	// retention window or a billing cycle.
 	[QUEUES.ESCALATE_REPORTS, "*/5 * * * *"],
+	// Every hour rather than nightly, because what it is re-asking after is a vendor
+	// outage, and an outage that ends at 9 AM should not leave a day of uploads unscanned
+	// until 3 the next morning. Nothing is waiting on a person, so it is hourly rather
+	// than five-minutely.
+	[QUEUES.RESCAN_OWED, "20 * * * *"],
 ] as const;

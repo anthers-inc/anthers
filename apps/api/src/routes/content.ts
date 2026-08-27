@@ -92,6 +92,7 @@ import {
 import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
 import { loadPublicAccessBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
+import { beginScans, scanReleaseGate } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
@@ -549,13 +550,10 @@ function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
  * at all. The current coverage map stays in wiki 40.12 and off the public safety page.
  */
 async function queueScanForWork(item: WorkRow): Promise<void> {
-	const keys = new Set<string>();
-	if (item.type === "image" && item.sourceKey) keys.add(item.sourceKey);
-	// Thumbnails may be stored as a full URL on older rows; `urlToKey` normalizes both.
-	if (item.thumbnail) {
-		const key = urlToKey(item.thumbnail);
-		if (key) keys.add(key);
-	}
+	// `beginScans` decides which objects are scannable and starts the Work's clock; this
+	// only sends the jobs. The key set has to be the same one the release gate waits on, so
+	// it lives in the service that owns both rather than being computed again here.
+	const keys = await beginScans(item);
 	for (const storageKey of keys) {
 		await queue.send(
 			QUEUES.SCAN_MEDIA,
@@ -2552,6 +2550,35 @@ const contentRoutes = new Hono()
 						error: "Can't release yet — the media is still processing.",
 						code: "media_not_ready",
 						unready,
+					},
+					409,
+				);
+			}
+		}
+
+		// Detection is the second readiness condition, and it is the same kind of thing as
+		// the first: 40.08 settles that publishing is not gated on encoding but release is
+		// gated on readiness, and an image whose scan has not come back is not ready. It is
+		// checked here rather than on the queued job because release is the moment the object
+		// becomes reachable by somebody other than its uploader.
+		//
+		// 🚨 **It gives way rather than blocking, and that is deliberate.** The window is two
+		// minutes from when the scans were queued; past it the creator releases and the scan
+		// stays owed, because a detection vendor's outage must not stop everyone on Anthers
+		// from publishing. `services/safety-scan.ts` carries the full reasoning, including
+		// why quarantine reaching a released Work is what makes the trade honest.
+		if (releasing) {
+			const gate = await scanReleaseGate(work);
+			if (gate.blocked) {
+				return c.json(
+					{
+						error: "Almost — we're still checking this Work's images. Try again in a moment.",
+						code: "scan_pending",
+						// A count rather than the keys. A storage key is not the creator's
+						// business, and neither is which of their objects we are still asking
+						// about.
+						pending: gate.pending.length,
+						retryAfter: gate.waitUntil?.toISOString() ?? null,
 					},
 					409,
 				);
