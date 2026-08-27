@@ -35,6 +35,9 @@ export interface WorkFixture {
 	bodyHtml?: string;
 	lyrics?: string;
 	sourceKey?: string;
+	thumbnail?: string;
+	/** When scans were last enqueued for this Work — the release gate's clock. */
+	scanQueuedAt?: Date | null;
 	embedUrl?: string;
 	durationSeconds?: number;
 	visibility?: "private" | "released";
@@ -64,6 +67,8 @@ export async function insertWork(fixture: WorkFixture) {
 			bodyHtml: fixture.bodyHtml ?? "",
 			lyrics: fixture.lyrics ?? "",
 			sourceKey: fixture.sourceKey ?? "",
+			thumbnail: fixture.thumbnail ?? "",
+			scanQueuedAt: fixture.scanQueuedAt ?? null,
 			embedUrl: fixture.embedUrl ?? "",
 			durationSeconds: fixture.durationSeconds ?? null,
 			visibility,

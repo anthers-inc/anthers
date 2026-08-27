@@ -1,0 +1,1 @@
+ALTER TABLE "works" ADD COLUMN "scan_queued_at" timestamp with time zone;

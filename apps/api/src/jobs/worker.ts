@@ -30,6 +30,7 @@ import { handlePruneAttention, type PruneAttentionData } from "./prune-attention
 import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue } from "./queue.js";
 import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
+import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
@@ -232,6 +233,16 @@ async function start() {
 					`[escalate-reports] job ${job.id}: escalated ${sent} floor report(s) and ${sentPublic} public report(s)`,
 				);
 			}
+		}
+	});
+
+	// Re-ask about objects whose scan never came back. Quiet when there is nothing owed,
+	// for the same reason the escalation sweep is: an hourly "0 owed" line makes the worker
+	// log unreadable, and this one has to stay readable.
+	await queue.work(QUEUES.RESCAN_OWED, async (jobs) => {
+		for (const job of jobs) {
+			const sent = await rescanOwed();
+			if (sent > 0) console.log(`[rescan-owed] job ${job.id}: re-queued ${sent} scan(s)`);
 		}
 	});
 
