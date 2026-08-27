@@ -49,6 +49,7 @@ import {
 	bindIdentityToPending,
 	findPendingByDid,
 	issueCodeForPending,
+	readPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
 
@@ -169,13 +170,29 @@ const atprotoRoutes = new Hono()
 			}
 			return c.redirect(`${callbackUrl}?${query.toString()}`);
 		};
-		const fail = (reason: string) => back({ error: reason });
+		/**
+		 * 🚨 **Every refusal is logged, and it did not used to be.** This route turns any
+		 * failure into a query parameter the browser renders as a sentence — which means a
+		 * signup that silently goes wrong leaves *nothing* server-side to read. Three rounds of
+		 * debugging the Bluesky handoff on 2026-08-26 were spent inferring from table state
+		 * which branch had been taken, because the branch itself said nothing. A round trip
+		 * through somebody else's website is exactly the path that cannot be reproduced on
+		 * demand, so it is the last place to be quiet about what happened.
+		 */
+		const fail = (reason: string, detail?: unknown) => {
+			console.warn(`[atproto/callback] refused: ${reason}`, detail ?? "");
+			return back({ error: reason });
+		};
 
 		try {
 			const params = new URL(c.req.url).searchParams;
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			console.log(
+				`[atproto/callback] intent=${appState.intent} did=${session.did} ` +
+					`pendingCookie=${getCookie(c, PENDING_SIGNUP_COOKIE) ? "present" : "absent"}`,
+			);
 			// Sanitized on the way in as well; this is the read that actually decides where a
 			// browser goes, and it is the one that has to be right.
 			const next = sanitizeNextPath(appState.next) ?? undefined;
@@ -264,6 +281,15 @@ const atprotoRoutes = new Hono()
 				// of that step back. A no-op when the PDS gave us nothing, in which case the
 				// finishing page asks for an address the ordinary way.
 				await issueCodeForPending(token);
+
+				// What the finishing page will find, said plainly. The three facts that decide
+				// which face it shows are the three worth reading back on a walkthrough.
+				const parked = await readPendingSignup(token);
+				console.log(
+					`[atproto/callback] parked signup: handle=${identity.handle || "(none)"} ` +
+						`scopeGranted=${pds.scopeGranted} pdsEmail=${pds.email ? "yes" : "no"} ` +
+						`rowEmail=${parked?.email ? "yes" : "no"} codeSent=${parked?.codeSentAt ? "yes" : "no"}`,
+				);
 				return back({ success: "needs_email", next });
 			}
 
@@ -287,7 +313,7 @@ const atprotoRoutes = new Hono()
 			});
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "exchange_failed";
-			return fail(message);
+			return fail(message, err);
 		}
 	})
 
