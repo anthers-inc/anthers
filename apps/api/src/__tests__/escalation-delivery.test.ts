@@ -111,7 +111,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Recording what the provider tells us", () => 
 			.values({
 				subjectType: "comment",
 				subjectId: 909_001,
-				reason: "sexual",
+				reason: "csam",
 				details: "delivery lookup fixture",
 				escalatedAt: new Date(),
 				escalationMessageId: REPORT_MSG,

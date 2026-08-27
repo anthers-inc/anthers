@@ -247,16 +247,16 @@ async function main() {
 		fixture = await createFixture();
 		if (fixture) {
 			log("Filing the in-app report…");
-			// `sexual` on purpose: its own hint reads "any sexual content involving minors",
-			// so it is the reason the form steers a real CSAM reporter toward, and an
-			// escalation wired only to `illegal` would pass every other test and miss it.
+			// `csam` on purpose: it is the reason the form steers a real child-safety
+			// reporter toward, and an escalation wired only to `illegal` would pass every
+			// other test and miss the code the interface points the most serious report at.
 			const inApp = await call("/api/moderation/reports", {
 				method: "POST",
 				cookie: fixture.cookie,
 				body: JSON.stringify({
 					subjectType: "comment",
 					subjectId: fixture.commentId,
-					reason: "sexual",
+					reason: "csam",
 					details: `Automated escalation probe (${TAG}). Not a real report — safe to dismiss.`,
 				}),
 			});

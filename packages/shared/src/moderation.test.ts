@@ -21,24 +21,72 @@ import {
 	isModeratableContent,
 	isModerationReason,
 	isModerationSubjectType,
+	MODERATION_REASON_GROUPS,
 	MODERATION_REASON_VALUES,
 	MODERATION_REASONS,
 	MODERATION_STATUSES,
 	MODERATION_SUBJECT_TYPES,
 	moderationReasonLabel,
+	reasonsInGroup,
 	reportRequiresDetails,
 } from "./moderation.js";
 
 describe("Report taxonomy", () => {
 	it("pins the stored reason codes — renaming one is a data migration", () => {
 		expect([...MODERATION_REASON_VALUES]).toEqual([
-			"spam",
-			"harassment",
-			"sexual",
+			"csam",
 			"violence",
 			"illegal",
+			"pornography",
+			"unrated-mature",
+			"harassment",
+			"spam",
 			"other",
 		]);
+	});
+
+	it("orders the legal group first, and orders each group most serious first", () => {
+		// 🚨 One of the three mitigations that make splitting the old single sexual reason
+		// safe: a reporter who has something involving a minor meets the legal option before
+		// the rule-break. The others are the pornography hint and its confirmation, below.
+		expect(MODERATION_REASON_GROUPS.map((g) => g.key)).toEqual(["law", "rules"]);
+		expect(reasonsInGroup("law").map((r) => r.value)).toEqual(["csam", "violence", "illegal"]);
+		expect(reasonsInGroup("rules").map((r) => r.value)).toEqual([
+			"pornography",
+			"unrated-mature",
+			"harassment",
+			"spam",
+			"other",
+		]);
+	});
+
+	it("puts a confirmation on the pornography reason, and it switches rather than warns", () => {
+		// A warning a reporter can read and ignore leaves the misfiled report filed. The
+		// control has to move them, which means the reason has to name where to.
+		const porn = MODERATION_REASONS.find((r) => r.value === "pornography");
+		expect(porn?.confirm?.switchTo).toBe("csam");
+		expect(porn?.confirm?.question).toContain("18");
+	});
+
+	it("never names queer lives anywhere in the taxonomy", () => {
+		// 🚨 An early draft of the pornography hint listed "queer lives" as an example of
+		// mature work, which asserts precisely the premise wiki 40.09 exists to refuse. The
+		// refusal belongs on /safety at a length that makes it a refusal, and nowhere
+		// shorter — anything that fits beside a radio button reads as the concession.
+		const copy = MODERATION_REASONS.map((r) => `${r.label} ${r.hint}`)
+			.join(" ")
+			.toLowerCase();
+		expect(copy).not.toContain("queer");
+		expect(copy).not.toContain("lgbt");
+		expect(copy).not.toContain("trans ");
+	});
+
+	it("keeps a retired code readable without letting anything file a new one", () => {
+		// `moderation_reports.reason` holds `sexual` verbatim on rows written while it was
+		// the code the form steered a child-safety reporter toward. An operator opening one
+		// has to see what the reporter picked; nothing may write another.
+		expect(moderationReasonLabel("sexual")).toBe("Sexual content");
+		expect(isModerationReason("sexual")).toBe(false);
 	});
 
 	it("keeps codes unique, so two reasons can't collapse into one stored value", () => {
@@ -107,18 +155,18 @@ describe("Subject types", () => {
 	});
 
 	it("requires the reporter's own words for a person, and not for content or a Work", () => {
-		// A comment IS the evidence; a person is not. That asymmetry is why the six
-		// reasons did NOT need a seventh entry for people — the taxonomy fits, and what
-		// doesn't transfer is the subject implying its own evidence. A Work is its own
-		// evidence the way a comment is — the operator opens it and sees what the
-		// reporter saw.
+		// A comment IS the evidence; a person is not. That asymmetry is why adding people
+		// did NOT need a reason of their own — the taxonomy fits, and what doesn't
+		// transfer is the subject implying its own evidence. A Work is its own evidence
+		// the way a comment is — the operator opens it and sees what the reporter saw.
 		expect(reportRequiresDetails("user")).toBe(true);
 		expect(reportRequiresDetails("comment")).toBe(false);
 		expect(reportRequiresDetails("rating")).toBe(false);
 		expect(reportRequiresDetails("work")).toBe(false);
 		// Adding a person and a Work did not touch the taxonomy — pinned here because
 		// "the reasons don't fit a person" is the reasonable-sounding change that would
-		// make renaming a stored value look like a copy edit.
-		expect(MODERATION_REASON_VALUES.length).toBe(6);
+		// make renaming a stored value look like a copy edit. The count is asserted by
+		// the exact-list test above; what this one says is that nothing here moved it.
+		expect(MODERATION_REASON_VALUES).not.toContain("person");
 	});
 });

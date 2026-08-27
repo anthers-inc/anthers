@@ -33,7 +33,11 @@
  * same reason, in the other direction.
  */
 
-import { MODERATION_REASONS } from "@anthers/shared/moderation";
+import {
+	MODERATION_REASON_GROUPS,
+	MODERATION_REASONS,
+	reasonsInGroup,
+} from "@anthers/shared/moderation";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useState } from "react";
@@ -173,6 +177,29 @@ export default function SafetyPage() {
 				</p>
 			</Section>
 
+			<Section title="What We Do Not Act On">
+				{/* 🚨 The refusal lives HERE rather than in the report dialog, and the length is
+				    the reason. Anything short enough to fit beside a radio button reads as the
+				    concession rather than as the refusal, and an early draft that tried to fit
+				    it into a hint ended up listing queer lives as an example of mature work —
+				    asserting exactly the premise this paragraph exists to refuse. Wiki 40.09. */}
+				<p>
+					<strong>
+						Work about queer lives is routinely reported as sexual content on other platforms.
+					</strong>{" "}
+					It is not sexual content, and we do not act on reports that treat it as such. A queer
+					character existing in a story does not make it adult material. Neither does a trans
+					character, a same-sex relationship, or a discussion of identity. Reports of that kind are
+					closed without action, however many of them arrive.
+				</p>
+				<p>
+					The same distinction runs through everything on this page:{" "}
+					<strong>a subject is not the same as its treatment.</strong> Work <em>about</em> violence,
+					addiction or sex is not the thing it depicts, and difficult art is not a rule-break. What
+					we act on is what a work does, not what it is about.
+				</p>
+			</Section>
+
 			<Section title="Where the Rules Are Written Down">
 				<p>
 					What is and is not allowed here is in the{" "}
@@ -282,20 +309,45 @@ function AbuseReportForm() {
 				<div className="label">
 					<span className="label-text font-semibold">What is wrong</span>
 				</div>
+				{/* Grouped, in the same two groups and the same order as the in-app dialog. The
+				    split is legal versus rule-breaking rather than urgent versus not, and a flat
+				    list here would present a piece of spam and a report of child sexual abuse
+				    material as the same class of thing. */}
 				<select
 					value={reason}
 					onChange={(e) => setReason(e.target.value)}
 					className="select select-bordered w-full"
 				>
-					{MODERATION_REASONS.map((r) => (
-						<option key={r.value} value={r.value}>
-							{r.label}
-						</option>
+					{MODERATION_REASON_GROUPS.map((group) => (
+						<optgroup key={group.key} label={group.heading.toUpperCase()}>
+							{reasonsInGroup(group.key).map((r) => (
+								<option key={r.value} value={r.value}>
+									{r.label}
+								</option>
+							))}
+						</optgroup>
 					))}
 				</select>
 				{chosen ? (
 					<div className="label">
 						<span className="label-text-alt text-base-content/60">{chosen.hint}</span>
+					</div>
+				) : null}
+				{/* The same confirmation the in-app dialog poses, and it has to be here too: a
+				    select cannot interrupt, so this warns in place and offers the switch as a
+				    control rather than as advice. Splitting the old single sexual reason made
+				    it possible to file something involving a minor as a rule-break, and this is
+				    one of the three things that stop it. */}
+				{chosen?.confirm ? (
+					<div className="alert alert-warning mt-2 flex-col items-start text-sm">
+						<span>{chosen.confirm.question}</span>
+						<button
+							type="button"
+							className="btn btn-sm btn-neutral"
+							onClick={() => setReason(chosen.confirm!.switchTo)}
+						>
+							{chosen.confirm.switchLabel}
+						</button>
 					</div>
 				) : null}
 			</label>
