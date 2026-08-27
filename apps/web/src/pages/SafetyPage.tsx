@@ -297,12 +297,9 @@ function AbuseReportForm() {
 					placeholder="https://anthers.org/works/..."
 					className="input input-bordered w-full"
 				/>
-				<div className="label">
-					<span className="label-text-alt text-base-content/60">
-						Paste the address from your browser. If you cannot get a link, describe where it is
-						below.
-					</span>
-				</div>
+				<p className="mt-1 text-sm text-base-content/60">
+					Paste the address from your browser. If you cannot get a link, describe where it is below.
+				</p>
 			</label>
 
 			<label className="form-control w-full">
@@ -328,22 +325,20 @@ function AbuseReportForm() {
 						</optgroup>
 					))}
 				</select>
-				{chosen ? (
-					<div className="label">
-						<span className="label-text-alt text-base-content/60">{chosen.hint}</span>
-					</div>
-				) : null}
+				{chosen ? <p className="mt-1 text-sm text-base-content/60">{chosen.hint}</p> : null}
 				{/* The same confirmation the in-app dialog poses, and it has to be here too: a
 				    select cannot interrupt, so this warns in place and offers the switch as a
 				    control rather than as advice. Splitting the old single sexual reason made
 				    it possible to file something involving a minor as a rule-break, and this is
 				    one of the three things that stop it. */}
 				{chosen?.confirm ? (
-					<div className="alert alert-warning mt-2 flex-col items-start text-sm">
-						<span>{chosen.confirm.question}</span>
+					// A plain bordered block rather than `alert`, whose default two-column grid
+					// squeezes the button into a four-line column at every width this form has.
+					<div className="mt-2 rounded-box border border-warning bg-warning/15 p-4 text-sm">
+						<p>{chosen.confirm.question}</p>
 						<button
 							type="button"
-							className="btn btn-sm btn-neutral"
+							className="btn btn-sm btn-neutral mt-3"
 							onClick={() => setReason(chosen.confirm!.switchTo)}
 						>
 							{chosen.confirm.switchLabel}
@@ -365,12 +360,10 @@ function AbuseReportForm() {
 					placeholder="What is on the page, and why you think it breaks the law."
 					className="textarea textarea-bordered w-full"
 				/>
-				<div className="label">
-					{/* Stated at the field rather than in a policy paragraph nobody reaches. */}
-					<span className="label-text-alt text-base-content/60">
-						Please describe it rather than attaching or re-uploading anything.
-					</span>
-				</div>
+				{/* Stated at the field rather than in a policy paragraph nobody reaches. */}
+				<p className="mt-1 text-sm text-base-content/60">
+					Please describe it rather than attaching or re-uploading anything.
+				</p>
 			</label>
 
 			<label className="form-control w-full">
@@ -384,12 +377,10 @@ function AbuseReportForm() {
 					placeholder="you@example.com"
 					className="input input-bordered w-full"
 				/>
-				<div className="label">
-					<span className="label-text-alt text-base-content/60">
-						Only so we can confirm we received this and ask a question if we have one. Leave it
-						blank and your report still counts.
-					</span>
-				</div>
+				<p className="mt-1 text-sm text-base-content/60">
+					Only so we can confirm we received this and ask a question if we have one. Leave it blank
+					and your report still counts.
+				</p>
 			</label>
 
 			{result ? (

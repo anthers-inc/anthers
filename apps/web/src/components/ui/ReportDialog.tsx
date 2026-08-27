@@ -127,7 +127,11 @@ export default function ReportDialog({
 						    so the question has to be answered rather than scrolled past. */}
 						<h3 className="text-lg font-bold">One question first</h3>
 						<p className="py-3 text-sm text-base-content/80">{confirmingReason.confirm.question}</p>
-						<div className="modal-action">
+						{/* Stacked rather than laid out in a row. Both labels are sentences — they
+						    have to be, because a two-word button here would be answering a question
+						    about a child with a shrug — and `modal-action`'s default row pushes the
+						    first one off the left edge of the box at every width the modal has. */}
+						<div className="modal-action flex-col items-stretch gap-2">
 							<button
 								type="button"
 								className="btn btn-primary"
