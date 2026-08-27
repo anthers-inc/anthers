@@ -126,7 +126,7 @@ describe("content notes", () => {
 	it("does not list queer lives, and must never learn to", () => {
 		// 🚨 The one assertion here that is about values rather than mechanics. An early
 		// draft of Anthers' report copy listed "queer lives" as an example of mature work,
-		// which asserts precisely the premise 40.09 exists to refuse. A content note is a
+		// which asserts precisely the premise 40.13 exists to refuse. A content note is a
 		// warning about what is in a work; queer people existing in one is not a warning.
 		const values = CONTENT_NOTES.map((n) => n.value).join(" ");
 		expect(values).not.toContain("queer");

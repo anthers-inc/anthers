@@ -4,7 +4,7 @@
  * creator.
  *
  * 🚨 **The appeal half is not a nicety and the tests for it are not optional.** Anthers'
- * adults-only category is payment-gated, so an over-cautious call does not merely add a
+ * Adult rung is payment-gated, so an over-cautious call does not merely add a
  * warning to a work — it puts it behind a paywall, and for a queer coming-of-age story
  * wrongly flagged that is exactly the harm the category exists to prevent, produced by the
  * mechanism meant to prevent it (wiki 40.09). A suite that covered only the correction would

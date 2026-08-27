@@ -182,7 +182,7 @@ export default function SafetyPage() {
 				    the reason. Anything short enough to fit beside a radio button reads as the
 				    concession rather than as the refusal, and an early draft that tried to fit
 				    it into a hint ended up listing queer lives as an example of mature work —
-				    asserting exactly the premise this paragraph exists to refuse. Wiki 40.09. */}
+				    asserting exactly the premise this paragraph exists to refuse. Wiki 40.13. */}
 				<p>
 					<strong>
 						Work about queer lives is routinely reported as sexual content on other platforms.

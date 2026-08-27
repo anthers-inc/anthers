@@ -174,12 +174,15 @@ export interface ModerationReason {
  * definition, rather than the other way round** (Parker). The retired label leaned on
  * "explicit" to carry a distinction the word does not carry on its own and then defined it
  * in one word anyway. What the hint leans on instead is Anthers' own settled distinction
- * from wiki 40.09 — *subject matter is not the same as treatment* — because "explicit" is
- * only a synonym for the thing being defined.
+ * from wiki 40.13 — *subject matter is not the same as treatment* — because "explicit" is
+ * only a synonym for the thing being defined. 🚨 **The hint says "what Anthers allows at
+ * all" rather than naming a rung**, because the boundary sits above the top of the rating
+ * scale rather than above `mature`: once `adult` exists, a hint reading "beyond mature work"
+ * would invite reports against work that is correctly rated and perfectly allowed.
  *
  * 🚨 **Never list queer lives as an example of mature work.** An early draft of the
  * pornography hint read *"Anthers allows mature work — nudity, sexuality as a subject, queer
- * lives"*, which asserts precisely the premise 40.09 exists to refuse: said at that length
+ * lives"*, which asserts precisely the premise 40.13 exists to refuse: said at that length
  * it reads as agreement that queer life is an adult concept. The refusal belongs somewhere
  * long enough to *be* a refusal, which is `/safety`, and nowhere shorter — anything that
  * fits in a hint reads as the concession rather than the refusal.
@@ -209,7 +212,7 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 		value: "pornography",
 		group: "rules",
 		label: "Pornographic material",
-		hint: "Sexually explicit material beyond what Anthers allows as mature work. The distinction is not the subject matter but how it's treated: art that deals with sex, nudity or the body is allowed on Anthers; material made to function as pornography is not. Before reporting this, please be considerate of the notion that your personal discomfort level with a piece of mature content doesn't necessarily make it pornographic.",
+		hint: "Sexually explicit material beyond what Anthers allows at all. The distinction is not the subject matter but how it's treated: art that deals with sex, nudity or the body is allowed on Anthers; material made to function as pornography is not. Before reporting this, please be considerate of the notion that your personal discomfort level with a piece of mature content doesn't necessarily make it pornographic.",
 		confirm: {
 			question:
 				"Does any of this involve someone under 18? If it might, report it as child sexual abuse or exploitation instead. That is a legal matter with a different process: it reaches a person immediately and is reported to authorities.",
