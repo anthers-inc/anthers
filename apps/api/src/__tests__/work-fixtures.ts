@@ -17,12 +17,30 @@ import { db } from "@anthers/db/client";
 import type { SeedAccessRow } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
 
+/**
+ * A random starting point for this module instance, and a counter from there.
+ *
+ * 🚨 **The clock is not a source of uniqueness across test files, and using it as one made
+ * `works_public_id_unique` fire.** This read `Date.now() % 800_000_000 + seq * 7919`, and
+ * `seq` is per module — bun gives each test file its own instance — so two files whose first
+ * `insertWork` lands in the same millisecond compute the *same* id from the same clock and
+ * the same `seq` of 1. It is a race that gets likelier with every suite added, which is
+ * exactly how it surfaced: it had been latent for months and started failing the run after
+ * two new suites began inserting Works.
+ *
+ * A random base fixes it because two modules now have to land within a few dozen of each
+ * other rather than within a millisecond of each other, which is four orders of magnitude
+ * less likely. ⚠️ It is not a guarantee, and a guarantee would mean asking the database —
+ * `makeUniquePublicId` in the route does exactly that, and a fixture helper that opened a
+ * transaction to mint an id would cost every suite more than the collision does.
+ */
+const BASE = Math.floor(Math.random() * 800_000_000);
 let seq = 0;
 
 /** A unique 9-digit public id, in the same range the routes mint. */
 export function testPublicId(): number {
 	seq += 1;
-	return 100_000_000 + (((Date.now() % 800_000_000) + seq * 7919) % 800_000_000);
+	return 100_000_000 + ((BASE + seq) % 800_000_000);
 }
 
 export interface WorkFixture {

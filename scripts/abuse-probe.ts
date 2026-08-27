@@ -1,6 +1,39 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Fire real illegal-content reports at a deployed Anthers and report how far each one got.
+ * File **one** real illegal-content report at a deployed Anthers and say how far it got.
+ *
+ * 🛑 **This never runs unattended, and that is a decision rather than a default** (Parker,
+ * 2026-08-27): *"we should never run unattended tests of content reports, especially safety
+ * or abuse ones. At most we should be able to explicitly run a single-email test to ensure
+ * the system is functioning, which then needs its database cruft immediately cleared out. We
+ * never want to automate or bulk-test the reporting, because it adds noise to a system that
+ * always needs to be attended diligently."*
+ *
+ * Three things follow from that, and each is enforced here rather than left to discipline:
+ *
+ * 1. **It refuses to start without a terminal.** `process.stdin.isTTY` is the mechanical
+ *    statement of "a person is here" — a cron job, a CI step and a `bash -c` from a deploy
+ *    hook all fail it. A `CI` environment variable is refused as well, because a terminal
+ *    can be allocated in CI and the check would otherwise pass in the one place it exists to
+ *    fail.
+ * 2. **One report per run.** The path is chosen, never accumulated: `--path public` or
+ *    `--path in-app`, and there is no way to ask for both. Two alerts prove nothing the
+ *    first did not, and every extra one teaches whoever reads that mailbox to skim it —
+ *    which is the single habit the floor exists to prevent.
+ * 3. **Cleanup is unconditional.** It is not a flag, it runs in a `finally`, and it runs
+ *    when the probe fails as well as when it passes. The run that most needs tidying up
+ *    after is the one that fell over halfway.
+ *
+ * 🚨 **The admin password is prompted for and never read from anywhere else.** It used to be
+ * `--admin-password`, which put a production credential into shell history and into whatever
+ * transcript the command was run from. Passing it now is **refused rather than accepted**:
+ * silently ignoring the flag would leave the secret in the history anyway and teach nobody.
+ * Nothing here writes the password to disk, to an environment variable, or to the log.
+ *
+ * ⚠️ **Admin is needed for exactly one thing — reading the escalation state back** over
+ * `/api/admin/*`, which is operator information by design, since the report route
+ * deliberately tells a reporter nothing about what happens next. Without it the report is
+ * still filed; what is lost is the answer.
  *
  * 🚨 **What this can and cannot settle, because the boundary is the whole point.** It can
  * prove a report was accepted, that the right row was written, and that `escalated_at` was
@@ -23,57 +56,162 @@
  * safe, rather than a guard that reads as though it would.
  *
  * Usage:
- *   bun run scripts/abuse-probe.ts --base https://anthers.org \
- *       --admin-login you@example.com --admin-password '…' [--fixture] [--cleanup]
+ *   bun run scripts/abuse-probe.ts --base https://anthers.org --admin-login you@example.com
  *
- *   --fixture   also create a Work and a comment, so the in-app report path can be tested.
- *               Without it only the public no-account form is exercised, which needs no
- *               content at all.
- *   --cleanup   remove the Work this run created and close the reports it filed.
+ *   --path      which single report to file: `public` (the no-account form, the default) or
+ *               `in-app` (the authenticated route, which creates a Work and a comment to
+ *               report and removes them afterwards).
  *   --wait      seconds to wait for the retry sweep before giving up (default 360; the
  *               cron runs every five minutes, so anything under 300 can report a false
  *               "never escalated").
+ *
+ * The password is asked for on the terminal. There is no flag for it.
  */
 
-interface Args {
+/** Which single report this run files. There is deliberately no way to ask for both. */
+export type ProbePath = "public" | "in-app";
+
+export interface ProbePlan {
 	base: string;
+	path: ProbePath;
+	/**
+	 * `/api/auth/sign-in` takes `{ login, password }` and resolves a username **or** an
+	 * email against it, so this is a LOGIN rather than an email. Sending `{ email }` gets a
+	 * 400 from the schema, which reads as bad credentials and is not.
+	 */
 	adminLogin?: string;
-	adminPassword?: string;
-	fixture: boolean;
-	cleanup: boolean;
 	waitSeconds: number;
 }
 
-function parseArgs(argv: string[]): Args {
+/** Why the probe will not run. The message is the whole output — it is what a person reads. */
+export interface ProbeRefusal {
+	refuse: string;
+}
+
+export function isRefusal(plan: ProbePlan | ProbeRefusal): plan is ProbeRefusal {
+	return "refuse" in plan;
+}
+
+/**
+ * Decide what this invocation is, or refuse it.
+ *
+ * Pure, and exported, so the refusals have tests rather than a comment claiming they exist —
+ * *where a document claims an absence, that absence needs a test.* Every branch here is a
+ * rule from the module header, and each returns a sentence rather than a code, because the
+ * person who trips one needs to know what to do instead.
+ */
+export function probePlan(
+	argv: string[],
+	env: Record<string, string | undefined>,
+	isTty: boolean,
+): ProbePlan | ProbeRefusal {
 	const get = (name: string): string | undefined => {
 		const i = argv.indexOf(`--${name}`);
 		return i >= 0 ? argv[i + 1] : undefined;
 	};
-	const base = (get("base") ?? "http://localhost:8000").replace(/\/+$/, "");
+
+	// 🚨 Refused rather than ignored. Ignoring it would leave the password in the shell
+	// history exactly as before while reading as though the problem were solved, and the
+	// person who typed it would learn nothing. The refusal is also the only moment anyone
+	// gets told to rotate it.
+	for (const flag of ["--admin-password", "--password", "--admin-pass"]) {
+		if (argv.includes(flag)) {
+			return {
+				refuse:
+					`${flag} is not accepted. The password is asked for on the terminal so that it ` +
+					"reaches no shell history and no transcript.\n" +
+					"Whatever you just typed is in your history now — clear it, and rotate it if it " +
+					"was a real production credential.",
+			};
+		}
+	}
+
+	// The mechanical statement of "a person is here". A cron job, a CI step and a deploy
+	// hook all fail it, which is the point: an abuse report is a request for somebody to
+	// stop what they are doing and look, and nothing should be able to make one on a timer.
+	if (!isTty) {
+		return {
+			refuse:
+				"This has no terminal, so nobody is here to read the answer. The probe files a real " +
+				"report that summons a real person, and it is never run unattended.",
+		};
+	}
+
+	// Checked separately, because CI can allocate a terminal — which would make the check
+	// above pass in the one environment it most exists to fail in.
+	if (env.CI) {
+		return {
+			refuse:
+				"CI is set. The probe files a real abuse report, and a report filed by a build is " +
+				"noise in a queue whose whole value is that everything in it is real.",
+		};
+	}
+
+	const rawPath = get("path") ?? "public";
+	if (rawPath !== "public" && rawPath !== "in-app") {
+		return { refuse: `Unknown --path "${rawPath}". It is either "public" or "in-app".` };
+	}
+
 	return {
-		base,
-		// `--admin-email` stays accepted because it is the obvious thing to type, but the
-		// field is a LOGIN: `/api/auth/sign-in` takes `{ login, password }` and resolves a
-		// username or an email against it. Sending `{ email }` gets a 400 from the schema,
-		// which reads as bad credentials and is not.
+		base: (get("base") ?? "http://localhost:8000").replace(/\/+$/, ""),
+		path: rawPath,
+		// `--admin-email` stays accepted because it is the obvious thing to type.
 		adminLogin: get("admin-login") ?? get("admin-email"),
-		adminPassword: get("admin-password"),
-		fixture: argv.includes("--fixture"),
-		cleanup: argv.includes("--cleanup"),
 		waitSeconds: Number(get("wait") ?? 360),
 	};
 }
 
-const args = parseArgs(process.argv.slice(2));
+/**
+ * Read a password from the terminal without echoing it, and without keeping it anywhere.
+ *
+ * Raw mode rather than a readline interface, because readline echoes by default and the
+ * usual way to stop it — overriding an internal write method — is a private API that has
+ * broken before. Reading bytes is longer and does exactly one thing.
+ */
+async function promptHidden(label: string): Promise<string> {
+	const stdin = process.stdin;
+	process.stdout.write(label);
+	stdin.setRawMode(true);
+	stdin.resume();
+	let entered = "";
+	try {
+		for await (const chunk of stdin) {
+			for (const byte of chunk as Buffer) {
+				if (byte === 3) {
+					// Ctrl-C. Restore the terminal before leaving, or the shell is left in raw
+					// mode with no echo and the next thing typed vanishes.
+					process.stdout.write("\n");
+					stdin.setRawMode(false);
+					process.exit(130);
+				}
+				if (byte === 13 || byte === 10) {
+					process.stdout.write("\n");
+					return entered;
+				}
+				if (byte === 127 || byte === 8) {
+					entered = entered.slice(0, -1);
+					continue;
+				}
+				entered += String.fromCharCode(byte);
+			}
+		}
+	} finally {
+		stdin.setRawMode(false);
+		stdin.pause();
+	}
+	return entered;
+}
 
 /**
- * The Origin every request carries.
+ * The invocation, and the origin derived from it.
  *
- * `csrfProtection` compares it against the allowed origins, so a request without one is
- * refused on a mutating route. Derived from `--base` rather than hard-coded, so pointing
- * the probe at a preview deployment does not silently fail CSRF and read as a code fault.
+ * ⚠️ **Assigned inside `run()` rather than at the top level, and that is what makes this file
+ * importable.** Everything above is pure and has tests; deciding the plan reads `process.argv`
+ * and can call `process.exit`, so doing it on import would mean `import { probePlan }` from a
+ * test killed the test runner — which is exactly what it did.
  */
-const ORIGIN = new URL(args.base).origin;
+let args!: ProbePlan;
+let ORIGIN!: string;
 
 function log(line: string) {
 	console.log(line);
@@ -114,11 +252,17 @@ const RUN = new Date()
 	.slice(0, 14);
 const TAG = `abuse-probe-${RUN}`;
 
-async function signInAdmin(): Promise<string | null> {
-	if (!args.adminLogin || !args.adminPassword) return null;
+/**
+ * Sign in as the operator, with a password that exists only as an argument.
+ *
+ * It is passed in rather than read off `args` so there is no field anywhere holding it —
+ * the value is prompted for in `main`, handed here, and goes out of scope when this
+ * returns. Nothing writes it to disk, to the environment, or to the log.
+ */
+async function signInAdmin(login: string, password: string): Promise<string | null> {
 	const res = await call("/api/auth/sign-in", {
 		method: "POST",
-		body: JSON.stringify({ login: args.adminLogin, password: args.adminPassword }),
+		body: JSON.stringify({ login, password }),
 	});
 	if (res.status !== 200) {
 		log(`  ! admin sign-in failed (${res.status}) — the readback will be skipped`);
@@ -207,44 +351,74 @@ interface Probe {
 	delivery?: { event: string; delivered: boolean; terminal: boolean } | null;
 }
 
+/**
+ * What this run created, reachable from outside `main` so the cleanup can be a `finally`.
+ *
+ * 🚨 **Cleanup that lives at the end of `main` only runs when `main` reaches the end**, and
+ * the run that most needs tidying up after is the one that fell over halfway. `probes` is
+ * assigned once and pushed into, so the reference stays live; the other two are re-assigned
+ * the moment they are known.
+ */
+const state: {
+	adminCookie: string | null;
+	fixture: Awaited<ReturnType<typeof createFixture>>;
+	probes: Probe[];
+} = { adminCookie: null, fixture: null, probes: [] };
+
+/** Set when the probe filed nothing, so the exit code survives the cleanup below. */
+let filedNothing = false;
+
 async function main() {
 	log(`abuse-probe → ${args.base}`);
 	log(`  run tag: ${TAG}`);
+	log(`  filing ONE report on the ${args.path} path`);
 
-	const adminCookie = await signInAdmin();
+	// Asked for here and nowhere else. `signInAdmin` takes it as an argument so no field
+	// holds it, and the readback is the only thing it is for — without an admin session the
+	// report is still filed and only the answer is lost.
+	let adminCookie: string | null = null;
+	if (args.adminLogin) {
+		const password = await promptHidden(`  password for ${args.adminLogin}: `);
+		adminCookie = password ? await signInAdmin(args.adminLogin, password) : null;
+	}
+	state.adminCookie = adminCookie;
 	if (adminCookie) log("  · signed in as admin — readback enabled");
-	else log("  · no admin session — reports will be filed but not read back");
+	else log("  · no admin session — the report will be filed but not read back");
 
 	const probes: Probe[] = [];
+	state.probes = probes;
+	let fixture: Awaited<ReturnType<typeof createFixture>> = null;
 
 	// ── The public, no-account report ────────────────────────────────────────
-	// Deliberately first, and deliberately sends no Cookie: this is the path a member of
-	// the public takes, and it is the one where the reporter has no other channel, so a
-	// silent failure here is the one nobody would ever find out about.
-	log("\nFiling the public no-account report…");
-	const publicRes = await call("/api/moderation/abuse-reports", {
-		method: "POST",
-		body: JSON.stringify({
-			url: `${args.base}/works/probe-fixture`,
-			reason: "illegal",
-			details: `Automated escalation probe (${TAG}). Not a real report — safe to dismiss.`,
-		}),
-	});
-	if (publicRes.status === 201) {
-		log(`  ✓ accepted, report #${publicRes.body.reportId}`);
-		probes.push({ kind: "public", reportId: publicRes.body.reportId });
-	} else {
-		log(`  ✗ REFUSED (${publicRes.status}): ${JSON.stringify(publicRes.body)}`);
-		if (publicRes.status === 401) {
-			log("    401 means the route has grown an auth requirement — that is the whole bug.");
+	// The default path, and deliberately sends no Cookie: this is the route a member of the
+	// public takes, and it is the one where the reporter has no other channel, so a silent
+	// failure here is the one nobody would ever find out about.
+	if (args.path === "public") {
+		log("\nFiling the public no-account report…");
+		const publicRes = await call("/api/moderation/abuse-reports", {
+			method: "POST",
+			body: JSON.stringify({
+				url: `${args.base}/works/probe-fixture`,
+				reason: "illegal",
+				details: `Attended escalation probe (${TAG}). Not a real report — safe to dismiss.`,
+			}),
+		});
+		if (publicRes.status === 201) {
+			log(`  ✓ accepted, report #${publicRes.body.reportId}`);
+			probes.push({ kind: "public", reportId: publicRes.body.reportId });
+		} else {
+			log(`  ✗ REFUSED (${publicRes.status}): ${JSON.stringify(publicRes.body)}`);
+			if (publicRes.status === 401) {
+				log("    401 means the route has grown an auth requirement — that is the whole bug.");
+			}
 		}
 	}
 
 	// ── The in-app, authenticated report ─────────────────────────────────────
-	let fixture: Awaited<ReturnType<typeof createFixture>> = null;
-	if (args.fixture) {
+	if (args.path === "in-app") {
 		log("\nCreating the fixture content…");
 		fixture = await createFixture();
+		state.fixture = fixture;
 		if (fixture) {
 			log("Filing the in-app report…");
 			// `csam` on purpose: it is the reason the form steers a real child-safety
@@ -267,13 +441,17 @@ async function main() {
 				log(`  ✗ REFUSED (${inApp.status}): ${JSON.stringify(inApp.body)}`);
 			}
 		}
-	} else {
-		log("\nSkipping the in-app report — pass --fixture to create content and test it too.");
 	}
 
+	// Nothing filed still runs the cleanup below — a half-created fixture is exactly the
+	// litter that most needs removing, and it is the run that leaves it.
 	if (probes.length === 0) {
-		log("\nNothing was filed. Stopping.");
-		process.exit(1);
+		// Returned rather than exited, so the cleanup below still runs — `process.exit`
+		// skips a `finally`, and a half-created fixture is exactly the litter this rule
+		// exists for.
+		log("\nNothing was filed.");
+		filedNothing = true;
+		return;
 	}
 
 	// ── Readback ─────────────────────────────────────────────────────────────
@@ -339,9 +517,6 @@ async function main() {
 	log("                                  and that abuse@anthers.org actually accepts mail.");
 	log("  NOT ESCALATED                 → the send never happened. Check the worker is");
 	log("                                  running, then RESEND_API_KEY.");
-
-	if (args.cleanup) await cleanup(adminCookie, fixture, probes);
-	else if (fixture) log(`\nFixture left in place. Re-run with --cleanup to remove it.`);
 }
 
 /** What the provider says became of this report's alert. Null while unknown. */
@@ -440,7 +615,43 @@ async function cleanup(
 	}
 }
 
-main().catch((err) => {
-	console.error("abuse-probe failed:", err);
-	process.exit(1);
-});
+/**
+ * 🚨 **Cleanup is unconditional, and not a flag.** Parker's rule (2026-08-27): a single
+ * attended test whose database cruft is cleared immediately afterwards. A cleanup somebody
+ * has to remember is one that happens on the runs that went well and not on the ones that
+ * did not — and the failed run is the one that leaves a fixture behind.
+ *
+ * ⚠️ It is a `finally` rather than a line at the end of `main` for the same reason a test's
+ * teardown belongs in `afterAll` rather than in a closing `it`: it has to run on failure.
+ */
+function run(): void {
+	const planned = probePlan(process.argv.slice(2), process.env, Boolean(process.stdin.isTTY));
+	if (isRefusal(planned)) {
+		console.error(`abuse-probe refused to run.\n\n${planned.refuse}`);
+		process.exit(2);
+	}
+	args = planned;
+	// `csrfProtection` compares this against the allowed origins, so a request without one is
+	// refused on a mutating route. Derived from `--base` rather than hard-coded, so pointing
+	// the probe at a preview deployment does not silently fail CSRF and read as a code fault.
+	ORIGIN = new URL(args.base).origin;
+
+	let exitCode = 0;
+	main()
+		.catch((err) => {
+			console.error("abuse-probe failed:", err);
+			exitCode = 1;
+		})
+		.finally(async () => {
+			await cleanup(state.adminCookie, state.fixture, state.probes).catch((err) => {
+				log(`  ! cleanup failed: ${err}`);
+				log("    Remove the probe Work and close the report by hand before walking away.");
+				exitCode = 1;
+			});
+			process.exit(filedNothing ? 1 : exitCode);
+		});
+}
+
+// Only when this file IS the command. Importing it — which the tests do, to reach
+// `probePlan` — must file nothing, decide nothing and exit nothing.
+if (import.meta.main) run();
