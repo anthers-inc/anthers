@@ -135,6 +135,57 @@ function pendingCookie(setCookie: string): string | undefined {
 	return setCookie.match(/signup_pending=([^;]+)/)?.[1];
 }
 
+describe("the browser stays on one host", () => {
+	/*
+	 * 🚨 **This is the defect that broke the Bluesky signup three times over, and none of the
+	 * other tests here could see it.** The ATProto spec permits only `127.0.0.1` / `[::1]` for
+	 * a loopback client's redirect — never `localhost` — so in development the OAuth callback
+	 * arrives on `127.0.0.1:8000` while the rest of the app was talking to `localhost:8000`.
+	 * A browser treats those as different hosts and scopes cookies accordingly, so the pending
+	 * signup written at the callback was unreadable by the page that had to finish it: the
+	 * finishing page found an empty row and asked for an address the PDS had already handed
+	 * over.
+	 *
+	 * Every other test drives this route with an explicit `Cookie` header, which is precisely
+	 * why they all passed — a header cannot notice that it would never have been sent.
+	 */
+	it("sends the browser back to the host it arrived from", async () => {
+		const previous = process.env.FRONTEND_URL;
+		delete process.env.FRONTEND_URL;
+		try {
+			nextCallback = { did: did("host"), state: JSON.stringify({ intent: "signup" }) };
+			const res = await app.request(
+				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+			);
+			expect(res.status).toBe(302);
+			const location = new URL(res.headers.get("location") as string);
+			expect(
+				location.hostname,
+				"bouncing to another host mid-flow leaves the pending signup in a cookie jar the next page cannot read",
+			).toBe("127.0.0.1");
+		} finally {
+			if (previous === undefined) delete process.env.FRONTEND_URL;
+			else process.env.FRONTEND_URL = previous;
+		}
+	});
+
+	it("still obeys FRONTEND_URL where it is configured, which is production", async () => {
+		const previous = process.env.FRONTEND_URL;
+		process.env.FRONTEND_URL = "https://anthers.org";
+		try {
+			nextCallback = { did: did("hostprod"), state: JSON.stringify({ intent: "signup" }) };
+			const res = await app.request(
+				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+			);
+			const location = new URL(res.headers.get("location") as string);
+			expect(location.origin).toBe("https://anthers.org");
+		} finally {
+			if (previous === undefined) delete process.env.FRONTEND_URL;
+			else process.env.FRONTEND_URL = previous;
+		}
+	});
+});
+
 describe("the scope a signup asks for", () => {
 	it("asks for the address, and only signup does", async () => {
 		const start = (intent: string) =>

@@ -42,6 +42,14 @@ export function allowedOrigins(): string[] {
 			...DESKTOP_ORIGINS,
 			"http://localhost:3000",
 			"http://localhost:3001",
+			// 🚨 The `127.0.0.1` spellings are NOT duplicates — a browser treats them as a
+			// different host from `localhost`, and the ATProto loopback client is required to
+			// register `127.0.0.1` for its redirect. Dev is served from `127.0.0.1:3000` so the
+			// OAuth round trip and everything around it share one cookie jar.
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:3001",
+			"http://127.0.0.1:4173",
+			"http://127.0.0.1:8000",
 			// The Playwright e2e preview (apps/web build + serve) — the SPA client targets
 			// localhost:8000 from any localhost page, so e2e needs CORS/CSRF passage too.
 			"http://localhost:4173",

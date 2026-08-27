@@ -83,8 +83,24 @@ interface AppState {
 	next?: string;
 }
 
-function getFrontendUrl(): string {
-	return process.env.FRONTEND_URL ?? "http://localhost:3000";
+/**
+ * Where to send the browser once the round trip is over.
+ *
+ * 🚨 **In development it follows the host this request arrived on, and that is the fix for a
+ * real defect rather than tidiness.** The ATProto spec permits only `127.0.0.1` / `[::1]` for
+ * a loopback client's redirect — never `localhost` — so the dev callback lands on
+ * `127.0.0.1:8000`. Bouncing from there to a hardcoded `localhost:3000` would move the browser
+ * to a *different host* mid-flow, and cookies are host-scoped: the pending signup written here
+ * would be unreadable there, which is exactly how the Bluesky handoff kept losing the address
+ * the PDS had just handed over.
+ *
+ * Production sets `FRONTEND_URL` and it wins, as it must — there the API and the SPA share one
+ * origin and none of this applies.
+ */
+function getFrontendUrl(c: { req: { url: string } }): string {
+	const configured = process.env.FRONTEND_URL;
+	if (configured) return configured;
+	return `http://${new URL(c.req.url).hostname}:3000`;
 }
 
 /**
@@ -160,7 +176,7 @@ const atprotoRoutes = new Hono()
 
 	// ── Callback ─────────────────────────────────────────────────────────────
 	.get("/callback", async (c) => {
-		const callbackUrl = `${getFrontendUrl()}/auth/atproto/callback`;
+		const callbackUrl = `${getFrontendUrl(c)}/auth/atproto/callback`;
 
 		/** Compose the one URL this route ever redirects to, so no caller hand-builds a query. */
 		const back = (params: Record<string, string | undefined>) => {
