@@ -39,6 +39,7 @@ import { isUnderHold } from "../services/legal-hold.js";
 import { clearQuarantine, loadQuarantineFindings, quarantineWork } from "../services/quarantine.js";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -510,6 +511,10 @@ describe("Clearing a finding", () => {
 });
 
 afterAll(async () => {
+	// 🚨 Reports first, and explicitly: `moderation_reports.reporter_id` is `set null`
+	// rather than `cascade`, because a moderation record has to outlive the account it
+	// concerns — so deleting these users leaves every report this suite filed behind.
+	await purgeFixtureAccounts([creatorName, buyerName]);
 	// Objects first: the rows below are what name them, so dropping the rows first would
 	// strand every quarantined file in the dev content directory.
 	const rows = await db

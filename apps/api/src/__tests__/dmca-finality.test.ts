@@ -44,6 +44,7 @@ import {
 	noticesReadyForFinality,
 	noticesReadyForRestore,
 } from "../services/dmca";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -279,6 +280,10 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
+	// 🚨 Reports first, and explicitly: `moderation_reports.reporter_id` is `set null`
+	// rather than `cascade`, because a moderation record has to outlive the account it
+	// concerns — so deleting these users leaves every report this suite filed behind.
+	await purgeFixtureAccounts([creatorName, buyerName, adminName]);
 	setStripeClient(realClient);
 	// Notices first, then works, then users. `dmca_notices.work_id` is `set null`,
 	// so a Work delete no longer takes its notices with it; and `works.creator_id`

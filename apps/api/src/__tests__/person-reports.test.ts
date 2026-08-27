@@ -22,12 +22,13 @@
  * its own headline count have to agree about that or the console shows work that
  * cannot be cleared.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { moderationActions, moderationReports, users } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUE_LIMIT } from "../services/moderation.js";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -205,6 +206,15 @@ describe("filing a report about a person", () => {
 		});
 		expect(res.status).toBe(404);
 	});
+});
+
+/**
+ * Same reason as `moderation.test.ts`: the reports survive their reporter by design, so the
+ * accounts cascading is not enough. `purgeFixtureAccounts` also takes the person reports filed
+ * *about* these accounts, whose subject id has no foreign key at all.
+ */
+afterAll(async () => {
+	await purgeFixtureAccounts([adminName, reporterName, subjectName, ghostName]);
 });
 
 describe("the person report in the operator queue", () => {
