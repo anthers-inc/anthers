@@ -14,6 +14,7 @@
  * date is bookkeeping and is deliberately not shown.
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
+import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import { LockedCover, lockedByBadge } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
@@ -312,6 +313,20 @@ export default function WorkPage() {
 						</span>
 					)}
 				</div>
+
+				{/* The rating and its notes sit above the deliverable, not below it: a warning
+				    that only appears once you already have the thing is not a warning. Nothing
+				    renders for a General Work, which is nearly all of them. */}
+				{work.maturity === "mature" && (
+					<div className="flex flex-wrap items-center gap-2 text-sm">
+						<span className="badge badge-warning badge-sm">Mature</span>
+						{(work.maturityNotes ?? []).length > 0 && (
+							<span className="text-base-content/60">
+								{(work.maturityNotes ?? []).map(contentNoteLabel).join(" · ")}
+							</span>
+						)}
+					</div>
+				)}
 			</header>
 
 			{/* ── The deliverable, or the gate in front of it ── */}

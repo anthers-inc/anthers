@@ -24,6 +24,14 @@
  * (`code: "release_on_create"`) — release is a separate deliberate act, which is the whole
  * point of separating the Catalog from posting.
  */
+
+import {
+	CONTENT_NOTES,
+	type ContentNote,
+	MATURITY_CHOICES,
+	type MaturityRating,
+	normalizeContentNotes,
+} from "@anthers/shared/content-rating";
 import { ArrowUpTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
@@ -44,6 +52,7 @@ import { keyToPreview, uploadImageFile } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import LoadingSpinner from "../ui/LoadingSpinner";
+import RatingAppeal from "./RatingAppeal";
 import { authoredToIso, isoToAuthoredValue } from "./work-state";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
 
@@ -135,6 +144,24 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	// of them on, which the server enforces against the state the edit RESULTS IN.
 	const [streamEnabled, setStreamEnabled] = useState(editing?.streamEnabled ?? true);
 	const [downloadEnabled, setDownloadEnabled] = useState(editing?.downloadEnabled ?? false);
+
+	// The content rating. Held as `null` until answered rather than pre-selected as General:
+	// a default here would be the editor answering on the creator's behalf, which is the one
+	// thing `unrated` exists in the schema to prevent. The release checkbox below refuses to
+	// be ticked while it is null, so the question is asked at the moment it matters.
+	const [maturity, setMaturity] = useState<Exclude<MaturityRating, "unrated"> | null>(
+		editing?.maturity === "general" || editing?.maturity === "mature" ? editing.maturity : null,
+	);
+	const [contentNotes, setContentNotes] = useState<ContentNote[]>(() =>
+		normalizeContentNotes(editing?.maturityNotes ?? []),
+	);
+	// An operator's correction. The creator may make it more cautious at any time and may
+	// not make it less, so the control stays live and the appeal is what the copy points at.
+	const maturityLocked = editing?.maturityLocked ?? false;
+	const toggleNote = (note: ContentNote) =>
+		setContentNotes((prev) =>
+			normalizeContentNotes(prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note]),
+		);
 
 	// Access. The creator's Badge ladder is fetched below because rungs live on the creator,
 	// not on the Work — `buildSeedRows` merges the Work's stored rows onto whatever rungs
@@ -290,6 +317,12 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 		input.streamEnabled = streamEnabled;
 		input.downloadEnabled = downloadEnabled;
 		input.seedAccess = serializeSeedRows(seedRows);
+		// Omitted rather than sent as a default when unanswered, so the Work is created
+		// `unrated` and the question is still visibly open on the next save.
+		if (maturity) {
+			input.maturity = maturity;
+			input.maturityNotes = contentNotes;
+		}
 		const authoredAt = authoredToIso(authoredPrecision, authoredValue);
 		if (authoredAt && authoredPrecision) {
 			input.authoredAt = authoredAt;
@@ -357,6 +390,10 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 			// alongside it, since a precision without a date claims accuracy about nothing.
 			authoredAt: authoredToIso(authoredPrecision, authoredValue),
 		};
+		if (maturity) {
+			json.maturity = maturity;
+			json.maturityNotes = contentNotes;
+		}
 		if (authoredPrecision && json.authoredAt) json.authoredPrecision = authoredPrecision;
 		if (type === "game" || type === "software") json.embedUrl = embedUrl.trim();
 		if (type === "physical" || type === "service") json.metadata = { note: detailsNote.trim() };
@@ -707,6 +744,69 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 						</p>
 					</div>
 
+					{/* The content rating. Nothing is preselected — see the state above. */}
+					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
+						<h3 className="font-semibold text-sm">Rating</h3>
+						<div className="flex flex-col gap-1">
+							{MATURITY_CHOICES.map((choice) => (
+								<label
+									key={choice.value}
+									className="flex cursor-pointer items-start gap-3 rounded-lg border border-base-300 p-3 hover:border-primary/50"
+								>
+									<input
+										type="radio"
+										name="work-maturity"
+										className="radio radio-sm mt-0.5"
+										value={choice.value}
+										checked={maturity === choice.value}
+										onChange={() => setMaturity(choice.value)}
+									/>
+									<span>
+										<span className="block text-sm font-medium">{choice.label}</span>
+										<span className="block text-xs text-base-content/50">{choice.hint}</span>
+									</span>
+								</label>
+							))}
+						</div>
+						{maturityLocked && (
+							<div className="alert alert-info text-sm">
+								<span>
+									An operator set this rating. You can make it more cautious at any time — to lower
+									it, appeal below and tell us why.
+								</span>
+							</div>
+						)}
+						{/* Stated where the creator meets the control, because it is the rule most
+						    often got wrong elsewhere and a policy page nobody opens cannot fix that. */}
+						<p className="text-xs text-base-content/50">
+							Queer characters, relationships and identity are not Mature, and neither is a
+							difficult subject on its own. What this reads is how the work treats it.
+						</p>
+						<div>
+							<p className="text-xs font-medium text-base-content/70">Content notes (optional)</p>
+							<p className="text-xs text-base-content/50">
+								What someone should know is in this. These describe the work and change nothing
+								about who can reach it.
+							</p>
+							<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+								{CONTENT_NOTES.map((note) => (
+									<label key={note.value} className="label cursor-pointer justify-start gap-2">
+										<input
+											type="checkbox"
+											className="checkbox checkbox-sm"
+											checked={contentNotes.includes(note.value)}
+											onChange={() => toggleNote(note.value)}
+										/>
+										<span className="label-text text-sm">{note.label}</span>
+									</label>
+								))}
+							</div>
+						</div>
+						{hasId && maturityLocked && (
+							<RatingAppeal workId={current?.id ?? 0} corrected={editing?.maturity ?? "mature"} />
+						)}
+					</div>
+
 					<div className="border-t border-base-300 pt-4 flex flex-col gap-3">
 						<h3 className="font-semibold text-sm">Access</h3>
 						<AccessTables seedRows={seedRows} onSeedChange={setSeedRows} />
@@ -721,10 +821,20 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 									type="checkbox"
 									className="checkbox checkbox-sm checkbox-primary"
 									checked={visibility === "released"}
+									// The server refuses an unrated release with `maturity_undeclared`.
+									// Don't offer the click that fails — the same reasoning as the
+									// delivery switches above.
+									disabled={!maturity}
 									onChange={(e) => setVisibility(e.target.checked ? "released" : "private")}
 								/>
 								<span className="label-text text-sm">Released to my public Catalog</span>
 							</label>
+							{!maturity && (
+								<p className="text-xs text-warning">
+									Pick a rating above first. Nothing goes into your public Catalog until somebody
+									has said whether it is General or Mature.
+								</p>
+							)}
 							{visibility === "released" && !anyoneAllowed && (
 								<div className="alert alert-warning text-sm">
 									<span>

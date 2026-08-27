@@ -14,6 +14,7 @@ import {
 	AccessBadge,
 	accessState,
 	itemPreviewUrl,
+	MaturityBadge,
 	ProcessingBadge,
 	TypeBadge,
 	TypeIcon,
@@ -45,10 +46,16 @@ export default function WorkCard({
 	const processing =
 		item.transcoding?.status === "pending" || item.transcoding?.status === "processing";
 	const noDelivery = !item.streamEnabled && !item.downloadEnabled;
-	const blocked = !released && (processing || noDelivery);
+	// A Work is born `unrated` and the server refuses to release it while it is — so the
+	// card, which is how a back catalog gets released thirty at a time, has to say which
+	// ones still need answering rather than earning thirty identical errors.
+	const unrated = !item.maturity || item.maturity === "unrated";
+	const blocked = !released && (processing || noDelivery || unrated);
 	const blockedWhy = processing
 		? "Still processing — it can be released once the media is ready"
-		: "Turn on streaming or downloads before releasing";
+		: unrated
+			? "Open Edit and say whether this is General or Mature"
+			: "Turn on streaming or downloads before releasing";
 
 	return (
 		<div className="card bg-base-100 border border-base-300 overflow-hidden">
@@ -67,11 +74,15 @@ export default function WorkCard({
 					<TypeBadge type={item.type} />
 					<AccessBadge item={item} />
 					<ProcessingBadge item={item} />
+					<MaturityBadge work={item} />
 				</div>
 				{state === "locked" && (
 					<p className="text-xs text-error">
 						Released, but no one can open it — set access on this Work.
 					</p>
+				)}
+				{unrated && !released && (
+					<p className="text-xs text-warning">Needs a rating before it can be released.</p>
 				)}
 				<div className="flex justify-end gap-1 mt-1">
 					{onSetVisibility && (

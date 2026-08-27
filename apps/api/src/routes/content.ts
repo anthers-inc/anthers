@@ -49,6 +49,7 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 } from "@anthers/shared/content";
+import { normalizeContentNotes, RATING_APPEAL_STATEMENT_MAX } from "@anthers/shared/content-rating";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -82,6 +83,7 @@ import {
 } from "../services/access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
+import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -364,6 +366,13 @@ const workBaseSchema = z
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
 		visibility: z.enum(["private", "released"]).optional(),
 
+		// The content rating. `unrated` is accepted from nobody: it is the state a Work is
+		// born in and leaves, never a value a client sets, and release is refused while it
+		// holds. `services/content-rating.ts` decides whether the change is allowed — an
+		// operator's correction can only be raised, not lowered, by the creator.
+		maturity: z.enum(["general", "mature"]).optional(),
+		maturityNotes: z.array(z.string()).max(20).optional(),
+
 		// Delivery (≥1 enforced on release)
 		streamEnabled: z.boolean().optional(),
 		downloadEnabled: z.boolean().optional(),
@@ -378,6 +387,18 @@ const workBaseSchema = z
 		sourceUrl: z.string().max(500).optional(),
 	})
 	.merge(authoredSchema);
+
+/**
+ * A creator's appeal against an operator's rating correction.
+ *
+ * The statement is required and has a floor, because an appeal is an argument: a queue of
+ * empty appeals is a queue an operator learns to clear without reading, which costs the
+ * creators with something to say.
+ */
+const ratingAppealSchema = z.object({
+	requestedMaturity: z.enum(["general", "mature"]),
+	statement: z.string().trim().min(10).max(RATING_APPEAL_STATEMENT_MAX),
+});
 
 const createWorkSchema = workBaseSchema
 	.extend({ type: z.enum(WORK_TYPES) })
@@ -639,6 +660,10 @@ function serializeWork(
 		metadata: stripInternalMetadata(item.metadata),
 		visibility: item.visibility,
 		releasedAt: item.releasedAt,
+		maturity: item.maturity,
+		maturityNotes: item.maturityNotes ?? [],
+		/** Whether an operator set the rating — what tells the creator an appeal is the route. */
+		maturityLocked: item.maturitySource === "operator",
 		authoredAt: item.authoredAt,
 		authoredPrecision: item.authoredPrecision,
 		streamEnabled: item.streamEnabled,
@@ -1084,6 +1109,13 @@ function serializeWorkForViewer(
 		// has left — it is the only warning they currently get, and it was reaching the
 		// old Library through the purchases endpoint rather than through the Work.
 		withdrawnAt: work.withdrawnAt,
+		// The rating and its notes travel with the blurb rather than with the payload, and
+		// have to: a warning that only appears once you already have the thing is not a
+		// warning. `maturitySource` stays behind — who set the rating is between the
+		// creator and an operator, and a viewer able to read it could tell a corrected Work
+		// from a self-declared one.
+		maturity: work.maturity,
+		maturityNotes: work.maturityNotes ?? [],
 		authoredAt: work.authoredAt,
 		authoredPrecision: work.authoredPrecision,
 		streamEnabled: work.streamEnabled,
@@ -2181,6 +2213,13 @@ const contentRoutes = new Hono()
 						: null,
 				metadata: data.metadata ?? {},
 				visibility: "private",
+				// Declared here or left `unrated` for the editor to ask about. Either way it
+				// is the creator's own word, so the source says so — nothing here can be an
+				// operator's correction, because the Work did not exist a moment ago.
+				maturity: data.maturity ?? "unrated",
+				maturityNotes: data.maturity ? normalizeContentNotes(data.maturityNotes ?? []) : [],
+				maturitySource: data.maturity ? "creator" : null,
+				maturitySetAt: data.maturity ? new Date() : null,
 				authoredAt: data.authoredAt ? new Date(data.authoredAt) : null,
 				authoredPrecision: data.authoredPrecision ?? null,
 				streamEnabled: data.streamEnabled ?? true,
@@ -2509,7 +2548,9 @@ const contentRoutes = new Hono()
 	.patch("/works/:id", requireAuth, zValidator("json", updateWorkSchema), async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
-		const [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// Reassigned below when the rating service rewrites the row, so the rest of the
+		// handler edits what is actually stored rather than what was loaded first.
+		let [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
 		if (!work || work.creatorId !== user.id) {
 			return c.json({ error: "Work not found" }, 404);
 		}
@@ -2567,6 +2608,21 @@ const contentRoutes = new Hono()
 		// stays owed, because a detection vendor's outage must not stop everyone on Anthers
 		// from publishing. `services/safety-scan.ts` carries the full reasoning, including
 		// why quarantine reaching a released Work is what makes the trade honest.
+		// The third readiness condition, and the only one a creator can satisfy instantly.
+		// A Work is born `unrated` and release is what makes it somebody else's business,
+		// so this is the moment to have asked. `data.maturity` counts: declaring the rating
+		// and releasing in one PATCH is the ordinary flow from the editor, and refusing it
+		// would mean two round trips to do one thing.
+		if (releasing && (data.maturity ?? work.maturity) === "unrated") {
+			return c.json(
+				{
+					error: "Say whether this is General or Mature before releasing it.",
+					code: "maturity_undeclared",
+				},
+				409,
+			);
+		}
+
 		if (releasing) {
 			const gate = await scanReleaseGate(work);
 			if (gate.blocked) {
@@ -2583,6 +2639,31 @@ const contentRoutes = new Hono()
 					409,
 				);
 			}
+		}
+
+		// The rating goes through its own service before anything else is written, because
+		// it is the one field on this route another party can have decided. A creator
+		// lowering an operator's correction is refused here rather than silently dropped —
+		// and told where the appeal is, since the refusal is otherwise indistinguishable
+		// from the edit not having saved.
+		if (data.maturity !== undefined || data.maturityNotes !== undefined) {
+			const declared = await declareRating(work, {
+				maturity: data.maturity,
+				notes: data.maturityNotes,
+			});
+			if (declared === "locked") {
+				return c.json(
+					{
+						error:
+							"An operator set this Work's rating. You can make it more cautious at any time; to lower it, appeal.",
+						code: "maturity_locked",
+					},
+					409,
+				);
+			}
+			// Re-read, so the rest of this handler edits the row the service just wrote
+			// rather than the one it loaded before.
+			work = declared;
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -2651,6 +2732,84 @@ const contentRoutes = new Hono()
 		await resolveWorkThumbnail(updated);
 		return c.json({ work: serializeWork(updated, workAssets, jobRows[0] ?? null) });
 	})
+
+	/**
+	 * A Work's rating appeals — the creator's own record of what they contested and how it
+	 * was answered.
+	 *
+	 * Owner-only, and it returns the operator's resolution note rather than only the
+	 * outcome. An appeal refused with no answer is the version of this feature that teaches
+	 * creators not to bother filing one.
+	 */
+	.get("/works/:id/rating-appeals", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db
+			.select({ id: works.id })
+			.from(works)
+			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.limit(1);
+		if (!item) return c.json({ error: "Work not found" }, 404);
+		return c.json({ appeals: await appealsForWork(id) });
+	})
+
+	/**
+	 * Appealing an operator's correction of a Work's rating.
+	 *
+	 * 🚨 **This is part of the rating feature rather than a later refinement**, on 40.09's
+	 * reasoning: because the adults-only category is payment-gated, an over-cautious call
+	 * does not merely add a warning to a work, it puts it behind a paywall — and for a queer
+	 * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
+	 * prevent, produced by the mechanism meant to prevent it. Shipping the correction
+	 * without the contest would build only the half that can do damage.
+	 */
+	.post(
+		"/works/:id/rating-appeals",
+		requireAuth,
+		zValidator("json", ratingAppealSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [work] = await db
+				.select()
+				.from(works)
+				.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			const { requestedMaturity, statement } = c.req.valid("json");
+			const result = await fileRatingAppeal({
+				work,
+				creatorId: user.id,
+				requestedMaturity,
+				statement,
+			});
+
+			// Each refusal is something the creator can act on, so each gets its own
+			// sentence rather than one generic 400. "Nobody corrected this" in particular
+			// has a better answer than an appeal: edit the field.
+			if (result === "not-locked") {
+				return c.json(
+					{
+						error:
+							"This Work's rating is your own — change it in the editor rather than appealing.",
+						code: "not_locked",
+					},
+					409,
+				);
+			}
+			if (result === "not-a-change") {
+				return c.json({ error: "That is the rating it already has.", code: "not_a_change" }, 400);
+			}
+			if (result === "already-open") {
+				return c.json(
+					{ error: "You already have an appeal open on this Work.", code: "already_open" },
+					409,
+				);
+			}
+			return c.json({ appeal: result }, 201);
+		},
+	)
 
 	/**
 	 * A Work's posting history — where it has been announced, and when. Doubles as the

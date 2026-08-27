@@ -76,7 +76,7 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 	const created = await req("/api/content/works", {
 		method: "POST",
 		headers: creatorAuth,
-		body: JSON.stringify({ type: "audio", title }),
+		body: JSON.stringify({ type: "audio", title, maturity: "general" }),
 	});
 	expect(created.status).toBe(201);
 	const workId = (await created.json()).work.id as number;

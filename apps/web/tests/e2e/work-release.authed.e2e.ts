@@ -189,6 +189,21 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Born private. Not a detail — it is why a Release control has to exist at all.
 	await expect(cardFor(page)).toContainText("Private");
 
+	// ── Unrated, and therefore unreleasable ─────────────────────────────────
+	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
+	// so the card refuses the click rather than earning the error. Asserted here rather than
+	// only in the API suite because the whole point of the card control is releasing a back
+	// catalog thirty at a time, and thirty identical 409s is the failure this prevents.
+	await expect(cardFor(page)).toContainText("Needs a rating");
+	await expect(cardFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
+
+	// ── Rate it ─────────────────────────────────────────────────────────────
+	await cardFor(page).getByRole("button", { name: "Edit" }).click();
+	await expect(modal).toBeVisible();
+	await modal.getByRole("radio", { name: "General" }).check();
+	await page.getByRole("button", { name: /save & close/i }).click();
+	await expect(modal).toBeHidden({ timeout: 15_000 });
+
 	// ── Release ─────────────────────────────────────────────────────────────
 	await cardFor(page).getByRole("button", { name: "Release" }).click();
 

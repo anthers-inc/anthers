@@ -204,6 +204,29 @@ export const works = pgTable(
 		viewCount: bigint("view_count", { mode: "number" }).notNull().default(0),
 		downloadCount: bigint("download_count", { mode: "number" }).notNull().default(0),
 
+		// ── Content rating ──
+		// `unrated` | `general` | `mature`, and every Work is born `unrated` — a value
+		// rather than a null, because "nobody has said" and "somebody said General" are
+		// different facts and a report of *"this is mature and is not labeled as mature"*
+		// has to be able to tell them apart. Release is refused while it is `unrated`.
+		//
+		// 🚨 This gates nothing today. Mature work is allowed on Anthers and is simply
+		// unlabeled; the adults-only category that will payment-gate it is closed on
+		// moderation-capacity grounds. What the value does now is give the viewer filters
+		// something to read. Wiki 40.09 carries the whole model, including the two standing
+		// principles that bound what `mature` may ever mean.
+		maturity: text("maturity").notNull().default("unrated"),
+		// Content notes — violence, sexual themes, substance use, and so on. Warnings for a
+		// reader rather than a classification: nothing reads this to decide access, which is
+		// what makes it safe to be expressive here and why there is nothing to enforce.
+		maturityNotes: jsonb("maturity_notes").$type<string[]>().notNull().default([]),
+		// `creator` | `operator`, and null while nobody has rated it. This is what makes an
+		// operator's correction hold: while it reads `operator`, the creator may raise the
+		// rating but not lower it, and lowering it takes an appeal. See
+		// `services/content-rating.ts`, the only writer of all four of these columns.
+		maturitySource: text("maturity_source"),
+		maturitySetAt: timestamp("maturity_set_at", { withTimezone: true }),
+
 		// ── Takedown (DMCA) ──
 		// A takedown is what WE did (a DMCA notice was acted on), distinct from
 		// `visibility` (what the CREATOR did) and from `moderation_status` (the

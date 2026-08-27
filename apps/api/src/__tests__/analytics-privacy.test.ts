@@ -121,6 +121,9 @@ beforeAll(async () => {
 	const workRes = await post("/api/content/works", creator, {
 		type: "video",
 		title: `Analytics privacy fixture ${id}`,
+		// Declared on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on a declared content rating.
+		maturity: "general",
 	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;

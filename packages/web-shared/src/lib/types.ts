@@ -9,6 +9,8 @@
  * Projects group a creator's Works and Posts.
  */
 
+import type { ContentNote, MaturityRating } from "@anthers/shared/content-rating";
+
 // ─── User Types ───
 
 export interface User {
@@ -226,6 +228,22 @@ export interface Work {
 	releasedAt?: string | null;
 	/** When it left public circulation. Only ever set alongside `visibility: "withdrawn"`. */
 	withdrawnAt?: string | null;
+
+	/**
+	 * The content rating, and the notes describing what is in it.
+	 *
+	 * Both travel with the public blurb rather than with the payload — a warning that only
+	 * appears once you already have the thing is not a warning — so they are present on
+	 * every serialization, gated or not.
+	 */
+	maturity?: MaturityRating;
+	maturityNotes?: ContentNote[];
+	/**
+	 * Whether an operator set the rating. **Creator-facing only** — the viewer serialization
+	 * withholds it, because a viewer able to read it could tell a corrected Work from a
+	 * self-declared one. What it tells the creator is that lowering it takes an appeal.
+	 */
+	maturityLocked?: boolean;
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
 
@@ -288,6 +306,13 @@ export interface WorkInput {
 	 * chooses, so it has no place in an input type.
 	 */
 	visibility?: Exclude<WorkVisibility, "withdrawn">;
+	/**
+	 * What a creator may DECLARE. Narrower than `Work["maturity"]` for the same reason
+	 * `visibility` is: `unrated` is the state a Work is born in and leaves, never a value
+	 * anybody sets, and release is refused while it holds.
+	 */
+	maturity?: Exclude<MaturityRating, "unrated">;
+	maturityNotes?: ContentNote[];
 	authoredAt?: string | null;
 	authoredPrecision?: AuthoredPrecision | null;
 	streamEnabled?: boolean;

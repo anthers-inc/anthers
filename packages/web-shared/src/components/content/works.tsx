@@ -5,6 +5,8 @@
  * preview URL. Used by the Catalog page, the Work editor, and the
  * post authoring content picker.
  */
+
+import { contentNoteLabel } from "@anthers/shared/content-rating";
 import {
 	CommandLineIcon,
 	CubeIcon,
@@ -121,6 +123,38 @@ export function AccessBadge({ item }: { item: Work }) {
 	return (
 		<span className={`badge badge-sm ${badge.className}`} title={badge.title}>
 			{badge.label}
+		</span>
+	);
+}
+
+/**
+ * The Work's content rating, as one badge, with its content notes in the tooltip.
+ *
+ * ⭐ **`general` renders nothing, deliberately.** Almost everything on Anthers is General,
+ * so a badge on all of it would say nothing and would make Mature read as a mark against a
+ * work rather than as information about it. What earns a badge is the answer that changes
+ * what a reader is walking into, plus the *absence* of an answer — which a creator has to
+ * see, because it is what is holding their release.
+ */
+export function MaturityBadge({ work }: { work: Work }) {
+	const notes = (work.maturityNotes ?? []).map(contentNoteLabel);
+	if (!work.maturity || work.maturity === "general") return null;
+	if (work.maturity === "unrated") {
+		return (
+			<span
+				className="badge badge-sm badge-warning badge-outline"
+				title="Nobody has rated this yet"
+			>
+				Unrated
+			</span>
+		);
+	}
+	return (
+		<span
+			className="badge badge-sm badge-warning"
+			title={notes.length > 0 ? notes.join(" · ") : "Made for adults"}
+		>
+			Mature
 		</span>
 	);
 }

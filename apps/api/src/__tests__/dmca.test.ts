@@ -90,11 +90,18 @@ beforeAll(async () => {
 	const w1 = await post("/api/content/works", creator, {
 		type: "game",
 		title: `DMCA fixture ${id}`,
+		// Declared on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on a declared content rating.
+		maturity: "general",
 	});
 	expect(w1.status).toBe(201);
 	workId = (await w1.json()).work.id;
 
-	const w2 = await post("/api/content/works", otherCreator, { type: "game", title: `Other ${id}` });
+	const w2 = await post("/api/content/works", otherCreator, {
+		type: "game",
+		title: `Other ${id}`,
+		maturity: "general",
+	});
 	expect(w2.status).toBe(201);
 	otherWorkId = (await w2.json()).work.id;
 
