@@ -46,7 +46,7 @@ import {
 	REPORT_DETAILS_MAX,
 } from "@anthers/shared/moderation";
 import { and, count, desc, eq, exists, inArray, isNull, max, or, sql } from "drizzle-orm";
-import { sendEmail } from "./email.js";
+import { sendAbuseAlert } from "./email.js";
 import { notify } from "./notifications.js";
 
 /**
@@ -237,7 +237,7 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
 	].join("\n");
 
-	const { sent, messageId } = await sendEmail({ to: ABUSE_EMAIL, subject, html });
+	const { sent, messageId } = await sendAbuseAlert({ subject, html });
 	if (!sent) return false;
 
 	// The provider's id is stored beside the stamp, because the stamp alone can only ever

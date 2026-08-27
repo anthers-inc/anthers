@@ -33,7 +33,7 @@ import {
 	moderationReasonLabel,
 } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import { sendEmail } from "./email.js";
+import { sendAbuseAlert } from "./email.js";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 /** DSA Art. 16 asks for a substantiated explanation; this is what "substantiated" costs. */
@@ -147,7 +147,7 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook (60.14). Do not open the content.</p>",
 	].join("\n");
 
-	const { sent, messageId } = await sendEmail({ to: ABUSE_EMAIL, subject, html });
+	const { sent, messageId } = await sendAbuseAlert({ subject, html });
 	if (!sent) return false;
 
 	// See the note on the same write in `services/moderation.ts` — the id is what makes

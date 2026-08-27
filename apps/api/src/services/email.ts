@@ -11,7 +11,9 @@
  * sandbox sender only delivers to the Resend account owner, so it can't be used
  * for real user email.
  */
+import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import { Resend } from "resend";
+import { isPublicDeployment } from "../lib/deployment.js";
 
 const FROM = process.env.EMAIL_FROM ?? "Anthers <noreply@anthers.org>";
 
@@ -242,4 +244,42 @@ export async function sendVerificationEmail(
 	);
 	const sent = await sendEmail({ to, subject: "Verify your email for Anthers", html });
 	if (!sent) console.info(`[email] verify link for ${to}: ${url}`);
+}
+
+/**
+ * The alert that a floor-level report has been filed — the one email on this site that
+ * summons a person rather than informing one.
+ *
+ * 🚨 **It refuses to send from anywhere but a public deployment, and that refusal is the
+ * point.** `abuse@` is a mailbox somebody has to read *immediately*, so anything that puts
+ * a message in it which does not need immediate human review is not noise in the ordinary
+ * sense — it is noise in the one channel that must never be skimmed. A developer's machine
+ * has no reports worth summoning anybody over: they are fixtures, or they are a person
+ * clicking around their own dev database.
+ *
+ * ⚠️ **This is what stood between a test fixture and Parker's phone on 2026-08-26, and it
+ * did not exist.** `bun test` cannot send — `sendEmail` refuses under the test runner — but
+ * the tests were leaving `moderation_reports` rows behind with `escalated_at` null, and
+ * `escalate-reports` runs every five minutes in the worker. The moment `make dev` ran with a
+ * real `RESEND_API_KEY` from the dev vault, the worker drained a whole session's fixtures
+ * into a real inbox: 390 alerts, 168 of them in one hour. **A guard on the sender does not
+ * cover a test that writes a row somebody else's process will act on later** — the side
+ * effect simply waits until it is outside the guard's process.
+ *
+ * ⭐ `isPublicDeployment()` rather than a `NODE_ENV` label, for the reason `lib/deployment.ts`
+ * gives at length: an https origin *is* what "deployed somewhere public" means, it cannot
+ * become true on a developer's machine by accident, and it is already configured.
+ *
+ * Set `ABUSE_ALERTS_ENABLED=true` to send anyway — for deliberately exercising the delivery
+ * loop against a real mailbox, which is the only reason to want this off a public deployment.
+ */
+export async function sendAbuseAlert(args: { subject: string; html: string }): Promise<SendResult> {
+	if (!isPublicDeployment() && process.env.ABUSE_ALERTS_ENABLED !== "true") {
+		console.warn(
+			`[email] withheld abuse alert "${args.subject}" — not a public deployment. ` +
+				"Set ABUSE_ALERTS_ENABLED=true to send from here.",
+		);
+		return { sent: false, messageId: null };
+	}
+	return sendEmail({ to: ABUSE_EMAIL, subject: args.subject, html: args.html });
 }
