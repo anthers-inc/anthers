@@ -32,6 +32,7 @@ import app from "../index.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import {
 	bindIdentityToPending,
+	issueCodeForPending,
 	PENDING_SIGNUP_TTL_MS,
 	readPendingSignup,
 	setPendingEmail,
@@ -352,6 +353,39 @@ describe("holding an address is not the same as having mailed it", () => {
 			addr("prefill"),
 		);
 		expect(pending.codeSent, "but nothing has been sent to it").toBe(false);
+	});
+
+	it("posts the code as soon as the PDS hands over an address", async () => {
+		// ⭐ **The Bluesky door's whole payoff.** Asking for `transition:email` is worth doing
+		// only if it saves the step — so the callback sends the code rather than landing the
+		// person on a filled-in field and a button, which is most of the step given back.
+		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		await bindIdentityToPending(
+			token,
+			{ did: did("posts"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
+			addr("posts"),
+		);
+		await issueCodeForPending(token);
+
+		const row = await readPendingSignup(token);
+		expect(row?.email).toBe(addr("posts"));
+		expect(row?.codeSentAt, "a code the person can actually be waiting for").not.toBeNull();
+	});
+
+	it("sends nothing when the PDS gave us no address to send to", async () => {
+		// The scope-refused path. There is nothing to mail, so the finishing page asks for an
+		// address the ordinary way — and must not claim to have sent anything.
+		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		await bindIdentityToPending(token, {
+			did: did("noaddr"),
+			handle: "someone.bsky.social",
+			pdsUrl: "https://pds",
+		});
+		await issueCodeForPending(token);
+
+		const row = await readPendingSignup(token);
+		expect(row?.email).toBeNull();
+		expect(row?.codeSentAt).toBeNull();
 	});
 
 	it("says a code went out once one actually has", async () => {

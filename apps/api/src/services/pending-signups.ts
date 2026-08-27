@@ -250,6 +250,52 @@ export async function setPendingEmail(token: string, email: string): Promise<voi
 }
 
 /**
+ * Put a code in the post for the address on this row, and record that we did.
+ *
+ * 🚨 **The Bluesky door needs this and `POST /auth/signup/begin` cannot do it**, which is the
+ * whole reason it exists. That route runs *before* the round trip, when there is no address to
+ * send to; the PDS supplies one at the OAuth callback, which is after the only place that sends
+ * a first code. Without this the person lands on the finishing page holding an address nobody
+ * has mailed — and Parker's reading of that, twice, was that Anthers had *"failed to use the
+ * email associated with my Bluesky account"*. Asking somebody to press a button about an
+ * address we just went and fetched is most of the step we fetched it to save.
+ *
+ * ⚠️ **Nothing is lost by sending straight away**, which is what makes this safe rather than
+ * presumptuous: the code box carries *"Use a different address"*, so somebody who would rather
+ * we used another still can, and the code we sent to the first one simply goes unspent. The
+ * address was never proof — the code is — so mailing it early proves nothing early.
+ *
+ * ⚠️ **Which message goes out is decided here rather than at the route**, bending the rule
+ * `issueSignupCode` states (that the *shape* of the message is a copy decision the route should
+ * own). Two callers now need identical behavior, and one description of it beats two that agree
+ * until they don't.
+ *
+ * Every failure is soft, and deliberately silent. A mail outage, a throttled repeat and an
+ * address that already has an account must all look the same from outside, exactly as they do
+ * at `/auth/signup/start`.
+ */
+export async function issueCodeForPending(token: string | undefined): Promise<void> {
+	const row = await readPendingSignup(token);
+	if (!row?.email || row.codeSentAt) return;
+
+	try {
+		const { issueSignupCode } = await import("./signup-codes.js");
+		const { sendSignInCodeEmail, sendSignupCodeEmail } = await import("./email.js");
+		const issued = await issueSignupCode(row.email);
+		if (issued.code) {
+			await (issued.existingAccount
+				? sendSignInCodeEmail(row.email, issued.code)
+				: sendSignupCodeEmail(row.email, issued.code));
+		}
+		// Stamped even when throttled: a code went out a moment ago, which is the state the
+		// finishing page should show.
+		await markCodeSent(row.token);
+	} catch (err) {
+		console.error("[pending-signups] failed to issue a code:", err);
+	}
+}
+
+/**
  * Record that a code has actually gone out to the address on this row.
  *
  * ⚠️ **Called only where mail is genuinely sent**, never where an address is merely learned.

@@ -127,3 +127,80 @@ test.describe("starting over", () => {
 		await expect(page).toHaveURL(/\/subscribe$/);
 	});
 });
+
+/**
+ * The address Bluesky gave us, in the field.
+ *
+ * 🚨 **This is the assertion whose absence let a real defect reach Parker twice.** The server
+ * chain was faultless — the PDS returned the address, `bindIdentityToPending` wrote it, and
+ * `GET /signup/pending` served it — and the page still asked him to type it, because it chose
+ * its state on whether an address was *known* rather than whether one had been *posted to*.
+ * `finish-face.test.ts` pins that decision as a pure function; nothing pinned that the value
+ * reaches the input.
+ *
+ * ⚠️ **The pending record is stubbed, and it has to be.** Reaching this state for real needs a
+ * completed OAuth round trip against bsky.social, which no test may perform — so the response
+ * is faked at the network boundary and what is asserted is everything downstream of it, which
+ * is exactly where the bug was.
+ */
+test.describe("an address the PDS handed us", () => {
+	const PENDING = {
+		email: "someone@example.com",
+		codeSent: false,
+		addressProved: false,
+		atprotoHandle: "someone.bsky.social",
+		picks: { anthers: 0, follow: [], seed: [] },
+		next: "",
+	};
+
+	async function stubPending(page: Page, pending: Record<string, unknown>) {
+		await page.route("**/api/auth/signup/pending", async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ pending, atprotoSignupEnabled: true }),
+			});
+		});
+	}
+
+	test("arrives already in the field, rather than asking for it again", async ({ page }) => {
+		await stubPending(page, PENDING);
+		await page.goto("/finish");
+
+		const field = page.locator('input[type="email"]');
+		await expect(field).toBeVisible();
+		await expect(
+			field,
+			"the whole value of asking Bluesky for the address is not typing it twice",
+		).toHaveValue("someone@example.com");
+	});
+
+	test("says whose signup it is, and where the address came from", async ({ page }) => {
+		await stubPending(page, PENDING);
+		await page.goto("/finish");
+
+		await expect(page.getByText(/@someone\.bsky\.social/)).toBeVisible();
+		// ⚠️ An address appearing in a field by itself, on a page reached by authorizing
+		// somewhere else, reads as something the site already knew rather than something it
+		// was handed. The label is what makes it legible.
+		await expect(page.getByText(/is this the right address/i)).toBeVisible();
+	});
+
+	test("does not claim to have sent a code it never sent", async ({ page }) => {
+		await stubPending(page, PENDING);
+		await page.goto("/finish");
+
+		// 🚨 The regression itself. `begin` runs before the Bluesky round trip and has nothing
+		// to send to; the PDS supplies the address at the callback, which sends nothing.
+		await expect(page.getByText(/we sent a six-character code/i)).toHaveCount(0);
+		await expect(page.locator('input[aria-label^="Code character"]')).toHaveCount(0);
+	});
+
+	test("shows the code box once one really has gone out", async ({ page }) => {
+		await stubPending(page, { ...PENDING, codeSent: true });
+		await page.goto("/finish");
+
+		await expect(page.locator('input[aria-label^="Code character"]')).toHaveCount(6);
+		await expect(page.getByText(/we sent a six-character code/i)).toBeVisible();
+	});
+});

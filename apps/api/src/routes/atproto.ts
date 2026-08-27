@@ -48,6 +48,7 @@ import { createSession, validateSession } from "../services/auth.js";
 import {
 	bindIdentityToPending,
 	findPendingByDid,
+	issueCodeForPending,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
 
@@ -256,6 +257,13 @@ const atprotoRoutes = new Hono()
 					pds.email,
 				);
 				setPendingSignupCookie(c, token);
+
+				// ⭐ **And post the code now, rather than asking them to press a button about an
+				// address we just went and fetched.** Asking Bluesky for it was worth doing only
+				// if it saves the step; landing on a filled-in field and a Send button gives most
+				// of that step back. A no-op when the PDS gave us nothing, in which case the
+				// finishing page asks for an address the ordinary way.
+				await issueCodeForPending(token);
 				return back({ success: "needs_email", next });
 			}
 

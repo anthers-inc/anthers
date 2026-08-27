@@ -295,6 +295,38 @@ describe("no answer a PDS can give creates an account", () => {
 		expect(body.pending.atprotoHandle).toBe(`${RUN}.bsky.social`);
 	});
 
+	it("posts the code on the way back, so the person lands on the code box", async () => {
+		/*
+		 * 🚨 **Driven through the CALLBACK, not through the function it calls.** A first version
+		 * of this asserted `issueCodeForPending` directly and passed with the call removed from
+		 * the route entirely — the same shape as a button wired to nothing, which looks
+		 * identical to a wired one until you press it. What is worth pinning is that the round
+		 * trip ends with a code in the post.
+		 *
+		 * ⭐ Why it sends at all: asking Bluesky for `transition:email` is worth doing only if it
+		 * saves the step. Landing somebody on a field already holding their address, under a
+		 * button, gives most of that step back — Parker read exactly that as Anthers having
+		 * failed to use the address, twice.
+		 */
+		pds.body = { email: addr("posted"), emailConfirmed: true };
+		const { cookies } = await runCallback({ did: did("posted") });
+		const token = pendingCookie(cookies);
+
+		const row = await readPendingSignup(token);
+		expect(row?.email).toBe(addr("posted"));
+		expect(row?.codeSentAt, "a code the person can actually be waiting for").not.toBeNull();
+	});
+
+	it("sends nothing when the PDS refused the scope, and says so", async () => {
+		// Nothing to mail, so the finishing page asks for an address the ordinary way — and
+		// must not claim to have sent anything.
+		pds.scope = "atproto";
+		const { cookies } = await runCallback({ did: did("noscope2") });
+		const row = await readPendingSignup(pendingCookie(cookies));
+		expect(row?.email).toBeNull();
+		expect(row?.codeSentAt).toBeNull();
+	});
+
 	it("tells a browser holding no token nothing at all", async () => {
 		const res = await app.request("/api/auth/signup/pending");
 		expect(((await res.json()) as { pending: unknown }).pending).toBeNull();
@@ -424,8 +456,17 @@ describe("the proved identity on a pending signup", () => {
 });
 
 describe("finishing a parked signup through the emailed code", () => {
-	/** Spend a real code for an address, carrying whatever cookies are given. */
+	/**
+	 * Spend a real code for an address, carrying whatever cookies are given.
+	 *
+	 * 🚨 **The live code is dropped first, and without that the send throttle answers instead
+	 * of the rule under test.** The callback posts a code itself now, so a second
+	 * `issueSignupCode` seconds later returns `{code: null}` because one just went out — which
+	 * reads identically to the service refusing, and fails this helper for a reason that has
+	 * nothing to do with what the test is asserting.
+	 */
 	async function verify(email: string, cookie: string) {
+		await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
 		const issued = await issueSignupCode(email);
 		expect(issued.code, "the test needs the plaintext code the service just minted").toBeTruthy();
 		return app.request("/api/auth/signup/verify", {
