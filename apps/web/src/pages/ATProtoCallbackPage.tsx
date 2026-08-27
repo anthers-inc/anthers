@@ -14,13 +14,14 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
  * outcome in the query. So this page is a *translator*: it turns one word into a sentence
  * and sends the person on.
  *
- * 🚨 **Nothing here creates an account, and both of its signup-shaped outcomes go through
- * `/subscribe`.** Coming back from the *sign-in* door with a handle nobody has linked is
- * `signup_disabled` — the honest answer is that there is no account, not that something
- * broke. Coming back from the *signup* door without a usable address is `needs_email`,
- * which means the identity is proved and parked and the ordinary emailed-code ceremony
- * has to finish the job. Different causes, one destination, because `/subscribe` is the
- * single signup door and this page is not going to become a second one.
+ * 🚨 **Nothing here creates an account, and every signup-shaped outcome goes somewhere that
+ * cannot become a second door.** Coming back from the *signup* door is `needs_email`: the
+ * identity is proved and written onto the pending signup, and `/finish` completes the
+ * ordinary emailed-code ceremony. Coming back from the *sign-in* door with a handle nobody
+ * has linked is `resume_signup` when there is an unfinished signup for that identity —
+ * proving the DID a second time is the same evidence as proving it the first — and
+ * `signup_disabled` when there is not, because the honest answer is then that there is no
+ * account, not that something broke.
  */
 
 /**
@@ -82,17 +83,23 @@ export default function ATProtoCallbackPage() {
 			return;
 		}
 
-		// 🚨 A signup whose PDS could not give us a usable address. There is no account and
-		// no session yet — the identity is parked server-side against an httpOnly cookie —
-		// so this goes to `/subscribe` to finish the ordinary way, and deliberately does
-		// NOT refresh the auth context, because there is nothing new to learn.
-		if (success === "needs_email") {
-			// ⚠️ Not `withNextPath`: that appends its own `?next=`, which would produce a
-			// second `?` in a path that already carries a parameter. Composing the query is
-			// the only way that stays right when a third parameter turns up.
-			const query = new URLSearchParams({ atproto: "1" });
-			if (next) query.set("next", next);
-			navigate(`/subscribe?${query}`, { replace: true });
+		// 🚨 **A signup coming back from Bluesky, and it lands on the page that finishes
+		// one.** There is no account and no session yet — the proved identity sits on the
+		// pending signup this browser started, bound by an httpOnly cookie — so this
+		// deliberately does NOT refresh the auth context, because there is nothing new to
+		// learn about who is signed in.
+		//
+		// ⚠️ **It went to `/subscribe?atproto=1` until 2026-08-26**, and that is the defect
+		// this whole flow was rebuilt to fix: dropping somebody back on a marketing page with
+		// a prefilled email box is indistinguishable from having accomplished nothing.
+		// `resume_signup` is the same landing reached from the *sign-in* door by somebody
+		// whose signup was still unfinished — different cause, same destination, because a
+		// page whose only job is finishing can only be about finishing.
+		if (success === "needs_email" || success === "resume_signup") {
+			// The destination rides on the pending signup rather than on this URL, so nothing
+			// is appended here — `/finish` reads it back with everything else the signup was
+			// carrying.
+			navigate("/finish", { replace: true });
 			return;
 		}
 

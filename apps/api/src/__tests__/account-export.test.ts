@@ -20,11 +20,12 @@
  * identifies the reporter, which is what GDPR Art. 15(4) is for and what the
  * moderation model's open question about not exposing reporters points at too.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sessions, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -210,6 +211,16 @@ describe("the export contains no credentials", () => {
 		expect(data.sessions[0]).toHaveProperty("createdAt");
 		expect(data.sessions[0]).not.toHaveProperty("token");
 	});
+});
+
+/**
+ * 🚨 This suite files reports in both directions between its two fixtures, and neither goes
+ * with the accounts: `moderation_reports.reporter_id` is `set null` rather than `cascade`,
+ * because a moderation record has to outlive the account it concerns. `afterAll` so it runs
+ * whether the suite passed or bailed.
+ */
+afterAll(async () => {
+	await purgeFixtureAccounts([subjectName, otherName]);
 });
 
 describe("the export contains no one else's data", () => {

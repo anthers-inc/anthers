@@ -72,7 +72,15 @@ export function apiBaseUrl(): string {
 	if (desktop) return desktop.apiBaseUrl.replace(/\/$/, "");
 	if (typeof location === "undefined") return "";
 	const h = location.hostname;
-	if (h === "localhost" || h === "127.0.0.1") return "http://localhost:8000";
+	// 🚨 **Mirror the page's own host rather than pinning `localhost`, because cookies are
+	// host-scoped and `127.0.0.1` is a different host.** Pinning cost the Bluesky signup
+	// entirely: the ATProto spec permits only `127.0.0.1` / `[::1]` for a loopback client's
+	// redirect, never `localhost`, so the dev OAuth callback lands on `127.0.0.1:8000` while
+	// every other call went to `localhost:8000`. The pending-signup cookie was written on one
+	// host and read on the other, so the finishing page found an empty row and asked for an
+	// address Bluesky had already given us. Serve dev from `http://127.0.0.1:3000` and the
+	// whole flow stays on one host.
+	if (h === "localhost" || h === "127.0.0.1") return `http://${h}:8000`;
 	return "";
 }
 

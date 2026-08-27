@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
+import { MAX_PICKED_CREATORS, MAX_SIGNUP_AMOUNT } from "@anthers/shared/signup";
 import { zValidator } from "@hono/zod-validator";
 import { eq, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import { z } from "zod";
-import { setSessionCookie } from "../lib/cookies.js";
+import {
+	clearPendingSignupCookie,
+	PENDING_SIGNUP_COOKIE,
+	setPendingSignupCookie,
+	setSessionCookie,
+} from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
 import { isReservedUsername } from "../reserved-usernames.js";
-import { attachPendingSignup } from "../services/atproto.js";
+import { atprotoSignupEnabled } from "../services/atproto.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -36,6 +42,17 @@ import {
 	sendVerificationEmail,
 	sendWelcomeEmail,
 } from "../services/email.js";
+import {
+	clearPendingSignup,
+	consumePendingSignup,
+	markCodeSent,
+	picksOf,
+	readPendingSignup,
+	resumeByProvedAddress,
+	setPendingEmail,
+	startPendingSignup,
+	sweepExpiredPendingSignups,
+} from "../services/pending-signups.js";
 import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -77,6 +94,33 @@ const signInSchema = z.object({
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
+});
+
+/**
+ * The choices `/subscribe` is holding when somebody presses *Create My Account*.
+ *
+ * ⚠️ **Bounded rather than accepted as posted.** This arrives from a browser and is stored
+ * as jsonb on a row nobody has yet proved anything about, so the ceiling is here rather
+ * than in the shape's own definition — `@anthers/shared/signup` describes what the picks
+ * *are*, and this describes what a stranger may send.
+ */
+const signupPicksSchema = z.object({
+	anthers: z.number().min(0).max(MAX_SIGNUP_AMOUNT),
+	follow: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
+	seed: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
+});
+
+/**
+ * Asking for an account.
+ *
+ * The address is **optional**, because the Bluesky door leaves `/subscribe` before it has
+ * one: the identity is proved first and the PDS may or may not hand an address over, so the
+ * row is written with the picks alone and the address lands on it later.
+ */
+const signupBeginSchema = z.object({
+	email: z.string().email().max(254).optional(),
+	picks: signupPicksSchema,
+	next: z.string().max(2048).optional(),
 });
 
 const emailCodeVerifySchema = z.object({
@@ -181,6 +225,104 @@ function serializeUser(user: typeof users.$inferSelect) {
 // which must be given the same domain or the cookie cannot be cleared.
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN;
 
+/**
+ * What the page finishing a signup is told about it.
+ *
+ * ⚠️ **One shape, always, and `null` when there is nothing.** Two `c.json` calls returning
+ * different objects give the RPC client a union every caller then has to narrow by hand.
+ *
+ * 🚨 **It describes a signup this browser started and nothing else**, because it answers
+ * from the httpOnly cookie alone. A hand-typed URL gets `null`, so the finishing page cannot
+ * be talked into displaying somebody else's handle by anybody who knows it.
+ */
+function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup>>) {
+	if (!row) return null;
+	return {
+		email: row.email,
+		/**
+		 * Whether a code has actually gone out to that address.
+		 *
+		 * 🚨 **Separate from holding the address, and the finishing page needs both.** The
+		 * Bluesky door learns an address at the OAuth callback, which sends nothing — so a
+		 * page choosing its state on `email` alone announced "check your email" for mail that
+		 * was never posted.
+		 */
+		codeSent: row.codeSentAt !== null,
+		/** Whether a code sent to that address has already been completed — see the resume path. */
+		addressProved: row.emailProvedAt !== null,
+		atprotoHandle: row.atprotoDid ? row.atprotoHandle : null,
+		picks: picksOf(row),
+		next: row.next,
+	};
+}
+
+/**
+ * Turn a proved address into a signed-in account, spending whatever pending signup this
+ * browser is carrying.
+ *
+ * 🚨 **This is the ONE place an account comes into existence from a proved address**, and
+ * both routes that can do it call it rather than repeating it. The two of them differ only
+ * in what proved the address — a code spent here, or a code spent at `/signin/verify` on a
+ * signup being resumed in another browser — and that difference must not turn into two
+ * descriptions of what a new account looks like. The last time signup had two descriptions
+ * of itself they drifted about terms acceptance and onboarding, which is why there is one
+ * door at all.
+ *
+ * A created account is `emailVerified: true` from the first instant and gets no
+ * verification mail: the code just typed IS the verification, and asking a second time for
+ * the same fact is how a flow teaches people to ignore it. `username` stays null, which is
+ * what makes the account `needsOnboarding` and routes it to `/welcome` — the only place the
+ * terms and the 13+ assertion are ever presented.
+ */
+async function mintFromProvedAddress(
+	c: Parameters<typeof setSessionCookie>[0] & {
+		req: { header: (name: string) => string | undefined };
+	},
+	email: string,
+	pendingToken: string | undefined,
+) {
+	const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+	const user =
+		existing ?? (await db.insert(users).values({ email, emailVerified: true }).returning())[0];
+
+	const token = await createSession(
+		user.id,
+		c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
+		c.req.header("User-Agent"),
+	);
+	setSessionCookie(c, token);
+
+	// 🚨 **A Bluesky signup finishes HERE**, and that is what makes it one ceremony rather
+	// than two. The identity was proved by a completed OAuth round trip and written down;
+	// the code just typed proves the address. Attaching now is safe precisely because of
+	// that order — a PDS's claim about an address is somebody else's assertion, and a code
+	// we sent to a mailbox they read is ours. It is also why this works for a *returning*
+	// account whose address happens to match: they proved the mailbox, so it is theirs.
+	//
+	// ⚠️ Deliberately not fatal. A refusal means the DID already belongs to another account,
+	// and the right outcome is a signed-in account with no link rather than a failed signup.
+	const spent = pendingToken ? await consumePendingSignup(pendingToken, user.id) : null;
+	if (pendingToken) clearPendingSignupCookie(c);
+
+	return {
+		body: {
+			user: serializeUser(user),
+			// What the client does next. `created` opens onboarding; a returning user is
+			// simply signed in and keeps whatever they already had.
+			created: !existing,
+			// Onboarding is unfinished business for anyone without a handle, which includes a
+			// returning user who abandoned it last time.
+			needsOnboarding: user.username === null,
+			// What the signup was carrying, so the finishing page commits the choices somebody
+			// made minutes ago rather than asking for them again.
+			picks: spent?.picks ?? null,
+			next: spent?.next || null,
+			atprotoLinked: spent?.atprotoLinked ?? false,
+		},
+		created: !existing,
+	};
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const authRoutes = new Hono()
@@ -224,16 +366,102 @@ const authRoutes = new Hono()
 		return c.json({ user: serializeUser(user) }, 201);
 	})
 
-	// ── Signup ceremony: prove the address, then build the account ───────────
+	// ── Signup ceremony: ask, prove the address, then build the account ──────
 	//
-	// The order is the feature. `/subscribe` asks for an email and nothing else, this
-	// pair confirms the address, and only then does anything ask for money or a name.
-	// Parker's reasoning: every account should arrive with a confirmed address, and the
-	// public page should ask for as little as it possibly can.
+	// The order is the feature. `/subscribe` is where a visitor makes their choices;
+	// pressing *Create My Account* writes them down and takes the person **off** that page
+	// to one whose only job is finishing. This is where that happens. Parker's reasoning:
+	// every account should arrive with a confirmed address, the public page should ask for
+	// as little as it possibly can, and the next thing asked of somebody should be the only
+	// thing in front of them rather than a modal over a page still inviting them to change
+	// their picks.
 	//
+	// Step 0 — write the pending account down and send the code.
+	//
+	// 🚨 **The row is written before anything is proved, which is exactly why it is not a
+	// `users` row.** `users.email` is `NOT NULL UNIQUE`, so a pending account there would
+	// claim an address on the strength of somebody having typed it — see
+	// `services/pending-signups.ts`.
+	//
+	// It answers 200 whatever happened, for the same reason `/signup/start` does: the
+	// moment this endpoint answers differently for an address that already has an account,
+	// it becomes a way to ask "is this person on Anthers?" and get a reliable answer.
+	.post("/signup/begin", zValidator("json", signupBeginSchema, invalidBody), async (c) => {
+		const { email, picks, next } = c.req.valid("json");
+
+		// Opportunistic rather than scheduled. `prune-credentials` sweeps these overnight
+		// too; doing it here as well means the table cannot grow unboundedly between runs on
+		// the one route that creates rows in it.
+		void sweepExpiredPendingSignups().catch(() => {});
+
+		const token = await startPendingSignup({
+			previousToken: getCookie(c, PENDING_SIGNUP_COOKIE),
+			email,
+			picks,
+			next,
+		});
+		setPendingSignupCookie(c, token);
+
+		// Failures are swallowed on purpose, exactly as at `/signup/start`. A mail outage, a
+		// throttled repeat and an address that already has an account must all look identical
+		// from out here.
+		if (email) {
+			try {
+				const issued = await issueSignupCode(email);
+				if (issued.code) {
+					await (issued.existingAccount
+						? sendSignInCodeEmail(email, issued.code)
+						: sendSignupCodeEmail(email, issued.code));
+				}
+				// Stamped whether or not a code was minted: a throttled repeat means one went
+				// out a moment ago, which is exactly the state the finishing page should show.
+				await markCodeSent(token);
+			} catch (err) {
+				console.error("[signup/begin] failed to issue a code:", err);
+			}
+		}
+
+		return c.json({ success: true });
+	})
+
+	// What the finishing page needs in order to say whose signup it is finishing, and to
+	// show the choices it is about to commit. Answers from the cookie and nothing else.
+	.get("/signup/pending", async (c) => {
+		const row = await readPendingSignup(getCookie(c, PENDING_SIGNUP_COOKIE));
+		return c.json({
+			pending: serializePendingSignup(row),
+			// So the finishing page knows whether to offer connecting Bluesky at all — the
+			// same reason `/api/atproto/config` exists. A button that refuses when pressed is
+			// worse than no button.
+			atprotoSignupEnabled: atprotoSignupEnabled(),
+		});
+	})
+
+	// Abandon it — the "actually, never mind" on the finishing page. The row goes as well as
+	// the cookie, because an unfinished signup nobody is claiming is a row waiting to expire.
+	.post("/signup/cancel", async (c) => {
+		const token = getCookie(c, PENDING_SIGNUP_COOKIE);
+		await clearPendingSignup(token);
+		if (token) clearPendingSignupCookie(c);
+		return c.json({ success: true });
+	})
+
 	// Step 1 — issue a code. ALWAYS 200, whatever happened.
+	//
+	// ⚠️ This is the **resend**, and the address it is given may be a new one: somebody whose
+	// PDS gave us no address types theirs here, and somebody who mistyped theirs at
+	// `/subscribe` corrects it. Either way the pending row has to follow, or the account
+	// would be minted against the address they abandoned.
 	.post("/signup/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
+
+		// The pending row follows the address the code is actually going to. Without this a
+		// corrected typo would leave the row pointing at the mistyped address, and the resume
+		// path would go looking for a mailbox nobody can read.
+		const pendingToken = getCookie(c, PENDING_SIGNUP_COOKIE);
+		if (pendingToken && (await readPendingSignup(pendingToken))) {
+			await setPendingEmail(pendingToken, email);
+		}
 
 		// Failures are swallowed on purpose. A mail outage, a throttled repeat and an
 		// address that already has an account must all look identical from out here —
@@ -246,6 +474,9 @@ const authRoutes = new Hono()
 					? sendSignInCodeEmail(email, issued.code)
 					: sendSignupCodeEmail(email, issued.code));
 			}
+			// The address on the row is now one we have actually posted to, which is what
+			// lets the finishing page show a code box rather than an address field.
+			await markCodeSent(pendingToken);
 		} catch (err) {
 			console.error("[signup/start] failed to issue a code:", err);
 		}
@@ -285,63 +516,38 @@ const authRoutes = new Hono()
 			);
 		}
 
-		const [existing] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
-
-		// Created accounts are `emailVerified: true` from the first instant, and get no
-		// verification mail: the code they just typed IS the verification, and asking a
-		// second time for the same fact is how a flow teaches people to ignore it.
-		//
-		// The username stays null until onboarding claims one — see the column's note
-		// for why a placeholder was rejected rather than merely unnecessary.
-		const user =
-			existing ??
-			(await db.insert(users).values({ email: result.email, emailVerified: true }).returning())[0];
-
-		const token = await createSession(
-			user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
-			c.req.header("User-Agent"),
+		const minted = await mintFromProvedAddress(
+			c,
+			result.email,
+			getCookie(c, PENDING_SIGNUP_COOKIE),
 		);
-		setSessionCookie(c, token);
+		return c.json(minted.body, minted.created ? 201 : 200);
+	})
 
-		// 🚨 **A Bluesky signup that could not get a usable address from its PDS finishes
-		// HERE**, and this is what makes it one ceremony rather than two. The identity was
-		// proved by a completed OAuth round trip and parked; the code just typed proves the
-		// address. Attaching now is safe precisely because of that order — the PDS's claim
-		// about an address is somebody else's assertion, and a code we sent to a mailbox
-		// they read is ours. It is also why this works for a *returning* account whose
-		// address happens to match: they proved the mailbox, so it is theirs.
-		//
-		// Deliberately not fatal. A refusal means the DID already belongs to another
-		// account, and the right outcome is a signed-in account with no link rather than a
-		// failed signup — the person can sort the link out from settings.
-		//
-		// ⚠️ **Guarded, and it emits nothing when there is no pending token.** An
-		// unconditional `deleteCookie` here added a second `Set-Cookie` to *every* signup,
-		// which broke a client that read the header and took the first cookie — the ceremony
-		// test does exactly that, and so might anything else. A route that has always
-		// answered with one cookie should keep doing so on the path that has not changed.
-		const pendingToken = getCookie(c, "atproto_pending");
-		if (pendingToken) {
-			await attachPendingSignup(pendingToken, user.id);
-			deleteCookie(c, "atproto_pending", {
-				path: "/",
-				...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
-			});
+	// Step 2b — finish a signup whose address was proved somewhere else.
+	//
+	// 🚨 **This exists because of resumption in a DIFFERENT browser, and it creates nothing
+	// that `/signup/verify` would not have created.** Somebody who starts a signup on a
+	// laptop and opens the mail on a phone has no cookie on the phone; they sign in at
+	// `/login` with their address, and the code they complete there proves the mailbox and
+	// hands the pending signup to that browser. The code is spent by then, so asking for a
+	// second one would be asking them to prove the same fact twice — this spends the
+	// `emailProvedAt` stamp instead.
+	//
+	// ⚠️ **The two things it insists on are what keep it from being a second signup door.**
+	// It needs a pending signup bound to this browser by cookie, and that row must already
+	// carry the stamp. Neither can be produced by asking: the row only exists because
+	// somebody pressed *Create My Account* at `/subscribe`, and the stamp only exists
+	// because somebody read a code out of the mailbox on it.
+	.post("/signup/complete", async (c) => {
+		const pendingToken = getCookie(c, PENDING_SIGNUP_COOKIE);
+		const row = await readPendingSignup(pendingToken);
+		if (!row?.email || !row.emailProvedAt) {
+			return c.json({ error: "There's nothing to finish here — start at /subscribe." }, 404);
 		}
 
-		return c.json(
-			{
-				user: serializeUser(user),
-				// What the client does next. `created` opens onboarding; a returning user
-				// is simply signed in and keeps whatever they already had.
-				created: !existing,
-				// Onboarding is unfinished business for anyone without a handle, which
-				// includes a returning user who abandoned it last time.
-				needsOnboarding: user.username === null,
-			},
-			existing ? 200 : 201,
-		);
+		const minted = await mintFromProvedAddress(c, row.email, pendingToken);
+		return c.json(minted.body, minted.created ? 201 : 200);
 	})
 
 	// ── Onboarding: claim the handle, and optionally set a password ──────────
@@ -477,11 +683,27 @@ const authRoutes = new Hono()
 
 		const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
 		if (!user) {
-			// Reachable only by someone holding a live code for an address with no account —
-			// which `/signin/start` never issues, so it means a code minted at `/subscribe`
-			// was typed in here instead. Naming that plainly costs nothing: reaching this
-			// line already requires reading the mailbox, so there is no enumeration left to
-			// protect. What it must not do is quietly create the account.
+			// 🚨 **An unfinished signup resumes here, and this route still creates nothing.**
+			// Somebody who pressed *Create My Account* in another browser has a pending signup
+			// and no account; they have just proved the address on it, which is the only thing
+			// resumption may ever be gated on. So the row is handed to *this* browser and the
+			// browser is sent to the page that finishes it — where `POST /signup/complete` is
+			// what actually mints the account, on the signup pair where minting belongs.
+			//
+			// ⚠️ **The identity on that row does not come with it**, because an address was
+			// proved and an identity was not. See `resumeByProvedAddress` for the takeover
+			// that closes.
+			const resumed = await resumeByProvedAddress(result.email);
+			if (resumed) {
+				setPendingSignupCookie(c, resumed.token);
+				return c.json({ user: null, needsOnboarding: true, resume: true });
+			}
+
+			// Reachable only by someone holding a live code for an address with no account and
+			// no pending signup — which `/signin/start` never issues, so it means a code minted
+			// at `/subscribe` was typed in here instead. Naming that plainly costs nothing:
+			// reaching this line already requires reading the mailbox, so there is no
+			// enumeration left to protect. What it must not do is quietly create the account.
 			return c.json(
 				{ error: "There's no Anthers account for that address yet — sign up to create one." },
 				404,
@@ -495,11 +717,14 @@ const authRoutes = new Hono()
 		);
 		setSessionCookie(c, token);
 
+		// One shape for both outcomes. Two `c.json` calls returning different objects give the
+		// RPC client a union type that every caller then has to narrow by hand.
 		return c.json({
 			user: serializeUser(user),
 			// Someone who abandoned onboarding still owes a handle, and the code is the only
 			// way that account comes back at all — so this door has to be able to say so.
 			needsOnboarding: user.username === null,
+			resume: false,
 		});
 	})
 

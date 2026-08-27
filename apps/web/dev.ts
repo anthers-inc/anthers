@@ -35,4 +35,11 @@ const server = serve({
 	},
 });
 
-console.log(`Web dev server on http://localhost:${server.port}`);
+// 🚨 **`127.0.0.1`, not `localhost`, and the two are not interchangeable here.** A browser
+// treats them as different hosts and scopes cookies accordingly, while the ATProto spec permits
+// only `127.0.0.1` / `[::1]` for a loopback client's redirect — so the dev OAuth callback always
+// lands on `127.0.0.1`. Browsing the site at `localhost` therefore splits the cookie jar in half
+// and the Bluesky signup loses the address the PDS just handed over. Print the one that works.
+console.log(`Web dev server on http://127.0.0.1:${server.port}`);
+console.log("  ⚠️  Use 127.0.0.1 rather than localhost — Bluesky's OAuth callback requires it,");
+console.log("      and the two are different cookie hosts.");

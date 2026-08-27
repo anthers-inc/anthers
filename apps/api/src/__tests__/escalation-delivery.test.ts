@@ -26,9 +26,10 @@ import {
 	recordDeliveryEvent,
 } from "../services/delivery-events.js";
 import { sendEmail } from "../services/email.js";
+import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-describe("Reading a stored event", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Reading a stored event", () => {
 	it("treats a delivered message as delivered and finished", () => {
 		const s = classifyStoredEvent("delivered", null);
 		expect(s.delivered).toBe(true);
@@ -75,7 +76,7 @@ describe("Reading a stored event", () => {
 	});
 });
 
-describe("The send result", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("The send result", () => {
 	it("reports failure as an object rather than a bare false", async () => {
 		// The test runner never sends, so this is the skip path — and the shape is the
 		// point. A caller that forgot to update would have seen a truthy object, which is
@@ -86,7 +87,7 @@ describe("The send result", () => {
 	});
 });
 
-describe("Recording what the provider tells us", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Recording what the provider tells us", () => {
 	let abuseId: number;
 	let reportId: number;
 	const ABUSE_MSG = `resend-fixture-abuse-${crypto.randomUUID().slice(0, 8)}`;

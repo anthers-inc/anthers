@@ -16,9 +16,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { setSecureCookie, setSessionCookie } from "../lib/cookies.js";
+import { PENDING_SIGNUP_COOKIE, setSecureCookie, setSessionCookie } from "../lib/cookies.js";
 import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
 import { allowedOrigins } from "../origins.js";
+import { sendAbuseAlert } from "../services/email.js";
 
 const TOUCHED = ["BASE_URL", "FRONTEND_URL", "NODE_ENV"] as const;
 const saved = new Map<string, string | undefined>();
@@ -132,13 +133,18 @@ describe("cookies in production's actual environment", () => {
 		expect(header).toContain("HttpOnly");
 	});
 
-	it("marks the ATProto pending-signup cookie Secure, through the same helper", async () => {
+	it("marks the pending-signup cookie Secure, through the same helper", async () => {
 		// The pending cookie carried its own copy of these attributes and its own NODE_ENV
 		// branch. It goes through `setSecureCookie` now, so this asserts the shared policy the
-		// route actually calls rather than a second description of it.
+		// route actually calls rather than a second description of it. ⚠️ Named through the
+		// constant rather than as a literal: the cookie was renamed on 2026-08-26 when the
+		// parked ATProto identity generalized into a pending account both doors write, and a
+		// literal here would have kept asserting the attributes of a cookie nothing sets.
 		asProduction();
-		const header = await setCookieHeader((c) => setSecureCookie(c, "atproto_pending", "tok", 600));
-		expect(header).toContain("atproto_pending=tok");
+		const header = await setCookieHeader((c) =>
+			setSecureCookie(c, PENDING_SIGNUP_COOKIE, "tok", 600),
+		);
+		expect(header).toContain(`${PENDING_SIGNUP_COOKIE}=tok`);
 		expect(header).toContain("Secure");
 	});
 
@@ -147,5 +153,79 @@ describe("cookies in production's actual environment", () => {
 		const header = await setCookieHeader((c) => setSessionCookie(c, "tok"));
 		expect(header).toContain("session=tok");
 		expect(header).not.toContain("Secure");
+	});
+});
+
+/**
+ * The abuse mailbox is the one channel that must never be trained to be skimmed.
+ *
+ * 🚨 **This is the guard that did not exist on 2026-08-26**, when a worker running on a
+ * developer's machine with a real `RESEND_API_KEY` drained a whole session's test fixtures
+ * into a real inbox — 390 floor alerts, 168 of them in one hour. `sendEmail` already refused
+ * under the test runner, and that was not enough: the tests were not sending, they were
+ * writing `moderation_reports` rows that `escalate-reports` picked up five minutes later, in
+ * a different process where the test-runner guard does not apply.
+ *
+ * ⚠️ Asserted through `sendAbuseAlert` rather than through the escalators that call it,
+ * because it is the sender that has to hold this. An escalator asserted alone would keep
+ * passing if a third caller mailed `abuse@` directly.
+ */
+describe("the abuse mailbox is not reachable from a developer's machine", () => {
+	/**
+	 * What the sender said it did.
+	 *
+	 * 🚨 **The return value cannot tell the two branches apart, and a first draft of these
+	 * tests did not notice.** Both answer `{sent: false}` — one because the gate refused, the
+	 * other because `sendEmail` refuses under the test runner — so an assertion on the result
+	 * alone passes with the gate deleted. The warning is the only observable that says *which*
+	 * refusal happened, which makes it the thing worth asserting.
+	 */
+	async function warningFrom(run: () => Promise<unknown>): Promise<string> {
+		const original = console.warn;
+		const lines: string[] = [];
+		console.warn = (...args: unknown[]) => {
+			lines.push(args.join(" "));
+		};
+		try {
+			await run();
+		} finally {
+			console.warn = original;
+		}
+		return lines.join("\n");
+	}
+
+	it("withholds the alert off a public deployment, and says so", async () => {
+		asDevelopment();
+		delete process.env.ABUSE_ALERTS_ENABLED;
+		let result: unknown;
+		const warned = await warningFrom(async () => {
+			result = await sendAbuseAlert({ subject: "Floor report", html: "<p>x</p>" });
+		});
+
+		expect(warned).toMatch(/withheld abuse alert/i);
+		// `sent: false` rather than a throw: the caller has already committed the report, and
+		// it must leave `escalated_at` null — a row claiming somebody was told, when nobody
+		// was, is worse than one that admits it.
+		expect(result).toEqual({ sent: false, messageId: null });
+	});
+
+	it("sends anyway when somebody asks for it explicitly", async () => {
+		// The delivery loop is worth exercising against a real mailbox on purpose. What must
+		// not happen is exercising it by accident. ⚠️ It gets as far as `sendEmail`, which
+		// refuses under the test runner — so what this pins is that the gate OPENED, named by
+		// which refusal came back.
+		asDevelopment();
+		process.env.ABUSE_ALERTS_ENABLED = "true";
+		try {
+			const warned = await warningFrom(() =>
+				sendAbuseAlert({ subject: "Floor report", html: "<p>x</p>" }),
+			);
+			expect(warned).not.toMatch(/withheld abuse alert/i);
+			expect(warned, "it reached the sender, which is as far as a test may go").toMatch(
+				/test run — not sending|RESEND_API_KEY unset/i,
+			);
+		} finally {
+			delete process.env.ABUSE_ALERTS_ENABLED;
+		}
 	});
 });

@@ -21,18 +21,18 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { atprotoPendingSignups, atprotoSessions, signupCodes, users } from "@anthers/db/schema";
+import { atprotoSessions, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
+import { readPdsEmail } from "../services/atproto.js";
+import { setAtprotoClient } from "../services/atproto-client.js";
 import {
-	attachPendingSignup,
-	PENDING_SIGNUP_TTL_MS,
-	readPdsEmail,
+	consumePendingSignup,
+	picksOf,
 	readPendingSignup,
 	startPendingSignup,
 	sweepExpiredPendingSignups,
-} from "../services/atproto.js";
-import { setAtprotoClient } from "../services/atproto-client.js";
+} from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
 
 const RUN = `su${Date.now().toString(36)}`;
@@ -106,7 +106,8 @@ afterAll(async () => {
 	globalThis.fetch = realFetch;
 	if (prevFlag === undefined) delete process.env.ATPROTO_SIGNUP_ENABLED;
 	else process.env.ATPROTO_SIGNUP_ENABLED = prevFlag;
-	await db.delete(atprotoPendingSignups).where(like(atprotoPendingSignups.did, `did:plc:${RUN}%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.atprotoDid, `did:plc:${RUN}%`));
+	await db.delete(pendingSignups).where(like(pendingSignups.email, `${RUN}%`));
 	await db.delete(atprotoSessions).where(like(atprotoSessions.did, `did:plc:${RUN}%`));
 	await db.delete(signupCodes).where(like(signupCodes.email, `${RUN}%`));
 	await db.delete(users).where(like(users.email, `${RUN}%`));
@@ -131,8 +132,59 @@ async function runCallback(staged: {
 }
 
 function pendingCookie(setCookie: string): string | undefined {
-	return setCookie.match(/atproto_pending=([^;]+)/)?.[1];
+	return setCookie.match(/signup_pending=([^;]+)/)?.[1];
 }
+
+describe("the browser stays on one host", () => {
+	/*
+	 * 🚨 **This is the defect that broke the Bluesky signup three times over, and none of the
+	 * other tests here could see it.** The ATProto spec permits only `127.0.0.1` / `[::1]` for
+	 * a loopback client's redirect — never `localhost` — so in development the OAuth callback
+	 * arrives on `127.0.0.1:8000` while the rest of the app was talking to `localhost:8000`.
+	 * A browser treats those as different hosts and scopes cookies accordingly, so the pending
+	 * signup written at the callback was unreadable by the page that had to finish it: the
+	 * finishing page found an empty row and asked for an address the PDS had already handed
+	 * over.
+	 *
+	 * Every other test drives this route with an explicit `Cookie` header, which is precisely
+	 * why they all passed — a header cannot notice that it would never have been sent.
+	 */
+	it("sends the browser back to the host it arrived from", async () => {
+		const previous = process.env.FRONTEND_URL;
+		delete process.env.FRONTEND_URL;
+		try {
+			nextCallback = { did: did("host"), state: JSON.stringify({ intent: "signup" }) };
+			const res = await app.request(
+				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+			);
+			expect(res.status).toBe(302);
+			const location = new URL(res.headers.get("location") as string);
+			expect(
+				location.hostname,
+				"bouncing to another host mid-flow leaves the pending signup in a cookie jar the next page cannot read",
+			).toBe("127.0.0.1");
+		} finally {
+			if (previous === undefined) delete process.env.FRONTEND_URL;
+			else process.env.FRONTEND_URL = previous;
+		}
+	});
+
+	it("still obeys FRONTEND_URL where it is configured, which is production", async () => {
+		const previous = process.env.FRONTEND_URL;
+		process.env.FRONTEND_URL = "https://anthers.org";
+		try {
+			nextCallback = { did: did("hostprod"), state: JSON.stringify({ intent: "signup" }) };
+			const res = await app.request(
+				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+			);
+			const location = new URL(res.headers.get("location") as string);
+			expect(location.origin).toBe("https://anthers.org");
+		} finally {
+			if (previous === undefined) delete process.env.FRONTEND_URL;
+			else process.env.FRONTEND_URL = previous;
+		}
+	});
+});
 
 describe("the scope a signup asks for", () => {
 	it("asks for the address, and only signup does", async () => {
@@ -284,16 +336,50 @@ describe("no answer a PDS can give creates an account", () => {
 		pds.body = { email: addr("prefill"), emailConfirmed: false };
 		const { cookies } = await runCallback({ did: did("prefill") });
 
-		const res = await app.request("/api/atproto/pending", {
-			headers: { Cookie: `atproto_pending=${pendingCookie(cookies)}` },
+		const res = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${pendingCookie(cookies)}` },
 		});
-		const body = (await res.json()) as { pending: { handle: string; email: string | null } };
+		const body = (await res.json()) as {
+			pending: { atprotoHandle: string | null; email: string | null };
+		};
 		expect(body.pending.email).toBe(addr("prefill"));
-		expect(body.pending.handle).toBe(`${RUN}.bsky.social`);
+		expect(body.pending.atprotoHandle).toBe(`${RUN}.bsky.social`);
+	});
+
+	it("posts the code on the way back, so the person lands on the code box", async () => {
+		/*
+		 * 🚨 **Driven through the CALLBACK, not through the function it calls.** A first version
+		 * of this asserted `issueCodeForPending` directly and passed with the call removed from
+		 * the route entirely — the same shape as a button wired to nothing, which looks
+		 * identical to a wired one until you press it. What is worth pinning is that the round
+		 * trip ends with a code in the post.
+		 *
+		 * ⭐ Why it sends at all: asking Bluesky for `transition:email` is worth doing only if it
+		 * saves the step. Landing somebody on a field already holding their address, under a
+		 * button, gives most of that step back — Parker read exactly that as Anthers having
+		 * failed to use the address, twice.
+		 */
+		pds.body = { email: addr("posted"), emailConfirmed: true };
+		const { cookies } = await runCallback({ did: did("posted") });
+		const token = pendingCookie(cookies);
+
+		const row = await readPendingSignup(token);
+		expect(row?.email).toBe(addr("posted"));
+		expect(row?.codeSentAt, "a code the person can actually be waiting for").not.toBeNull();
+	});
+
+	it("sends nothing when the PDS refused the scope, and says so", async () => {
+		// Nothing to mail, so the finishing page asks for an address the ordinary way — and
+		// must not claim to have sent anything.
+		pds.scope = "atproto";
+		const { cookies } = await runCallback({ did: did("noscope2") });
+		const row = await readPendingSignup(pendingCookie(cookies));
+		expect(row?.email).toBeNull();
+		expect(row?.codeSentAt).toBeNull();
 	});
 
 	it("tells a browser holding no token nothing at all", async () => {
-		const res = await app.request("/api/atproto/pending");
+		const res = await app.request("/api/auth/signup/pending");
 		expect(((await res.json()) as { pending: unknown }).pending).toBeNull();
 	});
 });
@@ -314,7 +400,7 @@ describe("the sign-in door still cannot sign anyone up", () => {
 	});
 });
 
-describe("the parked identity itself", () => {
+describe("the proved identity on a pending signup", () => {
 	const identity = (tag: string) => ({
 		did: did(tag),
 		handle: "someone.bsky.social",
@@ -322,19 +408,19 @@ describe("the parked identity itself", () => {
 	});
 
 	it("attaches to the account whose address was just proved", async () => {
-		const token = await startPendingSignup(identity("attach"));
+		const token = await startPendingSignup({ identity: identity("attach") });
 		const [user] = await db
 			.insert(users)
 			.values({ email: addr("attach") })
 			.returning();
 
-		expect(await attachPendingSignup(token, user.id)).toEqual({ attached: true });
+		expect((await consumePendingSignup(token, user.id))?.atprotoLinked).toBe(true);
 		const [after] = await db.select().from(users).where(eq(users.id, user.id));
 		expect(after.atprotoDid).toBe(did("attach"));
 	});
 
 	it("is spent on use, so it cannot be replayed onto a second account", async () => {
-		const token = await startPendingSignup(identity("once"));
+		const token = await startPendingSignup({ identity: identity("once") });
 		const [first] = await db
 			.insert(users)
 			.values({ email: addr("once1") })
@@ -344,8 +430,8 @@ describe("the parked identity itself", () => {
 			.values({ email: addr("once2") })
 			.returning();
 
-		await attachPendingSignup(token, first.id);
-		expect(await attachPendingSignup(token, second.id)).toEqual({ attached: false });
+		await consumePendingSignup(token, first.id);
+		expect(await consumePendingSignup(token, second.id)).toBeNull();
 
 		const [after] = await db.select().from(users).where(eq(users.id, second.id));
 		expect(after.atprotoDid).toBeNull();
@@ -361,28 +447,27 @@ describe("the parked identity itself", () => {
 			.values({ email: addr("other") })
 			.returning();
 
-		const token = await startPendingSignup(identity("contested"));
-		expect(await attachPendingSignup(token, other.id)).toEqual({ attached: false });
+		const token = await startPendingSignup({ identity: identity("contested") });
+		// ⚠️ Not fatal, deliberately: the signup still finishes, and the right outcome is a
+		// signed-in account with no link rather than a refusal at the last step.
+		expect((await consumePendingSignup(token, other.id))?.atprotoLinked).toBe(false);
 
 		const [stillOwner] = await db.select().from(users).where(eq(users.id, owner.id));
 		expect(stillOwner.atprotoDid).toBe(did("contested"));
 	});
 
 	it("expires, and reads as absent before the sweep gets to it", async () => {
-		const token = await startPendingSignup(identity("stale"));
+		const token = await startPendingSignup({ identity: identity("stale") });
 		await db
-			.update(atprotoPendingSignups)
-			.set({ createdAt: new Date(Date.now() - PENDING_SIGNUP_TTL_MS - 1000) })
-			.where(eq(atprotoPendingSignups.token, token));
+			.update(pendingSignups)
+			.set({ expiresAt: new Date(Date.now() - 1000) })
+			.where(eq(pendingSignups.token, token));
 
 		// Absent to a reader immediately — the sweep is housekeeping, never the gate.
 		expect(await readPendingSignup(token)).toBeUndefined();
 
 		await sweepExpiredPendingSignups();
-		const rows = await db
-			.select()
-			.from(atprotoPendingSignups)
-			.where(eq(atprotoPendingSignups.token, token));
+		const rows = await db.select().from(pendingSignups).where(eq(pendingSignups.token, token));
 		expect(rows.length).toBe(0);
 	});
 
@@ -391,13 +476,48 @@ describe("the parked identity itself", () => {
 			.insert(users)
 			.values({ email: addr("notoken") })
 			.returning();
-		expect(await attachPendingSignup(undefined, user.id)).toEqual({ attached: false });
+		expect(await consumePendingSignup(undefined, user.id)).toBeNull();
+	});
+
+	it("lands on the pending signup this browser already started, picks and all", async () => {
+		// 🚨 **The whole point of writing the row before the round trip.** The identity must
+		// join the choices somebody already made rather than replacing them — arriving back
+		// from bsky.social at an empty signup is the defect this flow was rebuilt to fix.
+		const begin = await app.request("/api/auth/signup/begin", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+			body: JSON.stringify({ picks: { anthers: 6, follow: ["alice"], seed: ["alice"] } }),
+		});
+		const started = pendingCookie(begin.headers.get("set-cookie") ?? "") as string;
+		expect(started).toBeTruthy();
+
+		nextCallback = {
+			did: did("carries"),
+			state: JSON.stringify({ intent: "signup" }),
+		};
+		const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social", {
+			headers: { Cookie: `signup_pending=${started}` },
+		});
+		expect(res.status).toBe(302);
+
+		const row = await readPendingSignup(started);
+		expect(row?.atprotoDid, "the same row, not a new one").toBe(did("carries"));
+		expect(picksOf(row as NonNullable<typeof row>).anthers).toBe(6);
 	});
 });
 
 describe("finishing a parked signup through the emailed code", () => {
-	/** Spend a real code for an address, carrying whatever cookies are given. */
+	/**
+	 * Spend a real code for an address, carrying whatever cookies are given.
+	 *
+	 * 🚨 **The live code is dropped first, and without that the send throttle answers instead
+	 * of the rule under test.** The callback posts a code itself now, so a second
+	 * `issueSignupCode` seconds later returns `{code: null}` because one just went out — which
+	 * reads identically to the service refusing, and fails this helper for a reason that has
+	 * nothing to do with what the test is asserting.
+	 */
 	async function verify(email: string, cookie: string) {
+		await db.delete(signupCodes).where(eq(signupCodes.email, email.trim().toLowerCase()));
 		const issued = await issueSignupCode(email);
 		expect(issued.code, "the test needs the plaintext code the service just minted").toBeTruthy();
 		return app.request("/api/auth/signup/verify", {
@@ -416,7 +536,7 @@ describe("finishing a parked signup through the emailed code", () => {
 		const { cookies } = await runCallback({ did: did("finish") });
 		const token = pendingCookie(cookies);
 
-		const res = await verify(addr("finish"), `atproto_pending=${token}`);
+		const res = await verify(addr("finish"), `signup_pending=${token}`);
 		expect(res.status).toBe(201);
 		const body = (await res.json()) as { created: boolean; needsOnboarding: boolean };
 		expect(body.created).toBe(true);
@@ -432,7 +552,7 @@ describe("finishing a parked signup through the emailed code", () => {
 
 		// The token is spent and the cookie cleared, so a back button cannot replay it.
 		expect(await readPendingSignup(token)).toBeUndefined();
-		expect(res.headers.get("set-cookie")).toMatch(/atproto_pending=;|atproto_pending=""/);
+		expect(res.headers.get("set-cookie")).toMatch(/signup_pending=;|signup_pending=""/);
 	});
 
 	it("links a RETURNING account whose address matches, because they proved the mailbox", async () => {
@@ -443,7 +563,7 @@ describe("finishing a parked signup through the emailed code", () => {
 		pds.body = { email: addr("returning"), emailConfirmed: true };
 		const { cookies } = await runCallback({ did: did("returning") });
 
-		const res = await verify(addr("returning"), `atproto_pending=${pendingCookie(cookies)}`);
+		const res = await verify(addr("returning"), `signup_pending=${pendingCookie(cookies)}`);
 		expect(res.status).toBe(200);
 
 		const [user] = await db

@@ -174,9 +174,21 @@ export default function LoginPage() {
 				const body = (await res.json().catch(() => ({}))) as { error?: string };
 				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
 			}
-			const body = (await res.json()) as { needsOnboarding: boolean };
+			const body = (await res.json()) as { needsOnboarding: boolean; resume: boolean };
 
 			setCodeEmail(null);
+
+			// 🚨 **A signup somebody started elsewhere and never finished, and this door still
+			// created nothing.** The code proved the mailbox, which is the only thing
+			// resumption may ever be gated on, so the server handed the pending signup to this
+			// browser — and `/finish` is where it becomes an account, on the signup pair where
+			// minting belongs. Deliberately no `refreshUser()`: nobody is signed in yet, and
+			// there is nothing new for the context to learn.
+			if (body.resume) {
+				navigate("/finish", { replace: true });
+				return;
+			}
+
 			await refreshUser();
 			// An account that never finished onboarding still owes a handle and the terms,
 			// and the emailed code is the only way it can come back at all — so this is the

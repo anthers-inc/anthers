@@ -15,11 +15,12 @@
  * detail — that re-rating can't resurrect a hidden rating, and that a restore is
  * a NEW log row rather than an edit to the hide it reverses.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, moderationActions, moderationReports, ratings, users } from "@anthers/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -228,6 +229,16 @@ describe("Filing a report", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].reason).toBe("harassment");
 	});
+});
+
+/**
+ * 🚨 **Reports do not go with their reporter.** `moderation_reports.reporter_id` is `set null`
+ * rather than `cascade`, because a moderation record has to outlive the account it concerns —
+ * so deleting these users leaves every report this suite filed behind, and every run adds more.
+ * In `afterAll` rather than a closing test, so it runs whether the suite passed or bailed.
+ */
+afterAll(async () => {
+	await purgeFixtureAccounts([creatorName, adminName, viewerAName, viewerBName]);
 });
 
 describe("Queue gating", () => {

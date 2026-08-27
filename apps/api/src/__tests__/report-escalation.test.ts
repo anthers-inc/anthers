@@ -17,13 +17,15 @@
  * passes every obvious test and misses the report that matters most, which is why
  * the reason codes are asserted one at a time instead of as a set.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, moderationReports, users } from "@anthers/db/schema";
 import { FLOOR_MODERATION_REASONS, isFloorReason } from "@anthers/shared/moderation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { loadQueue, pendingEscalations } from "../services/moderation.js";
+import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
+import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 const testFetch = app.fetch;
@@ -67,6 +69,7 @@ let slug: string;
 const commentIds: number[] = [];
 
 beforeAll(async () => {
+	if (SKIP_ABUSE_TESTS) return;
 	await db.execute(
 		sql`DELETE FROM users WHERE username IN (${creatorName}, ${reporterNames[0]}, ${reporterNames[1]}, ${reporterNames[2]}, ${reporterNames[3]})`,
 	);
@@ -137,7 +140,7 @@ async function escalatedAt(reportId: number): Promise<Date | null> {
 	return row?.escalatedAt ?? null;
 }
 
-describe("The floor taxonomy", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("The floor taxonomy", () => {
 	it("names the three reasons that must reach a person, and sexual is one of them", () => {
 		// Asserted individually rather than as a set: a set comparison written against
 		// the implementation would agree with whatever the implementation says, and the
@@ -155,7 +158,7 @@ describe("The floor taxonomy", () => {
 	});
 });
 
-describe("Filing a floor report", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
 	it("marks every floor reason as owed an alert, sexual included", async () => {
 		const filed: number[] = [];
 		const reasons = ["illegal", "sexual", "violence"];
@@ -200,7 +203,7 @@ describe("Filing a floor report", () => {
 	});
 });
 
-describe("What the console can see", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 	/**
 	 * 🚨 The operator queue is the one place a floor report is looked at, and until
 	 * `floorAlerted` existed it could not say whether anybody outside the console had been
@@ -248,10 +251,17 @@ describe("What the console can see", () => {
 	});
 });
 
-describe("Cleanup", () => {
-	it("removes the fixture", async () => {
-		await db.delete(comments).where(inArray(comments.id, commentIds));
-		await db.delete(users).where(inArray(users.username, [creatorName, ...reporterNames]));
-		expect(true).toBe(true);
-	});
+/**
+ * 🚨 **Teardown, moved out of a closing `it` on 2026-08-26.** As a test it read as tidy and
+ * tested nothing, it sorted among the real tests as though it were one, and a suite that bailed
+ * early never reached it — so a failing run left its floor reports behind, which is exactly the
+ * run you least want littering. `afterAll` happens whatever the tests did.
+ *
+ * ⚠️ And it deletes the REPORTS, which the old version did not: `reporter_id` is `set null`
+ * rather than `cascade`, so removing the users left every report this suite filed in the queue.
+ */
+afterAll(async () => {
+	if (SKIP_ABUSE_TESTS) return;
+	await db.delete(comments).where(inArray(comments.id, commentIds));
+	await purgeFixtureAccounts([creatorName, ...reporterNames]);
 });

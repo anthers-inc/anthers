@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * The signup ceremony on `/subscribe`.
+ * Starting an account from `/subscribe`, and the one door rule around it.
+ *
+ * ⚠️ **The ceremony stopped happening on this page on 2026-08-26.** Pressing *Create My
+ * Account* writes the choices down as a pending signup and hands the visitor to `/finish`,
+ * whose only job is finishing — so what this spec pins here is the *handoff* and the
+ * absence assertions, and everything past the handoff is `finish-signup.e2e.ts`.
  *
  * 🚨 **This page had no e2e coverage at all**, which is recorded in the Agents Hub as a
  * known gap — it was rebuilt wholesale in #223 with `make verify` green throughout, and
@@ -140,7 +145,9 @@ test.describe("one signup door", () => {
 });
 
 test.describe("starting an account from /subscribe", () => {
-	test("the ceremony opens on the page, and does not send anyone to /signup", async ({ page }) => {
+	test("pressing the button takes the visitor off this page, with no modal over it", async ({
+		page,
+	}) => {
 		await page.goto("/subscribe");
 
 		await topSignup(page).locator('input[type="email"]').fill(addr());
@@ -148,15 +155,19 @@ test.describe("starting an account from /subscribe", () => {
 			.getByRole("button", { name: /create my free account/i })
 			.click();
 
-		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
-
-		// The property that matters. The old flow bounced to /signup, and the picks only
-		// survived because they were being mirrored into session storage on every change —
-		// they left the screen at the exact moment they were being agreed to.
-		expect(new URL(page.url()).pathname).toBe("/subscribe");
+		// 🚨 **The property this whole change exists for.** The code box used to open as a
+		// modal *over this page* — the last thing asked of somebody, on top of a page still
+		// inviting them to add and drop picks. Parker's walkthrough on 2026-08-25 could not
+		// tell a Bluesky round trip from having accomplished nothing for the same reason.
+		await expect(page).toHaveURL(/\/finish$/);
+		await expect(page.getByRole("heading", { name: /confirm your email/i })).toBeVisible();
+		await expect(
+			page.locator(".modal-open"),
+			"the finishing page is a page, not a layer over the one before it",
+		).toHaveCount(0);
 	});
 
-	test("a chosen Badge changes the ask, and the ceremony says there is a second step", async ({
+	test("a chosen Badge changes the ask, and the flow says a payment is coming", async ({
 		page,
 	}) => {
 		await page.goto("/subscribe");
@@ -176,9 +187,17 @@ test.describe("starting an account from /subscribe", () => {
 		await topSignup(page).locator('input[type="email"]').fill(addr());
 		await cta.click();
 
-		// A paying start is two steps; a free one is one, and says so rather than counting
-		// to a step it will never reach.
-		await expect(page.getByText("Step 1 of 2")).toBeVisible();
+		// ⚠️ **The rail lists what will actually happen and nothing else.** A paying signup
+		// has a payment step and a free one does not, which is why `signupSteps` builds the
+		// list rather than drawing a fixed three. A rail naming a step somebody will never
+		// meet tells them the flow is longer than it is.
+		await expect(page).toHaveURL(/\/finish$/);
+		// ⚠️ **Scoped to the rail by its accessible name.** An unscoped `listitem` filter
+		// matched `/subscribe`'s own fee breakdown, which has two rows reading "Payments" —
+		// and reported a strict-mode violation where it meant to report a missing step.
+		await expect(
+			page.getByRole("list", { name: "Signup Progress" }).getByText("Payment", { exact: true }),
+		).toBeVisible();
 	});
 
 	/**
@@ -207,18 +226,28 @@ test.describe("starting an account from /subscribe", () => {
 		);
 	});
 
-	test("the free path promises one step only", async ({ page }) => {
+	test("the free path has no payment step to promise", async ({ page }) => {
 		await page.goto("/subscribe");
 		await topSignup(page).locator('input[type="email"]').fill(addr());
 		await topSignup(page)
 			.getByRole("button", { name: /create my free account/i })
 			.click();
 
-		await expect(page.getByText("Verify your email")).toBeVisible();
-		await expect(page.getByText("Step 1 of 2")).toHaveCount(0);
+		await expect(page).toHaveURL(/\/finish$/);
+		const rail = page.getByRole("list", { name: "Signup Progress" });
+		await expect(rail.getByText("Your Email", { exact: true })).toBeVisible();
+		await expect(rail.getByText("Payment", { exact: true })).toHaveCount(0);
 	});
 });
 
+/**
+ * The six-box field, driven where a visitor actually meets it.
+ *
+ * ⚠️ **It is the same component `/login` renders in a modal**, split out of `EmailCodeModal`
+ * on 2026-08-26 so the finishing page could ask in place. These assertions are about the
+ * field rather than the page, and they are here rather than duplicated because a second copy
+ * of them would agree with the original right up until one of the two was fixed again.
+ */
 test.describe("the code field", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/subscribe");
@@ -226,11 +255,11 @@ test.describe("the code field", () => {
 		await topSignup(page)
 			.getByRole("button", { name: /create my free account/i })
 			.click();
-		await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
+		await expect(page).toHaveURL(/\/finish$/);
 
-		// 🚨 Wait for the autofocus, not just for the modal. Every test below drives the
+		// 🚨 Wait for the autofocus, not just for the page. Every test below drives the
 		// field with bare `keyboard.type`, which goes wherever focus currently is — and
-		// the modal becoming *visible* is a different moment from its focus effect having
+		// the field becoming *visible* is a different moment from its focus effect having
 		// run. Asserting only visibility passed in isolation and failed under the full
 		// suite's parallel load, which is the classic shape of an e2e flake: the race is
 		// real, the test just usually wins it.
@@ -277,7 +306,7 @@ test.describe("the code field", () => {
 	});
 
 	test("refuses to submit until all six are filled", async ({ page }) => {
-		const verify = page.getByRole("button", { name: /verify my email/i });
+		const verify = page.getByRole("button", { name: /confirm my email/i });
 		await expect(verify).toBeDisabled();
 
 		await page.keyboard.type("ABCDE");
@@ -304,7 +333,7 @@ test.describe("the code field", () => {
 		await expect(boxes.first()).toBeFocused();
 
 		// 🚨 And nobody is signed in. A failed verification that still minted a session
-		// would be invisible here — the modal looks identical — so it is asserted against
+		// would be invisible here — the page looks identical — so it is asserted against
 		// the API rather than the page.
 		const me = await page.request.get("http://localhost:8000/api/auth/me");
 		expect((await me.json()).user, "a refused code must not create a session").toBeNull();

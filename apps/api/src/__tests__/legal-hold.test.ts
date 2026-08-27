@@ -138,7 +138,7 @@ async function seedRedactableReport(reporterId: number, subjectId: number): Prom
 			subjectType: "comment",
 			subjectId,
 			reporterId,
-			reason: "illegal",
+			reason: "spam",
 			details: "the reporter's own words",
 			status: "dismissed",
 			resolvedAt: longAgo(),

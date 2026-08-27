@@ -120,6 +120,14 @@ afterAll(async () => {
 	// `set null` rather than `cascade` (changed 2026-08-16, so an infringer cannot
 	// erase the record by deleting the Work) — so deleting the Work no longer
 	// takes the notices with it, and a suite that assumed it would leaves litter.
+	// 🚨 Reports too, and for the same reason as the notices: `moderation_reports` FKs are
+	// deliberately `set null`, so deleting the Work and the users leaves them behind. One of
+	// these carries a FLOOR reason — this suite reports a Work as "illegal" on purpose,
+	// because that is the closest reason to a copyright claim — and a floor report left in
+	// the database is an alert somebody is owed. Litter here is a person's attention.
+	await db.execute(
+		sql`DELETE FROM moderation_reports WHERE subject_id IN (${workId}, ${otherWorkId}) AND subject_type = 'work'`,
+	);
 	await db.execute(sql`DELETE FROM dmca_notices WHERE work_id IN (${workId}, ${otherWorkId})`);
 	await db.execute(sql`DELETE FROM works WHERE id IN (${workId}, ${otherWorkId})`);
 	await db.execute(

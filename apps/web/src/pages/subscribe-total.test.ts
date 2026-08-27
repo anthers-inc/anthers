@@ -26,7 +26,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { ANTHERS_BADGES, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
-import { marginalRows, RUNG_AMOUNTS, supportTotal } from "./SubscribePage";
+import { supportTotal } from "@anthers/shared/signup";
+import { marginalRows, RUNG_AMOUNTS } from "./SubscribePage";
 
 const creator = (amount: number) => ({ amount });
 

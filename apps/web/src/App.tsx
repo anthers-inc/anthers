@@ -100,6 +100,7 @@ const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SubscribePage = lazy(() => import("./pages/SubscribePage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const UserDemoPage = lazy(() => import("./pages/UserDemoPage"));
@@ -166,6 +167,15 @@ export default function App() {
 					<Route path="/login" element={<LoginPage />} />
 					<Route path="/signup" element={<Navigate to="/subscribe" replace />} />
 					<Route path="/auth/atproto/callback" element={<ATProtoCallbackPage />} />
+					{/* Finishing a signup, and it belongs in the LOGGED-OUT shell beside the other
+					    two: the person standing here has a pending signup and no account, so the
+					    signed-in layout would offer them a sidebar of things they cannot reach.
+					    It is deliberately not behind `ProtectedRoute` either — what admits
+					    somebody is the pending signup rather than a session. 🚨 The page's own
+					    guard is what stops this becoming a second signup door: with no pending
+					    record it sends you to `/subscribe`, and there is no way to start one
+					    from here. */}
+					<Route path="/finish" element={<FinishSignupPage />} />
 				</Route>
 
 				{/*

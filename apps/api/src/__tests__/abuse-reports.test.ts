@@ -29,6 +29,7 @@ import {
 	resolveReportedWork,
 } from "../services/abuse-reports.js";
 import { placeHold } from "../services/legal-hold.js";
+import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -86,6 +87,7 @@ async function signUp(username: string): Promise<string> {
 let creatorCookie: string;
 
 beforeAll(async () => {
+	if (SKIP_ABUSE_TESTS) return;
 	await db.execute(sql`DELETE FROM users WHERE username = ${creatorName}`);
 	creatorCookie = await signUp(creatorName);
 	const [row] = await db
@@ -99,7 +101,7 @@ beforeAll(async () => {
 	workPublicId = work.publicId;
 }, DB_SETUP_TIMEOUT);
 
-describe("Anyone can file, with no account", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Anyone can file, with no account", () => {
 	it("accepts a report from a request carrying no session at all", async () => {
 		const res = await report({
 			url: `https://anthers.org/works/whatever-${workPublicId}`,
@@ -154,7 +156,7 @@ describe("Anyone can file, with no account", () => {
 	});
 });
 
-describe("What the form requires", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("What the form requires", () => {
 	it("refuses a report with nothing to look at", async () => {
 		const res = await report({ url: "", reason: "illegal", details: "Something is wrong here." });
 		expect(res.status).toBe(400);
@@ -181,7 +183,7 @@ describe("What the form requires", () => {
 	});
 });
 
-describe("Reading the reported location", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Reading the reported location", () => {
 	it("resolves a Work URL by its durable public id, not its slug", async () => {
 		// The slug changes on a rename and the publicId does not, which is the whole reason
 		// the two-part address exists. Matching on the slug would break every report filed
@@ -215,7 +217,7 @@ describe("Reading the reported location", () => {
 	});
 });
 
-describe("Which reports are owed an alert", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Which reports are owed an alert", () => {
 	it("owes one for every floor reason, sexual included", async () => {
 		const filed: number[] = [];
 		for (const reason of ["illegal", "sexual", "violence"]) {
@@ -268,7 +270,7 @@ describe("Which reports are owed an alert", () => {
 	});
 });
 
-describe("Too many from one caller", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Too many from one caller", () => {
 	it("declines the sixth in ten minutes, and says where to go instead", async () => {
 		const ip = "203.0.113.77";
 		const send = () =>
@@ -296,7 +298,7 @@ describe("Too many from one caller", () => {
 	});
 });
 
-describe("Closing one", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Closing one", () => {
 	it("closes an open report once, and not twice", async () => {
 		const res = await report({
 			url: `https://anthers.org/works/x-${workPublicId}`,
@@ -339,7 +341,7 @@ describe("Closing one", () => {
 	});
 });
 
-describe("Retention", () => {
+describe.skipIf(SKIP_ABUSE_TESTS)("Retention", () => {
 	it("drops the reporter's words and address on a settled report, and a hold stops it", async () => {
 		const settled = new Date("2020-01-01T00:00:00.000Z");
 		const [free] = await db
@@ -392,6 +394,7 @@ describe("Retention", () => {
 });
 
 afterAll(async () => {
+	if (SKIP_ABUSE_TESTS) return;
 	await db.execute(sql`DELETE FROM abuse_reports WHERE url LIKE 'https://anthers.org/works/%'`);
 	await db.execute(sql`DELETE FROM abuse_reports WHERE url = 'https://example.com/somewhere/else'`);
 	await db.execute(

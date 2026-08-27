@@ -10,9 +10,9 @@
  * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
 import { db } from "@anthers/db";
-import { atprotoPendingSignups, atprotoSessions, users } from "@anthers/db/schema";
+import { atprotoSessions, users } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
-import { eq, lt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { EMAIL_SCOPE, getAtprotoClient } from "./atproto-client.js";
 
 export interface AtprotoIdentity {
@@ -109,9 +109,10 @@ export function atprotoSignupEnabled(): boolean {
  * verification. The party being trusted was **whichever server the person's identity lives
  * on**, so anyone self-hosting a PDS could claim an address they do not control.
  *
- * An ATProto signup now ends where every other signup ends — `/auth/signup/verify`, after a
- * code we sent has been read — and the identity is attached there by `attachPendingSignup`.
- * That is the ONLY place an ATProto account comes into existence.
+ * An ATProto signup now ends where every other signup ends — after a code we sent has been
+ * read — and the identity is attached there by `consumePendingSignup` in
+ * `services/pending-signups.ts`. That is the ONLY place an ATProto account comes into
+ * existence.
  */
 
 /** Find the Anthers account already bound to a DID, refreshing its handle and PDS. */
@@ -201,91 +202,14 @@ export async function readPdsEmail(session: {
 }
 
 // ─── Signups waiting on an address ───────────────────────────────────────────
-
-/** How long a proved identity waits for its address before it has to be proved again. */
-export const PENDING_SIGNUP_TTL_MS = 30 * 60 * 1000;
-
-/**
- * Park a proved ATProto identity until an address is confirmed for it.
- *
- * Returns the opaque token that binds the row to one browser; the caller puts it in an
- * httpOnly cookie. See the schema note for why this is a token in a table rather than a
- * signed cookie, and why the DID alone would not do.
- */
-export async function startPendingSignup(
-	identity: AtprotoIdentity,
-	email?: string,
-): Promise<string> {
-	const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-	await db.insert(atprotoPendingSignups).values({
-		token,
-		did: identity.did,
-		handle: identity.handle,
-		pdsUrl: identity.pdsUrl,
-		// Kept only to prefill the field. It is not proof of anything — the emailed code is,
-		// and the person may type a different address, which is their right.
-		email: email ?? null,
-	});
-	return token;
-}
-
-/** Read a parked identity without spending it. Expired rows read as absent. */
-export async function readPendingSignup(
-	token: string | undefined,
-): Promise<typeof atprotoPendingSignups.$inferSelect | undefined> {
-	if (!token) return undefined;
-	const [row] = await db
-		.select()
-		.from(atprotoPendingSignups)
-		.where(eq(atprotoPendingSignups.token, token))
-		.limit(1);
-	if (!row) return undefined;
-	if (Date.now() - row.createdAt.getTime() > PENDING_SIGNUP_TTL_MS) return undefined;
-	return row;
-}
-
-/**
- * Attach a parked identity to an account whose address has just been proved, and spend it.
- *
- * 🚨 **This is where the email-collision case resolves, and it resolves safely.** The
- * account may be one that already existed — someone whose Anthers address happens to match
- * what their PDS holds — and attaching to it is correct precisely *because* they have just
- * typed a code sent to that mailbox. The PDS's claim about an address is somebody else's
- * assertion; a code we sent and they read is ours.
- *
- * Refuses rather than steals: a DID some other account already holds is left alone.
- */
-export async function attachPendingSignup(
-	token: string | undefined,
-	userId: number,
-): Promise<{ attached: boolean }> {
-	const row = await readPendingSignup(token);
-	if (!row) return { attached: false };
-
-	// Spend it either way. A token that has been looked at has done its job, and leaving a
-	// spent one alive is how a replay becomes possible.
-	await db.delete(atprotoPendingSignups).where(eq(atprotoPendingSignups.token, row.token));
-
-	const result = await linkAtprotoToUser(userId, {
-		did: row.did,
-		handle: row.handle,
-		pdsUrl: row.pdsUrl,
-	});
-	return { attached: !result.error };
-}
-
-/** Abandon a parked signup outright. Safe to call with no token, or a stale one. */
-export async function clearPendingSignup(token: string | undefined): Promise<void> {
-	if (!token) return;
-	await db.delete(atprotoPendingSignups).where(eq(atprotoPendingSignups.token, token));
-}
-
-/** Drop parked signups nobody came back for. Same contract as the OAuth state sweep. */
-export async function sweepExpiredPendingSignups(): Promise<void> {
-	await db
-		.delete(atprotoPendingSignups)
-		.where(lt(atprotoPendingSignups.createdAt, new Date(Date.now() - PENDING_SIGNUP_TTL_MS)));
-}
+//
+// 🚨 **They moved to `services/pending-signups.ts` on 2026-08-26, and the move is a
+// generalization rather than a relocation.** A parked ATProto identity was only ever one
+// kind of unfinished signup; the emailed door has them too, and both now write the same
+// `pending_signups` row so that one page can finish either. That module is the only writer
+// of those records, and it carries the rules about what may be carried across from an
+// unfinished signup — including the one that stops an address-resumed row handing over an
+// identity nobody re-proved.
 
 /**
  * Link an ATProto DID to an existing user account.

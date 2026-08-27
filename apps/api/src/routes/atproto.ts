@@ -24,22 +24,17 @@
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { deleteCookie, getCookie, type setCookie } from "hono/cookie";
+import { getCookie } from "hono/cookie";
 import { z } from "zod";
-import { setSecureCookie, setSessionCookie } from "../lib/cookies.js";
+import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoSignupEnabled,
-	clearPendingSignup,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
 	linkAtprotoToUser,
-	PENDING_SIGNUP_TTL_MS,
 	readPdsEmail,
-	readPendingSignup,
 	resolveIdentity,
-	startPendingSignup,
-	sweepExpiredPendingSignups,
 	unlinkAtprotoFromUser,
 } from "../services/atproto.js";
 import {
@@ -50,6 +45,13 @@ import {
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
 import { createSession, validateSession } from "../services/auth.js";
+import {
+	bindIdentityToPending,
+	findPendingByDid,
+	issueCodeForPending,
+	readPendingSignup,
+	sweepExpiredPendingSignups,
+} from "../services/pending-signups.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -81,24 +83,24 @@ interface AppState {
 	next?: string;
 }
 
-function getFrontendUrl(): string {
-	return process.env.FRONTEND_URL ?? "http://localhost:3000";
-}
-
 /**
- * The cookie that binds a parked signup to this browser.
+ * Where to send the browser once the round trip is over.
  *
- * 🚨 **It carried its own copy of the security attributes until 2026-08-23, including
- * `secure: process.env.NODE_ENV === "production"` — and `NODE_ENV` is set nowhere in this
- * app, so the cookie shipped without `Secure` in production.** That is the second time a
- * cookie written here has drifted from the session cookie's policy; `lib/cookies.ts` owns the
- * attributes now and this supplies only the name and the lifetime, which are the parts that
- * are genuinely its own.
+ * 🚨 **In development it follows the host this request arrived on, and that is the fix for a
+ * real defect rather than tidiness.** The ATProto spec permits only `127.0.0.1` / `[::1]` for
+ * a loopback client's redirect — never `localhost` — so the dev callback lands on
+ * `127.0.0.1:8000`. Bouncing from there to a hardcoded `localhost:3000` would move the browser
+ * to a *different host* mid-flow, and cookies are host-scoped: the pending signup written here
+ * would be unreadable there, which is exactly how the Bluesky handoff kept losing the address
+ * the PDS had just handed over.
+ *
+ * Production sets `FRONTEND_URL` and it wins, as it must — there the API and the SPA share one
+ * origin and none of this applies.
  */
-const PENDING_COOKIE = "atproto_pending";
-
-function setPendingCookie(c: Parameters<typeof setCookie>[0], token: string): void {
-	setSecureCookie(c, PENDING_COOKIE, token, Math.floor(PENDING_SIGNUP_TTL_MS / 1000));
+function getFrontendUrl(c: { req: { url: string } }): string {
+	const configured = process.env.FRONTEND_URL;
+	if (configured) return configured;
+	return `http://${new URL(c.req.url).hostname}:3000`;
 }
 
 /**
@@ -174,7 +176,7 @@ const atprotoRoutes = new Hono()
 
 	// ── Callback ─────────────────────────────────────────────────────────────
 	.get("/callback", async (c) => {
-		const callbackUrl = `${getFrontendUrl()}/auth/atproto/callback`;
+		const callbackUrl = `${getFrontendUrl(c)}/auth/atproto/callback`;
 
 		/** Compose the one URL this route ever redirects to, so no caller hand-builds a query. */
 		const back = (params: Record<string, string | undefined>) => {
@@ -184,13 +186,29 @@ const atprotoRoutes = new Hono()
 			}
 			return c.redirect(`${callbackUrl}?${query.toString()}`);
 		};
-		const fail = (reason: string) => back({ error: reason });
+		/**
+		 * 🚨 **Every refusal is logged, and it did not used to be.** This route turns any
+		 * failure into a query parameter the browser renders as a sentence — which means a
+		 * signup that silently goes wrong leaves *nothing* server-side to read. Three rounds of
+		 * debugging the Bluesky handoff on 2026-08-26 were spent inferring from table state
+		 * which branch had been taken, because the branch itself said nothing. A round trip
+		 * through somebody else's website is exactly the path that cannot be reproduced on
+		 * demand, so it is the last place to be quiet about what happened.
+		 */
+		const fail = (reason: string, detail?: unknown) => {
+			console.warn(`[atproto/callback] refused: ${reason}`, detail ?? "");
+			return back({ error: reason });
+		};
 
 		try {
 			const params = new URL(c.req.url).searchParams;
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			console.log(
+				`[atproto/callback] intent=${appState.intent} did=${session.did} ` +
+					`pendingCookie=${getCookie(c, PENDING_SIGNUP_COOKIE) ? "present" : "absent"}`,
+			);
 			// Sanitized on the way in as well; this is the read that actually decides where a
 			// browser goes, and it is the one that has to be right.
 			const next = sanitizeNextPath(appState.next) ?? undefined;
@@ -215,10 +233,22 @@ const atprotoRoutes = new Hono()
 			const user = await findUserByAtprotoDid(identity, profile.displayName);
 
 			if (!user && appState.intent !== "signup") {
-				// 🚨 A DID nobody has linked, reached through the sign-in door. This is a signup
-				// and the sign-in door cannot perform one — it asked for identity only, so it
-				// holds no address and could not create an account it can mail. `/subscribe` is
-				// where signing up happens, exactly as it is for everyone else.
+				// ⭐ **An unfinished signup resumes here, and that is what "come back and sign in
+				// with the same handle" means.** Somebody who started a Bluesky signup and walked
+				// away has a pending account and no `users` row, so the sign-in door finds
+				// nothing — but a second completed OAuth round trip is exactly the evidence the
+				// first one was, so the row may be handed back whole and bound to this browser.
+				const resumable = await findPendingByDid(identity.did);
+				if (resumable) {
+					setPendingSignupCookie(c, resumable.token);
+					return back({ success: "resume_signup", next });
+				}
+
+				// 🚨 A DID nobody has linked and no signup in progress, reached through the
+				// sign-in door. This is a signup and the sign-in door cannot perform one — it
+				// asked for identity only, so it holds no address and could not create an
+				// account it can mail. `/subscribe` is where signing up happens, exactly as it
+				// is for everyone else.
 				return fail("signup_disabled");
 			}
 
@@ -247,9 +277,35 @@ const atprotoRoutes = new Hono()
 				//
 				// ⭐ What the PDS's answer is still good for is **saving somebody typing**. The
 				// address rides along as a prefill; the code is what makes it true.
+				//
+				// ⚠️ **The identity lands on the pending signup this browser already started at
+				// `/subscribe`**, rather than starting a fresh one — that row is holding the
+				// choices somebody made before they left, and dropping them here is precisely
+				// the "sign up again, with no sign anything succeeded" that this flow exists to
+				// fix. `bindIdentityToPending` starts one only when there is nothing to add to.
 				const pds = await readPdsEmail(session);
-				const token = await startPendingSignup(identity, pds.email);
-				setPendingCookie(c, token);
+				const token = await bindIdentityToPending(
+					getCookie(c, PENDING_SIGNUP_COOKIE),
+					identity,
+					pds.email,
+				);
+				setPendingSignupCookie(c, token);
+
+				// ⭐ **And post the code now, rather than asking them to press a button about an
+				// address we just went and fetched.** Asking Bluesky for it was worth doing only
+				// if it saves the step; landing on a filled-in field and a Send button gives most
+				// of that step back. A no-op when the PDS gave us nothing, in which case the
+				// finishing page asks for an address the ordinary way.
+				await issueCodeForPending(token);
+
+				// What the finishing page will find, said plainly. The three facts that decide
+				// which face it shows are the three worth reading back on a walkthrough.
+				const parked = await readPendingSignup(token);
+				console.log(
+					`[atproto/callback] parked signup: handle=${identity.handle || "(none)"} ` +
+						`scopeGranted=${pds.scopeGranted} pdsEmail=${pds.email ? "yes" : "no"} ` +
+						`rowEmail=${parked?.email ? "yes" : "no"} codeSent=${parked?.codeSentAt ? "yes" : "no"}`,
+				);
 				return back({ success: "needs_email", next });
 			}
 
@@ -273,7 +329,7 @@ const atprotoRoutes = new Hono()
 			});
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "exchange_failed";
-			return fail(message);
+			return fail(message, err);
 		}
 	})
 
@@ -288,33 +344,11 @@ const atprotoRoutes = new Hono()
 
 	// ── A signup waiting on an address ───────────────────────────────────────
 	//
-	// What `/subscribe` needs in order to say *whose* signup it is finishing, and to
-	// prefill the address the PDS gave us when it gave us one.
-	//
-	// ⚠️ It answers from the httpOnly cookie and nothing else, so it can only ever describe
-	// a signup this browser started. The address it returns is one the PDS already handed
-	// us for this identity — but it is a **prefill and not a claim**, and the person may
-	// type a different one, which is theirs to do. The code is what proves it either way.
-	.get("/pending", async (c) => {
-		const row = await readPendingSignup(getCookie(c, PENDING_COOKIE));
-		// One shape, always. Two `c.json` calls returning different objects give the RPC
-		// client a union type that every caller then has to narrow by hand.
-		const pending: { handle: string; email: string | null } | null = row
-			? { handle: row.handle, email: row.email ?? null }
-			: null;
-		return c.json({ pending });
-	})
-
-	// Abandon it — the "actually, never mind" on `/subscribe`. The row goes as well as the
-	// cookie, because a parked identity nobody is claiming is just a row waiting to expire.
-	.post("/pending/cancel", async (c) => {
-		await clearPendingSignup(getCookie(c, PENDING_COOKIE));
-		deleteCookie(c, PENDING_COOKIE, {
-			path: "/",
-			...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
-		});
-		return c.json({ success: true });
-	})
+	// 🚨 **`GET /pending` and `POST /pending/cancel` moved to `/api/auth/signup/*` on
+	// 2026-08-26**, when a parked ATProto identity generalized into a pending account both
+	// doors write. They are not ATProto endpoints any more: the page that finishes a signup
+	// asks one question — *what am I finishing?* — and the answer must not depend on which
+	// door produced it.
 
 	// ── Unlink ───────────────────────────────────────────────────────────────
 	.post("/unlink", requireAuth, async (c) => {
