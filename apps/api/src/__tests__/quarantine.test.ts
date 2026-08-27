@@ -337,7 +337,7 @@ describe("The record and the hold", () => {
 				subjectType: "work",
 				subjectId: 0,
 				reporterId: buyerId,
-				reason: "sexual",
+				reason: "spam",
 				details: "fixture report",
 				escalatedAt: new Date(),
 			})
@@ -403,7 +403,7 @@ describe("The record and the hold", () => {
 				subjectType: "work",
 				subjectId: work.id,
 				reporterId: buyerId,
-				reason: "illegal",
+				reason: "spam",
 				details: "fixture report 2",
 				escalatedAt: new Date(),
 			})

@@ -536,7 +536,7 @@ describe("routing a report out to the copyright path", () => {
 		const reported = await post("/api/moderation/reports", buyerCookie, {
 			subjectType: "work",
 			subjectId: workId,
-			reason: "illegal",
+			reason: "spam",
 			details: "this is my song and they did not license it",
 		});
 		expect(reported.status).toBe(201);

@@ -117,7 +117,7 @@ async function makeReport(opts: { status: string; createdAt: Date; resolvedAt?: 
 			// (reporter, subjectType, subjectId), so reusing one would collide.
 			subjectId: Math.floor(Math.random() * 1_000_000) + 9_000_000,
 			reporterId,
-			reason: "illegal",
+			reason: "spam",
 			details: "Here is exactly what I saw and why it upset me.",
 			status: opts.status,
 			createdAt: opts.createdAt,
@@ -310,7 +310,7 @@ describe("moderation reports past the clock", () => {
 		expect(after?.reporterId).toBeNull();
 		expect(after?.redactedAt).toBeTruthy();
 		// The subject's history survives — that is what the record is for.
-		expect(after?.reason).toBe("illegal");
+		expect(after?.reason).toBe("spam");
 		expect(after?.status).toBe("resolved");
 		expect(after?.subjectType).toBe("work");
 	});
