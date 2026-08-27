@@ -52,6 +52,8 @@ const serif = { fontFamily: FONTS.fraunces };
 /** What `GET /api/auth/signup/pending` says about the signup this browser is finishing. */
 interface Pending {
 	email: string | null;
+	/** Whether a code has actually gone out to that address — never merely that we hold one. */
+	codeSent: boolean;
 	addressProved: boolean;
 	atprotoHandle: string | null;
 	picks: SignupPicks;
@@ -67,6 +69,28 @@ interface Pending {
  * in another browser and asking again would be asking somebody to prove the same fact twice.
  */
 type Face = "loading" | "address" | "code" | "resumed";
+
+/**
+ * Which face a pending signup calls for.
+ *
+ * 🚨 **`codeSent` is the discriminator, not `email`, and getting that wrong shipped a page
+ * that lied.** The Bluesky door arrives here holding an address nobody has mailed: the PDS
+ * supplies it at the OAuth callback, which is *after* the only place that sends a first code.
+ * Choosing on `email` alone rendered "we sent a six-character code to …" for an address
+ * nothing had been sent to, and left the person waiting on mail that was never coming.
+ * Holding an address and having posted to it are different facts.
+ *
+ * Exported because it is the whole of the bug, and a pure function is the only part of this
+ * page a unit test can reach.
+ */
+export function faceFor(pending: {
+	email: string | null;
+	codeSent: boolean;
+	addressProved: boolean;
+}): Exclude<Face, "loading"> {
+	if (pending.addressProved) return "resumed";
+	return pending.email && pending.codeSent ? "code" : "address";
+}
 
 export default function FinishSignupPage() {
 	const { user, isLoading, refreshUser } = useAuth();
@@ -138,8 +162,11 @@ export default function FinishSignupPage() {
 				}
 				setCreators(list);
 				setPending(row as Pending);
+				// Prefilled either way. When the PDS gave us an address, this is the whole
+				// value of having asked for it: the field arrives filled in and one press
+				// sends the code.
 				setEmail(row.email ?? "");
-				setFace(row.addressProved ? "resumed" : row.email ? "code" : "address");
+				setFace(faceFor(row as Pending));
 			})
 			.catch(() => {
 				if (live) setError("We couldn't pick up your signup. Please try again.");
@@ -317,6 +344,16 @@ export default function FinishSignupPage() {
 		);
 	}
 
+	/**
+	 * Whether the address in the field is one the PDS handed us rather than one they typed.
+	 *
+	 * ⚠️ Read off the pending record rather than off the field, because the field is state the
+	 * person can edit — the moment they change it, the copy explaining where it came from is
+	 * describing something that is no longer there.
+	 */
+	const prefilledFromBluesky =
+		!!pending.atprotoHandle && !!pending.email && email === pending.email;
+
 	const steps = signupSteps({
 		bluesky: pending.atprotoHandle ? "done" : null,
 		address: "current",
@@ -352,8 +389,15 @@ export default function FinishSignupPage() {
 						void sendCode();
 					}}
 				>
+					{/* ⭐ **The label says where a prefilled address came from.** An address that
+					    appears in a field by itself, on a page you reached by authorizing somewhere
+					    else, reads as something the site already knew about you rather than
+					    something it was just handed — and the whole reason for asking Bluesky was
+					    to save this typing, which only works if the person trusts what they see. */}
 					<label className="label px-0 pb-1" htmlFor="finish-email">
-						<span className="text-sm font-semibold">Where should we reach you?</span>
+						<span className="text-sm font-semibold">
+							{prefilledFromBluesky ? "Is this the right address?" : "Where should we reach you?"}
+						</span>
 					</label>
 					<input
 						id="finish-email"
@@ -366,12 +410,22 @@ export default function FinishSignupPage() {
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 					/>
+					{prefilledFromBluesky && (
+						<p className="mt-2 text-xs leading-relaxed text-base-content/50">
+							Bluesky gave us this one. Change it if you would rather we used another — the code is
+							what confirms it either way.
+						</p>
+					)}
 					<button
 						type="submit"
 						className={`btn btn-primary btn-lg mt-4 w-full ${busy ? "btn-disabled" : ""}`}
 						disabled={busy}
 					>
-						{busy ? "Sending…" : "Send me a code"}
+						{busy
+							? "Sending…"
+							: prefilledFromBluesky
+								? "Send a code to this address"
+								: "Send me a code"}
 					</button>
 				</form>
 			)}

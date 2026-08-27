@@ -45,6 +45,7 @@ import {
 import {
 	clearPendingSignup,
 	consumePendingSignup,
+	markCodeSent,
 	picksOf,
 	readPendingSignup,
 	resumeByProvedAddress,
@@ -238,6 +239,15 @@ function serializePendingSignup(row: Awaited<ReturnType<typeof readPendingSignup
 	if (!row) return null;
 	return {
 		email: row.email,
+		/**
+		 * Whether a code has actually gone out to that address.
+		 *
+		 * 🚨 **Separate from holding the address, and the finishing page needs both.** The
+		 * Bluesky door learns an address at the OAuth callback, which sends nothing — so a
+		 * page choosing its state on `email` alone announced "check your email" for mail that
+		 * was never posted.
+		 */
+		codeSent: row.codeSentAt !== null,
 		/** Whether a code sent to that address has already been completed — see the resume path. */
 		addressProved: row.emailProvedAt !== null,
 		atprotoHandle: row.atprotoDid ? row.atprotoHandle : null,
@@ -403,6 +413,9 @@ const authRoutes = new Hono()
 						? sendSignInCodeEmail(email, issued.code)
 						: sendSignupCodeEmail(email, issued.code));
 				}
+				// Stamped whether or not a code was minted: a throttled repeat means one went
+				// out a moment ago, which is exactly the state the finishing page should show.
+				await markCodeSent(token);
 			} catch (err) {
 				console.error("[signup/begin] failed to issue a code:", err);
 			}
@@ -461,6 +474,9 @@ const authRoutes = new Hono()
 					? sendSignInCodeEmail(email, issued.code)
 					: sendSignupCodeEmail(email, issued.code));
 			}
+			// The address on the row is now one we have actually posted to, which is what
+			// lets the finishing page show a code box rather than an address field.
+			await markCodeSent(pendingToken);
 		} catch (err) {
 			console.error("[signup/start] failed to issue a code:", err);
 		}

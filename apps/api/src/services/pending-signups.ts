@@ -235,11 +235,33 @@ export async function resumeByProvedAddress(email: string): Promise<PendingSignu
 	return rebound;
 }
 
-/** Record the address a signup is now waiting on — typed at the finishing page. */
+/**
+ * Record the address a signup is now waiting on — typed at the finishing page.
+ *
+ * 🚨 **Both stamps are cleared, because they were about a different address.** A code sent
+ * to the address somebody just corrected is not a code sent to this one, and a mailbox proved
+ * earlier proves nothing about the new one.
+ */
 export async function setPendingEmail(token: string, email: string): Promise<void> {
 	await db
 		.update(pendingSignups)
-		.set({ email: normalize(email), emailProvedAt: null })
+		.set({ email: normalize(email), codeSentAt: null, emailProvedAt: null })
+		.where(eq(pendingSignups.token, token));
+}
+
+/**
+ * Record that a code has actually gone out to the address on this row.
+ *
+ * ⚠️ **Called only where mail is genuinely sent**, never where an address is merely learned.
+ * That distinction is the whole point of the column: the OAuth callback discovers an address
+ * from the PDS and sends nothing, and a page that could not tell the two apart told people to
+ * check an inbox nothing had been posted to.
+ */
+export async function markCodeSent(token: string | undefined): Promise<void> {
+	if (!token) return;
+	await db
+		.update(pendingSignups)
+		.set({ codeSentAt: new Date() })
 		.where(eq(pendingSignups.token, token));
 }
 

@@ -439,6 +439,19 @@ export const pendingSignups = pgTable(
 		 */
 		email: text("email"),
 		/**
+		 * When a code was last actually put in the post to `email`. Null until one was.
+		 *
+		 * 🚨 **It exists because holding an address and having mailed it are different
+		 * facts, and conflating them shipped a page that lied.** The Bluesky door reaches
+		 * the finishing page with no address — the PDS supplies one at the OAuth callback,
+		 * *after* the only place that sends the first code. The finishing page chose its
+		 * state on `email` alone, so it rendered "we sent a six-character code to …" for an
+		 * address nothing had ever been sent to, and the person waited for mail that was
+		 * never coming. Cleared whenever the address changes: a code sent to the old one is
+		 * not a code sent to this one.
+		 */
+		codeSentAt: timestamp("code_sent_at", { withTimezone: true }),
+		/**
 		 * When a code sent to `email` was completed. Null until it was.
 		 *
 		 * 🚨 The account is minted from this stamp plus a cookie, so nothing may set it that

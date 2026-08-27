@@ -31,8 +31,10 @@ import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import { setAtprotoClient } from "../services/atproto-client.js";
 import {
+	bindIdentityToPending,
 	PENDING_SIGNUP_TTL_MS,
 	readPendingSignup,
+	setPendingEmail,
 	startPendingSignup,
 	sweepExpiredPendingSignups,
 } from "../services/pending-signups.js";
@@ -316,6 +318,79 @@ describe("resuming it in another browser", () => {
 					.where(eq(users.email, addr("orphancode")))
 			).length,
 		).toBe(0);
+	});
+});
+
+describe("holding an address is not the same as having mailed it", () => {
+	/*
+	 * 🚨 **The bug this describes shipped, and no assertion in the suite could have caught
+	 * it.** The Bluesky door reaches the finishing page with no address at all: `begin` runs
+	 * before the round trip and has nothing to send to, and the PDS supplies one at the OAuth
+	 * callback — which posts nothing. The page chose its state on "do we have an address",
+	 * so it announced *"we sent a six-character code to …"* for an address nothing had ever
+	 * been sent to, and the person waited on mail that was never coming. Parker hit it on the
+	 * first real walkthrough, 2026-08-26.
+	 *
+	 * Every test here is about keeping those two facts apart.
+	 */
+
+	it("learns an address from the PDS without claiming to have posted to it", async () => {
+		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		await bindIdentityToPending(
+			token,
+			{ did: did("prefill"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
+			addr("prefill"),
+		);
+
+		const res = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${token}` },
+		});
+		const { pending } = (await res.json()) as {
+			pending: { email: string; codeSent: boolean };
+		};
+		expect(pending.email, "the prefill is worth having — it saves the typing").toBe(
+			addr("prefill"),
+		);
+		expect(pending.codeSent, "but nothing has been sent to it").toBe(false);
+	});
+
+	it("says a code went out once one actually has", async () => {
+		const { token } = await begin({ picks: { anthers: 0, follow: [], seed: [] } });
+		await bindIdentityToPending(
+			token,
+			{ did: did("sent"), handle: "someone.bsky.social", pdsUrl: "https://pds" },
+			addr("sent"),
+		);
+
+		await app.request("/api/auth/signup/start", {
+			method: "POST",
+			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
+			body: JSON.stringify({ email: addr("sent") }),
+		});
+
+		const row = await readPendingSignup(token);
+		expect(row?.codeSentAt).not.toBeNull();
+	});
+
+	it("says one went out when the address was known from the start", async () => {
+		// The emailed door, where `begin` has an address and posts to it immediately. This is
+		// the reading the page was written for and the only one it used to get right.
+		const { token } = await begin({ email: addr("emaildoor") });
+		const row = await readPendingSignup(token);
+		expect(row?.codeSentAt).not.toBeNull();
+	});
+
+	it("forgets the code when the address changes under it", async () => {
+		// A code sent to the address somebody just corrected is not a code sent to this one,
+		// and a page that thought otherwise would show a code box for a fresh mailbox.
+		const { token } = await begin({ email: addr("typo2") });
+		expect((await readPendingSignup(token))?.codeSentAt).not.toBeNull();
+
+		await setPendingEmail(token, addr("fixed2"));
+		const row = await readPendingSignup(token);
+		expect(row?.email).toBe(addr("fixed2"));
+		expect(row?.codeSentAt).toBeNull();
+		expect(row?.emailProvedAt).toBeNull();
 	});
 });
 
