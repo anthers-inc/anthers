@@ -257,6 +257,10 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			downloadEnabled: spec.downloadEnabled,
 			seedAccess: spec.seedAccess,
 			visibility: "released",
+			// Seeded Works stand for properly released ones, and release is gated on a
+			// declared rating — an unrated released Work is a state no path produces.
+			maturity: "general",
+			maturitySource: "creator",
 			releasedAt: new Date(),
 		})
 		.returning({ id: works.id });

@@ -11,6 +11,7 @@
 		"./attention": "./src/attention.ts",
 		"./public-access": "./src/public-access.ts",
 		"./moderation": "./src/moderation.ts",
+		"./content-rating": "./src/content-rating.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
 		"./next-path": "./src/next-path.ts",

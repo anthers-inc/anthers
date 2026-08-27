@@ -168,8 +168,15 @@ export function isFloorReason(value: string): boolean {
 	return FLOOR_MODERATION_REASONS.includes(value);
 }
 
-/** What an operator did. Append-only vocabulary — every entry is a recorded decision. */
-export type ModerationActionType = "hide" | "restore";
+/**
+ * What an operator did. Append-only vocabulary — every entry is a recorded decision.
+ *
+ * `reclassify` is a correction to a Work's maturity rating, and it is a third value rather
+ * than a reuse of the first two because it is neither a hide nor a restore: nothing becomes
+ * more or less reachable, and recording it as either would make the log lie about what
+ * happened. `services/content-rating.ts` is the only thing that writes one.
+ */
+export type ModerationActionType = "hide" | "restore" | "reclassify";
 
 /**
  * Who decided. v1 has exactly one operator, but the column exists from day one

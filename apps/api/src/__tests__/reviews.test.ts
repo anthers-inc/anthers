@@ -92,6 +92,9 @@ beforeAll(async () => {
 	const itemRes = await post("/api/content/works", creator, {
 		type: "game",
 		title: `Review fixture ${id}`,
+		// Declared on create so the release below is not refused for a reason this suite
+		// is not about — release is gated on a declared content rating.
+		maturity: "general",
 	});
 	expect(itemRes.status).toBe(201);
 	workId = (await itemRes.json()).work.id;

@@ -80,7 +80,14 @@ describe("project browse filters", () => {
 			const created = await req("/api/content/works", {
 				method: "POST",
 				headers: auth,
-				body: JSON.stringify({ type: c.type, title: `${c.label} ${id}`, tags: c.tags }),
+				body: JSON.stringify({
+					type: c.type,
+					title: `${c.label} ${id}`,
+					tags: c.tags,
+					// Declared on create so the release below is not refused for a reason this
+					// suite is not about.
+					maturity: "general",
+				}),
 			});
 			expect(created.status).toBe(201);
 			const workId = (await created.json()).work.id as number;

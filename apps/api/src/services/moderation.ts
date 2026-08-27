@@ -506,6 +506,15 @@ export interface QueueItem {
 	 * would only ever return 400.
 	 */
 	moderatable: boolean;
+	/**
+	 * The Work's content rating, on a reported Work and nowhere else.
+	 *
+	 * Present so the console can offer the one thing an operator can actually do to a
+	 * Work from this queue — correct its rating — without a second round trip per row,
+	 * and so the row shows what it currently says. Null on every other subject type,
+	 * which have no rating to carry.
+	 */
+	maturity?: string | null;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -643,6 +652,7 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	const commentIds = keys.filter((k) => k.subjectType === "comment").map((k) => k.subjectId);
 	const ratingIds = keys.filter((k) => k.subjectType === "rating").map((k) => k.subjectId);
 	const userIds = keys.filter((k) => k.subjectType === "user").map((k) => k.subjectId);
+	const workIdKeys = keys.filter((k) => k.subjectType === "work").map((k) => k.subjectId);
 
 	type QueueContext = QueueItem["context"];
 
@@ -809,6 +819,60 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				),
 				excerpt: r.bio ? `${label} — ${r.bio}` : label,
 				score: null,
+			});
+		}
+	}
+
+	// A reported Work.
+	//
+	// 🚨 **The key list has always been able to contain one and hydration never could**,
+	// so a reported Work reached this point and was silently dropped — it consumed a slot
+	// in the `LIMIT` above and then vanished, exactly the orphan failure the `reported`
+	// branch documents at length and guards against for a different cause. Nothing noticed
+	// because until the report taxonomy gained a reason that names a Work, the only way to
+	// file one was a copyright complaint routed out by hand.
+	//
+	// ⚠️ `moderatable` is false, from `isModeratableContent`, and that is correct rather
+	// than an omission: a Work has no `moderation_status` and hiding one is a takedown or a
+	// quarantine, each with its own service and its own record. What an operator CAN do
+	// from here is correct its rating.
+	if (workIdKeys.length > 0) {
+		const rows = await db
+			.select({
+				id: works.id,
+				creatorId: works.creatorId,
+				username: users.username,
+				slug: works.slug,
+				title: works.title,
+				description: works.description,
+				maturity: works.maturity,
+				createdAt: works.createdAt,
+			})
+			.from(works)
+			.leftJoin(users, eq(works.creatorId, users.id))
+			.where(inArray(works.id, workIdKeys));
+		for (const r of rows) {
+			items.set(key("work", r.id), {
+				...base(
+					"work",
+					{
+						id: r.id,
+						userId: r.creatorId,
+						username: r.username,
+						// A Work's own removal states live in `takedown_status` and
+						// `quarantine_status`, neither of which is this column's vocabulary.
+						moderationStatus: "visible",
+						createdAt: r.createdAt,
+					},
+					{ kind: "work", slug: r.slug, title: r.title ?? "" },
+				),
+				// Title and blurb: what the operator can judge without opening it, and the
+				// rating they may be being asked to correct.
+				excerpt: r.description
+					? `${r.title ?? "Untitled"} — ${r.description.slice(0, 400)}`
+					: (r.title ?? "Untitled"),
+				score: null,
+				maturity: r.maturity,
 			});
 		}
 	}

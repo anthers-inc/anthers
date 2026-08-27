@@ -28,6 +28,7 @@ import {
 	YAxis,
 } from "recharts";
 import ModerationQueue from "../components/admin/ModerationQueue";
+import RatingAppealsQueue from "../components/admin/RatingAppealsQueue";
 
 // ── Response shapes (mirror apps/api/src/routes/admin.ts) ────────────────────
 interface Activity {
@@ -175,6 +176,13 @@ export default function AdminPage() {
 			    queue isn't held behind a pg-boss health query. */}
 			<div className="mb-10">
 				<ModerationQueue />
+			</div>
+
+			{/* Outside the telemetry gate for the same reason as the queue above: it loads
+			    itself, and an appeal is somebody's work sitting behind a paywall while it
+			    waits. */}
+			<div className="mb-10">
+				<RatingAppealsQueue />
 			</div>
 
 			{loading && !activity && !jobs ? (

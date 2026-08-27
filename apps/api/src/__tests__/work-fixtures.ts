@@ -36,6 +36,15 @@ export interface WorkFixture {
 	lyrics?: string;
 	sourceKey?: string;
 	thumbnail?: string;
+	/**
+	 * The content rating. Defaults to a creator-declared `general`, because a fixture Work
+	 * stands for one that was properly released and release is refused while a Work is
+	 * `unrated` — a fixture defaulting to `unrated` would be an impossible state, and every
+	 * suite that flips one to `released` would 409 for a reason that is not its subject.
+	 * Pass `"unrated"` explicitly when the rating gate is what is being tested.
+	 */
+	maturity?: "unrated" | "general" | "mature";
+	maturityNotes?: string[];
 	/** When scans were last enqueued for this Work — the release gate's clock. */
 	scanQueuedAt?: Date | null;
 	embedUrl?: string;
@@ -68,6 +77,10 @@ export async function insertWork(fixture: WorkFixture) {
 			lyrics: fixture.lyrics ?? "",
 			sourceKey: fixture.sourceKey ?? "",
 			thumbnail: fixture.thumbnail ?? "",
+			maturity: fixture.maturity ?? "general",
+			maturityNotes: fixture.maturityNotes ?? [],
+			maturitySource: (fixture.maturity ?? "general") === "unrated" ? null : "creator",
+			maturitySetAt: (fixture.maturity ?? "general") === "unrated" ? null : new Date(),
 			scanQueuedAt: fixture.scanQueuedAt ?? null,
 			embedUrl: fixture.embedUrl ?? "",
 			durationSeconds: fixture.durationSeconds ?? null,

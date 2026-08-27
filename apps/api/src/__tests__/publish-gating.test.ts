@@ -83,7 +83,12 @@ describe("Catalog CRUD and post links", () => {
 		const create = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({ type: "game", title: "Library Build", description: "A build" }),
+			body: JSON.stringify({
+				type: "game",
+				title: "Library Build",
+				description: "A build",
+				maturity: "general",
+			}),
 		});
 		expect(create.status).toBe(201);
 		const { work } = await create.json();
