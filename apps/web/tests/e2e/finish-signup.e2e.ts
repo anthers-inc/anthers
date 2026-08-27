@@ -66,6 +66,14 @@ test.describe("it cannot be an entry point", () => {
 	test("it offers no way to start a signup of its own", async ({ page }) => {
 		await startSignup(page);
 
+		// ⚠️ **Wait for something only `/finish` draws before counting anything.** `toHaveURL`
+		// resolves the instant a client-side route changes, which is before React has
+		// unmounted `/subscribe` — and `.count()` is a one-shot read with no retry behind it,
+		// unlike a web-first assertion. So for a moment both pages' inputs are in the
+		// document and the count is the sum of them, which is how this failed with two email
+		// fields on a page that has one. The rail is the cheapest tell that the swap is done.
+		await expect(page.getByRole("list", { name: "Signup Progress" })).toBeVisible();
+
 		// The same structural tell the one-door spec uses: this page asks for no password at
 		// all, and a Create Account card growing back here would be invisible otherwise.
 		expect(await page.locator('input[type="password"]').count()).toBe(0);
