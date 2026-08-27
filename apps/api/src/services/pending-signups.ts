@@ -56,7 +56,7 @@ import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { normalizePicks, type SignupPicks } from "@anthers/shared/signup";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { AtprotoIdentity } from "./atproto.js";
-import { getAtprotoClient } from "./atproto-client.js";
+import { attachSessionToUser, getAtprotoClient } from "./atproto-client.js";
 
 /**
  * How long an unfinished signup waits before it has to be started again.
@@ -274,6 +274,12 @@ export async function consumePendingSignup(
 			pdsUrl: row.atprotoPdsUrl,
 		});
 		atprotoLinked = !result.error;
+		// ⚠️ **Claim the OAuth session for the account too.** The callback writes it keyed by
+		// DID, before there is an account to own it, so `userId` is null until something
+		// reconciles it — and a row left null is one the sweep is entitled to treat as an
+		// orphan. It would be recreated on the next sign-in either way, but a signup that
+		// finished should not leave its own credentials looking abandoned.
+		if (atprotoLinked) await attachSessionToUser(row.atprotoDid, userId);
 	}
 
 	return { picks: picksOf(row), next: row.next, atprotoLinked };

@@ -192,7 +192,12 @@ test.describe("starting an account from /subscribe", () => {
 		// list rather than drawing a fixed three. A rail naming a step somebody will never
 		// meet tells them the flow is longer than it is.
 		await expect(page).toHaveURL(/\/finish$/);
-		await expect(page.getByRole("listitem").filter({ hasText: "Payment" })).toBeVisible();
+		// ⚠️ **Scoped to the rail by its accessible name.** An unscoped `listitem` filter
+		// matched `/subscribe`'s own fee breakdown, which has two rows reading "Payments" —
+		// and reported a strict-mode violation where it meant to report a missing step.
+		await expect(
+			page.getByRole("list", { name: "Signup Progress" }).getByText("Payment", { exact: true }),
+		).toBeVisible();
 	});
 
 	/**
@@ -229,8 +234,9 @@ test.describe("starting an account from /subscribe", () => {
 			.click();
 
 		await expect(page).toHaveURL(/\/finish$/);
-		await expect(page.getByRole("listitem").filter({ hasText: "Your Email" })).toBeVisible();
-		await expect(page.getByRole("listitem").filter({ hasText: "Payment" })).toHaveCount(0);
+		const rail = page.getByRole("list", { name: "Signup Progress" });
+		await expect(rail.getByText("Your Email", { exact: true })).toBeVisible();
+		await expect(rail.getByText("Payment", { exact: true })).toHaveCount(0);
 	});
 });
 

@@ -103,7 +103,12 @@ export default function SignupSteps({
 			    wraps — and a connector drawn after every step but the last leaves one dangling
 			    off the end of the first row, pointing at nothing. Spacing and the numbers carry
 			    the sequence at every width instead. */}
-			<ol className="flex flex-wrap items-center gap-x-6 gap-y-2">
+			{/* ⚠️ **Named, and the name is load-bearing for more than assistive tech.** An
+			    unnamed `<ol>` is indistinguishable from every other list on the site, and the
+			    first spec written against these steps matched `/subscribe`'s fee breakdown
+			    instead — two list items reading "Payments" — and reported a strict-mode
+			    violation where it meant to report a missing step. */}
+			<ol aria-label="Signup Progress" className="flex flex-wrap items-center gap-x-6 gap-y-2">
 				{steps.map((step, i) => (
 					<li
 						key={step.key}

@@ -78,13 +78,16 @@ test.describe("a person can see where they are", () => {
 	test("the rail names the steps, and the last of them is on the next page", async ({ page }) => {
 		await startSignup(page);
 
-		const steps = page.getByRole("listitem");
-		await expect(steps.filter({ hasText: "Your Email" })).toBeVisible();
+		// ⚠️ Scoped by the rail's accessible name rather than by `listitem` alone: this site
+		// is full of lists, and an unscoped filter reports a strict-mode violation where it
+		// means to report a missing step.
+		const steps = page.getByRole("list", { name: "Signup Progress" });
+		await expect(steps.getByText("Your Email", { exact: true })).toBeVisible();
 		// ⭐ **`/welcome`'s step is drawn here.** The two pages are separate routes because
 		// `/welcome` has a job that has nothing to do with signing up — it is where any
 		// signed-in account still owing a handle is sent, from anywhere — and sharing the rail
 		// is what makes them read as one flow anyway.
-		await expect(steps.filter({ hasText: "Your Username" })).toBeVisible();
+		await expect(steps.getByText("Your Username", { exact: true })).toBeVisible();
 	});
 
 	test("the choices made a moment ago are read back, not left behind", async ({ page }) => {
