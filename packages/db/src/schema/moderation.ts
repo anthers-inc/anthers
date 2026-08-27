@@ -555,6 +555,59 @@ export const mediaQuarantine = pgTable(
 	],
 );
 
+/**
+ * A creator's appeal against an operator's correction of their Work's maturity rating.
+ *
+ * 🚨 **The appeal is part of the rating feature rather than a later refinement**, and 40.09
+ * is emphatic about why: the adults-only category is payment-gated, so an over-cautious call
+ * does not merely add a warning to a work — it puts it behind a paywall. For a queer
+ * coming-of-age story wrongly flagged, that is exactly the harm the category exists to
+ * prevent, produced by the mechanism meant to prevent it. Shipping a correction path without
+ * a way to contest it would build only the half that can do damage.
+ *
+ * ⚠️ **`work_id` cascades, unlike every other reference in this file, and the difference is
+ * the subject rather than an inconsistency.** A moderation report is about a person's
+ * conduct and has to outlive the account and the artifact, because § 512(i) needs the
+ * pattern; an appeal is about the rating of one Work and means nothing once that Work no
+ * longer exists. The creator reference is `set null` on the usual footing: the decision
+ * outlives whoever made it.
+ */
+export const workRatingAppeals = pgTable(
+	"work_rating_appeals",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** What the creator says the rating should be. `MaturityRating` in `@anthers/shared`. */
+		requestedMaturity: text("requested_maturity").notNull(),
+		/** What it was when they appealed, so a granted appeal can be read years later. */
+		correctedMaturity: text("corrected_maturity").notNull(),
+		/** The creator's own words. Required — an appeal with no argument is not one. */
+		statement: text("statement").notNull(),
+		/** `open` | `granted` | `upheld`. */
+		status: text("status").notNull().default("open"),
+		resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		/** The operator's answer, shown to the creator. Their appeal deserves a reply. */
+		resolutionNote: text("resolution_note").notNull().default(""),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// The operator queue reads open appeals oldest-first; the per-Work lookup is what
+		// refuses a second open appeal on the same Work.
+		index("idx_rating_appeals_status").on(table.status, table.createdAt),
+		index("idx_rating_appeals_work").on(table.workId, table.status),
+	],
+);
+
+export const workRatingAppealsRelations = relations(workRatingAppeals, ({ one }) => ({
+	work: one(works, { fields: [workRatingAppeals.workId], references: [works.id] }),
+	creator: one(users, { fields: [workRatingAppeals.creatorId], references: [users.id] }),
+	resolver: one(users, { fields: [workRatingAppeals.resolvedBy], references: [users.id] }),
+}));
+
 export const mediaQuarantineRelations = relations(mediaQuarantine, ({ one }) => ({
 	work: one(works, { fields: [mediaQuarantine.workId], references: [works.id] }),
 	uploader: one(users, { fields: [mediaQuarantine.uploaderId], references: [users.id] }),

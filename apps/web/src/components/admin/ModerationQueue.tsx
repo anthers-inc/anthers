@@ -29,13 +29,14 @@
  * creator-side moderation later features rather than later migrations.
  */
 
+import { maturityLabel } from "@anthers/shared/content-rating";
 import {
 	MODERATION_NOTE_MAX,
 	MODERATION_REASONS,
 	type ModerationSubjectType,
 	moderationReasonLabel,
 } from "@anthers/shared/moderation";
-import { client } from "@anthers/web-shared/rpc";
+import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 
@@ -56,6 +57,8 @@ interface QueueItem {
 	context: { kind: "post" | "work" | "profile"; slug: string; title: string } | null;
 	/** False for a person. The server decides this; the row must not guess at it. */
 	moderatable: boolean;
+	/** The Work's content rating, on a reported Work and nowhere else. */
+	maturity?: string | null;
 	openReports: number;
 	totalReports: number;
 	reasons: string[];
@@ -161,6 +164,36 @@ export default function ModerationQueue() {
 			setHiding(null);
 			setHideReason("");
 			setHideNote("");
+			await load();
+		} finally {
+			setActing(false);
+		}
+	};
+
+	/**
+	 * Correct a reported Work's rating.
+	 *
+	 * The one thing an operator can do to a Work from this queue. Hiding is a takedown or a
+	 * quarantine, each with its own service, its own record and its own reasons — which is
+	 * why `moderatable` is false here and the row offers this instead of a disabled button.
+	 *
+	 * ⚠️ **Two standing principles bound this call and neither is the operator's to
+	 * overturn**: a queer person existing in a story does not make it Mature, and subject
+	 * matter is not the same as treatment. Wiki 40.09. The creator can appeal, and the
+	 * appeal queue on this page is where that lands.
+	 */
+	const correctRating = async (item: QueueItem, maturity: "general" | "mature") => {
+		setActing(true);
+		try {
+			const res = await apiFetch("/api/admin/works/rating", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ workId: item.subjectId, maturity }),
+			});
+			if (!res.ok) {
+				setError("That rating couldn't be set.");
+				return;
+			}
 			await load();
 		} finally {
 			setActing(false);

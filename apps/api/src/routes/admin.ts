@@ -17,6 +17,7 @@
 
 import { db } from "@anthers/db/client";
 import { rightsRequests } from "@anthers/db/schema";
+import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	isModerationReason,
 	isModerationSubjectType,
@@ -29,6 +30,7 @@ import { z } from "zod";
 import { QUEUES } from "../jobs/queue.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { closeAbuseReport, loadAbuseQueue } from "../services/abuse-reports.js";
+import { correctRating, loadOpenAppeals, resolveRatingAppeal } from "../services/content-rating.js";
 import { deliveryForReport } from "../services/delivery-events.js";
 import {
 	dmcaSummary,
@@ -108,6 +110,27 @@ const deliveryQuerySchema = z.object({
 const clearQuarantineSchema = z.object({
 	workId: z.number().int().positive(),
 	note: z.string().max(MODERATION_NOTE_MAX).optional(),
+});
+
+/**
+ * An operator correcting a Work's rating.
+ *
+ * `unrated` is not offered. An operator correcting a rating is making a call, and putting a
+ * Work back to "nobody has said" would be un-releasing it by a side door — the release gate
+ * refuses an unrated Work, so a Work already out would be left in a state it could not have
+ * reached by any path a creator can take.
+ */
+const correctRatingSchema = z.object({
+	workId: z.number().int().positive(),
+	maturity: z.enum(["general", "mature"]),
+	notes: z.array(z.string()).max(20).optional(),
+	note: z.string().max(RATING_NOTE_MAX).optional(),
+});
+
+const resolveAppealSchema = z.object({
+	appealId: z.number().int().positive(),
+	outcome: z.enum(["granted", "upheld"]),
+	note: z.string().max(RATING_NOTE_MAX).optional(),
 });
 
 // pg-boss job states (v12). We surface the live ones that signal health;
@@ -468,6 +491,52 @@ const adminRoutes = new Hono()
 			return c.json({ error: "No open quarantine for that Work" }, 404);
 		}
 		return c.json(result);
+	})
+
+	// ── Content ratings ─────────────────────────────────────────────────────────
+	// 🚨 **The correction and the appeal ship together, and the appeal is not the
+	// optional half.** 40.09: because the adults-only category is payment-gated, an
+	// over-cautious call does not merely add a warning to a work — it puts it behind a
+	// paywall, and for a queer coming-of-age story wrongly flagged that is exactly the
+	// harm the category exists to prevent, produced by the mechanism meant to prevent it.
+	// An operator surface with no contest would be only the half that can do damage.
+	//
+	// ⚠️ Two standing principles bound what an operator may call `mature`, and neither is
+	// theirs to overturn: a queer person existing in a story does not make it mature, and
+	// subject matter is not the same as treatment.
+	.post("/works/rating", zValidator("json", correctRatingSchema), async (c) => {
+		const user = c.get("user");
+		const { workId, maturity, notes, note } = c.req.valid("json");
+		const updated = await correctRating({
+			workId,
+			maturity,
+			notes,
+			actorId: user.id,
+			note,
+		});
+		if (!updated) return c.json({ error: "Work not found" }, 404);
+		return c.json({
+			workId: updated.id,
+			maturity: updated.maturity,
+			notes: updated.maturityNotes ?? [],
+		});
+	})
+
+	.get("/rating-appeals", async (c) => c.json({ appeals: await loadOpenAppeals() }))
+
+	// Granting an appeal hands the rating back to the creator, because conceding the
+	// point and keeping the restriction would be neither. Upholding it changes nothing
+	// about the Work and closes the appeal — with a note, which the creator reads.
+	.post("/rating-appeals/resolve", zValidator("json", resolveAppealSchema), async (c) => {
+		const user = c.get("user");
+		const { appealId, outcome, note } = c.req.valid("json");
+		const result = await resolveRatingAppeal({ appealId, actorId: user.id, outcome, note });
+		if (!result) return c.json({ error: "No open appeal with that id" }, 404);
+		return c.json({
+			appealId: result.appeal.id,
+			outcome,
+			maturity: result.work?.maturity ?? null,
+		});
 	})
 
 	// ── Public illegal-content reports ──────────────────────────────────────────

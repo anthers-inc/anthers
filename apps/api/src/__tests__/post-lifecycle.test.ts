@@ -47,7 +47,9 @@ async function makeItem(cookie: string, title: string, type = "game"): Promise<n
 	const res = await req("/api/content/works", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-		body: JSON.stringify({ type, title }),
+		// `maturity` declared on create so the release below is not refused for a reason
+		// this suite is not about — release is gated on a declared content rating.
+		body: JSON.stringify({ type, title, maturity: "general" }),
 	});
 	expect(res.status).toBe(201);
 	return (await res.json()).work.id;
@@ -398,7 +400,7 @@ describe("Delivery-method floor lives on the Work", () => {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ type: "game", title, ...body }),
+			body: JSON.stringify({ type: "game", title, maturity: "general", ...body }),
 		});
 		expect(res.status).toBe(201);
 		return (await res.json()).work.id as number;

@@ -114,7 +114,13 @@ beforeAll(async () => {
 	abeId = await userId(abeName);
 	beeId = await userId(beeName);
 
-	const workRes = await post("/api/content/works", host, { type: "game", title: `Blk work ${id}` });
+	// `maturity` declared on create so the release below is not refused for a reason
+	// this suite is not about.
+	const workRes = await post("/api/content/works", host, {
+		type: "game",
+		title: `Blk work ${id}`,
+		maturity: "general",
+	});
 	expect(workRes.status).toBe(201);
 	workId = (await workRes.json()).work.id;
 
@@ -341,6 +347,7 @@ describe("a block is a boundary, not a moderation action", () => {
 			type: "text",
 			title: `Bee work ${id}`,
 			body: "words",
+			maturity: "general",
 		});
 		expect(beeWorkRes.status).toBe(201);
 		const beeWork = (await beeWorkRes.json()).work;

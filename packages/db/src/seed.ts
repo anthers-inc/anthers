@@ -850,6 +850,10 @@ async function seed() {
 					authoredAt: authored,
 					authoredPrecision: randomInt(0, 2) === 0 ? "year" : "day",
 					visibility: "released",
+					// Seeded Works stand for properly released ones, and release is gated on a
+					// declared rating — an unrated released Work is a state no path produces.
+					maturity: "general",
+					maturitySource: "creator",
 					releasedAt: daysAgo(randomInt(30, 180)),
 					viewCount: randomInt(50, 5000),
 					downloadCount: randomInt(10, 2000),
@@ -926,6 +930,10 @@ async function seed() {
 					downloadEnabled: false,
 					...access,
 					visibility: "released",
+					// Seeded Works stand for properly released ones, and release is gated on a
+					// declared rating — an unrated released Work is a state no path produces.
+					maturity: "general",
+					maturitySource: "creator",
 					releasedAt: published,
 					authoredAt: published,
 					authoredPrecision: "day",

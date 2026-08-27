@@ -75,6 +75,7 @@ describe("Catalog vertical slice", () => {
 			body: JSON.stringify({
 				type: "game",
 				title: `Old Game ${id}`,
+				maturity: "general",
 				description: "Made years before Anthers existed",
 				streamEnabled: false,
 				downloadEnabled: true,
@@ -141,6 +142,7 @@ describe("Catalog vertical slice", () => {
 			body: JSON.stringify({
 				type: "text",
 				title: `Recent Essay ${id}`,
+				maturity: "general",
 				bodyHtml: "<p>a thing I wrote lately</p>",
 				authoredAt: new Date().toISOString(),
 				authoredPrecision: "day",
