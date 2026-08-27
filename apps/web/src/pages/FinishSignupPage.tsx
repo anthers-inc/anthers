@@ -108,10 +108,27 @@ export default function FinishSignupPage() {
 		}
 
 		let live = true;
-		client.api.auth.signup.pending
-			.$get()
-			.then((res) => res.json())
-			.then(({ pending: row }) => {
+		/*
+		 * 🚨 **Both requests are awaited before this page becomes interactive, and the creator
+		 * list is the one that matters.** A pick is stored as a username and the charge needs
+		 * the creator's id, so the list is what turns one into the other — and a page that
+		 * accepted a code while it was still in flight would either quote support it then
+		 * failed to bill, or bill support it never showed. `/subscribe` carries the same
+		 * hazard in a milder form (a pick made before the list loaded was quotable and
+		 * unbillable); here the whole charge is assembled in one turn, so it is closed by
+		 * waiting rather than by reconciling afterwards.
+		 */
+		Promise.all([
+			client.api.auth.signup.pending.$get().then((res) => res.json()),
+			client.api.accounts.creators
+				.$get()
+				.then((res) => res.json())
+				.then((data) => data.creators as PublicUser[])
+				// A creator list that will not load is not a reason to strand somebody mid-signup:
+				// the account is still worth making, and an unresolvable pick simply is not billed.
+				.catch(() => [] as PublicUser[]),
+		])
+			.then(([{ pending: row }, list]) => {
 				if (!live) return;
 				if (!row) {
 					// ⚠️ **The guard that keeps this from being an entry point.** There is nothing
@@ -119,6 +136,7 @@ export default function FinishSignupPage() {
 					navigate("/subscribe", { replace: true });
 					return;
 				}
+				setCreators(list);
 				setPending(row as Pending);
 				setEmail(row.email ?? "");
 				setFace(row.addressProved ? "resumed" : row.email ? "code" : "address");
@@ -130,23 +148,6 @@ export default function FinishSignupPage() {
 			live = false;
 		};
 	}, [isLoading, user, navigate]);
-
-	// The creator list, for naming the picks and for the ids the charge needs. Same source
-	// `/subscribe` reads; a pick made against a creator this never returns is quotable and
-	// unbillable, which is why the charge is built from the intersection rather than the picks.
-	useEffect(() => {
-		let live = true;
-		client.api.accounts.creators
-			.$get()
-			.then((res) => res.json())
-			.then((data) => {
-				if (live) setCreators(data.creators as PublicUser[]);
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, []);
 
 	const picks = pending?.picks ?? EMPTY_PICKS;
 	const next = sanitizeNextPath(pending?.next || undefined);

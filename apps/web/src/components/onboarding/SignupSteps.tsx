@@ -98,7 +98,12 @@ export default function SignupSteps({
 			{/* An ordered list, because that is what this is — and it means a screen reader
 			    hears "3 of 3" rather than three unrelated words. The visual state is carried
 			    by `aria-current` and by the word in the label, never by colour alone. */}
-			<ol className="flex flex-wrap items-center gap-x-3 gap-y-2">
+			{/* ⚠️ **No connecting lines between the steps, and that is a fix rather than a
+			    simplification.** Three steps do not fit on one line in this column, so the rail
+			    wraps — and a connector drawn after every step but the last leaves one dangling
+			    off the end of the first row, pointing at nothing. Spacing and the numbers carry
+			    the sequence at every width instead. */}
+			<ol className="flex flex-wrap items-center gap-x-6 gap-y-2">
 				{steps.map((step, i) => (
 					<li
 						key={step.key}
@@ -114,9 +119,6 @@ export default function SignupSteps({
 							{step.label}
 						</span>
 						{step.state === "done" && <span className="sr-only">(done)</span>}
-						{i < steps.length - 1 && (
-							<span aria-hidden="true" className="ml-1 h-px w-6 bg-base-300 sm:w-10" />
-						)}
 					</li>
 				))}
 			</ol>

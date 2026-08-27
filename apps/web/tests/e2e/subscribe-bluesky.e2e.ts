@@ -98,7 +98,13 @@ test.describe("signing up with Bluesky", () => {
 		// is what lets the assertion be about the REQUEST rather than about a modal opening:
 		// the handoff is the behaviour, and everything past it is somebody else's website.
 		let payload: unknown = null;
+		const order: string[] = [];
+		await page.route("**/api/auth/signup/begin", async (route) => {
+			order.push("begin");
+			await route.continue();
+		});
 		await page.route("**/api/atproto/auth", async (route) => {
+			order.push("authorize");
 			payload = route.request().postDataJSON();
 			// A same-origin URL, so the browser goes somewhere harmless instead of to a real
 			// consent screen. Nothing after the handoff is this spec's subject.
@@ -118,6 +124,13 @@ test.describe("signing up with Bluesky", () => {
 
 		await expect.poll(() => payload).not.toBeNull();
 		expect(payload).toMatchObject({ handle: "alice.bsky.social", intent: "signup" });
+
+		// 🚨 **The pending signup is written BEFORE the browser leaves, and the order is the
+		// point.** That row is what the callback attaches the proved identity to, so the
+		// choices somebody made are still theirs when they come back. Writing it afterwards
+		// would mean a detour through another website arrived at an empty signup, which is
+		// the defect this whole flow was rebuilt to fix.
+		expect(order).toEqual(["begin", "authorize"]);
 	});
 
 	test("it warns that Bluesky will be asked for an email address", async ({ page }) => {
@@ -170,21 +183,23 @@ test.describe("signing up with Bluesky", () => {
 		await expect(page.getByText(/doesn't create one/i)).toBeVisible();
 	});
 
-	test("a fabricated ?atproto=1 gets no special treatment", async ({ page }) => {
-		// 🚨 The parked signup is read from an httpOnly cookie, never from the URL. If the
-		// query alone could put this page into "finishing a Bluesky signup" mode, the handle
-		// it displayed would be whatever an attacker put in a link.
+	test("this page never becomes the one that finishes a Bluesky signup", async ({ page }) => {
+		// ⚠️ **`/subscribe?atproto=1` was where the callback used to land, and the state it
+		// put this page into is gone** (2026-08-26). Dropping somebody back on a marketing
+		// page with a prefilled email box is exactly what Parker's walkthrough could not tell
+		// apart from having accomplished nothing; `/finish` owns that job now, and this page
+		// must not grow a second copy of it. Where a design says there is only one of
+		// something, that claim needs a test, because a second one arrives silently.
 		await page.goto("/subscribe?atproto=1");
 
 		await expect(page.getByText(/signing up as @/i)).toHaveCount(0);
-		// ⚠️ Deliberately not asserting the Bluesky button here. Whether it renders depends
-		// on the launch switch, which is not this test's subject — and an assertion that
-		// drags in an unrelated condition is one that fails for unrelated reasons.
-		//
-		// 🚨 But wait for the tab switcher before reading the email door, for the same
-		// reason as the test above: the card starts with no tabs and the email field
-		// showing, so this assertion would pass on the first paint whatever the tabs
-		// later decide. It is only meaningful once the switcher has rendered.
+		await expect(page.getByText(/bluesky confirmed you as/i)).toHaveCount(0);
+		// 🚨 Wait for the tab switcher before reading the email door: the card starts with no
+		// tabs and the email field showing, so this assertion would pass on the first paint
+		// whatever the tabs later decide. It is only meaningful once the switcher has
+		// rendered. Whether the Bluesky button appears depends on the launch switch, which is
+		// not this test's subject — an assertion dragging in an unrelated condition is one
+		// that fails for unrelated reasons.
 		await expect(topSignup(page).getByRole("tab", { name: "Bluesky", exact: true })).toBeVisible();
 		await expect(
 			topSignup(page).getByRole("button", { name: /create my free account/i }),

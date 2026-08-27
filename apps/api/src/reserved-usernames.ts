@@ -42,6 +42,7 @@ const ROUTE_NAMES = [
 	"basket",
 	"faq",
 	"feed",
+	"finish",
 	"for-creators",
 	"for-users",
 	"jams",
