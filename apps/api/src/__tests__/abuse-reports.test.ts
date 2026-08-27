@@ -202,7 +202,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Reading the reported location", () => {
 		// able to work out why a form rejected them is exactly the person this route is for.
 		const res = await report({
 			url: "https://example.com/somewhere/else",
-			reason: "sexual",
+			reason: "csam",
 			details: "Reported from an address that is not on Anthers at all.",
 		});
 		expect(res.status).toBe(201);
@@ -220,7 +220,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Reading the reported location", () => {
 describe.skipIf(SKIP_ABUSE_TESTS)("Which reports are owed an alert", () => {
 	it("owes one for every floor reason, sexual included", async () => {
 		const filed: number[] = [];
-		for (const reason of ["illegal", "sexual", "violence"]) {
+		for (const reason of ["illegal", "csam", "violence"]) {
 			const res = await report({
 				url: `https://anthers.org/works/x-${workPublicId}`,
 				reason,

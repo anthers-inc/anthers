@@ -32,9 +32,10 @@
 import { maturityLabel } from "@anthers/shared/content-rating";
 import {
 	MODERATION_NOTE_MAX,
-	MODERATION_REASONS,
+	MODERATION_REASON_GROUPS,
 	type ModerationSubjectType,
 	moderationReasonLabel,
+	reasonsInGroup,
 } from "@anthers/shared/moderation";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
@@ -438,10 +439,18 @@ export default function ModerationQueue() {
 							onChange={(e) => setHideReason(e.target.value)}
 						>
 							<option value="">Reason…</option>
-							{MODERATION_REASONS.map((r) => (
-								<option key={r.value} value={r.value}>
-									{r.label}
-								</option>
+							{/* Grouped the same way the reporter's picker is. An operator recording
+							    why something came down is choosing from the same vocabulary a
+							    reporter chose from, and a flat list here would be the one place on
+							    the platform that still presents spam and a crime as peers. */}
+							{MODERATION_REASON_GROUPS.map((group) => (
+								<optgroup key={group.key} label={group.heading.toUpperCase()}>
+									{reasonsInGroup(group.key).map((r) => (
+										<option key={r.value} value={r.value}>
+											{r.label}
+										</option>
+									))}
+								</optgroup>
 							))}
 						</select>
 

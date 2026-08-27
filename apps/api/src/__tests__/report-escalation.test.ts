@@ -109,7 +109,7 @@ async function report(cookie: string, commentId: number, reason: string) {
  * This fixture's own report on a given comment.
  *
  * 🚨 **Scoped to the subject, not just the reason.** The two cases below used to select
- * `WHERE reason = 'sexual'` with a bare `LIMIT 1` over the whole table, which is a query
+ * `WHERE reason = 'csam'` with a bare `LIMIT 1` over the whole table, which is a query
  * about the database rather than about this fixture — it happened to be right only while
  * nothing else in the suite filed a report with the same reason. `quarantine.test.ts`
  * seeds one (already escalated, deliberately), and the case then failed in a full run and
@@ -141,27 +141,37 @@ async function escalatedAt(reportId: number): Promise<Date | null> {
 }
 
 describe.skipIf(SKIP_ABUSE_TESTS)("The floor taxonomy", () => {
-	it("names the three reasons that must reach a person, and sexual is one of them", () => {
+	it("names every reason that must reach a person, retired codes included", () => {
 		// Asserted individually rather than as a set: a set comparison written against
 		// the implementation would agree with whatever the implementation says, and the
-		// entire point of this list is that `sexual` is easy to leave out.
+		// entire point of this list is which entries are easy to leave out.
+		expect(isFloorReason("csam")).toBe(true);
 		expect(isFloorReason("illegal")).toBe(true);
-		expect(isFloorReason("sexual")).toBe(true);
 		expect(isFloorReason("violence")).toBe(true);
-		expect(FLOOR_MODERATION_REASONS).toHaveLength(3);
+		// 🚨 Retired from the picker and NOT from the floor. Rows carrying `sexual` were
+		// written while it was the code the form steered a child-safety reporter toward,
+		// and a legacy row still has to escalate rather than going quiet — retiring a
+		// label must not silently change the handling of records.
+		expect(isFloorReason("sexual")).toBe(true);
+		expect(FLOOR_MODERATION_REASONS).toHaveLength(4);
 	});
 
 	it("leaves the reasons an operator can answer in their own time off the floor", () => {
 		expect(isFloorReason("spam")).toBe(false);
 		expect(isFloorReason("harassment")).toBe(false);
 		expect(isFloorReason("other")).toBe(false);
+		// ⚠️ The two halves of the split sexual reason land on opposite sides, which is the
+		// whole reason the split needed mitigations. Pornography is a rule-break an operator
+		// answers in their own time; the crime summons somebody.
+		expect(isFloorReason("pornography")).toBe(false);
+		expect(isFloorReason("unrated-mature")).toBe(false);
 	});
 });
 
 describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
-	it("marks every floor reason as owed an alert, sexual included", async () => {
+	it("marks every floor reason as owed an alert, csam included", async () => {
 		const filed: number[] = [];
-		const reasons = ["illegal", "sexual", "violence"];
+		const reasons = ["illegal", "csam", "violence"];
 		for (let i = 0; i < reasons.length; i++) {
 			filed.push(await report(reporters[i], commentIds[i], reasons[i]));
 		}
@@ -183,7 +193,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Filing a floor report", () => {
 		// The hole the floor exists to close: somebody clears it inside the console
 		// before anyone outside was told. Status is deliberately not part of the
 		// selection, so a resolved report is still owed its alert.
-		const row = await fixtureReport("sexual", commentIds[1]);
+		const row = await fixtureReport("csam", commentIds[1]);
 		await db
 			.update(moderationReports)
 			.set({ status: "dismissed", resolvedAt: new Date() })

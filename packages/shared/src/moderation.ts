@@ -93,47 +93,181 @@ export type ModerationStatus = "visible" | "hidden";
 
 export const MODERATION_STATUSES: readonly ModerationStatus[] = ["visible", "hidden"];
 
-/** The report taxonomy. `value` is stored; `label`/`hint` are what a reporter reads. */
-export interface ModerationReason {
-	value: string;
-	label: string;
-	hint: string;
+/**
+ * Which of the two groups a reason belongs to.
+ *
+ * 🚨 **The split is legal versus rule-breaking, and not urgent versus not** (Parker,
+ * 2026-08-26, and it is the sharper framing). Everything in `law` is against the law and is
+ * not up for discussion, debate or discretion on Anthers — so the group says what *kind of
+ * thing* the report is, and urgency is conveyed by the ordering within each group and by
+ * saying so in the subtitle. A grouping by urgency would have to rank a threat against a
+ * piece of pornography, which is a judgment the reporter should not be asked to make and
+ * the interface should not appear to have made.
+ */
+export type ModerationReasonGroup = "law" | "rules";
+
+export interface ModerationReasonGroupDef {
+	key: ModerationReasonGroup;
+	heading: string;
+	subtitle: string;
 }
 
+/**
+ * The two headings, in the order they are shown.
+ *
+ * The legal group is first, and that ordering is one of the three mitigations that make
+ * splitting the old `sexual` reason safe — see `MODERATION_REASONS` below.
+ */
+export const MODERATION_REASON_GROUPS: readonly ModerationReasonGroupDef[] = [
+	{
+		key: "law",
+		heading: "Against the Law",
+		subtitle: "Not ours to weigh. These reach a person straight away.",
+	},
+	{
+		key: "rules",
+		heading: "Against Our Rules",
+		subtitle: "An operator reviews these. Listed most serious first.",
+	},
+] as const;
+
+/**
+ * A question a reporter meets before going on, and where it sends them instead.
+ *
+ * One reason carries one of these and it is the load-bearing half of splitting the sexual
+ * reason in two. The control **switches the selection** rather than only warning: a warning
+ * a reporter can read and ignore leaves the misfiled report filed, which is the whole thing
+ * this is trying to prevent.
+ */
+export interface ModerationReasonConfirm {
+	question: string;
+	/** The reason code the control moves them to. */
+	switchTo: string;
+	switchLabel: string;
+	/** What the button that keeps the current selection says. */
+	keepLabel: string;
+}
+
+/** The report taxonomy. `value` is stored; everything else is what a reporter reads. */
+export interface ModerationReason {
+	value: string;
+	group: ModerationReasonGroup;
+	label: string;
+	hint: string;
+	confirm?: ModerationReasonConfirm;
+}
+
+/**
+ * The reasons, grouped and ordered most serious first within each group.
+ *
+ * ⚠️ **Splitting the old `sexual` reason trades one safety property for another, and the
+ * trade only works because of three specific mitigations.** The retired reason read
+ * *"Explicit sexual material, or any sexual content involving minors"* — one line spanning a
+ * crime and a rule-break — which was indiscriminate and therefore safe: every reporter
+ * landed in a bucket that escalates. Split, a reporter could pick the rule-break for
+ * something involving a minor. What makes the split worth it: **the legal group is ordered
+ * first**, **the pornography hint names what it is not**, and **selecting it poses a
+ * confirmation whose control switches the selection**. Removing any one of those three
+ * re-opens the hole.
+ *
+ * ⭐ **"Pornographic material" is the operative term and "sexually explicit" is the
+ * definition, rather than the other way round** (Parker). The retired label leaned on
+ * "explicit" to carry a distinction the word does not carry on its own and then defined it
+ * in one word anyway. What the hint leans on instead is Anthers' own settled distinction
+ * from wiki 40.09 — *subject matter is not the same as treatment* — because "explicit" is
+ * only a synonym for the thing being defined.
+ *
+ * 🚨 **Never list queer lives as an example of mature work.** An early draft of the
+ * pornography hint read *"Anthers allows mature work — nudity, sexuality as a subject, queer
+ * lives"*, which asserts precisely the premise 40.09 exists to refuse: said at that length
+ * it reads as agreement that queer life is an adult concept. The refusal belongs somewhere
+ * long enough to *be* a refusal, which is `/safety`, and nowhere shorter — anything that
+ * fits in a hint reads as the concession rather than the refusal.
+ */
 export const MODERATION_REASONS: readonly ModerationReason[] = [
 	{
-		value: "spam",
-		label: "Spam or advertising",
-		hint: "Unsolicited promotion, scams, or repetitive posting.",
-	},
-	{
-		value: "harassment",
-		label: "Harassment or hate",
-		hint: "Targeted abuse, or attacks on a person or group.",
-	},
-	{
-		value: "sexual",
-		label: "Sexual content",
-		hint: "Explicit sexual material, or any sexual content involving minors.",
+		value: "csam",
+		group: "law",
+		label: "Child sexual abuse or exploitation",
+		hint: "Sexual content involving anyone under 18, or an adult soliciting a minor. Reported to authorities, not only to us.",
 	},
 	{
 		value: "violence",
-		label: "Violence or threats",
+		group: "law",
+		label: "Threats or violence",
 		hint: "Threats of harm, incitement, or graphic violence.",
 	},
 	{
 		value: "illegal",
-		label: "Illegal content",
-		hint: "Content that appears to break the law.",
+		group: "law",
+		// ⚠️ "Appears" stays. A reporter is not a lawyer, and the heading speaks to how the
+		// report is handled rather than to how certain they have to be.
+		label: "Something else against the law",
+		hint: "Anything else that appears to break the law, excluding copyright infringement (see below).",
+	},
+	{
+		value: "pornography",
+		group: "rules",
+		label: "Pornographic material",
+		hint: "Sexually explicit material beyond what Anthers allows as mature work. The distinction is not the subject matter but how it's treated: art that deals with sex, nudity or the body is allowed on Anthers; material made to function as pornography is not. Before reporting this, please be considerate of the notion that your personal discomfort level with a piece of mature content doesn't necessarily make it pornographic.",
+		confirm: {
+			question:
+				"Does any of this involve someone under 18? If it might, report it as child sexual abuse or exploitation instead. That is a legal matter with a different process: it reaches a person immediately and is reported to authorities.",
+			switchTo: "csam",
+			switchLabel: "Report it as child sexual abuse instead",
+			keepLabel: "No — everyone in it is an adult",
+		},
+	},
+	{
+		value: "unrated-mature",
+		group: "rules",
+		label: "Mature work that isn't marked Mature",
+		hint: "Work made for adults whose creator rated it General, or has not rated it at all. An operator can correct a rating, and the creator can appeal that.",
+	},
+	{
+		value: "harassment",
+		group: "rules",
+		label: "Harassment or hate",
+		hint: "Targeted abuse, or attacks on a person or group.",
+	},
+	{
+		value: "spam",
+		group: "rules",
+		label: "Spam or advertising",
+		hint: "Unsolicited promotion, scams, or repetitive posting.",
 	},
 	{
 		value: "other",
+		group: "rules",
 		label: "Something else",
 		hint: "Tell us what's wrong and an operator will read it.",
 	},
 ] as const;
 
+/** The reasons in one group, in order. What a grouped picker iterates. */
+export function reasonsInGroup(group: ModerationReasonGroup): ModerationReason[] {
+	return MODERATION_REASONS.filter((r) => r.group === group);
+}
+
 export const MODERATION_REASON_VALUES: readonly string[] = MODERATION_REASONS.map((r) => r.value);
+
+/**
+ * Reason codes no longer offered, kept only so a stored row still reads as something.
+ *
+ * 🚨 **A retired reason is not a deleted one.** `moderation_reports.reason` and
+ * `moderation_actions.reason` hold these verbatim, so rows carrying `sexual` exist and an
+ * operator opening one has to see what the reporter actually picked rather than a raw code.
+ * `isModerationReason` deliberately does **not** accept these — nothing may file a new one —
+ * while `moderationReasonLabel` deliberately does.
+ */
+export const RETIRED_MODERATION_REASONS: readonly ModerationReason[] = [
+	{
+		value: "sexual",
+		group: "law",
+		label: "Sexual content",
+		hint: "Explicit sexual material, or any sexual content involving minors.",
+	},
+] as const;
 
 export function isModerationReason(value: string): boolean {
 	return MODERATION_REASON_VALUES.includes(value);
@@ -141,27 +275,36 @@ export function isModerationReason(value: string): boolean {
 
 /** Human label for a stored reason code; falls back to the code for forward compatibility. */
 export function moderationReasonLabel(value: string): string {
-	return MODERATION_REASONS.find((r) => r.value === value)?.label ?? value;
+	return (
+		MODERATION_REASONS.find((r) => r.value === value)?.label ??
+		RETIRED_MODERATION_REASONS.find((r) => r.value === value)?.label ??
+		value
+	);
 }
 
 /**
  * The reasons that reach Anthers no matter who else holds the scope, and that a
  * scoped Keeper will never be able to dismiss away — 40.06's floor.
  *
- * 🚨 `sexual` is in this list for a reason that is easy to miss and expensive to get
- * wrong. Its own hint reads "Explicit sexual material, or **any sexual content
- * involving minors**", so a person reporting child sexual abuse material will most
- * often pick `sexual` rather than `illegal` — the form steers them there. An
- * escalation wired only to `illegal` would miss the reason code the interface points
- * the most serious report at. `violence` is here on the same logic: a report of a
- * credible threat is not something an operator should meet a day late.
+ * ⭐ **It is the `law` group, plus one retired code**, and stating it that way is the
+ * point: the grouping a reporter sees and the routing they cannot see are the same
+ * division, so a reason added to the legal group without being added here would be
+ * presented as reaching a person straight away and would not.
+ *
+ * 🚨 **`sexual` stays in this list although nothing can file one any more.** Rows carrying
+ * it were written while it was the code the form steered a child-safety reporter toward,
+ * and a legacy row still has to escalate rather than going quiet. Removing it would make
+ * the retirement of a *label* silently change the handling of *records*.
  *
  * This is the taxonomy half of the split. The routing half — who a non-floor report
  * goes to instead — waits on the Keeper appointment model, and does not gate this:
  * with no scopes yet, every report already reaches Anthers, and what was missing was
  * anybody being *told*.
  */
-export const FLOOR_MODERATION_REASONS: readonly string[] = ["illegal", "sexual", "violence"];
+export const FLOOR_MODERATION_REASONS: readonly string[] = [
+	...reasonsInGroup("law").map((r) => r.value),
+	"sexual",
+];
 
 /** Does this reason demand escalation out of the queue, rather than a queue entry alone? */
 export function isFloorReason(value: string): boolean {
