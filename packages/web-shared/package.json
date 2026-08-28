@@ -11,6 +11,7 @@
 		"./desktop": "./src/lib/desktop.ts",
 		"./auth": "./src/lib/auth.tsx",
 		"./content-preferences": "./src/lib/content-preferences.tsx",
+		"./language-filter": "./src/lib/language-filter.tsx",
 		"./theme": "./src/lib/theme.ts",
 		"./postUrl": "./src/lib/postUrl.ts",
 		"./studio": "./src/lib/studio.ts",

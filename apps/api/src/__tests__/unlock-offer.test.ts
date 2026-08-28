@@ -21,6 +21,7 @@
  * creator's own Badges will arrive through.
  */
 import { describe, expect, it } from "bun:test";
+import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -38,6 +39,7 @@ function ctx(givenAmount = 0): AccessContext {
 		purchasedWorkIds: new Set(),
 		adultAccess: true,
 		sharedBy: null,
+		parental: NO_PARENTAL_CONTROLS,
 	};
 }
 
@@ -55,6 +57,7 @@ function gatedAt(threshold: number, price = "0"): AccessibleWork {
 		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
+		type: "text",
 	};
 }
 
@@ -177,6 +180,7 @@ describe("unlock offer — routes that would not actually open the Work", () => 
 			],
 			takedownStatus: "active",
 			quarantineStatus: "none",
+			type: "text",
 		};
 		expect(resolveAccessSync(ladder, ctx(0)).unlock?.creator?.threshold).toBe(2);
 	});
@@ -193,6 +197,7 @@ describe("unlock offer — when it is absent", () => {
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
+			type: "text",
 		};
 		const got = resolveAccessSync(free, ctx(0));
 		expect(got.canAccess).toBe(true);
@@ -207,6 +212,7 @@ describe("unlock offer — when it is absent", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		};
 		const got = resolveAccessSync(gatedAt(2), anon);
 		expect(got.reason).toBe("login_required");
@@ -223,6 +229,7 @@ describe("unlock offer — when it is absent", () => {
 			seedAccess: [{ threshold: 0, allow: true, price: "9.99" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
+			type: "text",
 		};
 		const got = resolveAccessSync(buyable, ctx(0));
 		expect(got.reason).toBe("payment_required");

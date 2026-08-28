@@ -44,8 +44,14 @@ import type { AccessRow, SeedAccessRow } from "@anthers/db/schema";
 import { accounts, purchases, seedAllocations } from "@anthers/db/schema";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
+import {
+	NO_PARENTAL_CONTROLS,
+	type ParentalPolicy,
+	parentalRefusal,
+} from "@anthers/shared/parental-controls";
 import { and, eq, inArray } from "drizzle-orm";
 import { adultAccessFor } from "./content-preferences.js";
+import { parentalPolicyFor } from "./parental-controls.js";
 
 /** The Work fields access resolution depends on (structurally satisfied by a full work row). */
 export interface AccessibleWork {
@@ -95,6 +101,15 @@ export interface AccessibleWork {
 	 * resolving one. See `services/quarantine.ts`.
 	 */
 	quarantineStatus: string;
+	/**
+	 * The Work's medium — `video`, `audio`, `text`, `game`, `ebook`, `image`, `software`.
+	 *
+	 * Read only by the **parental** rules, which are the one viewer-side restriction that
+	 * cares what something *is* rather than what it costs or who made it. Nothing else in this
+	 * resolver has ever needed the type, and adding it here rather than passing it alongside
+	 * keeps a Work one argument.
+	 */
+	type: string;
 }
 
 /** Viewer facts needed to resolve access, loaded once and reused across a batch of Works. */
@@ -133,6 +148,20 @@ export interface AccessContext {
 	 * rule that is easiest to get wrong.
 	 */
 	sharedBy: number | null;
+	/**
+	 * A guardian's controls on this account — see `@anthers/shared/parental-controls`.
+	 *
+	 * 🚨 **Sits on the VIEWER and never on the Work**, which is what makes it safe to put in a
+	 * resolver that a whole Catalog page runs through. A blocked creator is not less rated and
+	 * a limited household's Work is not less free; what changes is what reaches one account, so
+	 * no answer here can leak into anybody else's catalogue.
+	 *
+	 * ⚠️ **Time limits are deliberately NOT here.** They need a query — how long has this
+	 * account consumed today — and this resolver is pure and synchronous precisely so a batch
+	 * resolves without an N+1. The same reason the Public Access meter lives at delivery, and
+	 * the same shape: what runs out belongs to the account, not to the Work.
+	 */
+	parental: ParentalPolicy;
 }
 
 /**
@@ -183,6 +212,7 @@ export function buildPreviewContext(opts: {
 		// The imagined signed-in viewer has opted in and verified; the signed-out one cannot
 		// have, because there is no account to hold the setting.
 		//
+		// (see below for the parental note)
 		// ⭐ **Not a shortcut — it is what keeps the preview answering the question it was
 		// asked.** A preview exists to show a creator their own access ladder at $N given,
 		// and an imagined viewer with no opt-in would answer `adult_gated` at every rung,
@@ -195,6 +225,10 @@ export function buildPreviewContext(opts: {
 		// A preview asks what a viewer with a given standing would see, and arriving by a
 		// share link is not a standing — it is how somebody got here. Nothing to imagine.
 		sharedBy: null,
+		// Likewise: a creator previewing their ladder is asking about their gates, and
+		// answering "blocked" because some imagined household restricted them would tell them
+		// nothing about the thing they came to look at.
+		parental: NO_PARENTAL_CONTROLS,
 	};
 }
 
@@ -208,7 +242,9 @@ export type AccessReason =
 	| "login_required"
 	| "takedown"
 	| "quarantined"
-	| "adult_gated";
+	| "adult_gated"
+	| "blocked_creator"
+	| "blocked_type";
 
 /**
  * One way a denied viewer could open this Work, stated in the gate's own terms.
@@ -404,6 +440,23 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		return { ...base, canAccess: true, reason: "owner" };
 	}
 
+	// 🚨 A guardian has put this creator or this medium out of reach for this account.
+	//
+	// **Above the adult gate, the purchase and the gates, and below the owner check** — the
+	// same place the Adult rung sits, for the same reason. A household's rules are not
+	// something money undoes: a Work the account already bought is still blocked, because what
+	// a guardian restricted was the reaching rather than the paying, and a purchase that
+	// overrode the panel would make it mean "except for things you already own".
+	//
+	// ⚠️ Below the owner check so a young creator always reaches their own work. Locking
+	// somebody out of the thing they made would be a strange way to protect them, and it would
+	// make their own Work un-editable.
+	const blocked = parentalRefusal(ctx.parental, {
+		creatorId: work.creatorId,
+		workType: work.type,
+	});
+	if (blocked) return { ...base, canAccess: false, reason: blocked };
+
 	// 🚨 A Work rated `adult` is reachable only by an account that has both opted in and
 	// verified an adult. Wiki 40.09 § How Access Works When It Opens.
 	//
@@ -538,17 +591,22 @@ export async function buildAccessContext(
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
 			adultAccess: false,
-			// Set by `shareContextFor` in routes/content.ts when a request carries a live
+			// Set by `viewerFor` in routes/content.ts when a request carries a live
 			// share token. Null here because this is the ordinary logged-out context, and a
 			// default that guessed otherwise would hand out an allowance nobody offered.
 			sharedBy: opts.sharedBy ?? null,
+			// A visitor with no account has no guardian's controls to read. Note this makes a
+			// **share link** carry none either — correct, because the controls belong to the
+			// sharer's account and the person watching is not them. The relay budget is what
+			// bounds a link; a household's rules are not transitive.
+			parental: NO_PARENTAL_CONTROLS,
 		};
 	}
 
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
 
-	const [seedRows, purchaseRows, adult] = await Promise.all([
+	const [seedRows, purchaseRows, adult, parental] = await Promise.all([
 		db
 			.select({ creatorId: seedAllocations.creatorId, amount: seedAllocations.amount })
 			.from(seedAllocations)
@@ -564,6 +622,7 @@ export async function buildAccessContext(
 				),
 			),
 		adultAccessFor(userId),
+		parentalPolicyFor(userId),
 	]);
 
 	// `seed_allocations.amount` is MONEY and stays money — it is the payment ledger, not a
@@ -588,6 +647,7 @@ export async function buildAccessContext(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),
 		),
 		adultAccess: adult.canReach,
+		parental,
 		// Deliberately null even if a share token rode along on this request. Somebody with
 		// an account resolves on their own standing and spends their own allowance; a link
 		// they followed tells them where a Work is and nothing more.

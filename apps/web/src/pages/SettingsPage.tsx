@@ -14,6 +14,7 @@ import { apiFetch } from "@anthers/web-shared/rpc";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import ParentalControlsSection from "../components/settings/ParentalControlsSection";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
@@ -995,6 +996,11 @@ export default function SettingsPage() {
 
 			{/* What the reader meets at each rung, and the door to the Adult rung. */}
 			<MatureContentSection />
+
+			{/* Directly under it, because the first thing the pin protects is the section
+			    above — and a guardian who has just set those switches is exactly who wants
+			    to lock them. */}
+			<ParentalControlsSection />
 
 			{/* Blocked accounts — the only place a block can be lifted, since a blocked
 			    profile no longer resolves. */}

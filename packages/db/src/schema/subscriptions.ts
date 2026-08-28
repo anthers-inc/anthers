@@ -16,6 +16,7 @@ import {
 	boolean,
 	index,
 	integer,
+	jsonb,
 	numeric,
 	pgTable,
 	serial,
@@ -424,3 +425,62 @@ export const creatorGates = pgTable(
 	},
 	(table) => [index("idx_creator_gates_creator").on(table.creatorId, table.sortOrder)],
 );
+
+/**
+ * A guardian's controls on one account, behind a pin.
+ *
+ * 🚨 **Its own table rather than columns on `accounts`, because the pin changes who may write
+ * these rows.** Everything on `accounts` is the account holder's to set; everything here is
+ * set by whoever holds the pin, and the account holder may be a child who must not be able to
+ * lift their own restrictions. Putting the two in one table would make "who may write this
+ * column?" a per-column rule enforced by convention, which is precisely how a lock stops being
+ * one. A row's absence is the default: no pin, no controls.
+ *
+ * ⚠️ **Nothing here is a fact about content, and the shapes are chosen to keep it that way.**
+ * The lists hold creator ids and Work types — the viewer's opinions about them — and no rating,
+ * note or access row is touched. A guardian's settings must never leak into anybody else's
+ * catalogue, which they cannot do from here.
+ *
+ * See `@anthers/shared/parental-controls` for the policy the rows are read against; this table
+ * stores it and decides nothing.
+ */
+export const parentalControls = pgTable("parental_controls", {
+	userId: integer("user_id")
+		.primaryKey()
+		.references(() => users.id, { onDelete: "cascade" }),
+	/**
+	 * argon2id, the same primitive as a password.
+	 *
+	 * ⚠️ A pin is four to eight digits, so it is *weak by design* — a guardian types it often
+	 * and in front of the person it restricts. Hashing it properly does not make it strong; it
+	 * makes a database read useless to somebody who gets one, which is the part that is worth
+	 * having. Rate limiting is what bounds guessing, and lives at the route.
+	 */
+	pinHash: text("pin_hash").notNull(),
+	/** Locks the content-rating display settings — see the policy module's own note. */
+	lockMaturity: boolean("lock_maturity").notNull().default(false),
+	/** `{ defaultAllow, rules }` over creator ids. One shape serves allow- and blocklists. */
+	creators: jsonb("creators").$type<{
+		defaultAllow: boolean;
+		rules: { key: string; allow: boolean; dailySeconds: number | null }[];
+	}>(),
+	/** The same shape over Work types (`video`, `text`, `game`, …). */
+	types: jsonb("types").$type<{
+		defaultAllow: boolean;
+		rules: { key: string; allow: boolean; dailySeconds: number | null }[];
+	}>(),
+	/**
+	 * Whole-app consumption caps, in seconds. Null is uncapped.
+	 *
+	 * ⚠️ **These bound time spent CONSUMING Works, which is the only time Anthers measures.**
+	 * Browsing a catalogue is not counted and cannot honestly be — there is no event for it —
+	 * so the panel says "time watching, reading and playing" rather than "time in the app".
+	 * Naming it screen time would promise a measurement that does not exist.
+	 */
+	dailySeconds: integer("daily_seconds"),
+	weeklySeconds: integer("weekly_seconds"),
+	monthlySeconds: integer("monthly_seconds"),
+	languageFilter: boolean("language_filter").notNull().default(false),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});

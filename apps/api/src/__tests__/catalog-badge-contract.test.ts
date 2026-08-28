@@ -29,6 +29,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import type { SeedAccessRow } from "@anthers/db/schema";
+import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -46,6 +47,7 @@ const stranger: AccessContext = {
 	purchasedWorkIds: new Set(),
 	adultAccess: true,
 	sharedBy: null,
+	parental: NO_PARENTAL_CONTROLS,
 };
 
 function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork {
@@ -58,6 +60,7 @@ function work(seedAccess: SeedAccessRow[], streamEnabled = true): AccessibleWork
 		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
+		type: "text",
 	};
 }
 
@@ -259,6 +262,7 @@ describe("the properties the badge's individual states rest on", () => {
 			purchasedWorkIds: new Set(),
 			adultAccess: true,
 			sharedBy: null,
+			parental: NO_PARENTAL_CONTROLS,
 		};
 		const rows = [row(0, false), row(2, true)];
 		const resolved = resolveAccessSync(work(rows), generous);

@@ -32,6 +32,7 @@
 
 import { db } from "@anthers/db/client";
 import { follows, posts, rightsRequests, users, works } from "@anthers/db/schema";
+import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
 	RIGHTS_DETAILS_MAX,
@@ -63,6 +64,14 @@ import {
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
 import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
+import {
+	clearParentalControls,
+	parentalPolicyFor,
+	parentalVisibility,
+	pinMatches,
+	setPin,
+	updateParentalControls,
+} from "../services/parental-controls.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -157,6 +166,39 @@ const usersId = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
 const contentPreferencesSchema = z.object({
 	mature: z.enum(["hide", "blur", "show"]).optional(),
 	adult: z.enum(["hide", "blur", "show"]).optional(),
+});
+
+/**
+ * What a guardian may change, plus the pin that authorizes it.
+ *
+ * Caps are seconds and bounded at 24h / 7d / 30d, because a limit larger than its own window
+ * is not a limit — it is a number that looks like one and never bites, which is worse than
+ * having set nothing.
+ */
+const parentalRuleSchema = z.object({
+	key: z.string().min(1).max(64),
+	allow: z.boolean(),
+	dailySeconds: z.number().int().min(0).max(86_400).nullable(),
+});
+
+const parentalListSchema = z.object({
+	defaultAllow: z.boolean(),
+	rules: z.array(parentalRuleSchema).max(500),
+});
+
+const parentalUpdateSchema = z.object({
+	pin: z.string(),
+	lockMaturity: z.boolean().optional(),
+	creators: parentalListSchema.optional(),
+	types: parentalListSchema.optional(),
+	limits: z
+		.object({
+			daily: z.number().int().min(0).max(86_400).nullable(),
+			weekly: z.number().int().min(0).max(604_800).nullable(),
+			monthly: z.number().int().min(0).max(2_592_000).nullable(),
+		})
+		.optional(),
+	languageFilter: z.boolean().optional(),
 });
 
 const updateProfileSchema = z.object({
@@ -342,6 +384,8 @@ const accountRoutes = new Hono()
 								// no exception to the invisibility rule — following somebody is
 								// not the opt-in.
 								adultHiddenFrom(await adultAccessFor(sessionUser.id), sessionUser.id),
+								// Nor is following an exemption from a guardian's blocks.
+								(await parentalVisibility(sessionUser.id)).hidden,
 							),
 						)
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -815,7 +859,99 @@ const accountRoutes = new Hono()
 		async (c) => {
 			const sessionUser = c.get("user");
 			const data = c.req.valid("json");
+
+			// 🚨 **The parental lock, at the one route that can change these settings.** This
+			// is the whole point of the pin: the account holder may be a child, and a lock
+			// enforced only by hiding the controls in the browser would be lifted by anyone who
+			// opened the network tab. Refused rather than silently ignored — a setting that
+			// appears to save and does not is worse than one that says no.
+			const policy = await parentalPolicyFor(sessionUser.id);
+			if (policy.enabled && policy.lockMaturity) {
+				return c.json(
+					{
+						error: "These settings are locked. Ask whoever set the parental pin.",
+						code: "parental_locked",
+					},
+					403,
+				);
+			}
 			return c.json(await setMaturityDisplay(sessionUser.id, data));
+		},
+	)
+
+	// ── Parental controls ────────────────────────────────────────────────────
+	//
+	// 🚨 **Everything below is written by whoever holds the PIN, and read by the account
+	// holder** — who may be the person being restricted. That asymmetry is why these live in
+	// their own table rather than beside the other account settings, and why the pin is
+	// checked here rather than trusted from the client.
+	//
+	// ⚠️ **There is no reset door, deliberately.** A "forgot your pin?" link mailed to the
+	// account's own address would hand the pin to the person it restricts, since a child's
+	// account is very often reachable from the child's own inbox. Recovering is a support
+	// conversation, which is slow on purpose.
+
+	/** What is set, without saying what the pin is. Readable by the account holder. */
+	.get("/me/parental-controls", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json(await parentalPolicyFor(sessionUser.id));
+	})
+
+	/** Set the pin for the first time, or change it with the current one. */
+	.put(
+		"/me/parental-controls/pin",
+		requireAuth,
+		zValidator("json", z.object({ pin: z.string(), currentPin: z.string().optional() })),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const { pin, currentPin } = c.req.valid("json");
+			const result = await setPin(sessionUser.id, pin, currentPin);
+			if ("refusal" in result) {
+				return c.json(
+					result.refusal === "malformed"
+						? { error: "A pin is 4 to 8 digits.", code: "malformed" }
+						: { error: "That isn't the current pin.", code: "wrong_pin" },
+					result.refusal === "malformed" ? 400 : 403,
+				);
+			}
+			return c.json(await parentalPolicyFor(sessionUser.id));
+		},
+	)
+
+	/**
+	 * Change the controls. The pin travels with every write rather than opening a session.
+	 *
+	 * ⚠️ **No "unlocked" state, and that is the point.** A pin session would leave the panel
+	 * open on a shared device for whoever picked it up next — which, for this feature, is
+	 * exactly the person it restricts. Typing four digits per change is a small cost against
+	 * a lock that stays locked.
+	 */
+	.patch(
+		"/me/parental-controls",
+		requireAuth,
+		zValidator("json", parentalUpdateSchema),
+		async (c) => {
+			const sessionUser = c.get("user");
+			const { pin, ...update } = c.req.valid("json");
+			if (!(await pinMatches(sessionUser.id, pin))) {
+				return c.json({ error: "That isn't the pin.", code: "wrong_pin" }, 403);
+			}
+			return c.json(await updateParentalControls(sessionUser.id, update));
+		},
+	)
+
+	/** Turn the controls off entirely, with the pin. */
+	.delete(
+		"/me/parental-controls",
+		requireAuth,
+		zValidator("json", z.object({ pin: z.string() })),
+		async (c) => {
+			const sessionUser = c.get("user");
+			if (!(await pinMatches(sessionUser.id, c.req.valid("json").pin))) {
+				return c.json({ error: "That isn't the pin.", code: "wrong_pin" }, 403);
+			}
+			await clearParentalControls(sessionUser.id);
+			return c.json(NO_PARENTAL_CONTROLS);
 		},
 	)
 
