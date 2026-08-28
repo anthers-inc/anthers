@@ -178,6 +178,7 @@ describe("what an Adult rating costs", () => {
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
 			adultAccess: false,
+			sharedBy: null,
 			...over,
 		});
 
@@ -307,6 +308,7 @@ describe("what an Adult rating costs", () => {
 				supportByCreator: new Map(),
 				purchasedWorkIds: new Set(),
 				adultAccess: true,
+				sharedBy: null,
 			});
 			expect(verified.canAccess).toBe(true);
 			// `isFree` is the exact field the attention stamp multiplies into
@@ -321,6 +323,7 @@ describe("what an Adult rating costs", () => {
 				supportByCreator: new Map(),
 				purchasedWorkIds: new Set(),
 				adultAccess: false,
+				sharedBy: null,
 			});
 			expect(shutOut.canAccess).toBe(false);
 			expect(shutOut.isFree).toBe(false);
@@ -554,6 +557,7 @@ describe("what an Adult rating costs", () => {
 				supportByCreator: new Map([[99, 3]]),
 				purchasedWorkIds: new Set<number>(),
 				adultAccess: true,
+				sharedBy: null,
 			};
 
 			const asAdult = resolveAccessSync({ ...base, maturity: "adult" }, ctx);
@@ -578,6 +582,7 @@ describe("what an Adult rating costs", () => {
 				supportByCreator: new Map<number, number>(),
 				purchasedWorkIds: new Set<number>(),
 				adultAccess: false,
+				sharedBy: null,
 			};
 
 			expect(resolveAccessSync({ ...base, maturity: "mature" }, ctx).canAccess).toBe(true);
@@ -603,6 +608,7 @@ describe("what an Adult rating costs", () => {
 				supportByCreator: new Map(),
 				purchasedWorkIds: new Set(),
 				adultAccess: false,
+				sharedBy: null,
 			});
 			expect(got.canAccess).toBe(false);
 			expect(got.reason).toBe("adult_gated");

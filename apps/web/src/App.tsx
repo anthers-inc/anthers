@@ -109,6 +109,7 @@ const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WikiPage = lazy(() => import("./pages/WikiPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
+const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
 
 /**
  * A LAST-RESORT boundary, for routes that render outside a layout. The boundaries that
@@ -295,6 +296,10 @@ export default function App() {
 					<Route path="/posts/:slug" element={<PostPage />} />
 					{/* A Work stands on its own — reachable whether or not a post ever mentioned it. */}
 					<Route path="/works/:slug" element={<WorkPage />} />
+					{/* A share link. It redirects to the Work's canonical URL carrying the token —
+					    the one exception to "consuming a Work requires an account", and it opens
+					    nothing the recipient could not otherwise have opened. */}
+					<Route path="/s/:token" element={<SharedWorkPage />} />
 					<Route path="/subscribe" element={<SubscribePage />} />
 					<Route path="/faq" element={<FAQPage />} />
 					{/* Published PENDING — no effective date, and a banner saying so. See

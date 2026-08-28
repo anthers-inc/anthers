@@ -26,6 +26,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
 import { type RefObject, useEffect, useRef } from "react";
 import { publishBudget } from "./public-access";
+import { useShareToken } from "./share-link";
 
 const TICK_MS = 1_000;
 const FLUSH_INTERVAL_MS = 30_000;
@@ -90,6 +91,16 @@ let ticker: ReturnType<typeof setInterval> | null = null;
 let flusher: ReturnType<typeof setInterval> | null = null;
 let lastInteractionAt = Date.now();
 let isAuthenticated = false;
+/**
+ * The **share link** this page was reached by, if any.
+ *
+ * 🚨 **What this endpoint has always needed is an ATTRIBUTABLE claimant, not a logged-in
+ * one**, and until 2026-08-28 the two were the same thing so the distinction never had to be
+ * drawn. A share-link recipient has no account; the seconds are attributed to whoever shared
+ * the link, who does. So the flush below sends the token and the server decides whose month
+ * pays — the browser never asserts an identity, it only says how it got here.
+ */
+let shareToken: string | null = null;
 let listenersBound = false;
 
 // ── Evidence ─────────────────────────────────────────────────────────────────
@@ -200,13 +211,17 @@ function pushEvent(event: AttentionEvent) {
 }
 
 async function flushEvents() {
-	if (!isAuthenticated || pendingEvents.length === 0) return;
+	if ((!isAuthenticated && shareToken == null) || pendingEvents.length === 0) return;
 
 	// Never send more than the endpoint accepts. Sending the whole backlog was a
 	// permanent wedge: a batch over 50 is rejected, requeued, and rejected again.
 	const batch = pendingEvents.splice(0, MAX_EVENTS_PER_REQUEST);
 	try {
 		const res = await client.api.subscriptions.attention.$post({
+			// Sent only when there is one. A signed-in viewer's claim is theirs whatever link
+			// they arrived by, and the server ignores a token beside a session anyway — but
+			// sending one would say something untrue about what this request is.
+			query: shareToken ? { share: shareToken } : {},
 			json: {
 				events: batch.map((e) => ({
 					creatorId: e.creatorId,
@@ -292,18 +307,31 @@ export function useAttentionClaim(params: {
 }) {
 	const { creatorId, workId = null, contentType, playing, active = true, elementRef } = params;
 	const { isAuthenticated: authStatus } = useAuth();
+	// Read off the URL rather than plumbed through every player, because a claim is raised
+	// from inside `VideoPlayer` and `AudioPlayer` as well as from the page. See `share-link.ts`
+	// for why the token lives on the URL and nowhere more durable.
+	const share = useShareToken();
 	const idRef = useRef<number | null>(null);
 	if (idRef.current === null) idRef.current = nextId++;
 
 	useEffect(() => {
 		isAuthenticated = authStatus;
-	}, [authStatus]);
+		shareToken = share;
+	}, [authStatus, share]);
 
 	useEffect(() => {
 		const id = idRef.current;
 		if (id === null) return;
 
-		const eligible = authStatus && creatorId !== null && active && isTimePoolEligible(contentType);
+		// A share-link recipient is not signed in and their viewing still earns — for the
+		// creator, out of the sharer's slice. That is the whole point of the exception: the
+		// Time Pool cannot pay a creator for time it cannot attribute to anybody, and a
+		// share link is what makes a stranger's minute attributable.
+		const eligible =
+			(authStatus || share != null) &&
+			creatorId !== null &&
+			active &&
+			isTimePoolEligible(contentType);
 		if (!eligible) {
 			if (claims.delete(id)) stopEngineIfIdle();
 			return;
@@ -346,7 +374,7 @@ export function useAttentionClaim(params: {
 			claims.delete(id);
 			stopEngineIfIdle();
 		};
-	}, [authStatus, creatorId, workId, contentType, playing, active, elementRef]);
+	}, [authStatus, share, creatorId, workId, contentType, playing, active, elementRef]);
 }
 
 /**
@@ -357,11 +385,13 @@ export function useAttentionClaim(params: {
 export function useReportVisit(params: { creatorId: number | null; workId?: number | null }) {
 	const { creatorId, workId = null } = params;
 	const { isAuthenticated: authStatus } = useAuth();
+	const share = useShareToken();
 	const reportedRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		isAuthenticated = authStatus;
-	}, [authStatus]);
+		shareToken = share;
+	}, [authStatus, share]);
 
 	useEffect(() => {
 		if (!authStatus || creatorId === null || reportedRef.current === creatorId) return;

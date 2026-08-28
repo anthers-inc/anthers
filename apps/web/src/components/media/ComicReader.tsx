@@ -72,12 +72,22 @@ export default function ComicReader({
 	pageCount,
 	apiBase,
 	title,
+	shareToken = null,
 }: {
 	workId: number;
 	pageCount: number;
 	/** API origin, so the page URLs are built the one blessed way (see `rpc.ts`). */
 	apiBase: string;
 	title: string;
+	/**
+	 * The **share link** this reader was reached by, if any.
+	 *
+	 * 🚨 It has to ride on the URL rather than in a header: these are `<img src>` values, and
+	 * an `<img>` issues its own request with nothing the page can attach to it. Without the
+	 * token a share-link recipient would get a reader full of broken images and no
+	 * explanation — the dead-player failure the whole meter design exists to avoid.
+	 */
+	shareToken?: string | null;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [page, setPage] = useState(() => Math.min(readProgress(workId), Math.max(pageCount, 1)));
@@ -85,8 +95,11 @@ export default function ComicReader({
 	const [fullscreen, setFullscreen] = useState(false);
 
 	const pageUrl = useCallback(
-		(n: number) => `${apiBase}/api/content/works/${workId}/pages/${n}`,
-		[apiBase, workId],
+		(n: number) => {
+			const url = `${apiBase}/api/content/works/${workId}/pages/${n}`;
+			return shareToken ? `${url}?share=${encodeURIComponent(shareToken)}` : url;
+		},
+		[apiBase, workId, shareToken],
 	);
 
 	// Two-up shows n and n+1, so the last spread of an even-length book is a single page.

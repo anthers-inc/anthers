@@ -32,6 +32,8 @@ import {
 	NO_PUBLIC_ACCESS_ALLOWANCE,
 	type PublicAccessBudget,
 	publicAccessBudget,
+	type ShareLinkBudget,
+	shareLinkBudget,
 } from "@anthers/shared/public-access";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 
@@ -97,4 +99,49 @@ export async function loadPublicAccessBudget(
 	]);
 
 	return publicAccessBudget(supportAmount(acct?.anthersSupport), used);
+}
+
+/**
+ * Seconds watched through this sharer's **share links** in the current calendar month.
+ *
+ * 🚨 **Counts every `via_share_link` row, `public_access` or not, and that is not an
+ * oversight.** The two flags bound different things. `public_access` says whether the seconds
+ * buy a creator anything out of the Time Pool; this budget bounds *relay volume* — how much
+ * viewing one account may fund for strangers — and a creator sharing their own Work still
+ * consumes the relay even though it earns nothing. Filtering here would leave the one case
+ * that most obviously wants bounding unbounded.
+ */
+export async function shareLinkSecondsThisMonth(
+	sharerId: number,
+	now: Date = new Date(),
+): Promise<number> {
+	const [row] = await db
+		.select({ total: sql<number>`COALESCE(SUM(${attentionEvents.durationSeconds}), 0)::int` })
+		.from(attentionEvents)
+		.where(
+			and(
+				eq(attentionEvents.userId, sharerId),
+				eq(attentionEvents.viaShareLink, true),
+				gte(attentionEvents.createdAt, monthStart(now)),
+				lt(attentionEvents.createdAt, monthEnd(now)),
+			),
+		);
+	return Number(row?.total ?? 0);
+}
+
+/**
+ * How much more viewing this sharer's links may fund this month.
+ *
+ * No account lookup, because there is nothing about the account that changes the answer:
+ * the share-link budget is a flat constant for everybody, paying or not. Giving Anthers the
+ * Public Access price removes the limit on *your* viewing and buys no relay for strangers —
+ * see `SHARED_PUBLIC_ACCESS_SECONDS` for why deriving this from the sharer's own allowance
+ * would hand an unlimited account an unlimited relay, which is the anonymous streaming that
+ * requiring an account for delivery exists to close.
+ */
+export async function loadShareLinkBudget(
+	sharerId: number,
+	now: Date = new Date(),
+): Promise<ShareLinkBudget> {
+	return shareLinkBudget(await shareLinkSecondsThisMonth(sharerId, now));
 }

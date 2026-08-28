@@ -76,6 +76,7 @@ import {
 } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
+import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { embedCreator } from "../lib/handles.js";
@@ -100,10 +101,11 @@ import {
 	setHidden,
 } from "../services/library.js";
 import { purgeWorkMedia, urlToKey } from "../services/media-purge.js";
-import { loadPublicAccessBudget } from "../services/public-access.js";
+import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { beginScans, scanReleaseGate } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
+import { resolveShareToken, revokeShareLink, shareLinkFor } from "../services/share-links.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 
@@ -867,16 +869,33 @@ async function setPostWorkRefs(postId: number, workIds: number[]): Promise<boole
  */
 interface DeliveryCtx {
 	origin: string;
+	/**
+	 * The **share token** this request arrived with, if any — carried onto every media URL
+	 * the server builds.
+	 *
+	 * 🚨 **It has to travel on the URL, because the things that fetch these cannot be told
+	 * anything else.** An `<img>`, an `<audio src>` and hls.js all issue their own requests
+	 * with no way for the page to attach a header, so a recipient with no session would
+	 * otherwise be handed a set of URLs that 401 the moment the player touched them. The
+	 * token is a locator, not a credential, so putting it in a URL grants nothing that
+	 * following the link did not already grant.
+	 */
+	share?: string | null;
+}
+
+/** Appends the share token, when the request rode one in. */
+function withShare(url: string, ctx: DeliveryCtx): string {
+	return ctx.share ? `${url}?share=${encodeURIComponent(ctx.share)}` : url;
 }
 
 /** URL of the access-checked HLS master for a video Work. */
 function buildHlsManifestUrl(ctx: DeliveryCtx, workId: number, file = "master.m3u8"): string {
-	return `${ctx.origin}/api/content/works/${workId}/hls/${file}`;
+	return withShare(`${ctx.origin}/api/content/works/${workId}/hls/${file}`, ctx);
 }
 
 /** URL of the access-checked audio endpoint for an audio Work. */
 function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
-	return `${ctx.origin}/api/content/works/${workId}/audio`;
+	return withShare(`${ctx.origin}/api/content/works/${workId}/audio`, ctx);
 }
 
 /**
@@ -935,6 +954,11 @@ function parseNumericId(raw: string): number | null {
 const previewQuerySchema = z.object({
 	previewAs: z.string().optional(),
 	previewOwned: z.string().optional(),
+	/**
+	 * A **share link** token. Declared here so the RPC client can send it; it is read by
+	 * `viewerFor`, which refuses a token naming a different Work.
+	 */
+	share: z.string().optional(),
 });
 
 /** The Catalog's own filters, plus a preview. Same "publish the types" purpose. */
@@ -989,18 +1013,72 @@ function contextFor(
 }
 
 /**
+ * Middleware for a delivery endpoint: a session, **or** a live share link for this Work.
+ *
+ * 🚨 **The exception is narrow by construction, and this is the only door it opens.** A
+ * request that presents neither is refused here, before any work is done. A request that
+ * presents a token is let *through the door* and then meets `resolveAccessSync` exactly like
+ * everybody else, where a null viewer carrying `sharedBy` can emerge only from the branch
+ * reached by universally-free work. So this middleware decides *whether we will talk to you*;
+ * it decides nothing about what you may have.
+ *
+ * ⚠️ **The token must name the Work in the path.** Without that, a token minted for one free
+ * Work would be a skeleton key to every delivery route on the platform — the recipient would
+ * still be refused gated and Adult work by the resolver, but they would be drawing the
+ * sharer's budget across a catalogue the sharer never shared.
+ */
+const requireViewerOrShareLink = createMiddleware(async (c, next) => {
+	const workId = parseNumericId(c.req.param("id") ?? "");
+	if (workId != null) {
+		const token = c.req.query("share");
+		if (token) {
+			const link = await resolveShareToken(token);
+			if (link && link.workId === workId) return next();
+		}
+	}
+	return requireAuth(c, next);
+});
+
+/**
+ * Who this request is for — an account, a **share link**, or nobody.
+ *
+ * 🚨 **A share link is scoped to ONE Work, and this is where that is enforced.** The token
+ * names a Work; if the request is for a different one, the link is simply not present, so a
+ * token minted for a free Work cannot be pointed at anything else on the platform.
+ *
+ * ⚠️ **A session always wins.** Somebody who has an account resolves on their own standing
+ * and spends their own allowance, whatever link they arrived by — otherwise a link would be a
+ * way to consume on somebody else's meter while signed in, and (worse) a way around the
+ * recipient's own Adult opt-in.
+ */
+async function viewerFor(
+	c: Parameters<typeof getOptionalUserId>[0],
+	workId: number,
+): Promise<{ userId: number | null; sharedBy: number | null }> {
+	const userId = await getOptionalUserId(c);
+	if (userId != null) return { userId, sharedBy: null };
+
+	const token = c.req.query("share");
+	if (!token) return { userId: null, sharedBy: null };
+	const link = await resolveShareToken(token);
+	if (!link || link.workId !== workId) return { userId: null, sharedBy: null };
+	return { userId: null, sharedBy: link.sharerId };
+}
+
+/**
  * Resolve the calling viewer's access to one Work.
  *
  * Every delivery endpoint goes through here, which is the point: access is re-resolved
  * live, per request, against the Work's own gates. Nothing is inherited from a post, a
- * project, or the URL that got the caller here.
+ * project, or the URL that got the caller here — and, since 2026-08-28, nothing is inherited
+ * from a share link either. A token supplies an *attribution*; the gates are unmoved.
  */
 async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
-	const viewerId = await getOptionalUserId(c);
-	const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+	const { userId, sharedBy } = await viewerFor(c, work.id);
+	const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 	return resolveAccessSync(work as AccessibleWork, ctx);
 }
 
@@ -1019,6 +1097,13 @@ async function workAccessFor(
  * Public Access work: a gated Work the viewer cleared, one they bought, and their own
  * catalogue are all `isFree: false` and never reach the meter.
  *
+ * ⚠️ **A share-link view is metered against the SHARER's separate share-link budget**, not
+ * against their ordinary allowance and not against nothing. Which budget applies is decided
+ * by how the request arrived, because the two bound different things: the ten hours bound
+ * what one person may watch, and the share-link hour bounds how much viewing one person may
+ * fund for strangers. Metering a relay against the sharer's own hours would make sharing cost
+ * them the thing the sub-pool exists to protect.
+ *
  * Returns null when delivery may proceed, or the 402 body when the allowance is spent.
  */
 async function publicAccessGate(
@@ -1030,8 +1115,28 @@ async function publicAccessGate(
 	// purchase — or a creator's own work is not Public Access and draws nothing.
 	if (!(access.isFree && work.streamEnabled)) return null;
 
-	const viewerId = await getOptionalUserId(c);
-	const budget = await loadPublicAccessBudget(viewerId);
+	const { userId, sharedBy } = await viewerFor(c, work.id);
+
+	if (sharedBy != null) {
+		const shared = await loadShareLinkBudget(sharedBy);
+		if (shared.allowed) return null;
+		return {
+			error: "This shared link has used its viewing time for this month",
+			reason: "share_link_limit",
+			// The sharer's own ten hours are nobody else's business, so the recipient is told
+			// what ran out without being handed a reading of somebody's account. Same shape,
+			// so the players' 402 handling needs no second branch.
+			budget: {
+				unlimited: false,
+				usedSeconds: shared.usedSeconds,
+				limitSeconds: shared.limitSeconds,
+				remainingSeconds: shared.remainingSeconds,
+				allowed: false,
+			},
+		};
+	}
+
+	const budget = await loadPublicAccessBudget(userId);
 	if (budget.allowed) return null;
 
 	return {
@@ -1208,7 +1313,16 @@ function serializeWorkForViewer(
  * longer decides anything, because `resolveAccessSync` has already refused them the
  * deliverable by then.
  */
-async function allowanceSpent(viewerId: number | null): Promise<boolean> {
+async function allowanceSpent(
+	viewerId: number | null,
+	sharedBy: number | null = null,
+): Promise<boolean> {
+	// A share-link view draws the sharer's separate relay budget, never their ten hours and
+	// never nothing. Same split as `publicAccessGate` and for the same reason — the two
+	// budgets bound different things.
+	if (viewerId == null && sharedBy != null) {
+		return !(await loadShareLinkBudget(sharedBy)).allowed;
+	}
 	const budget = await loadPublicAccessBudget(viewerId);
 	return !budget.allowed;
 }
@@ -1327,6 +1441,27 @@ function publicOrigin(): string {
 	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 }
 
+/** The display name of whoever shared a link, for the recipient's banner. */
+async function sharerName(sharerId: number): Promise<string | null> {
+	const [row] = await db
+		.select({ displayName: users.displayName, username: users.username })
+		.from(users)
+		.where(eq(users.id, sharerId))
+		.limit(1);
+	return row ? row.displayName || row.username : null;
+}
+
+/**
+ * The address of a share link, as somebody would paste it.
+ *
+ * Short and opaque on purpose: it carries no Work id, no slug and no username, so the URL
+ * itself says nothing about what is behind it until somebody follows it. `/s/:token` resolves
+ * to the Work's canonical page, which is where every access question is asked.
+ */
+function shareUrl(token: string): string {
+	return `${publicOrigin()}/s/${token}`;
+}
+
 /**
  * Decide where a Work's media should be delivered from. In S3 mode ALL video and audio
  * goes through the access-checked endpoints, because access is enforced live at request
@@ -1338,9 +1473,9 @@ function publicOrigin(): string {
  * /content route serves everything, unsigned) — which is why a delivery leak cannot be
  * reproduced locally, and why the tests assert URLs rather than access reasons.
  */
-function deliveryCtx(): DeliveryCtx | null {
+function deliveryCtx(share: string | null = null): DeliveryCtx | null {
 	if (isLocalStorage) return null;
-	return { origin: publicOrigin() };
+	return { origin: publicOrigin(), share };
 }
 
 /**
@@ -2017,7 +2152,7 @@ const contentRoutes = new Hono()
 	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
 	 * entitled viewer can download from the Catalog whether or not anything was announced.
 	 */
-	.post("/works/:id/assets/:assetId/download", requireAuth, async (c) => {
+	.post("/works/:id/assets/:assetId/download", requireViewerOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2046,8 +2181,10 @@ const contentRoutes = new Hono()
 		// with no idea who pulled. Fire-and-forget for the same reason the counter
 		// is: nothing about bookkeeping may stand between a buyer and their file.
 		// The stamp is a no-op for a downloader who was entitled rather than a buyer,
-		// since there is no purchase of theirs to stamp.
-		void markPurchaseDownloaded(c.get("user").id, work.id);
+		// since there is no purchase of theirs to stamp — and for a share-link recipient,
+		// who has no account and therefore no purchase at all.
+		const downloaderId = await getOptionalUserId(c);
+		if (downloaderId != null) void markPurchaseDownloaded(downloaderId, work.id);
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).
@@ -2081,7 +2218,7 @@ const contentRoutes = new Hono()
 	// so this is the only way to reach it: access is re-checked here on every request,
 	// then we redirect to a short-lived signed CDN URL. A redirect rather than a proxy so
 	// range requests (seeking) go straight to the CDN instead of through the API.
-	.get("/works/:id/audio", requireAuth, async (c) => {
+	.get("/works/:id/audio", requireViewerOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2117,7 +2254,7 @@ const contentRoutes = new Hono()
 	// through a check, rather than as a single file whose URL is the whole book. Same shape
 	// as the audio route above — re-resolve access, meter the commons, redirect to a
 	// short-lived signed URL.
-	.get("/works/:id/pages/:page", requireAuth, async (c) => {
+	.get("/works/:id/pages/:page", requireViewerOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -2153,7 +2290,7 @@ const contentRoutes = new Hono()
 	// Serves the master + variant playlists for a video Work, rewriting segment refs to
 	// short-lived signed CDN URLs. Segments are always private, so EVERY accessible Work
 	// (free or gated) is pointed here by serializeWorkForViewer; this check is the gate.
-	.get("/works/:id/hls/:file", requireAuth, async (c) => {
+	.get("/works/:id/hls/:file", requireViewerOrShareLink, async (c) => {
 		const file = c.req.param("file");
 		// Playlists only — segments are fetched straight from the CDN via signed URLs.
 		if (!/^[A-Za-z0-9_.-]+\.m3u8$/.test(file)) return c.json({ error: "Not found" }, 404);
@@ -2431,7 +2568,11 @@ const contentRoutes = new Hono()
 			.where(eq(works.id, work.id))
 			.execute();
 
-		const ctx = await buildAccessContext(viewerId, { workIds: [work.id] });
+		// A share link rides in on the query string and is resolved here, at the one route a
+		// recipient actually lands on. `viewerFor` refuses a token that names a different
+		// Work, and a signed-in caller ignores tokens entirely.
+		const { sharedBy } = await viewerFor(c, work.id);
+		const ctx = await buildAccessContext(viewerId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
 		const [creator] = work.creatorId
 			? await db
@@ -2477,15 +2618,104 @@ const contentRoutes = new Hono()
 						work as AccessibleWork,
 						contextFor(work, viewerId, ctx, previewRequest(c)),
 					),
-					deliveryCtx(),
-					await allowanceSpent(viewerId),
+					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
+					await allowanceSpent(viewerId, sharedBy),
 					pageRow?.count ?? 0,
 				),
 				creator,
 				creatorHasStripe: !!creatorStripe?.onboardingComplete && !!creatorStripe.payoutsEnabled,
+				// Who sent them, when they arrived by a share link — a display name and nothing
+				// else. The recipient is told whose link they followed because it is what makes
+				// the page make sense; the sharer's account is otherwise none of their business,
+				// which is also why their remaining budget never reaches this response.
+				sharedBy: sharedBy != null ? await sharerName(sharedBy) : null,
 				// Where this Work has been announced — the other half of the reference.
 				postedIn: await postsUsingWork(work.id),
 			},
+		});
+	})
+
+	// ── Share links ──────────────────────────────────────────────────────────────
+	//
+	// 🚨 **The single exception to "consuming a Work requires an account", and it conveys an
+	// allowance rather than a permission** (Parker, 2026-08-27). A token tells somebody where
+	// a Work is; what they may reach is still `resolveAccess`'s answer alone. See
+	// `services/share-links.ts` for why "ungated, non-Adult work only" falls out of the
+	// control flow instead of being a rule these routes have to enforce.
+
+	/**
+	 * The link for this Work, minted on first ask and handed back unchanged after that.
+	 *
+	 * Idempotent so the URL somebody already pasted into a message keeps working — which is
+	 * also what makes revoking mean something, since a fresh token per press would leave a
+	 * trail of live links nobody could name.
+	 */
+	.post("/works/:id/share-link", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = parseNumericId(c.req.param("id"));
+		if (workId == null) return c.json({ error: "Work not found" }, 404);
+
+		const result = await shareLinkFor(user.id, workId);
+		if ("refusal" in result) {
+			if (result.refusal === "not_found") return c.json({ error: "Work not found" }, 404);
+			return c.json(
+				{
+					error:
+						"Only work that is free to everyone can be shared this way — a gate, a price or an Adult rating all need the person opening it to have their own account.",
+					code: "not_shareable",
+				},
+				409,
+			);
+		}
+		return c.json({ token: result.link.token, url: shareUrl(result.link.token) }, 201);
+	})
+
+	/** Stop a link working. The token is retired rather than freed. */
+	.delete("/works/:id/share-link", requireAuth, async (c) => {
+		const user = c.get("user");
+		const workId = parseNumericId(c.req.param("id"));
+		if (workId == null) return c.json({ error: "Work not found" }, 404);
+		const revoked = await revokeShareLink(user.id, workId);
+		return c.json({ revoked });
+	})
+
+	/**
+	 * What a share token points at — a Work's canonical address, and who sent you.
+	 *
+	 * ⚠️ **It answers "where", never "whether".** The recipient's browser takes this to the
+	 * Work's ordinary page carrying the token, and every question about what they may have is
+	 * asked there, by the same resolver that answers it for everybody else. Returning a
+	 * serialized Work from here would be a second path to the deliverable and therefore a
+	 * second place for the rules to drift.
+	 *
+	 * A revoked or unknown token is a 404 rather than a 403: a link that no longer works and
+	 * a link that never existed are the same thing to whoever is holding it, and telling them
+	 * apart would confirm that somebody had shared something.
+	 */
+	.get("/share/:token", async (c) => {
+		const link = await resolveShareToken(c.req.param("token"));
+		if (!link) return c.json({ error: "This link is no longer available" }, 404);
+
+		const [row] = await db
+			.select({
+				slug: works.slug,
+				publicId: works.publicId,
+				title: works.title,
+				sharerName: users.displayName,
+				sharerUsername: users.username,
+			})
+			.from(works)
+			.innerJoin(users, eq(users.id, link.sharerId))
+			.where(eq(works.id, link.workId))
+			.limit(1);
+		if (!row) return c.json({ error: "This link is no longer available" }, 404);
+
+		return c.json({
+			workId: link.workId,
+			slug: row.slug,
+			publicId: row.publicId,
+			title: row.title,
+			sharedBy: row.sharerName || row.sharerUsername,
 		});
 	})
 

@@ -75,6 +75,7 @@ async function watch(
 	creatorId: number,
 	seconds: number,
 	publicAccess: boolean,
+	viaShareLink = false,
 ): Promise<void> {
 	await db.insert(attentionEvents).values({
 		userId,
@@ -82,9 +83,15 @@ async function watch(
 		eventType: "watch",
 		durationSeconds: seconds,
 		publicAccess,
+		viaShareLink,
 		// Inside the cycle under test — the column defaults to now(), which is not.
 		createdAt: new Date("2031-03-15T12:00:00Z"),
 	});
+}
+
+/** The same, arriving through one of this account's **share links**. */
+async function watchViaLink(userId: number, creatorId: number, seconds: number): Promise<void> {
+	await watch(userId, creatorId, seconds, true, true);
 }
 
 async function ledger(userId: number) {
@@ -335,5 +342,81 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 			new Decimal(0),
 		);
 		expect(total.toFixed(2)).toBe(new Decimal(timePoolFor(9)).toFixed(2));
+	});
+});
+
+describe("distributePool — the share-link slice is a ceiling, not a reservation", () => {
+	beforeAll(async () => {
+		await db.execute("SELECT 1");
+	}, DB_SETUP_TIMEOUT);
+
+	it("🚨 pays a non-sharer's creators the WHOLE pool, exactly as before", async () => {
+		// The regression this rule invites, and the one that would hit almost everybody.
+		// Reserving the slice unconditionally would quietly cut every account that never
+		// shared anything by a tenth, to fund a feature they never used — and it would look
+		// like a rounding change rather than a policy one.
+		const creatorId = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+		await watch(userId, creatorId, 3600, true);
+
+		await distributePool({ accountId });
+
+		const paid = (await poolPaid(userId)).get(creatorId);
+		expect(paid?.toFixed(2)).toBe(new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE)).toFixed(2));
+	});
+
+	it("🚨 caps what strangers command at the fraction, however much they watched", async () => {
+		/*
+		 * The property the whole design turns on: **sharing never costs the sharer anything.**
+		 * Here the link is watched for nine times as long as the sharer watched anything
+		 * themselves, and the creator they actually chose is still paid 90% — the viral link
+		 * cannot dilute their own choices, it can only fill its own slice.
+		 */
+		const chosen = await makeUser("creator");
+		const viaLink = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+		await watch(userId, chosen, 600, true);
+		await watchViaLink(userId, viaLink, 5400);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const whole = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
+		expect(pool.get(chosen)?.toFixed(2)).toBe(whole.mul("0.9").toFixed(2));
+		expect(pool.get(viaLink)?.toFixed(2)).toBe(whole.mul("0.1").toFixed(2));
+	});
+
+	it("splits the shared slice among the creators the links actually reached", async () => {
+		const a = await makeUser("creator");
+		const b = await makeUser("creator");
+		const own = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+		await watch(userId, own, 1000, true);
+		await watchViaLink(userId, a, 750);
+		await watchViaLink(userId, b, 250);
+
+		await distributePool({ accountId });
+
+		const pool = await poolPaid(userId);
+		const whole = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
+		expect(pool.get(own)?.toFixed(2)).toBe(whole.mul("0.9").toFixed(2));
+		expect(pool.get(a)?.toFixed(2)).toBe(whole.mul("0.1").mul("0.75").toFixed(2));
+		expect(pool.get(b)?.toFixed(2)).toBe(whole.mul("0.1").mul("0.25").toFixed(2));
+	});
+
+	it("⚠️ leaves the other 90% undistributed when the sharer watched nothing themselves", async () => {
+		// Deliberately NOT symmetric with the first case. A ceiling that lifted whenever the
+		// sharer happened to watch nothing would be no ceiling at all — somebody could post one
+		// link publicly, never open the site, and hand strangers command of their whole pool.
+		// The remainder is the subject of its own open question, which a viewer with no
+		// attention at all already raises.
+		const viaLink = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+		await watchViaLink(userId, viaLink, 3600);
+
+		await distributePool({ accountId });
+
+		const whole = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
+		expect((await poolPaid(userId)).get(viaLink)?.toFixed(2)).toBe(whole.mul("0.1").toFixed(2));
 	});
 });

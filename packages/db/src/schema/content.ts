@@ -829,3 +829,58 @@ export const ratings = pgTable(
 		index("idx_ratings_work_visible").on(table.workId, table.moderationStatus),
 	],
 );
+
+/**
+ * A link somebody sends a friend, that lets the friend open an **ungated** Work without an
+ * account of their own — the single exception to the rule that consuming a Work requires
+ * one (21.01 §9.1).
+ *
+ * 🚨 **A share link is a locator and never an entitlement** (Parker, 2026-08-27). It tells
+ * somebody *where* a Work is; what they may reach is still decided by `resolveAccess` and by
+ * their own account. The distinction it has to get right is between conveying an
+ * **allowance** — a quantity, the sharer's, which is fine — and conveying a **permission**,
+ * which it must never do. So a token here is not consulted by the gates at all: it supplies
+ * an *attribution*, which is the thing the account requirement actually wanted, and every
+ * other refusal still runs.
+ *
+ * ⚠️ **Which means the "ungated only" rule is enforced by construction rather than by a
+ * check anyone has to remember.** A share context resolves with a null viewer, so a gated
+ * Work has no qualifying allowed row and falls to `login_required`, a priced one falls to
+ * `payment_required`, and an **Adult** one is refused above both because a share context
+ * carries no opt-in and can never carry one. Nothing but universally-free work can come out
+ * the other side. See `resolveAccessSync`, and 40.13 § *A share link is a locator*.
+ *
+ * One row per (sharer, Work): re-sharing returns the link you already have, so the thing you
+ * pasted somewhere keeps working and revoking means something. `revokedAt` rather than a
+ * delete, because a revoked token must stay un-mintable rather than becoming available again.
+ */
+export const shareLinks = pgTable(
+	"share_links",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * The opaque token in the URL. Not derived from the Work or the sharer — guessing one
+		 * would otherwise let somebody mint themselves an allowance out of another person's
+		 * month.
+		 */
+		token: text("token").notNull().unique(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/**
+		 * Whose allowance and whose Time Pool slice this link spends. ON DELETE CASCADE: an
+		 * account that goes away takes its links with it, because there would be nobody left
+		 * to attribute the viewing to and an unattributable view is the thing this exists to
+		 * prevent.
+		 */
+		sharerId: integer("sharer_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		revokedAt: timestamp("revoked_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_share_links_sharer_work").on(table.sharerId, table.workId),
+		index("idx_share_links_work").on(table.workId),
+	],
+);
