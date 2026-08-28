@@ -46,6 +46,7 @@ function accessible(key: string): AccessibleWork {
 		streamEnabled: spec.streamEnabled,
 		downloadEnabled: spec.downloadEnabled,
 		seedAccess: spec.seedAccess,
+		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
 	};
@@ -71,6 +72,7 @@ function ctx(givenAmount: number, purchased: number[] = []): AccessContext {
 		userId: VIEWER_ID,
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR_ID, givenAmount]] : []),
 		purchasedWorkIds: new Set(purchased),
+		adultAccess: true,
 	};
 }
 
@@ -199,6 +201,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: null,
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
+			adultAccess: true,
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
 		expect(resolveAccessSync(POSTS.G2, ctx(0)).reason).toBe("gated");
@@ -230,6 +233,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: CREATOR_ID,
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
+			adultAccess: true,
 		});
 		expect(owner.canAccess).toBe(true);
 		expect(owner.reason).toBe("owner");
@@ -240,6 +244,7 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 			userId: VIEWER_ID,
 			supportByCreator: new Map([[CREATOR_ID + 1, 99]]),
 			purchasedWorkIds: new Set(),
+			adultAccess: true,
 		};
 		expect(resolveAccessSync(POSTS.G2, elsewhere).reason).toBe("gated");
 	});

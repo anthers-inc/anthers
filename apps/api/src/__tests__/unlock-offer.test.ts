@@ -36,6 +36,7 @@ function ctx(givenAmount = 0): AccessContext {
 		userId: VIEWER,
 		supportByCreator: new Map(givenAmount > 0 ? [[CREATOR, givenAmount]] : []),
 		purchasedWorkIds: new Set(),
+		adultAccess: true,
 	};
 }
 
@@ -50,6 +51,7 @@ function gatedAt(threshold: number, price = "0"): AccessibleWork {
 			{ threshold: 0, allow: false, price: "0" },
 			{ threshold, allow: true, price },
 		],
+		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
 	};
@@ -165,6 +167,7 @@ describe("unlock offer — routes that would not actually open the Work", () => 
 			creatorId: CREATOR,
 			streamEnabled: true,
 			downloadEnabled: false,
+			maturity: "general",
 			seedAccess: [
 				{ threshold: 0, allow: false, price: "0" },
 				{ threshold: 5, allow: true, price: "0" },
@@ -185,6 +188,7 @@ describe("unlock offer — when it is absent", () => {
 			creatorId: CREATOR,
 			streamEnabled: true,
 			downloadEnabled: false,
+			maturity: "general",
 			seedAccess: [{ threshold: 0, allow: true, price: "0" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",
@@ -200,6 +204,7 @@ describe("unlock offer — when it is absent", () => {
 			userId: null,
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
+			adultAccess: true,
 		};
 		const got = resolveAccessSync(gatedAt(2), anon);
 		expect(got.reason).toBe("login_required");
@@ -212,6 +217,7 @@ describe("unlock offer — when it is absent", () => {
 			creatorId: CREATOR,
 			streamEnabled: false,
 			downloadEnabled: true,
+			maturity: "general",
 			seedAccess: [{ threshold: 0, allow: true, price: "9.99" }],
 			takedownStatus: "active",
 			quarantineStatus: "none",

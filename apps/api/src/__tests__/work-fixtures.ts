@@ -61,7 +61,7 @@ export interface WorkFixture {
 	 * suite that flips one to `released` would 409 for a reason that is not its subject.
 	 * Pass `"unrated"` explicitly when the rating gate is what is being tested.
 	 */
-	maturity?: "unrated" | "general" | "mature";
+	maturity?: "unrated" | "general" | "mature" | "adult";
 	maturityNotes?: string[];
 	/** When scans were last enqueued for this Work — the release gate's clock. */
 	scanQueuedAt?: Date | null;

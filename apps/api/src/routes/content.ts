@@ -85,8 +85,10 @@ import {
 	buildAccessContext,
 	buildPreviewContext,
 	defaultSeedAccess,
+	isOpenToEveryoneFree,
 	resolveAccessSync,
 } from "../services/access.js";
+import { adultVisibility } from "../services/adult-access.js";
 import { validateSession } from "../services/auth.js";
 import { notBlockedBy } from "../services/blocks.js";
 import { appealsForWork, declareRating, fileRatingAppeal } from "../services/content-rating.js";
@@ -1277,6 +1279,15 @@ async function loadPostWorks(
 		.map((ref) => {
 			const work = worksById.get(ref.workId);
 			if (!work) return null;
+			// 🚨 A post announcing an Adult Work does not announce it to somebody who has
+			// not opted in. The reference is dropped rather than serialized as locked,
+			// because the invisibility rule covers the title and cover art and a locked
+			// card is made of both. `ctx` already carries the viewer's adult access, so
+			// this costs no extra query — and reading it from the same context the access
+			// verdict comes from is what keeps the two from disagreeing.
+			if (work.maturity === "adult" && !ctx.adultAccess && ctx.userId !== work.creatorId) {
+				return null;
+			}
 			return {
 				position: ref.position,
 				work: serializeWorkForViewer(
@@ -2184,6 +2195,21 @@ const contentRoutes = new Hono()
 			);
 		}
 
+		// The same rule the PATCH handler enforces, at the other door a Work's rating and
+		// access table can be set together. A Work created Adult and free would be a
+		// violation from birth, and the creator should be told at the moment they wrote it
+		// rather than at release.
+		if (data.maturity === "adult" && isOpenToEveryoneFree(data.seedAccess ?? defaultSeedAccess())) {
+			return c.json(
+				{
+					error:
+						"Adult work can't be free to everyone. Put it behind a Badge or set a price, and it can stay Adult.",
+					code: "adult_must_be_paid",
+				},
+				409,
+			);
+		}
+
 		let slug: string;
 		if (data.slug) {
 			if (await workSlugExists(data.slug)) {
@@ -2326,6 +2352,22 @@ const contentRoutes = new Hono()
 			if (!stillOwed) return c.json({ error: "Work not found" }, 404);
 		}
 
+		// 🚨 **404, not 403, and the difference is the whole rule.** Adult work is invisible
+		// to anyone who has not opted in and verified — its existence, title and cover art
+		// included — so a response saying "this exists and you may not have it" would leak
+		// exactly what the rung withholds. This is also the surface a share link arrives at,
+		// and 40.13 is explicit that a share link is a locator and never an entitlement: the
+		// person following one has no setting for the opt-in to consult, so they meet the
+		// same absence a search would have given them.
+		//
+		// ⚠️ Placed after the owner and withdrawn-purchaser branches deliberately. A creator
+		// reaches their own Work whatever their setting says, and this must not become the
+		// reason somebody cannot see a thing they made.
+		if (!isOwner && work.maturity === "adult") {
+			const { access } = await adultVisibility(viewerId);
+			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
+		}
+
 		const [workAssets, jobRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, work.id)),
 			db
@@ -2457,6 +2499,15 @@ const contentRoutes = new Hono()
 					eq(works.streamEnabled, true),
 					openToEveryone(works.seedAccess),
 					notBlockedBy(viewerId, works.creatorId),
+					// ✅ **Belt and braces, and both belts are real.** Adult work cannot be
+					// Public Access by the access rule alone — `openToEveryone` above needs a
+					// baseline row that is allowed and free, and Adult work may not be free —
+					// so this condition should never remove a row from this particular query.
+					// It is here because that argument is a chain of two other rules, and a
+					// listing whose correctness depends on somebody remembering the chain is
+					// one relaxation away from being wrong. Wiki 40.09: the rule is enforced
+					// twice over, and if either half were relaxed the other still holds.
+					(await adultVisibility(viewerId)).hidden,
 				),
 			)
 			.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -2503,6 +2554,13 @@ const contentRoutes = new Hono()
 		// A creator browsing their own Catalog sees drafts too; nobody else does.
 		if (viewerId !== creator.id) conditions.push(eq(works.visibility, "released"));
 		if (type) conditions.push(eq(works.type, type));
+		// 🚨 A creator profile is one of the non-feed surfaces 40.09 left open, and it is
+		// settled: a reader who has not opted in meets nothing at all rather than an
+		// interstitial. The accepted cost is that this Catalog is silently incomplete for
+		// them — the alternative was announcing the existence and usually the title of work
+		// the rung specifically does not give an existence to.
+		const adultHidden = (await adultVisibility(viewerId)).hidden;
+		if (adultHidden) conditions.push(adultHidden);
 
 		const preview = previewRequest(c);
 		const order =
@@ -2651,6 +2709,33 @@ const contentRoutes = new Hono()
 			// Re-read, so the gates below and the rest of this handler read the row the
 			// service just wrote rather than the one loaded before it.
 			work = declared;
+		}
+
+		// 🚨 **Adult work may not be free**, so it may not carry a baseline row opening it to
+		// everyone at no cost — which is what Public Access is. Wiki 40.09 stacks three
+		// reasons: under distributor-pays a free Work makes the **Time Pool** the payer,
+		// which is a materially worse position with processors and regulators than a creator
+		// selling their own work; it would pay creators per minute for adult content, an
+		// attention-maximizing incentive on the one category where that is least wanted; and
+		// it would make supporting Anthers a route to adult content, turning the pitch into
+		// *"give Anthers $3, watch unlimited adult content"* — Anthers selling access rather
+		// than facilitating a creator's sale.
+		//
+		// ✅ **Evaluated on the state this edit RESULTS IN**, because either half can move in
+		// this request: a creator can rate a free Work Adult, or open a paid Adult Work up,
+		// and each is the same violation arrived at from a different side. Checked here
+		// rather than only on release, since a private Work in this state is a release away
+		// from being live and the creator should learn now rather than then.
+		const resultingAccess = data.seedAccess !== undefined ? data.seedAccess : work.seedAccess;
+		if (work.maturity === "adult" && isOpenToEveryoneFree(resultingAccess)) {
+			return c.json(
+				{
+					error:
+						"Adult work can't be free to everyone. Put it behind a Badge or set a price, and it can stay Adult.",
+					code: "adult_must_be_paid",
+				},
+				409,
+			);
 		}
 
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
@@ -3356,6 +3441,9 @@ const contentRoutes = new Hono()
 					eq(projectItems.projectId, row.project.id),
 					// A creator browsing their own project sees drafts; nobody else does.
 					viewerId === row.project.creatorId ? undefined : eq(works.visibility, "released"),
+					// A project is a listing like any other, so an Adult member is absent
+					// from it rather than present and locked.
+					(await adultVisibility(viewerId)).hidden,
 				),
 			)
 			.orderBy(asc(projectItems.sortOrder));

@@ -27,6 +27,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		creatorId: 42,
 		streamEnabled: true,
 		downloadEnabled: false,
+		maturity: "general",
 		takedownStatus: "active",
 		quarantineStatus: "none",
 		visibility: "released",
