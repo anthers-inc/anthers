@@ -149,8 +149,11 @@ export default function WorkEditor({ item, onSaved, onClose }: ContentItemEditor
 	// a default here would be the editor answering on the creator's behalf, which is the one
 	// thing `unrated` exists in the schema to prevent. The release checkbox below refuses to
 	// be ticked while it is null, so the question is asked at the moment it matters.
+	// Reads the vocabulary rather than listing the values, so a rung added to the scale is
+	// carried into the editor rather than silently falling back to "unanswered" on a Work
+	// that is in fact rated.
 	const [maturity, setMaturity] = useState<Exclude<MaturityRating, "unrated"> | null>(
-		editing?.maturity === "general" || editing?.maturity === "mature" ? editing.maturity : null,
+		editing?.maturity && editing.maturity !== "unrated" ? editing.maturity : null,
 	);
 	const [contentNotes, setContentNotes] = useState<ContentNote[]>(() =>
 		normalizeContentNotes(editing?.maturityNotes ?? []),

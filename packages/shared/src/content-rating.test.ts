@@ -10,46 +10,157 @@
  */
 import { describe, expect, it } from "bun:test";
 import {
+	ACCEPTED_MATURITY_RATINGS,
 	CONTENT_NOTES,
 	contentNoteLabel,
 	isAtLeastAsCautious,
 	isContentNote,
 	isMaturityRating,
+	isRatingAccepted,
 	MATURITY_CHOICES,
 	MATURITY_RATINGS,
 	type MaturityRating,
 	maturityLabel,
 	normalizeContentNotes,
+	releaseRatingRefusal,
+	rungBelow,
 } from "./content-rating.js";
 
 describe("the rating vocabulary", () => {
-	it("has exactly three values, and `unrated` is one of them", () => {
+	it("has exactly four values, and `unrated` is one of them", () => {
 		// `unrated` being a value rather than a null is the decision this pins: an
 		// unanswered question and an answer of "General" are different facts, and the
 		// report reason for unlabeled mature work depends on being able to tell them apart.
-		expect([...MATURITY_RATINGS]).toEqual(["unrated", "general", "mature"]);
+		expect([...MATURITY_RATINGS]).toEqual(["unrated", "general", "mature", "adult"]);
 		expect(isMaturityRating("unrated")).toBe(true);
+		// 🚨 The rung is `adult`, never `adults-only` — the second collides with the ESRB's
+		// existing AO rating, which is a different scale saying a different thing.
+		expect(isMaturityRating("adult")).toBe(true);
 		expect(isMaturityRating("adults-only")).toBe(false);
+	});
+
+	it("has no rung above Adult, and must never grow one", () => {
+		// 🚨 The value assertion in this file. Work made for the purpose of sexual
+		// gratification is not published on Anthers at all, so there is no rung for it: a
+		// creator has no way to declare it, because nobody needs a way to say their work is
+		// something that cannot be here whatever it is called. The boundary is enforced
+		// through the `pornography` report reason instead. A value added here would turn a
+		// content rule into a rung somebody could sit at.
+		const values = MATURITY_RATINGS.join(" ");
+		expect(values).not.toContain("explicit");
+		expect(values).not.toContain("porn");
+		expect(values).not.toContain("xxx");
 	});
 
 	it("never offers `unrated` as something to pick", () => {
 		// A picker that offered it would be a way to un-release a Work by a side door: the
 		// release gate refuses an unrated Work, so one already out would land in a state no
 		// path a creator can take could have produced.
-		expect(MATURITY_CHOICES.map((c) => c.value)).toEqual(["general", "mature"]);
+		expect(MATURITY_CHOICES.map((c) => c.value)).toEqual(["general", "mature", "adult"]);
 	});
 
 	it("labels every value, including the one nobody picks", () => {
 		expect(maturityLabel("unrated")).toBe("Unrated");
 		expect(maturityLabel("general")).toBe("General");
 		expect(maturityLabel("mature")).toBe("Mature");
+		expect(maturityLabel("adult")).toBe("Adult");
 		// Forward compatibility: a value a later build adds must not render as blank.
 		expect(maturityLabel("something-new")).toBe("something-new");
+	});
+
+	it("tells a creator what the Adult rung costs, in the hint they read while choosing", () => {
+		// The three consequences a creator is agreeing to, and the reason this is asserted
+		// rather than left to review: Adult is the one rung that takes money and audience
+		// away, and a hint that described it as merely "explicit" would be collecting a
+		// declaration nobody was told the price of.
+		const adult = MATURITY_CHOICES.find((c) => c.value === "adult");
+		expect(adult?.hint).toContain("Public Access");
+		expect(adult?.hint).toContain("Time Pool");
+		expect(adult?.hint).toContain("verified");
+	});
+});
+
+describe("which rungs Anthers accepts", () => {
+	it("accepts General and Mature, and not yet Adult", () => {
+		// ⚠️ This asserts the switch's CURRENT position, and it is meant to fail when the
+		// position changes — that is what makes opening or closing a rung a deliberate act
+		// with a reader rather than a constant somebody edited in passing.
+		//
+		// 🚨 Adult being absent is not the rung being deferred. It is being built, and this
+		// list is what it goes on once what the rung COSTS a Work is enforced — paid, never
+		// Public Access, no Time Pool, invisible unless opted in. A rung on this list with
+		// none of that built would be an open door described as a fence.
+		expect([...ACCEPTED_MATURITY_RATINGS]).toEqual(["general", "mature"]);
+		expect(isRatingAccepted("general")).toBe(true);
+		expect(isRatingAccepted("mature")).toBe(true);
+		expect(isRatingAccepted("adult")).toBe(false);
+		// `unrated` is not a rung and so is not accepted; the release gate answers it with
+		// its own message first.
+		expect(isRatingAccepted("unrated")).toBe(false);
+	});
+
+	it("refuses release at a rung that is not accepted", () => {
+		expect(releaseRatingRefusal("adult")).toBe("closed");
+		// And against an explicit set, so the branch is exercised whichever way the live
+		// switch is set — the day Adult opens, this still proves the mechanism works.
+		const openOnlyToGeneral: MaturityRating[] = ["general"];
+		expect(releaseRatingRefusal("mature", openOnlyToGeneral)).toBe("closed");
+		expect(releaseRatingRefusal("general", openOnlyToGeneral)).toBe(null);
+	});
+
+	it("answers an unrated Work `undeclared` even when nothing is accepted", () => {
+		// 🚨 The ordering, and it is load-bearing. `unrated` is not on the accepted list
+		// either, so a gate that asked about acceptance first would tell a creator who has
+		// simply not answered yet that Anthers is not taking their kind of work — which is
+		// both false and unfixable, where the real problem is one click.
+		expect(releaseRatingRefusal("unrated", [])).toBe("undeclared");
+		expect(releaseRatingRefusal("unrated")).toBe("undeclared");
+	});
+
+	it("lets an accepted rung release", () => {
+		expect(releaseRatingRefusal("general")).toBe(null);
+		expect(releaseRatingRefusal("mature")).toBe(null);
+	});
+});
+
+describe("rungBelow — what an appeal against a correction asks for", () => {
+	it("walks one rung down the scale", () => {
+		expect(rungBelow("adult")).toBe("mature");
+		expect(rungBelow("mature")).toBe("general");
+	});
+
+	it("has nothing below General", () => {
+		// The useful half: a creator whose rating was corrected DOWN has nothing to appeal,
+		// because raising it back is theirs to do without asking. Returning `mature` here
+		// would offer them a queue for something that is already one click away.
+		expect(rungBelow("general")).toBe(null);
+	});
+
+	it("never offers `unrated` as a destination", () => {
+		// Appealing back to "nobody has said" would un-release a Work by a side door, the
+		// same reason the picker does not offer it.
+		expect(rungBelow("general")).not.toBe("unrated");
+		for (const value of MATURITY_RATINGS) expect(rungBelow(value)).not.toBe("unrated");
+	});
+
+	it("asks for something strictly less cautious than what it is appealing", () => {
+		// Ties the two orderings together: whatever `rungBelow` returns must be a value
+		// `isAtLeastAsCautious` would refuse a locked creator, or the appeal would be asking
+		// for something they could simply have set.
+		for (const value of MATURITY_RATINGS) {
+			const below = rungBelow(value);
+			if (below) expect(isAtLeastAsCautious(below, value)).toBe(false);
+		}
 	});
 });
 
 describe("isAtLeastAsCautious — what a creator may change after a correction", () => {
-	const ORDER: MaturityRating[] = ["unrated", "general", "mature"];
+	// ⭐ The whole reason this is an order rather than a pair of `if`s: `adult` was added
+	// above the existing values on 2026-08-28, and the rule that a creator may raise but not
+	// lower a correction had to survive it untouched. This array is what proves it did —
+	// every pair is asserted below, so a value inserted anywhere in `CAUTION` that inverted
+	// the rule would fail here rather than in production, on somebody's work.
+	const ORDER: MaturityRating[] = ["unrated", "general", "mature", "adult"];
 
 	it("orders the three values, in both directions", () => {
 		for (let i = 0; i < ORDER.length; i++) {
@@ -73,8 +184,21 @@ describe("isAtLeastAsCautious — what a creator may change after a correction",
 		expect(isAtLeastAsCautious("mature", "general")).toBe(true);
 	});
 
+	it("lets a creator raise their own work all the way to Adult", () => {
+		// The rung an operator may not move somebody else's Work to is one a creator may
+		// always declare about their own. Raising your own rating costs nobody else
+		// anything, which is why the second-decision-maker rule sits on corrections alone.
+		expect(isAtLeastAsCautious("adult", "mature")).toBe(true);
+		expect(isAtLeastAsCautious("adult", "general")).toBe(true);
+	});
+
 	it("refuses to lower an operator's Mature to General", () => {
 		expect(isAtLeastAsCautious("general", "mature")).toBe(false);
+	});
+
+	it("refuses to lower an operator's Adult to anything", () => {
+		expect(isAtLeastAsCautious("mature", "adult")).toBe(false);
+		expect(isAtLeastAsCautious("general", "adult")).toBe(false);
 	});
 
 	it("treats no change as allowed", () => {
@@ -86,6 +210,7 @@ describe("isAtLeastAsCautious — what a creator may change after a correction",
 	it("refuses a return to unrated from anywhere", () => {
 		expect(isAtLeastAsCautious("unrated", "general")).toBe(false);
 		expect(isAtLeastAsCautious("unrated", "mature")).toBe(false);
+		expect(isAtLeastAsCautious("unrated", "adult")).toBe(false);
 	});
 });
 

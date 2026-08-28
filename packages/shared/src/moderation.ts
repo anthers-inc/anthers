@@ -224,8 +224,16 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 	{
 		value: "unrated-mature",
 		group: "rules",
-		label: "Mature work that isn't marked Mature",
-		hint: "Work made for adults whose creator rated it General, or has not rated it at all. An operator can correct a rating, and the creator can appeal that.",
+		// 🚨 The label names no rung at all, and that is the choice worth keeping. Under-
+		// declaration is one report whatever the size of the gap, so the reason covers the
+		// whole scale — but a label reading "…that isn't marked Adult" would put the
+		// expensive rung in front of every reporter deciding what to click, which is how a
+		// rung meant to be rare becomes a general-purpose bucket for work somebody found
+		// disturbing. That is the outcome wiki 40.13 draws its rows to prevent, and the
+		// value `unrated-mature` is left alone because renaming a stored reason code would
+		// rewrite what past reports said they were about.
+		label: "Work that isn't rated for what it shows",
+		hint: "Work rated lower than what it actually depicts — something made for adults rated General, or explicit work rated Mature. This reads how a work is treated rather than what it is about: a story dealing with violence, sex or addiction is not under-rated for its subject. An operator can correct a rating, and the creator can appeal that.",
 	},
 	{
 		value: "harassment",

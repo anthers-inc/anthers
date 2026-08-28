@@ -44,20 +44,32 @@
  * - `unrated` — nobody has said. Every Work is born here, and release is refused until
  *   somebody answers.
  * - `general` — its creator says anyone can meet it.
- * - `mature` — its creator (or an operator) says it is made for adults.
+ * - `mature` — its creator (or an operator) says it is made for adults. A warning and a
+ *   filter input, carrying no access consequence at all.
+ * - `adult` — explicit sexual depiction central to the work. Paid, verified, never in the
+ *   commons, invisible to anyone who has not opted in.
  *
- * ⚠️ **This scale is one value short of the one 40.13 defines, and `mature` gates nothing
- * today.** The standard runs `unrated` · `general` · `mature` · `adult`, so there is nothing
- * an operator can set on a Work belonging at the top of it; adding `adult` and refusing
- * release at a rung Anthers does not currently accept is its own task. Nothing above `adult`
- * is a rating at all — work that functions as pornography is disallowed outright, enforced
- * through `moderation.ts`'s taxonomy rather than by a value here. Mature work meanwhile is
- * ordinary work on Anthers, and what the rating does now is give the viewer filters
- * something to read.
+ * 🚨 **Nothing above `adult` is a rating.** Work made for the purpose of sexual
+ * gratification is not published on Anthers at all, so there is no rung for it and no reason
+ * for a creator to have a way to say it about their own work; that boundary is enforced
+ * through the `pornography` reason in `moderation.ts`'s taxonomy instead. The rung is named
+ * **Adult** rather than "adults-only" deliberately, to avoid collision with the ESRB's
+ * existing AO rating.
+ *
+ * ⚠️ **The scale is complete and permanent; which of its rungs Anthers accepts is a
+ * separate switch** — `ACCEPTED_MATURITY_RATINGS` below. Content of every kind on this scale
+ * exists in the world whether or not Anthers hosts it, so the standard has to be able to
+ * name all of it, and refusing a rung is then a decision *about* a classification rather
+ * than a hole in the classification.
  */
-export type MaturityRating = "unrated" | "general" | "mature";
+export type MaturityRating = "unrated" | "general" | "mature" | "adult";
 
-export const MATURITY_RATINGS: readonly MaturityRating[] = ["unrated", "general", "mature"];
+export const MATURITY_RATINGS: readonly MaturityRating[] = [
+	"unrated",
+	"general",
+	"mature",
+	"adult",
+];
 
 export function isMaturityRating(value: string): value is MaturityRating {
 	return (MATURITY_RATINGS as readonly string[]).includes(value);
@@ -88,9 +100,83 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
 	{
 		value: "mature",
 		label: "Mature",
+		// ⚠️ Says nothing about a blur. Mature work will blur by default once the reader
+		// filters exist, and they do not — a hint describing a fence nobody has built yet
+		// would be telling creators something untrue about their own work today.
 		hint: "Made for adults — not because of what it is about, but because of how it treats it. A story that deals with violence, sex or addiction is not Mature for its subject; depiction, explicitness and intent are what this reads.",
 	},
+	{
+		value: "adult",
+		// ⭐ The hint states what the rung COSTS rather than only what it covers, because
+		// this is the one rating that takes money and audience away and a creator should not
+		// be able to choose it without having been told the price. It describes the rung
+		// itself and not whether Anthers is currently accepting work at it — that is
+		// `ACCEPTED_MATURITY_RATINGS`, it changes, and a sentence here would go stale.
+		label: "Adult",
+		hint: "Explicit sexual depiction that is central to the work. Adult work must be sold or gated rather than free, so it is never Public Access and earns nothing from the Time Pool, and it is visible only to people who have opted in and verified that they are adults.",
+	},
 ] as const;
+
+/**
+ * The rungs Anthers currently accepts a Work at.
+ *
+ * 🚨 **This is an operational switch and not a property of the scale**, which is why it is a
+ * separate list rather than a shorter `MaturityRating`. Wiki 40.13 § Classifying a Work Is
+ * Not the Same as Accepting It owns the distinction: a Work at a rung Anthers does not
+ * accept is rated correctly and refused release with a reason naming the rung, rather than
+ * being pushed into under-declaring at the rung below — which is the pressure the whole
+ * standard exists to remove.
+ *
+ * ⚠️ **A rung can close again, and doing so is the correct response rather than a failure.**
+ * The switch answers to two independent inputs that can disagree: what Anthers can moderate,
+ * and what our processor will handle. If the queue outruns whoever is reading it, a rung
+ * comes off this list, and `releaseRatingRefusal` below takes the accepted set as an argument
+ * so that branch can be exercised whichever way the switch happens to be set.
+ *
+ * 🚨 **`adult` is off the list until its consequences are built, and the order is the whole
+ * point.** The rung is not deferred — it is being assembled, and what it costs a Work is
+ * enforcement's job: paid rather than free, never Public Access, no Time Pool, invisible to
+ * anybody who has not opted in and verified. Adding `adult` here before those exist would
+ * open a rung with none of its fences, which is precisely the failure 40.09's deferral
+ * principle names. It goes on the list in the same change that makes the fences real.
+ *
+ * A constant rather than configuration, deliberately: both inputs are judgments that deserve
+ * a commit and a reader, not an environment variable somebody can flip without one.
+ */
+export const ACCEPTED_MATURITY_RATINGS: readonly DeclarableMaturity[] = ["general", "mature"];
+
+/** Does Anthers currently accept Works at this rung? */
+export function isRatingAccepted(
+	value: MaturityRating,
+	accepted: readonly MaturityRating[] = ACCEPTED_MATURITY_RATINGS,
+): boolean {
+	return accepted.includes(value);
+}
+
+/**
+ * Why a Work's rating stops it being released, or null when nothing does.
+ *
+ * - `undeclared` — nobody has rated it. Every Work is born `unrated`, and release is what
+ *   makes it somebody else's business, so this is the moment to have asked.
+ * - `closed` — it is rated at a rung Anthers is not currently accepting.
+ *
+ * ⚠️ **The two are separate results because they are separate messages.** *"Say which this
+ * is"* is a thing the creator can fix in one click; *"Anthers is not taking Adult work right
+ * now"* is not something they can fix at all, and telling them the first when it is the
+ * second reads as an error they should retry.
+ *
+ * The order matters: `unrated` is not on the accepted list either, so checking acceptance
+ * first would answer an undeclared Work with the closed-rung message.
+ */
+export type ReleaseRatingRefusal = "undeclared" | "closed";
+
+export function releaseRatingRefusal(
+	rating: MaturityRating,
+	accepted: readonly MaturityRating[] = ACCEPTED_MATURITY_RATINGS,
+): ReleaseRatingRefusal | null {
+	if (rating === "unrated") return "undeclared";
+	return isRatingAccepted(rating, accepted) ? null : "closed";
+}
 
 /**
  * How cautious a rating is, so "more cautious" can be compared rather than enumerated.
@@ -100,11 +186,30 @@ export const MATURITY_CHOICES: readonly MaturityRatingDef[] = [
  * Writing it as an order rather than as a pair of `if`s is what keeps that rule true if a
  * fourth value is ever added between these.
  */
-const CAUTION: Record<MaturityRating, number> = { unrated: 0, general: 1, mature: 2 };
+const CAUTION: Record<MaturityRating, number> = { unrated: 0, general: 1, mature: 2, adult: 3 };
 
 /** Is `next` at least as cautious a rating as `current`? */
 export function isAtLeastAsCautious(next: MaturityRating, current: MaturityRating): boolean {
 	return CAUTION[next] >= CAUTION[current];
+}
+
+/**
+ * The rung immediately below `rating`, or null at the bottom of the scale.
+ *
+ * ⭐ **This is what an appeal against a correction asks for, and there is only ever one
+ * answer.** A creator may raise their own rating whenever they like, so an appeal is
+ * downward by construction; and asking to drop two rungs at once would be asking an operator
+ * to concede two separate judgments in one request. `null` at `general` is the useful half —
+ * a creator whose rating was corrected *down* has nothing to appeal, because raising it back
+ * is theirs to do in one click.
+ *
+ * Reads the same `CAUTION` order `isAtLeastAsCautious` does, so a value inserted into the
+ * scale is picked up here rather than needing a second table to be remembered.
+ */
+export function rungBelow(rating: MaturityRating): DeclarableMaturity | null {
+	const target = CAUTION[rating] - 1;
+	const below = MATURITY_CHOICES.find((c) => CAUTION[c.value] === target);
+	return below?.value ?? null;
 }
 
 /** Human label for a stored rating; falls back to the code for forward compatibility. */

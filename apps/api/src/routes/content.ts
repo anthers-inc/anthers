@@ -49,7 +49,13 @@ import {
 	REVIEW_MAX,
 	REVIEW_MIN,
 } from "@anthers/shared/content";
-import { normalizeContentNotes, RATING_APPEAL_STATEMENT_MAX } from "@anthers/shared/content-rating";
+import {
+	type MaturityRating,
+	maturityLabel,
+	normalizeContentNotes,
+	RATING_APPEAL_STATEMENT_MAX,
+	releaseRatingRefusal,
+} from "@anthers/shared/content-rating";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -370,7 +376,7 @@ const workBaseSchema = z
 		// born in and leaves, never a value a client sets, and release is refused while it
 		// holds. `services/content-rating.ts` decides whether the change is allowed — an
 		// operator's correction can only be raised, not lowered, by the creator.
-		maturity: z.enum(["general", "mature"]).optional(),
+		maturity: z.enum(["general", "mature", "adult"]).optional(),
 		maturityNotes: z.array(z.string()).max(20).optional(),
 
 		// Delivery (≥1 enforced on release)
@@ -396,7 +402,7 @@ const workBaseSchema = z
  * creators with something to say.
  */
 const ratingAppealSchema = z.object({
-	requestedMaturity: z.enum(["general", "mature"]),
+	requestedMaturity: z.enum(["general", "mature", "adult"]),
 	statement: z.string().trim().min(10).max(RATING_APPEAL_STATEMENT_MAX),
 });
 
@@ -2583,6 +2589,70 @@ const contentRoutes = new Hono()
 		}
 
 		const releasing = data.visibility === "released" && work.visibility !== "released";
+
+		// 🚨 **A LIVE Work may not be moved to a closed rung, and this is checked before the
+		// rating is written rather than after.** Everywhere else on this route the
+		// declaration is stored first and the release refused second, so a refusal never
+		// costs the creator their answer — but that trade only works while the Work is
+		// private. Applied here it would write the rating onto a Work that is already
+		// public and then refuse, leaving it released *at* the closed rung: the one state
+		// the whole guard exists to prevent. So this case refuses and stores nothing, and
+		// the message says what to do — make it private, and the declaration will stick.
+		//
+		// Scoped to a request that names a rating, so a Work sitting at a rung that closed
+		// after it was released stays editable in every other respect.
+		if (
+			work.visibility === "released" &&
+			data.visibility !== "private" &&
+			data.maturity !== undefined &&
+			releaseRatingRefusal(data.maturity) === "closed"
+		) {
+			const rung = maturityLabel(data.maturity);
+			return c.json(
+				{
+					error: `Anthers isn't accepting ${rung} work at the moment, so a released Work can't be rated ${rung}. Make this Work private and the rating will save — it will keep it until ${rung} reopens.`,
+					code: "maturity_rung_closed",
+					rung: data.maturity,
+				},
+				409,
+			);
+		}
+
+		// 🚨 **The rating is otherwise written BEFORE the release gates, and the order is
+		// the design rather than tidiness.** A creator who declares a rating and ticks
+		// release in one request — the ordinary flow from the editor, which sends the whole
+		// form — must not lose the declaration when the release is refused. It ran after the
+		// gates until 2026-08-28, so declaring Adult and releasing together answered 409 and
+		// left the Work `unrated`: the creator's honest answer was discarded, and the
+		// cheapest way out was to pick a lower rung and have it work. That is exactly the
+		// under-declaration pressure wiki 40.13 exists to remove, produced by the gate meant
+		// to enforce it. Every readiness refusal below now leaves the rating stored, so a
+		// creator whose media is still encoding keeps their answer too.
+		//
+		// It goes through its own service because it is the one field on this route another
+		// party can have decided. A creator lowering an operator's correction is refused
+		// here rather than silently dropped — and told where the appeal is, since the
+		// refusal is otherwise indistinguishable from the edit not having saved.
+		if (data.maturity !== undefined || data.maturityNotes !== undefined) {
+			const declared = await declareRating(work, {
+				maturity: data.maturity,
+				notes: data.maturityNotes,
+			});
+			if (declared === "locked") {
+				return c.json(
+					{
+						error:
+							"An operator set this Work's rating. You can make it more cautious at any time; to lower it, appeal.",
+						code: "maturity_locked",
+					},
+					409,
+				);
+			}
+			// Re-read, so the gates below and the rest of this handler read the row the
+			// service just wrote rather than the one loaded before it.
+			work = declared;
+		}
+
 		if (releasing && PROCESSED_WORK_TYPES.has(work.type)) {
 			const unready = await unreadyWorks([work.id]);
 			if (unready.length > 0) {
@@ -2591,6 +2661,55 @@ const contentRoutes = new Hono()
 						error: "Can't release yet — the media is still processing.",
 						code: "media_not_ready",
 						unready,
+					},
+					409,
+				);
+			}
+		}
+
+		// The third readiness condition, and the only one a creator can satisfy instantly.
+		// A Work is born `unrated` and release is what makes it somebody else's business,
+		// so this is the moment to have asked. It reads the STORED rating because the block
+		// above has already written whatever this request declared — which is what lets the
+		// refusal keep the creator's answer instead of costing them it.
+		//
+		// 🚨 **It asks two questions rather than one, and the second is not the same
+		// question later.** Whether a rating has been *declared* is about the creator;
+		// whether the declared rung is one Anthers currently *accepts* is about Anthers, and
+		// a Work can fail the second while answering the first perfectly. Wiki 40.13 §
+		// Classifying a Work Is Not the Same as Accepting It is why they are separate: a
+		// Work at a closed rung is rated correctly and refused, rather than pushed into
+		// under-declaring one rung down.
+		//
+		// ⚠️ **This half asks only about a Work being released NOW**, and the already-live
+		// case is handled above, before anything is written. Refusing every edit to a Work
+		// whose stored rating is `unrated` or at a closed rung would make Works released
+		// before the rating existed — and Works caught by a rung closing — uneditable.
+		const nextRating = work.maturity as MaturityRating;
+		if (releasing) {
+			const refusal = releaseRatingRefusal(nextRating);
+			if (refusal === "undeclared") {
+				return c.json(
+					{
+						error: "Say how this Work is rated before releasing it.",
+						code: "maturity_undeclared",
+					},
+					409,
+				);
+			}
+			if (refusal === "closed") {
+				const rung = maturityLabel(nextRating);
+				return c.json(
+					{
+						// Names the rung, and says the rating is right rather than wrong.
+						// A creator who reads this as an error to retry will lower the
+						// rating until it goes away, which is the one outcome this refusal
+						// exists to prevent. The rating is already stored, so "leave it as
+						// it is" is a description of what just happened rather than a
+						// request.
+						error: `Anthers isn't accepting ${rung} work at the moment, so this Work can't be released. The rating is right and has been saved — you'll be able to release when ${rung} reopens.`,
+						code: "maturity_rung_closed",
+						rung: nextRating,
 					},
 					409,
 				);
@@ -2608,21 +2727,6 @@ const contentRoutes = new Hono()
 		// stays owed, because a detection vendor's outage must not stop everyone on Anthers
 		// from publishing. `services/safety-scan.ts` carries the full reasoning, including
 		// why quarantine reaching a released Work is what makes the trade honest.
-		// The third readiness condition, and the only one a creator can satisfy instantly.
-		// A Work is born `unrated` and release is what makes it somebody else's business,
-		// so this is the moment to have asked. `data.maturity` counts: declaring the rating
-		// and releasing in one PATCH is the ordinary flow from the editor, and refusing it
-		// would mean two round trips to do one thing.
-		if (releasing && (data.maturity ?? work.maturity) === "unrated") {
-			return c.json(
-				{
-					error: "Say whether this is General or Mature before releasing it.",
-					code: "maturity_undeclared",
-				},
-				409,
-			);
-		}
-
 		if (releasing) {
 			const gate = await scanReleaseGate(work);
 			if (gate.blocked) {
@@ -2639,31 +2743,6 @@ const contentRoutes = new Hono()
 					409,
 				);
 			}
-		}
-
-		// The rating goes through its own service before anything else is written, because
-		// it is the one field on this route another party can have decided. A creator
-		// lowering an operator's correction is refused here rather than silently dropped —
-		// and told where the appeal is, since the refusal is otherwise indistinguishable
-		// from the edit not having saved.
-		if (data.maturity !== undefined || data.maturityNotes !== undefined) {
-			const declared = await declareRating(work, {
-				maturity: data.maturity,
-				notes: data.maturityNotes,
-			});
-			if (declared === "locked") {
-				return c.json(
-					{
-						error:
-							"An operator set this Work's rating. You can make it more cautious at any time; to lower it, appeal.",
-						code: "maturity_locked",
-					},
-					409,
-				);
-			}
-			// Re-read, so the rest of this handler edits the row the service just wrote
-			// rather than the one it loaded before.
-			work = declared;
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };

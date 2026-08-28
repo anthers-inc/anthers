@@ -3,7 +3,7 @@
  * Appealing an operator's correction of a Work's rating.
  *
  * 🚨 **This is part of the rating feature rather than a later refinement.** Because Anthers'
- * adults-only category is payment-gated, an over-cautious call does not merely add a warning
+ * Adult rung is payment-gated, an over-cautious call does not merely add a warning
  * to a work — it puts it behind a paywall, and for a queer coming-of-age story wrongly
  * flagged that is exactly the harm the category exists to prevent, produced by the mechanism
  * meant to prevent it (wiki 40.09). A correction surface without a contest would be only the
@@ -14,7 +14,12 @@
  * note is rendered beside the verdict — and a granted appeal says what the rating became.
  */
 
-import { maturityLabel, RATING_APPEAL_STATEMENT_MAX } from "@anthers/shared/content-rating";
+import {
+	type MaturityRating,
+	maturityLabel,
+	RATING_APPEAL_STATEMENT_MAX,
+	rungBelow,
+} from "@anthers/shared/content-rating";
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/rpc";
 
@@ -54,9 +59,13 @@ export default function RatingAppeal({ workId, corrected }: RatingAppealProps) {
 		};
 	}, [workId]);
 
-	// The only thing there is to ask for: the rating is two values, and one of them is the
-	// one an operator just set. A picker would be a control with a single option.
-	const requested = corrected === "mature" ? "general" : "mature";
+	// The only thing there is to ask for, and it stays a single value now the scale has four
+	// of them: an appeal is downward by construction, because a creator may raise their own
+	// rating without asking anybody. `null` at the bottom of the scale is the case worth
+	// having — a creator whose rating was corrected *down* has nothing to appeal, since
+	// raising it back is one click in the editor above. The form is hidden rather than
+	// offering a request an operator would only answer by pointing at that click.
+	const requested = rungBelow(corrected as MaturityRating);
 	const open = appeals?.find((a) => a.status === "open");
 	const settled = (appeals ?? []).filter((a) => a.status !== "open");
 
@@ -111,6 +120,11 @@ export default function RatingAppeal({ workId, corrected }: RatingAppealProps) {
 			{open ? (
 				<p className="mt-3 text-sm text-base-content/70">
 					Your appeal is with an operator. We will answer it here.
+				</p>
+			) : !requested ? (
+				<p className="mt-1 text-sm text-base-content/70">
+					An operator set this to {maturityLabel(corrected)}, which is the lowest rating there is.
+					You can raise it yourself at any time — there is nothing to appeal.
 				</p>
 			) : (
 				<>

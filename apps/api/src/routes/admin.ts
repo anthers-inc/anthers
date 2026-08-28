@@ -122,7 +122,11 @@ const clearQuarantineSchema = z.object({
  */
 const correctRatingSchema = z.object({
 	workId: z.number().int().positive(),
-	maturity: z.enum(["general", "mature"]),
+	// `adult` is accepted by the schema and refused by the service, deliberately. Leaving it
+	// out here would answer an operator with a validation error naming a field, when what
+	// they need to be told is that the top rung takes a second decision-maker and who that
+	// is — see `correctRating`.
+	maturity: z.enum(["general", "mature", "adult"]),
 	notes: z.array(z.string()).max(20).optional(),
 	note: z.string().max(RATING_NOTE_MAX).optional(),
 });
@@ -514,6 +518,19 @@ const adminRoutes = new Hono()
 			actorId: user.id,
 			note,
 		});
+		if (updated === "needs-working-group") {
+			// 409 rather than 403: the operator is permitted to be here and the request is
+			// well-formed, but one person may not move a Work into the rung that costs its
+			// creator the commons and the Time Pool at once.
+			return c.json(
+				{
+					error:
+						"Moving a Work to Adult takes the adult-content working group rather than one operator, and that body doesn't exist yet. If this Work breaks the rules, hide it; if it is only rated too low, its creator can raise it themselves.",
+					code: "rating_needs_working_group",
+				},
+				409,
+			);
+		}
 		if (!updated) return c.json({ error: "Work not found" }, 404);
 		return c.json({
 			workId: updated.id,
