@@ -205,8 +205,38 @@ describe("User Gauntlet — the reasons behind the staircase", () => {
 		};
 		expect(resolveAccessSync(POSTS.G2, anon).reason).toBe("login_required");
 		expect(resolveAccessSync(POSTS.G2, ctx(0)).reason).toBe("gated");
-		// ...but a free post is free to anyone, logged in or not.
-		expect(resolveAccessSync(POSTS.G1, anon).reason).toBe("free");
+	});
+
+	it("🚨 an anonymous viewer is 'login_required' for FREE work too, and it is still free", () => {
+		/*
+		 * The whole account requirement, in one assertion. This read `expect(…G1,
+		 * anon).reason).toBe("free")` until 2026-08-28 — *"a free post is free to anyone,
+		 * logged in or not"* — which was the single fact anonymous viewing rested on, and
+		 * was never a decision anybody took. Consuming a Work requires an account (21.01
+		 * §9.1): it is how terms are accepted, how 13+ is asserted, and how attention is
+		 * attributed, and the Time Pool cannot pay a creator for time it cannot attribute
+		 * to anyone.
+		 *
+		 * ⚠️ **`isFree` staying true is half the point and not an incidental.** What is
+		 * public is the Work's page and what requires an account is delivery, so a
+		 * signed-out visitor must still be told this Work is free to everyone — that is
+		 * what keeps the card off the padlock branch and the page worth sharing. A
+		 * refusal placed at the top of the resolver would have been simpler and would
+		 * have taken this with it.
+		 */
+		const anon: AccessContext = {
+			userId: null,
+			supportByCreator: new Map(),
+			purchasedWorkIds: new Set(),
+			adultAccess: true,
+		};
+		const free = resolveAccessSync(POSTS.G1, anon);
+		expect(free.reason).toBe("login_required");
+		expect(free.canAccess).toBe(false);
+		expect(free.isFree).toBe(true);
+
+		// The same Work, one account later.
+		expect(resolveAccessSync(POSTS.G1, ctx(0)).reason).toBe("free");
 	});
 
 	it("the purchase rung quotes its price until bought, then unlocks download permanently", () => {

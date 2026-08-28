@@ -22,6 +22,27 @@ import { LockClosedIcon } from "@heroicons/react/24/solid";
 import type { AccessResult, UnlockRoute } from "../../lib/types";
 
 /**
+ * Whether a Work should be *presented* as locked — a blurred cover, a padlock, "members
+ * only" — as opposed to merely being undeliverable right now.
+ *
+ * 🚨 **The two stopped being the same question on 2026-08-28, and conflating them turns
+ * the commons into a wall of padlocks.** Consuming a Work now requires an account, so a
+ * signed-out visitor is refused the bytes of *free* work too — and a card that reads
+ * `!canAccess` as "locked" would put "Members-only work from this creator" under every
+ * Public Access Work on Discover, shown to precisely the visitor the public page exists
+ * for. The Work is free to everyone and stays free to everyone; what is missing is an
+ * account for the time to be attributed to.
+ *
+ * That is the same line the Public Access meter draws and for the same reason — a Work is
+ * never described as gated by something that belongs to the viewer, or the commons quietly
+ * reads as stratified again, which is what retiring Anthers Gates was for.
+ */
+export function presentsAsLocked(access: AccessResult | null | undefined): boolean {
+	if (!access || access.canAccess) return false;
+	return !(access.reason === "login_required" && access.isFree);
+}
+
+/**
  * The cheapest route into a gated Work, and who the money would go to.
  *
  * "Cheapest" is the smallest amount the viewer still has to add, which is what they asked

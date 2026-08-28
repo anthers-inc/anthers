@@ -20,12 +20,17 @@
  *      every player subscribes to turns "you have run out" into an ordinary render
  *      instead of something that has to be discovered by failing a request.
  *
- * 🚨 **An anonymous viewer is not metered, and this must not pretend otherwise.** The
- * server hands a logged-out caller the full allowance with nothing spent — deliberately,
- * because anonymous streaming of the commons is the shop window — so their budget always
- * reads "10 hours left" no matter how long they watch. Rendering that as a meter would
- * state a falsehood with a number attached. `useMeteredBudget` returns null when signed
- * out for exactly this reason; the anonymous case gets a different surface.
+ * 🚨 **An anonymous viewer has no allowance, so there is no meter to render them.** They
+ * cannot consume a Work at all — delivery requires an account (21.01 §9.1) — so a budget
+ * would be a countdown on something that never starts. `useMeteredBudget` returns null when
+ * signed out, and what a signed-out visitor sees in place of a player is the invitation to
+ * make an account, from `InlineUnlock`.
+ *
+ * ⚠️ This said the opposite until 2026-08-28: that the server handed a logged-out caller
+ * the full allowance on purpose, "because anonymous streaming of the commons is the shop
+ * window". The null return was right; the reason given for it was a justification written
+ * after the fact for a missing `requireAuth`. The shop window is the Work's *page*, which
+ * is still public.
  */
 
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
@@ -159,54 +164,16 @@ export function shouldWarn(budget: PublicAccessBudget | null): boolean {
 }
 
 // ── The anonymous viewer ─────────────────────────────────────────────────────
-
-/** Where a logged-out viewer's running total lives. Cleared once they have an account. */
-const ANON_WATCHED_KEY = "anthers_anon_watched_seconds";
-
-/**
- * How long a logged-out viewer watches before being invited to make an account.
- *
- * 21.01 §9.1 step 3 — *"after approximately 30 minutes of cumulative viewing"*. The
- * prompt is dismissible and never blocks: the argument for an account here is that it
- * saves your place, not that you are running out of anything.
- */
-export const ANON_PROMPT_SECONDS = 30 * 60;
-
-/**
- * Accumulate a logged-out viewer's time spent, and say whether they have passed the mark.
- *
- * 🚨 **This is a genuinely different measurement from the meter and must not be confused
- * with it.** A logged-out viewer is *not metered* — the server hands them the full
- * allowance every time, on purpose — so there is nothing on the server to count and no
- * budget to draw down. This is a local tally, in `localStorage`, purely to decide when to
- * mention that accounts exist. It is trivially resettable by clearing site data, which is
- * fine: nothing is being enforced with it.
- */
-export function recordAnonymousSeconds(seconds: number): number {
-	if (seconds <= 0) return readAnonymousSeconds();
-	const next = readAnonymousSeconds() + seconds;
-	try {
-		localStorage.setItem(ANON_WATCHED_KEY, String(next));
-	} catch {
-		/* Storage disabled — the prompt simply never fires, which is the safe direction. */
-	}
-	return next;
-}
-
-export function readAnonymousSeconds(): number {
-	try {
-		const raw = Number(localStorage.getItem(ANON_WATCHED_KEY));
-		return Number.isFinite(raw) && raw > 0 ? raw : 0;
-	} catch {
-		return 0;
-	}
-}
-
-/** Forget the tally — called once an account exists, since it has served its purpose. */
-export function clearAnonymousSeconds(): void {
-	try {
-		localStorage.removeItem(ANON_WATCHED_KEY);
-	} catch {
-		/* ignore */
-	}
-}
+//
+// 🚨 **A local tally of anonymous viewing time used to live here, and it is gone with the
+// model it served (2026-08-28).** `ANON_PROMPT_SECONDS`, `recordAnonymousSeconds`,
+// `readAnonymousSeconds` and `clearAnonymousSeconds` counted how long a logged-out visitor
+// had watched, in `localStorage`, so that `AnonymousViewerBanner` could invite them to make
+// an account after half an hour. Consuming a Work now requires an account, so there is no
+// anonymous playback to count: a signed-out visitor never reaches a player, and the invitation
+// to sign up is the thing standing where the player would be.
+//
+// Worth a note rather than a silent deletion, because the code was careful, well-tested and
+// entirely correct about a rule that had never been agreed. It was cited in 21.01 §9.1 step
+// 3 — *"after approximately 30 minutes of cumulative viewing"* — which is the sentence that
+// section was rewritten to remove.

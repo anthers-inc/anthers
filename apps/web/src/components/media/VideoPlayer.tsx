@@ -435,7 +435,7 @@ export default function VideoPlayer({
 					onToggleFullscreen={toggleFullscreen}
 				/>
 			</section>
-			{publicAccess && <PublicAccessFooter playing={isPlaying} />}
+			{publicAccess && <PublicAccessFooter />}
 		</>
 	);
 }

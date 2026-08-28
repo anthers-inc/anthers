@@ -28,6 +28,23 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
+/**
+ * A Work's access verdict as seen by a signed-in non-owner.
+ *
+ * 🚨 **The cookie is not optional, and it stopped being optional on 2026-08-28.** These
+ * assertions used a logged-out request because that was the shortest way to reach
+ * `resolveAccessSync` without hitting the owner branch. Consuming a Work now requires an
+ * account, so a logged-out viewer resolves `login_required` on everything and the takedown
+ * this file exists to prove would be masked by a denial that has nothing to do with it —
+ * which is precisely what happened: `login_required` arrived where `takedown` was expected.
+ * A signed-in stranger reaches the same resolver and is refused for the real reason.
+ */
+async function accessOf(targetWorkId: number, cookie: string) {
+	const res = await req(`/api/content/works/${targetWorkId}`, { headers: { Cookie: cookie } });
+	expect(res.status).toBe(200);
+	return (await res.json()).work.access as { canAccess: boolean; reason: string };
+}
+
 function post(path: string, cookie: string | undefined, body: unknown) {
 	const headers: Record<string, string> = { "Content-Type": "application/json", Origin: ORIGIN };
 	if (cookie) headers.Cookie = cookie;
@@ -183,10 +200,7 @@ describe("DMCA takedown — the access denial", () => {
 		noticeId = (await fileRes.json()).noticeId;
 
 		// Before the takedown, the Work is accessible.
-		const before = await req(`/api/content/works/${workId}`);
-		expect(before.status).toBe(200);
-		const beforeBody = await before.json();
-		expect(beforeBody.work.access.canAccess).toBe(true);
+		expect((await accessOf(workId, otherCreator)).canAccess).toBe(true);
 
 		// Act on the notice as admin.
 		const actRes = await post(`/api/admin/dmca/${noticeId}/act`, admin, { note: "Valid notice" });
@@ -195,18 +209,19 @@ describe("DMCA takedown — the access denial", () => {
 	});
 
 	it("a taken-down Work denies access to everyone via resolveAccessSync", async () => {
-		// The creator themselves: the owner path returns no `access` verdict (they
-		// see the owner shape), so check the logged-out viewer path instead —
-		// which is the one that goes through `resolveAccessSync`.
-		const res = await req(`/api/content/works/${workId}`);
-		expect(res.status).toBe(200);
-		const body = await res.json();
-		expect(body.work.access.canAccess).toBe(false);
-		expect(body.work.access.reason).toBe("takedown");
+		// The creator themselves reach the owner branch and never see a verdict, so this
+		// asks as a signed-in stranger — the path that actually runs `resolveAccessSync`.
+		const access = await accessOf(workId, otherCreator);
+		expect(access.canAccess).toBe(false);
+		expect(access.reason).toBe("takedown");
 	});
 
-	it("a taken-down Work denies access to a logged-out viewer too", async () => {
-		// Same check, explicit — the logged-out path is the resolver path.
+	it("a taken-down Work outranks the account requirement for a logged-out viewer", async () => {
+		// 🚨 The takedown is checked before everything else in the resolver, and this is
+		// where that ordering earns its place. A logged-out viewer is refused twice over
+		// now — no account, and the material is down — and the reason they are given must
+		// be the takedown, or a notice would look like a login prompt to anyone auditing
+		// what we serve.
 		const res = await req(`/api/content/works/${workId}`);
 		expect(res.status).toBe(200);
 		const body = await res.json();
@@ -230,10 +245,7 @@ describe("DMCA takedown — the access denial", () => {
 		// The OTHER Work — by a different creator, not named in any notice —
 		// must still be accessible. This is the absence the brief names: a takedown
 		// that scopes to a catalog or an account is the competitor-removal weapon.
-		const res = await req(`/api/content/works/${otherWorkId}`);
-		expect(res.status).toBe(200);
-		const body = await res.json();
-		expect(body.work.access.canAccess).toBe(true);
+		expect((await accessOf(otherWorkId, creator)).canAccess).toBe(true);
 		// And the other Work's takedown_status is still "active"
 		const [otherWork] = await db
 			.select({ takedownStatus: works.takedownStatus })
@@ -262,11 +274,9 @@ describe("DMCA restore — the sweep", () => {
 		expect((await res.json()).status).toBe("restored");
 
 		// The Work is accessible again.
-		const accessRes = await req(`/api/content/works/${workId}`);
-		expect(accessRes.status).toBe(200);
-		const body = await accessRes.json();
-		expect(body.work.access.canAccess).toBe(true);
-		expect(body.work.access.reason).not.toBe("takedown");
+		const access = await accessOf(workId, otherCreator);
+		expect(access.canAccess).toBe(true);
+		expect(access.reason).not.toBe("takedown");
 
 		// And the restore was recorded in the audit log.
 		const restoreRows = await db
@@ -310,10 +320,7 @@ describe("A bare user report never causes a removal", () => {
 		expect(afterStatus[0]?.takedownStatus).toBe("active");
 
 		// And the Work is still accessible.
-		const accessRes = await req(`/api/content/works/${otherWorkId}`);
-		expect(accessRes.status).toBe(200);
-		const body = await accessRes.json();
-		expect(body.work.access.canAccess).toBe(true);
+		expect((await accessOf(otherWorkId, creator)).canAccess).toBe(true);
 	});
 });
 

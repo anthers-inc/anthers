@@ -85,8 +85,32 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
  * refusing a request. It lives here anyway so that "how do we read an optional session?"
  * has one answer beside `requireAuth`'s. Two identical private copies had grown in
  * `routes/accounts.ts` and `routes/content.ts` before this existed.
+ *
+ * 🚨 **It reads the cookie AND the bearer header, because `requireAuth` does.** This
+ * consulted only the cookie until 2026-08-28, so the packaged desktop Studio — which
+ * cannot send the cookie at all, and presents its session as `Authorization: Bearer` for
+ * exactly that reason — resolved as a signed-out visitor at every route that asks the
+ * question rather than requiring an answer. That was survivable only while signing out
+ * meant *more* access than signing in; the moment delivery requires an account, a
+ * disagreement between the two readers becomes a bearer-authenticated request being told
+ * to log in. Two ways to read one session must not answer differently.
+ *
+ * The `c.get("user")` check first is not an optimization for its own sake: on a route that
+ * already ran `requireAuth`, re-validating would be a second database round trip **and** a
+ * second chance to disagree with the middleware that just decided.
  */
 export async function getOptionalUserId(c: Context): Promise<number | null> {
+	const authenticated = (c as Context<AuthEnv>).get("user");
+	if (authenticated?.id != null) return authenticated.id;
+
+	// A presented bearer header IS the request's credential — the cookie is not consulted
+	// and there is no fallback to it. Same rule as `requireAuth` and `csrfProtection`; see
+	// `middleware/bearer.ts` for why all three have to agree.
+	if (bearerToken(c)) {
+		const result = await resolveBearerSession(c);
+		return result?.user.id ?? null;
+	}
+
 	const token = getCookie(c, "session");
 	if (!token) return null;
 	const result = await validateSession(token);

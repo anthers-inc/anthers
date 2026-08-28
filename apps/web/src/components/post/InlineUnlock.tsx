@@ -1,16 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 /**
- * Inline unlock for a gated **Work**. Instead of bouncing the viewer to the creator's
- * Badges page, this offers the *exact minimum upgrade* that unlocks it — the lowest
- * allowed Anthers threshold (subscribe inline, with the confirmation modal) and/or the
- * lowest Badge rung — right where the viewer hit the gate.
+ * What stands where a Work's deliverable would be, when the viewer cannot have it.
+ *
+ * For a gated Work that is an unlock: instead of bouncing the viewer to the creator's
+ * Badges page, this offers the *exact minimum upgrade* that opens it — the lowest allowed
+ * Anthers threshold (subscribe inline, with the confirmation modal) and/or the lowest Badge
+ * rung — right where the viewer hit the gate.
+ *
+ * ⚠️ **Since 2026-08-28 it also stands in front of free work, for a signed-out visitor**,
+ * because consuming a Work requires an account. That case is not a gate and must not be
+ * dressed as one; see the `login_required` branch, which reads `isFree` to tell the two
+ * apart. It is also the surface that replaced `AnonymousViewerBanner` — the invitation to
+ * make an account now stands *instead of* the player rather than underneath one.
  */
 import { amountLabel, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { withNextPath } from "@anthers/shared/next-path";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
-import { LockClosedIcon } from "@heroicons/react/24/solid";
+import { LockClosedIcon, UserPlusIcon } from "@heroicons/react/24/solid";
 import { useState } from "react";
 import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
@@ -73,6 +82,42 @@ export default function InlineUnlock({
 	 */
 	if (access.reason === "login_required") {
 		const back = `${location.pathname}${location.search}`;
+
+		/*
+		 * 🚨 **Two genuinely different situations arrive here, and one copy for both would
+		 * be wrong for whichever it wasn't.** Since 2026-08-28 a signed-out visitor resolves
+		 * `login_required` for **free** work as well as gated work, because consuming a Work
+		 * requires an account. On a gated Work the visitor's access really is in question and
+		 * signing in might settle it. On a Public Access Work nothing is in question at all:
+		 * it is free to everyone and stays free, and the only thing they lack is an account
+		 * for the time to be attributed to. Telling that person to "check your access" would
+		 * describe a gate that isn't there, on the most common Work on the platform.
+		 *
+		 * `isFree` is what tells them apart, and it survives the refusal for exactly this
+		 * reason — see `resolveAccessSync`, which withholds the bytes without withdrawing
+		 * the claim that the Work is free.
+		 *
+		 * Sign-up leads on the free branch and log-in leads on the gated one, which is the
+		 * likelier next step in each case: somebody meeting free work with no account
+		 * probably has none, and somebody meeting a gate probably does.
+		 */
+		if (access.isFree) {
+			return (
+				<UnlockCard
+					icon="account"
+					heading="Free to everyone on Anthers"
+					blurb={`This Work costs nothing to watch. Make a free account and it's yours — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access every month, and ${creatorName} is paid for the time you spend on it.`}
+				>
+					<Link to={withNextPath("/subscribe", back)} className="btn btn-primary btn-wide">
+						Create a free account
+					</Link>
+					<Link to={withNextPath("/login", back)} className="btn btn-ghost btn-sm">
+						Log in
+					</Link>
+				</UnlockCard>
+			);
+		}
+
 		return (
 			<UnlockCard blurb={`Log in to check your access to this Work from ${creatorName}.`}>
 				<Link to={withNextPath("/login", back)} className="btn btn-primary btn-wide">
@@ -192,22 +237,34 @@ export default function InlineUnlock({
 function UnlockCard({
 	blurb,
 	lockedBy,
+	heading,
+	icon = "lock",
 	children,
 }: {
 	/** Only for states the action itself doesn't explain (login, or no route at all). */
 	blurb?: string;
 	/** Badge the gate sits on, when it sits on one — the lock's *identity*. */
 	lockedBy?: string | null;
+	/** Overrides the default "Unlock this post" — for the states that are not unlocks. */
+	heading?: string;
+	/**
+	 * 🚨 **A padlock is a claim, and on Public Access work it is a false one.** Every state
+	 * this card renders was a gate until 2026-08-28, so the lock was drawn unconditionally.
+	 * Now one of them is a free Work waiting on an account, where a padlock and the word
+	 * "Unlock" would tell the visitor they have hit a price that does not exist.
+	 */
+	icon?: "lock" | "account";
 	children: React.ReactNode;
 }) {
+	const Icon = icon === "lock" ? LockClosedIcon : UserPlusIcon;
 	return (
 		<div className="card bg-base-200 border border-base-300">
 			<div className="card-body items-center text-center gap-3">
 				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
-					<LockClosedIcon className="w-6 h-6 text-base-content/70" />
+					<Icon className="w-6 h-6 text-base-content/70" />
 				</div>
 				<h3 className="font-bold text-lg">
-					{lockedBy ? `Locked · ${lockedBy}` : "Unlock this post"}
+					{heading ?? (lockedBy ? `Locked · ${lockedBy}` : "Unlock this post")}
 				</h3>
 				{blurb ? <p className="text-sm text-base-content/60 max-w-sm">{blurb}</p> : null}
 				{children}

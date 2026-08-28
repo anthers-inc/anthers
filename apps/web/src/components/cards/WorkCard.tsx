@@ -6,7 +6,12 @@ import {
 	MaturityVeil,
 	useContentPreferences,
 } from "@anthers/web-shared/content-preferences";
-import { LockedCover, lockedByBadge, unlockLabel } from "@anthers/web-shared/post/unlock";
+import {
+	LockedCover,
+	lockedByBadge,
+	presentsAsLocked,
+	unlockLabel,
+} from "@anthers/web-shared/post/unlock";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { Work } from "@anthers/web-shared/types";
@@ -59,7 +64,11 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 
 	// Locked to the viewer → the card is a gated preview (blurred cover, visible title).
 	// Clicking still navigates into the post, where the unlock options live.
-	const locked = post.access ? !post.access.canAccess : false;
+	//
+	// ⚠️ Not `!canAccess`. A signed-out visitor is refused the bytes of free work too, and
+	// rendering that as a padlock would label the whole commons "members only" for the one
+	// person the public page is for — see `presentsAsLocked`.
+	const locked = presentsAsLocked(post.access);
 
 	// What this reader asked to meet at this rung. **A veil is not a lock**: a veiled Work
 	// is listed, reachable and earning, and the reader can uncover it in one click. The two
